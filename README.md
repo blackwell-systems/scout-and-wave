@@ -23,6 +23,7 @@ Interface contracts are defined before any agent starts. Agents code against the
 
 - [`prompts/scout.md`](prompts/scout.md) — The scout prompt that produces the coordination artifact
 - [`prompts/agent-template.md`](prompts/agent-template.md) — The 8-field agent prompt template stamped per-agent
+- [`prompts/saw-skill.md`](prompts/saw-skill.md) — Claude Code `/saw` skill (copy to `~/.claude/commands/saw.md`)
 
 ## Worked Example
 
@@ -50,6 +51,36 @@ Wave 3:    [G]               <- 1 agent, 402 lines
 - Single piece of logic with nothing to parallelize
 
 The scout itself will surface a poor fit: if file ownership cannot be cleanly assigned, that's a signal the work isn't parallelizable, which is still useful information before you start.
+
+## Usage with Claude Code
+
+Scout-and-wave ships as a `/saw` skill for [Claude Code](https://docs.anthropic.com/en/docs/claude-code).
+
+### Install
+
+Copy the skill to your global commands directory:
+
+```bash
+cp prompts/saw-skill.md ~/.claude/commands/saw.md
+```
+
+### Commands
+
+```
+/saw scout <feature-description>   # Run the scout phase, produce docs/IMPL-<feature>.md
+/saw wave                          # Execute the next pending wave from the IMPL doc
+/saw status                        # Show current progress
+```
+
+### Workflow
+
+1. **Scout:** `/saw scout "add OAuth2 login flow"` analyzes the codebase and writes `docs/IMPL-oauth2-login.md` with the full coordination artifact: dependency graph, file ownership, interface contracts, wave structure, and per-agent prompts.
+
+2. **Review:** Read the IMPL doc. Verify file ownership is clean, interface contracts are correct, and wave ordering makes sense. Adjust before proceeding.
+
+3. **Wave:** `/saw wave` launches parallel agents for the current wave. Each agent runs in an isolated git worktree, owns disjoint files, and codes against the interface contracts. Build and test gates verify the wave before proceeding.
+
+4. **Repeat:** Run `/saw wave` for each subsequent wave until all waves complete.
 
 ## Blog Post
 
