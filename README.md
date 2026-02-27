@@ -25,18 +25,6 @@ Interface contracts are defined before any agent starts. Agents code against the
 - [`prompts/agent-template.md`](prompts/agent-template.md) — The 8-field agent prompt template stamped per-agent
 - [`prompts/saw-skill.md`](prompts/saw-skill.md) — Claude Code `/saw` skill (copy to `~/.claude/commands/saw.md`)
 
-## Worked Example
-
-[`examples/brewprune-IMPL-brew-native.md`](examples/brewprune-IMPL-brew-native.md) — A real coordination artifact from a [brewprune](https://github.com/blackwell-systems/brewprune) session: 7 agents, 3 waves, 1,532 lines across 16 files.
-
-```
-Wave 1: [A] [B] [C] [D]     <- 4 parallel agents, 600 lines
-           | (A completes)
-Wave 2:   [E] [F]            <- 2 parallel agents, 530 lines
-           | (E+F complete)
-Wave 3:    [G]               <- 1 agent, 402 lines
-```
-
 ## When to Use It
 
 **Good fit:**
