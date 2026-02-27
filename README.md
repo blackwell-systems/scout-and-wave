@@ -2,13 +2,13 @@
 
 A methodology for reducing conflict and improving efficiency with parallel AI agents.
 
-## The Problem
+## Why
 
 Parallel AI agents working on the same codebase produce merge conflicts, contradictory implementations, and expensive rework. Agents make local decisions without global context, and those decisions collide.
 
-## The Pattern
+## How
 
-Scout-and-wave solves this in two phases:
+Scout-and-wave addresses this in two phases:
 
 1. **Scout:** A read-only agent analyzes the codebase and produces a coordination artifact: a dependency graph, interface contracts, a file ownership table, and a wave structure.
 2. **Wave:** Groups of agents execute in parallel, each owning disjoint files, across successive waves verified by build and test gates.
