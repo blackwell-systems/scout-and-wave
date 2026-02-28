@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to the Scout-and-Wave pattern will be documented in this file.
+All notable changes to the Scout-and-Wave protocol will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
@@ -92,7 +92,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.1.0] - 2026-02-27
 
-Initial release of Scout-and-Wave pattern based on lessons learned from brewprune UX audit experiments.
+Initial release of the Scout-and-Wave protocol based on lessons learned from brewprune UX audit experiments.
 
 ### Added
 - Scout agent prompt for dependency mapping and coordination artifact generation
@@ -100,9 +100,9 @@ Initial release of Scout-and-Wave pattern based on lessons learned from brewprun
 - `/saw` skill for Claude Code with `check`, `scout`, `wave`, and `status` commands
 - Suitability gate with 3-question assessment (file decomposition, investigation items, interface discoverability)
 - Wave execution loop with post-merge verification
-- Living coordination artifact pattern (agents append completion reports)
+- Living coordination artifact (agents append completion reports)
 
-### Pattern Evolution Timeline
+### Protocol Evolution Timeline
 
 The improvements in this release emerged through iterative testing on brewprune (a Homebrew package cleanup tool):
 
@@ -116,7 +116,7 @@ The improvements in this release emerged through iterative testing on brewprune 
 - **Result:** Wave completed, but inefficiencies identified
 
 **Post-Round 3 Fixes (2026-02-27-28):**
-- Implemented 3 pattern improvements: conflict detection, performance guidance, pre-implementation check
+- Implemented 3 protocol improvements: conflict detection, performance guidance, pre-implementation check
 - Updated scout prompt and SAW skill
 
 **Round 4 Cold-Start Audit (2026-02-28):**
@@ -125,14 +125,14 @@ The improvements in this release emerged through iterative testing on brewprune 
 - **Discovered gap:** "Read-only reconnaissance agent" prompt caused agent to misinterpret as technical constraint
 - **Result:** Fixed scout prompt clarification
 
-**Current state:** Pattern now includes all 4 improvements. Round 4 P1/P2 fixes (31 findings, 10 agents, 3 waves) ready for execution using improved pattern.
+**Current state:** Protocol now includes all 4 improvements. Round 4 P1/P2 fixes (31 findings, 10 agents, 3 waves) ready for execution using the improved protocol.
 
 ### Lessons Learned
 
-**Audit-fix-audit cycle validates pattern:**
+**Audit-fix-audit cycle validates the protocol:**
 - Cold-start audits identify UX issues (source of truth for quality)
 - SAW accelerates parallel fixing (11 agents → single wave in Round 3)
-- Each audit reveals pattern gaps → improvements → better next iteration
+- Each audit reveals protocol gaps → improvements → better next iteration
 
 **Key insights:**
 - Post-merge verification caught integration issues individual agents missed
@@ -141,7 +141,7 @@ The improvements in this release emerged through iterative testing on brewprune 
 - Pre-implementation checks prevent wasted agent compute
 - Prompt clarity is critical - agents will self-limit if language is ambiguous
 
-## Pattern Philosophy
+## Protocol Design
 
 Scout-and-wave is optimized for:
 1. **Parallelization without conflicts** — Disjoint file ownership is a hard constraint
@@ -150,4 +150,4 @@ Scout-and-wave is optimized for:
 4. **Post-merge verification as the real gate** — Individual agent success doesn't guarantee integration success
 5. **Fail-fast suitability assessment** — Better to identify poor fits early than force decomposition
 
-The pattern evolves through real-world usage. Each experiment surfaces gaps that become improvements.
+The protocol evolves through real-world usage. Each experiment surfaces gaps that become improvements.
