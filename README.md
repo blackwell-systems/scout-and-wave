@@ -15,7 +15,7 @@ Scout-and-wave addresses this in two phases:
 
 Interface contracts are defined before any agent starts. Agents code against the spec, not against each other's in-progress code.
 
-The coordination artifact is living. Agents revise interface contracts and file ownership between waves based on what they actually built. Downstream agents in the next wave inherit corrected context, not the scout's original guesses. The plan converges toward reality with each wave instead of drifting from it.
+The coordination artifact is living. After each wave, agents append their completion reports directly to the artifact — interface contract deviations, out-of-scope discoveries, and implementation decisions. The orchestrator reads the artifact to run the post-merge verification gate, then downstream agents in the next wave read it for updated context. The plan converges toward reality with each wave instead of drifting from it.
 
 ## How It Differs From Spec-Driven Development
 
@@ -58,7 +58,8 @@ cp prompts/saw-skill.md ~/.claude/commands/saw.md
 
 ```
 /saw scout <feature-description>   # Run the scout phase, produce docs/IMPL-<feature>.md
-/saw wave                          # Execute the next pending wave from the IMPL doc
+/saw wave                          # Execute the next pending wave, pause for review
+/saw wave --auto                   # Execute all waves; only pause if verification fails
 /saw status                        # Show current progress
 ```
 
@@ -70,7 +71,7 @@ cp prompts/saw-skill.md ~/.claude/commands/saw.md
 
 3. **Wave:** `/saw wave` launches parallel agents for the current wave. Each agent owns disjoint files and codes against the interface contracts. Build and test gates verify the wave before proceeding. Note: git worktree isolation is not guaranteed to prevent concurrent writes — disjoint file ownership is what makes parallel execution safe, not the worktree mechanism.
 
-4. **Repeat:** Run `/saw wave` for each subsequent wave until all waves complete.
+4. **Repeat:** Run `/saw wave` for each subsequent wave, or `/saw wave --auto` to execute all remaining waves without per-wave confirmation prompts. Auto mode still pauses if verification fails.
 
 ## Blog Post
 
