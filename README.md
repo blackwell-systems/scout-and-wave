@@ -8,20 +8,23 @@ A coordination protocol for parallel AI agents. Defines preconditions, ownership
 
 Parallel AI agents working on the same codebase produce merge conflicts, contradictory implementations, and expensive rework. Agents make local decisions without global context, and those decisions collide.
 
+The root cause isn't that agents are careless — it's that nothing stops two agents from claiming the same file. Worktree isolation gives each agent a separate git branch, not a separate filesystem. If two agents both modify `auth/middleware.go`, the conflict is discovered at merge time, after both have implemented divergent solutions. You get either a merge conflict or, worse, a silent overwrite.
+
 ## How
 
-Scout-and-wave addresses this in two phases:
+Scout-and-wave fixes this before any agent starts, in two phases:
 
-1. **Scout:** A read-only agent analyzes the codebase and produces a coordination artifact: a dependency graph, interface contracts, a file ownership table, and a wave structure.
-2. **Wave:** Groups of agents execute in parallel, each owning disjoint files, across successive waves verified by build and test gates.
+1. **Scout:** A read-only agent analyzes the codebase and produces a coordination artifact: a dependency graph, exact interface contracts, a file ownership table, and a wave structure. Every file that will change is assigned to exactly one agent. No two agents in the same wave may touch the same file. This is a hard correctness constraint, not a preference — the scout resolves ownership conflicts at planning time or declares the work NOT SUITABLE for parallel execution.
 
-Interface contracts are defined before any agent starts. Agents code against the spec, not against each other's in-progress code.
+2. **Wave:** Groups of agents execute in parallel, each owning disjoint files, coding against the pre-defined interface contracts. Build and test gates verify each wave before the next begins. Agents append structured completion reports to the coordination artifact — interface deviations, out-of-scope discoveries, implementation decisions — so the plan converges toward reality with each wave instead of drifting from it.
 
-The coordination artifact is living. After each wave, agents append their completion reports directly to the artifact — interface contract deviations, out-of-scope discoveries, and implementation decisions. The orchestrator reads the artifact to run the post-merge verification gate, then downstream agents in the next wave read it for updated context. The plan converges toward reality with each wave instead of drifting from it.
+The protocol has a built-in suitability gate. The scout answers five questions before producing any agent prompts: Can the work decompose into disjoint file groups? Are there investigation-first blockers? Can interfaces be defined upfront? Are any items already implemented? Does parallelization gain exceed the overhead of scout + merge? If any question is a hard blocker, the scout emits NOT SUITABLE and stops. A poor-fit assessment is useful output — it tells you SAW isn't the right tool before any agent spends time on it.
 
-## How It Differs From Spec-Driven Development
+## In Practice
 
-[Spec-driven development](https://developer.microsoft.com/blog/spec-driven-development-spec-kit) says write the spec before the code. That's table stakes. Scout-and-wave starts where those specs end: when multiple agents need to execute in parallel against a shared codebase. Who owns which files? What are the exact interface contracts across agent boundaries? How do you propagate the actual state of completed work to the next wave? The scout produces that coordination artifact autonomously by reading the codebase. You don't write it by hand.
+Scout-and-wave was used to build [commitmux](https://github.com/blackwell-systems/commitmux), a cross-repo git history index for AI agents. The bootstrap run produced 5 agents across 3 waves: a Wave 0 types crate that established shared interfaces, followed by 3 parallel Wave 1 implementation agents (store, ingest, MCP server), then a Wave 2 integration agent that wired everything together. 17 tests passing across the full workspace at merge. The expected Cargo.toml conflict was documented in the coordination artifact before Wave 1 launched and handled at the post-merge gate rather than discovered mid-implementation.
+
+A subsequent feature wave added 9 features (fork detection, incremental sync, author filtering, short SHA support, remove-repo, update-repo, list_repos MCP tool) across 5 agents in 2 waves. The scout's pre-implementation check classified all 9 as TO-DO before agents were assigned.
 
 ## Protocol Specification
 
