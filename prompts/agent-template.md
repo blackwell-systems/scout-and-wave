@@ -11,6 +11,61 @@ context, then the work.
 
 You are Wave {N} Agent {letter}. {One-sentence summary of your task.}
 
+## 0. CRITICAL: Isolation Verification (RUN FIRST)
+
+⚠️ **MANDATORY PRE-FLIGHT CHECK - Run BEFORE any file modifications**
+
+Verify you are working in an isolated git worktree:
+
+```bash
+# Check working directory
+ACTUAL_DIR=$(pwd)
+EXPECTED_DIR="{absolute-repo-path}/.claude/worktrees/wave{N}-agent-{letter}"
+
+if [ "$ACTUAL_DIR" != "$EXPECTED_DIR" ]; then
+  echo "ISOLATION FAILURE: Wrong directory"
+  echo "Expected: $EXPECTED_DIR"
+  echo "Actual: $ACTUAL_DIR"
+  exit 1
+fi
+
+# Check git branch
+ACTUAL_BRANCH=$(git branch --show-current)
+EXPECTED_BRANCH="wave{N}-agent-{letter}"
+
+if [ "$ACTUAL_BRANCH" != "$EXPECTED_BRANCH" ]; then
+  echo "ISOLATION FAILURE: Wrong branch"
+  echo "Expected: $EXPECTED_BRANCH"
+  echo "Actual: $ACTUAL_BRANCH"
+  exit 1
+fi
+
+# Verify worktree in git's records
+git worktree list | grep -q "$EXPECTED_BRANCH" || {
+  echo "ISOLATION FAILURE: Worktree not in git worktree list"
+  exit 1
+}
+
+echo "✓ Isolation verified: $ACTUAL_DIR on $ACTUAL_BRANCH"
+```
+
+**If verification fails:** Write error to completion report and exit immediately (do NOT modify files):
+
+```
+### Agent {letter} — Completion Report
+
+**ISOLATION VERIFICATION FAILED**
+
+Expected: .claude/worktrees/wave{N}-agent-{letter} on branch wave{N}-agent-{letter}
+Actual: [paste output from pwd and git branch]
+
+**No work performed.** Cannot proceed without confirmed isolation.
+```
+
+**If verification passes:** Document briefly in completion report, then proceed with work.
+
+**Rationale:** Prevents modifying wrong files when worktree isolation fails (discovered in brewprune Round 5 Wave 1 where 5 agents modified main directly due to isolation failure).
+
 ## 1. File Ownership
 
 You own these files. Do not touch any other files EXCEPT as described below.

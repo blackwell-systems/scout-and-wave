@@ -27,21 +27,129 @@ Lessons learned from real-world usage, pending implementation.
 
 **Pattern fix required:**
 
-**Priority 1 - Add Worktree Verification Step:**
+**Priority 1 - Strict Worktree Enforcement (Orchestrator-Level):**
 
-Update `/saw wave` orchestrator to verify worktrees after agent launch:
+Replace reliance on Task tool's `isolation: "worktree"` parameter with explicit worktree creation:
 
+```bash
+# BEFORE launching agents:
+
+# 1. Create worktree directory
+mkdir -p .claude/worktrees
+
+# 2. For each agent, explicitly create worktree
+for agent in A B C D E; do
+  branch="wave1-agent-${agent}"
+  worktree_path=".claude/worktrees/${branch}"
+
+  # Remove stale worktree if exists
+  git worktree remove "$worktree_path" 2>/dev/null || true
+
+  # Create fresh worktree from current main
+  git worktree add "$worktree_path" -b "$branch" || {
+    echo "FATAL: Failed to create worktree for Agent $agent"
+    exit 1
+  }
+
+  # Verify it exists
+  [ -d "$worktree_path" ] || {
+    echo "FATAL: Worktree directory not found: $worktree_path"
+    exit 1
+  }
+
+  echo "✓ Agent $agent worktree created: $worktree_path"
+done
+
+# 3. Verify count before launching ANY agents
+expected=$((5 + 1))  # 5 agents + main
+actual=$(git worktree list | wc -l)
+if [ "$actual" -ne "$expected" ]; then
+  echo "FATAL: Expected $expected worktrees, found $actual"
+  git worktree list
+  exit 1
+fi
+
+# 4. NOW launch agents (without isolation parameter - already isolated)
 ```
-1. Launch all agents with isolation: "worktree"
-2. Sleep 5s (let agents initialize)
-3. Run: git worktree list
-4. Parse output - expect N+1 worktrees (main + N agents)
-5. If count mismatch:
-   - STOP immediately
-   - Show error: "Worktree isolation failed - expected N worktrees, found M"
-   - Provide git worktree list output
-   - Recommend: check git version, repo state, Task tool version
-   - Do NOT proceed to wait for agent completion
+
+**Priority 2 - Fail-Fast Agent Self-Verification:**
+
+Add mandatory pre-flight check to agent template (BEFORE any file modifications):
+
+```markdown
+## 0. CRITICAL: Isolation Verification (RUN FIRST)
+
+**BEFORE ANY WORK:**
+
+Run isolation verification:
+
+\`\`\`bash
+# Check location
+ACTUAL_DIR=$(pwd)
+EXPECTED_DIR="/path/to/repo/.claude/worktrees/wave1-agent-A"
+
+if [ "$ACTUAL_DIR" != "$EXPECTED_DIR" ]; then
+  echo "ISOLATION FAILURE: Wrong directory"
+  echo "Expected: $EXPECTED_DIR"
+  echo "Actual: $ACTUAL_DIR"
+  exit 1
+fi
+
+# Check branch
+ACTUAL_BRANCH=$(git branch --show-current)
+EXPECTED_BRANCH="wave1-agent-A"
+
+if [ "$ACTUAL_BRANCH" != "$EXPECTED_BRANCH" ]; then
+  echo "ISOLATION FAILURE: Wrong branch"
+  echo "Expected: $EXPECTED_BRANCH"
+  echo "Actual: $ACTUAL_BRANCH"
+  exit 1
+fi
+
+# Verify worktree exists in git's records
+git worktree list | grep -q "$EXPECTED_BRANCH" || {
+  echo "ISOLATION FAILURE: Worktree not in git worktree list"
+  exit 1
+}
+
+echo "✓ Isolation verified"
+\`\`\`
+
+**If verification fails:**
+1. Write failure to completion report immediately:
+   \`\`\`
+   ### Agent X — Completion Report
+
+   **ISOLATION VERIFICATION FAILED**
+
+   Expected: .claude/worktrees/wave1-agent-X on branch wave1-agent-X
+   Actual: [paste pwd and git branch output]
+
+   **No work performed.** Cannot proceed without confirmed isolation.
+   \`\`\`
+2. Exit immediately (do NOT modify any code files)
+3. Do NOT attempt recovery (cd, branch switch, etc) - let orchestrator fix
+
+**If verification passes:**
+- Document verification success in completion report
+- Proceed with assigned file modifications
+```
+
+**Priority 3 - Post-Launch Orchestrator Safety Check:**
+
+After launching all agents, check for immediate failures:
+
+```bash
+# Give agents 10s to run pre-flight checks
+sleep 10
+
+# Check if any completion reports show isolation failures
+if grep -r "ISOLATION VERIFICATION FAILED" docs/IMPL-*.md 2>/dev/null; then
+  echo "FATAL: One or more agents failed isolation verification"
+  echo "Stopping wave execution"
+  git worktree list
+  exit 1
+fi
 ```
 
 **Priority 2 - Document Failure Mode:**
@@ -73,13 +181,36 @@ After launching agents, verify worktrees were created:
 - Run post-merge verification immediately after each agent
 ```
 
+**Design rationale for fail-fast approach:**
+
+Agents can't fix their environment, but they CAN refuse to work in a bad environment:
+- ❌ Can't create missing worktrees (orchestrator's job, might conflict)
+- ❌ Can't kill themselves cleanly (background task, no orchestrator communication)
+- ❌ Can't fix environment (limited scope, no sudo)
+- ✅ CAN detect bad state via pwd/git branch checks
+- ✅ CAN write error to completion report (creates audit trail)
+- ✅ CAN exit without modifying files (prevents damage)
+
+Self-verification is error reporting, not recovery. Orchestrator reads completion reports after 10s, detects isolation failures, and stops wave execution before agents make changes to wrong files.
+
+**Defense in depth (3 layers):**
+1. **Orchestrator pre-creates worktrees** - fails fast if creation impossible
+2. **Agent self-verifies isolation** - catches tool failures, refuses to work
+3. **Post-merge verification** - final integration check (existing mechanism)
+
 **Evidence:**
 - brewprune Round 5 Wave 1 (2026-02-28)
 - 5 agents launched, 0 worktrees created
 - Commit: 521b3ec
-- Zero conflicts only due to perfect file disjointness
+- Zero conflicts only due to perfect file disjointness (pure luck)
 
 **Impact:** CRITICAL - undermines core safety mechanism of SAW pattern
+
+**Next steps:**
+1. Implement Priority 1 (explicit worktree creation) in saw-skill.md orchestrator logic
+2. Add Priority 2 (fail-fast verification) to agent-template.md section 0 (pre-flight)
+3. Add Priority 3 (post-launch safety check) to saw-skill.md after agent launch
+4. Test with brewprune Round 5 Wave 2 (2 agents, critical PATH fixes)
 
 ---
 
