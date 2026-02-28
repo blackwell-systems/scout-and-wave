@@ -1,5 +1,7 @@
 # Scout-and-Wave
 
+![Version](https://img.shields.io/badge/version-0.2.0-blue)
+
 A methodology for reducing conflict and improving efficiency with parallel AI agents.
 
 ## Why
