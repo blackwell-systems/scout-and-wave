@@ -2,7 +2,7 @@
 
 ![Version](https://img.shields.io/badge/version-0.3.1-blue)
 
-A methodology for reducing conflict and improving efficiency with parallel AI agents.
+A coordination protocol for parallel AI agents. Defines preconditions, ownership invariants, and verification gates that guarantee agents can work concurrently without conflicts.
 
 ## Why
 
@@ -22,6 +22,10 @@ The coordination artifact is living. After each wave, agents append their comple
 ## How It Differs From Spec-Driven Development
 
 [Spec-driven development](https://developer.microsoft.com/blog/spec-driven-development-spec-kit) says write the spec before the code. That's table stakes. Scout-and-wave starts where those specs end: when multiple agents need to execute in parallel against a shared codebase. Who owns which files? What are the exact interface contracts across agent boundaries? How do you propagate the actual state of completed work to the next wave? The scout produces that coordination artifact autonomously by reading the codebase. You don't write it by hand.
+
+## Protocol Specification
+
+[`PROTOCOL.md`](PROTOCOL.md) — Formal specification: preconditions, invariants, state machine, participant roles, message formats, and correctness guarantees. The prompts in `prompts/` are reference implementations of this spec.
 
 ## Prompts
 
