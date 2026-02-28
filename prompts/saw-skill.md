@@ -2,9 +2,17 @@ Scout-and-Wave: Parallel Agent Coordination
 
 Read the scout prompt at `prompts/scout.md` and the agent template at `prompts/agent-template.md` from the scout-and-wave repository. If these files are not in the current project, look for them at the path configured in the SAW_REPO environment variable, or fall back to `~/code/scout-and-wave/prompts/`.
 
+If the argument is `check <feature-description>`:
+1. Read the feature description and do a lightweight codebase scan (directory structure, key files likely to change — no deep analysis).
+2. Answer the three suitability questions:
+   - Can the work decompose into ≥2 disjoint file groups?
+   - Are there investigation-first items (unknown root causes, crashes to reproduce)?
+   - Can cross-agent interfaces be defined before implementation starts?
+3. Emit a verdict (SUITABLE / NOT SUITABLE / SUITABLE WITH CAVEATS) with a one-paragraph rationale and a recommended next step. Do not write any files.
+
 If no `docs/IMPL-*.md` file exists for the current feature:
-1. Run the scout phase: analyze the codebase and produce a coordination artifact following the scout prompt. Write it to `docs/IMPL-<feature-slug>.md`.
-2. Report the wave structure, file ownership table, and interface contracts. Ask the user to review before proceeding.
+1. Run the scout phase: analyze the codebase and produce a coordination artifact following the scout prompt. The scout runs the suitability gate first; if NOT SUITABLE it writes only the verdict section and stops. Write the result to `docs/IMPL-<feature-slug>.md`.
+2. Report the suitability verdict, and if suitable: the wave structure, file ownership table, and interface contracts. Ask the user to review before proceeding.
 
 If a `docs/IMPL-*.md` file already exists:
 1. Read it and identify the current wave (the first wave with unchecked status items).
@@ -16,7 +24,18 @@ If a `docs/IMPL-*.md` file already exists:
 7. If verification fails, report the failures and ask the user how to proceed.
 
 Arguments:
-- `scout <feature-description>`: Run only the scout phase to produce the IMPL doc
+- `check <feature-description>`: Lightweight suitability pre-flight. Does not
+  analyze the full codebase and does not write any files. Answers three
+  questions: (1) Can the work decompose into ≥2 disjoint file groups?
+  (2) Are there investigation-first items (crashes, unknown root causes)?
+  (3) Can cross-agent interfaces be defined before implementation starts?
+  Emits a verdict: SUITABLE / NOT SUITABLE / SUITABLE WITH CAVEATS, plus a
+  recommended next step. Run this when you are unsure whether SAW is the
+  right approach before committing to a full scout.
+- `scout <feature-description>`: Run the scout phase to produce the IMPL doc.
+  The scout always runs the suitability gate first; if the work is not
+  suitable, it writes a short verdict to `docs/IMPL-<slug>.md` and stops
+  without producing agent prompts.
 - `wave`: Execute the next pending wave, pause for review after each wave
 - `wave --auto`: Execute all remaining waves automatically; only pause if verification fails
 - `status`: Show current progress from the IMPL doc

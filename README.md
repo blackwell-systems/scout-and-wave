@@ -30,17 +30,18 @@ The coordination artifact is living. After each wave, agents append their comple
 ## When to Use It
 
 **Good fit:**
-- Feature touches 5+ files
+- Feature touches 5+ files across distinct concerns
 - Clear seams exist between pieces
-- Interfaces can be defined before implementation
+- Interfaces can be defined before implementation starts
 - Work can be chunked so each agent owns 1-3 files
 
 **Poor fit:**
-- Tightly coupled code with no clean seams
-- Interface unknown until you start implementing
+- Tightly coupled code with no clean file boundaries
+- Interface cannot be known until you start implementing
 - Single piece of logic with nothing to parallelize
+- Root cause is unknown (crash, race condition) — investigate first, then use SAW for the fix
 
-The scout itself will surface a poor fit: if file ownership cannot be cleanly assigned, that's a signal the work isn't parallelizable, which is still useful information before you start.
+Use `/saw check` when you're unsure. The scout also runs a built-in suitability gate and will emit a NOT SUITABLE verdict (and stop) rather than producing a broken IMPL doc with forced decomposition. Either way, a poor-fit assessment is useful output — it tells you SAW isn't the right tool before any agents spend time on it.
 
 ## Usage with Claude Code
 
@@ -57,6 +58,7 @@ cp prompts/saw-skill.md ~/.claude/commands/saw.md
 ### Commands
 
 ```
+/saw check <feature-description>   # Lightweight suitability pre-flight (no files written)
 /saw scout <feature-description>   # Run the scout phase, produce docs/IMPL-<feature>.md
 /saw wave                          # Execute the next pending wave, pause for review
 /saw wave --auto                   # Execute all waves; only pause if verification fails
@@ -65,13 +67,15 @@ cp prompts/saw-skill.md ~/.claude/commands/saw.md
 
 ### Workflow
 
-1. **Scout:** `/saw scout "add OAuth2 login flow"` analyzes the codebase and writes `docs/IMPL-oauth2-login.md` with the full coordination artifact: dependency graph, file ownership, interface contracts, wave structure, and per-agent prompts.
+1. **Check (optional):** `/saw check "add OAuth2 login flow"` runs a lightweight pre-flight. It answers whether the work can be decomposed into disjoint file groups, whether there are investigation-first items, and whether cross-agent interfaces can be defined upfront. Emits SUITABLE / NOT SUITABLE / SUITABLE WITH CAVEATS. No files are written. Skip this step if you already know SAW is a good fit.
 
-2. **Review:** Read the IMPL doc. Verify file ownership is clean, interface contracts are correct, and wave ordering makes sense. Adjust before proceeding.
+2. **Scout:** `/saw scout "add OAuth2 login flow"` analyzes the codebase and writes `docs/IMPL-oauth2-login.md`. The scout always runs the suitability gate first — if the work is not suitable it writes only the verdict and stops without generating agent prompts. If suitable, it produces the full coordination artifact: suitability assessment, dependency graph, file ownership, interface contracts, wave structure, and per-agent prompts.
 
-3. **Wave:** `/saw wave` launches parallel agents for the current wave. Each agent owns disjoint files and codes against the interface contracts. Build and test gates verify the wave before proceeding. Note: git worktree isolation is not guaranteed to prevent concurrent writes — disjoint file ownership is what makes parallel execution safe, not the worktree mechanism.
+3. **Review:** Read the IMPL doc. Verify the suitability verdict makes sense, file ownership is clean, interface contracts are correct, and wave ordering is right. Adjust before proceeding.
 
-4. **Repeat:** Run `/saw wave` for each subsequent wave, or `/saw wave --auto` to execute all remaining waves without per-wave confirmation prompts. Auto mode still pauses if verification fails.
+4. **Wave:** `/saw wave` launches parallel agents for the current wave. Each agent owns disjoint files and codes against the interface contracts. Build and test gates verify the wave before proceeding. Note: git worktree isolation is not guaranteed to prevent concurrent writes — disjoint file ownership is what makes parallel execution safe, not the worktree mechanism.
+
+5. **Repeat:** Run `/saw wave` for each subsequent wave, or `/saw wave --auto` to execute all remaining waves without per-wave confirmation prompts. Auto mode still pauses if verification fails.
 
 ## Blog Post
 

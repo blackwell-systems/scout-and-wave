@@ -14,6 +14,52 @@ Write the document to `docs/IMPL-<feature-slug>.md`. This file is the single
 source of truth for all downstream agents and for tracking progress between
 waves.
 
+## Suitability Gate
+
+Run this gate before any file analysis. If the work is not suitable, stop
+early — do not produce a full IMPL doc with agents.
+
+Answer these three questions:
+
+1. **File decomposition.** Can the work be assigned to ≥2 agents with
+   completely disjoint file ownership? Count the distinct files that will
+   change and check whether any two tasks are forced to share a file. If
+   every change funnels through a single file, there is nothing to
+   parallelize.
+
+2. **Investigation-first items.** Does any part of the work require root
+   cause analysis before implementation — a crash whose source is unknown,
+   a race condition that must be reproduced before it can be fixed, behavior
+   that must be observed to be understood? If so, agents cannot be written
+   for those items yet; they must be isolated into a Wave 0 or handled
+   before SAW begins.
+
+3. **Interface discoverability.** Can the cross-agent interfaces be defined
+   before implementation starts? If a downstream agent's inputs cannot be
+   specified until an upstream agent has already started implementing, the
+   contract cannot be written and agents will contradict each other.
+
+**Emit a verdict before proceeding:**
+
+- **SUITABLE** — All three questions resolve cleanly. Proceed with full
+  analysis and produce the IMPL doc.
+- **NOT SUITABLE** — One or more questions is a hard blocker (e.g., only
+  one file changes, or root cause of a crash is completely unknown). Write
+  a short explanation to `docs/IMPL-<slug>.md` — just the verdict and
+  reasoning, no agent prompts — and stop. Recommend sequential
+  implementation or an investigation-first step.
+- **SUITABLE WITH CAVEATS** — The work is parallelizable but has known
+  constraints. Proceed, but document the caveats explicitly:
+  - Investigation-first items become Wave 0 (a single solo agent, not
+    parallel), which gates all downstream waves.
+  - Interfaces that cannot yet be fully defined are flagged as blockers in
+    the interface contracts section, with a note on how to resolve them.
+
+Record the verdict and its rationale in the IMPL doc under a
+**Suitability Assessment** section that appears before the dependency graph.
+
+---
+
 ## Process
 
 1. **Read the project first.** Examine the build system (Makefile, go.mod,
@@ -75,6 +121,14 @@ waves.
 Write the following to `docs/IMPL-<feature-slug>.md`:
 
 ```
+### Suitability Assessment
+
+Verdict: SUITABLE | NOT SUITABLE | SUITABLE WITH CAVEATS
+
+[One paragraph explaining the verdict. If NOT SUITABLE, stop here — do not
+write the sections below. If SUITABLE WITH CAVEATS, describe what the
+caveats are and how they are handled (e.g., Wave 0 for investigation).]
+
 ### Dependency Graph
 
 [Description of the DAG. Which files/modules are roots, which are leaves,
