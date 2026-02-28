@@ -1,4 +1,4 @@
-# Scout-and-Wave
+# Scout-and-Wave: A Coordination Protocol for Parallel AI Agents
 
 ![Version](https://img.shields.io/badge/version-0.3.1-blue)
 
