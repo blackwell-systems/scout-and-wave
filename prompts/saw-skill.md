@@ -18,10 +18,11 @@ If a `docs/IMPL-*.md` file already exists:
 1. Read it and identify the current wave (the first wave with unchecked status items).
 2. For each agent in the current wave, launch a parallel Task agent using the agent prompt from the IMPL doc. Use `isolation: "worktree"` for each agent. Note: worktree isolation does not guarantee true filesystem isolation — disjoint file ownership (enforced by the IMPL doc) is what prevents conflicts, not the worktree mechanism.
 3. After all agents in the wave complete, read each agent's completion report from their named section in the IMPL doc (`### Agent {letter} — Completion Report`). Check for interface contract deviations and out-of-scope dependencies.
-4. Merge all agent worktrees back into the main branch.
-5. Run the verification gate commands listed in the IMPL doc against the merged result. Individual agents pass their gates in isolation, but the merged codebase can surface issues none of them saw individually. This post-merge verification is the real gate. Pay attention to cascade candidates listed in the IMPL doc.
-6. If verification passes, update the IMPL doc: tick status checkboxes, correct any interface contracts that changed, apply any out-of-scope fixes flagged by agents, and commit the wave's changes. If `--auto` was passed, immediately proceed to the next wave. Otherwise, report the wave result and ask the user if they want to continue.
-7. If verification fails, report the failures and ask the user how to proceed.
+4. **Detect out-of-scope conflicts before merging**: Scan all completion reports for out-of-scope file changes (reported in section 8). If multiple agents modified the same out-of-scope file, flag the conflict and show both changes to the user. Ask which version to keep or if manual merge is needed. Do not proceed to merge until conflicts are resolved.
+5. Merge all agent worktrees back into the main branch.
+6. Run the verification gate commands listed in the IMPL doc against the merged result. Individual agents pass their gates in isolation, but the merged codebase can surface issues none of them saw individually. This post-merge verification is the real gate. Pay attention to cascade candidates listed in the IMPL doc.
+7. If verification passes, update the IMPL doc: tick status checkboxes, correct any interface contracts that changed, apply any out-of-scope fixes flagged by agents, and commit the wave's changes. If `--auto` was passed, immediately proceed to the next wave. Otherwise, report the wave result and ask the user if they want to continue.
+8. If verification fails, report the failures and ask the user how to proceed.
 
 Arguments:
 - `check <feature-description>`: Lightweight suitability pre-flight. Does not

@@ -39,6 +39,23 @@ Answer these three questions:
    specified until an upstream agent has already started implementing, the
    contract cannot be written and agents will contradict each other.
 
+4. **Pre-implementation status check.** If the work is based on an audit report,
+   bug list, or requirements document, check each item against the current
+   codebase to determine implementation status:
+   - Read the source files that would change for each item
+   - Classify each item as: **TO-DO** (not implemented), **DONE** (already
+     implemented), or **PARTIAL** (partially implemented)
+   - For DONE items:
+     - If tests exist and are comprehensive: skip the agent entirely, OR
+     - If tests are missing/incomplete: change agent prompt to "verify existing
+       implementation and add test coverage" rather than "implement"
+   - For PARTIAL items: agent prompt should say "complete the implementation"
+     and describe what's missing
+
+   Document pre-implementation status in the Suitability Assessment section
+   (e.g., "3 of 19 findings already implemented; agents F, G, H adjusted to
+   add test coverage only").
+
 **Emit a verdict before proceeding:**
 
 - **SUITABLE** — All three questions resolve cleanly. Proceed with full
@@ -115,6 +132,28 @@ Record the verdict and its rationale in the IMPL doc under a
    CI config, or build scripts. Emit the exact commands each agent must run
    (e.g., `go build ./...`, `npm test`, `pytest -x`). Do not use generic
    placeholders.
+
+   **Performance guidance for test commands:**
+   - Count existing tests in the package(s) being modified
+   - If a package has >50 tests, use focused test commands during waves:
+     - Agent verification: `go test ./path/to/package -run TestSpecificCommand`
+     - Post-merge verification: `go test ./...` (full suite)
+   - Add reasonable timeouts (2-5 minutes per package for agent gates)
+   - This keeps agent verification fast while preserving full coverage at merge
+
+   Example for agent prompt:
+   ```bash
+   go build ./...
+   go vet ./...
+   go test ./internal/app -run TestDoctor  # Focused on this agent's work
+   ```
+
+   Example for Wave Execution Loop:
+   ```bash
+   go build ./...
+   go vet ./...
+   go test ./...  # Full suite after merge
+   ```
 
 ## Output Format
 
