@@ -68,7 +68,7 @@ cp prompts/saw-skill.md ~/.claude/commands/saw.md
 
 2. **Review:** Read the IMPL doc. Verify file ownership is clean, interface contracts are correct, and wave ordering makes sense. Adjust before proceeding.
 
-3. **Wave:** `/saw wave` launches parallel agents for the current wave. Each agent runs in an isolated git worktree, owns disjoint files, and codes against the interface contracts. Build and test gates verify the wave before proceeding.
+3. **Wave:** `/saw wave` launches parallel agents for the current wave. Each agent owns disjoint files and codes against the interface contracts. Build and test gates verify the wave before proceeding. Note: git worktree isolation is not guaranteed to prevent concurrent writes — disjoint file ownership is what makes parallel execution safe, not the worktree mechanism.
 
 4. **Repeat:** Run `/saw wave` for each subsequent wave until all waves complete.
 

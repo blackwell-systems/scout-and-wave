@@ -57,11 +57,22 @@ cd /path/to/project
 {Any additional hard rules: non-fatal error handling, stderr vs stdout,
 backward compatibility requirements, things to explicitly avoid.}
 
+If you discover that correct implementation requires changing a file not in
+your ownership list, do NOT modify it. Report it in section 8 as an
+out-of-scope dependency: name the file, describe the required change, and
+explain why it's needed. The orchestrator handles it at the post-merge gate.
+
 ## 8. Report
 
-When done, report:
+Append your completion report to the IMPL doc under
+`### Agent {letter} — Completion Report`. This is the canonical record —
+downstream agents and the orchestrator read the IMPL doc, not chat output.
+Interface contract changes must be written there so the next wave picks them up.
+
+Include:
 - What you implemented (function names, key decisions)
 - Test results (pass/fail, count)
 - Any deviations from the spec and why
-- Any interface contract changes (signature differences from the original spec that downstream agents need to know about)
+- Any interface contract changes (exact signature differences downstream agents need)
+- Any out-of-scope dependencies discovered (file name, required change, reason)
 ```
