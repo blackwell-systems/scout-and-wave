@@ -16,13 +16,13 @@ If no `docs/IMPL-*.md` file exists for the current feature:
 
 If a `docs/IMPL-*.md` file already exists:
 1. Read it and identify the current wave (the first wave with unchecked status items).
-2. For each agent in the current wave, launch a parallel Task agent using the agent prompt from the IMPL doc. Use `isolation: "worktree"` for each agent. Note: worktree isolation does not guarantee true filesystem isolation — disjoint file ownership (enforced by the IMPL doc) is what prevents conflicts, not the worktree mechanism.
+2. For each agent in the current wave, launch a parallel Task agent using the agent prompt from the IMPL doc. Use `isolation: "worktree"` for each agent. Note: Agents include self-healing logic (attempt cd to worktree) + strict verification (fail-fast if isolation incorrect). Disjoint file ownership (enforced by the IMPL doc) is the primary safety mechanism.
 3. **⚠️ CRITICAL: Verify worktree isolation** - After launching agents, immediately check that worktrees were created:
    - Run `git worktree list`
    - Expected: N+1 worktrees (main + N agents)
    - If count doesn't match: STOP and report error - agents are modifying main branch directly with NO isolation
-   - Known issue (2026-02-28): `isolation: "worktree"` parameter may not create worktrees in some environments
-   - If verification fails: Recommend reducing wave size to 1-2 agents or proceeding only if file ownership is STRICTLY disjoint
+   - Known issue (2026-02-28): `isolation: "worktree"` parameter may not create worktrees in some environments, but agents will attempt to cd to worktree location before running verification (self-healing)
+   - If verification fails: Agents will refuse to work and report isolation failure in completion reports
 4. After all agents in the wave complete, read each agent's completion report from their named section in the IMPL doc (`### Agent {letter} — Completion Report`). Check for interface contract deviations and out-of-scope dependencies.
 4. **Detect out-of-scope conflicts before merging**: Scan all completion reports for out-of-scope file changes (reported in section 8). If multiple agents modified the same out-of-scope file, flag the conflict and show both changes to the user. Ask which version to keep or if manual merge is needed. Do not proceed to merge until conflicts are resolved.
 5. Merge all agent worktrees back into the main branch.
