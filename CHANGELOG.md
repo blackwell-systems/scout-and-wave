@@ -13,6 +13,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - **Pre-implementation status check** (2026-02-28): Scout suitability gate now includes step 4: check each audit finding/requirement against the current codebase to determine implementation status (TO-DO, DONE, PARTIAL). For DONE items, scout adjusts agent prompts to "verify existing implementation and add test coverage" rather than "implement." Prevents wasted compute on already-implemented work. ([commit cb003ce](https://github.com/anthropics/scout-and-wave/commit/cb003ce))
 
+- **Known Issues section in IMPL template** (2026-02-28): Scout now includes a "Known Issues" section in the IMPL doc template where pre-existing test failures, build warnings, or known bugs can be documented. Helps agents distinguish expected failures from regressions. Includes workarounds and tracking links. ([commit b69c91e](https://github.com/anthropics/scout-and-wave/commit/b69c91e))
+
+- **Justified API-wide changes guidance** (2026-02-28): Agent template now explicitly permits out-of-scope modifications when fixing design flaws that require atomic changes. Agents must document all affected files, justify why changes must be atomic (not incremental), and update all call sites consistently. Example: fixing race conditions in shared APIs. ([commit b69c91e](https://github.com/anthropics/scout-and-wave/commit/b69c91e))
+
+- **Integration test reminder** (2026-02-28): Agent template now prompts agents to search for tests expecting OLD behavior when modifying command behavior, exit codes, or error handling. Update related tests BEFORE running verification to prevent post-merge test failures. ([commit b69c91e](https://github.com/anthropics/scout-and-wave/commit/b69c91e))
+
 ### Fixed
 - **Scout agent file-writing clarification** (2026-02-28): Removed ambiguous "read-only reconnaissance agent" language that caused Plan agents to refuse writing IMPL docs. Now explicitly states: "you do NOT write implementation code, but you MUST write the coordination artifact (IMPL doc) using the Write tool." Prevents agents from returning IMPL content as text instead of writing the file. ([commit 5d8c980](https://github.com/anthropics/scout-and-wave/commit/5d8c980))
 
