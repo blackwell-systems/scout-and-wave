@@ -4,6 +4,33 @@ All notable changes to the Scout-and-Wave pattern will be documented in this fil
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.3.1] - 2026-02-28
+
+### Changed
+
+- **Structured completion reports** — Agent template Section 8 now produces a
+  machine-readable YAML block instead of free-form prose: `status`, `worktree`,
+  `commit` (sha or "uncommitted"), `files_changed`, `files_created`,
+  `interface_deviations`, `out_of_scope_deps`, `tests_added`, `verification`.
+  Free-form notes follow the block for anything that doesn't fit. Enables
+  orchestrator automation of conflict detection, merge sequencing, and IMPL doc
+  updates without reading prose.
+
+- **Conflict prediction before merge** — `saw-merge.md` now cross-references
+  all agents' `files_changed` and `files_created` lists before touching the
+  working tree. Disjoint ownership violations surface before `git merge` is
+  attempted, not mid-merge. `out_of_scope_deps` lists are also cross-referenced
+  for agents that flagged the same file with different required changes.
+
+- **Structured merge procedure** — `saw-merge.md` rewritten as 7 explicit
+  steps: parse reports → conflict prediction → review deviations → merge →
+  cleanup → post-merge verification → IMPL doc updates. Each step uses
+  structured report fields rather than requiring the orchestrator to interpret
+  prose.
+
+- **`saw-merge.md` version bump** — v0.2.0 → v0.3.0
+- **`agent-template.md` version bump** — v0.2.0 → v0.3.1
+
 ## [0.3.0] - 2026-02-28
 
 ### Added

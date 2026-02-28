@@ -1,4 +1,4 @@
-<!-- agent-template v0.2.0 -->
+<!-- agent-template v0.3.1 -->
 # Agent Prompt Template
 
 Each agent prompt has 8 fields. The scout fills these in from the coordination

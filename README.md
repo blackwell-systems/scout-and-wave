@@ -1,6 +1,6 @@
 # Scout-and-Wave
 
-![Version](https://img.shields.io/badge/version-0.3.0-blue)
+![Version](https://img.shields.io/badge/version-0.3.1-blue)
 
 A methodology for reducing conflict and improving efficiency with parallel AI agents.
 
@@ -93,7 +93,7 @@ cp prompts/saw-skill.md ~/.claude/commands/saw.md
 
 3. **Review:** Read the IMPL doc. Verify the suitability verdict makes sense, file ownership is clean, interface contracts are correct, and wave ordering is right. Adjust before proceeding.
 
-4. **Wave:** `/saw wave` launches parallel agents for the current wave. Each agent owns disjoint files and codes against the interface contracts. Build and test gates verify the wave before proceeding. Note: git worktree isolation is not guaranteed to prevent concurrent writes — disjoint file ownership is what makes parallel execution safe, not the worktree mechanism.
+4. **Wave:** `/saw wave` launches parallel agents for the current wave. Each agent owns disjoint files, codes against the interface contracts, and writes a structured completion report (files changed, interface deviations, out-of-scope deps, verification result). The orchestrator cross-references all agents' file lists for conflicts before merging, then merges each worktree in sequence.
 
 5. **Repeat:** Run `/saw wave` for each subsequent wave, or `/saw wave --auto` to execute all remaining waves without per-wave confirmation prompts. Auto mode still pauses if verification fails.
 
