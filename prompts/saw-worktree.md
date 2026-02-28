@@ -1,4 +1,4 @@
-<!-- saw-worktree v0.3.0 -->
+<!-- saw-worktree v0.4.0 -->
 # SAW Worktree Lifecycle
 
 Manage git worktree creation, verification, and cleanup for wave agents.
@@ -17,6 +17,36 @@ Additional benefit: a solo Wave 0 agent running on main makes its output
 for a worktree merge.
 
 Proceed to worktree creation only when the wave has **≥2 agents**.
+
+## Interface Freeze Before Worktree Creation
+
+**Do not create worktrees until interface contracts are finalized.**
+
+The review window between "IMPL doc written" and "agents launched" is the
+right time to revise type signatures, add fields, or restructure APIs. Once
+worktrees branch from HEAD, any interface change in the IMPL doc requires
+removing and recreating the worktrees — otherwise agents run against a stale
+version of the contracts.
+
+Checklist before creating worktrees:
+- All type signatures in the IMPL doc interface contracts are final
+- All `store_embedding`-style multi-param signatures are agreed on
+- Any schema changes (Wave 0) are committed to HEAD
+
+**If worktrees already exist from a previous session**, verify their HEAD
+matches the current HEAD of main before launching agents:
+
+```bash
+git worktree list
+# Compare commit SHAs — if any worktree SHA differs from main HEAD, remove and recreate:
+git worktree remove ".claude/worktrees/wave{N}-agent-{letter}" --force
+git branch -D "wave{N}-agent-{letter}"
+git worktree add ".claude/worktrees/wave{N}-agent-{letter}" -b "wave{N}-agent-{letter}"
+```
+
+Stale worktrees from a previous session will cause agents to implement
+against outdated interfaces, producing merge-time conflicts that are expensive
+to untangle.
 
 ## Pre-Create Worktrees
 
