@@ -20,12 +20,6 @@ Scout-and-wave fixes this before any agent starts, in two phases:
 
 The protocol has a built-in suitability gate. The scout answers five questions before producing any agent prompts: Can the work decompose into disjoint file groups? Are there investigation-first blockers? Can interfaces be defined upfront? Are any items already implemented? Does parallelization gain exceed the overhead of scout + merge? If any question is a hard blocker, the scout emits NOT SUITABLE and stops. A poor-fit assessment is useful output — it tells you SAW isn't the right tool before any agent spends time on it.
 
-## In Practice
-
-Scout-and-wave was used to build [commitmux](https://github.com/blackwell-systems/commitmux), a cross-repo git history index for AI agents. The bootstrap run produced 5 agents across 3 waves: a Wave 0 types crate that established shared interfaces, followed by 3 parallel Wave 1 implementation agents (store, ingest, MCP server), then a Wave 2 integration agent that wired everything together. 17 tests passing across the full workspace at merge. The expected Cargo.toml conflict was documented in the coordination artifact before Wave 1 launched and handled at the post-merge gate rather than discovered mid-implementation.
-
-A subsequent feature wave added 9 features (fork detection, incremental sync, author filtering, short SHA support, remove-repo, update-repo, list_repos MCP tool) across 5 agents in 2 waves. The scout's pre-implementation check classified all 9 as TO-DO before agents were assigned.
-
 ## Protocol Specification
 
 [`PROTOCOL.md`](PROTOCOL.md) — Formal specification: preconditions, invariants, state machine, participant roles, message formats, and correctness guarantees. The prompts in `prompts/` are reference implementations of this spec.
