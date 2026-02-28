@@ -1,4 +1,4 @@
-<!-- saw-bootstrap v0.3.0 -->
+<!-- saw-bootstrap v0.3.1 -->
 # SAW Bootstrap: Design-First Project Architecture
 
 Use this mode when starting a new project from scratch with no existing codebase.
@@ -16,6 +16,33 @@ ownership before any code is written.
 - Existing codebase with features to add (use `/saw scout` instead)
 - Single-file or trivially small projects
 - Prototypes where structure doesn't matter yet
+
+## Pre-Flight: Ensure Git Repo Exists
+
+Before gathering requirements, check whether a git repository is initialized:
+
+```bash
+git status
+```
+
+If this fails (no repo), initialize one before proceeding. An empty first
+commit is fine — it gives agents a clean branch to work from:
+
+```bash
+git init
+git commit --allow-empty -m "chore: initial commit"
+```
+
+If there are already untracked files in the directory, stage and commit them:
+
+```bash
+git init
+git add .
+git commit -m "chore: initial commit"
+```
+
+This costs nothing and prevents bootstrap from failing silently mid-execution
+when agents try to create worktrees or branches.
 
 ## Phase 0: Gather Requirements
 

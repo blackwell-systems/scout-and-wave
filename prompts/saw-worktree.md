@@ -1,13 +1,28 @@
-<!-- saw-worktree v0.2.0 -->
+<!-- saw-worktree v0.3.0 -->
 # SAW Worktree Lifecycle
 
 Manage git worktree creation, verification, and cleanup for wave agents.
 
+## Solo Agent Check
+
+**Before creating any worktrees**, count the agents in the current wave.
+
+If the wave has exactly **1 agent**, skip worktree creation entirely. Run the
+agent directly on the main branch with no isolation overhead. Worktree
+isolation exists to prevent inter-agent file conflicts — a solo agent cannot
+conflict with itself, so the overhead is pure waste.
+
+Additional benefit: a solo Wave 0 agent running on main makes its output
+(new types, interfaces) immediately readable by Wave 1 agents without waiting
+for a worktree merge.
+
+Proceed to worktree creation only when the wave has **≥2 agents**.
+
 ## Pre-Create Worktrees
 
-Before launching any agents, create a worktree for each agent in the wave.
-Do NOT rely on the Task tool's `isolation: "worktree"` parameter alone — it
-may not create worktrees in all environments.
+Before launching any agents in a multi-agent wave, create a worktree for each
+agent. Do NOT rely on the Task tool's `isolation: "worktree"` parameter alone
+— it may not create worktrees in all environments.
 
 ```bash
 mkdir -p .claude/worktrees
