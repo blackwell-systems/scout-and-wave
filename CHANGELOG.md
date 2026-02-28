@@ -28,15 +28,44 @@ Initial release of Scout-and-Wave pattern based on lessons learned from brewprun
 - Wave execution loop with post-merge verification
 - Living coordination artifact pattern (agents append completion reports)
 
-### Pattern Improvements from Brewprune Experiments
+### Pattern Evolution Timeline
 
-**Lessons from Round 3 (19 findings, 11 parallel agents):**
-- 5 of 11 agents found work pre-implemented → Added pre-implementation check (step 4)
-- Agent E/C had out-of-scope conflict in quickstart.go → Added conflict detection (step 4)
-- Test suite timeouts during agent verification → Added performance guidance for focused tests
-- Agent F's test had incorrect expectations → Identified need for test quality validation (future work)
+The improvements in this release emerged through iterative testing on brewprune (a Homebrew package cleanup tool):
 
-**Observed:** The audit-fix-audit cycle works well. Scout-and-wave accelerates the "fix" phase by enabling parallel agent execution. Cold-start audits remain the source of truth for UX quality validation.
+**Round 3 Cold-Start Audit (2026-02-27):**
+- 19 findings → 11 parallel agents in single wave
+- **Discovered gaps:**
+  - 5/11 agents found work already implemented (wasted compute)
+  - Agents E & C both modified `quickstart.go` out-of-scope (conflict)
+  - Test suite (131 tests) timed out during agent verification (slow iteration)
+  - Agent F's test had incorrect expectations (quality issue)
+- **Result:** Wave completed, but inefficiencies identified
+
+**Post-Round 3 Fixes (2026-02-27-28):**
+- Implemented 3 pattern improvements: conflict detection, performance guidance, pre-implementation check
+- Updated scout prompt and SAW skill
+
+**Round 4 Cold-Start Audit (2026-02-28):**
+- 38 findings (7 P0 critical manually fixed, 31 P1/P2 for SAW)
+- Scout agent attempted to produce IMPL doc but refused to write file
+- **Discovered gap:** "Read-only reconnaissance agent" prompt caused agent to misinterpret as technical constraint
+- **Result:** Fixed scout prompt clarification
+
+**Current state:** Pattern now includes all 4 improvements. Round 4 P1/P2 fixes (31 findings, 10 agents, 3 waves) ready for execution using improved pattern.
+
+### Lessons Learned
+
+**Audit-fix-audit cycle validates pattern:**
+- Cold-start audits identify UX issues (source of truth for quality)
+- SAW accelerates parallel fixing (11 agents → single wave in Round 3)
+- Each audit reveals pattern gaps → improvements → better next iteration
+
+**Key insights:**
+- Post-merge verification caught integration issues individual agents missed
+- Out-of-scope dependencies are real and need proactive conflict detection
+- Test performance matters for iteration speed (focused tests during waves, full suite at merge)
+- Pre-implementation checks prevent wasted agent compute
+- Prompt clarity is critical - agents will self-limit if language is ambiguous
 
 ## Pattern Philosophy
 
