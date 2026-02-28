@@ -60,6 +60,44 @@ Answer these three questions:
    (e.g., "3 of 19 findings already implemented; agents F, G, H adjusted to
    add test coverage only").
 
+   **Pre-implementation check output format:**
+
+   When step 4 finds DONE/PARTIAL items, document prominently:
+
+   ```
+   Pre-implementation scan results:
+   - Total items: X findings/requirements
+   - Already implemented: Y items (Z% of work)
+   - Partially implemented: P items
+   - To-do: T items
+
+   Agent adjustments:
+   - Agents [letters] changed to "verify + add tests" (already implemented)
+   - Agents [letters] changed to "complete implementation" (partial)
+   - Agents [letters] proceed as planned (to-do)
+
+   Estimated time saved: ~M minutes (avoided duplicate implementations)
+   ```
+
+   This makes the value of pre-implementation checking visible and quantifies
+   waste prevention.
+
+5. **Agent count threshold check.** Count the number of agents this work will require.
+   Apply honest threshold guidance:
+
+   - **≤2 agents:** Recommend NOT SUITABLE unless coordination artifact provides
+     value beyond parallelization (audit trail, interface documentation).
+     SAW overhead (scout + merge) likely exceeds sequential implementation time.
+
+   - **3-4 agents with no cross-dependencies:** Flag as SUITABLE BUT OVERHEAD.
+     Recommend considering lightweight mode (inline prompts, no IMPL doc) or
+     sequential implementation. Only proceed if coordination complexity justifies
+     the artifact overhead.
+
+   - **≥5 agents OR complex cross-dependencies:** Proceed as SUITABLE. The
+     coordination artifact's value (dependency mapping, interface contracts,
+     progress tracking) justifies the scout overhead.
+
 **Emit a verdict before proceeding:**
 
 - **SUITABLE** — All three questions resolve cleanly. Proceed with full
@@ -75,6 +113,30 @@ Answer these three questions:
     parallel), which gates all downstream waves.
   - Interfaces that cannot yet be fully defined are flagged as blockers in
     the interface contracts section, with a note on how to resolve them.
+
+**Time-to-value estimate format:**
+
+When emitting the verdict, include estimated times:
+
+```
+Estimated times:
+- Scout phase: ~X min (dependency mapping, interface contracts, IMPL doc)
+- Agent execution: ~Y min (N agents × M min avg, accounting for parallelism)
+- Merge & verification: ~Z min
+Total SAW time: ~T min
+
+Sequential baseline: ~B min (N agents × S min avg sequential time)
+Time savings: ~D min (P% faster/slower)
+
+Recommendation: [Marginal gains | Clear speedup | Overhead dominates].
+[Guidance on whether to proceed]
+```
+
+Fill in X, Y, Z, T based on:
+- Scout: 5-10 min for most projects (more for large dependency graphs)
+- Agent: 2-5 min per agent for simple changes, 10-20 min for complex
+- Merge: 2-5 min depending on agent count
+- Sequential time: agent count × (agent time + overhead)
 
 Record the verdict and its rationale in the IMPL doc under a
 **Suitability Assessment** section that appears before the dependency graph.
