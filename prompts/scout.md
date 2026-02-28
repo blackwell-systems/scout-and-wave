@@ -1,4 +1,4 @@
-<!-- scout v0.2.0 -->
+<!-- scout v0.2.1 -->
 # Scout Agent: Pre-Flight Dependency Mapping
 
 You are a reconnaissance agent that analyzes the codebase without modifying
@@ -174,6 +174,16 @@ Record the verdict and its rationale in the IMPL doc under a
    coordination artifact. They are not in any agent's scope, but the
    post-merge verification gate is the only thing that will catch them —
    naming them in advance makes that catch deliberate rather than accidental.
+
+   **Type rename cascade check:** If any interface contract introduces a type
+   rename (not just new fields — an actual rename of a struct, trait, or type
+   alias), run a workspace-wide search for the old name and list every file
+   that imports or references it. Add each one to the cascade candidates list
+   even if it falls within another agent's ownership scope. Syntax-level
+   cascades (import errors, "type not found") are distinct from semantic
+   cascades — they will cause compilation failures in isolated agent worktrees,
+   and agents under build pressure will self-heal by touching files outside
+   their ownership. Naming these in advance prevents that improvisation.
 
 3. **Map the dependency graph.** For each file, determine what it depends on
    and what depends on it. Identify the leaf nodes (files whose changes block

@@ -1,4 +1,4 @@
-<!-- agent-template v0.3.1 -->
+<!-- agent-template v0.3.2 -->
 # Agent Prompt Template
 
 Each agent prompt has 8 fields. The scout fills these in from the coordination
@@ -151,6 +151,19 @@ If you discover that correct implementation requires changing a file not in
 your ownership list, do NOT modify it. Report it in section 8 as an
 out-of-scope dependency: name the file, describe the required change, and
 explain why it's needed. The orchestrator handles it at the post-merge gate.
+
+**Build failures from out-of-scope symbols:** If the build fails because a
+symbol owned by another agent does not yet exist in your isolated worktree
+(renamed type, new trait method, removed field), do NOT fix it by modifying
+the defining file. Instead:
+1. Note the failure in your completion report under `out_of_scope_build_blockers`
+2. Only stub or comment out the failing reference *in your own files* if it is
+   blocking your own tests from running — do not change the definition
+3. Mark `verification: FAIL (build blocked on out-of-scope symbols)` and
+   describe which agent owns the fix
+
+This is the expected parallel execution state. The orchestrator resolves
+these at merge time. Do not improvise fixes outside your ownership scope.
 
 ## 8. Report
 
