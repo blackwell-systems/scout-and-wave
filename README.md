@@ -25,15 +25,23 @@ The coordination artifact is living. After each wave, agents append their comple
 
 - [`prompts/scout.md`](prompts/scout.md) — The scout prompt that produces the coordination artifact
 - [`prompts/agent-template.md`](prompts/agent-template.md) — The 8-field agent prompt template stamped per-agent
+- [`prompts/saw-skill.md`](prompts/saw-skill.md) — Claude Code `/saw` skill router (copy to `~/.claude/commands/saw.md`)
+- [`prompts/saw-merge.md`](prompts/saw-merge.md) — Merge procedure: conflict detection, agent merging, post-merge verification
+- [`prompts/saw-worktree.md`](prompts/saw-worktree.md) — Worktree lifecycle: creation, verification, diagnosis, cleanup
 - [`prompts/saw-quick.md`](prompts/saw-quick.md) — Lightweight mode for 2-3 agents with no IMPL doc
-- [`prompts/saw-skill.md`](prompts/saw-skill.md) — Claude Code `/saw` skill (copy to `~/.claude/commands/saw.md`)
 
 ## When to Use It
 
-**Agent count thresholds:**
-- **≤2 agents:** SAW overhead (scout + merge) likely exceeds sequential implementation time
-- **3-4 agents:** Overhead may dominate unless work is truly parallel with zero cross-dependencies (consider SAW Quick mode for lightweight coordination)
-- **≥5 agents OR complex coordination:** SAW provides clear value
+**High parallelization value** (SAW pays for itself):
+- Build/test cycle >30 seconds — each parallel agent runs independently, amplifying time savings
+- Agents own 3+ files each — more implementation time per agent means more to parallelize
+- Tasks involve non-trivial logic, tests, and edge cases — not simple find-and-replace
+- Agents are independent (single wave) — maximum parallelization benefit
+
+**Low parallelization value** (consider alternatives):
+- Simple edits, documentation-only, or trivially fast sequential work — SAW overhead dominates
+- 2-3 agents with disjoint files and no dependencies — use SAW Quick mode instead
+- The IMPL doc has coordination value even when speed gains are marginal (audit trail, interface spec, progress tracking)
 
 **Good fit:**
 - Clear seams exist between pieces
