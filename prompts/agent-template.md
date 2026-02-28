@@ -154,6 +154,17 @@ explain why it's needed. The orchestrator handles it at the post-merge gate.
 
 ## 8. Report
 
+**Before reporting:** Commit your changes to your worktree branch:
+
+```bash
+cd /path/to/worktree
+git add .
+git commit -m "wave{N}-agent-{letter}: {short description}"
+```
+
+This lets the orchestrator use `git merge` instead of manual file copying.
+If you cannot commit (e.g., no changes, or git error), note it in your report.
+
 Append your completion report to the IMPL doc under
 `### Agent {letter} — Completion Report`. This is the canonical record —
 downstream agents and the orchestrator read the IMPL doc, not chat output.

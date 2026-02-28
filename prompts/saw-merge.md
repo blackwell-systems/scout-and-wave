@@ -13,6 +13,15 @@ same out-of-scope file:
 2. Ask which version to keep or if manual merge is needed
 3. Do not proceed to merge until conflicts are resolved
 
+**Expected conflict: IMPL doc completion reports.** Multiple agents appending
+to the same IMPL doc in the same wave will produce merge conflicts in that
+file. This is expected and manageable — resolve by accepting all appended
+sections (each agent owns a distinct `### Agent {letter} — Completion Report`
+section). For waves with many agents (≥5), consider using per-agent report
+files (`docs/reports/agent-{letter}.md`) instead, with the orchestrator
+reading and consolidating them after the wave. Specify this in the scout's
+output if agent count warrants it.
+
 ## Merge Each Agent
 
 For each agent in the wave:

@@ -85,9 +85,27 @@ Design for disjoint ownership before writing a line of code:
      store/         ← Storage/persistence
      output/        ← Formatting/display
      types/         ← Shared traits and types (Wave 0)
+   Cargo.toml       ← ORCHESTRATOR OWNED — do not touch in agent prompts
    ```
 
    TypeScript / Python: equivalent `src/` subdirectories per concern.
+
+   **Rust workspace rule:** The root `Cargo.toml` `[workspace] members` list is
+   a single file that every Wave 1 agent needs to modify (to register their
+   crate). This is a guaranteed conflict if agents touch it directly. Declare
+   it **orchestrator-owned**: exclude it from every agent's file ownership list,
+   and have the orchestrator add all crates to the workspace after Wave 0
+   completes and before Wave 1 launches.
+
+   Agent prompts for Rust bootstrap must include an explicit constraint:
+   > "Do not modify the root `Cargo.toml`. The orchestrator will register your
+   > crate in the workspace members list before you launch."
+
+   The orchestrator's pre-Wave-1 step:
+   ```bash
+   # Add all Wave 1 crates to workspace before launching agents
+   # Edit Cargo.toml members = ["crates/types", "crates/app", "crates/store", ...]
+   ```
 
 2. **Shared types as foundation.** All shared interfaces, traits, and structs
    live in a types module/crate that no other module *defines* — only
