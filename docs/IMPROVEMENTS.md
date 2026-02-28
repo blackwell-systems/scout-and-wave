@@ -181,22 +181,24 @@ After launching agents, verify worktrees were created:
 - Run post-merge verification immediately after each agent
 ```
 
-**Design rationale for fail-fast approach:**
+**Design rationale for self-healing + fail-fast approach:**
 
-Agents can't fix their environment, but they CAN refuse to work in a bad environment:
+Agents can't fix all environment issues, but they CAN attempt self-correction and refuse to work if unsuccessful:
 - ❌ Can't create missing worktrees (orchestrator's job, might conflict)
 - ❌ Can't kill themselves cleanly (background task, no orchestrator communication)
-- ❌ Can't fix environment (limited scope, no sudo)
-- ✅ CAN detect bad state via pwd/git branch checks
+- ❌ Can't fix permissions or install dependencies (limited scope, no sudo)
+- ✅ CAN attempt cd to correct worktree location (self-healing)
+- ✅ CAN detect bad state via pwd/git branch checks (verification)
 - ✅ CAN write error to completion report (creates audit trail)
 - ✅ CAN exit without modifying files (prevents damage)
 
-Self-verification is error reporting, not recovery. Orchestrator reads completion reports after 10s, detects isolation failures, and stops wave execution before agents make changes to wrong files.
+Self-verification combines self-correction (Layer 1.5) with strict verification (Layer 2). Agents first attempt `cd` to the expected worktree, then verify the environment is correct. If verification fails after the cd attempt, the agent cannot self-correct and must fail fast. Orchestrator reads completion reports after 10s, detects isolation failures, and stops wave execution.
 
-**Defense in depth (3 layers):**
+**Defense in depth (4 layers):**
 1. **Orchestrator pre-creates worktrees** - fails fast if creation impossible
-2. **Agent self-verifies isolation** - catches tool failures, refuses to work
-3. **Post-merge verification** - final integration check (existing mechanism)
+2. **Agent attempts self-correction** - tries cd to expected worktree location
+3. **Agent verifies isolation** - catches tool failures, refuses to work if verification fails
+4. **Post-merge verification** - final integration check (existing mechanism)
 
 **Evidence:**
 - brewprune Round 5 Wave 1 (2026-02-28)
@@ -207,10 +209,57 @@ Self-verification is error reporting, not recovery. Orchestrator reads completio
 **Impact:** CRITICAL - undermines core safety mechanism of SAW pattern
 
 **Next steps:**
-1. Implement Priority 1 (explicit worktree creation) in saw-skill.md orchestrator logic
-2. Add Priority 2 (fail-fast verification) to agent-template.md section 0 (pre-flight)
-3. Add Priority 3 (post-launch safety check) to saw-skill.md after agent launch
-4. Test with brewprune Round 5 Wave 2 (2 agents, critical PATH fixes)
+1. ✅ Implemented Priority 1 (explicit worktree creation) in saw-skill.md orchestrator logic
+2. ✅ Implemented Priority 2 (fail-fast verification) in agent-template.md section 0 (pre-flight)
+3. ✅ Implemented Priority 3 (post-launch safety check) in saw-skill.md after agent launch
+4. ✅ Tested with brewprune Round 5 Wave 2 → discovered new failure mode (see below)
+
+### ✓ VALIDATED: Fail-Fast Verification Caught Working Directory Issue (2026-02-28)
+
+**Issue discovered:** Wave 2 launched with worktrees pre-created successfully, but agents still failed isolation verification.
+
+**What happened:**
+- Orchestrator created worktrees correctly (verified via `git worktree list`)
+- Task agents launched with `isolation: "worktree"` parameter
+- Agents inherited parent session's working directory (`/Users/dayna.blackwell/code/gsm`)
+- Agent self-verification (Layer 2) detected wrong directory and refused to work
+- Zero files modified (fail-fast prevented damage)
+
+**Root cause:** Task tool's `isolation: "worktree"` parameter creates worktrees but doesn't automatically `cd` into them. Agents need to explicitly change directory before working.
+
+**Pattern improvement - Layer 1.5 (Self-Healing):**
+
+Added self-correction step to agent template Section 0:
+
+```bash
+# Step 1: Attempt environment correction
+cd {absolute-repo-path}/.claude/worktrees/wave{N}-agent-{letter} 2>/dev/null || true
+
+# Step 2: Verify isolation (strict fail-fast)
+[existing verification checks]
+```
+
+**Philosophy shift:** From "detect-only" to "self-healing + detect":
+- Agents first attempt `cd` to correct location (self-healing)
+- Then run strict verification checks (fail-fast if cd failed)
+- Provides redundant protection against Task tool working directory issues
+- Maintains strict verification - agents still refuse to work if environment is incorrect
+
+**Updated defense-in-depth (4 layers):**
+1. Orchestrator pre-creates worktrees (Layer 1)
+2. Agent attempts cd to worktree (Layer 1.5 - self-healing)
+3. Agent verifies isolation (Layer 2 - strict fail-fast)
+4. Orchestrator checks completion reports (Layer 3)
+5. Post-merge verification (Layer 4)
+
+**Evidence:**
+- brewprune Round 5 Wave 2 (2026-02-28)
+- 2 agents launched, 2 worktrees pre-created successfully
+- Both agents detected wrong working directory and refused to work
+- Fail-fast verification prevented any file modifications
+- Pattern worked exactly as designed (caught issue at Layer 2)
+
+**Impact:** Validates fail-fast design + identifies need for self-healing layer
 
 ---
 

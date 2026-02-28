@@ -15,7 +15,14 @@ You are Wave {N} Agent {letter}. {One-sentence summary of your task.}
 
 ⚠️ **MANDATORY PRE-FLIGHT CHECK - Run BEFORE any file modifications**
 
-Verify you are working in an isolated git worktree:
+**Step 1: Attempt environment correction**
+
+```bash
+# Attempt to cd to expected worktree location (self-healing)
+cd {absolute-repo-path}/.claude/worktrees/wave{N}-agent-{letter} 2>/dev/null || true
+```
+
+**Step 2: Verify isolation (strict fail-fast after self-correction attempt)**
 
 ```bash
 # Check working directory
@@ -23,7 +30,7 @@ ACTUAL_DIR=$(pwd)
 EXPECTED_DIR="{absolute-repo-path}/.claude/worktrees/wave{N}-agent-{letter}"
 
 if [ "$ACTUAL_DIR" != "$EXPECTED_DIR" ]; then
-  echo "ISOLATION FAILURE: Wrong directory"
+  echo "ISOLATION FAILURE: Wrong directory (even after cd attempt)"
   echo "Expected: $EXPECTED_DIR"
   echo "Actual: $ACTUAL_DIR"
   exit 1
@@ -64,7 +71,7 @@ Actual: [paste output from pwd and git branch]
 
 **If verification passes:** Document briefly in completion report, then proceed with work.
 
-**Rationale:** Prevents modifying wrong files when worktree isolation fails (discovered in brewprune Round 5 Wave 1 where 5 agents modified main directly due to isolation failure).
+**Rationale:** Defense-in-depth isolation enforcement (discovered in brewprune Round 5 Waves 1-2). Layer 1: orchestrator pre-creates worktrees. Layer 1.5: agent attempts self-correction via cd. Layer 2: agent verifies isolation and fails fast if incorrect. Layer 3: orchestrator checks completion reports for failures. This design handles cases where Task tool's `isolation: "worktree"` parameter doesn't automatically change working directory.
 
 ## 1. File Ownership
 
