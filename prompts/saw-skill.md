@@ -1,7 +1,13 @@
-<!-- saw-skill v0.2.0 -->
+<!-- saw-skill v0.3.0 -->
 Scout-and-Wave: Parallel Agent Coordination
 
 Read the scout prompt at `prompts/scout.md` and the agent template at `prompts/agent-template.md` from the scout-and-wave repository. If these files are not in the current project, look for them at the path configured in the SAW_REPO environment variable, or fall back to `~/code/scout-and-wave/prompts/`.
+
+If the argument is `bootstrap <project-description>`:
+1. Read `prompts/saw-bootstrap.md` from the scout-and-wave repository and follow the bootstrap procedure.
+2. Gather requirements (language, project type, key concerns) before designing anything.
+3. Design the package structure and interface contracts, then write `docs/IMPL-bootstrap.md`.
+4. Report the architecture design and wave structure. Ask the user to review before proceeding.
 
 If the argument is `check <feature-description>`:
 1. Read the feature description and do a lightweight codebase scan (directory structure, key files likely to change — no deep analysis).
@@ -25,6 +31,12 @@ If a `docs/IMPL-*.md` file already exists:
 7. If verification fails, report the failures and ask the user how to proceed.
 
 Arguments:
+- `bootstrap <project-description>`: Design-first architecture for new projects
+  with no existing codebase. Acts as architect rather than analyst — designs
+  disjoint file ownership before any code is written. Gathers requirements
+  (language, project type, key concerns), designs package structure and interface
+  contracts, and produces `docs/IMPL-bootstrap.md` with a Wave 0 (types) pattern
+  followed by parallel implementation waves. Use when starting from scratch.
 - `check <feature-description>`: Lightweight suitability pre-flight. Does not
   analyze the full codebase and does not write any files. Answers three
   questions: (1) Can the work decompose into ≥2 disjoint file groups?

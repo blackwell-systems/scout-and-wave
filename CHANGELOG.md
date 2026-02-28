@@ -4,6 +4,29 @@ All notable changes to the Scout-and-Wave pattern will be documented in this fil
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.3.0] - 2026-02-28
+
+### Added
+
+- **`/saw bootstrap` subcommand** — Design-first architecture for new projects
+  with no existing codebase. The bootstrap scout acts as architect rather than
+  analyst: it gathers requirements (language, project type, key concerns), designs
+  package structure and interface contracts before any code is written, and
+  produces `docs/IMPL-bootstrap.md` with a mandatory Wave 0 (types/interfaces)
+  followed by parallel implementation waves. Solves the cold-start problem where
+  regular scout has no existing code to analyze.
+
+- **`saw-bootstrap.md`** — Dedicated module implementing the bootstrap procedure:
+  requirements gathering, architecture design principles (one concern = one
+  package, types-as-foundation, no god files), Wave 0 pattern, output format,
+  and rules. Follows the module decomposition pattern established in v0.2.0.
+
+- **Wave 0 pattern formalized** — Bootstrap projects always require a solo types
+  wave before any parallel implementation. All shared interfaces and structs are
+  defined in a `types` package first; downstream agents implement against these
+  contracts without seeing each other's code. Post-Wave-0 gate is build-only
+  (no tests yet), unblocking all Wave 1 agents simultaneously.
+
 ## [0.2.0] - 2026-02-28
 
 ### Changed

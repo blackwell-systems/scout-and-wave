@@ -1,6 +1,6 @@
 # Scout-and-Wave
 
-![Version](https://img.shields.io/badge/version-0.2.0-blue)
+![Version](https://img.shields.io/badge/version-0.3.0-blue)
 
 A methodology for reducing conflict and improving efficiency with parallel AI agents.
 
@@ -28,9 +28,10 @@ The coordination artifact is living. After each wave, agents append their comple
 - [`prompts/scout.md`](prompts/scout.md) — The scout prompt that produces the coordination artifact
 - [`prompts/agent-template.md`](prompts/agent-template.md) — The 8-field agent prompt template stamped per-agent
 - [`prompts/saw-skill.md`](prompts/saw-skill.md) — Claude Code `/saw` skill router (copy to `~/.claude/commands/saw.md`)
+- [`prompts/saw-bootstrap.md`](prompts/saw-bootstrap.md) — Design-first architecture for new projects with no existing codebase
+- [`prompts/saw-quick.md`](prompts/saw-quick.md) — Lightweight mode for 2-3 agents with no IMPL doc
 - [`prompts/saw-merge.md`](prompts/saw-merge.md) — Merge procedure: conflict detection, agent merging, post-merge verification
 - [`prompts/saw-worktree.md`](prompts/saw-worktree.md) — Worktree lifecycle: creation, verification, diagnosis, cleanup
-- [`prompts/saw-quick.md`](prompts/saw-quick.md) — Lightweight mode for 2-3 agents with no IMPL doc
 
 ## When to Use It
 
@@ -74,14 +75,17 @@ cp prompts/saw-skill.md ~/.claude/commands/saw.md
 ### Commands
 
 ```
-/saw check <feature-description>   # Lightweight suitability pre-flight (no files written)
-/saw scout <feature-description>   # Run the scout phase, produce docs/IMPL-<feature>.md
-/saw wave                          # Execute the next pending wave, pause for review
-/saw wave --auto                   # Execute all waves; only pause if verification fails
-/saw status                        # Show current progress
+/saw bootstrap <project-description>   # Design-first architecture for new projects
+/saw check <feature-description>       # Lightweight suitability pre-flight (no files written)
+/saw scout <feature-description>       # Run the scout phase, produce docs/IMPL-<feature>.md
+/saw wave                              # Execute the next pending wave, pause for review
+/saw wave --auto                       # Execute all waves; only pause if verification fails
+/saw status                            # Show current progress
 ```
 
 ### Workflow
+
+0. **Bootstrap (new projects only):** `/saw bootstrap "CLI tool for X with storage and output formatting"` acts as architect rather than analyst. Gathers requirements (language, project type, key concerns), designs package structure and interface contracts from scratch, and produces `docs/IMPL-bootstrap.md` with a mandatory Wave 0 (types/interfaces) followed by parallel implementation waves. Use this when starting from an empty repo — it designs for SAW-compatible disjoint ownership before any code is written.
 
 1. **Check (optional):** `/saw check "add OAuth2 login flow"` runs a lightweight pre-flight. It answers whether the work can be decomposed into disjoint file groups, whether there are investigation-first items, and whether cross-agent interfaces can be defined upfront. Emits SUITABLE / NOT SUITABLE / SUITABLE WITH CAVEATS. No files are written. Skip this step if you already know SAW is a good fit.
 
