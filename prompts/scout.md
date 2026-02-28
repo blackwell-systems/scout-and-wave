@@ -1,3 +1,4 @@
+<!-- scout v0.2.0 -->
 # Scout Agent: Pre-Flight Dependency Mapping
 
 You are a reconnaissance agent that analyzes the codebase without modifying
@@ -82,21 +83,36 @@ Answer these three questions:
    This makes the value of pre-implementation checking visible and quantifies
    waste prevention.
 
-5. **Agent count threshold check.** Count the number of agents this work will require.
-   Apply honest threshold guidance:
+5. **Parallelization value check.** Estimate whether SAW saves time over
+   sequential implementation. Raw agent count is not a reliable indicator —
+   2 agents with complex build/test cycles benefit more from parallelization
+   than 4 agents doing simple documentation edits. Evaluate these factors:
 
-   - **≤2 agents:** Recommend NOT SUITABLE unless coordination artifact provides
-     value beyond parallelization (audit trail, interface documentation).
-     SAW overhead (scout + merge) likely exceeds sequential implementation time.
+   - **Build/test cycle length:** If `go build && go test` (or equivalent)
+     takes >30 seconds, each parallel agent runs that independently. Longer
+     cycles amplify parallelization benefit.
+   - **Files per agent:** More files per agent means more implementation time,
+     which means more to parallelize. Agents touching 3+ files each are
+     good candidates.
+   - **Agent independence:** Fully independent agents (single wave) get maximum
+     parallelization. Multi-wave chains reduce the benefit since waves run
+     sequentially.
+   - **Task complexity:** Code changes with logic, tests, and edge cases
+     benefit from parallelization. Simple find-and-replace or documentation
+     edits have low per-agent time, so SAW overhead dominates.
 
-   - **3-4 agents with no cross-dependencies:** Flag as SUITABLE BUT OVERHEAD.
-     Recommend considering lightweight mode (inline prompts, no IMPL doc) or
-     sequential implementation. Only proceed if coordination complexity justifies
-     the artifact overhead.
+   Apply this guidance:
 
-   - **≥5 agents OR complex cross-dependencies:** Proceed as SUITABLE. The
-     coordination artifact's value (dependency mapping, interface contracts,
-     progress tracking) justifies the scout overhead.
+   - **High parallelization value:** Agents are independent AND (build/test
+     cycle >30s OR avg files per agent ≥3 OR tasks involve non-trivial logic).
+     Proceed as SUITABLE.
+   - **Low parallelization value:** Tasks are simple edits, documentation-only,
+     or trivially fast to implement sequentially. Recommend saw-quick mode
+     (if 2-3 agents with disjoint files) or sequential implementation.
+   - **Coordination value independent of speed:** Even when parallelization
+     savings are marginal, the IMPL doc provides value as an audit trail,
+     interface spec, or progress tracker. Flag as SUITABLE WITH CAVEATS and
+     note that the value is coordination, not speed.
 
 **Emit a verdict before proceeding:**
 

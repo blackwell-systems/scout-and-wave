@@ -1,3 +1,4 @@
+<!-- saw-quick v0.2.0 -->
 # SAW Quick Mode: Lightweight Parallel Execution
 
 Use this mode for small work (≤3 agents) with no coordination complexity.
