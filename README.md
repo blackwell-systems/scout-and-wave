@@ -15,6 +15,8 @@ Scout-and-wave addresses this in two phases:
 
 Interface contracts are defined before any agent starts. Agents code against the spec, not against each other's in-progress code.
 
+The coordination artifact is living. Agents revise interface contracts and file ownership between waves based on what they actually built. Downstream agents in the next wave inherit corrected context, not the scout's original guesses. The plan converges toward reality with each wave instead of drifting from it.
+
 ## How It Differs From Spec-Driven Development
 
 [Spec-driven development](https://developer.microsoft.com/blog/spec-driven-development-spec-kit) says write the spec before the code. That's table stakes. Scout-and-wave starts where those specs end: when multiple agents need to execute in parallel against a shared codebase. Who owns which files? What are the exact interface contracts across agent boundaries? How do you propagate the actual state of completed work to the next wave? The scout produces that coordination artifact autonomously by reading the codebase. You don't write it by hand.
