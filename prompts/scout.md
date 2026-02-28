@@ -88,9 +88,10 @@ Answer these three questions:
    2 agents with complex build/test cycles benefit more from parallelization
    than 4 agents doing simple documentation edits. Evaluate these factors:
 
-   - **Build/test cycle length:** If `go build && go test` (or equivalent)
-     takes >30 seconds, each parallel agent runs that independently. Longer
-     cycles amplify parallelization benefit.
+   - **Build/test cycle length:** If the full build + test cycle takes >30
+     seconds (e.g., `cargo test`, `go build && go test`, `npm test`), each
+     parallel agent runs that independently. Longer cycles amplify
+     parallelization benefit.
    - **Files per agent:** More files per agent means more implementation time,
      which means more to parallelize. Agents touching 3+ files each are
      good candidates.
@@ -161,8 +162,8 @@ Record the verdict and its rationale in the IMPL doc under a
 
 ## Process
 
-1. **Read the project first.** Examine the build system (Makefile, go.mod,
-   package.json, pyproject.toml), test patterns, naming conventions, and
+1. **Read the project first.** Examine the build system (Makefile, Cargo.toml,
+   go.mod, package.json, pyproject.toml), test patterns, naming conventions, and
    directory structure. The verification gates and test expectations you emit
    must match the project's actual toolchain.
 
@@ -211,30 +212,42 @@ Record the verdict and its rationale in the IMPL doc under a
    beyond the prompt and the existing codebase to do its work.
 
 8. **Determine verification gates from the build system.** Read the Makefile,
-   CI config, or build scripts. Emit the exact commands each agent must run
-   (e.g., `go build ./...`, `npm test`, `pytest -x`). Do not use generic
-   placeholders.
+   CI config, or build scripts. Emit the exact commands each agent must run.
+   Do not use generic placeholders — use the project's actual toolchain.
 
    **Performance guidance for test commands:**
-   - Count existing tests in the package(s) being modified
-   - If a package has >50 tests, use focused test commands during waves:
-     - Agent verification: `go test ./path/to/package -run TestSpecificCommand`
-     - Post-merge verification: `go test ./...` (full suite)
-   - Add reasonable timeouts (2-5 minutes per package for agent gates)
+   - Count existing tests in the module(s) being modified
+   - If a module has >50 tests, use focused test commands during waves to keep
+     agent iteration fast, then run the full suite at post-merge verification:
+
+   | Language | Focused (agent gate) | Full (post-merge) |
+   |----------|---------------------|-------------------|
+   | Go       | `go test ./pkg -run TestFoo` | `go test ./...` |
+   | Rust     | `cargo test test_foo` | `cargo test` |
+   | Node     | `npm test -- --grep "foo"` | `npm test` |
+   | Python   | `pytest path/to/test_foo.py` | `pytest` |
+
+   - Add reasonable timeouts (2-5 minutes per module for agent gates)
    - This keeps agent verification fast while preserving full coverage at merge
 
-   Example for agent prompt:
+   Example for agent prompt (Go):
    ```bash
    go build ./...
    go vet ./...
    go test ./internal/app -run TestDoctor  # Focused on this agent's work
    ```
 
+   Example for agent prompt (Rust):
+   ```bash
+   cargo build
+   cargo clippy -- -D warnings
+   cargo test doctor  # Focused on this agent's work
+   ```
+
    Example for Wave Execution Loop:
    ```bash
-   go build ./...
-   go vet ./...
-   go test ./...  # Full suite after merge
+   # Go:   go build ./... && go vet ./... && go test ./...
+   # Rust: cargo build && cargo clippy -- -D warnings && cargo test
    ```
 
 ## Output Format

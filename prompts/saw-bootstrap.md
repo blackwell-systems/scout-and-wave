@@ -37,9 +37,10 @@ over-engineering a bootstrap.
 
 Design for disjoint ownership before writing a line of code:
 
-1. **One concern = one package/directory.** Each major responsibility lives in
-   isolation. No package reaches into another package's internals.
+1. **One concern = one module/crate/package/directory.** Each major
+   responsibility lives in isolation. No module reaches into another's internals.
 
+   Go:
    ```
    cmd/             ← Entry point (CLI wiring)
    internal/
@@ -49,16 +50,30 @@ Design for disjoint ownership before writing a line of code:
      types/         ← Shared interfaces and types (Wave 0)
    ```
 
-2. **Types package as foundation.** All shared interfaces and structs live in
-   a `types` package that no other package defines — only implements. This
-   creates a stable contract layer all agents implement against independently.
+   Rust (workspace):
+   ```
+   src/main.rs      ← Entry point (CLI wiring)
+   crates/
+     app/           ← Business logic
+     store/         ← Storage/persistence
+     output/        ← Formatting/display
+     types/         ← Shared traits and types (Wave 0)
+   ```
+
+   TypeScript / Python: equivalent `src/` subdirectories per concern.
+
+2. **Shared types as foundation.** All shared interfaces, traits, and structs
+   live in a types module/crate that no other module *defines* — only
+   implements. This creates a stable contract layer all agents implement against
+   independently. In Go this is `internal/types`; in Rust this is a `types`
+   workspace crate; in TypeScript this is a `types.ts` or `types/` directory.
 
 3. **No god files.** Avoid files that everything imports. If something is needed
-   everywhere, it belongs in `types/`. If two places need the same thing, extract
-   an interface, don't share a concrete implementation.
+   everywhere, it belongs in the types layer. If two places need the same thing,
+   extract an interface or trait, don't share a concrete implementation.
 
-4. **Tests alongside implementations.** Each package has its own test files.
-   Agents run focused tests without touching other packages.
+4. **Tests alongside implementations.** Each module has its own test files.
+   Agents run focused tests without touching other modules.
 
 ## Wave 0 Pattern (Always Required)
 
@@ -66,22 +81,23 @@ Bootstrap projects always start with a types wave because all other agents
 depend on shared contracts.
 
 **Wave 0:** Single agent, not parallel.
-- Creates `internal/types/` (or equivalent for the language)
-- Defines all interfaces that cross package boundaries
+- Creates the shared types module (Go: `internal/types/`, Rust: `crates/types/`,
+  TS: `src/types/`, Python: `src/types.py`)
+- Defines all interfaces/traits that cross module boundaries
 - Defines shared structs, enums, error types
-- No implementation — interfaces and types only
+- No implementation — interfaces, traits, and types only
 
 **Why solo:** Wave 1+ agents implement against these definitions. You cannot
 parallelize against contracts that don't exist yet.
 
-**Post-Wave 0 gate:** Build the types package only. Must pass before Wave 1 launches.
+**Post-Wave 0 gate:** Build the types module only. Must pass before Wave 1 launches.
 
 ## Wave 1+ Pattern
 
 After types exist, Wave 1 agents are truly parallel:
-- Each agent implements exactly one package against the typed interfaces
+- Each agent implements exactly one module/crate against the typed contracts
 - Agents create compilable stubs (internals may be TODO, but signatures match contracts)
-- Each agent writes at least one passing test per interface method
+- Each agent writes at least one passing test per interface/trait method
 - No agent touches another agent's directory
 
 Wave 2 wires everything together (entry point, dependency injection, main function).
@@ -146,8 +162,8 @@ Wave 2: [A]            — entry point wiring and integration
 
 ### Verification Gates
 
-Wave 0: [build types package]
-Wave 1: [build all packages] + [focused unit tests per package]
+Wave 0: [build types module only — e.g., `go build ./internal/types` or `cargo build -p types`]
+Wave 1: [build all modules] + [focused unit tests per module]
 Wave 2: [build full project] + [full test suite]
 
 ### Status
