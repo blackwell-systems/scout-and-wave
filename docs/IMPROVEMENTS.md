@@ -2,6 +2,87 @@
 
 Lessons learned from real-world usage, pending implementation.
 
+## From brewprune Round 5 Wave 1 (2026-02-28)
+
+### ⚠️ CRITICAL: Worktree Isolation Verification Failed
+
+**Issue discovered:** Wave 1 launched 5 agents with `isolation: "worktree"` parameter, but NO worktrees were created. All agents modified files directly on main branch.
+
+**What happened:**
+- Task tool invoked with `isolation: "worktree"` for all 5 agents
+- `git worktree list` showed only main worktree (no agent branches created)
+- All agent changes appeared as modified files in `git status` on main
+- No merge step occurred - changes were already on main
+
+**Why it didn't cause conflicts:**
+- File ownership was truly disjoint (A→root.go, B→undo.go, C→stats.go, D→explain.go, E→unused.go)
+- Agent E's out-of-scope change (table.go) wasn't touched by other agents
+- **Pure luck** - if two agents had modified same file → silent data loss
+
+**Root cause analysis needed:**
+1. Is `isolation: "worktree"` parameter actually implemented in Task tool?
+2. Does it require additional prerequisites (git repo state, permissions)?
+3. Is there error handling if worktree creation fails?
+4. Should agents receive feedback if isolation fails?
+
+**Pattern fix required:**
+
+**Priority 1 - Add Worktree Verification Step:**
+
+Update `/saw wave` orchestrator to verify worktrees after agent launch:
+
+```
+1. Launch all agents with isolation: "worktree"
+2. Sleep 5s (let agents initialize)
+3. Run: git worktree list
+4. Parse output - expect N+1 worktrees (main + N agents)
+5. If count mismatch:
+   - STOP immediately
+   - Show error: "Worktree isolation failed - expected N worktrees, found M"
+   - Provide git worktree list output
+   - Recommend: check git version, repo state, Task tool version
+   - Do NOT proceed to wait for agent completion
+```
+
+**Priority 2 - Document Failure Mode:**
+
+Add to scout.md and saw-skill.md:
+
+```markdown
+## Worktree Isolation Verification
+
+After launching agents, verify worktrees were created:
+
+**Check:** `git worktree list` should show N+1 entries (main + N agents)
+
+**If verification fails:**
+- Agents are modifying main branch directly (NO ISOLATION)
+- Risk of conflicts if file ownership overlaps
+- STOP and investigate before proceeding
+
+**Known failure modes:**
+- Task tool version doesn't support isolation parameter
+- Git worktree feature disabled or unavailable
+- Repository state prevents worktree creation
+- Insufficient disk space for worktree copies
+
+**Workaround if worktrees unavailable:**
+- Reduce wave size to 1-2 agents (sequential execution)
+- Manually verify file ownership is STRICTLY disjoint
+- Monitor git status during agent execution
+- Run post-merge verification immediately after each agent
+```
+
+**Evidence:**
+- brewprune Round 5 Wave 1 (2026-02-28)
+- 5 agents launched, 0 worktrees created
+- Commit: 521b3ec
+- Zero conflicts only due to perfect file disjointness
+
+**Impact:** CRITICAL - undermines core safety mechanism of SAW pattern
+
+---
+
 ## From brewprune Round 4 Wave 1 (2026-02-28)
 
 ### Pattern Validation: What Worked ✓
