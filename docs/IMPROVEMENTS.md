@@ -26,6 +26,48 @@ Lessons learned from real-world usage, pending implementation.
 
 ---
 
+## From brewprune Round 4 Wave 2 (2026-02-28)
+
+### Additional Pattern Validations ✓
+
+4. **Justified out-of-scope changes** - WORKING AS DESIGNED
+   - Agent H made breaking API change (NewSpinner requires explicit Start())
+   - Modified 13 call sites across 5 command files (outside scope)
+   - Justification: fixing design flaw (race condition), not convenience
+   - All affected files updated atomically
+   - Post-merge verification validated the migration
+   - **Pattern insight:** Disjoint file ownership is a hard constraint for parallel agents in same wave, but justified API-wide changes that must be atomic are acceptable when clearly documented
+
+5. **Wave sequencing prevents conflicts** - WORKING AS DESIGNED
+   - Wave 1 (command files) → Wave 2 (shared modules) ordering was optimal
+   - Agent H modified 5 command files that Wave 1 agents had finished with
+   - If Wave 2 ran first, Wave 1 would have stale API views
+   - **Validates existing guidance:** Structure waves by dependency (leaves → roots)
+
+6. **Recommendation without modification pattern** - WORKING AS DESIGNED
+   - Agent I identified that status.go should use new ClassifyConfidence() helper
+   - Correctly stayed in scope, documented recommendation instead
+   - Creates audit trail without scope creep
+   - **Pattern working well:** Agents can identify follow-up work in completion reports
+
+### Observations (No Action Needed)
+
+7. **Agent velocity correlates with scope**
+   - Agent I: 170s (simple constants + helper)
+   - Agent G: 412s (threshold change + function + tests)
+   - Agent H: 475s (API redesign + 13 call site updates)
+   - Longer times indicate justified complexity, not inefficiency
+   - No max time limit needed
+
+8. **Pre-implementation check ROI varies by layer**
+   - Wave 1 (commands): 41% already implemented (7/17)
+   - Wave 2 (shared modules): 0% already implemented (0/4)
+   - Command-level UX fixes happen incrementally (developers notice and fix)
+   - Shared module refactors require deliberate effort (less likely stale)
+   - Pre-implementation check has highest value for user-facing improvements
+
+---
+
 ## Proposed Improvements
 
 ### Priority 1: Document for Next Implementation
@@ -124,9 +166,50 @@ Update related tests to expect the NEW behavior.
 
 ---
 
+### Priority 1.5: Clarifications (Low Cost, High Value)
+
+#### 4. Justified Out-of-Scope Changes Guidance
+
+**Context:** Agent H made a justified breaking API change that required modifying files outside scope. This was correct architectural judgment, not scope violation.
+
+**Current state:** Scout.md says "Disjoint file ownership is a hard correctness constraint" with no exceptions.
+
+**Proposal:** Add nuance to agent-template.md:
+
+```markdown
+## Disjoint File Ownership
+
+Your assigned files define your scope. DO NOT modify files outside your ownership
+EXCEPT in these rare cases:
+
+**Exception: Justified API-wide changes**
+
+If you discover a design flaw requiring atomic changes across multiple files:
+1. Document ALL affected files in completion report section 4
+2. Justify why the change must be atomic (e.g., fixing race condition, preventing
+   breaking state)
+3. Update all call sites consistently
+4. The post-merge verification will validate your migration
+
+Example: If you add a required parameter to a shared function, you must update
+all callers atomically to prevent breaking the build.
+
+**Not justified:** Convenience refactoring, style improvements, "while I'm here"
+changes. These can be done incrementally.
+```
+
+**Benefit:**
+- Makes clear that API-breaking changes sometimes require broader scope
+- Provides guard rails (must be atomic, must be justified, must document)
+- Prevents agents from being too timid when architectural fixes are needed
+
+**Implementation:** Update `prompts/agent-template.md` section on file ownership
+
+---
+
 ### Priority 2: Consider for Future
 
-#### 4. Revalidation Checkpoint (Optional)
+#### 5. Revalidation Checkpoint (Optional)
 
 **Problem:** Time gap between scout and wave execution can make findings stale
 
