@@ -11,7 +11,7 @@ If a `docs/IMPL-*.md` file already exists:
 2. For each agent in the current wave, launch a parallel Task agent using the agent prompt from the IMPL doc. Use `isolation: "worktree"` for each agent so they work on isolated copies.
 3. After all agents in the wave complete, report their results.
 4. Run the verification gate commands listed in the IMPL doc.
-5. If verification passes, update the status checklist in the IMPL doc, commit the wave's changes, and ask the user if they want to proceed to the next wave.
+5. If verification passes, update the IMPL doc: tick status checkboxes, correct any interface contracts that changed during implementation, and record any file ownership changes. Downstream agents read this document before they start. Commit the wave's changes and ask the user if they want to proceed to the next wave.
 6. If verification fails, report the failures and ask the user how to proceed.
 
 Arguments:

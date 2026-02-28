@@ -63,4 +63,5 @@ When done, report:
 - What you implemented (function names, key decisions)
 - Test results (pass/fail, count)
 - Any deviations from the spec and why
+- Any interface contract changes (signature differences from the original spec that downstream agents need to know about)
 ```

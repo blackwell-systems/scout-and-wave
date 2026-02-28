@@ -99,8 +99,8 @@ After each wave completes:
 1. Review agent outputs for correctness.
 2. Fix any compiler errors or integration issues.
 3. Run the full verification gate (build + test).
-4. Commit the wave's changes.
-5. Update the Status checklist below.
+4. Update the coordination artifact: tick status checkboxes, correct any interface contracts that changed during implementation, and record any file ownership changes. Downstream agents read this document before they start.
+5. Commit the wave's changes.
 6. Launch the next wave.
 
 If verification fails, fix before proceeding. Do not launch the next wave
