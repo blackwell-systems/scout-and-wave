@@ -25,23 +25,29 @@ The coordination artifact is living. After each wave, agents append their comple
 
 - [`prompts/scout.md`](prompts/scout.md) — The scout prompt that produces the coordination artifact
 - [`prompts/agent-template.md`](prompts/agent-template.md) — The 8-field agent prompt template stamped per-agent
+- [`prompts/saw-quick.md`](prompts/saw-quick.md) — Lightweight mode for 2-3 agents with no IMPL doc
 - [`prompts/saw-skill.md`](prompts/saw-skill.md) — Claude Code `/saw` skill (copy to `~/.claude/commands/saw.md`)
 
 ## When to Use It
 
+**Agent count thresholds:**
+- **≤2 agents:** SAW overhead (scout + merge) likely exceeds sequential implementation time
+- **3-4 agents:** Overhead may dominate unless work is truly parallel with zero cross-dependencies (consider SAW Quick mode for lightweight coordination)
+- **≥5 agents OR complex coordination:** SAW provides clear value
+
 **Good fit:**
-- Feature touches 5+ files across distinct concerns
 - Clear seams exist between pieces
 - Interfaces can be defined before implementation starts
 - Work can be chunked so each agent owns 1-3 files
+- Cross-agent dependencies require coordination artifacts
 
 **Poor fit:**
 - Tightly coupled code with no clean file boundaries
 - Interface cannot be known until you start implementing
-- Single piece of logic with nothing to parallelize
+- Simple work better done sequentially
 - Root cause is unknown (crash, race condition) — investigate first, then use SAW for the fix
 
-Use `/saw check` when you're unsure. The scout also runs a built-in suitability gate and will emit a NOT SUITABLE verdict (and stop) rather than producing a broken IMPL doc with forced decomposition. Either way, a poor-fit assessment is useful output — it tells you SAW isn't the right tool before any agents spend time on it.
+Use `/saw check` when you're unsure. The scout runs a built-in suitability gate with time-to-value estimates (scout + agents + merge vs sequential baseline) and will emit a NOT SUITABLE verdict (and stop) rather than producing a broken IMPL doc with forced decomposition. Either way, a poor-fit assessment is useful output — it tells you SAW isn't the right tool before any agents spend time on it.
 
 ## Usage with Claude Code
 
@@ -69,7 +75,7 @@ cp prompts/saw-skill.md ~/.claude/commands/saw.md
 
 1. **Check (optional):** `/saw check "add OAuth2 login flow"` runs a lightweight pre-flight. It answers whether the work can be decomposed into disjoint file groups, whether there are investigation-first items, and whether cross-agent interfaces can be defined upfront. Emits SUITABLE / NOT SUITABLE / SUITABLE WITH CAVEATS. No files are written. Skip this step if you already know SAW is a good fit.
 
-2. **Scout:** `/saw scout "add OAuth2 login flow"` analyzes the codebase and writes `docs/IMPL-oauth2-login.md`. The scout always runs the suitability gate first — if the work is not suitable it writes only the verdict and stops without generating agent prompts. If suitable, it produces the full coordination artifact: suitability assessment, dependency graph, file ownership, interface contracts, wave structure, and per-agent prompts.
+2. **Scout:** `/saw scout "add OAuth2 login flow"` analyzes the codebase and writes `docs/IMPL-oauth2-login.md`. The scout always runs the suitability gate first — if the work is not suitable it writes only the verdict and stops without generating agent prompts. If suitable, it produces the full coordination artifact: suitability assessment with time-to-value estimates (scout + agents + merge vs sequential baseline), dependency graph, file ownership, interface contracts, wave structure, and per-agent prompts.
 
 3. **Review:** Read the IMPL doc. Verify the suitability verdict makes sense, file ownership is clean, interface contracts are correct, and wave ordering is right. Adjust before proceeding.
 
