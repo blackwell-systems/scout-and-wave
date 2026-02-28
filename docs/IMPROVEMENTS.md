@@ -468,6 +468,92 @@ changes. These can be done incrementally.
 
 ---
 
+## From SAW Dogfooding (Pattern Improvements Implementation, 2026-02-28)
+
+### ✓ VALIDATED: ≤4 Agent Threshold Confirmed
+
+**Dogfooding test:** Used SAW to implement SAW improvements (4 agents, documentation-only work).
+
+**Results:**
+- Estimated: 17 min (scout + agents + merge)
+- Actual: 22.5 min (includes Agent A retry after isolation failure)
+- Sequential baseline: 12 min (3 min × 4 files)
+- **SAW was 88% SLOWER** than sequential implementation
+
+**Breakdown:**
+- Scout phase (IMPL doc): 6 min
+- Agent A (failed - no worktrees): <1 min
+- Create worktrees (manual fix): 1 min
+- Agents B, C, D: ~9.5 min (parallel)
+- Agent A retry: 1 min
+- Merge + conflict resolution: 5 min
+
+**Overhead analysis:**
+- Pure overhead: 11 min (scout 6 + merge 5)
+- Actual editing: 11.5 min (similar to sequential estimate)
+- Coordination complexity: 0 (independent doc files)
+
+**Validation of user feedback:**
+- ≤4 agents = overhead dominates ✅
+- Documentation work = no coordination value ✅
+- IMPL doc overhead not justified for small work ✅
+
+**When SAW would have been faster:**
+- If ≥8 agents (parallel speedup overcomes overhead)
+- If cross-dependencies existed (coordination artifact provides value)
+- If audit trail needed (completion reports justify overhead)
+
+**Evidence:** Commits 03dc239, abad8e3, 3f44df8, f4a3e95
+
+---
+
+### ⚠️ CRITICAL: Orchestrator Must Pre-Create Worktrees Before Launching Agents
+
+**Issue discovered:** Agent A failed isolation verification because worktrees didn't exist when Task tool launched it.
+
+**What happened:**
+- Orchestrator launched 4 agents with `isolation: "worktree"` parameter
+- Orchestrator did NOT pre-create worktrees (missing Layer 1)
+- Agent A reached isolation check first - worktrees don't exist yet - FAILED
+- [Orchestrator manually created worktrees]
+- Agents B, C, D reached isolation check after creation - SUCCESS
+
+**Success rate:** 3 of 4 agents succeeded (75%), but only due to lucky timing
+
+**Root cause:** SAW skill says "Use `isolation: 'worktree'`" but doesn't say "Pre-create worktrees BEFORE launching." The Task tool's `isolation` parameter creates Task-managed worktrees (different paths), not the coordinated worktrees SAW expects.
+
+**Pattern fix implemented by Agent A:**
+Added explicit worktree pre-creation guidance to saw-skill.md (merge automation section). Orchestrators should now:
+1. Create `.claude/worktrees` directory
+2. For each agent, explicitly create worktree: `git worktree add .claude/worktrees/wave1-agent-X -b wave1-agent-X`
+3. Verify count: `git worktree list | wc -l` should equal agents + 1
+4. THEN launch agents (Layer 1 complete before Layer 1.5 self-healing)
+
+**Impact:** HIGH - Without Layer 1, agents will fail even with self-healing
+
+**Evidence:** Agent A isolation failure, then retry success after worktrees created
+
+---
+
+### Observation: IMPL Doc Completion Reports Create Merge Conflicts
+
+**Issue encountered:** Merging agents C and D failed with add/add conflicts on `docs/IMPL-pattern-improvements.md`.
+
+**What happened:**
+- All 4 agents append completion reports to same IMPL doc
+- Each agent's worktree has different completion report content
+- Merging creates conflict: which agent's report goes first?
+
+**Workaround used:** Manual copy of files from worktrees instead of git merge
+
+**Not a bug:** This is expected behavior - completion reports are meant to be additive. The orchestrator reads all reports from all worktrees before merging, so the conflict is informational (all content exists, just not in one branch).
+
+**Possible improvement:** Split completion reports into separate per-agent files like the split IMPL doc pattern (docs/IMPL-<slug>-agents/agent-X-report.md) to avoid merge conflicts.
+
+**Priority:** LOW - Current pattern works, orchestrator can handle merge conflicts
+
+---
+
 ### Priority 2: Consider for Future
 
 #### 5. Revalidation Checkpoint (Optional)
