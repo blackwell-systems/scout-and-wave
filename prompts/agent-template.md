@@ -13,9 +13,25 @@ You are Wave {N} Agent {letter}. {One-sentence summary of your task.}
 
 ## 1. File Ownership
 
-You own these files. Do not touch any other files.
+You own these files. Do not touch any other files EXCEPT as described below.
 - `path/to/file` - {create | modify}
 - `path/to/file_test` - {create | modify}
+
+**Exception: Justified API-wide changes**
+
+If you discover a design flaw requiring atomic changes across multiple files:
+1. Document ALL affected files in section 8 of your completion report
+2. Justify why the change must be atomic (e.g., fixing race condition,
+   preventing breaking build state)
+3. Update all call sites consistently in your implementation
+4. The post-merge verification will validate your migration
+
+Example: If you add a required parameter to a shared function, you must update
+all callers atomically to prevent breaking the build.
+
+**Not justified:** Convenience refactoring, style improvements, "while I'm here"
+changes. These can be done incrementally and should be noted as recommendations
+instead.
 
 ## 2. Interfaces You Must Implement
 
@@ -44,6 +60,17 @@ expectations, and any constraints on the approach.}
 2. TestFunctionName_EdgeCase - {what it verifies}
 
 ## 6. Verification Gate
+
+**Before running verification:** If your changes modify command behavior, exit
+codes, or error handling, search for tests that validate the OLD behavior:
+
+```bash
+# Example: if changing exit codes
+grep -r "exit.*0" path/to/*_test.go
+grep -r "SilenceErrors" path/to/*_test.go
+```
+
+Update related tests to expect the NEW behavior, then run verification.
 
 Run these commands. All must pass before you report completion.
 

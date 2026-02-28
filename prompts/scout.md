@@ -172,6 +172,19 @@ Verdict: SUITABLE | NOT SUITABLE | SUITABLE WITH CAVEATS
 write the sections below. If SUITABLE WITH CAVEATS, describe what the
 caveats are and how they are handled (e.g., Wave 0 for investigation).]
 
+### Known Issues
+
+List any pre-existing test failures, build warnings, or known bugs that agents
+should be aware of. This helps distinguish expected failures from regressions.
+
+Example:
+- `TestDoctorHelpIncludesFixNote` - Hangs (tries to execute test binary as CLI)
+  - Status: Pre-existing, unrelated to this work
+  - Workaround: Skip with `-skip 'TestDoctorHelpIncludesFixNote'`
+  - Tracked in: [issue link or "needs cleanup"]
+
+[If no known issues, write "None identified."]
+
 ### Dependency Graph
 
 [Description of the DAG. Which files/modules are roots, which are leaves,
