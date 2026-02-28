@@ -14,8 +14,8 @@ You are Wave {N} Agent {letter}. {One-sentence summary of your task.}
 ## 1. File Ownership
 
 You own these files. Do not touch any other files.
-- `path/to/file.go` - {create | modify}
-- `path/to/file_test.go` - {create | modify}
+- `path/to/file` - {create | modify}
+- `path/to/file_test` - {create | modify}
 
 ## 2. Interfaces You Must Implement
 
@@ -48,9 +48,9 @@ expectations, and any constraints on the approach.}
 Run these commands. All must pass before you report completion.
 
 cd /path/to/project
-<build command>    # e.g., go build ./...
-<lint command>     # e.g., go vet ./...
-<test command>     # e.g., go test ./path/to/package/...
+<build command>    # e.g., go build ./... | npm run build | make
+<lint command>     # e.g., go vet ./... | npm run lint | ruff check
+<test command>     # e.g., go test ./... | npm test | pytest -x
 
 ## 7. Constraints
 
