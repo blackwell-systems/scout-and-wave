@@ -166,14 +166,31 @@ This lets the orchestrator use `git merge` instead of manual file copying.
 If you cannot commit (e.g., no changes, or git error), note it in your report.
 
 Append your completion report to the IMPL doc under
-`### Agent {letter} — Completion Report`. This is the canonical record —
-downstream agents and the orchestrator read the IMPL doc, not chat output.
-Interface contract changes must be written there so the next wave picks them up.
+`### Agent {letter} — Completion Report`. Use the structured format below —
+the orchestrator parses these fields to automate conflict detection and merging.
+Write the structured block first, then add free-form notes beneath it.
 
-Include:
-- What you implemented (function names, key decisions)
-- Test results (pass/fail, count)
-- Any deviations from the spec and why
-- Any interface contract changes (exact signature differences downstream agents need)
-- Any out-of-scope dependencies discovered (file name, required change, reason)
+```yaml
+### Agent {letter} — Completion Report
+status: complete | partial | blocked
+worktree: .claude/worktrees/wave{N}-agent-{letter}
+commit: {sha}  # or "uncommitted" if commit failed
+files_changed:
+  - path/to/modified/file
+files_created:
+  - path/to/new/file
+interface_deviations:
+  - "Exact description of any deviation from the spec contract, or []"
+out_of_scope_deps:
+  - "file: path/to/file, change: what's needed, reason: why"  # or []
+tests_added:
+  - test_function_name
+verification: PASS | FAIL ({command} — N/N tests)
+```
+
+After the structured block, add free-form notes for anything that doesn't
+fit: key decisions, surprises, context for downstream agents.
+
+If `status` is `partial` or `blocked`, explain in the notes what remains and
+why. Do not mark `complete` if verification failed.
 ```
