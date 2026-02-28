@@ -97,11 +97,12 @@ Wave 3:    [G]               <- 1 agent
 
 After each wave completes:
 1. Review agent outputs for correctness.
-2. Fix any compiler errors or integration issues.
-3. Run the full verification gate (build + test).
-4. Update the coordination artifact: tick status checkboxes, correct any interface contracts that changed during implementation, and record any file ownership changes. Downstream agents read this document before they start.
-5. Commit the wave's changes.
-6. Launch the next wave.
+2. Merge all agent worktrees back into the main branch.
+3. Run the full verification gate (build + test) against the merged result. Individual agents pass their gates in isolation, but the merged codebase can surface issues none of them saw individually. This post-merge verification is the real gate.
+4. Fix any compiler errors or integration issues.
+5. Update the coordination artifact: tick status checkboxes, correct any interface contracts that changed during implementation, and record any file ownership changes. Downstream agents read this document before they start.
+6. Commit the wave's changes.
+7. Launch the next wave.
 
 If verification fails, fix before proceeding. Do not launch the next wave
 with a broken build.

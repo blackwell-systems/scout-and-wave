@@ -10,9 +10,10 @@ If a `docs/IMPL-*.md` file already exists:
 1. Read it and identify the current wave (the first wave with unchecked status items).
 2. For each agent in the current wave, launch a parallel Task agent using the agent prompt from the IMPL doc. Use `isolation: "worktree"` for each agent so they work on isolated copies.
 3. After all agents in the wave complete, report their results.
-4. Run the verification gate commands listed in the IMPL doc.
-5. If verification passes, update the IMPL doc: tick status checkboxes, correct any interface contracts that changed during implementation, and record any file ownership changes. Downstream agents read this document before they start. Commit the wave's changes and ask the user if they want to proceed to the next wave.
-6. If verification fails, report the failures and ask the user how to proceed.
+4. Merge all agent worktrees back into the main branch.
+5. Run the verification gate commands listed in the IMPL doc against the merged result. Individual agents pass their gates in isolation, but the merged codebase can surface issues none of them saw individually. This post-merge verification is the real gate.
+6. If verification passes, update the IMPL doc: tick status checkboxes, correct any interface contracts that changed during implementation, and record any file ownership changes. Downstream agents read this document before they start. Commit the wave's changes and ask the user if they want to proceed to the next wave.
+7. If verification fails, report the failures and ask the user how to proceed.
 
 Arguments:
 - `scout <feature-description>`: Run only the scout phase to produce the IMPL doc
