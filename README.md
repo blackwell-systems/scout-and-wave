@@ -104,7 +104,7 @@ Three-part series on the pattern, the lessons learned from dogfooding it, and ho
 
 1. [Scout-and-Wave: A Coordination Pattern for Parallel AI Agents](https://blog.blackwell-systems.com/posts/scout-and-wave/) — The pattern: failure modes of naive parallelism, the scout deliverable, wave execution, and a worked example from brewprune.
 2. [Scout-and-Wave, Part 2: What Dogfooding Taught Us](https://blog.blackwell-systems.com/posts/scout-and-wave-part2/) — The audit-fix-audit loop, overhead measurement (88% slower when ignored), Quick mode, and the bootstrap problem for new projects.
-3. [Scout-and-Wave, Part 3: The Skill Is Software](https://blog.blackwell-systems.com/posts/scout-and-wave-part3/) — How the skill file decomposed from a 400-line monolith, why version headers matter, and five scout prompt fixes driven by real failures.
+3. [Scout-and-Wave, Part 3: Five Failures, Five Fixes](https://blog.blackwell-systems.com/posts/scout-and-wave-part3/) — How the skill file decomposed from a 400-line monolith, why version headers matter, and five scout prompt fixes driven by real failures.
 
 ## License
 
