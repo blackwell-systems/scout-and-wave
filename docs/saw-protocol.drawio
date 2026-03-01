@@ -87,7 +87,6 @@
     <mxCell id="21" edge="1" parent="2" source="15" style="edgeStyle=orthogonalEdgeStyle;fontSize=18;" target="20" value="PASS">
       <mxGeometry relative="1" as="geometry"/>
     </mxCell>
-    <!-- next wave loop back -->
     <mxCell id="22" edge="1" parent="2" source="20" style="edgeStyle=orthogonalEdgeStyle;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;fontSize=18;" target="3" value="next wave">
       <mxGeometry relative="1" as="geometry">
         <Array as="points">
@@ -110,8 +109,8 @@
       <mxGeometry relative="1" as="geometry"/>
     </mxCell>
 
-    <!-- NOT SUITABLE -->
-    <mxCell id="26" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;fontSize=18;" value="Emit verdict · stop" vertex="1">
+    <!-- NOT SUITABLE → STOP -->
+    <mxCell id="26" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;fontSize=18;" value="STOP" vertex="1">
       <mxGeometry height="64" width="190" x="1180" y="558" as="geometry"/>
     </mxCell>
     <mxCell id="27" edge="1" parent="1" source="24" style="edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.5;exitDx=0;exitDy=0;fontSize=18;" target="26" value="NOT SUITABLE">
