@@ -11,9 +11,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **`docs/saw-scout-wave.drawio`** — draw.io diagram of the `/saw scout` + `/saw wave`
   protocol flow. Covers suitability gate, scout phase, IMPL doc, human review,
   wave loop (worktree setup, agent execution, completion reports, orchestrator,
-  merge, fix merge failures). Named per-flow so additional diagrams
-  (`saw-check.drawio`, `saw-bootstrap.drawio`, `saw-status.drawio`) can be added
+  merge, fix merge failures). Named per-flow so additional diagrams can be added
   alongside it.
+
+- **`docs/saw-bootstrap.drawio`** — draw.io diagram of the `/saw bootstrap` flow.
+  Covers git repo pre-flight, requirements gathering, package structure design,
+  concerns gate (≥3 required), IMPL-bootstrap.md output, human review, and
+  handoff to `/saw wave`. Uses the same visual language as `saw-scout-wave.drawio`.
 
 ## [0.3.1] - 2026-02-28
 
