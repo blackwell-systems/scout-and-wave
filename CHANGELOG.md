@@ -6,32 +6,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-02-28
+
 ### Added
 
-- **PNG exports** — all four flow diagrams exported at 2x scale with date-stamped
-  filenames (`saw-*-light.png`, `saw-*-dark.svg`). `saw-scout-wave-light.svg`
-  linked inline in README via `<picture>` element replacing the mermaid diagram.
+- **Flow diagrams** — four draw.io source files and light/dark SVG exports covering
+  each `/saw` subcommand: `saw-scout-wave`, `saw-bootstrap`, `saw-check`,
+  `saw-status`. All files live in `docs/diagrams/`. Light/dark SVGs exported via
+  `--svg-theme light/dark`; the `<picture>` element in README switches automatically.
 
-- **`docs/diagrams/saw-scout-wave.drawio`** — draw.io diagram of the `/saw scout` + `/saw wave`
-  protocol flow. Covers suitability gate, scout phase, IMPL doc, human review,
-  wave loop (worktree setup, agent execution, completion reports, orchestrator,
-  merge, fix merge failures). Named per-flow so additional diagrams can be added
-  alongside it.
+- **`docs/diagrams/saw-scout-wave.drawio`**: full protocol flow from suitability
+  gate through scout phase, IMPL doc, human review, wave loop (worktree setup,
+  agent execution, completion reports, orchestrator, merge, fix/re-verify).
 
-- **`docs/diagrams/saw-bootstrap.drawio`** — draw.io diagram of the `/saw bootstrap` flow.
-  Covers git repo pre-flight, requirements gathering, package structure design,
-  concerns gate (≥3 required), IMPL-bootstrap.md output, human review, and
-  handoff to `/saw wave`.
+- **`docs/diagrams/saw-bootstrap.drawio`**: `/saw bootstrap` flow — git pre-flight,
+  requirements gathering, package structure design, concerns gate (≥3 required),
+  IMPL-bootstrap.md output, handoff to `/saw wave`.
 
-- **`docs/diagrams/saw-check.drawio`** — draw.io diagram of the `/saw check` flow.
-  Covers lightweight codebase scan, evaluation of 3 suitability questions, and
-  3-way verdict output (SUITABLE / NOT SUITABLE / SUITABLE WITH CAVEATS) with
-  recommended next step for each. No files written — read-only pre-flight.
+- **`docs/diagrams/saw-check.drawio`**: `/saw check` flow — lightweight scan,
+  3-question evaluation, 3-way verdict (SUITABLE / NOT SUITABLE / SUITABLE WITH CAVEATS).
+  Read-only pre-flight; no files written.
 
-- **`docs/diagrams/saw-status.drawio`** — draw.io diagram of the `/saw status` flow.
-  Covers IMPL doc existence check, wave structure and checkbox reading, and
-  progress report output (waves done, current wave agents, blockers, recommended
-  next step). No files written — read-only utility.
+- **`docs/diagrams/saw-status.drawio`**: `/saw status` flow — IMPL doc existence
+  check, wave structure and checkbox reading, progress report output.
+
+- **README diagram**: replaced mermaid flowchart with `<picture>` element linking
+  `saw-scout-wave-light.svg` / `saw-scout-wave-dark.svg` for native dark mode support.
 
 ## [0.3.1] - 2026-02-28
 
