@@ -14,6 +14,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   merge, fix merge failures). Named per-flow so additional diagrams can be added
   alongside it.
 
+- **`docs/saw-check.drawio`** — draw.io diagram of the `/saw check` flow.
+  Covers lightweight codebase scan, evaluation of 3 suitability questions, and
+  3-way verdict output (SUITABLE / NOT SUITABLE / SUITABLE WITH CAVEATS) with
+  recommended next step for each. No files written — read-only pre-flight.
+
 - **`docs/saw-bootstrap.drawio`** — draw.io diagram of the `/saw bootstrap` flow.
   Covers git repo pre-flight, requirements gathering, package structure design,
   concerns gate (≥3 required), IMPL-bootstrap.md output, human review, and
