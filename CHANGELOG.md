@@ -6,6 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [0.3.5] - 2026-03-01
+
+### Changed
+
+- **`prompts/scout.md` (v0.2.1 → v0.3.4)** — suitability gate Q1 updated:
+  append-only additions to shared files (config registries, module manifests,
+  index files) are not a decomposition blocker; orchestrator-owned post-merge.
+  "8-field format" reference corrected to "9-field format".
+
+- **`prompts/saw-quick.md` (v0.2.0 → v0.3.4)** — file ownership declaration
+  is now a hard requirement before agents launch, not a checklist suggestion.
+  Explicit warning added: Quick mode enforces I1 only; I2–I5 are unenforced.
+
+- **`prompts/saw-merge.md` (v0.4.0 → v0.4.1)** — four additions:
+  - `status: partial` or `status: blocked` on any agent halts the wave; no
+    partial merges permitted
+  - Prompt propagation formalized: updating an agent prompt means editing its
+    section in the IMPL doc in-place; no separate prompt files
+  - Same-wave interface failure procedure: wave halts, contracts revised,
+    affected agents re-prompted, unaffected agents do not re-run
+  - Crash recovery section: use `git log --merges` to identify already-merged
+    worktrees before resuming a mid-merge crash; WAVE_MERGING is not idempotent
+
+- **`prompts/saw-worktree.md` (v0.4.0 → v0.4.1)** — two additions:
+  - Pre-launch ownership verification step: scan wave ownership table for
+    overlaps before creating worktrees; block launch if any file appears twice
+  - WAVE_PENDING re-entrancy note: check for existing worktrees before creating;
+    do not duplicate
+
 ## [0.3.4] - 2026-03-01
 
 ### Changed
