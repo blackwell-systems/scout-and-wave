@@ -1,6 +1,6 @@
 # Scout-and-Wave Protocol Specification
 
-**Version:** 0.3.5
+**Version:** 0.3.4
 **Status:** Active
 
 Scout-and-Wave (SAW) is a coordination protocol for parallel AI agent execution
