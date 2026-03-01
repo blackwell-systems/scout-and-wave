@@ -17,25 +17,33 @@ The prompts in `prompts/` are reference implementations of this protocol.
 SAW has three participant roles. All three are agents — AI model instances
 running with tool access. They differ only in execution mode and responsibility.
 
-**Orchestrator** — The foreground agent. The Claude session the developer is
-directly talking to. Runs the `/saw` skill, reads the IMPL doc, creates
-worktrees, launches scouts and wave agents as background tasks, reads completion
-reports, executes the merge procedure, verifies the merged result, and advances
-the protocol state. Never goes to background. The orchestrator is the only
-participant that interacts with the human directly.
+**Orchestrator** — The synchronous agent. Drives all protocol state transitions.
+Runs the `/saw` skill, reads the IMPL doc, creates worktrees, launches scouts
+and wave agents, waits for completion notifications, reads completion reports,
+executes the merge procedure, verifies the merged result, and advances state.
+The orchestrator serializes all state changes — it is the single-threaded
+coordinator that processes completion events and decides what runs next. The
+only participant that interacts with the human directly.
 
-**Scout** — A background agent launched by the orchestrator. Analyzes the
+**Scout** — An asynchronous agent launched by the orchestrator. Analyzes the
 codebase, produces the IMPL doc, and exits. Never modifies source files. Never
-participates in wave execution. The orchestrator waits for the scout to complete
-before entering REVIEWED state. When pipelining, the scout runs as a background
-agent concurrently with an active wave (see `saw-pipeline-proposal.md`).
+participates in wave execution. The orchestrator waits for the scout's
+completion notification before entering REVIEWED state. When pipelining, the
+scout runs concurrently with an active wave — still asynchronous, but overlapped
+rather than sequential (see `saw-pipeline-proposal.md`).
 
-**Wave Agent** — A background agent launched by the orchestrator. Owns a
+**Wave Agent** — An asynchronous agent launched by the orchestrator. Owns a
 disjoint set of files, implements against the interface contracts defined in the
 IMPL doc, runs the verification gate, commits its work, and writes a structured
 completion report to the IMPL doc. Multiple wave agents run concurrently within
-a wave. A wave agent never coordinates directly with other wave agents — the
-IMPL doc is the only coordination surface.
+a wave. Wave agents never coordinate directly with each other — the IMPL doc is
+the only coordination surface. The orchestrator collects all completion
+notifications before advancing to WAVE_MERGING.
+
+The protocol's correctness guarantees flow from this structure: the synchronous
+orchestrator serializes all state transitions while asynchronous agents execute
+in parallel. Agents can run concurrently precisely because they never write to
+shared state — only the orchestrator does.
 
 ---
 
