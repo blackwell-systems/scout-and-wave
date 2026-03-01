@@ -5,7 +5,7 @@
 
     <!-- Wave loop group -->
     <mxCell id="2" parent="1" style="swimlane;startSize=40;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;fontStyle=1;fontSize=18;" value="Wave loop (repeats per wave)" vertex="1">
-      <mxGeometry height="1460" width="960" x="430" y="1258" as="geometry"/>
+      <mxGeometry height="1460" width="1100" x="430" y="1258" as="geometry"/>
     </mxCell>
 
     <!-- Solo agent diamond -->
@@ -66,7 +66,7 @@
 
     <!-- Fix re-verify -->
     <mxCell id="17" parent="2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=18;align=left;spacingLeft=10;" value="&lt;b&gt;Fix · re-verify&lt;/b&gt;&lt;br&gt;• identify failing test or build error&lt;br&gt;• fix on main (no new worktree)&lt;br&gt;• re-run unscoped verification gate&lt;br&gt;• repeat until PASS" vertex="1">
-      <mxGeometry height="140" width="260" x="740" y="1024" as="geometry"/>
+      <mxGeometry height="170" width="300" x="780" y="1024" as="geometry"/>
     </mxCell>
     <mxCell id="18" edge="1" parent="2" source="15" style="edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.5;exitDx=0;exitDy=0;fontSize=18;" target="17" value="FAIL">
       <mxGeometry relative="1" as="geometry"/>
@@ -74,8 +74,8 @@
     <mxCell id="19" edge="1" parent="2" source="17" style="edgeStyle=orthogonalEdgeStyle;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;fontSize=18;" target="15">
       <mxGeometry relative="1" as="geometry">
         <Array as="points">
-          <mxPoint x="870" y="1210"/>
-          <mxPoint x="480" y="1210"/>
+          <mxPoint x="930" y="1240"/>
+          <mxPoint x="480" y="1240"/>
         </Array>
       </mxGeometry>
     </mxCell>
