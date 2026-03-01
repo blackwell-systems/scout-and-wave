@@ -1,4 +1,4 @@
-<!-- saw-merge v0.4.0 -->
+<!-- saw-merge v0.4.1 -->
 # SAW Merge Procedure
 
 Merge agent worktrees back into the main branch after a wave completes.
@@ -8,7 +8,12 @@ Merge agent worktrees back into the main branch after a wave completes.
 Read each agent's structured completion report from the IMPL doc
 (`### Agent {letter} — Completion Report`). Extract:
 
-- `status` — skip agents with `blocked`; flag agents with `partial` for review
+- `status` — if **any** agent in the wave has `status: partial` or `status: blocked`,
+  the wave does not proceed to merge. Stop here. Mark the wave BLOCKED in the IMPL doc.
+  The failing agent must be resolved (re-run, manually fixed, or descoped) before
+  the merge step proceeds. Agents that completed successfully are not re-run, but
+  their worktrees are not merged until the full wave is resolved. Partial merges
+  are not permitted.
 - `worktree` — path used for merge
 - `commit` — sha for `git merge`, or "uncommitted" (requires manual copy)
 - `files_changed` + `files_created` — used for conflict prediction
@@ -42,8 +47,10 @@ deviation:
 
 1. Assess whether downstream agents (in later waves) depend on the original
    contract
-2. If yes: update the interface contract in the IMPL doc **and** the
-   downstream agent prompt files before those agents launch
+2. If yes: update the interface contract in the IMPL doc **and** the affected
+   agent's prompt section in the IMPL doc before that agent launches. Agent
+   prompts are sections within the IMPL doc — updating a prompt means editing
+   that section in-place. There is no separate prompt file to keep in sync.
 3. If no: note the deviation and proceed
 
 Do not skip this step — downstream agents read the IMPL doc, not worktrees.
@@ -69,6 +76,23 @@ examples:
 
 If the completion report uses freeform `interface_deviations` (no structured
 flag), manually assess each one for downstream impact before proceeding.
+
+## Same-Wave Interface Failure
+
+If an agent reports `status: blocked` because a contract in the current wave is
+fundamentally unimplementable (not a deviation to document — the spec is wrong),
+the wave halts before merge:
+
+1. Mark the wave BLOCKED in the IMPL doc
+2. Revise the affected interface contracts in the IMPL doc
+3. Re-issue prompts to all agents whose work depends on the changed contract
+   (edit their prompt sections in the IMPL doc in-place)
+4. Agents that completed cleanly against unaffected contracts do not re-run —
+   their worktrees remain valid
+5. Re-launch only the affected agents from WAVE_PENDING with the corrected contracts
+
+This is distinct from a future-wave deviation (`downstream_action_required: true`),
+which propagates to the next wave without halting the current one.
 
 ## Step 4: Merge Each Agent
 
@@ -144,3 +168,16 @@ After verification passes:
 3. Queue `out_of_scope_deps` fixes — apply before launching the next wave
 4. Commit the wave's changes
 5. Launch the next wave (or pause if not `--auto`)
+
+## Crash Recovery
+
+If the orchestrator crashes mid-merge, do not re-run the full merge step —
+it is not idempotent. Before continuing:
+
+```bash
+git log --merges --oneline
+```
+
+Identify which worktree branches have already been merged into main. Skip those.
+Proceed only with worktrees whose branches do not yet appear in merge history.
+Re-merging an already-merged worktree will duplicate commits or produce conflicts.

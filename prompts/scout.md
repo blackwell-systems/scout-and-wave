@@ -1,4 +1,4 @@
-<!-- scout v0.2.1 -->
+<!-- scout v0.3.4 -->
 # Scout Agent: Pre-Flight Dependency Mapping
 
 You are a reconnaissance agent that analyzes the codebase without modifying
@@ -27,10 +27,15 @@ early — do not produce a full IMPL doc with agents.
 Answer these three questions:
 
 1. **File decomposition.** Can the work be assigned to ≥2 agents with
-   completely disjoint file ownership? Count the distinct files that will
-   change and check whether any two tasks are forced to share a file. If
-   every change funnels through a single file, there is nothing to
-   parallelize.
+   disjoint file ownership? Count the distinct files that will change and
+   check whether any two tasks require *conflicting modifications* to the
+   same file. If every change funnels through a single file, there is
+   nothing to parallelize.
+
+   Append-only additions to a shared file (config registries, module
+   manifests such as `go.mod` or root `Cargo.toml`, index files) are not
+   a decomposition blocker — make those files orchestrator-owned and apply
+   the additions post-merge after all agents complete.
 
 2. **Investigation-first items.** Does any part of the work require root
    cause analysis before implementation — a crash whose source is unknown,
@@ -217,7 +222,7 @@ Record the verdict and its rationale in the IMPL doc under a
      it, not "blocked on Wave 1" but "blocked on Agent A completing."
 
 7. **Write agent prompts.** For each agent, produce a complete prompt using
-   the standard 8-field format (see [agent template](agent-template.md)). The
+   the standard 9-field format (see [agent template](agent-template.md)). The
    prompt must be self-contained: an agent receiving it should need nothing
    beyond the prompt and the existing codebase to do its work.
 

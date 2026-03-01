@@ -1,4 +1,4 @@
-<!-- saw-quick v0.2.0 -->
+<!-- saw-quick v0.3.4 -->
 # SAW Quick Mode: Lightweight Parallel Execution
 
 Use this mode for small work (≤3 agents) with no coordination complexity.
@@ -16,13 +16,27 @@ Use this mode for small work (≤3 agents) with no coordination complexity.
 - Complex coordination (need dependency mapping)
 - Audit-fix-audit cycle (need completion reports)
 
+## Protocol Guarantees
+
+**Quick mode enforces I1 (disjoint file ownership) only.** The following
+invariants are unenforced:
+
+- **I2** — No interface contracts. Agents may implement incompatible signatures.
+- **I3** — No wave sequencing. All agents run in a single flat batch.
+- **I4** — No IMPL doc. Results are reported to chat; there is no persistent record.
+- **I5** — No commit requirement. Agents may report complete with uncommitted changes.
+
+If any of these gaps would cause a problem for the work at hand, use full SAW.
+
 ## Quick Mode Process
 
-1. **Check file ownership** - ensure files are disjoint
-2. **Generate inline prompts** - use simplified 3-field template
-3. **Launch agents** - no IMPL doc, just task descriptions
-4. **Merge results** - simple file copy or git merge
-5. **Run verification** - build + test on merged result
+1. **Declare file ownership** — write down every file each agent owns and verify
+   there is no overlap. This is a hard requirement, not a checklist item. Do not
+   launch agents until ownership is confirmed disjoint.
+2. **Generate inline prompts** — use simplified 3-field template
+3. **Launch agents** — no IMPL doc, just task descriptions
+4. **Merge results** — simple file copy or git merge
+5. **Run verification** — build + test on merged result
 
 ## Simplified Agent Prompt Template
 
@@ -123,7 +137,7 @@ Stop, rollback, and restart with full SAW coordination.
 
 Before using quick mode, verify:
 - [ ] ≤3 agents total
-- [ ] Files are disjoint (no overlap)
+- [ ] File ownership declared and confirmed disjoint (hard requirement)
 - [ ] No shared interfaces needed
 - [ ] No cross-agent dependencies
 - [ ] Merge conflicts unlikely

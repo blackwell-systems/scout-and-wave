@@ -1,4 +1,4 @@
-<!-- saw-worktree v0.4.0 -->
+<!-- saw-worktree v0.4.1 -->
 # SAW Worktree Lifecycle
 
 Manage git worktree creation, verification, and cleanup for wave agents.
@@ -17,6 +17,21 @@ Additional benefit: a solo Wave 0 agent running on main makes its output
 for a worktree merge.
 
 Proceed to worktree creation only when the wave has **≥2 agents**.
+
+## Pre-Launch Ownership Verification
+
+Before creating any worktrees, scan the wave's file ownership table in the
+IMPL doc and verify no file appears in more than one agent's ownership list.
+
+If an overlap is found, **do not proceed**. Correct the IMPL doc first —
+resolve the conflict by splitting the file, extracting an interface, or
+reassigning scope. This catches scout planning errors before agents spend
+time on conflicting work.
+
+This is distinct from post-execution conflict prediction (Step 2 of
+saw-merge.md), which catches runtime deviations where an agent touched files
+outside its declared scope. Both checks are required; they catch different
+failure modes.
 
 ## Interface Freeze Before Worktree Creation
 
@@ -49,6 +64,18 @@ against outdated interfaces, producing merge-time conflicts that are expensive
 to untangle.
 
 ## Pre-Create Worktrees
+
+Re-running `/saw wave` at this point is safe — WAVE_PENDING is re-entrant.
+Before creating worktrees, check whether they already exist from a previous
+run:
+
+```bash
+git worktree list
+```
+
+If the expected worktrees are already present and their HEAD matches the
+current HEAD of main, skip creation and proceed to launch. Do not duplicate
+worktrees.
 
 Before launching any agents in a multi-agent wave, create a worktree for each
 agent. Do NOT rely on the Task tool's `isolation: "worktree"` parameter alone
