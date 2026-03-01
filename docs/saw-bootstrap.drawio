@@ -1,0 +1,114 @@
+<mxGraphModel>
+  <root>
+    <mxCell id="0"/>
+    <mxCell id="1" parent="0"/>
+
+    <!-- Title -->
+    <mxCell id="2" parent="1" style="text;html=1;align=center;fontStyle=1;fontSize=24;strokeColor=none;fillColor=none;" value="/saw bootstrap" vertex="1">
+      <mxGeometry height="40" width="400" x="600" y="160" as="geometry"/>
+    </mxCell>
+
+    <!-- Scope note -->
+    <mxCell id="3" parent="1" style="text;html=1;align=center;fontSize=15;strokeColor=none;fillColor=none;fontColor=#666666;fontStyle=2;" value="See also: saw-scout-wave.drawio · saw-check.drawio · saw-status.drawio" vertex="1">
+      <mxGeometry height="30" width="700" x="450" y="208" as="geometry"/>
+    </mxCell>
+
+    <!-- START -->
+    <mxCell id="4" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;fontSize=18;" value="/saw bootstrap &lt;project-description&gt;" vertex="1">
+      <mxGeometry height="64" width="360" x="620" y="260" as="geometry"/>
+    </mxCell>
+
+    <!-- Pre-flight diamond: Git repo initialized? -->
+    <mxCell id="5" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=18;" value="Git repo&#10;initialized?" vertex="1">
+      <mxGeometry height="110" width="230" x="685" y="384" as="geometry"/>
+    </mxCell>
+    <mxCell id="6" edge="1" parent="1" source="4" style="edgeStyle=orthogonalEdgeStyle;fontSize=18;" target="5">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- git init box (no branch, left) -->
+    <mxCell id="7" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=18;align=left;spacingLeft=10;" value="&lt;b&gt;Initialize git repo&lt;/b&gt;&lt;br&gt;• git init&lt;br&gt;• git commit --allow-empty" vertex="1">
+      <mxGeometry height="100" width="280" x="180" y="399" as="geometry"/>
+    </mxCell>
+    <mxCell id="8" edge="1" parent="1" source="5" style="edgeStyle=orthogonalEdgeStyle;exitX=0;exitY=0.5;exitDx=0;exitDy=0;fontSize=18;" target="7" value="no">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- Gather requirements -->
+    <mxCell id="9" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=18;align=left;spacingLeft=10;" value="&lt;b&gt;Gather requirements&lt;/b&gt;&lt;br&gt;• language + ecosystem&lt;br&gt;• project type (CLI / API / library / worker)&lt;br&gt;• key concerns (3–6 major responsibilities)&lt;br&gt;• storage needs&lt;br&gt;• external integrations" vertex="1">
+      <mxGeometry height="160" width="440" x="580" y="570" as="geometry"/>
+    </mxCell>
+    <!-- yes path: diamond bottom → gather reqs -->
+    <mxCell id="10" edge="1" parent="1" source="5" style="edgeStyle=orthogonalEdgeStyle;exitX=0.5;exitY=1;exitDx=0;exitDy=0;fontSize=18;" target="9" value="yes">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <!-- no path: git init bottom → gather reqs left -->
+    <mxCell id="11" edge="1" parent="1" source="7" style="edgeStyle=orthogonalEdgeStyle;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;fontSize=18;" target="9">
+      <mxGeometry relative="1" as="geometry">
+        <Array as="points">
+          <mxPoint x="320" y="650"/>
+          <mxPoint x="580" y="650"/>
+        </Array>
+      </mxGeometry>
+    </mxCell>
+
+    <!-- Design package structure -->
+    <mxCell id="12" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=18;align=left;spacingLeft=10;" value="&lt;b&gt;Design package structure&lt;/b&gt;&lt;br&gt;• one concern = one module / package&lt;br&gt;• shared types as foundation (Wave 0 prerequisite)&lt;br&gt;• no god files — interfaces at every boundary&lt;br&gt;• disjoint ownership: each file owned by one agent" vertex="1">
+      <mxGeometry height="160" width="440" x="580" y="790" as="geometry"/>
+    </mxCell>
+    <mxCell id="13" edge="1" parent="1" source="9" style="edgeStyle=orthogonalEdgeStyle;fontSize=18;" target="12">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- Concerns diamond -->
+    <mxCell id="14" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=18;" value="≥ 3 concerns&#10;identified?" vertex="1">
+      <mxGeometry height="110" width="230" x="685" y="1010" as="geometry"/>
+    </mxCell>
+    <mxCell id="15" edge="1" parent="1" source="12" style="edgeStyle=orthogonalEdgeStyle;fontSize=18;" target="14">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- SUITABLE WITH CAVEATS -->
+    <mxCell id="16" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=18;align=left;spacingLeft=10;" value="&lt;b&gt;SUITABLE WITH CAVEATS&lt;/b&gt;&lt;br&gt;• consider /saw quick or sequential&lt;br&gt;• flag low parallelization value" vertex="1">
+      <mxGeometry height="100" width="300" x="1160" y="1015" as="geometry"/>
+    </mxCell>
+    <mxCell id="17" edge="1" parent="1" source="14" style="edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.5;exitDx=0;exitDy=0;fontSize=18;" target="16" value="&lt; 3 concerns">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- Writes IMPL-bootstrap.md -->
+    <mxCell id="18" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=18;align=left;spacingLeft=10;" value="&lt;b&gt;Writes IMPL-bootstrap.md&lt;/b&gt;&lt;br&gt;• package structure + file ownership table&lt;br&gt;• suitability verdict + time estimate&lt;br&gt;• interface contracts (binding, language-native)&lt;br&gt;• wave structure: Wave 0 → Wave 1+ → Wave 2&lt;br&gt;• per-agent prompts" vertex="1">
+      <mxGeometry height="170" width="440" x="580" y="1180" as="geometry"/>
+    </mxCell>
+    <mxCell id="19" edge="1" parent="1" source="14" style="edgeStyle=orthogonalEdgeStyle;exitX=0.5;exitY=1;exitDx=0;exitDy=0;fontSize=18;" target="18" value="≥ 3">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- Human review -->
+    <mxCell id="20" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=18;" value="Human review&#10;interface freeze checkpoint" vertex="1">
+      <mxGeometry height="64" width="440" x="580" y="1410" as="geometry"/>
+    </mxCell>
+    <mxCell id="21" edge="1" parent="1" source="18" style="edgeStyle=orthogonalEdgeStyle;fontSize=18;" target="20">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- Revise contracts loop -->
+    <mxCell id="22" edge="1" parent="1" source="20" style="edgeStyle=orthogonalEdgeStyle;dashed=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;fontSize=18;" target="18" value="revise contracts">
+      <mxGeometry relative="1" as="geometry">
+        <Array as="points">
+          <mxPoint x="1100" y="1442"/>
+          <mxPoint x="1100" y="1265"/>
+        </Array>
+      </mxGeometry>
+    </mxCell>
+
+    <!-- Wave execution note -->
+    <mxCell id="23" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#444444;fontSize=18;fontStyle=2;" value="Run /saw wave — see saw-scout-wave.drawio&#10;Wave 0 (types) → Wave 1 parallel → Wave 2 wiring" vertex="1">
+      <mxGeometry height="80" width="440" x="580" y="1540" as="geometry"/>
+    </mxCell>
+    <mxCell id="24" edge="1" parent="1" source="20" style="edgeStyle=orthogonalEdgeStyle;fontSize=18;" target="23" value="contracts final">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+  </root>
+</mxGraphModel>
