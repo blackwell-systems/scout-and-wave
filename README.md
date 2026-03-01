@@ -87,6 +87,39 @@ Copy the skill to your global commands directory:
 cp prompts/saw-skill.md ~/.claude/commands/saw.md
 ```
 
+### Permissions
+
+SAW requires the following entries in `~/.claude/settings.json` to run without
+blocking on approval prompts at each tool call:
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Agent",
+      "Bash",
+      "Read",
+      "Write",
+      "Edit",
+      "Glob",
+      "Grep"
+    ]
+  }
+}
+```
+
+**`"Agent"` is the critical one.** Without it, every wave agent launch — and
+every pipelined scout launch — blocks waiting for a keyboard approval. In a
+multi-agent wave, you would need to approve each agent individually before it
+goes to background. Add `"Agent"` once to your user-level settings and all
+future SAW runs are fully hands-free from the moment you invoke `/saw wave`.
+
+The other entries (`Bash`, `Read`, `Write`, `Edit`, `Glob`, `Grep`) cover git
+commands, worktree management, IMPL doc writes, and codebase reads during the
+scout phase. If your existing settings already allow these, no change is needed.
+For project-scoped settings, add the same block to
+`.claude/settings.json` in the project root.
+
 ### Commands
 
 ```
