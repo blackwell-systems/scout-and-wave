@@ -14,7 +14,7 @@
     </mxCell>
 
     <!-- START -->
-    <mxCell id="4" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1a3a5c;strokeColor=#4a7ab5;fontStyle=1;fontSize=18;fontColor=#ffffff;" value="/saw check &lt;feature-description&gt;" vertex="1">
+    <mxCell id="4" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1e4d8c;strokeColor=#6a9fd8;fontStyle=1;fontSize=18;fontColor=#ffffff;" value="/saw check &lt;feature-description&gt;" vertex="1">
       <mxGeometry height="64" width="340" x="630" y="260" as="geometry"/>
     </mxCell>
 
@@ -35,7 +35,7 @@
     </mxCell>
 
     <!-- Verdict diamond -->
-    <mxCell id="9" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#3d3000;strokeColor=#b89b40;fontSize=18;fontColor=#ffffff;" value="Verdict?" vertex="1">
+    <mxCell id="9" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#7a6200;strokeColor=#d4a820;fontSize=18;fontColor=#ffffff;" value="Verdict?" vertex="1">
       <mxGeometry height="110" width="230" x="685" y="784" as="geometry"/>
     </mxCell>
     <mxCell id="10" edge="1" parent="1" source="7" style="edgeStyle=orthogonalEdgeStyle;fontSize=18;fontColor=#cccccc;" target="9">
@@ -43,7 +43,7 @@
     </mxCell>
 
     <!-- NOT SUITABLE (left) -->
-    <mxCell id="11" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#3d1a1a;strokeColor=#c06060;fontSize=18;align=left;spacingLeft=10;fontColor=#ffffff;" value="&lt;b&gt;NOT SUITABLE&lt;/b&gt;&lt;br&gt;• hard blocker on one or more questions&lt;br&gt;• rethink decomposition, or investigate root cause first&lt;br&gt;• do not proceed to /saw scout" vertex="1">
+    <mxCell id="11" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#8b2020;strokeColor=#d45a5a;fontSize=18;align=left;spacingLeft=10;fontColor=#ffffff;" value="&lt;b&gt;NOT SUITABLE&lt;/b&gt;&lt;br&gt;• hard blocker on one or more questions&lt;br&gt;• rethink decomposition, or investigate root cause first&lt;br&gt;• do not proceed to /saw scout" vertex="1">
       <mxGeometry height="160" width="380" x="60" y="759" as="geometry"/>
     </mxCell>
     <mxCell id="12" edge="1" parent="1" source="9" style="edgeStyle=orthogonalEdgeStyle;exitX=0;exitY=0.5;exitDx=0;exitDy=0;fontSize=18;fontColor=#cccccc;" target="11" value="blocker">
@@ -51,7 +51,7 @@
     </mxCell>
 
     <!-- SUITABLE (right) -->
-    <mxCell id="13" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1a3a1a;strokeColor=#5a8a5a;fontSize=18;align=left;spacingLeft=10;fontColor=#ffffff;" value="&lt;b&gt;SUITABLE&lt;/b&gt;&lt;br&gt;• all 3 questions pass cleanly&lt;br&gt;• recommended: /saw scout &lt;feature&gt;" vertex="1">
+    <mxCell id="13" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2d6b2d;strokeColor=#5aad5a;fontSize=18;align=left;spacingLeft=10;fontColor=#ffffff;" value="&lt;b&gt;SUITABLE&lt;/b&gt;&lt;br&gt;• all 3 questions pass cleanly&lt;br&gt;• recommended: /saw scout &lt;feature&gt;" vertex="1">
       <mxGeometry height="150" width="320" x="1110" y="764" as="geometry"/>
     </mxCell>
     <mxCell id="14" edge="1" parent="1" source="9" style="edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.5;exitDx=0;exitDy=0;fontSize=18;fontColor=#cccccc;" target="13" value="all pass">
@@ -59,7 +59,7 @@
     </mxCell>
 
     <!-- SUITABLE WITH CAVEATS (bottom) -->
-    <mxCell id="15" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#3d3000;strokeColor=#b89b40;fontSize=18;align=left;spacingLeft=10;fontColor=#ffffff;" value="&lt;b&gt;SUITABLE WITH CAVEATS&lt;/b&gt;&lt;br&gt;• questions pass but with concerns (partial decomposition, risky interfaces)&lt;br&gt;• recommended: /saw scout with awareness of caveats, or /saw quick" vertex="1">
+    <mxCell id="15" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#7a6200;strokeColor=#d4a820;fontSize=18;align=left;spacingLeft=10;fontColor=#ffffff;" value="&lt;b&gt;SUITABLE WITH CAVEATS&lt;/b&gt;&lt;br&gt;• questions pass but with concerns (partial decomposition, risky interfaces)&lt;br&gt;• recommended: /saw scout with awareness of caveats, or /saw quick" vertex="1">
       <mxGeometry height="140" width="480" x="560" y="954" as="geometry"/>
     </mxCell>
     <mxCell id="16" edge="1" parent="1" source="9" style="edgeStyle=orthogonalEdgeStyle;exitX=0.5;exitY=1;exitDx=0;exitDy=0;fontSize=18;fontColor=#cccccc;" target="15" value="caveats">

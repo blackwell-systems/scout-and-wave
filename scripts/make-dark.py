@@ -5,20 +5,22 @@ import re
 from pathlib import Path
 
 # Semantic color mappings: light → dark
+# Fills use medium-dark saturated colors so semantic meaning (red/green/amber/blue)
+# remains clearly readable on a dark canvas — not so dark they render near-black.
 FILL_MAP = {
-    '#dae8fc': '#1a3a5c',   # blue fill (entry nodes)
-    '#fff2cc': '#3d3000',   # yellow fill (diamonds, caveats)
-    '#d5e8d4': '#1a3a1a',   # green fill (checkpoints)
-    '#f8cecc': '#3d1a1a',   # red fill (error/stop nodes)
-    '#f5f5f5': '#2a2a2a',   # gray fill (swimlane, reference nodes)
+    '#dae8fc': '#1e4d8c',   # blue fill (entry nodes)
+    '#fff2cc': '#7a6200',   # amber fill (diamonds, caveats)
+    '#d5e8d4': '#2d6b2d',   # green fill (checkpoints, suitable)
+    '#f8cecc': '#8b2020',   # red fill (error/stop/not-suitable nodes)
+    '#f5f5f5': '#3a3a3a',   # gray fill (swimlane, reference nodes)
 }
 
 STROKE_MAP = {
-    '#6c8ebf': '#4a7ab5',   # blue stroke
-    '#d6b656': '#b89b40',   # yellow stroke
-    '#82b366': '#5a8a5a',   # green stroke
-    '#b85450': '#c06060',   # red stroke
-    '#666666': '#888888',   # gray stroke (swimlane)
+    '#6c8ebf': '#6a9fd8',   # blue stroke
+    '#d6b656': '#d4a820',   # amber stroke
+    '#82b366': '#5aad5a',   # green stroke
+    '#b85450': '#d45a5a',   # red stroke
+    '#666666': '#999999',   # gray stroke (swimlane)
 }
 
 FONT_MAP = {
