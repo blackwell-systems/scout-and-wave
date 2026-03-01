@@ -1,4 +1,4 @@
-<!-- agent-template v0.3.2 -->
+<!-- agent-template v0.3.3 -->
 # Agent Prompt Template
 
 Each agent prompt has 8 fields. The scout fills these in from the coordination
@@ -141,6 +141,11 @@ cd /path/to/project
 <build command>    # e.g., go build ./... | npm run build | make
 <lint command>     # e.g., go vet ./... | npm run lint | ruff check
 <test command>     # e.g., go test ./... | npm test | pytest -x
+
+**Note:** You do not need to run linter auto-fix (e.g., `golangci-lint run --fix`,
+`ruff --fix`, `eslint --fix`). The orchestrator applies a single auto-fix pass
+on the merged result after all agents complete — this is cleaner than requiring
+every agent to know and run the project's exact auto-fix command.
 
 ## 7. Constraints
 

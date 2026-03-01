@@ -1,4 +1,4 @@
-<!-- saw-merge v0.4.1 -->
+<!-- saw-merge v0.4.2 -->
 # SAW Merge Procedure
 
 Merge agent worktrees back into the main branch after a wave completes.
@@ -136,10 +136,47 @@ Individual agents pass their gates in isolation, but the merged codebase can
 surface issues none of them saw individually. This post-merge verification is
 the real gate.
 
+**Linter auto-fix pass (run first, before build and tests):**
+If the project's CI config includes an auto-fix linter step, run it now on
+the merged codebase before anything else. Common patterns:
+
+```bash
+# Go
+golangci-lint run --fix ./...
+
+# Python
+ruff --fix . && black .
+
+# JavaScript / TypeScript
+eslint --fix src/ && prettier --write .
+
+# Rust
+cargo fmt
+
+# Any project with a Makefile target
+make lint-fix   # or: make fmt
+```
+
+After the auto-fix runs, check whether it changed any files:
+
+```bash
+git diff --name-only
+```
+
+If it did, commit those changes before running build and tests:
+
+```bash
+git add -A
+git commit -m "style: post-merge lint/format fix"
+```
+
+This is the correct place for auto-fix — one centralized pass on the merged
+result is cleaner and more reliable than requiring every agent to know and run
+the exact auto-fix command in their individual verification gates.
+
 **Run tests unscoped.** Agents naturally scope their own verification to the
-crates they own (e.g. `-p commitmux-store`). The orchestrator's post-merge
-gate must run without crate scoping so cross-crate cascade failures are
-caught:
+packages they own. The orchestrator's post-merge gate must run without package
+scoping so cross-package cascade failures are caught:
 
 ```bash
 # Correct — catches cross-crate failures:

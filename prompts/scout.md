@@ -1,4 +1,4 @@
-<!-- scout v0.3.4 -->
+<!-- scout v0.3.5 -->
 # Scout Agent: Pre-Flight Dependency Mapping
 
 You are a reconnaissance agent that analyzes the codebase without modifying
@@ -229,6 +229,17 @@ Record the verdict and its rationale in the IMPL doc under a
 8. **Determine verification gates from the build system.** Read the Makefile,
    CI config, or build scripts. Emit the exact commands each agent must run.
    Do not use generic placeholders — use the project's actual toolchain.
+
+   **Linter auto-fix (orchestrator responsibility, not agent responsibility):**
+   Check the CI config for a lint or formatting step that applies auto-fixes.
+   Common patterns: `golangci-lint run --fix`, `ruff --fix`, `eslint --fix`,
+   `prettier --write`, `cargo fmt`, `black .`, `swift-format --in-place`.
+   If such a step exists, **document it in the IMPL doc's Wave Execution Loop**
+   as a post-merge step the orchestrator runs before build and tests. Do not
+   add it to individual agent verification gates — agents run the linter in
+   check mode only. The orchestrator owns the single auto-fix pass on the
+   merged result and commits any style changes before running the full suite.
+   See `saw-merge.md` Step 6 for the exact procedure.
 
    **Performance guidance for test commands:**
    - Count existing tests in the module(s) being modified

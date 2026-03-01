@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [0.3.7] - 2026-03-01
+
+### Changed
+
+- **`prompts/saw-merge.md` (v0.4.1 → v0.4.2)** — post-merge verification now
+  includes an explicit linter auto-fix pass before build and tests. The orchestrator
+  runs the project's auto-fix command (`golangci-lint run --fix`, `ruff --fix`,
+  `eslint --fix`, `cargo fmt`, etc.) on the merged codebase, commits any style
+  changes, then runs the full suite. Centralizing auto-fix in the orchestrator
+  is cleaner than requiring every agent to know and run the exact command — one
+  pass on the merged result catches formatter divergence across all agents at once.
+
+- **`prompts/agent-template.md` (v0.3.2 → v0.3.3)** — agent verification gate
+  now explicitly states agents do not run linter auto-fix. A note explains that
+  the orchestrator owns the single auto-fix pass on the merged result, so agents
+  run the linter in check mode only. Removes the failure mode where agents pass
+  locally but CI fails because CI runs auto-fix and agents don't.
+
+- **`prompts/scout.md` (v0.3.4 → v0.3.5)** — step 8 now instructs the scout to
+  document the project's auto-fix command in the IMPL doc's Wave Execution Loop
+  (for the orchestrator) rather than emitting it in individual agent gates.
+
 ## [0.3.6] - 2026-03-01
 
 ### Changed
