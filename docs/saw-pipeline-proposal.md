@@ -6,6 +6,18 @@
 
 ---
 
+## Participant Model
+
+All three SAW participants are agents — AI model instances with tool access. What distinguishes them is execution mode:
+
+- **Orchestrator** — synchronous. Drives all state transitions. Launches scouts and wave agents, waits for completion, reads results, and decides what runs next. The sole reporting channel to the human: all progress, decisions, approval requests, and errors surface through the orchestrator. Async agents are invisible to the human except through the orchestrator's completion handling.
+- **Scout** — asynchronous. Launched by the orchestrator, analyzes the codebase, writes the IMPL doc, and exits. Never modifies source.
+- **Wave agents** — asynchronous. Launched by the orchestrator in parallel, own disjoint file sets, commit their work, and write completion reports to the IMPL doc.
+
+Pipelining does not change any of these roles. The orchestrator remains synchronous and foreground throughout. It simply makes a different scheduling decision during what would otherwise be an idle wait window: rather than doing nothing while async wave agents run, it launches the next feature's scout as an additional async agent. The protocol structure is unchanged — only the orchestrator's time is used more efficiently.
+
+---
+
 ## The Idea
 
 SAW optimizes parallelism *within* a feature (multiple agents per wave). This proposal addresses parallelism *across* features: starting the next feature's scout while the current feature's agents are still executing.
@@ -30,11 +42,13 @@ The scout for Feature B runs during Feature A's wave 2 execution. By the time Fe
 
 ## Why This Works
 
-A SAW scout is always read-only — it analyzes source files and writes only the IMPL doc. It never modifies source. This means:
+A SAW scout is an asynchronous, read-only agent — it analyzes source files and writes only the IMPL doc, never source code. Because the orchestrator is synchronous and the scout is asynchronous, they can overlap without any coordination: the orchestrator launches the scout, registers its completion notification, and continues waiting for the active wave's agents. When both the wave and the scout complete, the orchestrator handles both results in sequence.
 
-- No write conflict with active agents possible
-- The only risk is reading code that an active agent is simultaneously modifying in a worktree
-- If the scout reads stale (pre-modification) source for files an active agent owns, its interface contracts may be wrong
+The write safety is structural:
+
+- Scout writes only to the IMPL doc — no conflict with active wave agents possible
+- The only risk is reading code that an active wave agent is simultaneously modifying in a worktree
+- If the scout reads stale (pre-modification) source for files an active agent owns, its interface contracts may be wrong when the next wave launches
 
 That risk is controlled by a single constraint.
 
@@ -64,7 +78,7 @@ The check is: **files the scout expects to modify** must not appear in **active 
                                                           from Feature N merge.
 ```
 
-The review window — merge, verify, tick checkboxes, read agent reports — is dead time for the orchestrator. The scout fills it. By the time the orchestrator finishes reviewing Wave N's merge, the IMPL doc for Feature N+1 is waiting.
+The review window — merge, verify, tick checkboxes, read agent reports — is dead time for the synchronous orchestrator. Launching the pipelined scout fills that gap. The orchestrator's role doesn't change: it launched async agents (the wave), it launches another async agent (the scout), and it processes both results when they complete. By the time the orchestrator finishes reviewing Wave N's merge, the IMPL doc for Feature N+1 is waiting.
 
 ---
 
@@ -235,10 +249,12 @@ The canonical form of the protocol should describe both modes clearly and treat 
 
 3. **Does the scout need a "disjoint read domain" declaration in the IMPL doc?** If the IMPL doc declared "this scout assumed main HEAD at commit {sha} for file X," the orchestrator could invalidate and re-run the scout if that file changed before Wave 1 launches.
 
-4. **How does this interact with the human review step?** The proposal assumes the orchestrator (Claude) makes the pipeline launch decision. If the human reviews IMPL docs before every wave, the pipeline benefit only materializes if the human approves the pipelined scout before the active wave finishes — otherwise the review is the bottleneck, not scout time.
+4. **How does this interact with the human review step?** The orchestrator is the sole human-facing channel, so the pipeline launch decision is always the orchestrator's to make — not the human's directly. But if the human must approve each IMPL doc before waves launch, the benefit only materializes if that approval happens before the active wave finishes. When human review is the bottleneck, the review window is not dead time and the pipelined scout yields no wall-clock savings — the IMPL doc simply sits ready earlier than it can be used.
 
 ---
 
 ## Summary
 
-Pipeline scouting is the observation that the bottleneck in multi-feature SAW work is human review time, not AI execution time. By filling wave execution gaps with the next feature's scout, the IMPL doc is ready for review at the same moment the previous wave's merge completes. The cost is a single disjoint-read-domain check before launching the scout. The constraint is light and the benefit compounds across features.
+Pipeline scouting is a scheduling optimization on the synchronous orchestrator — not a structural change to the protocol. The orchestrator's role, execution model, and status as the sole human-facing reporting channel are unchanged. The only difference is what the orchestrator does during wave execution gaps: rather than waiting idle, it launches the next feature's scout as an additional async agent and processes that result alongside the wave completion.
+
+The prerequisite is a single disjoint-read-domain check. The bottleneck it eliminates is the serial dependency between independent features. The benefit compounds: each pipelined scout removes one wait window from the critical path, and with upfront session planning, multiple scouts can run in parallel before any code is written.
