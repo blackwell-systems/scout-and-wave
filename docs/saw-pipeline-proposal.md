@@ -115,6 +115,118 @@ The orchestrator checks "Files Read" of the incoming scout against "Files Change
 
 ---
 
+## Intentional Upfront Planning: The Session-Level DAG
+
+The opportunistic model — discover a feature mid-session, check disjointness, fill the gap — works but leaves value on the table. If the full change landscape is known at the start of a session, a more powerful approach is available: plan the entire pipeline before writing any code.
+
+### The Principle Lifts One Level
+
+SAW applies the same reasoning at every level:
+
+```
+Files    → dependency graph → wave structure  → parallel agents
+Features → dependency graph → pipeline schedule → parallel scouts + waves
+```
+
+The structure is identical. The granularity changes. A feature DAG determines which scouts can run in parallel and which must wait, the same way a file DAG determines which agents can run in parallel and which must wait.
+
+### What Upfront Planning Produces
+
+Given five features at session start, a lightweight survey produces a feature DAG before any code is touched:
+
+```
+Feature A (store layer)   ──→  Feature C (MCP surface)
+Feature B (live read)     ──→  Feature C (MCP surface)
+Feature D (CLI commands)  [independent]
+Feature E (docs/tests)    [independent]
+```
+
+From that graph, an optimal pipeline schedule falls out:
+
+```
+t=0m:   Scout A, Scout B, Scout D, Scout E          ← all independent, all parallel
+t=10m:  Wave1-A, Wave1-B  |  Scout C (A+B interfaces locked)  |  Wave1-D
+t=20m:  Wave2-A, Wave2-B  |  Wave1-C                          |  Wave2-D
+t=30m:  merge A+B         |  Wave2-C
+t=35m:  merge C, merge D, merge E
+```
+
+Compare to the sequential baseline:
+
+```
+t=0m:   Scout A
+t=10m:  Wave1-A, Wave2-A
+t=25m:  merge A → Scout B
+t=35m:  Wave1-B, Wave2-B
+t=50m:  merge B → Scout C
+...
+```
+
+The pipeline schedule gets to the same endpoint in roughly half the wall-clock time. The savings are not from faster agents — they are from eliminating the serial dependency between features that don't actually depend on each other.
+
+### The New Artifact: Session Plan
+
+Upfront planning requires a **session plan** — a coordination artifact at the feature level, above individual IMPL docs. It records:
+
+- The feature list with brief descriptions and expected file domains
+- The feature DAG (which features depend on others' outputs)
+- The conflict matrix (which features cannot pipeline due to file overlap)
+- The pipeline schedule with time estimates
+- The baseline sequential time for comparison
+
+The session plan becomes the document the orchestrator consults when deciding whether to launch a pipelined scout. Rather than checking disjointness on the fly, the schedule was worked out upfront. The runtime decision becomes: "is the schedule still valid, or did an earlier feature's merge change something unexpected?"
+
+### The New Entry Point: `/saw session`
+
+A natural entry point for this mode:
+
+```
+/saw session
+  - fix session project attribution
+  - add live session reading
+  - add cost alerting
+  - update docs
+```
+
+The session command:
+1. Takes a list of feature descriptions
+2. Runs lightweight file-domain estimates on all of them simultaneously (not full scouts — just enough to identify which packages each feature will likely touch)
+3. Builds the feature DAG from stated dependencies and inferred file conflicts
+4. Produces the pipeline schedule with estimated times
+5. Writes a `docs/SESSION-<date>.md` session plan
+6. Asks for human review before launching anything
+
+After approval, the session plan drives the orchestrator. Each time a wave completes, the orchestrator consults the session plan to determine what can launch next — which scouts, which Wave 1s, which merges are unblocked.
+
+### Feature-Level vs. File-Level Conflict Detection
+
+The upfront plan catches **feature-level conflicts** — two features that both touch the same subsystem, making them impossible to pipeline. This is distinct from the **file-level conflicts** SAW already manages within a feature.
+
+The upfront plan doesn't eliminate the file-level check — it supplements it. The session plan says "features A and C can pipeline"; the runtime disjointness check says "Agent B in feature A's Wave 2 owns `tools.go`; confirm the pipelined scout for C doesn't also change `tools.go` at this moment."
+
+Two levels of conflict detection, each operating at its appropriate granularity.
+
+### Feature Reordering for Throughput
+
+With the full landscape visible upfront, features can be **reordered** to minimize pipeline bubbles. A feature with no file conflicts and a fast Wave 1 is a high-value fill feature — slot its scout and Wave 1 into gaps created by longer-running features. This is CPU scheduling applied to development work.
+
+Example: if Feature D (CLI commands) is independent and takes 15 minutes, it should fill the gap during Feature A's 20-minute Wave 2 rather than running sequentially after Feature A completes. The session planner can see this and schedule accordingly. An ad-hoc orchestrator cannot.
+
+### Two Modes, One Protocol
+
+Upfront session planning and opportunistic pipelining are not competing approaches — they are the same technique applied at different information levels:
+
+| Mode | When to use | Information required |
+|------|-------------|---------------------|
+| **Session planning** | Full feature list known at session start | All features + their approximate file domains |
+| **Opportunistic pipelining** | Feature discovered mid-session | Just the next feature |
+
+Both use the same disjointness check. Both produce IMPL docs that feed into `/saw wave`. The session plan is simply the upfront version of the decision the orchestrator would otherwise make one feature at a time.
+
+The canonical form of the protocol should describe both modes clearly and treat session planning as the preferred approach when the full picture is available.
+
+---
+
 ## Open Questions
 
 1. **Should the orchestrator automatically launch pipelined scouts**, or should it always be a manual decision? The risk of getting it wrong (stale contracts) argues for manual. The overhead of always checking argues for automation.
