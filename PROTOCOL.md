@@ -3,10 +3,14 @@
 **Version:** 0.3.4
 **Status:** Active
 
-Scout-and-Wave (SAW) is a coordination protocol for parallel AI agent execution
-against a shared codebase. It defines preconditions, invariants, participant
-roles, state transitions, and message formats that guarantee agents can work
-concurrently without conflicts.
+Scout-and-Wave (SAW) is a parallelization protocol for human-guided agentic
+workflows. It defines preconditions, invariants, participant roles, state
+transitions, and message formats that guarantee agents can work concurrently
+without conflicts. Human review checkpoints are structural — the protocol does
+not advance past the suitability gate or between waves without human approval.
+Cross-feature pipelining is optional: an extension for scheduling scout work
+across features when the change landscape is known in advance or a safe overlap
+is detected mid-session.
 
 The prompts in `prompts/` are reference implementations of this protocol.
 
