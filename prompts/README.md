@@ -35,7 +35,6 @@ instructions in them directly.
 | File | Version | Skill command | Purpose |
 |------|---------|---------------|---------|
 | [`saw-bootstrap.md`](saw-bootstrap.md) | v0.3.1 | `/saw bootstrap` | Design-first execution for new projects with no existing codebase. Orchestrator reads this and acts as architect: gathers requirements, designs package structure, defines interface contracts, produces `docs/IMPL-bootstrap.md` with a mandatory solo Wave 0 (types) followed by parallel implementation waves. |
-| [`saw-quick.md`](saw-quick.md) | v0.3.4 | _(not routed)_ | Lightweight execution for 2–3 agents with fully disjoint files and no cross-agent interfaces. Uses a 3-field template (files, task, verification). No IMPL doc, no completion reports, no interface contracts. Enforces I1 only. **Not wired to the `/saw` skill** — invoke manually or use as a reference. If merge conflicts occur, graduate to full SAW. |
 
 ## Protocol Invariants Referenced
 

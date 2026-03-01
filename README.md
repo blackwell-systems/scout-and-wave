@@ -46,7 +46,6 @@ If any question is a hard blocker, the scout emits NOT SUITABLE and stops. A poo
 - [`prompts/agent-template.md`](prompts/agent-template.md): The 9-field agent prompt template stamped per-agent (Field 0: isolation verification; Fields 1–8: implementation spec)
 - [`prompts/saw-skill.md`](prompts/saw-skill.md): Claude Code `/saw` skill router (copy to `~/.claude/commands/saw.md`)
 - [`prompts/saw-bootstrap.md`](prompts/saw-bootstrap.md): Design-first architecture for new projects with no existing codebase
-- [`prompts/saw-quick.md`](prompts/saw-quick.md): Lightweight mode for 2-3 agents with no IMPL doc
 - [`prompts/saw-merge.md`](prompts/saw-merge.md): Merge procedure: conflict detection, agent merging, post-merge verification
 - [`prompts/saw-worktree.md`](prompts/saw-worktree.md): Worktree lifecycle: creation, verification, diagnosis, cleanup
 
@@ -60,7 +59,6 @@ If any question is a hard blocker, the scout emits NOT SUITABLE and stops. A poo
 
 **Low parallelization value** (consider alternatives):
 - Simple edits, documentation-only, or trivially fast sequential work; SAW overhead dominates
-- 2-3 agents with disjoint files and no dependencies; use SAW Quick mode instead
 - The IMPL doc has coordination value even when speed gains are marginal (audit trail, interface spec, progress tracking)
 
 **Good fit:**

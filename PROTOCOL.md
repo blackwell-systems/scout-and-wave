@@ -372,17 +372,6 @@ When all preconditions hold and all invariants are maintained:
 
 ## Variants
 
-**Quick mode** (`prompts/saw-quick.md`): Lightweight execution for 2–3 agents
-with fully disjoint files and no cross-agent interfaces. Uses a 3-field template
-(files, task, verification). No IMPL doc. No structured completion reports. No
-interface contracts.
-
-Quick mode requires a file ownership declaration before agents launch — each
-agent's files must be listed and verified disjoint. This is the only protocol
-guarantee Quick mode provides. I2 through I5 are unenforced. If merge conflicts
-occur, the work needed full SAW and Quick mode was the wrong choice — agents
-have already done conflicting work by the time this is discovered.
-
 **Bootstrap mode** (`prompts/saw-bootstrap.md`): Design-first execution for new
 projects with no existing codebase. The scout acts as architect: gathers
 requirements, designs package structure, and defines interface contracts before
@@ -403,5 +392,4 @@ The canonical prompts that implement this protocol:
 | `prompts/saw-skill.md` | Orchestrator — command routing and wave execution |
 | `prompts/saw-worktree.md` | Orchestrator — worktree lifecycle |
 | `prompts/saw-merge.md` | Orchestrator — merge procedure |
-| `prompts/saw-quick.md` | Quick mode variant — 2-3 agents, no IMPL doc |
 | `prompts/saw-bootstrap.md` | Bootstrap mode variant — design-first for new projects |

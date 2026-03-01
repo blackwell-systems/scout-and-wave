@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Removed
 
+- **`prompts/saw-quick.md` (Quick mode)** — removed. Quick mode only enforced I1
+  and explicitly unenforced I2–I5. A tool that strips SAW's guarantee set is not
+  a SAW variant — it is a different thing wearing SAW's name. Keeping it in the
+  repo implied SAW has a mode for every parallelization case, which dilutes the
+  protocol's contract and invites using it as a catch-all. Work that doesn't fit
+  SAW should not use SAW. The "Low parallelization value" guidance in the README
+  covers the 2–3 agent case without prescribing a named protocol for it.
+
 - **`/saw check` command** — removed. The command's only value was filtering NOT SUITABLE
   cases before a scout run, but the Scout already runs a built-in suitability gate and stops
   with a NOT SUITABLE verdict when the work doesn't qualify. Running `/saw check` before
