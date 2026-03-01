@@ -23,7 +23,10 @@ and wave agents, waits for completion notifications, reads completion reports,
 executes the merge procedure, verifies the merged result, and advances state.
 The orchestrator serializes all state changes — it is the single-threaded
 coordinator that processes completion events and decides what runs next. The
-only participant that interacts with the human directly.
+only participant that interacts with the human directly. All progress
+reporting, decision points, approval requests, and error escalation flow through
+the orchestrator — asynchronous agents never surface information to the human
+except through the orchestrator's completion handling.
 
 **Scout** — An asynchronous agent launched by the orchestrator. Analyzes the
 codebase, produces the IMPL doc, and exits. Never modifies source files. Never
