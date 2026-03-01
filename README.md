@@ -1,9 +1,9 @@
-# Scout-and-Wave: A Coordination Protocol for Parallel AI Agents
+# Scout-and-Wave: A Protocol for Safely Parallelizing Human-Guided Agentic Workflows
 
 [![Blackwell Systems™](https://raw.githubusercontent.com/blackwell-systems/blackwell-docs-theme/main/badge-trademark.svg)](https://github.com/blackwell-systems)
 ![Version](https://img.shields.io/badge/version-0.3.5-blue)
 
-A coordination protocol for parallel AI agents. Defines preconditions, ownership invariants, and verification gates that guarantee agents can work concurrently without conflicts.
+A coordination protocol for safely parallelizing human-guided agentic workflows. Defines participant roles, preconditions, ownership invariants, and verification gates that guarantee agents can work concurrently without conflicts. Human review checkpoints are structural — the protocol does not advance past the suitability gate or between waves without human approval.
 
 ## Why
 
@@ -13,11 +13,13 @@ The root cause isn't that agents are careless; it's that nothing stops two agent
 
 ## How
 
-Scout-and-wave fixes this before any agent starts, in two phases:
+Scout-and-wave fixes this before any agent starts, through three participant roles:
 
-1. **Scout:** A read-only agent analyzes the codebase and produces a coordination artifact: a dependency graph, exact interface contracts, a file ownership table, and a wave structure. Every file that will change is assigned to exactly one agent. No two agents in the same wave may touch the same file. This is a hard correctness constraint, not a preference: the scout resolves ownership conflicts at planning time or declares the work NOT SUITABLE for parallel execution.
+- **Orchestrator** — the synchronous agent. Drives all protocol state transitions. Launches the Scout and Wave Agents, waits for completion, executes the merge procedure, verifies the result, and advances state. The only participant that interacts with the human directly. Does not perform Scout or Wave Agent duties (I6 — Role Separation).
 
-2. **Wave:** Groups of agents execute in parallel, each owning disjoint files, coding against the pre-defined interface contracts. Build and test gates verify each wave before the next begins. Agents append structured completion reports to the coordination artifact (interface deviations, out-of-scope discoveries, implementation decisions) so the plan converges toward reality with each wave instead of drifting from it.
+- **Scout** — an asynchronous agent launched by the Orchestrator. Analyzes the codebase and produces a coordination artifact: a dependency graph, exact interface contracts, a file ownership table, and a wave structure. Every file that will change is assigned to exactly one agent. No two agents in the same wave may touch the same file (I1 — Disjoint File Ownership). The Scout resolves ownership conflicts at planning time or declares the work NOT SUITABLE for parallel execution. Never modifies source files.
+
+- **Wave Agents** — asynchronous agents launched by the Orchestrator in parallel. Each owns a disjoint set of files, implements against the pre-defined interface contracts, runs the verification gate, commits its work, and writes a structured completion report (interface deviations, out-of-scope discoveries, verification result). Build and test gates verify each wave before the next begins.
 
 The protocol has a built-in suitability gate. The scout answers five questions before producing any agent prompts:
 
@@ -36,7 +38,7 @@ If any question is a hard blocker, the scout emits NOT SUITABLE and stops. A poo
 
 ## Protocol Specification
 
-[`PROTOCOL.md`](PROTOCOL.md). Formal specification: preconditions, invariants, state machine, participant roles, message formats, and correctness guarantees. The prompts in `prompts/` are reference implementations of this spec.
+[`PROTOCOL.md`](PROTOCOL.md). Formal specification: participant roles, preconditions, invariants (I1–I6), state machine, execution rules, message formats, and correctness guarantees. Invariants are numbered I1–I6; prompt files embed them verbatim alongside their I-number for self-containment and auditability. The prompts in `prompts/` are reference implementations of this spec.
 
 ## Prompts
 
