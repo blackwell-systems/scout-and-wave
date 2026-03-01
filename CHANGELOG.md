@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **PNG exports** — all four flow diagrams exported at 2x scale with date-stamped
+  filenames (`saw-*-20260228.png`). `saw-scout-wave-20260228.png` linked inline
+  in README replacing the mermaid diagram.
+
 - **`docs/diagrams/saw-scout-wave.drawio`** — draw.io diagram of the `/saw scout` + `/saw wave`
   protocol flow. Covers suitability gate, scout phase, IMPL doc, human review,
   wave loop (worktree setup, agent execution, completion reports, orchestrator,
