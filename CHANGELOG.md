@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Removed
+
+- **`/saw check` command** — removed. The command's only value was filtering NOT SUITABLE
+  cases before a scout run, but the Scout already runs a built-in suitability gate and stops
+  with a NOT SUITABLE verdict when the work doesn't qualify. Running `/saw check` before
+  `/saw scout` added latency on SUITABLE outcomes (the common case) with no benefit, and
+  the NOT SUITABLE path was already handled by the Scout's early exit. The "When to Use It"
+  section now describes the Scout's suitability gate directly. The CHECKING state has been
+  removed from the PROTOCOL.md state machine.
+
 ### Changed
 
 - **`PROTOCOL.md` (v0.3.5)** — added invariant reference convention. Invariants are

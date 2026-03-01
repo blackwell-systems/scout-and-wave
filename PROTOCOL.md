@@ -137,11 +137,6 @@ no SAW session is detectable by monitoring tools).
 ```
 IDLE
   │
-  ├─ /saw check  ──────────────────────► CHECKING
-  │                                          │
-  │                                     verdict only,
-  │                                     no state written
-  │
   ├─ /saw scout  ──────────────────────► SCOUTING
   │                                          │
   │                                     IMPL doc written

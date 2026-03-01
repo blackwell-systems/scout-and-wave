@@ -26,14 +26,6 @@ If the argument is `bootstrap <project-description>`:
 3. Design the package structure and interface contracts, then write `docs/IMPL-bootstrap.md`.
 4. Report the architecture design and wave structure. Ask the user to review before proceeding.
 
-If the argument is `check <feature-description>`:
-1. Read the feature description and do a lightweight codebase scan (directory structure, key files likely to change — no deep analysis).
-2. Answer the three suitability questions:
-   - Can the work decompose into ≥2 disjoint file groups?
-   - Are there investigation-first items (unknown root causes, crashes to reproduce)?
-   - Can cross-agent interfaces be defined before implementation starts?
-3. Emit a verdict (SUITABLE / NOT SUITABLE / SUITABLE WITH CAVEATS) with a one-paragraph rationale and a recommended next step. Do not write any files.
-
 If no `docs/IMPL-*.md` file exists for the current feature:
 1. Launch a **Scout agent** (asynchronous) using the Agent tool with the contents of `prompts/scout.md` as its prompt and the feature description as context. The Scout analyzes the codebase, runs the suitability gate, and writes the IMPL doc — the Orchestrator does not perform this analysis itself.
 2. Wait for the Scout to complete. Read the resulting `docs/IMPL-<feature-slug>.md`.
@@ -55,14 +47,6 @@ Arguments:
   (language, project type, key concerns), designs package structure and interface
   contracts, and produces `docs/IMPL-bootstrap.md` with a Wave 0 (types) pattern
   followed by parallel implementation waves. Use when starting from scratch.
-- `check <feature-description>`: Lightweight suitability pre-flight. Does not
-  analyze the full codebase and does not write any files. Answers three
-  questions: (1) Can the work decompose into ≥2 disjoint file groups?
-  (2) Are there investigation-first items (crashes, unknown root causes)?
-  (3) Can cross-agent interfaces be defined before implementation starts?
-  Emits a verdict: SUITABLE / NOT SUITABLE / SUITABLE WITH CAVEATS, plus a
-  recommended next step. Run this when you are unsure whether SAW is the
-  right approach before committing to a full scout.
 - `scout <feature-description>`: The Orchestrator launches a Scout agent
   (asynchronous) to analyze the codebase and produce the IMPL doc. The Scout
   runs the suitability gate first; if the work is not suitable, it writes a

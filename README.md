@@ -75,7 +75,7 @@ If any question is a hard blocker, the scout emits NOT SUITABLE and stops. A poo
 - Simple work better done sequentially
 - Root cause is unknown (crash, race condition): investigate first, then use SAW for the fix
 
-Use `/saw check` when you're unsure. The scout runs a built-in suitability gate with time-to-value estimates (scout + agents + merge vs sequential baseline) and will emit a NOT SUITABLE verdict (and stop) rather than producing a broken IMPL doc with forced decomposition. Either way, a poor-fit assessment is useful output: it tells you SAW isn't the right tool before any agents spend time on it.
+The Scout always runs the suitability gate first and will emit a NOT SUITABLE verdict (and stop) rather than producing a broken IMPL doc with forced decomposition. A poor-fit assessment is useful output: it tells you SAW isn't the right tool before any agents spend time on it.
 
 ## Usage with Claude Code
 
@@ -126,7 +126,6 @@ For project-scoped settings, add the same block to
 
 ```
 /saw bootstrap <project-description>   # Design-first architecture for new projects
-/saw check <feature-description>       # Lightweight suitability pre-flight (no files written)
 /saw scout <feature-description>       # Run the scout phase, produce docs/IMPL-<feature>.md
 /saw wave                              # Execute the next pending wave, pause for review
 /saw wave --auto                       # Execute all waves; only pause if verification fails
@@ -137,15 +136,13 @@ For project-scoped settings, add the same block to
 
 0. **Bootstrap (new projects only):** `/saw bootstrap "CLI tool for X with storage and output formatting"` acts as architect rather than analyst. Gathers requirements (language, project type, key concerns), designs package structure and interface contracts from scratch, and produces `docs/IMPL-bootstrap.md` with a mandatory Wave 0 (types/interfaces) followed by parallel implementation waves. Use this when starting from an empty repo; it designs for SAW-compatible disjoint ownership before any code is written.
 
-1. **Check (optional):** `/saw check "add OAuth2 login flow"` runs a lightweight pre-flight. It answers whether the work can be decomposed into disjoint file groups, whether there are investigation-first items, and whether cross-agent interfaces can be defined upfront. Emits SUITABLE / NOT SUITABLE / SUITABLE WITH CAVEATS. No files are written. Skip this step if you already know SAW is a good fit.
+1. **Scout:** `/saw scout "add OAuth2 login flow"` analyzes the codebase and writes `docs/IMPL-oauth2-login.md`. The Scout always runs the suitability gate first; if the work is not suitable it writes only the verdict and stops without generating agent prompts. If suitable, it produces the full coordination artifact: suitability assessment with time-to-value estimates (scout + agents + merge vs sequential baseline), dependency graph, file ownership, interface contracts, wave structure, and per-agent prompts.
 
-2. **Scout:** `/saw scout "add OAuth2 login flow"` analyzes the codebase and writes `docs/IMPL-oauth2-login.md`. The scout always runs the suitability gate first; if the work is not suitable it writes only the verdict and stops without generating agent prompts. If suitable, it produces the full coordination artifact: suitability assessment with time-to-value estimates (scout + agents + merge vs sequential baseline), dependency graph, file ownership, interface contracts, wave structure, and per-agent prompts.
+2. **Review:** Read the IMPL doc. Verify the suitability verdict makes sense, file ownership is clean, interface contracts are correct, and wave ordering is right. Adjust before proceeding.
 
-3. **Review:** Read the IMPL doc. Verify the suitability verdict makes sense, file ownership is clean, interface contracts are correct, and wave ordering is right. Adjust before proceeding.
+3. **Wave:** `/saw wave` launches parallel agents for the current wave. Each agent owns disjoint files, codes against the interface contracts, and writes a structured completion report (files changed, interface deviations, out-of-scope deps, verification result). The orchestrator cross-references all agents' file lists for conflicts before merging, then merges each worktree in sequence.
 
-4. **Wave:** `/saw wave` launches parallel agents for the current wave. Each agent owns disjoint files, codes against the interface contracts, and writes a structured completion report (files changed, interface deviations, out-of-scope deps, verification result). The orchestrator cross-references all agents' file lists for conflicts before merging, then merges each worktree in sequence.
-
-5. **Repeat:** Run `/saw wave` for each subsequent wave, or `/saw wave --auto` to execute all remaining waves without per-wave confirmation prompts. Auto mode still pauses if verification fails.
+4. **Repeat:** Run `/saw wave` for each subsequent wave, or `/saw wave --auto` to execute all remaining waves without per-wave confirmation prompts. Auto mode still pauses if verification fails.
 
 ## Blog Post
 
