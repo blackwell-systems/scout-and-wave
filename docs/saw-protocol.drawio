@@ -65,8 +65,8 @@
     </mxCell>
 
     <!-- Fix re-verify -->
-    <mxCell id="17" parent="2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=18;" value="Fix · re-verify" vertex="1">
-      <mxGeometry height="140" width="140" x="800" y="1024" as="geometry"/>
+    <mxCell id="17" parent="2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=18;align=left;spacingLeft=10;" value="&lt;b&gt;Fix · re-verify&lt;/b&gt;&lt;br&gt;• identify failing test or build error&lt;br&gt;• fix on main (no new worktree)&lt;br&gt;• re-run unscoped verification gate&lt;br&gt;• repeat until PASS" vertex="1">
+      <mxGeometry height="140" width="260" x="740" y="1024" as="geometry"/>
     </mxCell>
     <mxCell id="18" edge="1" parent="2" source="15" style="edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.5;exitDx=0;exitDy=0;fontSize=18;" target="17" value="FAIL">
       <mxGeometry relative="1" as="geometry"/>
