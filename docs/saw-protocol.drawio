@@ -96,6 +96,16 @@
       </mxGeometry>
     </mxCell>
 
+    <!-- Diagram title -->
+    <mxCell id="38" parent="1" style="text;html=1;align=center;fontStyle=1;fontSize=24;strokeColor=none;fillColor=none;" value="SAW Core Protocol: scout → wave execution" vertex="1">
+      <mxGeometry height="40" width="600" x="500" y="290" as="geometry"/>
+    </mxCell>
+
+    <!-- Scope note -->
+    <mxCell id="39" parent="1" style="text;html=1;align=center;fontSize=15;strokeColor=none;fillColor=none;fontColor=#666666;fontStyle=2;" value="This diagram covers /saw scout and /saw wave only. &amp;nbsp;/saw check, /saw bootstrap, and /saw status are separate entry points." vertex="1">
+      <mxGeometry height="30" width="700" x="450" y="338" as="geometry"/>
+    </mxCell>
+
     <!-- START -->
     <mxCell id="23" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;fontSize=18;" value="/saw scout &lt;feature&gt;" vertex="1">
       <mxGeometry height="64" width="250" x="675" y="426" as="geometry"/>
