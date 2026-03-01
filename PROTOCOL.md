@@ -63,7 +63,9 @@ suitability gate checks these before producing agent prompts.
    No two agents require conflicting modifications to the same file.
    Append-only additions to a shared file (config registries, module manifests,
    index files) are not a decomposition blocker — the scout makes such files
-   orchestrator-owned and the orchestrator applies them post-merge.
+   orchestrator-owned and the orchestrator applies them post-merge. Generated
+   files (build artifacts, compiled outputs) are excluded from ownership and
+   must not appear in any agent's ownership list.
 
 2. **No investigation-first blockers.** No part of the work requires root cause
    analysis before it can be specified. Agents must be fully specifiable before
@@ -219,6 +221,9 @@ worktrees before launching any agent. Do not rely on the Task tool's
 `isolation: "worktree"` parameter alone — it does not guarantee each agent
 starts in the correct worktree. Pre-creation is the mechanism that enforces
 isolation; agent-side isolation verification (Field 0) is defense-in-depth.
+Worktrees isolate working directories, not merge outcomes. Two agents can still
+produce incompatible edits to the same file — disjoint file ownership (I1) is
+the mechanism that prevents this, not worktree isolation.
 
 **Agent prompt propagation.** Agent prompts are sections within the IMPL doc.
 When the orchestrator updates an agent prompt — due to interface deviation
@@ -263,6 +268,30 @@ by construction: any agent whose work depends on a file created by another
 agent belongs in a later wave. If merge order appears to matter, the wave
 structure is wrong — not the merge sequence.
 
+**Merge conflict taxonomy.** Three distinct conflict types can arise; each has
+a different resolution path:
+
+1. **Git conflict on agent-owned files** — an I1 violation. This is impossible
+   if invariants hold. If it occurs, the scout produced an incorrect ownership
+   table. Do not merge. Correct the IMPL doc and re-run the wave.
+
+2. **Git conflict on orchestrator-owned shared files** (IMPL doc completion
+   report sections, append-only config registries) — expected. Resolve by
+   accepting all appended sections. Each agent owns a distinct named section;
+   there is no semantic conflict, only a git conflict on adjacent lines.
+
+3. **Semantic conflict** (two agents implement incompatible interfaces without
+   a git conflict) — surfaces in `interface_deviations` and `out_of_scope_deps`
+   in completion reports. Resolved by the orchestrator before the next wave
+   launches, via interface contract revision and downstream prompt updates.
+
+**Verification minimum.** The minimum acceptable verification gate is: build
+(compile) passing and lint passing. Tests are required if the project has a
+test suite — a wave reporting PASS on compile-only when tests exist is a
+protocol violation. Agents scope their verification to owned files and packages;
+the orchestrator's post-merge gate runs unscoped to catch cross-package cascade
+failures.
+
 ---
 
 ## Message Formats
@@ -288,8 +317,20 @@ Estimated times:
 Recommendation: [Proceed | Do not proceed | Proceed with caveats]
 ```
 
-If `NOT SUITABLE`, the IMPL doc contains only this verdict. No agent prompts
-are written. The protocol terminates.
+If `NOT SUITABLE`, the verdict must include two additional fields:
+
+```
+Failed preconditions:
+  - Precondition N ([name]): [evidence — what was found in the codebase]
+
+Suggested alternative: [sequential execution | investigate-first then re-scout |
+                        other — describe]
+```
+
+`Failed preconditions` names each precondition that blocked the verdict (by
+number and name) and states the specific evidence. `Suggested alternative`
+makes the verdict actionable rather than a stop sign. The IMPL doc contains
+only this verdict. No agent prompts are written. The protocol terminates.
 
 ### Agent Prompt
 
