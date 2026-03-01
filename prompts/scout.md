@@ -332,7 +332,7 @@ Wave 3:    [G]               <- 1 agent
 
 ### Agent Prompts
 
-[Full prompt for each agent, using the 8-field format.]
+[Full prompt for each agent, using the 9-field format.]
 
 ### Wave Execution Loop
 

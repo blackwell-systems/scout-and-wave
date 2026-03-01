@@ -1,7 +1,7 @@
 # Scout-and-Wave: A Coordination Protocol for Parallel AI Agents
 
 [![Blackwell Systems™](https://raw.githubusercontent.com/blackwell-systems/blackwell-docs-theme/main/badge-trademark.svg)](https://github.com/blackwell-systems)
-![Version](https://img.shields.io/badge/version-0.3.7-blue)
+![Version](https://img.shields.io/badge/version-0.3.5-blue)
 
 A coordination protocol for parallel AI agents. Defines preconditions, ownership invariants, and verification gates that guarantee agents can work concurrently without conflicts.
 
@@ -41,7 +41,7 @@ If any question is a hard blocker, the scout emits NOT SUITABLE and stops. A poo
 ## Prompts
 
 - [`prompts/scout.md`](prompts/scout.md): The scout prompt that produces the coordination artifact
-- [`prompts/agent-template.md`](prompts/agent-template.md): The 8-field agent prompt template stamped per-agent
+- [`prompts/agent-template.md`](prompts/agent-template.md): The 9-field agent prompt template stamped per-agent (Field 0: isolation verification; Fields 1–8: implementation spec)
 - [`prompts/saw-skill.md`](prompts/saw-skill.md): Claude Code `/saw` skill router (copy to `~/.claude/commands/saw.md`)
 - [`prompts/saw-bootstrap.md`](prompts/saw-bootstrap.md): Design-first architecture for new projects with no existing codebase
 - [`prompts/saw-quick.md`](prompts/saw-quick.md): Lightweight mode for 2-3 agents with no IMPL doc
@@ -111,7 +111,7 @@ blocking on approval prompts at each tool call:
 **`"Agent"` is the critical one.** Without it, every wave agent launch — and
 every pipelined scout launch — blocks waiting for a keyboard approval. In a
 multi-agent wave, you would need to approve each agent individually before it
-goes to background. Add `"Agent"` once to your user-level settings and all
+launches asynchronously. Add `"Agent"` once to your user-level settings and all
 future SAW runs are fully hands-free from the moment you invoke `/saw wave`.
 
 The other entries (`Bash`, `Read`, `Write`, `Edit`, `Glob`, `Grep`) cover git

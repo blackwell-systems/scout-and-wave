@@ -6,6 +6,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Terminology sweep** — eliminated all remaining "foreground/background" language
+  in favour of "synchronous/asynchronous" per the canonical participant model:
+  - `docs/saw-pipeline-proposal.md` lines 17, 119: "foreground" → "synchronous agent",
+    "background scout" → "asynchronous scout"
+  - `README.md` line 114: "goes to background" → "launches asynchronously"
+
+- **9-field correction** — "8-field" references corrected to "9-field" across all files
+  that had not yet been updated following the addition of Field 0 (Isolation Verification):
+  - `prompts/agent-template.md` line 4: description updated to name Field 0 explicitly
+  - `prompts/scout.md` line 335: IMPL doc output format reference
+  - `prompts/saw-bootstrap.md` line 203: Agent Prompts section template
+  - `README.md` line 44: Prompts table description, now names Field 0 and Fields 1–8
+
+- **README version badge** — corrected from 0.3.7 to 0.3.5 to match PROTOCOL.md.
+  The badge reflects the protocol specification version, not the latest individual
+  prompt file version.
+
+- **`PROTOCOL.md` (v0.3.4 → v0.3.5)** — added **I6 — Role Separation** invariant.
+  The Orchestrator must not perform Scout or Wave Agent duties. Codebase analysis,
+  IMPL doc production, and source code implementation must be delegated to the
+  appropriate asynchronous agent. I6 violation added to the Protocol Violations table
+  with its effects: context pollution, broken observability, async execution bypassed.
+  This invariant was implicit in the participant role definitions but not enforced —
+  the absence allowed rationalizing Scout work as Orchestrator convenience.
+
+- **`prompts/saw-skill.md` (v0.3.2 → v0.3.3)** — added strict role enforcement rule.
+  The Orchestrator now has an explicit invariant: if it finds itself analyzing a codebase,
+  writing an IMPL doc, or implementing code, it must stop and delegate to the appropriate
+  agent. If asked to perform Scout or Wave agent duties directly, it must refuse and launch
+  the correct agent instead. Stated at the top of the skill before all other instructions
+  so it cannot be rationalized away by downstream context.
+
 ### Added
 
 - **`docs/saw-pipeline-proposal.md`** — new document capturing cross-feature scout

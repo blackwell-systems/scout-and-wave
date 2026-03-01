@@ -14,7 +14,7 @@ All three SAW participants are agents — AI model instances with tool access. W
 - **Scout** — asynchronous. Launched by the orchestrator, analyzes the codebase, writes the IMPL doc, and exits. Never modifies source.
 - **Wave agents** — asynchronous. Launched by the orchestrator in parallel, own disjoint file sets, commit their work, and write completion reports to the IMPL doc.
 
-Pipelining does not change any of these roles. The orchestrator remains synchronous and foreground throughout. It simply makes a different scheduling decision during what would otherwise be an idle wait window: rather than doing nothing while async wave agents run, it launches the next feature's scout as an additional async agent. The protocol structure is unchanged — only the orchestrator's time is used more efficiently.
+Pipelining does not change any of these roles. The orchestrator remains the synchronous agent throughout. It simply makes a different scheduling decision during what would otherwise be an idle wait window: rather than doing nothing while async wave agents run, it launches the next feature's scout as an additional async agent. The protocol structure is unchanged — only the orchestrator's time is used more efficiently.
 
 ---
 
@@ -116,7 +116,7 @@ A reference doc describing:
 
 After launching a wave, add a section:
 
-> **Pipeline opportunity:** If the next feature is known, check whether its expected file changes are disjoint from this wave's ownership. If so, a background scout for the next feature can run during this wave's execution time. See `saw-pipeline.md`.
+> **Pipeline opportunity:** If the next feature is known, check whether its expected file changes are disjoint from this wave's ownership. If so, an asynchronous scout for the next feature can run during this wave's execution time. See `saw-pipeline.md`.
 
 ### 3. Amendment to `prompts/scout.md`
 

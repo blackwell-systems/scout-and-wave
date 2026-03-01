@@ -1,6 +1,6 @@
 # Scout-and-Wave Protocol Specification
 
-**Version:** 0.3.4
+**Version:** 0.3.5
 **Status:** Active
 
 Scout-and-Wave (SAW) is a protocol for safely parallelizing human-guided
@@ -114,6 +114,15 @@ the record.
 **I5 — Agents commit before reporting.** Each agent commits its changes to its
 worktree branch before writing a completion report. Uncommitted state at report
 time is a protocol deviation and must be noted in the report.
+
+**I6 — Role separation.** The Orchestrator does not perform Scout or Wave Agent
+duties. Codebase analysis, IMPL doc production, and source code implementation
+are delegated to the appropriate asynchronous agent. If the Orchestrator finds
+itself doing any of these, it has violated the protocol — it must stop and
+launch the correct agent. This invariant is not a style preference: an
+Orchestrator performing Scout work bypasses async execution, pollutes the
+orchestrator's context window, and breaks observability (no Scout agent means
+no SAW session is detectable by monitoring tools).
 
 ---
 
@@ -344,6 +353,7 @@ guarantees.
 | Wave N+1 launched before Wave N verified | I3 | Cascade failures surface at end |
 | Completion report written to chat only | I4 | Downstream agents get stale context |
 | Agent reports complete with uncommitted changes | I5 | Merge requires manual copy |
+| Orchestrator performs Scout or Wave Agent duties | I6 | Context pollution, broken observability, async execution bypassed |
 
 ---
 

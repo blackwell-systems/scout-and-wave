@@ -200,7 +200,7 @@ Wave 2: [A]            — entry point wiring and integration
 
 ### Agent Prompts
 
-[Full 8-field prompt for each agent.]
+[Full 9-field prompt for each agent.]
 [Wave 0 agent: create types only, zero implementation.]
 [Wave 1 agents: implement against Wave 0 contracts, stub internals are fine.]
 [Wave 2 agent: wire packages together, write integration test.]

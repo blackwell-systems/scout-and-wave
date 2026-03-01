@@ -1,9 +1,10 @@
 <!-- agent-template v0.3.3 -->
 # Agent Prompt Template
 
-Each agent prompt has 8 fields. The scout fills these in from the coordination
-artifact. Fields are ordered so the agent reads constraints first, then
-context, then the work.
+Each agent prompt has 9 fields. Field 0 is a mandatory pre-flight isolation
+check run before any file modifications. Fields 1–8 are the implementation
+spec. The scout fills these in from the coordination artifact. Fields are
+ordered so the agent reads constraints first, then context, then the work.
 
 ---
 
