@@ -6,6 +6,43 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **`docs/saw-pipeline-proposal.md`** — new document capturing cross-feature scout
+  pipelining: the observation that the orchestrator's wave-execution wait window is
+  dead time that can be filled by launching the next feature's scout as an async agent.
+  Covers the safety constraint (disjoint read domain check), timing model, a real
+  example from a claudewatch session, and proposed protocol changes. Also captures
+  the session-level DAG extension: applying SAW's file-level dependency graph reasoning
+  at the feature level, with a proposed `/saw session` entry point for upfront
+  full-landscape pipeline planning.
+
+### Changed
+
+- **`PROTOCOL.md` (v0.3.4)** — three clarifications developed from practice:
+
+  - **Opening description** — repositioned from "coordination protocol for parallel
+    AI agent execution" to "a protocol for safely parallelizing human-guided agentic
+    workflows." Human review checkpoints are now named as structural (not optional
+    guardrails); cross-feature pipelining is named as optional.
+
+  - **Participants section** — synchronous/asynchronous framing replaces
+    foreground/background. Orchestrator is the synchronous agent that serializes all
+    state transitions and is the sole human-facing reporting channel. Scouts and wave
+    agents are asynchronous agents launched by the orchestrator. Async agents are
+    invisible to the human except through the orchestrator's completion handling.
+
+  - **Pipeline framing** — PROTOCOL.md now references `saw-pipeline-proposal.md`
+    in the Scout participant description, noting that pipelining is a scheduling
+    optimization on the orchestrator — not a structural change to the protocol. The
+    orchestrator stays synchronous and foreground; it simply launches a scout instead
+    of idling during wave execution.
+
+- **`README.md`** — added **Permissions** subsection under Usage. Documents all
+  required `~/.claude/settings.json` allow entries for hands-free execution.
+  Calls out `"Agent"` as the critical entry: without it, every wave agent launch
+  and pipelined scout launch blocks on a keyboard approval prompt.
+
 ## [0.3.7] - 2026-03-01
 
 ### Changed
