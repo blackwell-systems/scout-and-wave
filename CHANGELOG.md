@@ -8,6 +8,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
+- **`PROTOCOL.md` (v0.3.5)** — added invariant reference convention. Invariants are
+  identified by I-number (I1–I6). When referenced in prompt files, the I-number anchors
+  cross-referencing and audit; the canonical definition is embedded verbatim for
+  self-containment. Audit pattern: grep prompt files for `I{N}` and verify definition
+  matches PROTOCOL.md.
+
+- **`prompts/saw-skill.md` (v0.3.3 → v0.3.4)** — role enforcement block replaced with
+  I6 canonical definition verbatim. Wave execution step replaced "Disjoint file ownership
+  is the primary safety mechanism" with I1 canonical definition. I-notation explanation
+  added after I6 block.
+
+- **`prompts/agent-template.md` (v0.3.3 → v0.3.4)** — three additions:
+  1. Opening paragraph names agents as Wave Agents operating under the SAW protocol,
+     giving them formal identity and context for their role without requiring the full spec.
+  2. I-notation explanation added so agents know I-numbers refer to `PROTOCOL.md` invariants.
+  3. I1 canonical definition embedded in Section 1 (File Ownership).
+  4. I5 canonical definition embedded in Section 8 (Report) before the commit instructions.
+
 - **Terminology sweep** — eliminated all remaining "foreground/background" language
   in favour of "synchronous/asynchronous" per the canonical participant model:
   - `docs/saw-pipeline-proposal.md` lines 17, 119: "foreground" → "synchronous agent",

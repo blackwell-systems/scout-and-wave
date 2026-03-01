@@ -91,6 +91,12 @@ does not proceed.
 These must hold throughout the entire protocol execution. Violations break the
 correctness guarantees.
 
+Invariants are identified by number (I1–I6). When referenced in prompt files,
+the I-number serves as an anchor for cross-referencing and audit; the canonical
+definition is embedded verbatim alongside it so each document remains
+self-contained without requiring a lookup. To audit consistency, grep prompt
+files for `I{N}` and verify the embedded definition matches this section.
+
 **I1 — Disjoint file ownership.** No two agents in the same wave own the same
 file. This is a hard constraint, not a preference. It is the mechanism that
 makes parallel execution safe. Worktree isolation does not substitute for it.
