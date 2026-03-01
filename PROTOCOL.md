@@ -1,6 +1,6 @@
 # Scout-and-Wave Protocol Specification
 
-**Version:** 0.3.4
+**Version:** 0.3.5
 **Status:** Active
 
 Scout-and-Wave (SAW) is a coordination protocol for parallel AI agent execution
@@ -14,16 +14,28 @@ The prompts in `prompts/` are reference implementations of this protocol.
 
 ## Participants
 
-**Orchestrator** — Runs the `/saw` skill. Creates worktrees, launches agents,
-reads completion reports, executes the merge procedure, verifies the merged
-result, and advances the protocol state.
+SAW has three participant roles. All three are agents — AI model instances
+running with tool access. They differ only in execution mode and responsibility.
 
-**Scout** — Analyzes the codebase, produces the IMPL doc, and exits. Never
-modifies source files. Never participates in wave execution.
+**Orchestrator** — The foreground agent. The Claude session the developer is
+directly talking to. Runs the `/saw` skill, reads the IMPL doc, creates
+worktrees, launches scouts and wave agents as background tasks, reads completion
+reports, executes the merge procedure, verifies the merged result, and advances
+the protocol state. Never goes to background. The orchestrator is the only
+participant that interacts with the human directly.
 
-**Agent** — An implementation agent. Owns a disjoint set of files, implements
-against defined interface contracts, runs the verification gate, and writes a
-structured completion report.
+**Scout** — A background agent launched by the orchestrator. Analyzes the
+codebase, produces the IMPL doc, and exits. Never modifies source files. Never
+participates in wave execution. The orchestrator waits for the scout to complete
+before entering REVIEWED state. When pipelining, the scout runs as a background
+agent concurrently with an active wave (see `saw-pipeline-proposal.md`).
+
+**Wave Agent** — A background agent launched by the orchestrator. Owns a
+disjoint set of files, implements against the interface contracts defined in the
+IMPL doc, runs the verification gate, commits its work, and writes a structured
+completion report to the IMPL doc. Multiple wave agents run concurrently within
+a wave. A wave agent never coordinates directly with other wave agents — the
+IMPL doc is the only coordination surface.
 
 ---
 
