@@ -21,8 +21,8 @@ Scout-and-wave fixes this before any agent starts, in two phases:
 The protocol has a built-in suitability gate. The scout answers five questions before producing any agent prompts: Can the work decompose into disjoint file groups? Are there investigation-first blockers? Can interfaces be defined upfront? Are any items already implemented? Does parallelization gain exceed the overhead of scout + merge? If any question is a hard blocker, the scout emits NOT SUITABLE and stops. A poor-fit assessment is useful output — it tells you SAW isn't the right tool before any agent spends time on it.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/saw-scout-wave-dark-20260228.png">
-  <img src="docs/diagrams/saw-scout-wave-light-20260228.png" alt="SAW scout + wave execution flow">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/saw-scout-wave-dark.svg">
+  <img src="docs/diagrams/saw-scout-wave-light.svg" alt="SAW scout + wave execution flow">
 </picture>
 
 ## Protocol Specification
@@ -105,7 +105,7 @@ cp prompts/saw-skill.md ~/.claude/commands/saw.md
 
 ## Blog Post
 
-Three-part series on the pattern, the lessons learned from dogfooding it, and how the skill file evolved as software:
+Three-part series on the pattern, the lessons learned from dogfooding it, and how the skill file evolved:
 
 1. [Scout-and-Wave: A Coordination Pattern for Parallel AI Agents](https://blog.blackwell-systems.com/posts/scout-and-wave/) — The pattern: failure modes of naive parallelism, the scout deliverable, wave execution, and a worked example from brewprune.
 2. [Scout-and-Wave, Part 2: What Dogfooding Taught Us](https://blog.blackwell-systems.com/posts/scout-and-wave-part2/) — The audit-fix-audit loop, overhead measurement (88% slower when ignored), Quick mode, and the bootstrap problem for new projects.
