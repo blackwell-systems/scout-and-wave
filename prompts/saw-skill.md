@@ -1,4 +1,4 @@
-<!-- saw-skill v0.3.0 -->
+<!-- saw-skill v0.3.1 -->
 Scout-and-Wave: Parallel Agent Coordination
 
 Read the scout prompt at `prompts/scout.md` and the agent template at `prompts/agent-template.md` from the scout-and-wave repository. If these files are not in the current project, look for them at the path configured in the SAW_REPO environment variable, or fall back to `~/code/scout-and-wave/prompts/`.
@@ -24,7 +24,7 @@ If no `docs/IMPL-*.md` file exists for the current feature:
 If a `docs/IMPL-*.md` file already exists:
 1. Read it and identify the current wave (the first wave with unchecked status items).
 2. **Worktree setup:** Read `prompts/saw-worktree.md` from the scout-and-wave repository and follow the pre-creation procedure. Create a worktree for each agent before launching any agents.
-3. For each agent in the current wave, launch a parallel Task agent using the agent prompt from the IMPL doc. Use `isolation: "worktree"` for each agent. Disjoint file ownership (enforced by the IMPL doc) is the primary safety mechanism.
+3. For each agent in the current wave, launch a parallel Task agent using the agent prompt from the IMPL doc. Use `isolation: "worktree"` for each agent. Disjoint file ownership (enforced by the IMPL doc) is the primary safety mechanism. **SAW tag requirement:** The `description` parameter of every Task tool call must be prefixed with a structured SAW tag in this exact format: `[SAW:wave{N}:agent-{X}] {short description}`, where `{N}` is the 1-indexed wave number and `{X}` is the uppercase agent letter. Examples: `[SAW:wave1:agent-A] implement cache layer`, `[SAW:wave2:agent-B] add MCP tools`. This enables claudewatch to automatically parse wave timing and agent breakdown from session transcripts — structured observability with zero overhead.
 4. After all agents in the wave complete, read each agent's completion report from their named section in the IMPL doc (`### Agent {letter} — Completion Report`).
 5. **Merge and verify:** Read `prompts/saw-merge.md` from the scout-and-wave repository and follow the merge procedure (conflict detection → merge each agent → cleanup → post-merge verification → update IMPL doc).
 6. If `--auto` was passed, immediately proceed to the next wave. Otherwise, report the wave result and ask the user if they want to continue.
