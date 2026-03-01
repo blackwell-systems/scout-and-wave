@@ -18,7 +18,15 @@ Scout-and-wave fixes this before any agent starts, in two phases:
 
 2. **Wave:** Groups of agents execute in parallel, each owning disjoint files, coding against the pre-defined interface contracts. Build and test gates verify each wave before the next begins. Agents append structured completion reports to the coordination artifact — interface deviations, out-of-scope discoveries, implementation decisions — so the plan converges toward reality with each wave instead of drifting from it.
 
-The protocol has a built-in suitability gate. The scout answers five questions before producing any agent prompts: Can the work decompose into disjoint file groups? Are there investigation-first blockers? Can interfaces be defined upfront? Are any items already implemented? Does parallelization gain exceed the overhead of scout + merge? If any question is a hard blocker, the scout emits NOT SUITABLE and stops. A poor-fit assessment is useful output — it tells you SAW isn't the right tool before any agent spends time on it.
+The protocol has a built-in suitability gate. The scout answers five questions before producing any agent prompts:
+
+1. Can the work decompose into disjoint file groups?
+2. Are there investigation-first blockers?
+3. Can interfaces be defined upfront?
+4. Are any items already implemented?
+5. Does parallelization gain exceed the overhead of scout + merge?
+
+If any question is a hard blocker, the scout emits NOT SUITABLE and stops. A poor-fit assessment is useful output — it tells you SAW isn't the right tool before any agent spends time on it.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/saw-scout-wave-dark.svg">
