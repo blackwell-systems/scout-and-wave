@@ -8,23 +8,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
-- **`docs/saw-scout-wave.drawio`** — draw.io diagram of the `/saw scout` + `/saw wave`
+- **`docs/diagrams/saw-scout-wave.drawio`** — draw.io diagram of the `/saw scout` + `/saw wave`
   protocol flow. Covers suitability gate, scout phase, IMPL doc, human review,
   wave loop (worktree setup, agent execution, completion reports, orchestrator,
   merge, fix merge failures). Named per-flow so additional diagrams can be added
   alongside it.
 
-- **`docs/saw-bootstrap.drawio`** — draw.io diagram of the `/saw bootstrap` flow.
+- **`docs/diagrams/saw-bootstrap.drawio`** — draw.io diagram of the `/saw bootstrap` flow.
   Covers git repo pre-flight, requirements gathering, package structure design,
   concerns gate (≥3 required), IMPL-bootstrap.md output, human review, and
   handoff to `/saw wave`.
 
-- **`docs/saw-check.drawio`** — draw.io diagram of the `/saw check` flow.
+- **`docs/diagrams/saw-check.drawio`** — draw.io diagram of the `/saw check` flow.
   Covers lightweight codebase scan, evaluation of 3 suitability questions, and
   3-way verdict output (SUITABLE / NOT SUITABLE / SUITABLE WITH CAVEATS) with
   recommended next step for each. No files written — read-only pre-flight.
 
-- **`docs/saw-status.drawio`** — draw.io diagram of the `/saw status` flow.
+- **`docs/diagrams/saw-status.drawio`** — draw.io diagram of the `/saw status` flow.
   Covers IMPL doc existence check, wave structure and checkbox reading, and
   progress report output (waves done, current wave agents, blockers, recommended
   next step). No files written — read-only utility.
