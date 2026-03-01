@@ -8,15 +8,15 @@ A coordination protocol for parallel AI agents. Defines preconditions, ownership
 
 Parallel AI agents working on the same codebase produce merge conflicts, contradictory implementations, and expensive rework. Agents make local decisions without global context, and those decisions collide.
 
-The root cause isn't that agents are careless — it's that nothing stops two agents from claiming the same file. Worktree isolation gives each agent a separate git branch, not a separate filesystem. If two agents both modify `auth/middleware.go`, the conflict is discovered at merge time, after both have implemented divergent solutions. You get either a merge conflict or, worse, a silent overwrite.
+The root cause isn't that agents are careless; it's that nothing stops two agents from claiming the same file. Worktree isolation gives each agent a separate git branch, not a separate filesystem. If two agents both modify `auth/middleware.go`, the conflict is discovered at merge time, after both have implemented divergent solutions. You get either a merge conflict or, worse, a silent overwrite.
 
 ## How
 
 Scout-and-wave fixes this before any agent starts, in two phases:
 
-1. **Scout:** A read-only agent analyzes the codebase and produces a coordination artifact: a dependency graph, exact interface contracts, a file ownership table, and a wave structure. Every file that will change is assigned to exactly one agent. No two agents in the same wave may touch the same file. This is a hard correctness constraint, not a preference — the scout resolves ownership conflicts at planning time or declares the work NOT SUITABLE for parallel execution.
+1. **Scout:** A read-only agent analyzes the codebase and produces a coordination artifact: a dependency graph, exact interface contracts, a file ownership table, and a wave structure. Every file that will change is assigned to exactly one agent. No two agents in the same wave may touch the same file. This is a hard correctness constraint, not a preference: the scout resolves ownership conflicts at planning time or declares the work NOT SUITABLE for parallel execution.
 
-2. **Wave:** Groups of agents execute in parallel, each owning disjoint files, coding against the pre-defined interface contracts. Build and test gates verify each wave before the next begins. Agents append structured completion reports to the coordination artifact — interface deviations, out-of-scope discoveries, implementation decisions — so the plan converges toward reality with each wave instead of drifting from it.
+2. **Wave:** Groups of agents execute in parallel, each owning disjoint files, coding against the pre-defined interface contracts. Build and test gates verify each wave before the next begins. Agents append structured completion reports to the coordination artifact (interface deviations, out-of-scope discoveries, implementation decisions) so the plan converges toward reality with each wave instead of drifting from it.
 
 The protocol has a built-in suitability gate. The scout answers five questions before producing any agent prompts:
 
@@ -26,7 +26,7 @@ The protocol has a built-in suitability gate. The scout answers five questions b
 4. Are any items already implemented?
 5. Does parallelization gain exceed the overhead of scout + merge?
 
-If any question is a hard blocker, the scout emits NOT SUITABLE and stops. A poor-fit assessment is useful output — it tells you SAW isn't the right tool before any agent spends time on it.
+If any question is a hard blocker, the scout emits NOT SUITABLE and stops. A poor-fit assessment is useful output: it tells you SAW isn't the right tool before any agent spends time on it.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/saw-scout-wave-dark.svg">
@@ -35,29 +35,29 @@ If any question is a hard blocker, the scout emits NOT SUITABLE and stops. A poo
 
 ## Protocol Specification
 
-[`PROTOCOL.md`](PROTOCOL.md) — Formal specification: preconditions, invariants, state machine, participant roles, message formats, and correctness guarantees. The prompts in `prompts/` are reference implementations of this spec.
+[`PROTOCOL.md`](PROTOCOL.md). Formal specification: preconditions, invariants, state machine, participant roles, message formats, and correctness guarantees. The prompts in `prompts/` are reference implementations of this spec.
 
 ## Prompts
 
-- [`prompts/scout.md`](prompts/scout.md) — The scout prompt that produces the coordination artifact
-- [`prompts/agent-template.md`](prompts/agent-template.md) — The 8-field agent prompt template stamped per-agent
-- [`prompts/saw-skill.md`](prompts/saw-skill.md) — Claude Code `/saw` skill router (copy to `~/.claude/commands/saw.md`)
-- [`prompts/saw-bootstrap.md`](prompts/saw-bootstrap.md) — Design-first architecture for new projects with no existing codebase
-- [`prompts/saw-quick.md`](prompts/saw-quick.md) — Lightweight mode for 2-3 agents with no IMPL doc
-- [`prompts/saw-merge.md`](prompts/saw-merge.md) — Merge procedure: conflict detection, agent merging, post-merge verification
-- [`prompts/saw-worktree.md`](prompts/saw-worktree.md) — Worktree lifecycle: creation, verification, diagnosis, cleanup
+- [`prompts/scout.md`](prompts/scout.md): The scout prompt that produces the coordination artifact
+- [`prompts/agent-template.md`](prompts/agent-template.md): The 8-field agent prompt template stamped per-agent
+- [`prompts/saw-skill.md`](prompts/saw-skill.md): Claude Code `/saw` skill router (copy to `~/.claude/commands/saw.md`)
+- [`prompts/saw-bootstrap.md`](prompts/saw-bootstrap.md): Design-first architecture for new projects with no existing codebase
+- [`prompts/saw-quick.md`](prompts/saw-quick.md): Lightweight mode for 2-3 agents with no IMPL doc
+- [`prompts/saw-merge.md`](prompts/saw-merge.md): Merge procedure: conflict detection, agent merging, post-merge verification
+- [`prompts/saw-worktree.md`](prompts/saw-worktree.md): Worktree lifecycle: creation, verification, diagnosis, cleanup
 
 ## When to Use It
 
 **High parallelization value** (SAW pays for itself):
-- Build/test cycle >30 seconds — each parallel agent runs independently, amplifying time savings
-- Agents own 3+ files each — more implementation time per agent means more to parallelize
-- Tasks involve non-trivial logic, tests, and edge cases — not simple find-and-replace
-- Agents are independent (single wave) — maximum parallelization benefit
+- Build/test cycle >30 seconds; each parallel agent runs independently, amplifying time savings
+- Agents own 3+ files each; more implementation time per agent means more to parallelize
+- Tasks involve non-trivial logic, tests, and edge cases, not simple find-and-replace
+- Agents are independent (single wave): maximum parallelization benefit
 
 **Low parallelization value** (consider alternatives):
-- Simple edits, documentation-only, or trivially fast sequential work — SAW overhead dominates
-- 2-3 agents with disjoint files and no dependencies — use SAW Quick mode instead
+- Simple edits, documentation-only, or trivially fast sequential work; SAW overhead dominates
+- 2-3 agents with disjoint files and no dependencies; use SAW Quick mode instead
 - The IMPL doc has coordination value even when speed gains are marginal (audit trail, interface spec, progress tracking)
 
 **Good fit:**
@@ -70,9 +70,9 @@ If any question is a hard blocker, the scout emits NOT SUITABLE and stops. A poo
 - Tightly coupled code with no clean file boundaries
 - Interface cannot be known until you start implementing
 - Simple work better done sequentially
-- Root cause is unknown (crash, race condition) — investigate first, then use SAW for the fix
+- Root cause is unknown (crash, race condition): investigate first, then use SAW for the fix
 
-Use `/saw check` when you're unsure. The scout runs a built-in suitability gate with time-to-value estimates (scout + agents + merge vs sequential baseline) and will emit a NOT SUITABLE verdict (and stop) rather than producing a broken IMPL doc with forced decomposition. Either way, a poor-fit assessment is useful output — it tells you SAW isn't the right tool before any agents spend time on it.
+Use `/saw check` when you're unsure. The scout runs a built-in suitability gate with time-to-value estimates (scout + agents + merge vs sequential baseline) and will emit a NOT SUITABLE verdict (and stop) rather than producing a broken IMPL doc with forced decomposition. Either way, a poor-fit assessment is useful output: it tells you SAW isn't the right tool before any agents spend time on it.
 
 ## Usage with Claude Code
 
@@ -99,11 +99,11 @@ cp prompts/saw-skill.md ~/.claude/commands/saw.md
 
 ### Workflow
 
-0. **Bootstrap (new projects only):** `/saw bootstrap "CLI tool for X with storage and output formatting"` acts as architect rather than analyst. Gathers requirements (language, project type, key concerns), designs package structure and interface contracts from scratch, and produces `docs/IMPL-bootstrap.md` with a mandatory Wave 0 (types/interfaces) followed by parallel implementation waves. Use this when starting from an empty repo — it designs for SAW-compatible disjoint ownership before any code is written.
+0. **Bootstrap (new projects only):** `/saw bootstrap "CLI tool for X with storage and output formatting"` acts as architect rather than analyst. Gathers requirements (language, project type, key concerns), designs package structure and interface contracts from scratch, and produces `docs/IMPL-bootstrap.md` with a mandatory Wave 0 (types/interfaces) followed by parallel implementation waves. Use this when starting from an empty repo; it designs for SAW-compatible disjoint ownership before any code is written.
 
 1. **Check (optional):** `/saw check "add OAuth2 login flow"` runs a lightweight pre-flight. It answers whether the work can be decomposed into disjoint file groups, whether there are investigation-first items, and whether cross-agent interfaces can be defined upfront. Emits SUITABLE / NOT SUITABLE / SUITABLE WITH CAVEATS. No files are written. Skip this step if you already know SAW is a good fit.
 
-2. **Scout:** `/saw scout "add OAuth2 login flow"` analyzes the codebase and writes `docs/IMPL-oauth2-login.md`. The scout always runs the suitability gate first — if the work is not suitable it writes only the verdict and stops without generating agent prompts. If suitable, it produces the full coordination artifact: suitability assessment with time-to-value estimates (scout + agents + merge vs sequential baseline), dependency graph, file ownership, interface contracts, wave structure, and per-agent prompts.
+2. **Scout:** `/saw scout "add OAuth2 login flow"` analyzes the codebase and writes `docs/IMPL-oauth2-login.md`. The scout always runs the suitability gate first; if the work is not suitable it writes only the verdict and stops without generating agent prompts. If suitable, it produces the full coordination artifact: suitability assessment with time-to-value estimates (scout + agents + merge vs sequential baseline), dependency graph, file ownership, interface contracts, wave structure, and per-agent prompts.
 
 3. **Review:** Read the IMPL doc. Verify the suitability verdict makes sense, file ownership is clean, interface contracts are correct, and wave ordering is right. Adjust before proceeding.
 
@@ -115,9 +115,9 @@ cp prompts/saw-skill.md ~/.claude/commands/saw.md
 
 Three-part series on the pattern, the lessons learned from dogfooding it, and how the skill file evolved:
 
-1. [Scout-and-Wave: A Coordination Pattern for Parallel AI Agents](https://blog.blackwell-systems.com/posts/scout-and-wave/) — The pattern: failure modes of naive parallelism, the scout deliverable, wave execution, and a worked example from brewprune.
-2. [Scout-and-Wave, Part 2: What Dogfooding Taught Us](https://blog.blackwell-systems.com/posts/scout-and-wave-part2/) — The audit-fix-audit loop, overhead measurement (88% slower when ignored), Quick mode, and the bootstrap problem for new projects.
-3. [Scout-and-Wave, Part 3: Five Failures, Five Fixes](https://blog.blackwell-systems.com/posts/scout-and-wave-part3/) — How the skill file decomposed from a 400-line monolith, why version headers matter, and five scout prompt fixes driven by real failures.
+1. [Scout-and-Wave: A Coordination Pattern for Parallel AI Agents](https://blog.blackwell-systems.com/posts/scout-and-wave/). The pattern: failure modes of naive parallelism, the scout deliverable, wave execution, and a worked example from brewprune.
+2. [Scout-and-Wave, Part 2: What Dogfooding Taught Us](https://blog.blackwell-systems.com/posts/scout-and-wave-part2/). The audit-fix-audit loop, overhead measurement (88% slower when ignored), Quick mode, and the bootstrap problem for new projects.
+3. [Scout-and-Wave, Part 3: Five Failures, Five Fixes](https://blog.blackwell-systems.com/posts/scout-and-wave-part3/). How the skill file decomposed from a 400-line monolith, why version headers matter, and five scout prompt fixes driven by real failures.
 
 ## License
 
