@@ -20,15 +20,15 @@
 
     <!-- Lightweight scan -->
     <mxCell id="5" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=18;align=left;spacingLeft=10;" value="&lt;b&gt;Lightweight codebase scan&lt;/b&gt;&lt;br&gt;• read directory structure&lt;br&gt;• identify files likely to change&lt;br&gt;• no deep analysis" vertex="1">
-      <mxGeometry height="120" width="440" x="580" y="374" as="geometry"/>
+      <mxGeometry height="130" width="480" x="560" y="374" as="geometry"/>
     </mxCell>
     <mxCell id="6" edge="1" parent="1" source="4" style="edgeStyle=orthogonalEdgeStyle;fontSize=18;" target="5">
       <mxGeometry relative="1" as="geometry"/>
     </mxCell>
 
-    <!-- Evaluate 3 questions -->
+    <!-- Evaluate 3 questions — wider + taller to fit long lines without wrapping -->
     <mxCell id="7" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=18;align=left;spacingLeft=10;" value="&lt;b&gt;Evaluate 3 suitability questions&lt;/b&gt;&lt;br&gt;• Q1: Can work decompose into ≥2 disjoint file groups?&lt;br&gt;• Q2: Are there investigation-first items (crashes, unknown root causes)?&lt;br&gt;• Q3: Can cross-agent interfaces be defined before implementation starts?" vertex="1">
-      <mxGeometry height="140" width="440" x="580" y="554" as="geometry"/>
+      <mxGeometry height="170" width="560" x="520" y="564" as="geometry"/>
     </mxCell>
     <mxCell id="8" edge="1" parent="1" source="5" style="edgeStyle=orthogonalEdgeStyle;fontSize=18;" target="7">
       <mxGeometry relative="1" as="geometry"/>
@@ -36,15 +36,15 @@
 
     <!-- Verdict diamond -->
     <mxCell id="9" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=18;" value="Verdict?" vertex="1">
-      <mxGeometry height="110" width="230" x="685" y="754" as="geometry"/>
+      <mxGeometry height="110" width="230" x="685" y="784" as="geometry"/>
     </mxCell>
     <mxCell id="10" edge="1" parent="1" source="7" style="edgeStyle=orthogonalEdgeStyle;fontSize=18;" target="9">
       <mxGeometry relative="1" as="geometry"/>
     </mxCell>
 
     <!-- NOT SUITABLE (left) -->
-    <mxCell id="11" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=18;align=left;spacingLeft=10;" value="&lt;b&gt;NOT SUITABLE&lt;/b&gt;&lt;br&gt;• hard blocker on one or more questions&lt;br&gt;• rethink decomposition, or investigate first&lt;br&gt;• do not proceed to /saw scout" vertex="1">
-      <mxGeometry height="130" width="320" x="120" y="769" as="geometry"/>
+    <mxCell id="11" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=18;align=left;spacingLeft=10;" value="&lt;b&gt;NOT SUITABLE&lt;/b&gt;&lt;br&gt;• hard blocker on one or more questions&lt;br&gt;• rethink decomposition, or investigate root cause first&lt;br&gt;• do not proceed to /saw scout" vertex="1">
+      <mxGeometry height="160" width="380" x="60" y="759" as="geometry"/>
     </mxCell>
     <mxCell id="12" edge="1" parent="1" source="9" style="edgeStyle=orthogonalEdgeStyle;exitX=0;exitY=0.5;exitDx=0;exitDy=0;fontSize=18;" target="11" value="blocker">
       <mxGeometry relative="1" as="geometry"/>
@@ -52,15 +52,15 @@
 
     <!-- SUITABLE (right) -->
     <mxCell id="13" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=18;align=left;spacingLeft=10;" value="&lt;b&gt;SUITABLE&lt;/b&gt;&lt;br&gt;• all 3 questions pass cleanly&lt;br&gt;• recommended: /saw scout &lt;feature&gt;" vertex="1">
-      <mxGeometry height="130" width="300" x="1110" y="769" as="geometry"/>
+      <mxGeometry height="150" width="320" x="1110" y="764" as="geometry"/>
     </mxCell>
     <mxCell id="14" edge="1" parent="1" source="9" style="edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.5;exitDx=0;exitDy=0;fontSize=18;" target="13" value="all pass">
       <mxGeometry relative="1" as="geometry"/>
     </mxCell>
 
     <!-- SUITABLE WITH CAVEATS (bottom) -->
-    <mxCell id="15" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=18;align=left;spacingLeft=10;" value="&lt;b&gt;SUITABLE WITH CAVEATS&lt;/b&gt;&lt;br&gt;• questions pass but with concerns&lt;br&gt;• recommended: /saw scout with awareness, or /saw quick" vertex="1">
-      <mxGeometry height="110" width="400" x="600" y="924" as="geometry"/>
+    <mxCell id="15" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=18;align=left;spacingLeft=10;" value="&lt;b&gt;SUITABLE WITH CAVEATS&lt;/b&gt;&lt;br&gt;• questions pass but with concerns (partial decomposition, risky interfaces)&lt;br&gt;• recommended: /saw scout with awareness of caveats, or /saw quick" vertex="1">
+      <mxGeometry height="140" width="480" x="560" y="954" as="geometry"/>
     </mxCell>
     <mxCell id="16" edge="1" parent="1" source="9" style="edgeStyle=orthogonalEdgeStyle;exitX=0.5;exitY=1;exitDx=0;exitDy=0;fontSize=18;" target="15" value="caveats">
       <mxGeometry relative="1" as="geometry"/>
@@ -68,7 +68,7 @@
 
     <!-- No files written note -->
     <mxCell id="17" parent="1" style="text;html=1;align=center;fontSize=15;strokeColor=none;fillColor=none;fontColor=#666666;fontStyle=2;" value="No files are written. /saw check is a read-only pre-flight." vertex="1">
-      <mxGeometry height="30" width="600" x="500" y="1080" as="geometry"/>
+      <mxGeometry height="30" width="600" x="500" y="1140" as="geometry"/>
     </mxCell>
 
   </root>
