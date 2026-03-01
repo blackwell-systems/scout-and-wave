@@ -9,7 +9,7 @@ A coordination protocol for safely parallelizing human-guided agentic workflows.
 
 Parallel AI agents working on the same codebase produce merge conflicts, contradictory implementations, and expensive rework. Agents make local decisions without global context, and those decisions collide.
 
-The root cause isn't that agents are careless; it's that nothing stops two agents from claiming the same file. Worktree isolation gives each agent a separate git branch, not a separate filesystem. If two agents both modify `auth/middleware.go`, the conflict is discovered at merge time, after both have implemented divergent solutions. You get either a merge conflict or, worse, a silent overwrite.
+The root cause isn't that agents are careless; it's that nothing stops two agents from claiming the same file. Worktrees isolate working directories, not merge outcomes. Two agents can still produce incompatible edits to the same file — the conflict is discovered at merge time, after both have implemented divergent solutions. You get either a merge conflict or, worse, a silent overwrite.
 
 ## How
 
@@ -30,6 +30,8 @@ The protocol has a built-in suitability gate. The scout answers five questions b
 5. Does parallelization gain exceed the overhead of scout + merge?
 
 If any question is a hard blocker, the scout emits NOT SUITABLE and stops. A poor-fit assessment is useful output: it tells you SAW isn't the right tool before any agent spends time on it.
+
+When all preconditions hold and all invariants are maintained, the protocol provides a concrete correctness guarantee: if the suitability gate passes and the verification gates pass, the work was safe to parallelize. That's the difference between parallel agents with coordination overhead and parallel agents with structural safety properties.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/saw-scout-wave-dark.svg">
