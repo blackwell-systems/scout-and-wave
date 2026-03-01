@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-03-01
+
+### Changed
+
+- **PROTOCOL.md updated to v0.3.3** — aligned with actual implementation:
+  - Agent prompt is 9-field (Field 0: Isolation Verification), not 8-field
+  - State machine extended: solo wave path bypasses WAVE_MERGING; Wave 0 formalized
+  - New Execution Rules section: interface freeze, worktree pre-creation, scoped vs
+    unscoped verification, conflict prediction before merge
+  - I1 invariant clarified: single-agent out-of-scope changes are distinct from
+    two-agent conflicts and not an I1 violation when justified and documented
+  - Completion report `interface_deviations` extended with `downstream_action_required`
+    and `affects` fields
+  - New Variants section documenting Quick mode and Bootstrap mode
+  - Protocol Violations table: removed language-specific Rust example (special case
+    of I1, not a distinct protocol violation)
+  - Reference Implementation table: corrected "8-field" to "9-field"
+
 ## [0.3.2] - 2026-02-28
 
 ### Added

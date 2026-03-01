@@ -1,6 +1,6 @@
 # Scout-and-Wave: A Coordination Protocol for Parallel AI Agents
 
-![Version](https://img.shields.io/badge/version-0.3.2-blue)
+![Version](https://img.shields.io/badge/version-0.3.3-blue)
 
 A coordination protocol for parallel AI agents. Defines preconditions, ownership invariants, and verification gates that guarantee agents can work concurrently without conflicts.
 
