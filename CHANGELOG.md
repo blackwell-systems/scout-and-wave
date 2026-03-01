@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [0.3.6] - 2026-03-01
+
+### Changed
+
+- **`prompts/saw-skill.md` (v0.3.0 → v0.3.1)** — wave execution step 3 now requires a
+  structured `[SAW:wave{N}:agent-{X}]` prefix on the Task tool's `description` parameter
+  when launching agents. Format: `[SAW:wave1:agent-A] short description`. Enables
+  claudewatch to automatically parse wave timing, agent count, and per-agent status from
+  session transcripts with no additional instrumentation.
+
 ## [0.3.5] - 2026-03-01
 
 ### Changed
