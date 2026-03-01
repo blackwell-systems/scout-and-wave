@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-03-01
+
+### Changed
+
+- **PROTOCOL.md updated to v0.3.4** — eight protocol gaps closed following formal review:
+  - Precondition 1: append-only additions to shared files (config registries, module
+    manifests) are not a decomposition blocker; scout makes such files orchestrator-owned
+  - Execution Rules: pre-launch ownership verification added — orchestrator scans
+    wave ownership table for overlaps before creating worktrees or launching agents
+  - Execution Rules: agent prompt propagation formalized — prompts are sections within
+    the IMPL doc; updates are edits in-place, no separate prompt files
+  - Execution Rules: agent failure handling — any `status: partial` or `status: blocked`
+    halts the wave; no partial merges permitted
+  - Execution Rules: same-wave interface failure — wave goes to BLOCKED, contracts
+    revised, affected agents re-prompted; unaffected agents do not re-run
+  - Execution Rules: idempotency — WAVE_PENDING is re-entrant; WAVE_MERGING is not;
+    recovery procedure defined for mid-merge orchestrator crash
+  - Conflict prediction: explicit statement that within a valid wave merge order is
+    arbitrary — same-wave agents are independent by construction
+  - Variants: Quick mode now requires file ownership declaration (preserves I1);
+    explicit statement that I2–I5 are unenforced in Quick mode
+
 ## [0.3.3] - 2026-03-01
 
 ### Changed

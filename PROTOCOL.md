@@ -1,6 +1,6 @@
 # Scout-and-Wave Protocol Specification
 
-**Version:** 0.3.2
+**Version:** 0.3.4
 **Status:** Active
 
 Scout-and-Wave (SAW) is a coordination protocol for parallel AI agent execution
@@ -33,7 +33,10 @@ The protocol may only run when ALL of the following hold. The scout's
 suitability gate checks these before producing agent prompts.
 
 1. **File decomposition.** The work decomposes into ≥2 disjoint file groups.
-   No two tasks require modification of the same file.
+   No two agents require conflicting modifications to the same file.
+   Append-only additions to a shared file (config registries, module manifests,
+   index files) are not a decomposition blocker — the scout makes such files
+   orchestrator-owned and the orchestrator applies them post-merge.
 
 2. **No investigation-first blockers.** No part of the work requires root cause
    analysis before it can be specified. Agents must be fully specifiable before
@@ -166,11 +169,47 @@ for revising type signatures, adding fields, or restructuring APIs. After
 worktrees branch from HEAD, any interface change requires removing and
 recreating all worktrees for the wave.
 
+**Pre-launch ownership verification.** Before creating worktrees or launching
+any agent in a wave, the orchestrator scans the wave's file ownership table in
+the IMPL doc and verifies no file appears in more than one agent's ownership
+list. If an overlap is found, the wave does not launch — the IMPL doc must be
+corrected first. This is distinct from post-execution conflict prediction:
+pre-launch catches scout planning errors; post-execution catches runtime
+deviations where an agent touched files outside its declared scope.
+
 **Worktree pre-creation.** For multi-agent waves, the orchestrator creates all
 worktrees before launching any agent. Do not rely on the Task tool's
 `isolation: "worktree"` parameter alone — it does not guarantee each agent
 starts in the correct worktree. Pre-creation is the mechanism that enforces
 isolation; agent-side isolation verification (Field 0) is defense-in-depth.
+
+**Agent prompt propagation.** Agent prompts are sections within the IMPL doc.
+When the orchestrator updates an agent prompt — due to interface deviation
+propagation, contract revision, or same-wave interface failure — it edits the
+prompt section in the IMPL doc directly. The agent reads its prompt from the
+IMPL doc at launch time, so the corrected version is always what runs. There
+is no separate prompt file to keep in sync.
+
+**Agent failure handling.** If any agent in a wave reports `status: partial`
+or `status: blocked`, the wave does not merge. The wave goes to BLOCKED. The
+orchestrator must resolve the failing agent — re-run it, manually fix the
+issue, or descope it from the wave — before the merge step proceeds. Agents
+that completed successfully are not re-run, but their worktrees are not merged
+until the full wave is resolved. Partial merges are not permitted.
+
+**Same-wave interface failure.** If any agent reports `status: blocked` due to
+an interface contract being unimplementable as specified, the wave does not
+merge. The orchestrator marks the wave BLOCKED, revises the affected contracts
+in the IMPL doc, and re-issues prompts to all agents whose work depends on the
+changed contract. Agents that completed cleanly against unaffected contracts do
+not re-run. The wave restarts from WAVE_PENDING with the corrected contracts.
+
+**Idempotency.** WAVE_PENDING is re-entrant — re-running `/saw wave` checks
+for existing worktrees before creating new ones and does not duplicate them.
+WAVE_MERGING is not idempotent. If the orchestrator crashes mid-merge, inspect
+the state before continuing: check which worktree branches are already present
+in main's history (`git log --merges`) and skip those. Do not re-merge a
+worktree that has already been merged.
 
 **Scoped vs unscoped verification.** Agents run focused verification during
 waves (scoped to the files and packages they own) to keep iteration fast.
@@ -181,6 +220,11 @@ catch cross-package cascade failures that no individual agent could see.
 agents' `files_changed` and `files_created` lists before touching the working
 tree. A file appearing in more than one agent's list is a disjoint ownership
 violation. It must be resolved before any merge proceeds.
+
+Within a valid wave, merge order is arbitrary. Same-wave agents are independent
+by construction: any agent whose work depends on a file created by another
+agent belongs in a later wave. If merge order appears to matter, the wave
+structure is wrong — not the merge sequence.
 
 ---
 
@@ -293,8 +337,13 @@ When all preconditions hold and all invariants are maintained:
 **Quick mode** (`prompts/saw-quick.md`): Lightweight execution for 2–3 agents
 with fully disjoint files and no cross-agent interfaces. Uses a 3-field template
 (files, task, verification). No IMPL doc. No structured completion reports. No
-interface contracts. Suitable when the coordination overhead of full SAW exceeds
-the value. If merge conflicts occur in quick mode, the work needs full SAW.
+interface contracts.
+
+Quick mode requires a file ownership declaration before agents launch — each
+agent's files must be listed and verified disjoint. This is the only protocol
+guarantee Quick mode provides. I2 through I5 are unenforced. If merge conflicts
+occur, the work needed full SAW and Quick mode was the wrong choice — agents
+have already done conflicting work by the time this is discovered.
 
 **Bootstrap mode** (`prompts/saw-bootstrap.md`): Design-first execution for new
 projects with no existing codebase. The scout acts as architect: gathers
