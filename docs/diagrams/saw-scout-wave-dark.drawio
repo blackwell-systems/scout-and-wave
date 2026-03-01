@@ -1,0 +1,183 @@
+<mxGraphModel background="#1e1e1e">
+  <root>
+    <mxCell id="0"/>
+    <mxCell id="1" parent="0"/>
+
+    <!-- Wave loop group -->
+    <mxCell id="2" parent="1" style="swimlane;startSize=40;fillColor=#2a2a2a;strokeColor=#888888;fontColor=#cccccc;fontStyle=1;fontSize=18;" value="Wave loop (repeats per wave)" vertex="1">
+      <mxGeometry height="1460" width="1100" x="430" y="1258" as="geometry"/>
+    </mxCell>
+
+    <!-- Solo agent diamond -->
+    <mxCell id="3" parent="2" style="rhombus;whiteSpace=wrap;html=1;fillColor=#3d3000;strokeColor=#b89b40;fontSize=18;fontColor=#ffffff;" value="Solo agent&#10;in wave?" vertex="1">
+      <mxGeometry height="110" width="230" x="365" y="70" as="geometry"/>
+    </mxCell>
+
+    <!-- Run on main -->
+    <mxCell id="4" parent="2" style="rounded=1;whiteSpace=wrap;html=1;fontSize=18;fillColor=#2d2d2d;strokeColor=#888888;fontColor=#ffffff;" value="Run on main&#10;no worktrees needed" vertex="1">
+      <mxGeometry height="74" width="220" x="40" y="240" as="geometry"/>
+    </mxCell>
+    <mxCell id="5" edge="1" parent="2" source="3" style="edgeStyle=orthogonalEdgeStyle;exitX=0;exitY=0.5;exitDx=0;exitDy=0;fontSize=18;fontColor=#cccccc;" target="4" value="yes">
+      <mxGeometry relative="1" x="0.0606" y="-23" as="geometry"><mxPoint as="offset"/></mxGeometry>
+    </mxCell>
+
+    <!-- Pre-create worktrees -->
+    <mxCell id="6" parent="2" style="rounded=1;whiteSpace=wrap;html=1;fontSize=18;fillColor=#2d2d2d;strokeColor=#888888;fontColor=#ffffff;" value="Pre-create worktrees&#10;for each agent" vertex="1">
+      <mxGeometry height="74" width="220" x="700" y="240" as="geometry"/>
+    </mxCell>
+    <mxCell id="7" edge="1" parent="2" source="3" style="edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.5;exitDx=0;exitDy=0;fontSize=18;fontColor=#cccccc;" target="6" value="no">
+      <mxGeometry relative="1" y="23" as="geometry"><mxPoint as="offset"/></mxGeometry>
+    </mxCell>
+
+    <!-- Agents execute -->
+    <mxCell id="8" parent="2" style="rounded=1;whiteSpace=wrap;html=1;fontSize=18;align=left;spacingLeft=10;fillColor=#2d2d2d;strokeColor=#888888;fontColor=#ffffff;" value="&lt;b&gt;Agents execute&lt;/b&gt;&lt;br&gt;• implement assigned files only&lt;br&gt;• code against interface contracts&lt;br&gt;• run focused test gate&lt;br&gt;• record any spec deviations" vertex="1">
+      <mxGeometry height="140" width="440" x="260" y="394" as="geometry"/>
+    </mxCell>
+    <mxCell id="9" edge="1" parent="2" source="4" style="edgeStyle=orthogonalEdgeStyle;fontSize=18;fontColor=#cccccc;" target="8">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="10" edge="1" parent="2" source="6" style="edgeStyle=orthogonalEdgeStyle;fontSize=18;fontColor=#cccccc;" target="8">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- Write completion reports -->
+    <mxCell id="11" parent="2" style="rounded=1;whiteSpace=wrap;html=1;fontSize=18;align=left;spacingLeft=10;fillColor=#2d2d2d;strokeColor=#888888;fontColor=#ffffff;" value="&lt;b&gt;Write completion reports&lt;/b&gt;&lt;br&gt;• files changed&lt;br&gt;• interface deviations from spec&lt;br&gt;• out-of-scope discoveries&lt;br&gt;• verification result (pass/fail)" vertex="1">
+      <mxGeometry height="140" width="440" x="260" y="604" as="geometry"/>
+    </mxCell>
+    <mxCell id="12" edge="1" parent="2" source="8" style="edgeStyle=orthogonalEdgeStyle;fontSize=18;fontColor=#cccccc;" target="11">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- Orchestrator -->
+    <mxCell id="13" parent="2" style="rounded=1;whiteSpace=wrap;html=1;fontSize=18;align=left;spacingLeft=10;fillColor=#2d2d2d;strokeColor=#888888;fontColor=#ffffff;" value="&lt;b&gt;Orchestrator&lt;/b&gt;&lt;br&gt;• cross-ref file lists for conflicts&lt;br&gt;• review interface deviations&lt;br&gt;• flag downstream_action_required&lt;br&gt;• update next-wave agent prompts" vertex="1">
+      <mxGeometry height="140" width="440" x="260" y="814" as="geometry"/>
+    </mxCell>
+    <mxCell id="14" edge="1" parent="2" source="11" style="edgeStyle=orthogonalEdgeStyle;fontSize=18;fontColor=#cccccc;" target="13">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- Merge worktrees -->
+    <mxCell id="15" parent="2" style="rounded=1;whiteSpace=wrap;html=1;fontSize=18;align=left;spacingLeft=10;fillColor=#2d2d2d;strokeColor=#888888;fontColor=#ffffff;" value="&lt;b&gt;Merge worktrees&lt;/b&gt;&lt;br&gt;• merge each worktree in sequence&lt;br&gt;• clean up branches + worktrees&lt;br&gt;• run unscoped gate (go test ./...)&lt;br&gt;• tick IMPL doc status checkboxes" vertex="1">
+      <mxGeometry height="140" width="440" x="260" y="1024" as="geometry"/>
+    </mxCell>
+    <mxCell id="16" edge="1" parent="2" source="13" style="edgeStyle=orthogonalEdgeStyle;fontSize=18;fontColor=#cccccc;" target="15">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- Fix re-verify -->
+    <mxCell id="17" parent="2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#3d1a1a;strokeColor=#c06060;fontSize=18;align=left;spacingLeft=10;fontColor=#ffffff;" value="&lt;b&gt;Fix merge failures&lt;/b&gt;&lt;br&gt;• identify failing test or build error&lt;br&gt;• fix on main (no new worktree)&lt;br&gt;• re-run unscoped verification gate&lt;br&gt;• repeat until PASS" vertex="1">
+      <mxGeometry height="170" width="300" x="780" y="1024" as="geometry"/>
+    </mxCell>
+    <mxCell id="18" edge="1" parent="2" source="15" style="edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.5;exitDx=0;exitDy=0;fontSize=18;fontColor=#cccccc;" target="17" value="FAIL">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="19" edge="1" parent="2" source="17" style="edgeStyle=orthogonalEdgeStyle;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;fontSize=18;fontColor=#cccccc;" target="15">
+      <mxGeometry relative="1" as="geometry">
+        <Array as="points">
+          <mxPoint x="930" y="1240"/>
+          <mxPoint x="480" y="1240"/>
+        </Array>
+      </mxGeometry>
+    </mxCell>
+
+    <!-- More waves diamond -->
+    <mxCell id="20" parent="2" style="rhombus;whiteSpace=wrap;html=1;fillColor=#3d3000;strokeColor=#b89b40;fontSize=18;fontColor=#ffffff;" value="More waves?" vertex="1">
+      <mxGeometry height="110" width="230" x="365" y="1314" as="geometry"/>
+    </mxCell>
+    <mxCell id="21" edge="1" parent="2" source="15" style="edgeStyle=orthogonalEdgeStyle;fontSize=18;fontColor=#cccccc;" target="20" value="PASS">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="22" edge="1" parent="2" source="20" style="edgeStyle=orthogonalEdgeStyle;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;fontSize=18;fontColor=#cccccc;" target="3" value="next wave">
+      <mxGeometry relative="1" as="geometry">
+        <Array as="points">
+          <mxPoint x="20" y="1369"/>
+          <mxPoint x="20" y="125"/>
+        </Array>
+      </mxGeometry>
+    </mxCell>
+
+    <!-- Diagram title -->
+    <mxCell id="38" parent="1" style="text;html=1;align=center;fontStyle=1;fontSize=24;strokeColor=none;fillColor=none;fontColor=#cccccc;" value="/saw scout + /saw wave" vertex="1">
+      <mxGeometry height="40" width="500" x="550" y="290" as="geometry"/>
+    </mxCell>
+
+    <!-- Scope note -->
+    <mxCell id="39" parent="1" style="text;html=1;align=center;fontSize=15;strokeColor=none;fillColor=none;fontColor=#999999;fontStyle=2;" value="See also: saw-check.drawio · saw-bootstrap.drawio · saw-status.drawio" vertex="1">
+      <mxGeometry height="30" width="620" x="490" y="338" as="geometry"/>
+    </mxCell>
+
+    <!-- START -->
+    <mxCell id="23" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1a3a5c;strokeColor=#4a7ab5;fontStyle=1;fontSize=18;fontColor=#ffffff;" value="/saw scout &lt;feature&gt;" vertex="1">
+      <mxGeometry height="64" width="250" x="675" y="426" as="geometry"/>
+    </mxCell>
+
+    <!-- Suitability gate -->
+    <mxCell id="24" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#3d3000;strokeColor=#b89b40;fontSize=18;fontColor=#ffffff;" value="Suitability gate&#10;5 checks" vertex="1">
+      <mxGeometry height="110" width="230" x="685" y="530" as="geometry"/>
+    </mxCell>
+    <mxCell id="25" edge="1" parent="1" source="23" style="edgeStyle=orthogonalEdgeStyle;fontSize=18;fontColor=#cccccc;" target="24">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- NOT SUITABLE → STOP -->
+    <mxCell id="26" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#3d1a1a;strokeColor=#c06060;fontStyle=1;fontSize=18;fontColor=#ffffff;" value="STOP" vertex="1">
+      <mxGeometry height="64" width="190" x="1180" y="558" as="geometry"/>
+    </mxCell>
+    <mxCell id="27" edge="1" parent="1" source="24" style="edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.5;exitDx=0;exitDy=0;fontSize=18;fontColor=#cccccc;" target="26" value="NOT SUITABLE">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- Scout reads codebase -->
+    <mxCell id="28" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=18;align=left;spacingLeft=10;fillColor=#2d2d2d;strokeColor=#888888;fontColor=#ffffff;" value="&lt;b&gt;Scout reads codebase&lt;/b&gt;&lt;br&gt;• maps seams + file ownership&lt;br&gt;• defines cross-agent contracts&lt;br&gt;• builds wave dependency graph" vertex="1">
+      <mxGeometry height="130" width="370" x="615" y="734" as="geometry"/>
+    </mxCell>
+    <mxCell id="29" edge="1" parent="1" source="24" style="edgeStyle=orthogonalEdgeStyle;exitX=0.5;exitY=1;exitDx=0;exitDy=0;fontSize=18;fontColor=#cccccc;" target="28" value="SUITABLE">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- Writes IMPL doc -->
+    <mxCell id="30" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=18;align=left;spacingLeft=10;fillColor=#2d2d2d;strokeColor=#888888;fontColor=#ffffff;" value="&lt;b&gt;Writes IMPL doc&lt;/b&gt;&lt;br&gt;• suitability verdict + estimate&lt;br&gt;• interface contracts&lt;br&gt;• file ownership table&lt;br&gt;• wave structure + agent prompts" vertex="1">
+      <mxGeometry height="130" width="370" x="615" y="914" as="geometry"/>
+    </mxCell>
+    <mxCell id="31" edge="1" parent="1" source="28" style="edgeStyle=orthogonalEdgeStyle;fontSize=18;fontColor=#cccccc;" target="30">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- Human review -->
+    <mxCell id="32" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1a3a1a;strokeColor=#5a8a5a;fontSize=18;fontColor=#ffffff;" value="Human review&#10;interface freeze checkpoint" vertex="1">
+      <mxGeometry height="64" width="370" x="615" y="1094" as="geometry"/>
+    </mxCell>
+    <mxCell id="33" edge="1" parent="1" source="30" style="edgeStyle=orthogonalEdgeStyle;fontSize=18;fontColor=#cccccc;" target="32">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- Revise contracts loop -->
+    <mxCell id="34" edge="1" parent="1" source="32" style="edgeStyle=orthogonalEdgeStyle;dashed=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;fontSize=18;fontColor=#cccccc;" target="30" value="revise contracts">
+      <mxGeometry relative="1" as="geometry">
+        <Array as="points">
+          <mxPoint x="1100" y="1126"/>
+          <mxPoint x="1100" y="979"/>
+        </Array>
+      </mxGeometry>
+    </mxCell>
+
+    <!-- contracts final edge -->
+    <mxCell id="35" edge="1" parent="1" source="32" style="edgeStyle=orthogonalEdgeStyle;fontSize=18;fontColor=#cccccc;" target="3" value="contracts final">
+      <mxGeometry relative="1" as="geometry">
+        <Array as="points">
+          <mxPoint x="800" y="1210"/>
+          <mxPoint x="910" y="1210"/>
+        </Array>
+      </mxGeometry>
+    </mxCell>
+
+    <!-- DONE -->
+    <mxCell id="36" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1a3a1a;strokeColor=#5a8a5a;fontStyle=1;fontSize=18;fontColor=#ffffff;" value="IMPL doc finalized · done" vertex="1">
+      <mxGeometry height="64" width="250" x="675" y="2860" as="geometry"/>
+    </mxCell>
+    <mxCell id="37" edge="1" parent="1" source="20" style="edgeStyle=orthogonalEdgeStyle;fontSize=20;fontColor=#cccccc;" target="36" value="no">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+  </root>
+</mxGraphModel>

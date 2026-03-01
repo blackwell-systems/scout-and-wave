@@ -1,0 +1,59 @@
+<mxGraphModel background="#1e1e1e">
+  <root>
+    <mxCell id="0"/>
+    <mxCell id="1" parent="0"/>
+
+    <!-- Title -->
+    <mxCell id="2" parent="1" style="text;html=1;align=center;fontStyle=1;fontSize=24;strokeColor=none;fillColor=none;fontColor=#cccccc;" value="/saw status" vertex="1">
+      <mxGeometry height="40" width="300" x="650" y="160" as="geometry"/>
+    </mxCell>
+
+    <!-- Scope note -->
+    <mxCell id="3" parent="1" style="text;html=1;align=center;fontSize=15;strokeColor=none;fillColor=none;fontColor=#999999;fontStyle=2;" value="See also: saw-scout-wave.drawio · saw-bootstrap.drawio · saw-check.drawio" vertex="1">
+      <mxGeometry height="30" width="700" x="450" y="208" as="geometry"/>
+    </mxCell>
+
+    <!-- START -->
+    <mxCell id="4" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1a3a5c;strokeColor=#4a7ab5;fontStyle=1;fontSize=18;fontColor=#ffffff;" value="/saw status" vertex="1">
+      <mxGeometry height="64" width="240" x="680" y="260" as="geometry"/>
+    </mxCell>
+
+    <!-- IMPL doc exists? -->
+    <mxCell id="5" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#3d3000;strokeColor=#b89b40;fontSize=18;fontColor=#ffffff;" value="docs/IMPL-*.md&#10;exists?" vertex="1">
+      <mxGeometry height="110" width="230" x="685" y="374" as="geometry"/>
+    </mxCell>
+    <mxCell id="6" edge="1" parent="1" source="4" style="edgeStyle=orthogonalEdgeStyle;fontSize=18;fontColor=#cccccc;" target="5">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- No active session -->
+    <mxCell id="7" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#3d1a1a;strokeColor=#c06060;fontSize=18;align=left;spacingLeft=10;fontColor=#ffffff;" value="&lt;b&gt;No active SAW session&lt;/b&gt;&lt;br&gt;• no IMPL doc found&lt;br&gt;• run /saw scout or /saw bootstrap first" vertex="1">
+      <mxGeometry height="110" width="340" x="80" y="374" as="geometry"/>
+    </mxCell>
+    <mxCell id="8" edge="1" parent="1" source="5" style="edgeStyle=orthogonalEdgeStyle;exitX=0;exitY=0.5;exitDx=0;exitDy=0;fontSize=18;fontColor=#cccccc;" target="7" value="no">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- Read IMPL doc -->
+    <mxCell id="9" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=18;align=left;spacingLeft=10;fillColor=#2d2d2d;strokeColor=#888888;fontColor=#ffffff;" value="&lt;b&gt;Read IMPL doc&lt;/b&gt;&lt;br&gt;• wave structure + status checkboxes&lt;br&gt;• identify current wave (first with unchecked items)&lt;br&gt;• read verification gate commands" vertex="1">
+      <mxGeometry height="140" width="460" x="570" y="554" as="geometry"/>
+    </mxCell>
+    <mxCell id="10" edge="1" parent="1" source="5" style="edgeStyle=orthogonalEdgeStyle;exitX=0.5;exitY=1;exitDx=0;exitDy=0;fontSize=18;fontColor=#cccccc;" target="9" value="yes">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- Report progress -->
+    <mxCell id="11" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=18;align=left;spacingLeft=10;fillColor=#2d2d2d;strokeColor=#888888;fontColor=#ffffff;" value="&lt;b&gt;Report progress&lt;/b&gt;&lt;br&gt;• waves completed vs remaining&lt;br&gt;• current wave agents + their status&lt;br&gt;• any flagged deviations or blockers&lt;br&gt;• recommended next step (/saw wave or /saw wave --auto)" vertex="1">
+      <mxGeometry height="160" width="460" x="570" y="754" as="geometry"/>
+    </mxCell>
+    <mxCell id="12" edge="1" parent="1" source="9" style="edgeStyle=orthogonalEdgeStyle;fontSize=18;fontColor=#cccccc;" target="11">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- No files written note -->
+    <mxCell id="13" parent="1" style="text;html=1;align=center;fontSize=15;strokeColor=none;fillColor=none;fontColor=#999999;fontStyle=2;" value="No files are written. /saw status is read-only." vertex="1">
+      <mxGeometry height="30" width="500" x="550" y="964" as="geometry"/>
+    </mxCell>
+
+  </root>
+</mxGraphModel>
