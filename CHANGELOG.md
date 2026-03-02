@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
-| Unreleased | -- | Spec completeness pass: E1–E14 numbered, six spec holes patched, state machine diagram, all invariants embedded in skill |
+| [0.4.0] | 2026-03-02 | Spec completeness pass: E1–E14 numbered, six spec holes patched, state machine diagram, all invariants embedded in skill, conformance criteria |
 | [0.3.7] | 2026-03-01 | Orchestrator owns linter auto-fix post-merge; agents run check-only |
 | [0.3.6] | 2026-03-01 | SAW tag format for claudewatch wave/agent observability |
 | [0.3.5] | 2026-03-01 | I-number anchors for cross-referencing; I6 role separation invariant added |
@@ -22,7 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [Unreleased]
+## [0.4.0] - 2026-03-02
 
 ### Removed
 
