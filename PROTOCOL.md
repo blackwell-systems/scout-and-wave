@@ -18,16 +18,31 @@ The prompts in `prompts/` are reference implementations of this protocol.
 SAW has three participant roles. All three are agents (AI model instances
 running with tool access). They differ only in execution mode and responsibility.
 
-**Orchestrator:** The synchronous agent. Drives all protocol state transitions.
-Runs the `/saw` skill, reads the IMPL doc, creates worktrees, launches scouts
-and wave agents, waits for completion notifications, reads completion reports,
-executes the merge procedure, verifies the merged result, and advances state.
-The orchestrator serializes all state changes; it is the single-threaded
-coordinator that processes completion events and decides what runs next. The
-only participant that interacts with the human directly. All progress
+**Orchestrator:** The synchronous agent running in the user's own interactive
+session. Drives all protocol state transitions: reads the IMPL doc, creates
+worktrees, launches scouts and wave agents, waits for completion notifications,
+reads completion reports, executes the merge procedure, verifies the merged
+result, and advances state. The orchestrator serializes all state changes; it
+is the single-threaded coordinator that processes completion events and decides
+what runs next.
+
+The only participant that interacts with the human directly. All progress
 reporting, decision points, approval requests, and error escalation flow through
 the orchestrator; asynchronous agents never surface information to the human
 except through the orchestrator's completion handling.
+
+Running in the user's session is what makes human checkpoints enforceable. A
+background orchestrator would have no interactive session to deliver mandatory
+approvals to. The human is not a separate role; they are present through the
+orchestrator's session.
+
+Not all checkpoints require human input. The suitability gate and the REVIEWED
+state (plan review before the first wave) always require explicit approval.
+Inter-wave checkpoints are optional and can be automated via `/saw wave --auto`.
+Failures and BLOCKED states always surface to the human regardless of automation
+mode. The orchestrator being synchronous means the human can intervene at any
+moment; which specific stops are mandatory is a separate question from whether
+intervention is possible at all.
 
 **Scout:** An asynchronous agent launched by the orchestrator. Analyzes the
 codebase, produces the IMPL doc, and exits. Never modifies source files. Never
