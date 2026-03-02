@@ -139,7 +139,61 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
     launch (step 3). Added explicit freeze checkpoint callout to step 2.
   - Embedded E7 (agent failure handling) and E8 (same-wave interface failure) at step 4
     (completion report reading), the Orchestrator decision point for both.
-  - Updated `I{N}` notation comment to cover `E{N}` execution rules (E1–E13).
+  - Updated `I{N}` notation comment to cover `E{N}` execution rules (E1–E14).
+
+- **`PROTOCOL.md` — spec hole patches (six gaps closed):**
+
+  - **E14: IMPL doc write discipline (new rule).** Agents write to the IMPL doc
+    exactly once: by appending their named completion report section at the end of
+    the file. Must not edit any earlier section (interface contracts, ownership
+    table, suitability verdict, wave structure). Those sections are frozen at
+    worktree creation (E2). Any required update to an earlier section is an
+    interface deviation — report it, do not edit in place. Cross-referenced from I4.
+    This constraint is what makes IMPL doc git conflicts predictably resolvable (E12).
+
+  - **E2: Interface freeze exception workflow.** Added two named recovery paths for
+    interface changes after worktrees exist and some agents have completed work:
+    (a) recreate and cherry-pick — preserve unaffected commits, recreate worktrees,
+    cherry-pick safe commits, re-run only affected agents; use when most agents have
+    completed and the change is narrow; (b) descope and defer — leave the current
+    wave to complete against existing contracts, move the interface revision to the
+    next wave boundary via E8; use when the change is broad or cherry-pick safety
+    cannot be confirmed. Added E2/E8 relationship note: same problem from opposite
+    discovery directions, both resolve at the wave boundary.
+
+  - **E10: Scoped verification — exact commands mandate.** The scout must specify
+    exact verification commands in Field 6 of each agent prompt. Agents run those
+    exact commands; substitutions are not permitted. `go test ./...` is unscoped in
+    Go regardless of speed; the correct scoped command targets owned packages only.
+    An agent substituting a broader command is non-conforming even if it passes.
+
+  - **Solo wave I6 safety clause.** The solo wave agent must operate in the Wave
+    Agent role — launched by the Orchestrator as an asynchronous agent, not executed
+    inline. Executing solo wave work directly violates I6 regardless of wave size.
+    The absence of worktrees changes the isolation mechanism; it does not change
+    participant roles.
+
+  - **Precondition 1: append-only precisely defined.** A change qualifies as
+    append-only if and only if: the diff is purely additive (no deletions, no
+    modifications to existing entries, no reformatting, no reordering) and the new
+    entries are self-contained. Any change that touches an existing line — even
+    whitespace — disqualifies the file from orchestrator-owned treatment and makes
+    it a decomposition blocker. Verification: diff must contain only `+` lines, no
+    `-` lines.
+
+  - **Protocol Guarantees: softened interface drift claim.** "Interface drift is
+    structurally impossible" replaced with "direct coordination drift is prevented;
+    deviations must be declared in completion reports and surfaced at wave
+    boundaries." The original claim was falsifiable by semantic drift (wrong
+    implementation of correct signature, differing contract interpretation). The
+    revised claim matches what the protocol actually enforces via `interface_deviations`
+    in the completion report schema.
+
+- **`prompts/agent-template.md` (v0.3.4 → v0.3.5):**
+  - Embedded E14 in Field 8 (Report): explicit append-only mandate with rationale.
+    Agents must not edit earlier IMPL doc sections; report interface deviations
+    instead of editing contracts in place.
+  - Updated notation comment to cover `E{N}` execution rules (E1–E14).
 
 - **Style:** removed em dashes from 20 markdown files across the repository.
 

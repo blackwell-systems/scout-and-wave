@@ -77,6 +77,15 @@ suitability gate checks these before producing agent prompts.
    files (build artifacts, compiled outputs) are excluded from ownership and
    must not appear in any agent's ownership list.
 
+   **Append-only defined.** An agent's change to a shared file qualifies as
+   append-only if and only if: (a) the diff is purely additive — no deletions,
+   no modifications to existing entries, no reformatting, no reordering; and
+   (b) the new entries are self-contained and do not depend on changes to
+   existing entries in the same file. Any change that touches an existing line
+   (even whitespace or comment cleanup) disqualifies the file from
+   orchestrator-owned treatment and makes it a decomposition blocker. To
+   verify: the diff for the file must contain only `+` lines, no `-` lines.
+
 2. **No investigation-first blockers.** No part of the work requires root cause
    analysis before it can be specified. Agents must be fully specifiable before
    the protocol begins.
@@ -127,7 +136,8 @@ merged and post-merge verification has passed.
 
 **I4: IMPL doc is the single source of truth.** Completion reports, interface
 contract updates, and status are written to the IMPL doc. Chat output is not
-the record.
+the record. See E14 for the write discipline that keeps IMPL doc conflicts
+predictably resolvable.
 
 **I5: Agents commit before reporting.** Each agent commits its changes to its
 worktree branch before writing a completion report. Uncommitted state at report
@@ -154,10 +164,16 @@ no SAW session is detectable by monitoring tools).
 **BLOCKED** is not a terminal state. The orchestrator fixes the failure and
 re-runs verification. BLOCKED → WAVE_VERIFIED on verification pass.
 
-**Solo wave:** A wave containing exactly one agent runs the agent directly on
-the main branch with no worktrees. There is nothing to conflict with. The
-WAVE_MERGING state is skipped. Post-wave verification is still required before
-advancing. Wave 0 in bootstrap projects is always a solo wave.
+**Solo wave:** A wave containing exactly one agent runs the agent on the main
+branch with no worktrees. There is nothing to conflict with. The WAVE_MERGING
+state is skipped. Post-wave verification is still required before advancing.
+Wave 0 in bootstrap projects is always a solo wave.
+
+The solo wave agent must still operate in the Wave Agent role: launched by the
+Orchestrator as an asynchronous agent, not executed directly by the
+Orchestrator. Executing solo wave work inline violates I6 regardless of wave
+size. The absence of worktrees changes the isolation mechanism; it does not
+change the participant roles.
 
 ---
 
@@ -174,6 +190,29 @@ created. The review window between REVIEWED and WAVE_PENDING is the checkpoint
 for revising type signatures, adding fields, or restructuring APIs. After
 worktrees branch from HEAD, any interface change requires removing and
 recreating all worktrees for the wave.
+
+When an interface change is required after worktrees exist and some agents have
+already committed work, two recovery paths are available:
+
+- **(a) Recreate and cherry-pick.** Record the commit SHAs of agents whose
+  completed work does not implement or call the changed interface. Remove and
+  recreate all worktrees. Cherry-pick the unaffected commits onto their new
+  worktrees. Verify each cherry-picked commit still builds against the new
+  interface. Re-run only the agents whose work is affected by the change.
+  Use this path when most agents have completed and the change is narrow
+  (affects 1–2 agents).
+
+- **(b) Descope and defer.** Leave the current wave to complete against the
+  existing contracts. Move the interface revision to the next wave boundary,
+  where it becomes the contract for a new wave. Agents that cannot complete
+  against the current contract report `status: blocked` (E8); the orchestrator
+  resolves the contract change at the wave boundary. Use this path when the
+  change is broad, when few agents have completed, or when cherry-pick safety
+  cannot be confirmed.
+
+If no agents have committed work yet, recreate worktrees without cherry-pick.
+E2 governs orchestrator-initiated interface changes. E8 governs the same
+problem from the other direction: agent-discovered contract failures.
 
 **E3: Pre-launch ownership verification.** Before creating worktrees or launching
 any agent in a wave, the orchestrator scans the wave's file ownership table in
@@ -228,6 +267,15 @@ waves (scoped to the files and packages they own) to keep iteration fast.
 The orchestrator's post-merge gate runs unscoped across the full project to
 catch cross-package cascade failures that no individual agent could see.
 
+The scout must specify exact verification commands in Field 6 of each agent
+prompt. Agents run those exact commands; they may not substitute broader ones.
+"Scoped" is not self-evident from agent context: `go test ./...` is unscoped
+in Go regardless of how fast it runs; the correct scoped command is
+`go test ./pkg/owned/...` or equivalent. The scout knows the project structure
+and can determine the right target; agents must not guess. An agent that
+substitutes a broader command than specified is non-conforming, even if the
+command passes.
+
 **E11: Conflict prediction before merge.** The orchestrator cross-references all
 agents' `files_changed` and `files_created` lists before touching the working
 tree. A file appearing in more than one agent's list is a disjoint ownership
@@ -261,6 +309,17 @@ test suite; a wave reporting PASS on compile-only when tests exist is a
 protocol violation. Agents scope their verification to owned files and packages;
 the orchestrator's post-merge gate runs unscoped to catch cross-package cascade
 failures.
+
+**E14: IMPL doc write discipline.** Agents write to the IMPL doc exactly once:
+by appending their named completion report section at the end of the file under
+`### Agent {letter} - Completion Report`. Agents must not edit any earlier
+section of the IMPL doc (interface contracts, file ownership table, suitability
+verdict, wave structure). Those sections are frozen at worktree creation (E2).
+Any apparent need to update an earlier section is an interface deviation; it
+must be reported in the completion report and resolved by the Orchestrator, not
+edited in-place by the agent. This constraint is what makes IMPL doc git
+conflicts predictably resolvable: two agents appending distinct named sections
+always produce adjacent-section conflicts with no semantic overlap (E12).
 
 ---
 
@@ -374,8 +433,8 @@ guarantees.
 When all preconditions hold and all invariants are maintained:
 
 - No two agents in the same wave will produce conflicting changes
-- Interface drift between agents is structurally impossible (contracts precede implementation)
-- Integration failures surface at wave boundaries, not at the end
+- Direct coordination drift is prevented; deviations from interface contracts must be declared in completion reports and are surfaced at wave boundaries
+- Integration failures surface at wave boundaries, not at the end of all waves
 - Downstream agents always receive accurate context (IMPL doc reflects actual state)
 - The orchestrator can detect disjoint ownership violations before touching the working tree
 
