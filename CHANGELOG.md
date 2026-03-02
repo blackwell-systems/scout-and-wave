@@ -4,6 +4,24 @@ All notable changes to the Scout-and-Wave protocol will be documented in this fi
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## Version History
+
+| Version | Date | Headline |
+|---------|------|----------|
+| Unreleased | -- | Spec completeness pass: E1–E14 numbered, six spec holes patched, state machine diagram, all invariants embedded in skill |
+| [0.3.7] | 2026-03-01 | Orchestrator owns linter auto-fix post-merge; agents run check-only |
+| [0.3.6] | 2026-03-01 | SAW tag format for claudewatch wave/agent observability |
+| [0.3.5] | 2026-03-01 | I-number anchors for cross-referencing; I6 role separation invariant added |
+| [0.3.4] | 2026-03-01 | Eight protocol gaps closed; Execution Rules section added |
+| [0.3.3] | 2026-03-01 | Solo wave path formalized; 9-field agent template; conflict taxonomy |
+| [0.3.2] | 2026-02-28 | Draw.io flow diagrams with light/dark SVG exports |
+| [0.3.1] | 2026-02-28 | Structured YAML completion reports; automated conflict prediction |
+| [0.3.0] | 2026-02-28 | Bootstrap mode for new projects; Wave 0 pattern |
+| [0.2.0] | 2026-02-28 | Decomposed skill prompt; complexity-based suitability heuristic |
+| [0.1.0] | 2026-02-27 | Initial release |
+
+---
+
 ## [Unreleased]
 
 ### Removed

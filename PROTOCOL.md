@@ -453,7 +453,7 @@ without seeing each other's code.
 
 ## Reference Implementation
 
-The canonical prompts that implement this protocol:
+The canonical prompts that implement this protocol for Claude Code:
 
 | File | Role |
 |------|------|
@@ -465,3 +465,15 @@ The canonical prompts that implement this protocol:
 | `prompts/saw-bootstrap.md` | Bootstrap mode variant: design-first for new projects |
 
 **Version headers.** Each prompt file must carry a machine-readable version identifier on line 1 in the format `<name> v<major>.<minor>.<patch>` (e.g. `saw-skill v0.3.4`), using whatever comment syntax the implementation supports (e.g. `<!-- saw-skill v0.3.4 -->` in Claude Code markdown skills). This is a normative requirement. The version identifier is how the active skill is identified mid-session by the orchestrator and by monitoring tools. Prompt files without version identifiers are unidentifiable. Any implementation or fork of a prompt file must carry a conforming version identifier.
+
+**Conformance.** An implementation of SAW (in any agent runtime) is conforming if it preserves:
+
+- All six invariants (I1–I6) with equivalent enforcement — the definitions may be adapted for the target runtime's idioms but the semantics must be identical
+- All fourteen execution rules (E1–E14) at their enforcement points — background execution, interface freeze, ownership verification, IMPL doc write discipline, and so on
+- The state machine transitions, including mandatory human checkpoints at the suitability gate and REVIEWED state
+- The message formats: suitability verdict, completion report YAML schema, and IMPL doc section structure
+- The suitability gate: five-question assessment with NOT SUITABLE as a first-class outcome
+
+What may vary across implementations: the agent runtime primitives (tool names, parameter syntax, isolation mechanism), the programming language of the target project, the specific verification commands, and the UI surface for human checkpoints.
+
+**Forking.** You may adapt the prompt files for a different agent runtime. The invariant definitions (I1–I6) and execution rule definitions (E1–E14) must be preserved verbatim or with semantically equivalent language — they are the normative core, not implementation detail. Remove the Claude Code-specific examples if they do not apply, but do not remove the rules themselves. Carry a conforming version identifier and, if your fork diverges meaningfully, a new name to avoid confusion with this reference implementation.
