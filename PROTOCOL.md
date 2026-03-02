@@ -15,37 +15,37 @@ The prompts in `prompts/` are reference implementations of this protocol.
 
 ## Participants
 
-SAW has three participant roles. All three are agents — AI model instances
-running with tool access. They differ only in execution mode and responsibility.
+SAW has three participant roles. All three are agents (AI model instances
+running with tool access). They differ only in execution mode and responsibility.
 
-**Orchestrator** — The synchronous agent. Drives all protocol state transitions.
+**Orchestrator:** The synchronous agent. Drives all protocol state transitions.
 Runs the `/saw` skill, reads the IMPL doc, creates worktrees, launches scouts
 and wave agents, waits for completion notifications, reads completion reports,
 executes the merge procedure, verifies the merged result, and advances state.
-The orchestrator serializes all state changes — it is the single-threaded
+The orchestrator serializes all state changes; it is the single-threaded
 coordinator that processes completion events and decides what runs next. The
 only participant that interacts with the human directly. All progress
 reporting, decision points, approval requests, and error escalation flow through
-the orchestrator — asynchronous agents never surface information to the human
+the orchestrator; asynchronous agents never surface information to the human
 except through the orchestrator's completion handling.
 
-**Scout** — An asynchronous agent launched by the orchestrator. Analyzes the
+**Scout:** An asynchronous agent launched by the orchestrator. Analyzes the
 codebase, produces the IMPL doc, and exits. Never modifies source files. Never
 participates in wave execution. The orchestrator waits for the scout's
 completion notification before entering REVIEWED state.
 
-**Wave Agent** — An asynchronous agent launched by the orchestrator. Owns a
+**Wave Agent:** An asynchronous agent launched by the orchestrator. Owns a
 disjoint set of files, implements against the interface contracts defined in the
 IMPL doc, runs the verification gate, commits its work, and writes a structured
 completion report to the IMPL doc. Multiple wave agents run concurrently within
-a wave. Wave agents never coordinate directly with each other — the IMPL doc is
+a wave. Wave agents never coordinate directly with each other; the IMPL doc is
 the only coordination surface. The orchestrator collects all completion
 notifications before advancing to WAVE_MERGING.
 
 The protocol's correctness guarantees flow from this structure: the synchronous
 orchestrator serializes all state transitions while asynchronous agents execute
 in parallel. Agents can run concurrently precisely because they never write to
-shared state — only the orchestrator does.
+shared state; only the orchestrator does.
 
 ---
 
@@ -57,7 +57,7 @@ suitability gate checks these before producing agent prompts.
 1. **File decomposition.** The work decomposes into ≥2 disjoint file groups.
    No two agents require conflicting modifications to the same file.
    Append-only additions to a shared file (config registries, module manifests,
-   index files) are not a decomposition blocker — the scout makes such files
+   index files) are not a decomposition blocker; the scout makes such files
    orchestrator-owned and the orchestrator applies them post-merge. Generated
    files (build artifacts, compiled outputs) are excluded from ownership and
    must not appear in any agent's ownership list.
@@ -94,7 +94,7 @@ definition is embedded verbatim alongside it so each document remains
 self-contained without requiring a lookup. To audit consistency, grep prompt
 files for `I{N}` and verify the embedded definition matches this section.
 
-**I1 — Disjoint file ownership.** No two agents in the same wave own the same
+**I1: Disjoint file ownership.** No two agents in the same wave own the same
 file. This is a hard constraint, not a preference. It is the mechanism that
 makes parallel execution safe. Worktree isolation does not substitute for it.
 
@@ -103,25 +103,25 @@ distinct from an I1 violation. A single agent cannot conflict with itself.
 Such out-of-scope changes must be justified, documented in the completion
 report, and verified by the post-merge gate.
 
-**I2 — Interface contracts precede implementation.** All interfaces that cross
+**I2: Interface contracts precede implementation.** All interfaces that cross
 agent boundaries are defined in the IMPL doc before any agent launches.
 Agents implement against the spec; they never coordinate directly.
 
-**I3 — Wave sequencing.** Wave N+1 does not launch until Wave N has been
+**I3: Wave sequencing.** Wave N+1 does not launch until Wave N has been
 merged and post-merge verification has passed.
 
-**I4 — IMPL doc is the single source of truth.** Completion reports, interface
+**I4: IMPL doc is the single source of truth.** Completion reports, interface
 contract updates, and status are written to the IMPL doc. Chat output is not
 the record.
 
-**I5 — Agents commit before reporting.** Each agent commits its changes to its
+**I5: Agents commit before reporting.** Each agent commits its changes to its
 worktree branch before writing a completion report. Uncommitted state at report
 time is a protocol deviation and must be noted in the report.
 
-**I6 — Role separation.** The Orchestrator does not perform Scout or Wave Agent
+**I6: Role separation.** The Orchestrator does not perform Scout or Wave Agent
 duties. Codebase analysis, IMPL doc production, and source code implementation
 are delegated to the appropriate asynchronous agent. If the Orchestrator finds
-itself doing any of these, it has violated the protocol — it must stop and
+itself doing any of these, it has violated the protocol; it must stop and
 launch the correct agent. This invariant is not a style preference: an
 Orchestrator performing Scout work bypasses async execution, pollutes the
 orchestrator's context window, and breaks observability (no Scout agent means
@@ -197,6 +197,8 @@ advancing. Wave 0 in bootstrap projects is always a solo wave.
 These rules govern orchestrator behavior during wave execution. They are not
 captured by the state machine alone.
 
+**Background execution.** All agent launches, CI polling, and long-running watch commands must use `run_in_background: true`. A blocking agent launch serializes the wave — the orchestrator waits for one agent before launching the next, eliminating parallelism. This is a protocol violation, not a performance preference. Any implementation that blocks the foreground session on agent execution or polling is non-conforming.
+
 **Interface freeze.** Interface contracts become immutable when worktrees are
 created. The review window between REVIEWED and WAVE_PENDING is the checkpoint
 for revising type signatures, adding fields, or restructuring APIs. After
@@ -206,31 +208,33 @@ recreating all worktrees for the wave.
 **Pre-launch ownership verification.** Before creating worktrees or launching
 any agent in a wave, the orchestrator scans the wave's file ownership table in
 the IMPL doc and verifies no file appears in more than one agent's ownership
-list. If an overlap is found, the wave does not launch — the IMPL doc must be
+list. If an overlap is found, the wave does not launch; the IMPL doc must be
 corrected first. This is distinct from post-execution conflict prediction:
 pre-launch catches scout planning errors; post-execution catches runtime
 deviations where an agent touched files outside its declared scope.
 
 **Worktree pre-creation.** For multi-agent waves, the orchestrator creates all
 worktrees before launching any agent. Do not rely on the Task tool's
-`isolation: "worktree"` parameter alone — it does not guarantee each agent
+`isolation: "worktree"` parameter alone; it does not guarantee each agent
 starts in the correct worktree. Pre-creation is the mechanism that enforces
 isolation; agent-side isolation verification (Field 0) is defense-in-depth.
 Worktrees isolate working directories, not merge outcomes. Two agents can still
-produce incompatible edits to the same file — disjoint file ownership (I1) is
+produce incompatible edits to the same file; disjoint file ownership (I1) is
 the mechanism that prevents this, not worktree isolation.
 
+**Worktree naming convention.** Worktrees must be named `.claude/worktrees/wave{N}-agent-{letter}` where `{N}` is the 1-based wave number and `{letter}` is the agent identifier (A, B, C...). This is a canonical requirement, not a style choice. Monitoring tools detect SAW sessions by parsing agent names from transcripts; deviating from this convention breaks observability silently. Any tooling that consumes SAW session data must conform to this naming scheme.
+
 **Agent prompt propagation.** Agent prompts are sections within the IMPL doc.
-When the orchestrator updates an agent prompt — due to interface deviation
-propagation, contract revision, or same-wave interface failure — it edits the
+When the orchestrator updates an agent prompt (due to interface deviation
+propagation, contract revision, or same-wave interface failure), it edits the
 prompt section in the IMPL doc directly. The agent reads its prompt from the
 IMPL doc at launch time, so the corrected version is always what runs. There
 is no separate prompt file to keep in sync.
 
 **Agent failure handling.** If any agent in a wave reports `status: partial`
 or `status: blocked`, the wave does not merge. The wave goes to BLOCKED. The
-orchestrator must resolve the failing agent — re-run it, manually fix the
-issue, or descope it from the wave — before the merge step proceeds. Agents
+orchestrator must resolve the failing agent (re-run it, manually fix the
+issue, or descope it from the wave) before the merge step proceeds. Agents
 that completed successfully are not re-run, but their worktrees are not merged
 until the full wave is resolved. Partial merges are not permitted.
 
@@ -241,7 +245,7 @@ in the IMPL doc, and re-issues prompts to all agents whose work depends on the
 changed contract. Agents that completed cleanly against unaffected contracts do
 not re-run. The wave restarts from WAVE_PENDING with the corrected contracts.
 
-**Idempotency.** WAVE_PENDING is re-entrant — re-running `/saw wave` checks
+**Idempotency.** WAVE_PENDING is re-entrant; re-running `/saw wave` checks
 for existing worktrees before creating new ones and does not duplicate them.
 WAVE_MERGING is not idempotent. If the orchestrator crashes mid-merge, inspect
 the state before continuing: check which worktree branches are already present
@@ -261,28 +265,28 @@ violation. It must be resolved before any merge proceeds.
 Within a valid wave, merge order is arbitrary. Same-wave agents are independent
 by construction: any agent whose work depends on a file created by another
 agent belongs in a later wave. If merge order appears to matter, the wave
-structure is wrong — not the merge sequence.
+structure is wrong, not the merge sequence.
 
 **Merge conflict taxonomy.** Three distinct conflict types can arise; each has
 a different resolution path:
 
-1. **Git conflict on agent-owned files** — an I1 violation. This is impossible
+1. **Git conflict on agent-owned files:** an I1 violation. This is impossible
    if invariants hold. If it occurs, the scout produced an incorrect ownership
    table. Do not merge. Correct the IMPL doc and re-run the wave.
 
 2. **Git conflict on orchestrator-owned shared files** (IMPL doc completion
-   report sections, append-only config registries) — expected. Resolve by
+   report sections, append-only config registries): expected. Resolve by
    accepting all appended sections. Each agent owns a distinct named section;
    there is no semantic conflict, only a git conflict on adjacent lines.
 
 3. **Semantic conflict** (two agents implement incompatible interfaces without
-   a git conflict) — surfaces in `interface_deviations` and `out_of_scope_deps`
+   a git conflict): surfaces in `interface_deviations` and `out_of_scope_deps`
    in completion reports. Resolved by the orchestrator before the next wave
    launches, via interface contract revision and downstream prompt updates.
 
 **Verification minimum.** The minimum acceptable verification gate is: build
 (compile) passing and lint passing. Tests are required if the project has a
-test suite — a wave reporting PASS on compile-only when tests exist is a
+test suite; a wave reporting PASS on compile-only when tests exist is a
 protocol violation. Agents scope their verification to owned files and packages;
 the orchestrator's post-merge gate runs unscoped to catch cross-package cascade
 failures.
@@ -316,10 +320,10 @@ If `NOT SUITABLE`, the verdict must include two additional fields:
 
 ```
 Failed preconditions:
-  - Precondition N ([name]): [evidence — what was found in the codebase]
+  - Precondition N ([name]): [evidence: what was found in the codebase]
 
 Suggested alternative: [sequential execution | investigate-first then re-scout |
-                        other — describe]
+                        other: describe]
 ```
 
 `Failed preconditions` names each precondition that blocked the verdict (by
@@ -351,7 +355,7 @@ Structured YAML block written by each agent to the IMPL doc. Machine-readable.
 Orchestrator parses these before merging.
 
 ```yaml
-### Agent {letter} — Completion Report
+### Agent {letter} - Completion Report
 status: complete | partial | blocked
 worktree: .claude/worktrees/wave{N}-agent-{letter}
 commit: {sha}  # or "uncommitted"
@@ -367,7 +371,7 @@ out_of_scope_deps:
   - "file: path, change: description, reason: why"  # or []
 tests_added:
   - test_name
-verification: PASS | FAIL ({command} — N/N tests)
+verification: PASS | FAIL ({command} - N/N tests)
 ```
 
 Free-form notes follow the structured block for anything that doesn't fit.
@@ -423,9 +427,11 @@ The canonical prompts that implement this protocol:
 
 | File | Role |
 |------|------|
-| `prompts/scout.md` | Scout participant — suitability gate + IMPL doc production |
-| `prompts/agent-template.md` | Agent participant — 9-field prompt template |
-| `prompts/saw-skill.md` | Orchestrator — command routing and wave execution |
-| `prompts/saw-worktree.md` | Orchestrator — worktree lifecycle |
-| `prompts/saw-merge.md` | Orchestrator — merge procedure |
-| `prompts/saw-bootstrap.md` | Bootstrap mode variant — design-first for new projects |
+| `prompts/scout.md` | Scout participant: suitability gate + IMPL doc production |
+| `prompts/agent-template.md` | Agent participant: 9-field prompt template |
+| `prompts/saw-skill.md` | Orchestrator: command routing and wave execution |
+| `prompts/saw-worktree.md` | Orchestrator: worktree lifecycle |
+| `prompts/saw-merge.md` | Orchestrator: merge procedure |
+| `prompts/saw-bootstrap.md` | Bootstrap mode variant: design-first for new projects |
+
+**Version headers.** Each prompt file must carry a version header comment on line 1 in the format `<!-- <name> v<major>.<minor>.<patch> -->` (e.g. `<!-- saw-skill v0.3.4 -->`). This is a normative requirement. The version header is how the running skill is identified mid-session by the orchestrator and by monitoring tools. Prompt files without version headers are unidentifiable; tooling that detects SAW sessions will not recognize them. Any implementation or fork of a prompt file must carry a conforming version header.
