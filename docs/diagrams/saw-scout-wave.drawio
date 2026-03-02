@@ -101,11 +101,6 @@
       <mxGeometry height="40" width="500" x="550" y="290" as="geometry"/>
     </mxCell>
 
-    <!-- Scope note -->
-    <mxCell id="39" parent="1" style="text;html=1;align=center;fontSize=15;strokeColor=none;fillColor=none;fontColor=#666666;fontStyle=2;" value="See also: saw-check.drawio · saw-bootstrap.drawio · saw-status.drawio" vertex="1">
-      <mxGeometry height="30" width="620" x="490" y="338" as="geometry"/>
-    </mxCell>
-
     <!-- START -->
     <mxCell id="23" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;fontSize=18;" value="/saw scout &lt;feature&gt;" vertex="1">
       <mxGeometry height="64" width="250" x="675" y="426" as="geometry"/>
