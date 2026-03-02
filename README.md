@@ -3,7 +3,7 @@
 [![Blackwell Systems™](https://raw.githubusercontent.com/blackwell-systems/blackwell-docs-theme/main/badge-trademark.svg)](https://github.com/blackwell-systems)
 ![Version](https://img.shields.io/badge/version-0.3.5-blue)
 
-A coordination protocol for safely parallelizing human-guided agentic workflows. Defines participant roles, preconditions, ownership invariants, and verification gates that guarantee agents can work concurrently without conflicts. Human review checkpoints are structural — the protocol does not advance past the suitability gate or between waves without human approval.
+A coordination protocol for safely parallelizing human-guided agentic workflows. Defines participant roles, preconditions, ownership invariants, and verification gates that guarantee agents can work concurrently without conflicts. Human review checkpoints are structural: the protocol does not advance past the suitability gate or between waves without human approval.
 
 ## Why
 
@@ -15,11 +15,11 @@ The root cause isn't that agents are careless; it's that nothing stops two agent
 
 Scout-and-wave fixes this before any agent starts, through three participant roles:
 
-- **Orchestrator** — the synchronous agent. Drives all protocol state transitions. Launches the Scout and Wave Agents, waits for completion, executes the merge procedure, verifies the result, and advances state. The only participant that interacts with the human directly. Does not perform Scout or Wave Agent duties (I6 — Role Separation).
+- **Orchestrator:** the synchronous agent. Drives all protocol state transitions. Launches the Scout and Wave Agents, waits for completion, executes the merge procedure, verifies the result, and advances state. The only participant that interacts with the human directly. Does not perform Scout or Wave Agent duties (I6: Role Separation).
 
-- **Scout** — an asynchronous agent launched by the Orchestrator. Analyzes the codebase and produces a coordination artifact: a dependency graph, exact interface contracts, a file ownership table, and a wave structure. Every file that will change is assigned to exactly one agent. No two agents in the same wave may touch the same file (I1 — Disjoint File Ownership). The Scout resolves ownership conflicts at planning time or declares the work NOT SUITABLE for parallel execution. Never modifies source files.
+- **Scout:** an asynchronous agent launched by the Orchestrator. Analyzes the codebase and produces a coordination artifact: a dependency graph, exact interface contracts, a file ownership table, and a wave structure. Every file that will change is assigned to exactly one agent. No two agents in the same wave may touch the same file (I1: Disjoint File Ownership). The Scout resolves ownership conflicts at planning time or declares the work NOT SUITABLE for parallel execution. Never modifies source files.
 
-- **Wave Agents** — asynchronous agents launched by the Orchestrator in parallel. Each owns a disjoint set of files, implements against the pre-defined interface contracts, runs the verification gate, commits its work, and writes a structured completion report (interface deviations, out-of-scope discoveries, verification result). Build and test gates verify each wave before the next begins.
+- **Wave Agents:** asynchronous agents launched by the Orchestrator in parallel. Each owns a disjoint set of files, implements against the pre-defined interface contracts, runs the verification gate, commits its work, and writes a structured completion report (interface deviations, out-of-scope discoveries, verification result). Build and test gates verify each wave before the next begins.
 
 The protocol has a built-in suitability gate. The scout answers five questions before producing any agent prompts:
 
@@ -103,6 +103,12 @@ The other entries cover git commands, worktree management, IMPL doc writes, and 
 For project-scoped settings, add the same block to
 `.claude/settings.json` in the project root.
 
+### How it works under the hood
+
+**IMPL doc as coordination surface.** The IMPL doc is not just documentation — it is the live state of the wave. Agents write structured YAML completion reports directly into it, and the orchestrator parses those reports to detect ownership violations, interface deviations, and blocked agents before touching the working tree. The format has to be strict enough to be machine-readable. Loose or summarized reports break the orchestrator's ability to do conflict prediction and downstream prompt propagation.
+
+**Background execution.** Every agent launch uses `run_in_background: true`. Without it, the orchestrator blocks waiting for each agent to finish before launching the next — sequential execution with extra steps. Background execution is what makes the wave actually parallel. The same applies to CI polling and `gh run watch` calls; anything that blocks the foreground session defeats the hands-free design.
+
 ### Commands
 
 ```
@@ -115,9 +121,9 @@ For project-scoped settings, add the same block to
 
 ### Workflow
 
-0. **Bootstrap (new projects only):** `/saw bootstrap "description"` — designs package structure, interface contracts, and wave layout for a new repo before any code is written.
+0. **Bootstrap (new projects only):** `/saw bootstrap "description"` designs package structure, interface contracts, and wave layout for a new repo before any code is written.
 
-1. **Scout:** `/saw scout "feature description"` — analyzes the codebase, runs the suitability gate, and produces `docs/IMPL-<feature>.md` with file ownership, interface contracts, and per-agent prompts.
+1. **Scout:** `/saw scout "feature description"` analyzes the codebase, runs the suitability gate, and produces `docs/IMPL-<feature>.md` with file ownership, interface contracts, and per-agent prompts.
 
 2. **Review:** Read the IMPL doc. Verify ownership is clean, interfaces are correct, and wave order makes sense. Adjust before proceeding.
 
