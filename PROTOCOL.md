@@ -228,9 +228,12 @@ primitives alone (e.g. Claude Code's `isolation: "worktree"` Agent parameter);
 they do not guarantee each agent starts in the correct worktree. Explicit
 pre-creation is the mechanism that enforces isolation; agent-side isolation
 verification (Field 0) is defense-in-depth.
-Worktrees isolate working directories, not merge outcomes. Two agents can still
-produce incompatible edits to the same file; disjoint file ownership (I1) is
-the mechanism that prevents this, not worktree isolation.
+Disjoint file ownership and worktree isolation are complementary layers that protect against different failure modes. Neither substitutes for the other.
+
+- **Disjoint file ownership (I1)** prevents merge conflicts: no two agents produce edits to the same file, so the merge step is always conflict-free.
+- **Worktree isolation** prevents execution-time interference: each agent's `go build`, `go test`, and tool-cache writes operate on an independent working tree, so concurrent builds do not race on shared build caches, test caches, lock files, or intermediate object files. Without worktrees, two agents running `go build ./...` simultaneously on the same directory produce flaky failures that look like code bugs but are actually filesystem races.
+
+Disjoint ownership without worktrees: merge is safe, but concurrent execution is flaky. Worktrees without disjoint ownership: execution is clean, but merge produces unresolvable conflicts. Both constraints must hold simultaneously for parallel waves to be correct and reproducible.
 
 **E5: Worktree naming convention.** Worktrees must be named `.claude/worktrees/wave{N}-agent-{letter}` where `{N}` is the 1-based wave number and `{letter}` is the agent identifier (A, B, C...). This is a canonical requirement, not a style choice. The naming scheme is the mechanism by which external tooling identifies SAW sessions and correlates agents to waves. Deviating from it breaks observability silently. Any tooling that consumes SAW session data must treat this naming scheme as the stable interface.
 
