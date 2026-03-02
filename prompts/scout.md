@@ -6,7 +6,7 @@ source code. Your job is to analyze the codebase and produce a coordination
 artifact that enables parallel development agents to work without conflicts.
 
 **Important:** You do NOT write implementation code, but you MUST write the
-coordination artifact (IMPL doc) using the Write tool. This is not source code—it's
+coordination artifact (IMPL doc) using the Write tool. This is not source code; it's
 planning documentation.
 
 ## Your Task
@@ -22,7 +22,7 @@ progress between waves.
 ## Suitability Gate
 
 Run this gate before any file analysis. If the work is not suitable, stop
-early — do not produce a full IMPL doc with agents.
+early; do not produce a full IMPL doc with agents.
 
 Answer these three questions:
 
@@ -34,11 +34,11 @@ Answer these three questions:
 
    Append-only additions to a shared file (config registries, module
    manifests such as `go.mod` or root `Cargo.toml`, index files) are not
-   a decomposition blocker — make those files orchestrator-owned and apply
+   a decomposition blocker; make those files orchestrator-owned and apply
    the additions post-merge after all agents complete.
 
 2. **Investigation-first items.** Does any part of the work require root
-   cause analysis before implementation — a crash whose source is unknown,
+   cause analysis before implementation: a crash whose source is unknown,
    a race condition that must be reproduced before it can be fixed, behavior
    that must be observed to be understood? If so, agents cannot be written
    for those items yet; they must be isolated into a Wave 0 or handled
@@ -89,7 +89,7 @@ Answer these three questions:
    waste prevention.
 
 5. **Parallelization value check.** Estimate whether SAW saves time over
-   sequential implementation. Raw agent count is not a reliable indicator —
+   sequential implementation. Raw agent count is not a reliable indicator;
    2 agents with complex build/test cycles benefit more from parallelization
    than 4 agents doing simple documentation edits. Evaluate these factors:
 
@@ -122,14 +122,14 @@ Answer these three questions:
 
 **Emit a verdict before proceeding:**
 
-- **SUITABLE** — All three questions resolve cleanly. Proceed with full
+- **SUITABLE:** All three questions resolve cleanly. Proceed with full
   analysis and produce the IMPL doc.
-- **NOT SUITABLE** — One or more questions is a hard blocker (e.g., only
+- **NOT SUITABLE:** One or more questions is a hard blocker (e.g., only
   one file changes, or root cause of a crash is completely unknown). Write
-  a short explanation to `docs/IMPL-<slug>.md` — just the verdict and
-  reasoning, no agent prompts — and stop. Recommend sequential
+  a short explanation to `docs/IMPL-<slug>.md` (just the verdict and
+  reasoning, no agent prompts) and stop. Recommend sequential
   implementation or an investigation-first step.
-- **SUITABLE WITH CAVEATS** — The work is parallelizable but has known
+- **SUITABLE WITH CAVEATS:** The work is parallelizable but has known
   constraints. Proceed, but document the caveats explicitly:
   - Investigation-first items become Wave 0 (a single solo agent, not
     parallel), which gates all downstream waves.
@@ -177,16 +177,16 @@ Record the verdict and its rationale in the IMPL doc under a
    Then scan for *cascade candidates*: files that will NOT change but
    reference interfaces whose semantics will change. List these in the
    coordination artifact. They are not in any agent's scope, but the
-   post-merge verification gate is the only thing that will catch them —
+   post-merge verification gate is the only thing that will catch them;
    naming them in advance makes that catch deliberate rather than accidental.
 
    **Type rename cascade check:** If any interface contract introduces a type
-   rename (not just new fields — an actual rename of a struct, trait, or type
+   rename (not just new fields; an actual rename of a struct, trait, or type
    alias), run a workspace-wide search for the old name and list every file
    that imports or references it. Add each one to the cascade candidates list
    even if it falls within another agent's ownership scope. Syntax-level
    cascades (import errors, "type not found") are distinct from semantic
-   cascades — they will cause compilation failures in isolated agent worktrees,
+   cascades; they will cause compilation failures in isolated agent worktrees,
    and agents under build pressure will self-heal by touching files outside
    their ownership. Naming these in advance prevents that improvisation.
 
@@ -210,8 +210,8 @@ Record the verdict and its rationale in the IMPL doc under a
 
 6. **Structure waves from the DAG.** Group agents into waves:
    - **Wave 0 (prerequisite, if needed):** If any work is a correctness
-     prerequisite — meaning downstream agents cannot meaningfully validate
-     their own output until it completes — label it Wave 0 and run it alone.
+     prerequisite (meaning downstream agents cannot meaningfully validate
+     their own output until it completes), label it Wave 0 and run it alone.
      Wave 0 is not just a dependency; it gates the integrity of all downstream
      verification. Call this out explicitly in the coordination artifact.
    - Wave 1: Agents whose files have no dependencies on other new work.
@@ -228,7 +228,7 @@ Record the verdict and its rationale in the IMPL doc under a
 
 8. **Determine verification gates from the build system.** Read the Makefile,
    CI config, or build scripts. Emit the exact commands each agent must run.
-   Do not use generic placeholders — use the project's actual toolchain.
+   Do not use generic placeholders; use the project's actual toolchain.
 
    **Linter auto-fix (orchestrator responsibility, not agent responsibility):**
    Check the CI config for a lint or formatting step that applies auto-fixes.
@@ -236,7 +236,7 @@ Record the verdict and its rationale in the IMPL doc under a
    `prettier --write`, `cargo fmt`, `black .`, `swift-format --in-place`.
    If such a step exists, **document it in the IMPL doc's Wave Execution Loop**
    as a post-merge step the orchestrator runs before build and tests. Do not
-   add it to individual agent verification gates — agents run the linter in
+   add it to individual agent verification gates; agents run the linter in
    check mode only. The orchestrator owns the single auto-fix pass on the
    merged result and commits any style changes before running the full suite.
    See `saw-merge.md` Step 6 for the exact procedure.
@@ -285,7 +285,7 @@ Write the following to `docs/IMPL-<feature-slug>.md`:
 
 Verdict: SUITABLE | NOT SUITABLE | SUITABLE WITH CAVEATS
 
-[One paragraph explaining the verdict. If NOT SUITABLE, stop here — do not
+[One paragraph explaining the verdict. If NOT SUITABLE, stop here; do not
 write the sections below. If SUITABLE WITH CAVEATS, describe what the
 caveats are and how they are handled (e.g., Wave 0 for investigation).]
 
@@ -338,14 +338,14 @@ Wave 3:    [G]               <- 1 agent
 
 After each wave completes:
 1. Read each agent's completion report from their named section in the IMPL
-   doc (`### Agent {letter} — Completion Report`). Check for interface
+   doc (`### Agent {letter} - Completion Report`). Check for interface
    contract deviations and out-of-scope dependencies flagged by agents.
 2. Merge all agent worktrees back into the main branch.
 3. Run the full verification gate (build + test) against the merged result.
    Individual agents pass their gates in isolation, but the merged codebase
    can surface issues none of them saw individually. This post-merge
    verification is the real gate. Pay particular attention to the cascade
-   candidates listed in the coordination artifact — files outside agent scope
+   candidates listed in the coordination artifact: files outside agent scope
    that reference changed interfaces.
 4. Fix any compiler errors or integration issues, including any out-of-scope
    changes flagged by agents in their reports.
@@ -371,10 +371,10 @@ with a broken build.
 If the coordination artifact will exceed ~20KB (many agents, many findings),
 split it:
 
-- `docs/IMPL-<slug>.md` — the **index**: wave structure, file ownership table,
+- `docs/IMPL-<slug>.md`: the **index**: wave structure, file ownership table,
   interface contracts, cascade candidates, and wave execution loop. This is
   what the orchestrator reads every turn. Keep it small.
-- `docs/IMPL-<slug>-agents/agent-{A,B,...}.md` — **per-agent files**: full
+- `docs/IMPL-<slug>-agents/agent-{A,B,...}.md`: **per-agent files**: full
   prompt, verification gate, and completion report section for each agent.
   Reference these from the index. Agents read only their own file.
 
@@ -391,7 +391,7 @@ glance. Per-agent files are loaded only when launching or reviewing that agent.
   signal the work is not ready for parallel execution.
 - Disjoint file ownership is a hard correctness constraint, not a style
   preference. Worktree isolation (the `isolation: "worktree"` parameter in
-  the Task tool) cannot be relied upon to prevent concurrent writes —
+  the Task tool) cannot be relied upon to prevent concurrent writes;
   multiple agents can end up writing to the same underlying working tree.
   Disjoint ownership is the mechanism that actually prevents conflicts.
 - Prefer more agents with smaller scopes over fewer agents with larger ones.

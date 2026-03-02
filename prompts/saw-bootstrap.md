@@ -2,7 +2,7 @@
 # SAW Bootstrap: Design-First Project Architecture
 
 Use this mode when starting a new project from scratch with no existing codebase.
-The bootstrap scout acts as **architect**, not analyst — designing disjoint file
+The bootstrap scout acts as **architect**, not analyst: designing disjoint file
 ownership before any code is written.
 
 ## When to Use
@@ -26,7 +26,7 @@ git status
 ```
 
 If this fails (no repo), initialize one before proceeding. An empty first
-commit is fine — it gives agents a clean branch to work from:
+commit is fine; it gives agents a clean branch to work from:
 
 ```bash
 git init
@@ -57,7 +57,7 @@ Before designing anything, ask the user:
 5. **External integrations:** APIs, auth systems, message queues?
 
 Use the answers to identify the major concerns that become packages/modules.
-Aim for 3-6 concerns — fewer means nothing to parallelize, more means
+Aim for 3-6 concerns: fewer means nothing to parallelize, more means
 over-engineering a bootstrap.
 
 ## Architecture Design Principles
@@ -85,7 +85,7 @@ Design for disjoint ownership before writing a line of code:
      store/         ← Storage/persistence
      output/        ← Formatting/display
      types/         ← Shared traits and types (Wave 0)
-   Cargo.toml       ← ORCHESTRATOR OWNED — do not touch in agent prompts
+   Cargo.toml       ← ORCHESTRATOR OWNED - do not touch in agent prompts
    ```
 
    TypeScript / Python: equivalent `src/` subdirectories per concern.
@@ -108,7 +108,7 @@ Design for disjoint ownership before writing a line of code:
    ```
 
 2. **Shared types as foundation.** All shared interfaces, traits, and structs
-   live in a types module/crate that no other module *defines* — only
+   live in a types module/crate that no other module *defines*; only
    implements. This creates a stable contract layer all agents implement against
    independently. In Go this is `internal/types`; in Rust this is a `types`
    workspace crate; in TypeScript this is a `types.ts` or `types/` directory.
@@ -130,7 +130,7 @@ depend on shared contracts.
   TS: `src/types/`, Python: `src/types.py`)
 - Defines all interfaces/traits that cross module boundaries
 - Defines shared structs, enums, error types
-- No implementation — interfaces, traits, and types only
+- No implementation; interfaces, traits, and types only
 
 **Why solo:** Wave 1+ agents implement against these definitions. You cannot
 parallelize against contracts that don't exist yet.
@@ -192,11 +192,11 @@ No pseudocode. These are binding contracts.]
 
 ### Wave Structure
 
-Wave 0: [Types]        — shared interfaces and types (prerequisite)
+Wave 0: [Types]        - shared interfaces and types (prerequisite)
               | (types package compiles cleanly)
-Wave 1: [B][C][D]     — package implementations (parallel)
+Wave 1: [B][C][D]     - package implementations (parallel)
               | (all packages build, unit tests pass)
-Wave 2: [A]            — entry point wiring and integration
+Wave 2: [A]            - entry point wiring and integration
 
 ### Agent Prompts
 
@@ -207,17 +207,17 @@ Wave 2: [A]            — entry point wiring and integration
 
 ### Verification Gates
 
-Wave 0: [build types module only — e.g., `go build ./internal/types` or `cargo build -p types`]
+Wave 0: [build types module only, e.g., `go build ./internal/types` or `cargo build -p types`]
 Wave 1: [build all modules] + [focused unit tests per module]
 Wave 2: [build full project] + [full test suite]
 
 ### Status
 
-- [ ] Wave 0: Types — [description]
-- [ ] Wave 1 Agent B — [package: description]
-- [ ] Wave 1 Agent C — [package: description]
-- [ ] Wave 1 Agent D — [package: description]
-- [ ] Wave 2 Agent A — [entry point wiring]
+- [ ] Wave 0: Types - [description]
+- [ ] Wave 1 Agent B - [package: description]
+- [ ] Wave 1 Agent C - [package: description]
+- [ ] Wave 1 Agent D - [package: description]
+- [ ] Wave 2 Agent A - [entry point wiring]
 ```
 
 ## Rules
@@ -225,7 +225,7 @@ Wave 2: [build full project] + [full test suite]
 - Do not write any source code. Write only `docs/IMPL-bootstrap.md`.
 - Every interface you define is a binding contract. Wave 1 agents implement
   against these without seeing each other's code.
-- Wave 0 is mandatory. Do not skip it even if interfaces seem obvious — it
+- Wave 0 is mandatory. Do not skip it even if interfaces seem obvious; it
   creates the foundation all other agents depend on.
 - Prefer more packages with smaller scopes over fewer with larger ones.
   An agent owning 1-3 files is ideal.

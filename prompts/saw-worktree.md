@@ -9,7 +9,7 @@ Manage git worktree creation, verification, and cleanup for wave agents.
 
 If the wave has exactly **1 agent**, skip worktree creation entirely. Run the
 agent directly on the main branch with no isolation overhead. Worktree
-isolation exists to prevent inter-agent file conflicts — a solo agent cannot
+isolation exists to prevent inter-agent file conflicts; a solo agent cannot
 conflict with itself, so the overhead is pure waste.
 
 Additional benefit: a solo Wave 0 agent running on main makes its output
@@ -23,7 +23,7 @@ Proceed to worktree creation only when the wave has **≥2 agents**.
 Before creating any worktrees, scan the wave's file ownership table in the
 IMPL doc and verify no file appears in more than one agent's ownership list.
 
-If an overlap is found, **do not proceed**. Correct the IMPL doc first —
+If an overlap is found, **do not proceed**. Correct the IMPL doc first:
 resolve the conflict by splitting the file, extracting an interface, or
 reassigning scope. This catches scout planning errors before agents spend
 time on conflicting work.
@@ -40,7 +40,7 @@ failure modes.
 The review window between "IMPL doc written" and "agents launched" is the
 right time to revise type signatures, add fields, or restructure APIs. Once
 worktrees branch from HEAD, any interface change in the IMPL doc requires
-removing and recreating the worktrees — otherwise agents run against a stale
+removing and recreating the worktrees; otherwise agents run against a stale
 version of the contracts.
 
 Checklist before creating worktrees:
@@ -53,7 +53,7 @@ matches the current HEAD of main before launching agents:
 
 ```bash
 git worktree list
-# Compare commit SHAs — if any worktree SHA differs from main HEAD, remove and recreate:
+# Compare commit SHAs - if any worktree SHA differs from main HEAD, remove and recreate:
 git worktree remove ".claude/worktrees/wave{N}-agent-{letter}" --force
 git branch -D "wave{N}-agent-{letter}"
 git worktree add ".claude/worktrees/wave{N}-agent-{letter}" -b "wave{N}-agent-{letter}"
@@ -65,7 +65,7 @@ to untangle.
 
 ## Pre-Create Worktrees
 
-Re-running `/saw wave` at this point is safe — WAVE_PENDING is re-entrant.
+Re-running `/saw wave` at this point is safe; WAVE_PENDING is re-entrant.
 Before creating worktrees, check whether they already exist from a previous
 run:
 
@@ -79,7 +79,7 @@ worktrees.
 
 Before launching any agents in a multi-agent wave, create a worktree for each
 agent. Do NOT rely on the Task tool's `isolation: "worktree"` parameter alone
-— it may not create worktrees in all environments.
+; it may not create worktrees in all environments.
 
 ```bash
 mkdir -p .claude/worktrees
@@ -136,11 +136,11 @@ Delete stale branches from previous runs.
 
 If worktrees cannot be created:
 
-1. **Reduce wave size** — Fewer agents means less risk of conflict
-2. **Verify file ownership is strictly disjoint** — With perfect disjointness,
+1. **Reduce wave size:** fewer agents means less risk of conflict
+2. **Verify file ownership is strictly disjoint:** with perfect disjointness,
    agents can safely work on the same branch (not recommended, but safe if
    ownership is truly disjoint)
-3. **Run agents sequentially** — Abandon parallelism, run one agent at a time
+3. **Run agents sequentially:** abandon parallelism, run one agent at a time
    on the main branch
 
 ## Agent Self-Healing
@@ -169,5 +169,5 @@ for agent in A B C; do
 done
 ```
 
-Clean up even if agents failed — stale worktrees and branches will interfere
+Clean up even if agents failed; stale worktrees and branches will interfere
 with future waves.

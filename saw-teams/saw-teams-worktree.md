@@ -2,7 +2,7 @@
 # SAW-Teams Worktree Lifecycle
 
 Manage git worktree creation, verification, and cleanup for Agent Teams wave
-execution. Adapted from `prompts/saw-worktree.md` (v0.4.1) — same invariants,
+execution. Adapted from `prompts/saw-worktree.md` (v0.4.1): same invariants,
 same defense-in-depth model, different execution plumbing.
 
 **Key difference from standard SAW:** Agent Teams does not create worktrees
@@ -16,9 +16,9 @@ current wave.
 
 If the wave has exactly **1 agent**:
 
-- Do NOT create an Agent Team — Agent Teams overhead is not justified for a
+- Do NOT create an Agent Team; Agent Teams overhead is not justified for a
   single agent
-- Do NOT create worktrees — a solo agent cannot conflict with itself
+- Do NOT create worktrees; a solo agent cannot conflict with itself
 - Launch the agent directly via the Agent tool with `run_in_background: true`
   on the main branch (same as standard SAW solo wave behavior)
 - Proceed directly to post-wave verification after the agent completes
@@ -34,7 +34,7 @@ Proceed to team creation and worktree setup only when the wave has **≥2 agents
 Before creating any worktrees, scan the wave's file ownership table in the
 IMPL doc and verify no file appears in more than one agent's ownership list.
 
-If an overlap is found, **do not proceed**. Correct the IMPL doc first —
+If an overlap is found, **do not proceed**. Correct the IMPL doc first:
 resolve the conflict by splitting the file, extracting an interface, or
 reassigning scope. This catches scout planning errors before agents spend
 time on conflicting work.
@@ -51,7 +51,7 @@ different failure modes.
 The review window between "IMPL doc written" and "teammates spawned" is the
 right time to revise type signatures, add fields, or restructure APIs. Once
 worktrees branch from HEAD, any interface change in the IMPL doc requires
-removing and recreating the worktrees — otherwise teammates run against a stale
+removing and recreating the worktrees; otherwise teammates run against a stale
 version of the contracts.
 
 Checklist before creating worktrees:
@@ -64,7 +64,7 @@ matches the current HEAD of main before spawning teammates:
 
 ```bash
 git worktree list
-# Compare commit SHAs — if any worktree SHA differs from main HEAD, remove and recreate:
+# Compare commit SHAs - if any worktree SHA differs from main HEAD, remove and recreate:
 git worktree remove ".claude/worktrees/wave{N}-agent-{letter}" --force
 git branch -D "wave{N}-agent-{letter}"
 git worktree add ".claude/worktrees/wave{N}-agent-{letter}" -b "wave{N}-agent-{letter}"
@@ -76,7 +76,7 @@ to untangle.
 
 ## Pre-Create Worktrees
 
-Re-running `/saw-teams wave` at this point is safe — WAVE_PENDING is
+Re-running `/saw-teams wave` at this point is safe; WAVE_PENDING is
 re-entrant. Before creating worktrees, check whether they already exist from
 a previous run:
 
@@ -89,7 +89,7 @@ current HEAD of main, skip creation and proceed to teammate spawn. Do not
 duplicate worktrees.
 
 Before spawning any teammates, create a worktree for each agent. The lead
-creates worktrees — Agent Teams has no built-in worktree creation mechanism.
+creates worktrees; Agent Teams has no built-in worktree creation mechanism.
 
 ```bash
 mkdir -p .claude/worktrees
@@ -149,15 +149,15 @@ Delete stale branches from previous runs.
 
 If worktrees cannot be created:
 
-1. **Reduce wave size** — Fewer agents means less risk of conflict
-2. **Verify file ownership is strictly disjoint** — With perfect disjointness,
+1. **Reduce wave size:** fewer agents means less risk of conflict
+2. **Verify file ownership is strictly disjoint:** with perfect disjointness,
    teammates can safely work on the same branch (not recommended, but safe if
    ownership is truly disjoint)
-3. **Run agents sequentially** — Abandon parallelism, run one agent at a time
+3. **Run agents sequentially:** abandon parallelism, run one agent at a time
    on the main branch
-4. **Fall back to standard SAW execution** — Use `prompts/saw-skill.md` with
+4. **Fall back to standard SAW execution:** use `prompts/saw-skill.md` with
    the raw Agent tool instead of Agent Teams. The IMPL doc state machine is
-   execution-layer-agnostic — the same IMPL doc works with either execution
+   execution-layer-agnostic; the same IMPL doc works with either execution
    layer. This is always a valid fallback.
 
 ## Teammate Self-Healing
@@ -178,19 +178,19 @@ This is defense-in-depth:
 - **Layer 1.5:** Teammate attempts self-correction via cd
 - **Layer 2:** Teammate verifies isolation and fails fast if incorrect
 - **Layer 2.5:** Teammate messages lead about isolation failure (real-time
-  awareness — the lead can intervene immediately rather than discovering the
+  awareness; the lead can intervene immediately rather than discovering the
   failure only when reading completion reports after all teammates finish)
 - **Layer 3:** Lead checks completion reports for isolation failures
 
 Layer 2.5 is the key addition over standard SAW. In standard SAW, the
 Orchestrator only discovers isolation failures when reading completion reports
 after all agents complete. With Agent Teams messaging, the lead can intervene
-immediately — e.g., spawn a replacement teammate with the correct path.
+immediately, e.g., spawn a replacement teammate with the correct path.
 
 ## Cleanup
 
 After merging a wave, remove all worktrees and branches. Note: team cleanup
-(dismissing teammates) is handled by `saw-teams-merge.md` Step 5 — this
+(dismissing teammates) is handled by `saw-teams-merge.md` Step 5; this
 section handles only git worktree lifecycle.
 
 **Important:** Dismiss the team BEFORE removing worktrees. If a teammate is
@@ -204,5 +204,5 @@ for agent in A B C; do
 done
 ```
 
-Clean up even if agents failed — stale worktrees and branches will interfere
+Clean up even if agents failed; stale worktrees and branches will interfere
 with future waves.

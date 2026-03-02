@@ -9,7 +9,7 @@ A coordination protocol for safely parallelizing human-guided agentic workflows.
 
 Parallel AI agents working on the same codebase produce merge conflicts, contradictory implementations, and expensive rework. Agents make local decisions without global context, and those decisions collide.
 
-The root cause isn't that agents are careless; it's that nothing stops two agents from claiming the same file. Worktrees isolate working directories, not merge outcomes. Two agents can still produce incompatible edits to the same file — the conflict is discovered at merge time, after both have implemented divergent solutions. You get either a merge conflict or, worse, a silent overwrite.
+The root cause isn't that agents are careless; it's that nothing stops two agents from claiming the same file. Worktrees isolate working directories, not merge outcomes. Two agents can still produce incompatible edits to the same file; the conflict is discovered at merge time, after both have implemented divergent solutions. You get either a merge conflict or, worse, a silent overwrite.
 
 ## How
 
@@ -93,8 +93,8 @@ blocking on approval prompts at each tool call:
 }
 ```
 
-**`"Agent"` is the critical one.** Without it, every wave agent launch — and
-every pipelined scout launch — blocks waiting for a keyboard approval. In a
+**`"Agent"` is the critical one.** Without it, every wave agent launch and
+every pipelined scout launch blocks waiting for a keyboard approval. In a
 multi-agent wave, you would need to approve each agent individually before it
 launches asynchronously. Add `"Agent"` once to your user-level settings and all
 future SAW runs are fully hands-free from the moment you invoke `/saw wave`.
@@ -105,9 +105,9 @@ For project-scoped settings, add the same block to
 
 ### How it works under the hood
 
-**IMPL doc as coordination surface.** The IMPL doc is not just documentation — it is the live state of the wave. Agents write structured YAML completion reports directly into it, and the orchestrator parses those reports to detect ownership violations, interface deviations, and blocked agents before touching the working tree. The format has to be strict enough to be machine-readable. Loose or summarized reports break the orchestrator's ability to do conflict prediction and downstream prompt propagation.
+**IMPL doc as coordination surface.** The IMPL doc is not just documentation; it is the live state of the wave. Agents write structured YAML completion reports directly into it, and the orchestrator parses those reports to detect ownership violations, interface deviations, and blocked agents before touching the working tree. The format has to be strict enough to be machine-readable. Loose or summarized reports break the orchestrator's ability to do conflict prediction and downstream prompt propagation.
 
-**Background execution.** Every agent launch uses `run_in_background: true`. Without it, the orchestrator blocks waiting for each agent to finish before launching the next — sequential execution with extra steps. Background execution is what makes the wave actually parallel. The same applies to CI polling and `gh run watch` calls; anything that blocks the foreground session defeats the hands-free design.
+**Background execution.** Every agent launch uses `run_in_background: true`. Without it, the orchestrator blocks waiting for each agent to finish before launching the next; sequential execution with extra steps. Background execution is what makes the wave actually parallel. The same applies to CI polling and `gh run watch` calls; anything that blocks the foreground session defeats the hands-free design.
 
 ### Commands
 
@@ -127,7 +127,7 @@ For project-scoped settings, add the same block to
 
 2. **Review:** Read the IMPL doc. Verify ownership is clean, interfaces are correct, and wave order makes sense. Adjust before proceeding.
 
-3. **Wave:** `/saw wave` — launches parallel agents for the current wave, merges on completion, and runs the verification gate.
+3. **Wave:** `/saw wave` launches parallel agents for the current wave, merges on completion, and runs the verification gate.
 
 4. **Repeat:** `/saw wave` for each subsequent wave, or `/saw wave --auto` to run all remaining waves unattended. Auto mode still pauses if verification fails.
 

@@ -11,7 +11,7 @@ maps to a specific participant role or procedure defined in the spec.
 
 ## Participant Prompts
 
-These files are passed as agent content — the Orchestrator reads them and
+These files are passed as agent content; the Orchestrator reads them and
 uses their text as the prompt when launching an asynchronous agent.
 
 | File | Version | Participant | Purpose |
@@ -22,7 +22,7 @@ uses their text as the prompt when launching an asynchronous agent.
 ## Procedure Prompts
 
 These files are read by the Orchestrator at runtime to drive its own
-behavior. They are not passed to agents — the Orchestrator follows the
+behavior. They are not passed to agents; the Orchestrator follows the
 instructions in them directly.
 
 | File | Version | When read | Purpose |
@@ -43,5 +43,5 @@ invariants appear in these prompts, they are embedded verbatim alongside
 their I-number so each prompt is self-contained. To audit consistency:
 
 ```bash
-grep -n "I[1-6] —" prompts/*.md
+grep -n "I[1-6]:" prompts/*.md
 ```

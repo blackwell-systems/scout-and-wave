@@ -1,7 +1,7 @@
 # Implementation Plan: brew-native experience
 
 Tracks the parallel agent workload for the brew-native roadmap items.
-Update interface contracts here if signatures change during Wave 1 — Wave 2+ agents use this as their spec.
+Update interface contracts here if signatures change during Wave 1; Wave 2+ agents use this as their spec.
 
 ## Wave structure
 
@@ -60,7 +60,7 @@ The shim binary emits this to stderr (rate-limited, once per day max) when versi
 ```
 brewprune upgraded; run 'brewprune scan' to refresh shims (or 'brewprune doctor').
 ```
-No new exported Go interface — this is shim-internal behavior.
+No new exported Go interface; this is shim-internal behavior.
 
 ### From Agent E → consumed by Agent D (formula), Agent G (quickstart)
 
@@ -108,11 +108,11 @@ func RunShimTest(st *store.Store, maxWait time.Duration) error
 
 ## Status
 
-- [x] Wave 1 Agent A — shim package extensions
-- [x] Wave 1 Agent B — shim startup version check
-- [x] Wave 1 Agent C — exec path disambiguation
-- [x] Wave 1 Agent D — formula + README (draft, hold release)
-- [x] Wave 2 Agent E — scan --refresh-shims
-- [x] Wave 2 Agent F — doctor self-test
-- [x] Wave 3 Agent G — quickstart blessed workflow
+- [x] Wave 1 Agent A - shim package extensions
+- [x] Wave 1 Agent B - shim startup version check
+- [x] Wave 1 Agent C - exec path disambiguation
+- [x] Wave 1 Agent D - formula + README (draft, hold release)
+- [x] Wave 2 Agent E - scan --refresh-shims
+- [x] Wave 2 Agent F - doctor self-test
+- [x] Wave 3 Agent G - quickstart blessed workflow
 - [x] Release Agent D formula change (after Wave 2 ships)

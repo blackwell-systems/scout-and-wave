@@ -197,7 +197,7 @@ advancing. Wave 0 in bootstrap projects is always a solo wave.
 These rules govern orchestrator behavior during wave execution. They are not
 captured by the state machine alone.
 
-**Background execution.** All agent launches, CI polling, and long-running watch commands must execute asynchronously without blocking the orchestrator's main execution thread (e.g. Claude Code's `run_in_background: true` on the Agent and Bash tools). A blocking agent launch serializes the wave — the orchestrator waits for one agent before launching the next, eliminating parallelism. This is a protocol violation, not a performance preference. Any implementation that blocks the orchestrator on agent execution or polling is non-conforming.
+**Background execution.** All agent launches, CI polling, and long-running watch commands must execute asynchronously without blocking the orchestrator's main execution thread (e.g. Claude Code's `run_in_background: true` on the Agent and Bash tools). A blocking agent launch serializes the wave; the orchestrator waits for one agent before launching the next, eliminating parallelism. This is a protocol violation, not a performance preference. Any implementation that blocks the orchestrator on agent execution or polling is non-conforming.
 
 **Interface freeze.** Interface contracts become immutable when worktrees are
 created. The review window between REVIEWED and WAVE_PENDING is the checkpoint

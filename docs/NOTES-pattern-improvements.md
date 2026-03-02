@@ -74,7 +74,7 @@ Wave 1: [A] [B] [C] [D]     <- 4 parallel agents (all independent)
 
 ## Agent Prompts
 
-### Agent A — Orchestrator Improvements (saw-skill.md)
+### Agent A - Orchestrator Improvements (saw-skill.md)
 
 **Scope:** Add merge automation and worktree diagnostics to SAW orchestrator
 
@@ -162,11 +162,11 @@ grep -q "Fallback options" prompts/saw-skill.md  # Verify diagnostics
 - Add new content, don't remove anything
 
 **Report:**
-Append completion report to this IMPL doc under `### Agent A — Completion Report`
+Append completion report to this IMPL doc under `### Agent A - Completion Report`
 
 ---
 
-### Agent B — Suitability Gate Improvements (scout.md)
+### Agent B - Suitability Gate Improvements (scout.md)
 
 **Scope:** Add time estimates, honest thresholds, and pre-implementation check visibility
 
@@ -286,11 +286,11 @@ grep -q "Pre-implementation scan results" prompts/scout.md
 - Add new guidance, don't replace existing logic
 
 **Report:**
-Append completion report to this IMPL doc under `### Agent B — Completion Report`
+Append completion report to this IMPL doc under `### Agent B - Completion Report`
 
 ---
 
-### Agent C — Lightweight Mode Template (saw-quick.md, new file)
+### Agent C - Lightweight Mode Template (saw-quick.md, new file)
 
 **Scope:** Create simplified SAW skill for ≤3 agents with no coordination complexity
 
@@ -402,11 +402,11 @@ wc -l prompts/saw-quick.md | awk '{print ($1 < 150) ? "PASS: Lightweight (<150 l
 - Clear "when NOT to use" guidance (prevent misuse)
 
 **Report:**
-Append completion report to this IMPL doc under `### Agent C — Completion Report`
+Append completion report to this IMPL doc under `### Agent C - Completion Report`
 
 ---
 
-### Agent D — Pattern Documentation Updates (IMPROVEMENTS.md)
+### Agent D - Pattern Documentation Updates (IMPROVEMENTS.md)
 
 **Scope:** Document self-healing validation and pre-implementation check value
 
@@ -517,7 +517,7 @@ After "From brewprune Round 4 Wave 2" section (around line 285):
 **Evidence from user review:**
 > "The merge step is manual and awkward. I had to cp files from one worktree,
 > check that the other's changes were already on main, then clean up branches.
-> There's no saw merge — it's just me doing git operations."
+> There's no saw merge; it's just me doing git operations."
 
 **Evidence from this session:**
 - Wave 2 merge: stashed IMPL doc, merged F, merged G, restored IMPL doc
@@ -562,7 +562,7 @@ grep -q "Merge Automation Command" docs/IMPROVEMENTS.md
 - Include evidence citations (commits, dates)
 
 **Report:**
-Append completion report to this IMPL doc under `### Agent D — Completion Report`
+Append completion report to this IMPL doc under `### Agent D - Completion Report`
 
 ---
 
@@ -570,7 +570,7 @@ Append completion report to this IMPL doc under `### Agent D — Completion Repo
 
 After Wave 1 completes:
 
-1. **Read completion reports** - Check `### Agent {A,B,C,D} — Completion Report` sections
+1. **Read completion reports** - Check `### Agent {A,B,C,D} - Completion Report` sections
 2. **Verify changes** - No build/test (markdown only), but verify files modified:
    ```bash
    cd /Users/dayna.blackwell/code/scout-and-wave
@@ -619,7 +619,7 @@ After Wave 1 completes:
 
 ## Completion Reports
 
-### Agent A — Completion Report
+### Agent A - Completion Report
 
 **Status:** COMPLETE
 
@@ -669,7 +669,7 @@ After Wave 1 completes:
 
 ---
 
-### Agent B — Completion Report
+### Agent B - Completion Report
 
 **Status:** COMPLETE
 
@@ -721,13 +721,13 @@ After Wave 1 completes:
 
 ---
 
-### Agent C — Completion Report
+### Agent C - Completion Report
 
 [Agent C will write completion report here after finishing]
 
 ---
 
-### Agent D — Completion Report
+### Agent D - Completion Report
 
 **Status:** COMPLETE
 

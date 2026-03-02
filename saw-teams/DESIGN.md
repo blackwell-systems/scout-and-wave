@@ -2,7 +2,7 @@
 
 Alternate execution layer for the SAW protocol using Claude Code Agent Teams
 as the agent runtime. Same invariants (I1–I6), same IMPL doc artifact, same
-Scout — different plumbing for wave execution.
+Scout. Different plumbing for wave execution.
 
 **Status:** Prompt set complete (v0.1.0). Blocked on Agent Teams stabilizing
 (currently experimental with known limitations). Ready for integration testing
@@ -28,12 +28,12 @@ progress visibility, and native worktree management.
 
 | Invariant | SAW (current) | SAW-Teams |
 |-----------|--------------|-----------|
-| I1 — Disjoint file ownership | Scout verifies, Orchestrator enforces | Scout verifies, lead enforces via spawn prompts |
-| I2 — Verification gates | Agent runs build/test in worktree | Teammate runs build/test in worktree |
-| I3 — Wave ordering | Orchestrator blocks between waves | Lead blocks between waves via task dependencies |
-| I4 — IMPL doc is source of truth | Agents read IMPL doc | Teammates read IMPL doc |
-| I5 — Agents commit before reporting | Agent commits to worktree branch | Teammate commits to worktree branch |
-| I6 — Role separation | Orchestrator doesn't do agent work | Lead doesn't do teammate work |
+| I1: Disjoint file ownership | Scout verifies, Orchestrator enforces | Scout verifies, lead enforces via spawn prompts |
+| I2: Verification gates | Agent runs build/test in worktree | Teammate runs build/test in worktree |
+| I3: Wave ordering | Orchestrator blocks between waves | Lead blocks between waves via task dependencies |
+| I4: IMPL doc is source of truth | Agents read IMPL doc | Teammates read IMPL doc |
+| I5: Agents commit before reporting | Agent commits to worktree branch | Teammate commits to worktree branch |
+| I6: Role separation | Orchestrator doesn't do agent work | Lead doesn't do teammate work |
 
 The IMPL doc, Scout phase, suitability gate, and merge procedure are
 unchanged. Only the wave execution step differs.
@@ -83,7 +83,7 @@ The 9-field agent template needs adaptation:
 ### Completion reports
 
 Current: agents append structured YAML to the IMPL doc under
-`### Agent {letter} — Completion Report`.
+`### Agent {letter} - Completion Report`.
 
 SAW-Teams option A: teammates message the lead with structured completion
 data. The lead writes all reports to the IMPL doc.
@@ -100,7 +100,7 @@ persistent artifact + real-time deviation handling.
 ### Merge procedure
 
 Largely unchanged. The lead (Orchestrator) runs the same merge protocol
-from `saw-merge.md`. Agent Teams doesn't have a built-in merge concept —
+from `saw-merge.md`. Agent Teams doesn't have a built-in merge concept;
 the lead still needs to:
 
 1. Parse completion reports
@@ -122,7 +122,7 @@ Mapping: create all wave N tasks first. Create wave N+1 tasks with
 `blockedBy` pointing to all wave N tasks. Teammates self-claim within their
 wave. The dependency system enforces the barrier.
 
-**Risk:** Agent Teams task dependencies are "fluid" — a teammate that
+**Risk:** Agent Teams task dependencies are "fluid"; a teammate that
 finishes early might idle instead of waiting cleanly for the barrier.
 The lead may need to explicitly hold teammates between waves.
 
@@ -158,22 +158,22 @@ scope is fixed at launch time.
 
 Agent Teams is experimental with limitations that affect SAW-Teams:
 
-1. **No session resumption** — if the lead crashes mid-wave, there's no way
+1. **No session resumption:** if the lead crashes mid-wave, there's no way
    to resume teammates. SAW's current approach (worktree branches + IMPL
    doc state) survives crashes. SAW-Teams would lose in-progress teammates.
 
-2. **One team per session** — multi-wave execution would need to create and
+2. **One team per session:** multi-wave execution would need to create and
    clean up a team per wave. The overhead of team creation/cleanup per wave
    could negate the messaging benefits.
 
-3. **No nested teams** — teammates can't spawn sub-agents. This is fine for
+3. **No nested teams:** teammates can't spawn sub-agents. This is fine for
    SAW (wave agents don't spawn children), but limits future extensions.
 
-4. **Permissions set at spawn** — all teammates inherit the lead's
+4. **Permissions set at spawn:** all teammates inherit the lead's
    permissions. SAW agents currently get the same permissions anyway, so
    this is fine.
 
-5. **Shutdown can be slow** — teammates finish their current tool call
+5. **Shutdown can be slow:** teammates finish their current tool call
    before shutting down. Could cause delays at wave boundaries.
 
 ## Migration Path
@@ -207,5 +207,5 @@ saw-teams/
 
 The Scout prompt (`prompts/scout.md`) and IMPL doc format are unchanged.
 The Scout doesn't know or care whether agents execute via raw Agent tool
-or Agent Teams — it produces the same coordination artifact either way.
+or Agent Teams; it produces the same coordination artifact either way.
 This is by design: the Scout is the planning layer, execution is swappable.
