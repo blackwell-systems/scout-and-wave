@@ -1,0 +1,104 @@
+--- a/PROTOCOL.md
++++ b/PROTOCOL.md
+@@ -1,5 +1,5 @@
+ # Scout-and-Wave Protocol Specification
+
+-**Version:** 0.4.0
++**Version:** 0.5.0
+ **Status:** Active
+
+@@ -16,8 +16,8 @@
+ ## Participants
+
+-SAW has three participant roles. All three are agents (AI model instances
+-running with tool access). They differ only in execution mode and responsibility.
++SAW has three core participant roles, plus one optional participant. All are
++agents (AI model instances running with tool access). They differ in execution
++mode, responsibility, and whether they are required.
+
+@@ -55,6 +55,18 @@
+ The orchestrator collects all completion
+ notifications before advancing to WAVE_MERGING.
+
++**Operations Agent (optional):** An asynchronous agent launched by the
++orchestrator at the start of the merge phase. Handles the mechanical steps of
++the merge procedure — file copy, post-merge verification, worktree cleanup, and
++IMPL doc checkbox updates — and writes a structured merge report for the
++orchestrator to review. Does not make go/no-go decisions. Does not advance
++protocol state. Does not modify agent prompt sections in the IMPL doc. The
++orchestrator reads the merge report and makes all decisions. The Operations
++Agent is optional: single-agent waves and fast build cycles do not warrant the
++coordination overhead. See I7 and E15.
++
+ The protocol's correctness guarantees flow from this structure: the synchronous
+
+@@ -113,7 +125,7 @@
+ These must hold throughout the entire protocol execution. Violations break the
+ correctness guarantees.
+
+-Invariants are identified by number (I1–I6). When referenced in prompt files,
++Invariants are identified by number (I1–I7). When referenced in prompt files,
+ the I-number serves as an anchor for cross-referencing and audit; the canonical
+
+@@ -151,6 +163,16 @@
+ observability (no Scout agent means no SAW session is detectable by monitoring
+ tools).
+
++**I7: Operations Agent state isolation.** The Operations Agent executes the
++mechanical merge procedure and produces a merge report. It does not advance
++protocol state, does not make go/no-go decisions, does not launch Wave or Scout
++agents, and does not modify agent prompts. Only the Orchestrator reads the merge
++report and advances state. Any action the Ops Agent takes that causes a state
++transition — including launching another agent or modifying an agent prompt
++section in the IMPL doc — is an I7 violation; stop and record the situation in
++`halt_reason` of the merge report instead.
++
+ ---
+
+@@ -181,8 +193,8 @@
+ ## Execution Rules
+
+ These rules govern orchestrator behavior during wave execution. They are not
+-captured by the state machine alone. Rules are numbered E1–E13 for
+-cross-referencing and audit; the same convention as invariants (I1–I6).
++captured by the state machine alone. Rules are numbered E1–E15 for
++cross-referencing and audit; the same convention as invariants (I1–I7).
+
+@@ -322,6 +334,18 @@
+ always produce adjacent-section conflicts with no semantic overlap (E12).
+
++**E15: Operations Agent launch criteria.** The Orchestrator may launch an
++Operations Agent instead of running the merge procedure inline when all three
++conditions hold: the wave has ≥2 agents, the build/test cycle is expected to
++exceed 30 seconds, and user interactivity during verification is desirable. When
++an Ops Agent is used, its SAW tag is `[SAW:ops:wave{N}] merge + verify wave N`.
++The Orchestrator reads the Ops Agent's merge report, reviews all deviations, and
++makes the go/no-go decision before launching the next wave. Using the Ops Agent
++does not change the go/no-go authority; it changes only who runs the build. The
++base merge procedure in `prompts/saw-merge.md` remains the default; the Ops Agent
++is an optimization, not a requirement.
++
+ ---
+
+@@ -428,6 +442,7 @@
+ | Agent calls undefined interface | I2 | Interface drift, integration failure |
+ | Wave N+1 launched before Wave N verified | I3 | Cascade failures surface at end |
+ | Completion report written to chat only | I4 | Downstream agents get stale context |
+ | Agent reports complete with uncommitted changes | I5 | Merge requires manual copy |
+ | Orchestrator performs Scout or Wave Agent duties | I6 | Context pollution, broken observability, async execution bypassed |
++| Operations Agent launches another agent or modifies agent prompts | I7 | State transition outside Orchestrator control |
+
+@@ -461,6 +476,7 @@
+ | `prompts/saw-skill.md` | Orchestrator: command routing and wave execution |
+ | `prompts/saw-worktree.md` | Orchestrator: worktree lifecycle |
+ | `prompts/saw-merge.md` | Orchestrator: merge procedure |
+ | `prompts/saw-bootstrap.md` | Bootstrap mode variant: design-first for new projects |
++| `docs/saw-ops/saw-ops.md` | Operations Agent (optional): mechanical merge procedure execution |
+
+@@ -472,8 +488,8 @@
+ **Conformance.** An implementation of SAW (in any agent runtime) is conforming if it preserves:
+
+-- All six invariants (I1–I6) with equivalent enforcement — the definitions may be adapted for the target runtime's idioms but the semantics must be identical
+-- All fourteen execution rules (E1–E14) at their enforcement points — background execution, interface freeze, ownership verification, IMPL doc write discipline, and so on
++- All seven invariants (I1–I7) with equivalent enforcement — the definitions may be adapted for the target runtime's idioms but the semantics must be identical
++- All fifteen execution rules (E1–E15) at their enforcement points — background execution, interface freeze, ownership verification, IMPL doc write discipline, and so on

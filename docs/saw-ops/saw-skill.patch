@@ -1,0 +1,20 @@
+--- a/prompts/saw-skill.md
++++ b/prompts/saw-skill.md
+@@ -1,4 +1,4 @@
+-<!-- saw-skill v0.3.5 -->
++<!-- saw-skill v0.4.0 -->
+ Scout-and-Wave: Parallel Agent Coordination
+
+@@ -15,8 +15,8 @@
+
+-*`I{N}` notation refers to invariants (I1–I6) and `E{N}` to execution rules
+-(E1–E13) defined in `PROTOCOL.md`. Each is embedded verbatim at its point of
++*`I{N}` notation refers to invariants (I1–I7) and `E{N}` to execution rules
++(E1–E15) defined in `PROTOCOL.md`. Each is embedded verbatim at its point of
+ enforcement; the number is the anchor for cross-referencing and audit.*
+
+@@ -37,7 +37,14 @@
+ 4. After all Wave agents in the wave complete, read each agent's completion report from their named section in the IMPL doc (`### Agent {letter} - Completion Report`). **I4: IMPL doc is the single source of truth.** Completion reports, interface contract updates, and status are written to the IMPL doc. Chat output is not the record. If a completion report is missing from the IMPL doc, do not proceed; the agent has not completed the protocol. **I5: Agents commit before reporting.** Each agent commits its changes to its worktree branch before writing a completion report. If a report is present but the agent's worktree branch has no commits, flag this as a protocol deviation before merging. **E7: Agent failure handling.** If any agent reports `status: partial` or `status: blocked`, the wave does not merge; it goes to BLOCKED. Resolve the failing agent (re-run, manually fix, or descope) before the merge step proceeds. Agents that completed successfully are not re-run, but their worktrees are not merged until the full wave is resolved. Partial merges are not permitted. **E8: Same-wave interface failure.** If any agent reports `status: blocked` due to an interface contract being unimplementable as specified, the wave does not merge. Mark the wave BLOCKED, revise the affected contracts in the IMPL doc, and re-issue prompts to all agents whose work depends on the changed contract. Agents that completed cleanly against unaffected contracts do not re-run. The wave restarts from WAVE_PENDING with the corrected contracts.
+-5. **Merge and verify:** Read `prompts/saw-merge.md` from the scout-and-wave repository and follow the merge procedure (conflict detection → merge each agent → cleanup → post-merge verification → update IMPL doc).
++5. **Merge and verify:** **E15.** For multi-agent waves with a build/test cycle likely >30 seconds, you may optionally launch an **Operations Agent** in the background: read `docs/saw-ops/saw-ops.md` from the scout-and-wave repository, use it as the agent prompt with `run_in_background: true`, and tag it `[SAW:ops:wave{N}] merge + verify wave N`. The Ops Agent runs the mechanical merge steps and writes a structured merge report (`### Ops Agent — Wave N Merge Report`) to the IMPL doc. **I7: Operations Agent state isolation.** The Ops Agent does not advance protocol state; only the Orchestrator reads the merge report and makes the go/no-go decision. For simple waves or when inline merge is preferred, read `prompts/saw-merge.md` from the scout-and-wave repository and follow the merge procedure directly (conflict detection → merge each agent → cleanup → post-merge verification → update IMPL doc).
+ 6. **I3: Wave sequencing.** Wave N+1 does not launch until Wave N has been merged and post-merge verification has passed. If `--auto` was passed and verification passed, immediately proceed to the next wave. Otherwise, report the wave result and ask the user if they want to continue.
