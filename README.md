@@ -53,29 +53,9 @@ When all preconditions hold and all invariants are maintained, the protocol prov
 
 ## When to Use It
 
-**High parallelization value** (SAW pays for itself):
-- Build/test cycle >30 seconds; each parallel agent runs independently, amplifying time savings
-- Agents own 3+ files each; more implementation time per agent means more to parallelize
-- Tasks involve non-trivial logic, tests, and edge cases, not simple find-and-replace
-- Agents are independent (single wave): maximum parallelization benefit
+SAW pays for itself when the work has clear file seams, interfaces can be defined before implementation starts, and each agent owns enough work to justify running in parallel. The build/test cycle being >30 seconds amplifies the savings further.
 
-**Low parallelization value** (consider alternatives):
-- Simple edits, documentation-only, or trivially fast sequential work; SAW overhead dominates
-- The IMPL doc has coordination value even when speed gains are marginal (audit trail, interface spec, progress tracking)
-
-**Good fit:**
-- Clear seams exist between pieces
-- Interfaces can be defined before implementation starts
-- Work can be chunked so each agent owns 1-3 files
-- Cross-agent dependencies require coordination artifacts
-
-**Poor fit:**
-- Tightly coupled code with no clean file boundaries
-- Interface cannot be known until you start implementing
-- Simple work better done sequentially
-- Root cause is unknown (crash, race condition): investigate first, then use SAW for the fix
-
-The Scout always runs the suitability gate first and will emit a NOT SUITABLE verdict (and stop) rather than producing a broken IMPL doc with forced decomposition. A poor-fit assessment is useful output: it tells you SAW isn't the right tool before any agents spend time on it.
+If the work doesn't decompose cleanly, the Scout says so. It runs a suitability gate first and emits NOT SUITABLE rather than forcing a bad decomposition.
 
 ## Usage with Claude Code
 
