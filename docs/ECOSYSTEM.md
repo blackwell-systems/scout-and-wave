@@ -182,6 +182,27 @@ tool you already use. Today that's Claude Code; tomorrow it could be Codex,
 Cursor, or a custom agent. The protocol is portable; the mechanism is
 swappable.
 
+This is a deliberate design choice, not a limitation. The intellectual claim
+SAW makes is that you can encode coordination protocols in natural language
+and get reliable, structured execution from an LLM. The invariants, the
+suitability gate, the ownership verification — these work because the prompts
+are precise enough that a capable LLM follows them consistently. A code
+framework enforcing the same invariants would just be another orchestration
+tool; there are many of those. What's interesting about SAW is the proof that
+the protocol layer can live in natural language and still provide structural
+safety guarantees.
+
+**Why not enforce invariants in code?** The state machine and file ownership
+checks could be implemented programmatically — and the tradeoff is real. Code
+enforcement can't be reasoned around; prompts can drift. But the parts of SAW
+that matter most (the suitability gate, interface contract generation, ownership
+decomposition) require LLM judgment and can't be mechanized. Moving the
+enforcement layer to code would add an installation dependency, reduce
+portability, and still require the LLM for all the hard parts. The right time
+to make that tradeoff is if SAW scales to environments where prompt discipline
+can't be trusted. Until then, the prompt-native approach is the correct call:
+it's simpler, more portable, and proves something worth proving.
+
 ## The Natural Pairing: Agent Teams + SAW
 
 Claude Code Agent Teams is the strongest execution mechanism in the
