@@ -11,6 +11,10 @@ Parallel AI agents working on the same codebase produce merge conflicts, contrad
 
 The root cause isn't that agents are careless; it's that nothing stops two agents from claiming the same file. Worktrees isolate working directories, not merge outcomes. Two agents can still produce incompatible edits to the same file; the conflict is discovered at merge time, after both have implemented divergent solutions. You get either a merge conflict or, worse, a silent overwrite.
 
+The common workaround — running multiple Claude Code sessions in separate terminals — doesn't solve this. Each session is independent: no shared state, no ownership boundaries, no interface contracts. Conflicts are discovered when you try to merge the results, after all the work is done. That's multi-session parallelism without coordination.
+
+SAW takes the opposite approach: everything runs within a single session. One synchronous orchestrator holds the full coordination state, enforces file ownership before any agent launches, freezes interface contracts so agents can't drift, and handles merge and verification as structured protocol phases — not an afterthought. The agents are parallel; the coordination is centralized.
+
 ## How
 
 Scout-and-wave fixes this before any agent starts, through three participant roles:
