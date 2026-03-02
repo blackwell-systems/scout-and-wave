@@ -84,7 +84,10 @@ blocking on approval prompts at each tool call:
       "Write",
       "Edit",
       "Glob",
-      "Grep"
+      "Grep",
+      "WebFetch",
+      "WebSearch",
+      "TodoWrite"
     ]
   }
 }
@@ -96,9 +99,7 @@ multi-agent wave, you would need to approve each agent individually before it
 launches asynchronously. Add `"Agent"` once to your user-level settings and all
 future SAW runs are fully hands-free from the moment you invoke `/saw wave`.
 
-The other entries (`Bash`, `Read`, `Write`, `Edit`, `Glob`, `Grep`) cover git
-commands, worktree management, IMPL doc writes, and codebase reads during the
-scout phase. If your existing settings already allow these, no change is needed.
+The other entries cover git commands, worktree management, IMPL doc writes, and codebase reads (`Bash`, `Read`, `Write`, `Edit`, `Glob`, `Grep`), task list updates for wave progress tracking (`TodoWrite`), and doc/API lookups during scout analysis (`WebFetch`, `WebSearch`). If your existing settings already allow these, no change is needed.
 For project-scoped settings, add the same block to
 `.claude/settings.json` in the project root.
 
