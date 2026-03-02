@@ -197,7 +197,7 @@ advancing. Wave 0 in bootstrap projects is always a solo wave.
 These rules govern orchestrator behavior during wave execution. They are not
 captured by the state machine alone.
 
-**Background execution.** All agent launches, CI polling, and long-running watch commands must use `run_in_background: true`. A blocking agent launch serializes the wave — the orchestrator waits for one agent before launching the next, eliminating parallelism. This is a protocol violation, not a performance preference. Any implementation that blocks the foreground session on agent execution or polling is non-conforming.
+**Background execution.** All agent launches, CI polling, and long-running watch commands must execute asynchronously without blocking the orchestrator's main execution thread. A blocking agent launch serializes the wave — the orchestrator waits for one agent before launching the next, eliminating parallelism. This is a protocol violation, not a performance preference. Any implementation that blocks the orchestrator on agent execution or polling is non-conforming.
 
 **Interface freeze.** Interface contracts become immutable when worktrees are
 created. The review window between REVIEWED and WAVE_PENDING is the checkpoint
@@ -214,15 +214,15 @@ pre-launch catches scout planning errors; post-execution catches runtime
 deviations where an agent touched files outside its declared scope.
 
 **Worktree pre-creation.** For multi-agent waves, the orchestrator creates all
-worktrees before launching any agent. Do not rely on the Task tool's
-`isolation: "worktree"` parameter alone; it does not guarantee each agent
-starts in the correct worktree. Pre-creation is the mechanism that enforces
-isolation; agent-side isolation verification (Field 0) is defense-in-depth.
+worktrees before launching any agent. Do not rely on agent runtime isolation
+primitives alone; they do not guarantee each agent starts in the correct
+worktree. Explicit pre-creation is the mechanism that enforces isolation;
+agent-side isolation verification (Field 0) is defense-in-depth.
 Worktrees isolate working directories, not merge outcomes. Two agents can still
 produce incompatible edits to the same file; disjoint file ownership (I1) is
 the mechanism that prevents this, not worktree isolation.
 
-**Worktree naming convention.** Worktrees must be named `.claude/worktrees/wave{N}-agent-{letter}` where `{N}` is the 1-based wave number and `{letter}` is the agent identifier (A, B, C...). This is a canonical requirement, not a style choice. Monitoring tools detect SAW sessions by parsing agent names from transcripts; deviating from this convention breaks observability silently. Any tooling that consumes SAW session data must conform to this naming scheme.
+**Worktree naming convention.** Worktrees must be named `.claude/worktrees/wave{N}-agent-{letter}` where `{N}` is the 1-based wave number and `{letter}` is the agent identifier (A, B, C...). This is a canonical requirement, not a style choice. The naming scheme is the mechanism by which external tooling identifies SAW sessions and correlates agents to waves. Deviating from it breaks observability silently. Any tooling that consumes SAW session data must treat this naming scheme as the stable interface.
 
 **Agent prompt propagation.** Agent prompts are sections within the IMPL doc.
 When the orchestrator updates an agent prompt (due to interface deviation
@@ -434,4 +434,4 @@ The canonical prompts that implement this protocol:
 | `prompts/saw-merge.md` | Orchestrator: merge procedure |
 | `prompts/saw-bootstrap.md` | Bootstrap mode variant: design-first for new projects |
 
-**Version headers.** Each prompt file must carry a version header comment on line 1 in the format `<!-- <name> v<major>.<minor>.<patch> -->` (e.g. `<!-- saw-skill v0.3.4 -->`). This is a normative requirement. The version header is how the running skill is identified mid-session by the orchestrator and by monitoring tools. Prompt files without version headers are unidentifiable; tooling that detects SAW sessions will not recognize them. Any implementation or fork of a prompt file must carry a conforming version header.
+**Version headers.** Each prompt file must carry a machine-readable version identifier on line 1 in the format `<name> v<major>.<minor>.<patch>` (e.g. `saw-skill v0.3.4`), using whatever comment syntax the implementation supports. This is a normative requirement. The version identifier is how the active skill is identified mid-session by the orchestrator and by monitoring tools. Prompt files without version identifiers are unidentifiable. Any implementation or fork of a prompt file must carry a conforming version identifier.
