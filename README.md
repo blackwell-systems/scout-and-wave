@@ -15,7 +15,7 @@ The root cause isn't that agents are careless; it's that nothing stops two agent
 
 Scout-and-wave fixes this before any agent starts, through three participant roles:
 
-- **Orchestrator:** the synchronous agent. Drives all protocol state transitions. Launches the Scout and Wave Agents, waits for completion, executes the merge procedure, verifies the result, and advances state. The only participant that interacts with the human directly. Does not perform Scout or Wave Agent duties (I6: Role Separation).
+- **Orchestrator:** the synchronous agent running in the user's own session. The human reviews, approves, and intervenes through it directly — there is no separate human role because the Orchestrator is already the user's agent. Drives all protocol state transitions: launches the Scout and Wave Agents, waits for completion, executes the merge procedure, verifies the result, and advances state. Does not perform Scout or Wave Agent duties (I6: Role Separation).
 
 - **Scout:** an asynchronous agent launched by the Orchestrator. Analyzes the codebase and produces a coordination artifact: a dependency graph, exact interface contracts, a file ownership table, and a wave structure. Every file that will change is assigned to exactly one agent. No two agents in the same wave may touch the same file (I1: Disjoint File Ownership). The Scout resolves ownership conflicts at planning time or declares the work NOT SUITABLE for parallel execution. Never modifies source files.
 
