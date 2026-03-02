@@ -6,11 +6,8 @@
 Scout-and-Wave (SAW) is a protocol for safely parallelizing human-guided
 agentic workflows. It defines preconditions, invariants, participant roles, state
 transitions, and message formats that guarantee agents can work concurrently
-without conflicts. Human review checkpoints are structural — the protocol does
+without conflicts. Human review checkpoints are structural: the protocol does
 not advance past the suitability gate or between waves without human approval.
-Cross-feature pipelining is optional: an extension for scheduling scout work
-across features when the change landscape is known in advance or a safe overlap
-is detected mid-session.
 
 The prompts in `prompts/` are reference implementations of this protocol.
 
@@ -35,9 +32,7 @@ except through the orchestrator's completion handling.
 **Scout** — An asynchronous agent launched by the orchestrator. Analyzes the
 codebase, produces the IMPL doc, and exits. Never modifies source files. Never
 participates in wave execution. The orchestrator waits for the scout's
-completion notification before entering REVIEWED state. When pipelining, the
-scout runs concurrently with an active wave — still asynchronous, but overlapped
-rather than sequential (see `saw-pipeline-proposal.md`).
+completion notification before entering REVIEWED state.
 
 **Wave Agent** — An asynchronous agent launched by the orchestrator. Owns a
 disjoint set of files, implements against the interface contracts defined in the
