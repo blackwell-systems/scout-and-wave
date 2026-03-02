@@ -13,7 +13,7 @@ The root cause isn't that agents are careless; it's that nothing stops two agent
 
 The common workaround — running multiple Claude Code sessions in separate terminals — doesn't solve this. Each session is independent: no shared state, no ownership boundaries, no interface contracts. Conflicts are discovered when you try to merge the results, after all the work is done. That's multi-session parallelism without coordination.
 
-SAW takes the opposite approach: everything runs within a single session. One synchronous orchestrator holds the full coordination state, enforces file ownership before any agent launches, freezes interface contracts so agents can't drift, and handles merge and verification as structured protocol phases — not an afterthought. The agents are parallel; the coordination is centralized.
+SAW takes the opposite approach: everything runs within a single session. One synchronous orchestrator holds the full coordination state, enforces file ownership before any agent launches, freezes interface contracts so agents can't drift, and handles merge and verification as structured protocol phases. The agents are parallel; the coordination is centralized.
 
 ## How
 
