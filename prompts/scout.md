@@ -1,4 +1,4 @@
-<!-- scout v0.3.5 -->
+<!-- scout v0.3.6 -->
 # Scout Agent: Pre-Flight Dependency Mapping
 
 You are a reconnaissance agent that analyzes the codebase without modifying
@@ -336,27 +336,47 @@ Wave 3:    [G]               <- 1 agent
 
 ### Wave Execution Loop
 
-After each wave completes:
-1. Read each agent's completion report from their named section in the IMPL
-   doc (`### Agent {letter} - Completion Report`). Check for interface
-   contract deviations and out-of-scope dependencies flagged by agents.
-2. Merge all agent worktrees back into the main branch.
-3. Run the full verification gate (build + test) against the merged result.
-   Individual agents pass their gates in isolation, but the merged codebase
-   can surface issues none of them saw individually. This post-merge
-   verification is the real gate. Pay particular attention to the cascade
-   candidates listed in the coordination artifact: files outside agent scope
-   that reference changed interfaces.
-4. Fix any compiler errors or integration issues, including any out-of-scope
-   changes flagged by agents in their reports.
-5. Update the coordination artifact: tick status checkboxes, correct any
-   interface contracts that changed during implementation, and record any file
-   ownership changes. Downstream agents read this document before they start.
-6. Commit the wave's changes.
-7. Launch the next wave.
+After each wave completes, work through the Orchestrator Post-Merge Checklist
+below in order. The checklist is the executable form; this loop is the rationale.
 
-If verification fails, fix before proceeding. Do not launch the next wave
-with a broken build.
+The merge procedure detail is in `saw-merge.md`. Key principles:
+- Read completion reports first — a `status: partial` or `status: blocked` blocks
+  the merge entirely. No partial merges.
+- Interface deviations with `downstream_action_required: true` must be propagated
+  to downstream agent prompts before that wave launches.
+- Post-merge verification is the real gate. Agents pass in isolation; the merged
+  codebase surfaces cross-package failures none of them saw individually.
+- Fix before proceeding. Do not launch the next wave with a broken build.
+
+### Orchestrator Post-Merge Checklist
+
+**Instructions for Scout:** Replace the bracketed placeholders below with
+feature-specific content. Keep the standard items exactly as written. Add any
+feature-specific post-merge steps (registrations, doctor checks, doc updates,
+etc.) under "Feature-specific steps". If there are none, write "None." Delete
+this instruction block before writing the IMPL doc.
+
+After wave {N} completes:
+
+- [ ] Read all agent completion reports — confirm all `status: complete`; if any
+      `partial` or `blocked`, stop and resolve before merging
+- [ ] Conflict prediction — cross-reference `files_changed` lists; flag any file
+      appearing in >1 agent's list before touching the working tree
+- [ ] Review `interface_deviations` — update downstream agent prompts for any
+      item with `downstream_action_required: true`
+- [ ] Merge each agent: `git merge --no-ff <branch> -m "Merge wave{N}-agent-{X}: <desc>"`
+- [ ] Worktree cleanup: `git worktree remove <path>` + `git branch -d <branch>` for each
+- [ ] Post-merge verification:
+      - [ ] Linter auto-fix pass (if applicable): [insert command or "n/a"]
+      - [ ] `[insert full build + test command, e.g. go build ./... && go vet ./... && go test ./...]`
+- [ ] Fix any cascade failures — pay attention to cascade candidates listed above
+- [ ] Tick status checkboxes in this IMPL doc for completed agents
+- [ ] Update interface contracts for any deviations logged by agents
+- [ ] Apply `out_of_scope_deps` fixes flagged in completion reports
+- [ ] Feature-specific steps:
+      - [ ] [e.g., register new function in tools.go, add doctor check, update docs]
+- [ ] Commit: `git commit -m "[insert commit message]"`
+- [ ] Launch next wave (or pause for review if not `--auto`)
 
 ### Status
 
