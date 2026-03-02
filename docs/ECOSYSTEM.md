@@ -14,10 +14,9 @@ layers: **mechanism** (how to run agents in parallel) and **infrastructure**
 **Should you parallelize this at all? And if so, how do you guarantee the
 agents won't conflict?**
 
-That's the layer SAW operates at. It's the only tool in the ecosystem that
-treats "don't parallelize this" as a first-class outcome, and the only one
-that proves conflict-freedom at planning time rather than discovering
-conflicts at merge time.
+That's the layer SAW operates at. It treats "don't parallelize this" as a
+first-class outcome, and addresses conflict-freedom at planning time rather
+than discovering conflicts at merge time.
 
 ## The Ecosystem: What's Missing from Each Layer
 
@@ -142,9 +141,9 @@ SAW is the middle layer. It sits between "have a plan" (methodology) and
 plan, can it be safely parallelized, and if so, how do we assign ownership
 to guarantee conflict-freedom?*
 
-No other tool in the ecosystem occupies this layer.
+This is the layer SAW operates at.
 
-### What SAW provides that nothing else does
+### What SAW provides
 
 **Suitability gate.** The Scout runs a 5-question assessment and can emit
 NOT SUITABLE. Every other tool assumes parallelization is desirable and
@@ -202,50 +201,6 @@ portability, and still require the LLM for all the hard parts. The right time
 to make that tradeoff is if SAW scales to environments where prompt discipline
 can't be trusted. Until then, the prompt-native approach is the correct call:
 it's simpler, more portable, and proves something worth proving.
-
-## The Natural Pairing: Agent Teams + SAW
-
-Claude Code Agent Teams is the strongest execution mechanism in the
-ecosystem. SAW is the strongest safety protocol. They solve complementary
-problems:
-
-| Concern | Agent Teams | SAW |
-|---------|------------|-----|
-| Spawn agents in parallel | Yes | Delegates to Agent Teams |
-| Worktree isolation | Built-in | Uses Agent Teams' worktrees |
-| Inter-agent messaging | Yes | Not available standalone |
-| Progress visibility | Yes | Not available standalone |
-| Suitability gate | No | Yes (Scout decides if parallelization is safe) |
-| Disjoint file ownership | No (agents self-organize) | Yes (verified before launch) |
-| Interface contracts | No (agents discover during implementation) | Yes (frozen in IMPL doc) |
-| Persistent coordination artifact | No (task list is ephemeral) | Yes (IMPL doc survives) |
-| "Don't parallelize this" | Not a concept | First-class outcome |
-
-**Agent Teams without SAW:** Powerful but unplanned. Agents self-organize,
-which works for loosely coupled tasks. On interdependent code changes, you
-get merge-time surprises. No record of why work was decomposed the way it
-was.
-
-**SAW without Agent Teams:** Works today with the raw Agent tool and git
-worktrees. All the safety guarantees hold. But you lose inter-agent
-messaging, progress visibility, and native worktree management; the
-Orchestrator does manual plumbing that Agent Teams handles natively.
-
-**Agent Teams + SAW:** The Scout plans the decomposition with ownership
-guarantees and frozen contracts. Agent Teams executes with messaging,
-progress tracking, and worktree management. The IMPL doc persists as the
-audit trail. Planned safety from SAW, emergent adaptation from Agent Teams.
-
-## Decision Guide
-
-| Situation | Use |
-|-----------|-----|
-| Quick parallel edits, loosely coupled | Agent Teams or orchestration layer (SAW overhead isn't worth it) |
-| Feature with 3+ agents, shared interfaces, file interdependencies | SAW (the Scout identifies safe decomposition before agents start) |
-| Need an audit trail of what was parallelized and why | SAW (the IMPL doc is the artifact) |
-| Uncertain whether parallelization is even appropriate | SAW (the suitability gate answers the question) |
-| Spec-driven team that also needs parallel execution | Kiro for the spec, SAW for the parallelization |
-| Maximum throughput with maximum safety | Agent Teams + SAW |
 
 ## Further Reading
 
