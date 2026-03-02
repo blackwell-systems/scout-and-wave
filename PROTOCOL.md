@@ -164,17 +164,18 @@ advancing. Wave 0 in bootstrap projects is always a solo wave.
 ## Execution Rules
 
 These rules govern orchestrator behavior during wave execution. They are not
-captured by the state machine alone.
+captured by the state machine alone. Rules are numbered E1–E13 for
+cross-referencing and audit; the same convention as invariants (I1–I6).
 
-**Background execution.** All agent launches, CI polling, and long-running watch commands must execute asynchronously without blocking the orchestrator's main execution thread (e.g. Claude Code's `run_in_background: true` on the Agent and Bash tools). A blocking agent launch serializes the wave; the orchestrator waits for one agent before launching the next, eliminating parallelism. This is a protocol violation, not a performance preference. Any implementation that blocks the orchestrator on agent execution or polling is non-conforming.
+**E1: Background execution.** All agent launches, CI polling, and long-running watch commands must execute asynchronously without blocking the orchestrator's main execution thread (e.g. Claude Code's `run_in_background: true` on the Agent and Bash tools). A blocking agent launch serializes the wave; the orchestrator waits for one agent before launching the next, eliminating parallelism. This is a protocol violation, not a performance preference. Any implementation that blocks the orchestrator on agent execution or polling is non-conforming.
 
-**Interface freeze.** Interface contracts become immutable when worktrees are
+**E2: Interface freeze.** Interface contracts become immutable when worktrees are
 created. The review window between REVIEWED and WAVE_PENDING is the checkpoint
 for revising type signatures, adding fields, or restructuring APIs. After
 worktrees branch from HEAD, any interface change requires removing and
 recreating all worktrees for the wave.
 
-**Pre-launch ownership verification.** Before creating worktrees or launching
+**E3: Pre-launch ownership verification.** Before creating worktrees or launching
 any agent in a wave, the orchestrator scans the wave's file ownership table in
 the IMPL doc and verifies no file appears in more than one agent's ownership
 list. If an overlap is found, the wave does not launch; the IMPL doc must be
@@ -182,7 +183,7 @@ corrected first. This is distinct from post-execution conflict prediction:
 pre-launch catches scout planning errors; post-execution catches runtime
 deviations where an agent touched files outside its declared scope.
 
-**Worktree pre-creation.** For multi-agent waves, the orchestrator creates all
+**E4: Worktree pre-creation.** For multi-agent waves, the orchestrator creates all
 worktrees before launching any agent. Do not rely on agent runtime isolation
 primitives alone (e.g. Claude Code's `isolation: "worktree"` Agent parameter);
 they do not guarantee each agent starts in the correct worktree. Explicit
@@ -192,42 +193,42 @@ Worktrees isolate working directories, not merge outcomes. Two agents can still
 produce incompatible edits to the same file; disjoint file ownership (I1) is
 the mechanism that prevents this, not worktree isolation.
 
-**Worktree naming convention.** Worktrees must be named `.claude/worktrees/wave{N}-agent-{letter}` where `{N}` is the 1-based wave number and `{letter}` is the agent identifier (A, B, C...). This is a canonical requirement, not a style choice. The naming scheme is the mechanism by which external tooling identifies SAW sessions and correlates agents to waves. Deviating from it breaks observability silently. Any tooling that consumes SAW session data must treat this naming scheme as the stable interface.
+**E5: Worktree naming convention.** Worktrees must be named `.claude/worktrees/wave{N}-agent-{letter}` where `{N}` is the 1-based wave number and `{letter}` is the agent identifier (A, B, C...). This is a canonical requirement, not a style choice. The naming scheme is the mechanism by which external tooling identifies SAW sessions and correlates agents to waves. Deviating from it breaks observability silently. Any tooling that consumes SAW session data must treat this naming scheme as the stable interface.
 
-**Agent prompt propagation.** Agent prompts are sections within the IMPL doc.
+**E6: Agent prompt propagation.** Agent prompts are sections within the IMPL doc.
 When the orchestrator updates an agent prompt (due to interface deviation
 propagation, contract revision, or same-wave interface failure), it edits the
 prompt section in the IMPL doc directly. The agent reads its prompt from the
 IMPL doc at launch time, so the corrected version is always what runs. There
 is no separate prompt file to keep in sync.
 
-**Agent failure handling.** If any agent in a wave reports `status: partial`
+**E7: Agent failure handling.** If any agent in a wave reports `status: partial`
 or `status: blocked`, the wave does not merge. The wave goes to BLOCKED. The
 orchestrator must resolve the failing agent (re-run it, manually fix the
 issue, or descope it from the wave) before the merge step proceeds. Agents
 that completed successfully are not re-run, but their worktrees are not merged
 until the full wave is resolved. Partial merges are not permitted.
 
-**Same-wave interface failure.** If any agent reports `status: blocked` due to
+**E8: Same-wave interface failure.** If any agent reports `status: blocked` due to
 an interface contract being unimplementable as specified, the wave does not
 merge. The orchestrator marks the wave BLOCKED, revises the affected contracts
 in the IMPL doc, and re-issues prompts to all agents whose work depends on the
 changed contract. Agents that completed cleanly against unaffected contracts do
 not re-run. The wave restarts from WAVE_PENDING with the corrected contracts.
 
-**Idempotency.** WAVE_PENDING is re-entrant; re-running `/saw wave` checks
+**E9: Idempotency.** WAVE_PENDING is re-entrant; re-running `/saw wave` checks
 for existing worktrees before creating new ones and does not duplicate them.
 WAVE_MERGING is not idempotent. If the orchestrator crashes mid-merge, inspect
 the state before continuing: check which worktree branches are already present
 in main's history (`git log --merges`) and skip those. Do not re-merge a
 worktree that has already been merged.
 
-**Scoped vs unscoped verification.** Agents run focused verification during
+**E10: Scoped vs unscoped verification.** Agents run focused verification during
 waves (scoped to the files and packages they own) to keep iteration fast.
 The orchestrator's post-merge gate runs unscoped across the full project to
 catch cross-package cascade failures that no individual agent could see.
 
-**Conflict prediction before merge.** The orchestrator cross-references all
+**E11: Conflict prediction before merge.** The orchestrator cross-references all
 agents' `files_changed` and `files_created` lists before touching the working
 tree. A file appearing in more than one agent's list is a disjoint ownership
 violation. It must be resolved before any merge proceeds.
@@ -237,7 +238,7 @@ by construction: any agent whose work depends on a file created by another
 agent belongs in a later wave. If merge order appears to matter, the wave
 structure is wrong, not the merge sequence.
 
-**Merge conflict taxonomy.** Three distinct conflict types can arise; each has
+**E12: Merge conflict taxonomy.** Three distinct conflict types can arise; each has
 a different resolution path:
 
 1. **Git conflict on agent-owned files:** an I1 violation. This is impossible
@@ -254,7 +255,7 @@ a different resolution path:
    in completion reports. Resolved by the orchestrator before the next wave
    launches, via interface contract revision and downstream prompt updates.
 
-**Verification minimum.** The minimum acceptable verification gate is: build
+**E13: Verification minimum.** The minimum acceptable verification gate is: build
 (compile) passing and lint passing. Tests are required if the project has a
 test suite; a wave reporting PASS on compile-only when tests exist is a
 protocol violation. Agents scope their verification to owned files and packages;

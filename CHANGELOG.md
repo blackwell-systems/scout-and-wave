@@ -78,6 +78,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **`docs/diagrams/saw-state-machine.drawio`:** new draw.io state machine diagram
+  covering all named protocol states (IDLE, SCOUTING, REVIEWED, WAVE_PENDING,
+  WAVE_EXECUTING, WAVE_MERGING, WAVE_VERIFIED, BLOCKED, COMPLETE) with solo/multi
+  fork, BLOCKED recovery arc, and wave loop. Light/dark SVG exports in
+  `docs/diagrams/`. Replaces the ASCII state machine in PROTOCOL.md.
+
 - **`docs/saw-pipeline-proposal.md`:** new document capturing cross-feature scout
   pipelining: the observation that the orchestrator's wave-execution wait window is
   dead time that can be filled by launching the next feature's scout as an async agent.
@@ -88,6 +94,54 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   full-landscape pipeline planning.
 
 ### Changed
+
+- **`PROTOCOL.md` — execution rules numbered E1–E13:** all execution rules are now
+  identified by E-number (E1–E13), matching the I-number convention for invariants.
+  The E-number is the cross-referencing anchor for embedding in prompts and audit.
+  Audit pattern: grep prompt files for `E{N}` and verify definition matches PROTOCOL.md.
+
+- **`PROTOCOL.md` — state machine:** ASCII art replaced with draw.io SVG
+  (`saw-state-machine-light.svg` / `saw-state-machine-dark.svg`). The `<picture>`
+  element switches themes automatically. Source preserved in
+  `docs/diagrams/saw-state-machine.drawio`.
+
+- **`PROTOCOL.md` — pipelining references removed:** pipeline scheduling is an
+  experimental design proposal (`docs/saw-pipeline-proposal.md`), not a finalized
+  protocol feature. All references to it removed from the normative spec.
+
+- **`PROTOCOL.md` — decoupled from Claude-specific language:** normative requirements
+  are now implementation-agnostic. Claude Code primitives (e.g. `run_in_background:
+  true`, `isolation: "worktree"`) re-added as parenthetical examples, not normative
+  text. Protocol is portable; the mechanism is swappable.
+
+- **`PROTOCOL.md` — Orchestrator role clarified:** synchronous execution is what makes
+  checkpoints enforceable; the human is present through the Orchestrator, not as a
+  separate participant. Mandatory vs optional checkpoints distinguished explicitly:
+  suitability gate and REVIEWED are always mandatory; inter-wave confirmation is
+  optional via `--auto`; BLOCKED always surfaces.
+
+- **`docs/ECOSYSTEM.md`:** added explicit statement of prompt-native design intent
+  and the down-the-stack tradeoff. The intellectual claim SAW makes — that coordination
+  protocols can live in natural language and still provide structural safety guarantees
+  — is now named directly. The tradeoff (code enforcement vs prompt portability) is
+  stated with the condition under which it would be worth revisiting.
+
+- **`README.md`:** added "How it works under the hood" section covering IMPL doc as
+  coordination surface (not just documentation) and background execution as the
+  mechanism that makes waves actually parallel. Updated permissions block to include
+  WebFetch, WebSearch, and TodoWrite. Trimmed Workflow and "When to Use It" sections.
+  Orchestrator described as running in the user's own session; no separate human role.
+
+- **`prompts/saw-skill.md` (v0.3.4 → v0.3.5):**
+  - Embedded I2, I3, I4, I5 at their enforcement points (I1 and I6 were already
+    present). All six invariants now embedded verbatim in the skill.
+  - Tightened I2: interface freeze occurs at worktree creation (step 2), not at agent
+    launch (step 3). Added explicit freeze checkpoint callout to step 2.
+  - Embedded E7 (agent failure handling) and E8 (same-wave interface failure) at step 4
+    (completion report reading), the Orchestrator decision point for both.
+  - Updated `I{N}` notation comment to cover `E{N}` execution rules (E1–E13).
+
+- **Style:** removed em dashes from 20 markdown files across the repository.
 
 - **`PROTOCOL.md` (v0.3.4):** three clarifications developed from practice:
 
