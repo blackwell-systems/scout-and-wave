@@ -197,7 +197,7 @@ advancing. Wave 0 in bootstrap projects is always a solo wave.
 These rules govern orchestrator behavior during wave execution. They are not
 captured by the state machine alone.
 
-**Background execution.** All agent launches, CI polling, and long-running watch commands must execute asynchronously without blocking the orchestrator's main execution thread. A blocking agent launch serializes the wave — the orchestrator waits for one agent before launching the next, eliminating parallelism. This is a protocol violation, not a performance preference. Any implementation that blocks the orchestrator on agent execution or polling is non-conforming.
+**Background execution.** All agent launches, CI polling, and long-running watch commands must execute asynchronously without blocking the orchestrator's main execution thread (e.g. Claude Code's `run_in_background: true` on the Agent and Bash tools). A blocking agent launch serializes the wave — the orchestrator waits for one agent before launching the next, eliminating parallelism. This is a protocol violation, not a performance preference. Any implementation that blocks the orchestrator on agent execution or polling is non-conforming.
 
 **Interface freeze.** Interface contracts become immutable when worktrees are
 created. The review window between REVIEWED and WAVE_PENDING is the checkpoint
@@ -215,9 +215,10 @@ deviations where an agent touched files outside its declared scope.
 
 **Worktree pre-creation.** For multi-agent waves, the orchestrator creates all
 worktrees before launching any agent. Do not rely on agent runtime isolation
-primitives alone; they do not guarantee each agent starts in the correct
-worktree. Explicit pre-creation is the mechanism that enforces isolation;
-agent-side isolation verification (Field 0) is defense-in-depth.
+primitives alone (e.g. Claude Code's `isolation: "worktree"` Agent parameter);
+they do not guarantee each agent starts in the correct worktree. Explicit
+pre-creation is the mechanism that enforces isolation; agent-side isolation
+verification (Field 0) is defense-in-depth.
 Worktrees isolate working directories, not merge outcomes. Two agents can still
 produce incompatible edits to the same file; disjoint file ownership (I1) is
 the mechanism that prevents this, not worktree isolation.
@@ -434,4 +435,4 @@ The canonical prompts that implement this protocol:
 | `prompts/saw-merge.md` | Orchestrator: merge procedure |
 | `prompts/saw-bootstrap.md` | Bootstrap mode variant: design-first for new projects |
 
-**Version headers.** Each prompt file must carry a machine-readable version identifier on line 1 in the format `<name> v<major>.<minor>.<patch>` (e.g. `saw-skill v0.3.4`), using whatever comment syntax the implementation supports. This is a normative requirement. The version identifier is how the active skill is identified mid-session by the orchestrator and by monitoring tools. Prompt files without version identifiers are unidentifiable. Any implementation or fork of a prompt file must carry a conforming version identifier.
+**Version headers.** Each prompt file must carry a machine-readable version identifier on line 1 in the format `<name> v<major>.<minor>.<patch>` (e.g. `saw-skill v0.3.4`), using whatever comment syntax the implementation supports (e.g. `<!-- saw-skill v0.3.4 -->` in Claude Code markdown skills). This is a normative requirement. The version identifier is how the active skill is identified mid-session by the orchestrator and by monitoring tools. Prompt files without version identifiers are unidentifiable. Any implementation or fork of a prompt file must carry a conforming version identifier.
