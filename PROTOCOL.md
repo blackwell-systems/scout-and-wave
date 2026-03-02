@@ -146,56 +146,10 @@ no SAW session is detectable by monitoring tools).
 
 ## State Machine
 
-```
-IDLE
-  │
-  ├─ /saw scout  ──────────────────────► SCOUTING
-  │                                          │
-  │                                     IMPL doc written
-  │                                          │
-  │                                          ▼
-  │                                       REVIEWED
-  │                                    (human reviews;
-  │                                     interface freeze
-  │                                     checkpoint)
-  │                                          │
-  │                                     human approves
-  │                                          │
-  │                                          ▼
-  └──────────────────────────────────► WAVE_PENDING
-                                            │
-                                   ┌────────┴────────┐
-                               solo │               multi│
-                               wave │               wave │
-                                    ▼                    ▼
-                             WAVE_EXECUTING      orchestrator
-                           (agent runs on      pre-creates worktrees,
-                             main directly)    launches agents
-                                    │                    │
-                                    │              WAVE_EXECUTING
-                                    │           (agents run in parallel)
-                                    │                    │
-                                    │           all agents report complete
-                                    │                    │
-                                    │              WAVE_MERGING
-                                    │           (conflict prediction →
-                                    │            merge sequence →
-                                    │            worktree cleanup)
-                                    │                    │
-                                    └──────┬─────────────┘
-                                    post-merge verification
-                                           │
-                                  ┌────────┴────────┐
-                              PASS │                │ FAIL
-                                   ▼                ▼
-                             WAVE_VERIFIED       BLOCKED
-                                   │          (fix required
-                            ┌──────┴──────┐    before next
-                        more │            │ no  wave)
-                       waves │            │ more
-                             ▼            ▼
-                        WAVE_PENDING   COMPLETE
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/saw-state-machine-dark.svg">
+  <img src="docs/diagrams/saw-state-machine-light.svg" alt="SAW protocol state machine">
+</picture>
 
 **BLOCKED** is not a terminal state. The orchestrator fixes the failure and
 re-runs verification. BLOCKED → WAVE_VERIFIED on verification pass.
