@@ -98,7 +98,7 @@
 
     <!-- Diagram title -->
     <mxCell id="38" parent="1" style="text;html=1;align=center;fontStyle=1;fontSize=24;strokeColor=none;fillColor=none;" value="/saw scout + /saw wave" vertex="1">
-      <mxGeometry height="40" width="500" x="550" y="290" as="geometry"/>
+      <mxGeometry height="40" width="500" x="550" y="370" as="geometry"/>
     </mxCell>
 
     <!-- START -->
