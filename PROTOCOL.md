@@ -178,6 +178,16 @@ execution, pollutes the orchestrator's context window, and breaks observability
 **BLOCKED** is not a terminal state. The orchestrator fixes the failure and
 re-runs verification. BLOCKED → WAVE_VERIFIED on verification pass.
 
+**Solo wave:** A wave containing exactly one agent runs the agent on the main
+branch with no worktrees. There is nothing to conflict with. The WAVE_MERGING
+state is skipped. Post-wave verification is still required before advancing.
+
+The solo wave agent must still operate in the Wave Agent role: launched by the
+Orchestrator as an asynchronous agent, not executed directly by the
+Orchestrator. Executing solo wave work inline violates I6 regardless of wave
+size. The absence of worktrees changes the isolation mechanism; it does not
+change the participant roles.
+
 ---
 
 ## Execution Rules
@@ -416,6 +426,31 @@ Free-form notes follow the structured block for anything that doesn't fit.
 as specified. `downstream_action_required: true` means the orchestrator must
 update affected downstream agent prompts before the next wave launches.
 
+### Scaffolds Section
+
+Written by the Scout into the IMPL doc to specify type scaffold files. Read and
+materialized by the Scaffold Agent after human review. Canonical four-column
+format:
+
+```markdown
+### Scaffolds
+
+[Omit this section if no scaffold files are needed.]
+
+| File | Contents | Import path | Status |
+|------|----------|-------------|--------|
+| `path/to/types.go` | [exact types, interfaces, structs with signatures] | `module/internal/types` | pending |
+```
+
+`Status` lifecycle: `pending` (Scout wrote spec, Scaffold Agent not yet run) →
+`committed (sha)` (Scaffold Agent created, compiled, and committed the file) →
+`FAILED: {reason}` (Scaffold Agent could not compile; no file committed).
+
+The Orchestrator verifies all files show `committed` status before creating
+worktrees. A `FAILED` status is a protocol stop: report the failure to the
+human, surface the reason, and do not proceed to worktree creation. The human
+must revise the interface contracts in the IMPL doc and re-run the Scaffold Agent.
+
 ---
 
 ## Protocol Violations
@@ -430,7 +465,7 @@ guarantees.
 | Wave N+1 launched before Wave N verified | I3 | Cascade failures surface at end |
 | Completion report written to chat only | I4 | Downstream agents get stale context |
 | Agent reports complete with uncommitted changes | I5 | Merge requires manual copy |
-| Orchestrator performs Scout or Wave Agent duties | I6 | Context pollution, broken observability, async execution bypassed |
+| Orchestrator performs Scout, Scaffold Agent, or Wave Agent duties | I6 | Context pollution, broken observability, async execution bypassed |
 
 ---
 
@@ -451,9 +486,9 @@ When all preconditions hold and all invariants are maintained:
 **Bootstrap mode** (`prompts/saw-bootstrap.md`): Design-first execution for new
 projects with no existing codebase. The Scout acts as architect: gathers
 requirements, designs package structure, defines interface contracts, and
-produces a types scaffold file containing all shared interfaces before any wave
-runs. Wave 1 agents implement in parallel against those contracts without seeing
-each other's code.
+specifies a types scaffold in the IMPL doc Scaffolds section. The Scaffold Agent
+materializes it after human review. Wave 1 agents implement in parallel against
+those contracts without seeing each other's code.
 
 ---
 
@@ -464,7 +499,8 @@ The canonical prompts that implement this protocol for Claude Code:
 | File | Role |
 |------|------|
 | `prompts/scout.md` | Scout participant: suitability gate + IMPL doc production |
-| `prompts/agent-template.md` | Agent participant: 9-field prompt template |
+| `prompts/scaffold-agent.md` | Scaffold Agent participant: materializes approved interface contracts as type scaffold source files |
+| `prompts/agent-template.md` | Wave Agent participant: 9-field prompt template |
 | `prompts/saw-skill.md` | Orchestrator: command routing and wave execution |
 | `prompts/saw-worktree.md` | Orchestrator: worktree lifecycle |
 | `prompts/saw-merge.md` | Orchestrator: merge procedure |

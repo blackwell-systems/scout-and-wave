@@ -4,7 +4,7 @@ Alternate execution layer for the SAW protocol using Claude Code Agent Teams
 as the agent runtime. Same invariants (I1–I6), same IMPL doc artifact, same
 Scout. Different plumbing for wave execution.
 
-**Status:** Prompt set complete (v0.1.5). Synced to protocol v0.6.0. Hooks,
+**Status:** Prompt set complete (v0.1.6). Synced to protocol v0.6.0. Hooks,
 README, and spawn step fully specified. Blocked on Agent Teams stabilizing
 (currently experimental with known limitations). Ready for integration testing
 when Agent Teams is stable.
@@ -223,7 +223,7 @@ saw-teams/
   DESIGN.md                    ← this file
   README.md                    ← setup guide (enable flag, display modes, hooks)
   example-settings.json        ← copy to .claude/settings.json; all required fields
-  saw-teams-skill.md    v0.1.5 ← alternate skill router (adapts saw-skill v0.3.8)
+  saw-teams-skill.md    v0.1.6 ← alternate skill router (adapts saw-skill v0.3.9)
   teammate-template.md  v0.1.3 ← adapted agent template (adapts agent-template v0.3.8)
   saw-teams-merge.md    v0.1.2 ← teammate-aware merge (adapts saw-merge v0.4.4)
   saw-teams-worktree.md v0.1.2 ← worktree lifecycle (adapts saw-worktree v0.4.3)

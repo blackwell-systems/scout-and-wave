@@ -1,4 +1,4 @@
-<!-- saw-teams-skill v0.1.5 -->
+<!-- saw-teams-skill v0.1.6 -->
 Scout-and-Wave Teams: Parallel Agent Coordination via Agent Teams
 
 You are the **Orchestrator** (team lead), the synchronous agent that drives all
@@ -42,11 +42,12 @@ If no `docs/IMPL-*.md` file exists for the current feature:
 1. Launch a **Scout agent** using the Agent tool with `run_in_background: true` and the contents of `prompts/scout.md` as its prompt and the feature description as context. The Scout is NOT a teammate; it runs before any team exists and does not need inter-agent messaging. The Scout analyzes the codebase, runs the suitability gate, and writes the IMPL doc; the Orchestrator does not perform this analysis itself. Inform the user that the Scout is running.
 2. When the Scout completes, read the resulting `docs/IMPL-<feature-slug>.md`.
 3. Report the suitability verdict to the user, and if suitable: the wave structure, file ownership table, interface contracts, and Scaffolds section. Ask the user to review before proceeding.
-4. **Scaffold Agent (conditional):** If the IMPL doc Scaffolds section is non-empty and any scaffold file has `Status: pending`, launch a **Scaffold Agent** using the Agent tool with `run_in_background: true` and the contents of `prompts/scaffold-agent.md` as its prompt. The Scaffold Agent is NOT a teammate; it runs before any team exists. Wait for it to complete, then verify all scaffold files show `Status: committed` before proceeding.
+4. **Scaffold Agent (conditional):** If the IMPL doc Scaffolds section is non-empty and any scaffold file has `Status: pending`, launch a **Scaffold Agent** using the Agent tool with `run_in_background: true` and the contents of `prompts/scaffold-agent.md` as its prompt. Use `[SAW:scaffold:<feature-slug>]` as the description prefix so claudewatch can identify the run. The Scaffold Agent is NOT a teammate; it runs before any team exists. Wait for it to complete, then read the Scaffolds section: if any file shows `Status: FAILED`, stop immediately — report the failure reason to the user and do not create worktrees or teams. The user must revise the interface contracts in the IMPL doc and re-run the Scaffold Agent. If all files show `Status: committed`, proceed.
 
 If a `docs/IMPL-*.md` file already exists:
-1. Read it and identify the current wave (the first wave with unchecked status items). Also check the Scaffolds section: if any scaffold file has `Status: pending`, spawn the Scaffold Agent now (see step 4 of the Scout flow above) before creating any worktrees or teams.
-2. **Multi-agent wave: Agent Teams execution:**
+1. Read it and identify the current wave (the first wave with unchecked status items). Also check the Scaffolds section: if any scaffold file has `Status: pending`, spawn the Scaffold Agent now (see step 4 of the Scout flow above) before creating any worktrees or teams. If any file shows `Status: FAILED`, stop and report the failure to the user before proceeding.
+2. **Solo agent check:** If the wave has exactly 1 agent, skip team creation and worktree creation. Launch the agent directly via the Agent tool with `run_in_background: true` on the main branch. After the agent completes, proceed to Step 5. (The solo wave agent must still operate in the Wave Agent role — not executed inline by the lead. Executing solo wave work inline violates I6 regardless of wave size.)
+3. **Multi-agent wave: Agent Teams execution:**
 
    a. **Worktree setup:** Read `saw-teams/saw-teams-worktree.md` from the scout-and-wave repository and follow the pre-creation procedure. Create a worktree for each teammate before spawning any teammates. **Interface freeze checkpoint:** interface contracts become immutable when worktrees are created. This is the last moment to revise type signatures, add fields, or restructure APIs. After this point, any interface change requires removing and recreating all worktrees for the wave. Verify that all scaffold files listed in the IMPL doc Scaffolds section show `Status: committed` before creating worktrees. **I2: Interface contracts precede parallel implementation.** The Scout defines all interfaces that cross agent boundaries in the IMPL doc. The Scaffold Agent implements them as type scaffold files committed to HEAD after human review, before any Wave Agent launches. Teammates implement against the spec; they never coordinate directly. Verify scaffold files are committed (Scaffolds section status) before creating worktrees; they are frozen at worktree creation (step 3a), not at teammate spawn.
 
@@ -127,9 +128,10 @@ Arguments:
   with no existing codebase. Acts as architect rather than analyst: designs
   disjoint file ownership before any code is written. Gathers requirements
   (language, project type, key concerns), designs package structure and interface
-  contracts, produces a types scaffold file with all shared interfaces, and
-  writes `docs/IMPL-bootstrap.md` with parallel implementation waves starting
-  from Wave 1. Use when starting from scratch.
+  contracts, specifies types scaffold in IMPL doc Scaffolds section (Scaffold
+  Agent creates it after human review), and writes `docs/IMPL-bootstrap.md`
+  with parallel implementation waves starting from Wave 1. Use when starting
+  from scratch.
 - `scout <feature-description>`: The Orchestrator launches a Scout agent
   (asynchronous) to analyze the codebase and produce the IMPL doc. The Scout
   runs the suitability gate first; if the work is not suitable, it writes a

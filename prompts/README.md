@@ -7,7 +7,7 @@ maps to a specific participant role or procedure defined in the spec.
 
 | File | Version | Purpose |
 |------|---------|---------|
-| [`saw-skill.md`](saw-skill.md) | v0.3.8 | The `/saw` skill router. Install to `~/.claude/commands/saw.md`. Routes `bootstrap`, `scout`, `wave`, `wave --auto`, and `status` commands. Drives all protocol state transitions as the Orchestrator. |
+| [`saw-skill.md`](saw-skill.md) | v0.3.9 | The `/saw` skill router. Install to `~/.claude/commands/saw.md`. Routes `bootstrap`, `scout`, `wave`, `wave --auto`, and `status` commands. Drives all protocol state transitions as the Orchestrator. |
 
 ## Participant Prompts
 
