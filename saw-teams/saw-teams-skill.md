@@ -1,4 +1,4 @@
-<!-- saw-teams-skill v0.1.2 -->
+<!-- saw-teams-skill v0.1.3 -->
 Scout-and-Wave Teams: Parallel Agent Coordination via Agent Teams
 
 You are the **Orchestrator** (team lead), the synchronous agent that drives all
@@ -23,7 +23,7 @@ pollutes the orchestrator's context window, and breaks observability (no Scout
 agent means no SAW session is detectable by monitoring tools).
 
 *`I{N}` notation refers to invariants (I1–I6) and `E{N}` to execution rules
-(E1–E13) defined in `PROTOCOL.md`. Each is embedded verbatim at its point of
+(E1–E14) defined in `PROTOCOL.md`. Each is embedded verbatim at its point of
 enforcement; the number is the anchor for cross-referencing and audit.*
 
 Read the scout prompt at `prompts/scout.md` and the teammate template at
@@ -46,7 +46,7 @@ If a `docs/IMPL-*.md` file already exists:
 1. Read it and identify the current wave (the first wave with unchecked status items).
 2. **Multi-agent wave: Agent Teams execution:**
 
-   a. **Worktree setup:** Read `saw-teams/saw-teams-worktree.md` from the scout-and-wave repository and follow the pre-creation procedure. Create a worktree for each teammate before spawning any teammates. **Interface freeze checkpoint:** interface contracts become immutable when worktrees are created. This is the last moment to revise type signatures, add fields, or restructure APIs. After this point, any interface change requires removing and recreating all worktrees for the wave. **I2: Interface contracts precede implementation.** All interfaces that cross agent boundaries are defined in the IMPL doc before any agent launches. Teammates implement against the spec; they never coordinate directly. Verify contracts are present in the IMPL doc before creating worktrees; they are frozen at worktree creation (step 3a), not at teammate spawn.
+   a. **Worktree setup:** Read `saw-teams/saw-teams-worktree.md` from the scout-and-wave repository and follow the pre-creation procedure. Create a worktree for each teammate before spawning any teammates. **Interface freeze checkpoint:** interface contracts become immutable when worktrees are created. This is the last moment to revise type signatures, add fields, or restructure APIs. After this point, any interface change requires removing and recreating all worktrees for the wave. Verify that any Scout-produced scaffold files are committed to HEAD before creating worktrees; scaffold files branched from a dirty or uncommitted state will diverge from the contracts teammates implement against. **I2: Interface contracts precede implementation.** All interfaces that cross agent boundaries are defined in the IMPL doc before any agent launches. Teammates implement against the spec; they never coordinate directly. Verify contracts are present in the IMPL doc before creating worktrees; they are frozen at worktree creation (step 3a), not at teammate spawn.
 
    b. **Pre-launch ownership verification:** Scan the wave's file ownership table. **I1: Disjoint File Ownership:** no two agents in the same wave own the same file; this is a hard constraint, not a preference, and is the mechanism that makes parallel execution safe. Worktree isolation does not substitute for it; the IMPL doc's file ownership table is the enforcement mechanism.
 

@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.5.1] | 2026-03-03 | Consistency pass: E-rule count, scaffold handling, Scout definition |
 | [0.5.0] | 2026-03-03 | Wave 0 collapsed into Scout phase; solo-agent short-circuit removed |
 | [0.4.4] | 2026-03-03 | saw-teams/example-settings.json; all required config fields in one copyable block |
 | [0.4.3] | 2026-03-03 | saw-teams hooks, README, and spawn step; complete Agent Teams integration |
@@ -41,6 +42,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Rationale
 
 Wave 0 was a structural smell: wave machinery applied to a single agent produces pure overhead with no parallelism benefit. The Scout already knows what Wave 0 needs to do — it wrote the Wave 0 agent prompt — so moving that work into the Scout phase requires only a permission change and a format change, not a new decision framework. See `docs/saw-type-scaffold-proposal.md` for the full design discussion.
+
+---
+
+## [0.5.1] - 2026-03-03
+
+### Fixed
+
+- **E-rule count mismatch:** `PROTOCOL.md`, `prompts/saw-skill.md`, and
+  `saw-teams/saw-teams-skill.md` all claimed "E1–E13" despite E14 being defined
+  in PROTOCOL.md since v0.4.0. All three updated to "E1–E14".
+- **Scout definition stale in `PROTOCOL.md` and `README.md`:** both still said
+  "Never modifies source files" after the Wave 0 collapse in v0.5.0. Updated to
+  reflect that the Scout may produce type scaffold files as coordination
+  artifacts; "Never modifies **existing** source files" is preserved.
+- **Scaffold handling not visible in skill files:** the interface freeze
+  checkpoint in `prompts/saw-skill.md` and `saw-teams/saw-teams-skill.md` did
+  not mention scaffold commit verification. Added explicit note: Scout-produced
+  scaffold files must be committed to HEAD before worktrees are created.
+- **Post-merge verification missing scaffold check:** `prompts/saw-merge.md`
+  (v0.4.4) and `saw-teams/saw-teams-merge.md` (v0.1.2) Step 6 now include a
+  scaffold integrity check — verify scaffold files are present and unmodified
+  after merge; any agent-modified scaffold is a protocol deviation.
+- **Wave numbering not documented in `agent-template.md`:** added explicit note
+  that waves are 1-indexed and Wave 0 no longer exists.
+
+### Version bumps
+
+`saw-skill.md` v0.3.6, `saw-merge.md` v0.4.4, `agent-template.md` v0.3.6,
+`saw-teams-skill.md` v0.1.3, `saw-teams-merge.md` v0.1.2.
 
 ---
 

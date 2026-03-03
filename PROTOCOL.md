@@ -45,9 +45,11 @@ moment; which specific stops are mandatory is a separate question from whether
 intervention is possible at all.
 
 **Scout:** An asynchronous agent launched by the orchestrator. Analyzes the
-codebase, produces the IMPL doc, and exits. Never modifies source files. Never
-participates in wave execution. The orchestrator waits for the scout's
-completion notification before entering REVIEWED state.
+codebase, produces the IMPL doc, and exits. May produce type scaffold files
+(shared interfaces, traits, structs) as coordination artifacts committed to HEAD
+before worktrees are created; agents implement against them. Never modifies
+existing source files. Never participates in wave execution. The orchestrator
+waits for the scout's completion notification before entering REVIEWED state.
 
 **Wave Agent:** An asynchronous agent launched by the orchestrator. Owns a
 disjoint set of files, implements against the interface contracts defined in the
@@ -169,7 +171,7 @@ re-runs verification. BLOCKED → WAVE_VERIFIED on verification pass.
 ## Execution Rules
 
 These rules govern orchestrator behavior during wave execution. They are not
-captured by the state machine alone. Rules are numbered E1–E13 for
+captured by the state machine alone. Rules are numbered E1–E14 for
 cross-referencing and audit; the same convention as invariants (I1–I6).
 
 **E1: Background execution.** All agent launches, CI polling, and long-running watch commands must execute asynchronously without blocking the orchestrator's main execution thread (e.g. Claude Code's `run_in_background: true` on the Agent and Bash tools). A blocking agent launch serializes the wave; the orchestrator waits for one agent before launching the next, eliminating parallelism. This is a protocol violation, not a performance preference. Any implementation that blocks the orchestrator on agent execution or polling is non-conforming.
