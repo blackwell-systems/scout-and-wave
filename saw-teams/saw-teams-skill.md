@@ -44,8 +44,7 @@ If no `docs/IMPL-*.md` file exists for the current feature:
 
 If a `docs/IMPL-*.md` file already exists:
 1. Read it and identify the current wave (the first wave with unchecked status items).
-2. **Solo agent check:** If the wave has exactly 1 agent, skip team creation and worktree creation. Launch the agent directly via the Agent tool with `run_in_background: true` on the main branch. After the agent completes, proceed to Step 4.
-3. **Multi-agent wave: Agent Teams execution:**
+2. **Multi-agent wave: Agent Teams execution:**
 
    a. **Worktree setup:** Read `saw-teams/saw-teams-worktree.md` from the scout-and-wave repository and follow the pre-creation procedure. Create a worktree for each teammate before spawning any teammates. **Interface freeze checkpoint:** interface contracts become immutable when worktrees are created. This is the last moment to revise type signatures, add fields, or restructure APIs. After this point, any interface change requires removing and recreating all worktrees for the wave. **I2: Interface contracts precede implementation.** All interfaces that cross agent boundaries are defined in the IMPL doc before any agent launches. Teammates implement against the spec; they never coordinate directly. Verify contracts are present in the IMPL doc before creating worktrees; they are frozen at worktree creation (step 3a), not at teammate spawn.
 
@@ -126,8 +125,9 @@ Arguments:
   with no existing codebase. Acts as architect rather than analyst: designs
   disjoint file ownership before any code is written. Gathers requirements
   (language, project type, key concerns), designs package structure and interface
-  contracts, and produces `docs/IMPL-bootstrap.md` with a Wave 0 (types) pattern
-  followed by parallel implementation waves. Use when starting from scratch.
+  contracts, produces a types scaffold file with all shared interfaces, and
+  writes `docs/IMPL-bootstrap.md` with parallel implementation waves starting
+  from Wave 1. Use when starting from scratch.
 - `scout <feature-description>`: The Orchestrator launches a Scout agent
   (asynchronous) to analyze the codebase and produce the IMPL doc. The Scout
   runs the suitability gate first; if the work is not suitable, it writes a

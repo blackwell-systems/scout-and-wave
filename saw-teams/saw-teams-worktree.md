@@ -11,8 +11,8 @@ teammates and passes the worktree path in each teammate's spawn context.
 
 ## Preflight: Working Tree Check
 
-**Run this before anything else** — before the solo agent check, before
-ownership verification, before creating worktrees.
+**Run this before anything else** — before ownership verification, before
+creating worktrees.
 
 ```bash
 git status --porcelain
@@ -53,26 +53,6 @@ merge results. Resolve before proceeding.
 
 Do not proceed until `git status --porcelain` returns empty output.
 
-## Solo Agent Check
-
-**Before creating any worktrees or any Agent Team**, count the agents in the
-current wave.
-
-If the wave has exactly **1 agent**:
-
-- Do NOT create an Agent Team; Agent Teams overhead is not justified for a
-  single agent
-- Do NOT create worktrees; a solo agent cannot conflict with itself
-- Launch the agent directly via the Agent tool with `run_in_background: true`
-  on the main branch (same as standard SAW solo wave behavior)
-- Proceed directly to post-wave verification after the agent completes
-
-Additional benefit: a solo Wave 0 agent running on main makes its output
-(new types, interfaces) immediately readable by Wave 1 agents without waiting
-for a worktree merge.
-
-Proceed to team creation and worktree setup only when the wave has **≥2 agents**.
-
 ## Pre-Launch Ownership Verification
 
 Before creating any worktrees, scan the wave's file ownership table in the
@@ -101,7 +81,7 @@ version of the contracts.
 Checklist before creating worktrees:
 - All type signatures in the IMPL doc interface contracts are final
 - All `store_embedding`-style multi-param signatures are agreed on
-- Any schema changes (Wave 0) are committed to HEAD
+- Any Scout scaffold files are committed to HEAD
 
 **If worktrees already exist from a previous session**, verify their HEAD
 matches the current HEAD of main before spawning teammates:

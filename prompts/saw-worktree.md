@@ -5,8 +5,8 @@ Manage git worktree creation, verification, and cleanup for wave agents.
 
 ## Preflight: Working Tree Check
 
-**Run this before anything else** — before the solo agent check, before ownership
-verification, before creating worktrees.
+**Run this before anything else** — before ownership verification, before
+creating worktrees.
 
 ```bash
 git status --porcelain
@@ -47,21 +47,6 @@ merge results. Resolve before proceeding.
 
 Do not proceed until `git status --porcelain` returns empty output.
 
-## Solo Agent Check
-
-**Before creating any worktrees**, count the agents in the current wave.
-
-If the wave has exactly **1 agent**, skip worktree creation entirely. Run the
-agent directly on the main branch with no isolation overhead. Worktree
-isolation exists to prevent inter-agent file conflicts; a solo agent cannot
-conflict with itself, so the overhead is pure waste.
-
-Additional benefit: a solo Wave 0 agent running on main makes its output
-(new types, interfaces) immediately readable by Wave 1 agents without waiting
-for a worktree merge.
-
-Proceed to worktree creation only when the wave has **≥2 agents**.
-
 ## Pre-Launch Ownership Verification
 
 Before creating any worktrees, scan the wave's file ownership table in the
@@ -90,7 +75,7 @@ version of the contracts.
 Checklist before creating worktrees:
 - All type signatures in the IMPL doc interface contracts are final
 - All `store_embedding`-style multi-param signatures are agreed on
-- Any schema changes (Wave 0) are committed to HEAD
+- Any Scout scaffold files are committed to HEAD
 
 **If worktrees already exist from a previous session**, verify their HEAD
 matches the current HEAD of main before launching agents:

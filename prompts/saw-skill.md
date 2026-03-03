@@ -45,8 +45,9 @@ Arguments:
   with no existing codebase. Acts as architect rather than analyst: designs
   disjoint file ownership before any code is written. Gathers requirements
   (language, project type, key concerns), designs package structure and interface
-  contracts, and produces `docs/IMPL-bootstrap.md` with a Wave 0 (types) pattern
-  followed by parallel implementation waves. Use when starting from scratch.
+  contracts, produces a types scaffold file with all shared interfaces, and
+  writes `docs/IMPL-bootstrap.md` with parallel implementation waves starting
+  from Wave 1. Use when starting from scratch.
 - `scout <feature-description>`: The Orchestrator launches a Scout agent
   (asynchronous) to analyze the codebase and produce the IMPL doc. The Scout
   runs the suitability gate first; if the work is not suitable, it writes a

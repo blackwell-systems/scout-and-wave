@@ -41,8 +41,7 @@ Answer these three questions:
    cause analysis before implementation: a crash whose source is unknown,
    a race condition that must be reproduced before it can be fixed, behavior
    that must be observed to be understood? If so, agents cannot be written
-   for those items yet; they must be isolated into a Wave 0 or handled
-   before SAW begins.
+   for those items yet; they must be resolved before SAW begins.
 
 3. **Interface discoverability.** Can the cross-agent interfaces be defined
    before implementation starts? If a downstream agent's inputs cannot be
@@ -131,8 +130,6 @@ Answer these three questions:
   implementation or an investigation-first step.
 - **SUITABLE WITH CAVEATS:** The work is parallelizable but has known
   constraints. Proceed, but document the caveats explicitly:
-  - Investigation-first items become Wave 0 (a single solo agent, not
-    parallel), which gates all downstream waves.
   - Interfaces that cannot yet be fully defined are flagged as blockers in
     the interface contracts section, with a note on how to resolve them.
 
@@ -212,11 +209,6 @@ Record the verdict and its rationale in the IMPL doc under a
    This is a hard constraint, not a preference.
 
 6. **Structure waves from the DAG.** Group agents into waves:
-   - **Wave 0 (prerequisite, if needed):** If any work is a correctness
-     prerequisite (meaning downstream agents cannot meaningfully validate
-     their own output until it completes), label it Wave 0 and run it alone.
-     Wave 0 is not just a dependency; it gates the integrity of all downstream
-     verification. Call this out explicitly in the coordination artifact.
    - Wave 1: Agents whose files have no dependencies on other new work.
      These are the foundation. Maximize parallelism here.
    - Wave N+1: Agents whose files depend on interfaces delivered in Wave N.
@@ -291,7 +283,7 @@ test_command: [full test suite command — e.g. `go test ./...` | `cargo test --
 
 [One paragraph explaining the verdict. If NOT SUITABLE, stop here; do not
 write the sections below. If SUITABLE WITH CAVEATS, describe what the
-caveats are and how they are handled (e.g., Wave 0 for investigation).]
+caveats are and how they are handled.]
 
 ### Known Issues
 
@@ -324,15 +316,11 @@ extracted to resolve ownership conflicts.]
 
 ### Wave Structure
 
-Wave 0:  [A]                 <- prerequisite (gates all downstream verification)
-              | (A completes + full verification gate passes)
-Wave 1: [B] [C] [D]          <- 3 parallel agents
-           | (B+C complete)
-Wave 2:   [E] [F]            <- 2 parallel agents
-           | (E+F complete)
-Wave 3:    [G]               <- 1 agent
-
-[Omit Wave 0 if no correctness prerequisite exists.]
+Wave 1: [A] [B] [C]          <- 3 parallel agents (foundation)
+           | (A+B complete)
+Wave 2:   [D] [E]            <- 2 parallel agents
+           | (D+E complete)
+Wave 3:    [F] [G]           <- 2 parallel agents
 
 ### Agent Prompts
 

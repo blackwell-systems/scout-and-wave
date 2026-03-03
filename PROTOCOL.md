@@ -164,17 +164,6 @@ no SAW session is detectable by monitoring tools).
 **BLOCKED** is not a terminal state. The orchestrator fixes the failure and
 re-runs verification. BLOCKED → WAVE_VERIFIED on verification pass.
 
-**Solo wave:** A wave containing exactly one agent runs the agent on the main
-branch with no worktrees. There is nothing to conflict with. The WAVE_MERGING
-state is skipped. Post-wave verification is still required before advancing.
-Wave 0 in bootstrap projects is always a solo wave.
-
-The solo wave agent must still operate in the Wave Agent role: launched by the
-Orchestrator as an asynchronous agent, not executed directly by the
-Orchestrator. Executing solo wave work inline violates I6 regardless of wave
-size. The absence of worktrees changes the isolation mechanism; it does not
-change the participant roles.
-
 ---
 
 ## Execution Rules
@@ -446,11 +435,11 @@ When all preconditions hold and all invariants are maintained:
 ## Variants
 
 **Bootstrap mode** (`prompts/saw-bootstrap.md`): Design-first execution for new
-projects with no existing codebase. The scout acts as architect: gathers
-requirements, designs package structure, and defines interface contracts before
-any code is written. Always begins with a mandatory solo Wave 0 that creates the
-shared types module. All subsequent agents implement against Wave 0 contracts
-without seeing each other's code.
+projects with no existing codebase. The Scout acts as architect: gathers
+requirements, designs package structure, defines interface contracts, and
+produces a types scaffold file containing all shared interfaces before any wave
+runs. Wave 1 agents implement in parallel against those contracts without seeing
+each other's code.
 
 ---
 

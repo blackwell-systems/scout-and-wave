@@ -74,7 +74,7 @@ Design for disjoint ownership before writing a line of code:
      app/           ← Business logic
      store/         ← Storage/persistence
      output/        ← Formatting/display
-     types/         ← Shared interfaces and types (Wave 0)
+     types/         ← Shared interfaces and types (Scout scaffold)
    ```
 
    Rust (workspace):
@@ -84,7 +84,7 @@ Design for disjoint ownership before writing a line of code:
      app/           ← Business logic
      store/         ← Storage/persistence
      output/        ← Formatting/display
-     types/         ← Shared traits and types (Wave 0)
+     types/         ← Shared traits and types (Scout scaffold)
    Cargo.toml       ← ORCHESTRATOR OWNED - do not touch in agent prompts
    ```
 
@@ -94,8 +94,8 @@ Design for disjoint ownership before writing a line of code:
    a single file that every Wave 1 agent needs to modify (to register their
    crate). This is a guaranteed conflict if agents touch it directly. Declare
    it **orchestrator-owned**: exclude it from every agent's file ownership list,
-   and have the orchestrator add all crates to the workspace after Wave 0
-   completes and before Wave 1 launches.
+   and have the orchestrator add all crates to the workspace after the Scout
+   phase completes and before Wave 1 launches.
 
    Agent prompts for Rust bootstrap must include an explicit constraint:
    > "Do not modify the root `Cargo.toml`. The orchestrator will register your
@@ -120,22 +120,29 @@ Design for disjoint ownership before writing a line of code:
 4. **Tests alongside implementations.** Each module has its own test files.
    Agents run focused tests without touching other modules.
 
-## Wave 0 Pattern (Always Required)
+## Scout Types Phase (Always Required)
 
-Bootstrap projects always start with a types wave because all other agents
-depend on shared contracts.
+Bootstrap projects always require shared contracts before any agent starts.
+The Scout produces these directly as a types scaffold file — not a Wave 0 agent.
 
-**Wave 0:** Single agent, not parallel.
-- Creates the shared types module (Go: `internal/types/`, Rust: `crates/types/`,
-  TS: `src/types/`, Python: `src/types.py`)
+**Scout creates the types scaffold:**
+- File location: Go: `internal/types/`, Rust: `crates/types/`,
+  TS: `src/types/`, Python: `src/types.py`
 - Defines all interfaces/traits that cross module boundaries
 - Defines shared structs, enums, error types
 - No implementation; interfaces, traits, and types only
+- Committed before any worktrees are created
 
-**Why solo:** Wave 1+ agents implement against these definitions. You cannot
-parallelize against contracts that don't exist yet.
+**Why the Scout, not a Wave 0 agent:** The Scout already has the full
+dependency graph and interface contracts in context. Producing a compilable
+types file is the same work as writing the interface contracts section of the
+IMPL doc — just expressed as source code rather than prose. A Wave 0 agent
+would do nothing the Scout cannot do directly, at the cost of a full wave
+cycle.
 
-**Post-Wave 0 gate:** Build the types module only. Must pass before Wave 1 launches.
+**Verification gate (Scout runs this before writing the IMPL doc):**
+Build the types module only. If it does not compile, fix it before producing
+agent prompts. Wave 1 agents must have a compiling types module to work against.
 
 ## Wave 1+ Pattern
 
@@ -146,7 +153,7 @@ After types exist, Wave 1 agents are truly parallel:
 - No agent touches another agent's directory
 
 Wave 2 wires everything together (entry point, dependency injection, main function).
-This is often a single solo agent since it's inherently integrative.
+This is inherently integrative work and may have only one or two agents.
 
 ## Output Format
 
@@ -168,13 +175,12 @@ Write `docs/IMPL-bootstrap.md`:
 Verdict: SUITABLE
 
 [One paragraph: N concerns identified, clean seams at [boundary descriptions].
-Wave 0 required because [all agents depend on shared types].]
+Scout produces types scaffold before Wave 1 launches.]
 
 Estimated times:
-- Design phase: ~X min (this scout)
-- Wave 0 (types): ~Y min (single agent, defines contracts)
+- Design + types scaffold phase: ~X min (this scout)
 - Wave 1 (parallel): ~Z min (N agents × M min, fully parallel)
-- Wave 2 (wiring): ~W min (single agent)
+- Wave 2 (wiring): ~W min
 Total: ~T min
 
 Sequential baseline: ~B min
@@ -192,28 +198,27 @@ No pseudocode. These are binding contracts.]
 
 ### Wave Structure
 
-Wave 0: [Types]        - shared interfaces and types (prerequisite)
+Scout: [Types scaffold] - shared interfaces and types (produced by Scout before Wave 1)
               | (types package compiles cleanly)
-Wave 1: [B][C][D]     - package implementations (parallel)
+Wave 1: [B][C][D]      - package implementations (parallel)
               | (all packages build, unit tests pass)
 Wave 2: [A]            - entry point wiring and integration
 
 ### Agent Prompts
 
 [Full 9-field prompt for each agent.]
-[Wave 0 agent: create types only, zero implementation.]
-[Wave 1 agents: implement against Wave 0 contracts, stub internals are fine.]
+[Wave 1 agents: implement against Scout-produced type contracts, stub internals are fine.]
 [Wave 2 agent: wire packages together, write integration test.]
 
 ### Verification Gates
 
-Wave 0: [build types module only, e.g., `go build ./internal/types` or `cargo build -p types`]
+Scout: [build types module only, e.g., `go build ./internal/types` or `cargo build -p types`]
 Wave 1: [build all modules] + [focused unit tests per module]
 Wave 2: [build full project] + [full test suite]
 
 ### Status
 
-- [ ] Wave 0: Types - [description]
+- [ ] Scout: Types scaffold - [description]
 - [ ] Wave 1 Agent B - [package: description]
 - [ ] Wave 1 Agent C - [package: description]
 - [ ] Wave 1 Agent D - [package: description]
@@ -225,8 +230,8 @@ Wave 2: [build full project] + [full test suite]
 - Do not write any source code. Write only `docs/IMPL-bootstrap.md`.
 - Every interface you define is a binding contract. Wave 1 agents implement
   against these without seeing each other's code.
-- Wave 0 is mandatory. Do not skip it even if interfaces seem obvious; it
-  creates the foundation all other agents depend on.
+- The Scout must produce a types scaffold file. Do not skip it even if
+  interfaces seem obvious; it creates the foundation all agents depend on.
 - Prefer more packages with smaller scopes over fewer with larger ones.
   An agent owning 1-3 files is ideal.
 - Design for the project's actual current needs, not hypothetical future ones.
