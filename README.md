@@ -77,11 +77,21 @@ Scout-and-wave ships as a `/saw` skill for [Claude Code](https://docs.anthropic.
 
 ### Install
 
-Copy the skill to your global commands directory:
+**1. Clone the repository** (the skill reads prompt files from it at runtime):
 
 ```bash
-cp prompts/saw-skill.md ~/.claude/commands/saw.md
+git clone https://github.com/blackwell-systems/scout-and-wave.git ~/code/scout-and-wave
 ```
+
+**2. Copy the skill to your Claude Code commands directory:**
+
+```bash
+cp ~/code/scout-and-wave/prompts/saw-skill.md ~/.claude/commands/saw.md
+```
+
+The skill loads `prompts/scout.md`, `prompts/saw-merge.md`, and `prompts/saw-worktree.md`
+from the repository at runtime. Keep the repository on disk. To use a non-default
+location, set `SAW_REPO=/path/to/scout-and-wave` in your environment.
 
 ### Permissions
 
@@ -114,6 +124,7 @@ launches asynchronously. Add `"Agent"` once to your user-level settings and all
 future SAW runs are fully hands-free from the moment you invoke `/saw wave`.
 
 The other entries cover git commands, worktree management, IMPL doc writes, and codebase reads (`Bash`, `Read`, `Write`, `Edit`, `Glob`, `Grep`), task list updates for wave progress tracking (`TodoWrite`), and doc/API lookups during scout analysis (`WebFetch`, `WebSearch`). If your existing settings already allow these, no change is needed.
+
 For project-scoped settings, add the same block to
 `.claude/settings.json` in the project root.
 
