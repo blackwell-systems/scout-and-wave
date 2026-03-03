@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.5.0] | 2026-03-03 | Wave 0 collapsed into Scout phase; solo-agent short-circuit removed |
 | [0.4.4] | 2026-03-03 | saw-teams/example-settings.json; all required config fields in one copyable block |
 | [0.4.3] | 2026-03-03 | saw-teams hooks, README, and spawn step; complete Agent Teams integration |
 | [0.4.2] | 2026-03-03 | saw-teams prompt set synced to protocol v0.4.1; all invariants/E-rules propagated |
@@ -23,6 +24,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.3.0] | 2026-02-28 | Bootstrap mode for new projects; Wave 0 pattern |
 | [0.2.0] | 2026-02-28 | Decomposed skill prompt; complexity-based suitability heuristic |
 | [0.1.0] | 2026-02-27 | Initial release |
+
+---
+
+## [0.5.0] - 2026-03-03
+
+### Changed
+
+- **Wave 0 collapsed into Scout phase.** The Scout now produces a types scaffold file directly — a source file containing all shared interfaces, structs, and error types — rather than writing a Wave 0 agent prompt. The work is identical; the mechanism changes from a sequential solo wave to a Scout output committed before any worktrees are created. Wave 1 is now always the first parallel wave.
+- **Solo-agent short-circuit removed** from `prompts/saw-worktree.md`, `saw-teams/saw-teams-worktree.md`, and `saw-teams/saw-teams-skill.md`. Every wave runs through full wave machinery. A wave that decomposes to one agent signals a decomposition problem or NOT SUITABLE, not a short-circuit path.
+- **Investigation-first items** are now NOT SUITABLE unconditionally. The SUITABLE WITH CAVEATS → Wave 0 workaround path is removed from the suitability gate in `scout.md`.
+- **`saw-bootstrap.md`** reframed: "Wave 0 Pattern (Always Required)" → "Scout Types Phase (Always Required)". Output format, verification gates, status checklist, and rules updated to match.
+- **`PROTOCOL.md`** solo wave definition removed; bootstrap Variants section updated.
+- **`prompts/saw-skill.md`** and **`saw-teams/saw-teams-skill.md`** bootstrap descriptions updated.
+
+### Rationale
+
+Wave 0 was a structural smell: wave machinery applied to a single agent produces pure overhead with no parallelism benefit. The Scout already knows what Wave 0 needs to do — it wrote the Wave 0 agent prompt — so moving that work into the Scout phase requires only a permission change and a format change, not a new decision framework. See `docs/saw-type-scaffold-proposal.md` for the full design discussion.
 
 ---
 
