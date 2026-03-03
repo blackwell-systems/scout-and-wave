@@ -84,7 +84,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   Prompts table. Updated scout.md description: "Never modifies source files" →
   "Never modifies existing source files" (clarification: it is the Scaffold Agent
   that creates new ones). Version numbers updated: scout v0.3.9, agent-template
-  v0.3.8, saw-skill v0.3.7.
+  v0.3.8, saw-skill v0.3.9.
 - **`PROTOCOL.md` version:** 0.5.2 → 0.6.0.
 - **`README.md` version badge:** 0.5.2 → 0.6.0.
 - **`saw-teams/DESIGN.md`:** I2 row updated to reflect Scaffold Agent role; File

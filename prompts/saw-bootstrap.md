@@ -144,8 +144,9 @@ Scaffold Agent creates the scaffold source files after human review.
 Producing source files is implementation work that benefits from a human review
 gate: the user approves the interface contracts in the IMPL doc before any code
 is written. The Scaffold Agent materializes the approved contracts. This
-restores the same checkpoint that existed between the Scout and Wave 0 in the
-original design, without the overhead of full wave machinery.
+restores the same structural checkpoint that Wave 0 previously provided
+(human review of interface contracts before any implementation), without the
+overhead of full wave machinery.
 
 ## Wave 1+ Pattern
 
