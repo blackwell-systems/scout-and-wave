@@ -74,7 +74,7 @@ Design for disjoint ownership before writing a line of code:
      app/           ← Business logic
      store/         ← Storage/persistence
      output/        ← Formatting/display
-     types/         ← Shared interfaces and types (Scout scaffold)
+     types/         ← Shared interfaces and types (Scaffold Agent)
    ```
 
    Rust (workspace):
@@ -84,7 +84,7 @@ Design for disjoint ownership before writing a line of code:
      app/           ← Business logic
      store/         ← Storage/persistence
      output/        ← Formatting/display
-     types/         ← Shared traits and types (Scout scaffold)
+     types/         ← Shared traits and types (Scaffold Agent)
    Cargo.toml       ← ORCHESTRATOR OWNED - do not touch in agent prompts
    ```
 
