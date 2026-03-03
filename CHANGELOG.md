@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.4.1] | 2026-03-03 | `test_command` field in IMPL doc; post-merge gate explicitly runs it unscoped |
 | [0.4.0] | 2026-03-02 | Spec completeness pass: E1–E14 numbered, six spec holes patched, state machine diagram, all invariants embedded in skill, conformance criteria |
 | [0.3.7] | 2026-03-01 | Orchestrator owns linter auto-fix post-merge; agents run check-only |
 | [0.3.6] | 2026-03-01 | SAW tag format for claudewatch wave/agent observability |
@@ -19,6 +20,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.3.0] | 2026-02-28 | Bootstrap mode for new projects; Wave 0 pattern |
 | [0.2.0] | 2026-02-28 | Decomposed skill prompt; complexity-based suitability heuristic |
 | [0.1.0] | 2026-02-27 | Initial release |
+
+---
+
+## [0.4.1] - 2026-03-03
+
+### Added
+
+- **`test_command` field in IMPL doc** — Scout derives the project's full test
+  suite command from the build system manifest (go.mod → `go test ./...`,
+  Cargo.toml → `cargo test --workspace`, package.json → `npx jest`, etc.) and
+  records it as `test_command` in the Suitability Assessment section. This is
+  language-agnostic: the field is populated once by the Scout and consumed by
+  the Orchestrator at every post-merge gate, with no per-language branching in
+  the protocol itself.
+
+### Changed
+
+- **`saw-merge.md` Step 6** (`saw-merge v0.4.2 → v0.4.3`) — Post-merge
+  verification now explicitly references `test_command` from the IMPL doc
+  rather than describing the rule in generic terms. The "run tests unscoped"
+  principle is unchanged; the change makes the IMPL doc the single source of
+  the actual command.
+
+- **`scout.md` Process step 1** (`scout v0.3.6 → v0.3.7`) — Step 1 now
+  explicitly instructs the Scout to derive and record `test_command` as part of
+  reading the build system. Previously this was implicit in "verification gates
+  must match the project's actual toolchain."
 
 ---
 

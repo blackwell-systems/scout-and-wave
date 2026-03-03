@@ -1,4 +1,4 @@
-<!-- scout v0.3.6 -->
+<!-- scout v0.3.7 -->
 # Scout Agent: Pre-Flight Dependency Mapping
 
 You are a reconnaissance agent that analyzes the codebase without modifying
@@ -170,7 +170,10 @@ Record the verdict and its rationale in the IMPL doc under a
 1. **Read the project first.** Examine the build system (Makefile, Cargo.toml,
    go.mod, package.json, pyproject.toml), test patterns, naming conventions, and
    directory structure. The verification gates and test expectations you emit
-   must match the project's actual toolchain.
+   must match the project's actual toolchain. Derive the full test suite command
+   and record it as `test_command` in the IMPL doc — this is the command the
+   Orchestrator runs post-merge to catch cross-package failures that individual
+   agents cannot see in isolation.
 
 2. **Identify every file that will change or be created.** Trace call paths,
    imports, and type dependencies. Do not guess; read the actual source.
@@ -284,6 +287,7 @@ Write the following to `docs/IMPL-<feature-slug>.md`:
 ### Suitability Assessment
 
 Verdict: SUITABLE | NOT SUITABLE | SUITABLE WITH CAVEATS
+test_command: [full test suite command — e.g. `go test ./...` | `cargo test --workspace` | `pytest` | `mvn test` | `npx jest`]
 
 [One paragraph explaining the verdict. If NOT SUITABLE, stop here; do not
 write the sections below. If SUITABLE WITH CAVEATS, describe what the
@@ -368,7 +372,7 @@ After wave {N} completes:
 - [ ] Worktree cleanup: `git worktree remove <path>` + `git branch -d <branch>` for each
 - [ ] Post-merge verification:
       - [ ] Linter auto-fix pass (if applicable): [insert command or "n/a"]
-      - [ ] `[insert full build + test command, e.g. go build ./... && go vet ./... && go test ./...]`
+      - [ ] `[insert full build + test command, e.g. go build ./... && go vet ./... && go test ./...]` ← use `test_command` from IMPL doc header; run unscoped
 - [ ] Fix any cascade failures — pay attention to cascade candidates listed above
 - [ ] Tick status checkboxes in this IMPL doc for completed agents
 - [ ] Update interface contracts for any deviations logged by agents

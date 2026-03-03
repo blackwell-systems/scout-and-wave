@@ -1,4 +1,4 @@
-<!-- saw-merge v0.4.2 -->
+<!-- saw-merge v0.4.3 -->
 # SAW Merge Procedure
 
 Merge agent worktrees back into the main branch after a wave completes.
@@ -174,9 +174,11 @@ This is the correct place for auto-fix: one centralized pass on the merged
 result is cleaner and more reliable than requiring every agent to know and run
 the exact auto-fix command in their individual verification gates.
 
-**Run tests unscoped.** Agents naturally scope their own verification to the
-packages they own. The orchestrator's post-merge gate must run without package
-scoping so cross-package cascade failures are caught:
+**Run tests unscoped using `test_command` from the IMPL doc.** Agents naturally
+scope their own verification to the packages they own. The orchestrator's
+post-merge gate must run without package scoping so cross-package cascade
+failures are caught. Use the `test_command` field from the IMPL doc's
+Suitability Assessment — the Scout derived it from the project's build system:
 
 ```bash
 # Correct - catches cross-crate failures:
