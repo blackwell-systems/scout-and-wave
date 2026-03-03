@@ -15,7 +15,7 @@ The prompts in `prompts/` are reference implementations of this protocol.
 
 ## Participants
 
-SAW has three participant roles. All three are agents (AI model instances
+SAW has four participant roles. All four are agents (AI model instances
 running with tool access). They differ only in execution mode and responsibility.
 
 **Orchestrator:** The synchronous agent running in the user's own interactive

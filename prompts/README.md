@@ -35,7 +35,7 @@ instructions in them directly.
 
 | File | Version | Skill command | Purpose |
 |------|---------|---------------|---------|
-| [`saw-bootstrap.md`](saw-bootstrap.md) | v0.3.2 | `/saw bootstrap` | Design-first execution for new projects with no existing codebase. Orchestrator reads this and acts as architect: gathers requirements, designs package structure, defines interface contracts, produces a types scaffold file, and writes `docs/IMPL-bootstrap.md` with parallel implementation waves starting from Wave 1. |
+| [`saw-bootstrap.md`](saw-bootstrap.md) | v0.3.3 | `/saw bootstrap` | Design-first execution for new projects with no existing codebase. Orchestrator reads this and acts as architect: gathers requirements, designs package structure, defines interface contracts, specifies types scaffold in IMPL doc Scaffolds section, and writes `docs/IMPL-bootstrap.md` with parallel implementation waves starting from Wave 1. |
 
 ## Protocol Invariants Referenced
 

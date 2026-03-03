@@ -75,7 +75,7 @@ version of the contracts.
 Checklist before creating worktrees:
 - All type signatures in the IMPL doc interface contracts are final
 - All multi-parameter function signatures and complex return types are agreed on
-- Any Scout scaffold files are committed to HEAD
+- Any Scaffold Agent scaffold files are committed to HEAD
 
 **If worktrees already exist from a previous session**, verify their HEAD
 matches the current HEAD of main before launching agents:

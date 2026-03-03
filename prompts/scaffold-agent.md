@@ -83,9 +83,9 @@ Update the IMPL doc Scaffolds section with the commit SHA:
 ```markdown
 ### Scaffolds
 
-| File | Description | Status |
-|------|-------------|--------|
-| `path/to/scaffold.go` | Shared types for X | committed (abc1234) |
+| File | Contents | Import path | Status |
+|------|----------|-------------|--------|
+| `path/to/scaffold.go` | Shared types for X | `module/path/types` | committed (abc1234) |
 ```
 
 Do not write a full YAML completion report. The Scaffold Agent's completion

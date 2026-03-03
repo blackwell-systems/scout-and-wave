@@ -38,7 +38,7 @@ See [Permissions](#permissions) before your first run. `"Agent"` must be in your
 
 ## How
 
-Scout-and-wave fixes this before any agent starts, through three participant roles:
+Scout-and-wave fixes this before any agent starts, through four participant roles:
 
 - **Orchestrator:** the synchronous agent running in the user's own session. The human reviews, approves, and intervenes through it directly. There is no separate human role because the Orchestrator is already the user's agent. Drives all protocol state transitions: launches the Scout and Wave Agents, waits for completion, executes the merge procedure, verifies the result, and advances state. Does not perform Scout or Wave Agent duties (I6: Role Separation).
 

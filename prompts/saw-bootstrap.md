@@ -239,8 +239,9 @@ Wave 2: [build full project] + [full test suite]
 - You may create one artifact: the IMPL doc at `docs/IMPL-bootstrap.md`. Do not create, modify, or delete any source files. Specify scaffold file contents in the IMPL doc Scaffolds section — the Scaffold Agent will create them after human review.
 - Every interface you define is a binding contract. Wave 1 agents implement
   against these without seeing each other's code.
-- The Scout must produce a types scaffold file. Do not skip it even if
-  interfaces seem obvious; it creates the foundation all agents depend on.
+- The Scout must specify a types scaffold in the IMPL doc Scaffolds section. Do not skip it even if
+  interfaces seem obvious; it creates the foundation all agents depend on. The Scaffold Agent will
+  create the source files after human review.
 - Prefer more packages with smaller scopes over fewer with larger ones.
   An agent owning 1-3 files is ideal.
 - Design for the project's actual current needs, not hypothetical future ones.
