@@ -1,7 +1,7 @@
 # Scout-and-Wave: A Protocol for Safely Parallelizing Human-Guided Agentic Workflows
 
 [![Blackwell Systems™](https://raw.githubusercontent.com/blackwell-systems/blackwell-docs-theme/main/badge-trademark.svg)](https://github.com/blackwell-systems)
-![Version](https://img.shields.io/badge/version-0.4.1-blue)
+![Version](https://img.shields.io/badge/version-0.6.0-blue)
 
 A coordination protocol for safely parallelizing human-guided agentic workflows. Defines participant roles, preconditions, ownership invariants, and verification gates that guarantee agents can work concurrently without conflicts. Human review checkpoints are structural: the protocol does not advance past the suitability gate or between waves without human approval.
 
@@ -38,11 +38,13 @@ See [Permissions](#permissions) before your first run. `"Agent"` must be in your
 
 ## How
 
-Scout-and-wave fixes this before any agent starts, through three participant roles:
+Scout-and-wave fixes this before any agent starts, through four participant roles:
 
 - **Orchestrator:** the synchronous agent running in the user's own session. The human reviews, approves, and intervenes through it directly. There is no separate human role because the Orchestrator is already the user's agent. Drives all protocol state transitions: launches the Scout and Wave Agents, waits for completion, executes the merge procedure, verifies the result, and advances state. Does not perform Scout or Wave Agent duties (I6: Role Separation).
 
-- **Scout:** an asynchronous agent launched by the Orchestrator. Analyzes the codebase and produces a coordination artifact: a dependency graph, exact interface contracts, a file ownership table, and a wave structure. Every file that will change is assigned to exactly one agent. No two agents in the same wave may touch the same file (I1: Disjoint File Ownership). The Scout resolves ownership conflicts at planning time or declares the work NOT SUITABLE for parallel execution. Never modifies source files.
+- **Scout:** an asynchronous agent launched by the Orchestrator. Analyzes the codebase and produces a coordination artifact: a dependency graph, exact interface contracts, a file ownership table, and a wave structure. Every file that will change is assigned to exactly one agent. No two agents in the same wave may touch the same file (I1: Disjoint File Ownership). The Scout resolves ownership conflicts at planning time or declares the work NOT SUITABLE for parallel execution. If shared types are needed, specifies their contents in the IMPL doc Scaffolds section; the Scaffold Agent materializes them after human review. Never modifies source files.
+
+- **Scaffold Agent:** an asynchronous agent launched by the Orchestrator after human review of the IMPL doc. Reads the Scaffolds section, creates the specified type scaffold source files (shared interfaces, traits, structs), verifies they compile, and commits them to HEAD. Runs once, before any Wave Agent launches. If compilation fails, writes a FAILED status to the IMPL doc and stops; the Orchestrator surfaces the failure before any worktree is created. This is the structural human checkpoint: scaffold files exist in HEAD and are frozen at worktree creation time, so all Wave Agents implement against the same compiled contracts (I2: Interface contracts precede parallel implementation).
 
 - **Wave Agents:** asynchronous agents launched by the Orchestrator in parallel. Each owns a disjoint set of files, implements against the pre-defined interface contracts, runs the verification gate, commits its work, and writes a structured completion report (interface deviations, out-of-scope discoveries, verification result). Build and test gates verify each wave before the next begins.
 
@@ -138,9 +140,11 @@ For project-scoped settings, add the same block to
 
 2. **Review:** Read the IMPL doc. Verify ownership is clean, interfaces are correct, and wave order makes sense. Adjust before proceeding. This is the last moment to change interface signatures.
 
-3. **Wave:** `/saw wave` launches parallel agents for the current wave, merges on completion, and runs the verification gate.
+3. **Scaffold Agent (conditional):** If the IMPL doc has a non-empty Scaffolds section, the Orchestrator launches the Scaffold Agent automatically. It creates the shared type files, verifies compilation, and commits to HEAD. If any scaffold fails to compile, the run stops here — fix the contracts in the IMPL doc before proceeding. When all scaffolds show `Status: committed`, the interface contracts are frozen.
 
-4. **Repeat:** `/saw wave` for each subsequent wave, or `/saw wave --auto` to run all remaining waves unattended. Auto mode still pauses if verification fails.
+4. **Wave:** `/saw wave` launches parallel agents for the current wave, merges on completion, and runs the verification gate.
+
+5. **Repeat:** `/saw wave` for each subsequent wave, or `/saw wave --auto` to run all remaining waves unattended. Auto mode still pauses if verification fails.
 
 ### How it works under the hood
 
@@ -171,6 +175,7 @@ Neither constraint substitutes for the other. Disjoint ownership without worktre
 ## Prompts
 
 - [`prompts/scout.md`](prompts/scout.md): The scout prompt that produces the coordination artifact
+- [`prompts/scaffold-agent.md`](prompts/scaffold-agent.md): Scaffold Agent prompt — materializes type scaffolds from the IMPL doc Scaffolds section after human review, before any Wave Agent launches
 - [`prompts/agent-template.md`](prompts/agent-template.md): The 9-field agent prompt template stamped per-agent (Field 0: isolation verification; Fields 1–8: implementation spec)
 - [`prompts/saw-skill.md`](prompts/saw-skill.md): Claude Code `/saw` skill router (copy to `~/.claude/commands/saw.md`)
 - [`prompts/saw-bootstrap.md`](prompts/saw-bootstrap.md): Design-first architecture for new projects with no existing codebase

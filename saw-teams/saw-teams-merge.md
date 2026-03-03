@@ -1,8 +1,8 @@
-<!-- saw-teams-merge v0.1.1 -->
+<!-- saw-teams-merge v0.1.2 -->
 # SAW-Teams Merge Procedure
 
 Merge teammate worktrees back into the main branch after a wave completes.
-Adapted from `prompts/saw-merge.md` (v0.4.3): same merge mechanics, same
+Adapted from `prompts/saw-merge.md` (v0.4.4): same merge mechanics, same
 invariants, with teammate messaging as a supplement.
 
 ## Step 1: Parse Completion Reports
@@ -229,6 +229,12 @@ different crate constructs the type without the new field.
 
 Pay particular attention to cascade candidates listed in the IMPL doc: files
 outside agent scope that reference changed interfaces.
+
+**Scaffold files:** If the Scaffold Agent produced type scaffold files for this wave,
+verify they are present and unchanged in the merged result. Scaffold files are
+committed to HEAD before worktrees branch; teammates implement against them but
+do not own them. If a scaffold file is missing or was modified by a teammate,
+this is a protocol deviation — investigate before proceeding.
 
 If verification fails, fix before proceeding. Do not launch the next wave
 with a broken build.

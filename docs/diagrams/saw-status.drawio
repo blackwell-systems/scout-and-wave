@@ -9,7 +9,7 @@
     </mxCell>
 
     <!-- Scope note -->
-    <mxCell id="3" parent="1" style="text;html=1;align=center;fontSize=15;strokeColor=none;fillColor=none;fontColor=#666666;fontStyle=2;" value="See also: saw-scout-wave.drawio · saw-bootstrap.drawio · saw-check.drawio" vertex="1">
+    <mxCell id="3" parent="1" style="text;html=1;align=center;fontSize=15;strokeColor=none;fillColor=none;fontColor=#666666;fontStyle=2;" value="See also: saw-scout-wave.drawio · saw-bootstrap.drawio · saw-state-machine.drawio" vertex="1">
       <mxGeometry height="30" width="700" x="450" y="208" as="geometry"/>
     </mxCell>
 
