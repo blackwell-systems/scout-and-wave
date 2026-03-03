@@ -202,13 +202,23 @@ Record the verdict and its rationale in the IMPL doc under a
    code. If you cannot determine a signature, flag it as a blocker that must
    be resolved before launching agents.
 
-5. **Assign file ownership.** Every file that will change gets assigned to
+5. **Produce type scaffolds if needed.** If the interface contracts from step 4
+   define types, structs, enums, or interfaces that cross agent boundaries —
+   meaning Wave 1 agents must import or reference them to validate their own
+   output — produce a type scaffold file now. Write only the shared type
+   definitions; no function bodies, no behavior. Use the project's standard
+   location for shared types (Go: `internal/types/`, Rust: `crates/types/`,
+   TS: `src/types/`, Python: `src/types.py`). Run the build against the
+   scaffold file to verify it compiles before proceeding. Commit it. If no
+   cross-agent types are needed, skip this step.
+
+6. **Assign file ownership.** Every file that will change gets assigned to
    exactly one agent. No two agents in the same wave may touch the same file.
    If two tasks need the same file, resolve the conflict now: extract an
    interface, split the file, or create a new file so ownership is disjoint.
    This is a hard constraint, not a preference.
 
-6. **Structure waves from the DAG.** Group agents into waves:
+7. **Structure waves from the DAG.** Group agents into waves:
    - Wave 1: Agents whose files have no dependencies on other new work.
      These are the foundation. Maximize parallelism here.
    - Wave N+1: Agents whose files depend on interfaces delivered in Wave N.
@@ -216,12 +226,12 @@ Record the verdict and its rationale in the IMPL doc under a
    - Annotate each wave transition with the *specific* agent(s) that unblock
      it, not "blocked on Wave 1" but "blocked on Agent A completing."
 
-7. **Write agent prompts.** For each agent, produce a complete prompt using
+8. **Write agent prompts.** For each agent, produce a complete prompt using
    the standard 9-field format (see [agent template](agent-template.md)). The
    prompt must be self-contained: an agent receiving it should need nothing
    beyond the prompt and the existing codebase to do its work.
 
-8. **Determine verification gates from the build system.** Read the Makefile,
+9. **Determine verification gates from the build system.** Read the Makefile,
    CI config, or build scripts. Emit the exact commands each agent must run.
    Do not use generic placeholders; use the project's actual toolchain.
 
@@ -284,6 +294,17 @@ test_command: [full test suite command — e.g. `go test ./...` | `cargo test --
 [One paragraph explaining the verdict. If NOT SUITABLE, stop here; do not
 write the sections below. If SUITABLE WITH CAVEATS, describe what the
 caveats are and how they are handled.]
+
+### Scaffolds
+
+[Omit this section if no type scaffold files were produced.]
+
+If you created type scaffold files in step 5, list them here. Agents must
+import from these files rather than defining their own versions of these types.
+
+| File | Contents | Import path |
+|------|----------|-------------|
+| `...` | `...` | `...` |
 
 ### Known Issues
 
@@ -395,8 +416,14 @@ glance. Per-agent files are loaded only when launching or reviewing that agent.
 
 ## Rules
 
-- You are read-only. Do not create, modify, or delete any source files
-  other than the coordination artifact at `docs/IMPL-<feature-slug>.md`.
+- You may create two kinds of artifacts: the IMPL doc at
+  `docs/IMPL-<feature-slug>.md`, and type scaffold files containing only type
+  definitions, constants, and interface declarations — no function bodies, no
+  behavior. Do not create, modify, or delete any other source files. Type
+  scaffolds are coordination artifacts expressed as compilable code; they are
+  not product code and their content is fully determined by the interface
+  contracts you already define. Commit scaffold files before writing the IMPL
+  doc so they are in HEAD when worktrees are created.
 - Every signature you define is a binding contract. Agents will implement
   against these signatures without seeing each other's code.
 - If you cannot cleanly assign disjoint file ownership, say so. That is a
