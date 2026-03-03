@@ -129,8 +129,9 @@ distinct from an I1 violation. A single agent cannot conflict with itself.
 Such out-of-scope changes must be justified, documented in the completion
 report, and verified by the post-merge gate.
 
-**I2: Interface contracts precede implementation.** All interfaces that cross
-agent boundaries are defined in the IMPL doc before any agent launches.
+**I2: Interface contracts precede parallel implementation.** The Scout defines
+all interfaces that cross agent boundaries in the IMPL doc, and implements them
+as type scaffold files committed to HEAD, before any Wave Agent launches.
 Agents implement against the spec; they never coordinate directly.
 
 **I3: Wave sequencing.** Wave N+1 does not launch until Wave N has been

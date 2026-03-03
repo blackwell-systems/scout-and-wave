@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.5.2] | 2026-03-03 | I2 invariant updated: Scout defines and implements interface contracts |
 | [0.5.1] | 2026-03-03 | Consistency pass: E-rule count, scaffold handling, Scout definition |
 | [0.5.0] | 2026-03-03 | Wave 0 collapsed into Scout phase; solo-agent short-circuit removed |
 | [0.4.4] | 2026-03-03 | saw-teams/example-settings.json; all required config fields in one copyable block |
@@ -25,6 +26,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.3.0] | 2026-02-28 | Bootstrap mode for new projects; Wave 0 pattern |
 | [0.2.0] | 2026-02-28 | Decomposed skill prompt; complexity-based suitability heuristic |
 | [0.1.0] | 2026-02-27 | Initial release |
+
+---
+
+## [0.5.2] - 2026-03-03
+
+### Changed
+
+- **I2 invariant redefined:** renamed from "Interface contracts precede
+  implementation" to "Interface contracts precede parallel implementation".
+  Body updated to reflect the Scout's dual role: defines contracts in the IMPL
+  doc AND implements them as type scaffold files committed to HEAD, before any
+  Wave Agent launches. Updated in `PROTOCOL.md` (canonical definition),
+  `prompts/saw-skill.md`, and `saw-teams/saw-teams-skill.md` (embeddings).
+
+### Fixed
+
+- **`saw-teams/DESIGN.md`:** I2 row was mislabeled "Verification gates"
+  (that is I5). Corrected to "Interface contracts precede parallel
+  implementation" with accurate SAW vs SAW-Teams comparison.
+- **`saw-teams/README.md`:** I2 reference updated to name scaffold files
+  explicitly.
 
 ---
 

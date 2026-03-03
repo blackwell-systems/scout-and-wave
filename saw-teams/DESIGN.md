@@ -30,7 +30,7 @@ progress visibility, and native worktree management.
 | Invariant | SAW (current) | SAW-Teams |
 |-----------|--------------|-----------|
 | I1: Disjoint file ownership | Scout verifies, Orchestrator enforces | Scout verifies, lead enforces via spawn prompts |
-| I2: Verification gates | Agent runs build/test in worktree | Teammate runs build/test in worktree |
+| I2: Interface contracts precede parallel implementation | Scout defines contracts in IMPL doc and produces scaffold files before Wave 1 | Same; Scout is not a teammate, runs before any team exists |
 | I3: Wave ordering | Orchestrator blocks between waves | Lead blocks between waves via control flow; future-wave tasks not created (tasks lost during team cleanup) |
 | I4: IMPL doc is source of truth | Agents read IMPL doc | Teammates read IMPL doc |
 | I5: Agents commit before reporting | Agent commits to worktree branch | Teammate commits to worktree branch |

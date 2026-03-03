@@ -161,7 +161,7 @@ any team exists. The IMPL doc it produces is consumed by every wave team.
 
 **What SAW adds to Agent Teams:**
 - Suitability gate (Scout asks: is this work parallelizable? do interfaces exist? are files decomposable?)
-- Interface contracts defined before any agent starts (I2)
+- Scout defines and implements interface contracts (scaffold files committed to HEAD) before any Wave Agent launches (I2)
 - Disjoint file ownership enforced before worktrees created (I1)
 - Wave structure derived from the dependency DAG (waves run sequentially; within a wave, agents are independent)
 - Git worktree isolation per agent (Agent Teams has no worktree primitive)
