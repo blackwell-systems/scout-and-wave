@@ -105,6 +105,19 @@ was rejected: async agents run to completion with no pause/resume, so a "Scout
 continues" design would require two separate Scout invocations with context
 re-establishment overhead. The Scaffold Agent avoids this.
 
+### Solo wave and cross-wave coordination semantics
+
+- **Solo waves do not require scaffolding.** Scaffold files exist so that multiple
+  agents in the same wave can compile against shared types; one agent cannot
+  conflict with itself. Scout leaves the Scaffolds section empty for solo waves.
+- **Cross-wave coordination uses committed code.** Waves execute sequentially.
+  Wave N commits its work to HEAD; Wave N+1 imports from the committed codebase
+  directly. Scaffolds solve the intra-wave problem only.
+- **Scaffolding runs once, before the first wave.** E2 (interface freeze)
+  guarantees all cross-agent types are known at REVIEWED. The state machine's
+  loop-back from "more waves?" to WAVE_PENDING bypasses the scaffold gate by
+  design — there is nothing new to scaffold between waves.
+
 ---
 
 ## [0.5.3] - 2026-03-03

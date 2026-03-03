@@ -55,7 +55,9 @@ completion notification before entering REVIEWED state.
 human review of the IMPL doc. Reads the approved interface contracts and
 Scaffolds section from the IMPL doc, creates the specified type scaffold files
 (shared interfaces, traits, structs — no behavior), verifies they compile, and
-commits them to HEAD. Runs only when the IMPL doc Scaffolds section is
+commits them to HEAD. Runs once, before the first wave — E2 (interface freeze)
+guarantees all cross-agent types are known at REVIEWED, so there is nothing new
+to scaffold between waves. Runs only when the IMPL doc Scaffolds section is
 non-empty. Never modifies existing source files. Exits after committing and
 updating the Scaffolds section status. The orchestrator waits for the Scaffold
 Agent before creating worktrees.
@@ -187,6 +189,18 @@ Orchestrator as an asynchronous agent, not executed directly by the
 Orchestrator. Executing solo wave work inline violates I6 regardless of wave
 size. The absence of worktrees changes the isolation mechanism; it does not
 change the participant roles.
+
+Solo waves do not require scaffolding. Scaffold files exist so that multiple
+agents in the same wave can compile against shared types; one agent cannot
+conflict with itself. Scout leaves the Scaffolds section empty for solo waves.
+
+**Cross-wave coordination:** Waves execute sequentially. When Wave N completes,
+its implementations are committed to HEAD. Wave N+1 agents branch from that
+commit and import from the committed codebase directly — not from scaffolds.
+This is ordinary software development: you import from what is already merged.
+Scaffolds solve the intra-wave problem (parallel agents that cannot see each
+other's code); cross-wave coordination needs no special mechanism because later
+waves always have access to earlier waves' committed work.
 
 ---
 
