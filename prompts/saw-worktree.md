@@ -1,4 +1,4 @@
-<!-- saw-worktree v0.4.2 -->
+<!-- saw-worktree v0.4.3 -->
 # SAW Worktree Lifecycle
 
 Manage git worktree creation, verification, and cleanup for wave agents.
@@ -74,7 +74,7 @@ version of the contracts.
 
 Checklist before creating worktrees:
 - All type signatures in the IMPL doc interface contracts are final
-- All `store_embedding`-style multi-param signatures are agreed on
+- All multi-parameter function signatures and complex return types are agreed on
 - Any Scout scaffold files are committed to HEAD
 
 **If worktrees already exist from a previous session**, verify their HEAD

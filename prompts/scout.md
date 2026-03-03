@@ -1,4 +1,4 @@
-<!-- scout v0.3.7 -->
+<!-- scout v0.3.8 -->
 # Scout Agent: Pre-Flight Dependency Mapping
 
 You are a reconnaissance agent that analyzes the codebase without modifying
@@ -112,8 +112,8 @@ Answer these three questions:
      cycle >30s OR avg files per agent ≥3 OR tasks involve non-trivial logic).
      Proceed as SUITABLE.
    - **Low parallelization value:** Tasks are simple edits, documentation-only,
-     or trivially fast to implement sequentially. Recommend saw-quick mode
-     (if 2-3 agents with disjoint files) or sequential implementation.
+     or trivially fast to implement sequentially. Recommend sequential
+     implementation (SAW overhead exceeds parallelization benefit for this work).
    - **Coordination value independent of speed:** Even when parallelization
      savings are marginal, the IMPL doc provides value as an audit trail,
      interface spec, or progress tracker. Flag as SUITABLE WITH CAVEATS and
@@ -121,7 +121,7 @@ Answer these three questions:
 
 **Emit a verdict before proceeding:**
 
-- **SUITABLE:** All three questions resolve cleanly. Proceed with full
+- **SUITABLE:** All five questions resolve cleanly. Proceed with full
   analysis and produce the IMPL doc.
 - **NOT SUITABLE:** One or more questions is a hard blocker (e.g., only
   one file changes, or root cause of a crash is completely unknown). Write

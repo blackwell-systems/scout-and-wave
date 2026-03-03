@@ -1,4 +1,4 @@
-<!-- saw-bootstrap v0.3.1 -->
+<!-- saw-bootstrap v0.3.2 -->
 # SAW Bootstrap: Design-First Project Architecture
 
 Use this mode when starting a new project from scratch with no existing codebase.
@@ -227,7 +227,7 @@ Wave 2: [build full project] + [full test suite]
 
 ## Rules
 
-- Do not write any source code. Write only `docs/IMPL-bootstrap.md`.
+- You may create two kinds of artifacts: the IMPL doc at `docs/IMPL-bootstrap.md`, and type scaffold files containing only type definitions, constants, and interface declarations — no function bodies, no behavior. Do not create, modify, or delete any other source files.
 - Every interface you define is a binding contract. Wave 1 agents implement
   against these without seeing each other's code.
 - The Scout must produce a types scaffold file. Do not skip it even if
@@ -236,5 +236,5 @@ Wave 2: [build full project] + [full test suite]
   An agent owning 1-3 files is ideal.
 - Design for the project's actual current needs, not hypothetical future ones.
   A CLI tool with 3 concerns needs 3 packages, not 8.
-- If fewer than 3 concerns are identified, flag as SUITABLE WITH CAVEATS and
-  recommend saw-quick mode or sequential implementation instead.
+- If fewer than 3 concerns are identified, flag as NOT SUITABLE and recommend
+  sequential implementation or a redesign that produces more separable concerns.

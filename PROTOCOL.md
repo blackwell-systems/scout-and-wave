@@ -1,6 +1,6 @@
 # Scout-and-Wave Protocol Specification
 
-**Version:** 0.4.0
+**Version:** 0.5.2
 **Status:** Active
 
 Scout-and-Wave (SAW) is a protocol for safely parallelizing human-guided
@@ -118,7 +118,8 @@ Invariants are identified by number (I1–I6). When referenced in prompt files,
 the I-number serves as an anchor for cross-referencing and audit; the canonical
 definition is embedded verbatim alongside it so each document remains
 self-contained without requiring a lookup. To audit consistency, grep prompt
-files for `I{N}` and verify the embedded definition matches this section.
+files for `I{N}` and `E{N}` and verify the embedded definitions match this
+section and the Execution Rules section.
 
 **I1: Disjoint file ownership.** No two agents in the same wave own the same
 file. This is a hard constraint, not a preference. It is the mechanism that
@@ -468,6 +469,7 @@ The canonical prompts that implement this protocol for Claude Code:
 - The state machine transitions, including mandatory human checkpoints at the suitability gate and REVIEWED state
 - The message formats: suitability verdict, completion report YAML schema, and IMPL doc section structure
 - The suitability gate: five-question assessment with NOT SUITABLE as a first-class outcome
+- Scaffold file support: the Scout may produce type scaffold files committed to HEAD before worktrees are created; agents implement against them; the post-merge gate verifies scaffold files are present and unmodified (I2)
 
 What may vary across implementations: the agent runtime primitives (tool names, parameter syntax, isolation mechanism), the programming language of the target project, the specific verification commands, and the UI surface for human checkpoints.
 

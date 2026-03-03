@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.5.3] | 2026-03-03 | Deep consistency pass: 15 issues across 12 files |
 | [0.5.2] | 2026-03-03 | I2 invariant updated: Scout defines and implements interface contracts |
 | [0.5.1] | 2026-03-03 | Consistency pass: E-rule count, scaffold handling, Scout definition |
 | [0.5.0] | 2026-03-03 | Wave 0 collapsed into Scout phase; solo-agent short-circuit removed |
@@ -26,6 +27,48 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.3.0] | 2026-02-28 | Bootstrap mode for new projects; Wave 0 pattern |
 | [0.2.0] | 2026-02-28 | Decomposed skill prompt; complexity-based suitability heuristic |
 | [0.1.0] | 2026-02-27 | Initial release |
+
+---
+
+## [0.5.3] - 2026-03-03
+
+### Fixed
+
+- **`PROTOCOL.md` version header:** was `0.4.0`, updated to `0.5.2`.
+- **`PROTOCOL.md` conformance criteria:** added scaffold file support bullet —
+  conforming implementations must support Scout-produced scaffold files and
+  post-merge scaffold integrity verification.
+- **`PROTOCOL.md` audit grep instruction:** updated to include `E{N}` alongside
+  `I{N}` so both invariants and execution rules are covered in consistency audits.
+- **`prompts/README.md`:** updated all stale version numbers (saw-skill v0.3.3→v0.3.6,
+  scout v0.3.5→v0.3.7, agent-template v0.3.4→v0.3.7, saw-worktree v0.4.1→v0.4.3,
+  saw-merge v0.4.2→v0.4.4, saw-bootstrap v0.3.2→v0.3.1); removed "solo-agent check"
+  from saw-worktree description; updated Scout description to reflect scaffold file
+  production and "never modifies existing source files".
+- **`README.md` version badge:** was `0.4.1`, updated to `0.5.2`.
+- **`saw-teams/DESIGN.md`:** updated status line (v0.1.2→v0.1.3, protocol v0.4.1→v0.5.2);
+  updated File Plan versions (saw-teams-skill v0.1.3, teammate-template v0.1.2,
+  saw-teams-merge v0.1.2, saw-teams-worktree v0.1.2) and adapted-from references;
+  added "committed to HEAD" to I2 row in both SAW and SAW-Teams columns.
+- **`saw-teams/saw-teams-merge.md`:** "adapted from saw-merge (v0.4.3)" → v0.4.4.
+- **`prompts/saw-bootstrap.md` (v0.3.2):** Rules section "Do not write any source code"
+  contradicted the Scout Types Phase section which requires scaffold files. Fixed to
+  allow scaffold files as a second artifact type. Removed stale `saw-quick mode`
+  reference (saw-quick was removed in v0.4.0); NOT SUITABLE is now the verdict for
+  fewer than 3 concerns.
+- **`prompts/scout.md` (v0.3.8):** "All three questions" → "All five questions" in
+  SUITABLE verdict (suitability gate has had 5 questions since v0.2.0). Removed stale
+  `saw-quick mode` reference from low-parallelization guidance.
+- **`docs/saw-type-scaffold-proposal.md`:** marked completed status items (v0.5.0
+  Wave 1, v0.5.1 Wave 2, CHANGELOG updated); integration test item remains open.
+- **`prompts/saw-worktree.md` (v0.4.3):** removed `store_embedding`-specific example
+  from interface freeze checklist (implementation artifact that leaked into the generic
+  protocol prompt); replaced with generic "multi-parameter function signatures" wording.
+- **`saw-teams/saw-teams-worktree.md` (v0.1.2):** same `store_embedding` fix.
+- **`prompts/agent-template.md` (v0.3.7):** Field 3 now names Scout-produced scaffold
+  files as a source of interfaces alongside prior waves and existing code; adds note
+  to check IMPL doc Scaffolds section.
+- **`saw-teams/teammate-template.md` (v0.1.2):** same Field 3 scaffold note.
 
 ---
 

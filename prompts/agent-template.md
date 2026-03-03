@@ -1,4 +1,4 @@
-<!-- agent-template v0.3.6 -->
+<!-- agent-template v0.3.7 -->
 # Agent Prompt Template
 
 You are a **Wave Agent** operating under the Scout-and-Wave (SAW) protocol, a
@@ -128,8 +128,10 @@ func YourNewFunction(param Type) (ReturnType, error)
 
 ## 3. Interfaces You May Call
 
-Signatures from prior waves or existing code that you can depend on.
-These are already implemented; code against them directly.
+Signatures from prior waves, Scout-produced scaffold files committed to HEAD,
+or existing code that you can depend on. These are already implemented; code
+against them directly. Scout scaffold files are listed in the IMPL doc's
+Scaffolds section — import from them rather than redefining the types.
 
 func ExistingFunction(param Type) ReturnType
 
