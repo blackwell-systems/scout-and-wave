@@ -1,0 +1,44 @@
+{
+  "_comment": "Copy relevant sections into your project's .claude/settings.json.",
+
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
+
+  "teammateMode": "tmux",
+
+  "permissions": {
+    "allow": [
+      "Agent",
+      "Bash",
+      "Read",
+      "Write",
+      "Edit",
+      "Glob",
+      "Grep"
+    ]
+  },
+
+  "hooks": {
+    "TeammateIdle": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/teammate-idle-saw.sh"
+          }
+        ]
+      }
+    ],
+    "TaskCompleted": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/task-completed-saw.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

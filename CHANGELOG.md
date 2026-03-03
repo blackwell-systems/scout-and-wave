@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.4.4] | 2026-03-03 | saw-teams/example-settings.json; all required config fields in one copyable block |
+| [0.4.3] | 2026-03-03 | saw-teams hooks, README, and spawn step; complete Agent Teams integration |
+| [0.4.2] | 2026-03-03 | saw-teams prompt set synced to protocol v0.4.1; all invariants/E-rules propagated |
 | [0.4.1] | 2026-03-03 | `test_command` field in IMPL doc; post-merge gate explicitly runs it unscoped |
 | [0.4.0] | 2026-03-02 | Spec completeness pass: E1–E14 numbered, six spec holes patched, state machine diagram, all invariants embedded in skill, conformance criteria |
 | [0.3.7] | 2026-03-01 | Orchestrator owns linter auto-fix post-merge; agents run check-only |
@@ -20,6 +23,107 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.3.0] | 2026-02-28 | Bootstrap mode for new projects; Wave 0 pattern |
 | [0.2.0] | 2026-02-28 | Decomposed skill prompt; complexity-based suitability heuristic |
 | [0.1.0] | 2026-02-27 | Initial release |
+
+---
+
+## [0.4.4] - 2026-03-03
+
+### Added
+
+- **`saw-teams/example-settings.json`:** all required `.claude/settings.json`
+  fields for saw-teams in a single copyable block. Fields: `env` (enable Agent
+  Teams), `teammateMode` (tmux recommended for wave work), `permissions.allow`
+  (Agent + Bash + Read/Write/Edit + Glob/Grep), and `hooks` (TeammateIdle +
+  TaskCompleted). README updated with a field-reference table explaining the
+  purpose of each entry and calling out `"Agent"` as the critical allow-list
+  entry.
+
+---
+
+## [0.4.3] - 2026-03-03
+
+### Added
+
+- **`saw-teams/hooks.md` (v0.1.0):** documentation for `TeammateIdle` and
+  `TaskCompleted` protocol enforcement hooks. `TeammateIdle` fires when a
+  teammate tries to idle; the SAW hook checks for a completion report in the
+  IMPL doc and sends the teammate back if missing. `TaskCompleted` fires when
+  a task is being closed; the hook enforces the I4 write-before-close ordering
+  (IMPL doc write must precede task status update). Includes combined
+  settings.json configuration and relationship to standard SAW.
+
+- **`saw-teams/hooks/teammate-idle-saw.sh`:** executable `TeammateIdle`
+  enforcement script. Exits 2 with structured feedback if no completion report
+  or `status:` line found in the IMPL doc.
+
+- **`saw-teams/hooks/task-completed-saw.sh`:** executable `TaskCompleted`
+  enforcement script. Exits 2 if IMPL doc completion report is absent or
+  missing `status:` line before a task is marked complete.
+
+- **`saw-teams/README.md`:** setup guide covering: enable env var, display
+  mode selection (in-process vs split-pane; split-pane recommended for SAW
+  wave work), hook installation, `"Agent"` allow-list requirement, command
+  reference, what SAW adds to Agent Teams, and known limitations.
+
+### Changed
+
+- **`saw-teams/saw-teams-skill.md` (v0.1.1 → v0.1.2):** spawn step (step 3c)
+  fully specified. Three changes:
+  1. **Spawn context construction**: explicit that spawn context must combine
+     (a) teammate-template preamble, (b) IMPL doc agent section, (c) absolute
+     worktree path. Without the preamble, the no-self-claim constraint and
+     messaging protocol are absent and teammates default to Agent Teams
+     self-claiming behavior.
+  2. **CLAUDE.md note**: teammates automatically load the project's CLAUDE.md
+     from their worktree working directory; project-level instructions are
+     inherited without explicit inclusion in spawn context.
+  3. **Display mode note**: split-pane mode recommended for SAW wave work;
+     pointer to README.md for setup.
+  4. **Task self-claiming note**: Agent Teams default is to self-claim; SAW
+     explicitly prohibits it; the constraint lives in the spawn context.
+
+- **`saw-teams/DESIGN.md`:** added "Protocol enforcement hooks" to "What's
+  New" section. Updated File Plan to include README.md, hooks.md, and
+  hooks/. Updated status to v0.1.2.
+
+---
+
+## [0.4.2] - 2026-03-03
+
+### Changed
+
+- **`saw-teams/saw-teams-skill.md` (v0.1.0 → v0.1.1):** synced to saw-skill
+  v0.3.5 ([0.4.0]). Added E{N} notation to preamble. Embedded I2 (interface
+  freeze at worktree creation, not teammate spawn) at step 3a. Embedded I4, I5,
+  E7, E8 at step 5 (completion report reading). Embedded I3 (wave sequencing)
+  at step 7.
+
+- **`saw-teams/teammate-template.md` (v0.1.0 → v0.1.1):** synced to
+  agent-template v0.3.5 ([0.4.0]). Added E{N} notation to preamble. Embedded
+  E14 (IMPL doc write discipline) in Field 8: explicit append-only mandate,
+  prohibition on editing earlier sections, rationale for why concurrent appends
+  are safe.
+
+- **`saw-teams/saw-teams-merge.md` (v0.1.0 → v0.1.1):** synced to saw-merge
+  v0.4.3 ([0.4.1]). Step 6 now references `test_command` from the IMPL doc's
+  Suitability Assessment rather than using ad-hoc language. The Scout derives
+  this command; the lead consumes it at every post-merge gate.
+
+- **`saw-teams/saw-teams-worktree.md` (v0.1.0 → v0.1.1):** synced to
+  saw-worktree v0.4.2. Added Preflight Working Tree Check section (runs
+  `git status --porcelain` before solo agent check, ownership verification, or
+  worktree creation; two resolution paths: commit preferred, stash for WIP).
+  Diagnose section 2 updated to use `git status --porcelain` and reference the
+  preflight.
+
+- **`saw-teams/DESIGN.md`:** corrected three stale table entries:
+  - Field 0: "Agent Teams manages worktree natively" → actual behavior (lead
+    pre-creates worktrees manually, same defense-in-depth as standard SAW)
+  - I3 row: "via task dependencies" → "via control flow; future-wave tasks not
+    created"
+  - "Dynamic task reassignment" section relabeled as rejected; explained that
+    self-claiming at runtime violates I1
+  - File Plan version numbers updated to v0.1.1 throughout
 
 ---
 

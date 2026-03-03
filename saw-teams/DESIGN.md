@@ -4,7 +4,8 @@ Alternate execution layer for the SAW protocol using Claude Code Agent Teams
 as the agent runtime. Same invariants (I1–I6), same IMPL doc artifact, same
 Scout. Different plumbing for wave execution.
 
-**Status:** Prompt set complete (v0.1.0). Blocked on Agent Teams stabilizing
+**Status:** Prompt set complete (v0.1.2). Synced to protocol v0.4.1. Hooks,
+README, and spawn step fully specified. Blocked on Agent Teams stabilizing
 (currently experimental with known limitations). Ready for integration testing
 when Agent Teams is stable.
 
@@ -30,7 +31,7 @@ progress visibility, and native worktree management.
 |-----------|--------------|-----------|
 | I1: Disjoint file ownership | Scout verifies, Orchestrator enforces | Scout verifies, lead enforces via spawn prompts |
 | I2: Verification gates | Agent runs build/test in worktree | Teammate runs build/test in worktree |
-| I3: Wave ordering | Orchestrator blocks between waves | Lead blocks between waves via task dependencies |
+| I3: Wave ordering | Orchestrator blocks between waves | Lead blocks between waves via control flow; future-wave tasks not created (tasks lost during team cleanup) |
 | I4: IMPL doc is source of truth | Agents read IMPL doc | Teammates read IMPL doc |
 | I5: Agents commit before reporting | Agent commits to worktree branch | Teammate commits to worktree branch |
 | I6: Role separation | Orchestrator doesn't do agent work | Lead doesn't do teammate work |
@@ -70,7 +71,7 @@ The 9-field agent template needs adaptation:
 
 | Field | Current (Agent tool) | SAW-Teams (teammate) |
 |-------|---------------------|---------------------|
-| Field 0: Isolation | Self-healing cd + verify worktree | Agent Teams manages worktree natively |
+| Field 0: Isolation | Self-healing cd + verify worktree | Same self-healing cd + verify worktree; lead pre-creates worktrees and passes path in spawn context |
 | Field 1: File ownership | Listed in prompt | Listed in prompt + enforced by lead |
 | Field 2: Interfaces to implement | Exact signatures | Exact signatures (unchanged) |
 | Field 3: Interfaces to call | Prior wave output | Prior wave output + can message teammate to clarify |
@@ -148,11 +149,32 @@ The lead can see all teammates' progress in real time. If a teammate is
 stuck, the lead can redirect or spawn a replacement. Currently, the
 Orchestrator has no visibility into agent progress until completion.
 
-### Dynamic task reassignment
+### Protocol enforcement hooks (`TeammateIdle`, `TaskCompleted`)
 
-If a teammate finishes early, it can self-claim the next available task.
-If a teammate is struggling, the lead can reassign work. Currently, agent
-scope is fixed at launch time.
+Standard SAW discovers protocol violations (missing completion reports,
+uncommitted changes) only when reading the IMPL doc after all agents finish.
+Agent Teams fires `TeammateIdle` when a teammate tries to idle and
+`TaskCompleted` when a task is being closed. SAW-Teams uses both to enforce
+protocol compliance in real time:
+
+- **`TeammateIdle`**: blocks idle if the IMPL doc completion report is missing
+  or has no `status:` line. Sends the teammate back to complete the protocol.
+- **`TaskCompleted`**: blocks task closure if the IMPL doc write hasn't
+  happened yet. Enforces the I4 write-before-close ordering.
+
+This is the primary protocol-enforcement advantage of saw-teams over standard
+SAW. Hook scripts live in `saw-teams/hooks/` and documentation in `hooks.md`.
+
+Without hooks the protocol still works via lead-reads-reports, but timing
+degrades from real-time to post-hoc discovery.
+
+### Dynamic task reassignment (rejected)
+
+Dynamic task reassignment was considered but explicitly rejected: self-claiming
+tasks at runtime violates I1 (disjoint file ownership is assigned at IMPL doc
+time, not runtime). The teammate-template prohibits self-claiming and prohibits
+the lead from reassigning file ownership during a wave. If a teammate finishes
+early, it messages the lead; it does not self-assign. This is intentional.
 
 ## Blocking Issues
 
@@ -199,10 +221,16 @@ Agent Teams is experimental with limitations that affect SAW-Teams:
 ```
 saw-teams/
   DESIGN.md                    ← this file
-  saw-teams-skill.md    v0.1.0 ← alternate skill router (adapts saw-skill v0.3.4)
-  teammate-template.md  v0.1.0 ← adapted agent template (adapts agent-template v0.3.4)
-  saw-teams-merge.md    v0.1.0 ← teammate-aware merge (adapts saw-merge v0.4.2)
-  saw-teams-worktree.md v0.1.0 ← worktree lifecycle (adapts saw-worktree v0.4.1)
+  README.md                    ← setup guide (enable flag, display modes, hooks)
+  example-settings.json        ← copy to .claude/settings.json; all required fields
+  saw-teams-skill.md    v0.1.2 ← alternate skill router (adapts saw-skill v0.3.5)
+  teammate-template.md  v0.1.1 ← adapted agent template (adapts agent-template v0.3.5)
+  saw-teams-merge.md    v0.1.1 ← teammate-aware merge (adapts saw-merge v0.4.3)
+  saw-teams-worktree.md v0.1.1 ← worktree lifecycle (adapts saw-worktree v0.4.2)
+  hooks.md              v0.1.0 ← TeammateIdle + TaskCompleted hook documentation
+  hooks/
+    teammate-idle-saw.sh       ← TeammateIdle enforcement script
+    task-completed-saw.sh      ← TaskCompleted enforcement script
 ```
 
 The Scout prompt (`prompts/scout.md`) and IMPL doc format are unchanged.

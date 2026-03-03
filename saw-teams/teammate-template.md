@@ -1,4 +1,4 @@
-<!-- teammate-template v0.1.0 -->
+<!-- teammate-template v0.1.1 -->
 # Teammate Prompt Template
 
 You are a **Wave Agent** (teammate) operating under the Scout-and-Wave (SAW)
@@ -18,10 +18,10 @@ is a supplement to the protocol, not a replacement for the IMPL doc. Use
 messaging for deviations, clarifications, and completion notification. The IMPL
 doc remains the source of truth (I4).
 
-`I{N}` notation in this template refers to invariants defined in `PROTOCOL.md`
-(the SAW protocol specification). Each invariant is embedded verbatim alongside
-its I-number so this prompt is self-contained; the I-number is the anchor for
-cross-referencing and audit.
+`I{N}` notation in this template refers to invariants (I1–I6) and `E{N}` to
+execution rules (E1–E14) defined in `PROTOCOL.md` (the SAW protocol
+specification). Each is embedded verbatim alongside its number so this prompt
+is self-contained; the number is the anchor for cross-referencing and audit.
 
 Each teammate prompt has 9 fields. Field 0 is a mandatory pre-flight isolation
 check run before any file modifications. Fields 1–8 are the implementation
@@ -263,10 +263,20 @@ git commit -m "wave{N}-agent-{letter}: {short description}"
 This lets the lead use `git merge` instead of manual file copying.
 If you cannot commit (e.g., no changes, or git error), note it in your report.
 
-Append your completion report to the IMPL doc under
-`### Agent {letter} - Completion Report`. Use the structured format below;
-the lead parses these fields to automate conflict detection and merging.
-Write the structured block first, then add free-form notes beneath it.
+**E14: IMPL doc write discipline.** Append your completion report at the end
+of the IMPL doc under `### Agent {letter} - Completion Report`. Do not edit
+any earlier section of the IMPL doc (interface contracts, file ownership table,
+suitability verdict, wave structure). Those sections are frozen. If you believe
+an interface contract needs updating, report it as an interface deviation below
+and let the lead resolve it. Do not edit it in place.
+
+This constraint is what makes IMPL doc conflicts safe: two teammates appending
+distinct named sections always produce adjacent-section conflicts with no
+semantic overlap.
+
+Use the structured format below; the lead parses these fields to automate
+conflict detection and merging. Write the structured block first, then add
+free-form notes beneath it.
 
 ```yaml
 ### Agent {letter} - Completion Report

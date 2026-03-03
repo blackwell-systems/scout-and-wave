@@ -1,13 +1,57 @@
-<!-- saw-teams-worktree v0.1.0 -->
+<!-- saw-teams-worktree v0.1.1 -->
 # SAW-Teams Worktree Lifecycle
 
 Manage git worktree creation, verification, and cleanup for Agent Teams wave
-execution. Adapted from `prompts/saw-worktree.md` (v0.4.1): same invariants,
+execution. Adapted from `prompts/saw-worktree.md` (v0.4.2): same invariants,
 same defense-in-depth model, different execution plumbing.
 
 **Key difference from standard SAW:** Agent Teams does not create worktrees
 automatically. The lead (Orchestrator) creates worktrees before spawning
 teammates and passes the worktree path in each teammate's spawn context.
+
+## Preflight: Working Tree Check
+
+**Run this before anything else** — before the solo agent check, before
+ownership verification, before creating worktrees.
+
+```bash
+git status --porcelain
+```
+
+If the output is non-empty, the working tree is dirty. `git worktree add` will
+succeed on a dirty tree, but teammates branching from an uncommitted state will
+carry unstaged changes into their isolation boundary, which produces confusing
+merge results. Resolve before proceeding.
+
+**Two options:**
+
+1. **Commit (preferred):** If the changes are complete work, commit them now.
+   This is the most common case — the previous feature was just finished and
+   the changes weren't committed before starting the next wave.
+
+   ```bash
+   git add <files>
+   git commit -m "<message>"
+   ```
+
+2. **Stash (for genuine WIP):** If the changes are incomplete and shouldn't be
+   committed, stash with a descriptive message so recovery is unambiguous:
+
+   ```bash
+   git stash push -u -m "SAW pre-wave stash: <brief description>"
+   ```
+
+   After the wave completes and the merge is done, restore:
+
+   ```bash
+   git stash pop
+   ```
+
+   **Crash recovery note:** if the lead crashes mid-wave with a stash active,
+   run `git stash list` to find the stash and `git stash pop` to restore it
+   after the merge is resolved manually.
+
+Do not proceed until `git status --porcelain` returns empty output.
 
 ## Solo Agent Check
 
@@ -130,11 +174,11 @@ If this fails, git worktrees are not supported or the repo has issues.
 ### 2. Check repo state
 
 ```bash
-git status
+git status --porcelain
 ```
 
-Must be clean. Uncommitted changes can interfere with worktree creation.
-If dirty, stash or commit before proceeding.
+Must be clean (empty output). If dirty, the preflight check at the top of
+this document should have caught this — return there and resolve it.
 
 ### 3. Check for branch name conflicts
 

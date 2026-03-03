@@ -1,8 +1,8 @@
-<!-- saw-teams-merge v0.1.0 -->
+<!-- saw-teams-merge v0.1.1 -->
 # SAW-Teams Merge Procedure
 
 Merge teammate worktrees back into the main branch after a wave completes.
-Adapted from `prompts/saw-merge.md` (v0.4.2): same merge mechanics, same
+Adapted from `prompts/saw-merge.md` (v0.4.3): same merge mechanics, same
 invariants, with teammate messaging as a supplement.
 
 ## Step 1: Parse Completion Reports
@@ -209,9 +209,11 @@ This is the correct place for auto-fix: one centralized pass on the merged
 result is cleaner and more reliable than requiring every teammate to know and
 run the exact auto-fix command in their individual verification gates.
 
-**Run tests unscoped.** Teammates naturally scope their own verification to the
-packages they own. The lead's post-merge gate must run without package
-scoping so cross-package cascade failures are caught:
+**Run tests unscoped using `test_command` from the IMPL doc.** Teammates
+naturally scope their own verification to the packages they own. The lead's
+post-merge gate must run without package scoping so cross-package cascade
+failures are caught. Use the `test_command` field from the IMPL doc's
+Suitability Assessment — the Scout derived it from the project's build system:
 
 ```bash
 # Correct - catches cross-crate failures:
