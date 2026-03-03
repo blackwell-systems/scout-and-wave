@@ -118,6 +118,40 @@ re-establishment overhead. The Scaffold Agent avoids this.
   loop-back from "more waves?" to WAVE_PENDING bypasses the scaffold gate by
   design — there is nothing new to scaffold between waves.
 
+### Worktree isolation hardening
+
+During a live SAW test (brewprune cold-start-r13, 6 parallel agents), all agents
+committed to main instead of their worktree branches. The `isolation: "worktree"`
+parameter on the Agent tool failed silently, Field 0 self-verification did not
+catch it, and the Orchestrator saw "Already up to date" on all 6 branches during
+merge — but proceeded anyway, committing uncommitted changes found on main.
+
+The protocol had three defense layers but no merge-time enforcement. All three
+cooperative layers (Task tool isolation, Field 0 verification, prompt
+instructions) depend on agent behavior being correct. When the execution
+environment fails silently, cooperative layers cannot detect it. The missing
+piece was a deterministic check at merge time — before any `git merge` runs —
+that verifies each agent branch actually has commits.
+
+Correctness guarantees belong in infrastructure, not cooperation. Asking agents
+to maintain worktree isolation through prompt instructions is fragile,
+unenforceable at runtime, and invisible until merge time. Layer 4 transforms
+an invisible failure mode into a loud, explicit error that forces investigation
+before any damage occurs.
+
+- **Layer 4 trip wire** added to merge procedure (`prompts/saw-merge.md` v0.4.5,
+  `saw-teams/saw-teams-merge.md` v0.1.3): before any merge, verify each agent
+  branch has commits beyond the base. Empty branch triggers hard stop. Catches
+  all isolation failures regardless of cause — Task tool, Field 0, or prompt
+  instructions.
+- **Defense-in-depth rationale** added to worktree docs (`prompts/saw-worktree.md`
+  v0.4.4, `saw-teams/saw-teams-worktree.md` v0.1.3): manual pre-creation stays
+  alongside `isolation: "worktree"` as belt + suspenders. Neither mechanism is
+  sufficient alone.
+- **E4 rewritten** in `PROTOCOL.md`: documents 4-layer defense model (manual
+  pre-creation → Task tool isolation → Field 0 verification → merge-time trip
+  wire).
+
 ---
 
 ## [0.5.3] - 2026-03-03

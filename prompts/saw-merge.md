@@ -1,4 +1,4 @@
-<!-- saw-merge v0.4.4 -->
+<!-- saw-merge v0.4.5 -->
 # SAW Merge Procedure
 
 Merge agent worktrees back into the main branch after a wave completes.
@@ -19,6 +19,51 @@ Read each agent's structured completion report from the IMPL doc
 - `files_changed` + `files_created`: used for conflict prediction
 - `interface_deviations`: flag for orchestrator review before merging
 - `out_of_scope_deps`: queue for post-merge fixes
+
+## Step 1.5: Verify Agent Commits (Trip Wire)
+
+Before attempting any merges, verify each agent produced commits to its
+worktree branch. This catches all isolation failures — regardless of whether
+the Task tool, Field 0, or prompt instructions failed.
+
+Record the base commit (HEAD before merge begins):
+
+```bash
+base_commit=$(git rev-parse HEAD)
+```
+
+For each agent with `status: complete`:
+
+```bash
+branch="wave{N}-agent-{letter}"
+commit_count=$(git rev-list ${base_commit}..${branch} --count)
+```
+
+If `commit_count` is 0 for ANY agent: **STOP immediately.** This is a protocol
+violation — the agent did not commit to its worktree branch. Do not proceed to
+the next agent. Do not commit uncommitted changes found on main.
+
+Present the isolation failure and recovery options to the user:
+
+```
+ISOLATION FAILURE: Agent {letter} branch wave{N}-agent-{letter} has 0 commits.
+Base commit: {base_commit}
+Agent(s) may have worked on main instead of their worktrees.
+
+Recovery options:
+  1. Re-run wave — discard all changes, re-create worktrees, re-launch agents.
+     Safest option. All agent work is lost and re-executed.
+  2. Investigate — check main for uncommitted/committed changes, attempt to
+     attribute changes to agents using the IMPL doc file ownership table.
+     Manual and error-prone; only practical for small waves.
+  3. Accept as-is — run full test suite on main; if passing, commit and
+     proceed. Bypasses merge correctness guarantees (conflict prediction,
+     per-agent verification, structured merge history).
+```
+
+**Do not choose a recovery path autonomously.** Wait for the user to decide.
+The Orchestrator is synchronous so the human can make this judgment call.
+Path 1 costs compute time. Path 3 costs trust in the result.
 
 ## Step 2: Conflict Prediction
 

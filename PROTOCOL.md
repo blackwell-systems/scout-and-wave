@@ -249,12 +249,24 @@ corrected first. This is distinct from post-execution conflict prediction:
 pre-launch catches scout planning errors; post-execution catches runtime
 deviations where an agent touched files outside its declared scope.
 
-**E4: Worktree pre-creation.** For multi-agent waves, the orchestrator creates all
-worktrees before launching any agent. Do not rely on agent runtime isolation
-primitives alone (e.g. Claude Code's `isolation: "worktree"` Agent parameter);
-they do not guarantee each agent starts in the correct worktree. Explicit
-pre-creation is the mechanism that enforces isolation; agent-side isolation
-verification (Field 0) is defense-in-depth.
+**E4: Worktree isolation.** Four layers protect against isolation failures:
+
+- **Layer 1 — Manual pre-creation:** The orchestrator creates all worktrees
+  before launching any agent (`git worktree add`). This is the primary
+  mechanism. It is deterministic and does not depend on agent cooperation.
+- **Layer 2 — Task tool isolation:** `isolation: "worktree"` on the Agent tool
+  provides runtime isolation. This is the secondary mechanism. It may fail
+  silently — do not rely on it alone.
+- **Layer 3 — Field 0 self-verification:** Each agent verifies its working
+  directory at startup (cd, pwd, git branch). If verification fails, the agent
+  exits without modifying files. This is agent-cooperative defense-in-depth.
+- **Layer 4 — Merge-time trip wire:** Before any merge, the orchestrator
+  verifies each agent branch has commits beyond the base. Empty branch = hard
+  stop. This catches all isolation failures regardless of cause.
+
+Layers 1 and 2 may both fire; this is harmless. If both fail, Layer 3 may
+catch it. If all three fail, Layer 4 catches it before any incorrect merge.
+
 Disjoint file ownership and worktree isolation are complementary layers that protect against different failure modes. Neither substitutes for the other.
 
 - **Disjoint file ownership (I1)** prevents merge conflicts: no two agents produce edits to the same file, so the merge step is always conflict-free.

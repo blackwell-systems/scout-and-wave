@@ -1,4 +1,4 @@
-<!-- saw-teams-merge v0.1.2 -->
+<!-- saw-teams-merge v0.1.3 -->
 # SAW-Teams Merge Procedure
 
 Merge teammate worktrees back into the main branch after a wave completes.
@@ -29,6 +29,52 @@ that every deviation reported via message also appears in the IMPL doc's
 it is missing from their IMPL doc report, add it to the report before
 proceeding. The IMPL doc is the record of truth (I4); messages are
 notifications, not records.
+
+## Step 1.5: Verify Teammate Commits (Trip Wire)
+
+Before attempting any merges, verify each teammate produced commits to its
+worktree branch. This catches all isolation failures — regardless of whether
+the Task tool, Field 0, or prompt instructions failed.
+
+Record the base commit (HEAD before merge begins):
+
+```bash
+base_commit=$(git rev-parse HEAD)
+```
+
+For each teammate with `status: complete`:
+
+```bash
+branch="wave{N}-agent-{letter}"
+commit_count=$(git rev-list ${base_commit}..${branch} --count)
+```
+
+If `commit_count` is 0 for ANY teammate: **STOP immediately.** This is a
+protocol violation — the teammate did not commit to its worktree branch. Do not
+proceed to the next teammate. Do not commit uncommitted changes found on main.
+
+Present the isolation failure and recovery options to the user:
+
+```
+ISOLATION FAILURE: Teammate {letter} branch wave{N}-agent-{letter} has 0 commits.
+Base commit: {base_commit}
+Teammate(s) may have worked on main instead of their worktrees.
+
+Recovery options:
+  1. Re-run wave — discard all changes, dismiss team, remove worktrees,
+     re-create worktrees, spawn new team and teammates.
+     Safest option. All teammate work is lost and re-executed.
+  2. Investigate — check main for uncommitted/committed changes, attempt to
+     attribute changes to teammates using the IMPL doc file ownership table.
+     Manual and error-prone; only practical for small waves.
+  3. Accept as-is — run full test suite on main; if passing, commit and
+     proceed. Bypasses merge correctness guarantees (conflict prediction,
+     per-agent verification, structured merge history).
+```
+
+**Do not choose a recovery path autonomously.** Wait for the user to decide.
+The lead is synchronous so the human can make this judgment call.
+Path 1 costs compute time. Path 3 costs trust in the result.
 
 ## Step 2: Conflict Prediction
 

@@ -1,4 +1,4 @@
-<!-- saw-worktree v0.4.3 -->
+<!-- saw-worktree v0.4.4 -->
 # SAW Worktree Lifecycle
 
 Manage git worktree creation, verification, and cleanup for wave agents.
@@ -107,8 +107,7 @@ current HEAD of main, skip creation and proceed to launch. Do not duplicate
 worktrees.
 
 Before launching any agents in a multi-agent wave, create a worktree for each
-agent. Do NOT rely on the Task tool's `isolation: "worktree"` parameter alone
-; it may not create worktrees in all environments.
+agent manually. This is the primary isolation mechanism.
 
 ```bash
 mkdir -p .claude/worktrees
@@ -117,6 +116,23 @@ for agent in A B C; do
   git worktree add ".claude/worktrees/wave{N}-agent-${agent}" -b "wave{N}-agent-${agent}"
 done
 ```
+
+### Why Manual Pre-Creation Alongside isolation: "worktree"
+
+Always pre-create worktrees manually even when using `isolation: "worktree"`
+on the Agent tool. The two mechanisms are complementary, not redundant:
+
+1. Manual creation provides a fallback when the Task tool's isolation fails
+   silently — agents can still navigate to the pre-created worktree via Field 0
+2. Enables Field 0 agent self-verification (the worktree must exist for the
+   agent to cd into it and verify)
+3. Costs one bash loop (negligible overhead)
+4. Harmless if the Task tool also creates worktrees — git will not duplicate
+   a worktree that already exists at the expected path
+
+Do not rely solely on `isolation: "worktree"`. It may fail silently. The merge
+procedure's trip wire (Step 1.5 in saw-merge.md) is the final safety net that
+catches all isolation failures before any incorrect merge occurs.
 
 ## Verify Creation
 
@@ -183,8 +199,9 @@ template):
 3. If verification fails after cd attempt, agent exits without modifying files
 
 This is defense-in-depth: the orchestrator pre-creates worktrees (Layer 1),
-agents self-correct (Layer 1.5), agents verify (Layer 2), and the orchestrator
-checks completion reports (Layer 3).
+the Task tool's `isolation: "worktree"` provides runtime isolation (Layer 2),
+agents self-correct and verify (Layer 3, Field 0), and the merge procedure's
+trip wire (Step 1.5) catches all failures before any merge occurs (Layer 4).
 
 ## Cleanup
 

@@ -1,4 +1,4 @@
-<!-- saw-teams-worktree v0.1.2 -->
+<!-- saw-teams-worktree v0.1.3 -->
 # SAW-Teams Worktree Lifecycle
 
 Manage git worktree creation, verification, and cleanup for Agent Teams wave
@@ -112,8 +112,9 @@ If the expected worktrees are already present and their HEAD matches the
 current HEAD of main, skip creation and proceed to teammate spawn. Do not
 duplicate worktrees.
 
-Before spawning any teammates, create a worktree for each agent. The lead
-creates worktrees; Agent Teams has no built-in worktree creation mechanism.
+Before spawning any teammates, create a worktree for each agent manually.
+The lead creates worktrees; Agent Teams has no built-in worktree creation
+mechanism. This is the primary isolation mechanism.
 
 ```bash
 mkdir -p .claude/worktrees
@@ -125,6 +126,17 @@ done
 
 Pass the absolute worktree path to each teammate in its spawn context so it
 knows where to navigate during Field 0 isolation verification.
+
+### Why Manual Pre-Creation Is Required
+
+Unlike standard SAW where the Agent tool's `isolation: "worktree"` parameter
+provides a secondary isolation mechanism, Agent Teams does not support
+`isolation: "worktree"` on teammate spawn. Manual pre-creation is the only
+worktree creation mechanism. If it fails, worktrees do not exist.
+
+The merge procedure's trip wire (Step 1.5 in saw-teams-merge.md) catches
+isolation failures before any incorrect merge occurs — this is the safety net
+when both manual pre-creation and Field 0 self-verification fail.
 
 ## Verify Creation
 
