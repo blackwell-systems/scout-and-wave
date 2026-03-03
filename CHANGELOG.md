@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.6.0] | 2026-03-03 | Scaffold Agent: new participant; Scout defines contracts, Scaffold Agent materializes them after review |
 | [0.5.3] | 2026-03-03 | Deep consistency pass: 15 issues across 12 files |
 | [0.5.2] | 2026-03-03 | I2 invariant updated: Scout defines and implements interface contracts |
 | [0.5.1] | 2026-03-03 | Consistency pass: E-rule count, scaffold handling, Scout definition |
@@ -27,6 +28,82 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.3.0] | 2026-02-28 | Bootstrap mode for new projects; Wave 0 pattern |
 | [0.2.0] | 2026-02-28 | Decomposed skill prompt; complexity-based suitability heuristic |
 | [0.1.0] | 2026-02-27 | Initial release |
+
+---
+
+## [0.6.0] - 2026-03-03
+
+### Added
+
+- **`prompts/scaffold-agent.md` (v0.1.0):** New participant prompt for the Scaffold
+  Agent. A lightweight participant that runs after Scout and human review: reads
+  the approved IMPL doc Scaffolds section, creates the specified type scaffold
+  source files, verifies they compile, commits to HEAD, and updates scaffold
+  status. Embeds I2 and I5 at enforcement points. The Scaffold Agent is not a
+  Wave Agent; it has no 9-field template, no worktree, and no completion report.
+- **Scaffold Agent participant** added to `PROTOCOL.md`. Sits between Scout and
+  Wave Agent in the participant model. Defined in the Participants section with
+  narrow scope: materializes approved interface contracts as source files.
+- **I2 invariant updated** in `PROTOCOL.md`: "The Scout defines all interfaces
+  that cross agent boundaries in the IMPL doc. The Scaffold Agent implements them
+  as type scaffold files committed to HEAD after human review, before any Wave
+  Agent launches." Previously credited Scout with both defining and implementing.
+- **Scaffold Agent conditional spawn** added to `prompts/saw-skill.md` (v0.3.7):
+  after Scout completes and user reviews the IMPL doc, if the Scaffolds section
+  is non-empty and any scaffold file has `Status: pending`, launch Scaffold Agent
+  before creating worktrees. Scaffold Agent is NOT a wave agent; runs via Agent
+  tool with `run_in_background: true`.
+- Same Scaffold Agent spawn step added to `saw-teams/saw-teams-skill.md` (v0.1.4).
+  Scaffold Agent runs before any team is created; it is not a teammate.
+- **`prompts/saw-bootstrap.md` (v0.3.3):** Scout Types Phase rewritten — Scout
+  specifies scaffold file contents in IMPL doc; Scaffold Agent creates them after
+  human review. Added "Why Scaffold Agent, not Scout" rationale. Output format,
+  verification gates, and status checklist now show "Scaffold Agent:" instead of
+  "Scout:". Rules clarified: Scout may create one artifact only (the IMPL doc).
+- **Scaffold commit verification** added to skill files' worktree pre-creation
+  steps: verify all IMPL doc Scaffolds section files show `Status: committed`
+  before creating worktrees or spawning teammates.
+- **Wave numbering note** added to `prompts/agent-template.md` (v0.3.8): waves
+  are 1-indexed; there is no Wave 0; the Scout produces any required type scaffold
+  files (via Scaffold Agent) before Wave 1 launches.
+
+### Changed
+
+- **`prompts/scout.md` (v0.3.9):** Scout no longer creates scaffold source files.
+  Step 5 ("Produce type scaffolds if needed") reverted to "Define scaffold
+  contents if needed" — Scout lists files in the IMPL doc Scaffolds section with
+  exact contents specified, but does not write source files. Rules: "You may
+  create one artifact: the IMPL doc. Do not create, modify, or delete any source
+  files." IMPL doc Scaffolds section template updated: Status column added
+  (`pending` initially, Scaffold Agent sets to `committed`).
+- **`prompts/agent-template.md` (v0.3.8) Field 3:** "Scout-produced scaffold
+  files committed to HEAD" → "Scaffold Agent-produced scaffold files committed to
+  HEAD". Import from scaffold files rather than redefining types.
+- **`saw-teams/teammate-template.md` (v0.1.3) Field 3:** same wording update.
+- **`prompts/README.md`:** added `scaffold-agent.md` row (v0.1.0) to Participant
+  Prompts table. Updated scout.md description: "Never modifies source files" →
+  "Never modifies existing source files" (clarification: it is the Scaffold Agent
+  that creates new ones). Version numbers updated: scout v0.3.9, agent-template
+  v0.3.8, saw-skill v0.3.7.
+- **`PROTOCOL.md` version:** 0.5.2 → 0.6.0.
+- **`README.md` version badge:** 0.5.2 → 0.6.0.
+- **`saw-teams/DESIGN.md`:** I2 row updated to reflect Scaffold Agent role; File
+  Plan updated (saw-teams-skill v0.1.4, teammate-template v0.1.3); status line
+  updated to v0.1.4 synced to protocol v0.6.0.
+
+### Rationale
+
+Introducing the Scaffold Agent restores the human review gate that the v0.5.0
+"Scout creates scaffolds" design eliminated. Previously (v0.5.x), Scout committed
+scaffold files before the user saw the IMPL doc — meaning interface contracts were
+locked in code before human review. With v0.6.0, the flow is: Scout writes IMPL
+doc → human reviews interface contracts → Scaffold Agent materializes them →
+Wave Agents implement against them. The review gate is structural again.
+
+The alternative (spawning Scout twice — once to analyze, once to create scaffolds)
+was rejected: async agents run to completion with no pause/resume, so a "Scout
+continues" design would require two separate Scout invocations with context
+re-establishment overhead. The Scaffold Agent avoids this.
 
 ---
 

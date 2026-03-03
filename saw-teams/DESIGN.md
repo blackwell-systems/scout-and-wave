@@ -4,7 +4,7 @@ Alternate execution layer for the SAW protocol using Claude Code Agent Teams
 as the agent runtime. Same invariants (I1–I6), same IMPL doc artifact, same
 Scout. Different plumbing for wave execution.
 
-**Status:** Prompt set complete (v0.1.3). Synced to protocol v0.5.2. Hooks,
+**Status:** Prompt set complete (v0.1.4). Synced to protocol v0.6.0. Hooks,
 README, and spawn step fully specified. Blocked on Agent Teams stabilizing
 (currently experimental with known limitations). Ready for integration testing
 when Agent Teams is stable.
@@ -30,7 +30,7 @@ progress visibility, and native worktree management.
 | Invariant | SAW (current) | SAW-Teams |
 |-----------|--------------|-----------|
 | I1: Disjoint file ownership | Scout verifies, Orchestrator enforces | Scout verifies, lead enforces via spawn prompts |
-| I2: Interface contracts precede parallel implementation | Scout defines contracts in IMPL doc and produces scaffold files committed to HEAD before Wave 1 | Same; Scout is not a teammate, runs before any team exists. Scaffold files committed to HEAD before any team is created. |
+| I2: Interface contracts precede parallel implementation | Scout defines contracts in IMPL doc; Scaffold Agent materializes them as type scaffold source files committed to HEAD after human review, before Wave 1 | Same; Scout and Scaffold Agent are not teammates, both run before any team exists. Scaffold files committed to HEAD before any team is created. |
 | I3: Wave ordering | Orchestrator blocks between waves | Lead blocks between waves via control flow; future-wave tasks not created (tasks lost during team cleanup) |
 | I4: IMPL doc is source of truth | Agents read IMPL doc | Teammates read IMPL doc |
 | I5: Agents commit before reporting | Agent commits to worktree branch | Teammate commits to worktree branch |
@@ -223,8 +223,8 @@ saw-teams/
   DESIGN.md                    ← this file
   README.md                    ← setup guide (enable flag, display modes, hooks)
   example-settings.json        ← copy to .claude/settings.json; all required fields
-  saw-teams-skill.md    v0.1.3 ← alternate skill router (adapts saw-skill v0.3.6)
-  teammate-template.md  v0.1.2 ← adapted agent template (adapts agent-template v0.3.7)
+  saw-teams-skill.md    v0.1.4 ← alternate skill router (adapts saw-skill v0.3.7)
+  teammate-template.md  v0.1.3 ← adapted agent template (adapts agent-template v0.3.8)
   saw-teams-merge.md    v0.1.2 ← teammate-aware merge (adapts saw-merge v0.4.4)
   saw-teams-worktree.md v0.1.2 ← worktree lifecycle (adapts saw-worktree v0.4.3)
   hooks.md              v0.1.0 ← TeammateIdle + TaskCompleted hook documentation

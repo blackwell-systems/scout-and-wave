@@ -1,4 +1,4 @@
-<!-- teammate-template v0.1.2 -->
+<!-- teammate-template v0.1.3 -->
 # Teammate Prompt Template
 
 You are a **Wave Agent** (teammate) operating under the Scout-and-Wave (SAW)
@@ -157,10 +157,10 @@ func YourNewFunction(param Type) (ReturnType, error)
 
 ## 3. Interfaces You May Call
 
-Signatures from prior waves, Scout-produced scaffold files committed to HEAD,
-or existing code that you can depend on. These are already implemented; code
-against them directly. Scout scaffold files are listed in the IMPL doc's
-Scaffolds section — import from them rather than redefining the types.
+Signatures from prior waves, Scaffold Agent-produced scaffold files committed
+to HEAD, or existing code that you can depend on. These are already
+implemented; code against them directly. Scaffold files are listed in the IMPL
+doc's Scaffolds section — import from them rather than redefining the types.
 
 func ExistingFunction(param Type) ReturnType
 

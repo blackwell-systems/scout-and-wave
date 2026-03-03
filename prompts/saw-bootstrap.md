@@ -1,4 +1,4 @@
-<!-- saw-bootstrap v0.3.2 -->
+<!-- saw-bootstrap v0.3.3 -->
 # SAW Bootstrap: Design-First Project Architecture
 
 Use this mode when starting a new project from scratch with no existing codebase.
@@ -123,26 +123,29 @@ Design for disjoint ownership before writing a line of code:
 ## Scout Types Phase (Always Required)
 
 Bootstrap projects always require shared contracts before any agent starts.
-The Scout produces these directly as a types scaffold file — not a Wave 0 agent.
+The Scout defines these contracts in the IMPL doc Scaffolds section. The
+Scaffold Agent creates the scaffold source files after human review.
 
-**Scout creates the types scaffold:**
-- File location: Go: `internal/types/`, Rust: `crates/types/`,
+**Scout defines the types scaffold in the IMPL doc:**
+- Specifies file location: Go: `internal/types/`, Rust: `crates/types/`,
   TS: `src/types/`, Python: `src/types.py`
-- Defines all interfaces/traits that cross module boundaries
-- Defines shared structs, enums, error types
-- No implementation; interfaces, traits, and types only
-- Committed before any worktrees are created
+- Lists all interfaces/traits that cross module boundaries
+- Lists all shared structs, enums, error types with exact signatures
+- No source files created at this stage — specification only
 
-**Why the Scout, not a Wave 0 agent:** The Scout already has the full
-dependency graph and interface contracts in context. Producing a compilable
-types file is the same work as writing the interface contracts section of the
-IMPL doc — just expressed as source code rather than prose. A Wave 0 agent
-would do nothing the Scout cannot do directly, at the cost of a full wave
-cycle.
+**Scaffold Agent creates the types scaffold (after human review):**
+- Reads the approved Scaffolds section from `docs/IMPL-bootstrap.md`
+- Creates the scaffold source files with the specified types
+- No implementation — interfaces, traits, and types only
+- Verifies the scaffold compiles, then commits to HEAD
+- Wave 1 agents must have a compiling types module to build against
 
-**Verification gate (Scout runs this before writing the IMPL doc):**
-Build the types module only. If it does not compile, fix it before producing
-agent prompts. Wave 1 agents must have a compiling types module to work against.
+**Why Scaffold Agent, not Scout:** The Scout's job is analysis and planning.
+Producing source files is implementation work that benefits from a human review
+gate: the user approves the interface contracts in the IMPL doc before any code
+is written. The Scaffold Agent materializes the approved contracts. This
+restores the same checkpoint that existed between the Scout and Wave 0 in the
+original design, without the overhead of full wave machinery.
 
 ## Wave 1+ Pattern
 
@@ -175,10 +178,10 @@ Write `docs/IMPL-bootstrap.md`:
 Verdict: SUITABLE
 
 [One paragraph: N concerns identified, clean seams at [boundary descriptions].
-Scout produces types scaffold before Wave 1 launches.]
+Scout specifies types scaffold in IMPL doc; Scaffold Agent creates source files after human review.]
 
 Estimated times:
-- Design + types scaffold phase: ~X min (this scout)
+- Design phase: ~X min (this scout)
 - Wave 1 (parallel): ~Z min (N agents × M min, fully parallel)
 - Wave 2 (wiring): ~W min
 Total: ~T min
@@ -196,9 +199,15 @@ No pseudocode. These are binding contracts.]
 | File | Agent | Wave | Depends On |
 |------|-------|------|------------|
 
+### Scaffolds
+
+| File | Contents | Import path | Status |
+|------|----------|-------------|--------|
+| `path/to/types.go` | [list exact types, interfaces, structs] | `module/path/types` | pending |
+
 ### Wave Structure
 
-Scout: [Types scaffold] - shared interfaces and types (produced by Scout before Wave 1)
+Scaffold Agent: [Types scaffold] - shared interfaces and types (created after human review)
               | (types package compiles cleanly)
 Wave 1: [B][C][D]      - package implementations (parallel)
               | (all packages build, unit tests pass)
@@ -207,18 +216,18 @@ Wave 2: [A]            - entry point wiring and integration
 ### Agent Prompts
 
 [Full 9-field prompt for each agent.]
-[Wave 1 agents: implement against Scout-produced type contracts, stub internals are fine.]
+[Wave 1 agents: implement against Scaffold Agent-produced type contracts, stub internals are fine.]
 [Wave 2 agent: wire packages together, write integration test.]
 
 ### Verification Gates
 
-Scout: [build types module only, e.g., `go build ./internal/types` or `cargo build -p types`]
+Scaffold Agent: [build types module only, e.g., `go build ./internal/types` or `cargo build -p types`]
 Wave 1: [build all modules] + [focused unit tests per module]
 Wave 2: [build full project] + [full test suite]
 
 ### Status
 
-- [ ] Scout: Types scaffold - [description]
+- [ ] Scaffold Agent: Types scaffold - [description]
 - [ ] Wave 1 Agent B - [package: description]
 - [ ] Wave 1 Agent C - [package: description]
 - [ ] Wave 1 Agent D - [package: description]
@@ -227,7 +236,7 @@ Wave 2: [build full project] + [full test suite]
 
 ## Rules
 
-- You may create two kinds of artifacts: the IMPL doc at `docs/IMPL-bootstrap.md`, and type scaffold files containing only type definitions, constants, and interface declarations — no function bodies, no behavior. Do not create, modify, or delete any other source files.
+- You may create one artifact: the IMPL doc at `docs/IMPL-bootstrap.md`. Do not create, modify, or delete any source files. Specify scaffold file contents in the IMPL doc Scaffolds section — the Scaffold Agent will create them after human review.
 - Every interface you define is a binding contract. Wave 1 agents implement
   against these without seeing each other's code.
 - The Scout must produce a types scaffold file. Do not skip it even if

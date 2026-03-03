@@ -1,6 +1,6 @@
 # Scout-and-Wave Protocol Specification
 
-**Version:** 0.5.2
+**Version:** 0.6.0
 **Status:** Active
 
 Scout-and-Wave (SAW) is a protocol for safely parallelizing human-guided
@@ -45,11 +45,20 @@ moment; which specific stops are mandatory is a separate question from whether
 intervention is possible at all.
 
 **Scout:** An asynchronous agent launched by the orchestrator. Analyzes the
-codebase, produces the IMPL doc, and exits. May produce type scaffold files
-(shared interfaces, traits, structs) as coordination artifacts committed to HEAD
-before worktrees are created; agents implement against them. Never modifies
-existing source files. Never participates in wave execution. The orchestrator
-waits for the scout's completion notification before entering REVIEWED state.
+codebase, produces the IMPL doc, and exits. Defines all interface contracts and
+specifies any required scaffold files in the IMPL doc Scaffolds section — but
+does not create source files. Never modifies existing source files. Never
+participates in wave execution. The orchestrator waits for the scout's
+completion notification before entering REVIEWED state.
+
+**Scaffold Agent:** An asynchronous agent launched by the orchestrator after
+human review of the IMPL doc. Reads the approved interface contracts and
+Scaffolds section from the IMPL doc, creates the specified type scaffold files
+(shared interfaces, traits, structs — no behavior), verifies they compile, and
+commits them to HEAD. Runs only when the IMPL doc Scaffolds section is
+non-empty. Never modifies existing source files. Exits after committing and
+updating the Scaffolds section status. The orchestrator waits for the Scaffold
+Agent before creating worktrees.
 
 **Wave Agent:** An asynchronous agent launched by the orchestrator. Owns a
 disjoint set of files, implements against the interface contracts defined in the
@@ -131,9 +140,10 @@ Such out-of-scope changes must be justified, documented in the completion
 report, and verified by the post-merge gate.
 
 **I2: Interface contracts precede parallel implementation.** The Scout defines
-all interfaces that cross agent boundaries in the IMPL doc, and implements them
-as type scaffold files committed to HEAD, before any Wave Agent launches.
-Agents implement against the spec; they never coordinate directly.
+all interfaces that cross agent boundaries in the IMPL doc. The Scaffold Agent
+implements them as type scaffold files committed to HEAD after human review,
+before any Wave Agent launches. Agents implement against the spec; they never
+coordinate directly.
 
 **I3: Wave sequencing.** Wave N+1 does not launch until Wave N has been
 merged and post-merge verification has passed.
