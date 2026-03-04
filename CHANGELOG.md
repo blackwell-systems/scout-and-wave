@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.6.4] | 2026-03-04 | E7a: automatic failure remediation in --auto mode (isolation, deps, transient errors) |
 | [0.6.3] | 2026-03-04 | Scaffold Agent: repository context derivation from IMPL doc location |
 | [0.6.2] | 2026-03-04 | Scout automatically detects shared types for scaffold files |
 | [0.6.1] | 2026-03-03 | Scout status table includes scaffold rows with commit SHAs |
