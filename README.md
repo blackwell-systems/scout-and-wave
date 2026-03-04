@@ -83,9 +83,11 @@ git clone https://github.com/blackwell-systems/scout-and-wave.git ~/code/scout-a
 cp ~/code/scout-and-wave/prompts/saw-skill.md ~/.claude/commands/saw.md
 ```
 
-The skill loads `prompts/scout.md`, `prompts/saw-merge.md`, and `prompts/saw-worktree.md`
-from the repository at runtime. Keep the repository on disk. To use a non-default
-location, set `SAW_REPO=/path/to/scout-and-wave` in your environment.
+The skill loads prompt files from the repository at runtime: `prompts/scout.md`,
+`prompts/agent-template.md`, `prompts/saw-merge.md`, `prompts/saw-worktree.md`,
+`prompts/scaffold-agent.md` (conditional), and `prompts/saw-bootstrap.md` (bootstrap
+only). Keep the repository on disk. To use a non-default location, set
+`SAW_REPO=/path/to/scout-and-wave` in your environment.
 
 ### Permissions
 
@@ -168,6 +170,20 @@ SAW enforces two independent constraints that together make parallel execution c
 
 Neither constraint substitutes for the other. Disjoint ownership without worktrees: merge is safe, but concurrent builds are flaky. Worktrees without disjoint ownership: execution is clean, but merge produces unresolvable conflicts. Both must hold for a wave to be correct and reproducible.
 
+### Worktree Isolation Defense (5 layers)
+
+Agents don't always respect isolation instructions. v0.6.0 adds a layered defense model that treats worktree isolation as an infrastructure problem, not a cooperation problem:
+
+| Layer | Mechanism | Type |
+|-------|-----------|------|
+| 0 | **Pre-commit hook** — ephemeral git hook installed during worktree setup, blocks commits to main during active waves. Agents receive an instructive error with their worktree path. Orchestrator bypasses via `SAW_ALLOW_MAIN_COMMIT=1`. | Prevention |
+| 1 | **Manual worktree pre-creation** — Orchestrator creates all worktrees before any agent launches | Deterministic |
+| 2 | **`isolation: "worktree"` parameter** — each agent launch specifies worktree isolation at the tool level | Tool-level |
+| 3 | **Field 0 self-verification** — agents verify their own branch and working directory on startup | Cooperative |
+| 4 | **Merge-time trip wire** — Orchestrator counts commits per worktree branch before merging. Zero commits = isolation failure. Stops with recovery options. | Deterministic |
+
+Layers 0 and 4 are the structural guarantees: Layer 0 prevents agents from committing to main, Layer 4 detects if isolation failed by any mechanism. Layers 1-3 are defense-in-depth.
+
 ## Protocol Specification
 
 [`PROTOCOL.md`](PROTOCOL.md). Formal specification: participant roles, preconditions, invariants (I1–I6), state machine, execution rules, message formats, and correctness guarantees. Invariants are numbered I1–I6; prompt files embed them verbatim alongside their I-number for self-containment and auditability. The prompts in `prompts/` are reference implementations of this spec.
@@ -182,13 +198,18 @@ Neither constraint substitutes for the other. Disjoint ownership without worktre
 - [`prompts/saw-merge.md`](prompts/saw-merge.md): Merge procedure: conflict detection, agent merging, post-merge verification
 - [`prompts/saw-worktree.md`](prompts/saw-worktree.md): Worktree lifecycle: creation, verification, diagnosis, cleanup
 
+## SAW-Teams (Experimental)
+
+[`saw-teams/`](saw-teams/) is an alternate execution layer using Claude Code Agent Teams. Same protocol, same IMPL doc, same Scout. Different wave plumbing: teammates replace background Agent tool calls, providing inter-agent messaging and real-time deviation alerts. Trade-off: better visibility during execution, worse crash recovery. See [`saw-teams/README.md`](saw-teams/README.md) for setup and usage.
+
 ## Blog Post
 
-Three-part series on the pattern, the lessons learned from dogfooding it, and how the skill file evolved:
+Four-part series on the pattern, the lessons learned from dogfooding it, and how the protocol evolved:
 
 1. [Scout-and-Wave: A Coordination Pattern for Parallel AI Agents](https://blog.blackwell-systems.com/posts/scout-and-wave/). The pattern: failure modes of naive parallelism, the scout deliverable, wave execution, and a worked example from brewprune.
 2. [Scout-and-Wave, Part 2: What Dogfooding Taught Us](https://blog.blackwell-systems.com/posts/scout-and-wave-part2/). The audit-fix-audit loop, overhead measurement (88% slower when ignored), Quick mode, and the bootstrap problem for new projects.
 3. [Scout-and-Wave, Part 3: Five Failures, Five Fixes](https://blog.blackwell-systems.com/posts/scout-and-wave-part3/). How the skill file decomposed from a 400-line monolith, why version headers matter, and five scout prompt fixes driven by real failures.
+4. [Scout-and-Wave, Part 4: Structural Guarantees](https://blog.blackwell-systems.com/posts/scout-and-wave-part4/). The Scaffold Agent, the 5-layer worktree isolation defense, and why correctness belongs in infrastructure rather than cooperation.
 
 ## License
 
