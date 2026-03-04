@@ -152,6 +152,40 @@ before any damage occurs.
   pre-creation → Task tool isolation → Field 0 verification → merge-time trip
   wire).
 
+### Pre-commit hook as fail-fast guard (Layer 0)
+
+Layer 4 detects isolation failures at merge time but cannot prevent them. The
+natural follow-up: can we block the bad commit before it happens? A git
+pre-commit hook can. But SAW has no runtime, no binary, no installed tooling.
+The protocol is entirely prompt-driven. There is no hook file to commit to the
+repo and no framework to manage it.
+
+The solution is an ephemeral hook. The Orchestrator creates the hook during
+worktree setup (a `cat > .git/hooks/pre-commit` inline in the worktree docs)
+and removes it during cleanup after merge. Between waves, the hook doesn't
+exist. The project's normal git workflow is unaffected. If the project already
+has a pre-commit hook, SAW backs it up and restores it afterward.
+
+The hook blocks agent commits to main with an instructive error listing
+available worktrees so the agent can self-correct (cd to its worktree and
+retry). The Orchestrator bypasses the hook via `SAW_ALLOW_MAIN_COMMIT=1` for
+its own legitimate main commits (scaffold, post-merge, lint fix). Agents never
+have this variable set.
+
+This closes the gap between prevention and detection. Layer 0 prevents the most
+common failure mode (agent commits to main). Layer 4 catches everything Layer 0
+can't prevent (agent works on main without committing, agent on wrong worktree
+branch). Both are deterministic. Neither depends on agent cooperation.
+
+- **Layer 0 pre-commit hook** added to worktree setup (`prompts/saw-worktree.md`
+  v0.4.5, `saw-teams/saw-teams-worktree.md` v0.1.4): blocks agent commits to
+  main during active waves with instructive error output.
+- **`SAW_ALLOW_MAIN_COMMIT` bypass** added to merge procedures
+  (`prompts/saw-merge.md` v0.4.6, `saw-teams/saw-teams-merge.md` v0.1.4) and
+  `prompts/scaffold-agent.md` (v0.1.1) for legitimate Orchestrator commits.
+- **E4 updated** in `PROTOCOL.md`: documents 5-layer defense model (Layer 0
+  through Layer 4).
+
 ---
 
 ## [0.5.3] - 2026-03-03

@@ -1,4 +1,4 @@
-<!-- saw-merge v0.4.5 -->
+<!-- saw-merge v0.4.6 -->
 # SAW Merge Procedure
 
 Merge agent worktrees back into the main branch after a wave completes.
@@ -158,7 +158,7 @@ else
     cp "$worktree/$file" "./$file"
     git add "./$file"
   done
-  git commit -m "Apply agent {letter} changes from worktree"
+  SAW_ALLOW_MAIN_COMMIT=1 git commit -m "Apply agent {letter} changes from worktree"
 fi
 ```
 
@@ -212,7 +212,7 @@ If it did, commit those changes before running build and tests:
 
 ```bash
 git add -A
-git commit -m "style: post-merge lint/format fix"
+SAW_ALLOW_MAIN_COMMIT=1 git commit -m "style: post-merge lint/format fix"
 ```
 
 This is the correct place for auto-fix: one centralized pass on the merged

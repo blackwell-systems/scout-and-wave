@@ -1,4 +1,4 @@
-<!-- saw-teams-worktree v0.1.3 -->
+<!-- saw-teams-worktree v0.1.4 -->
 # SAW-Teams Worktree Lifecycle
 
 Manage git worktree creation, verification, and cleanup for Agent Teams wave
@@ -127,6 +127,48 @@ done
 Pass the absolute worktree path to each teammate in its spawn context so it
 knows where to navigate during Field 0 isolation verification.
 
+### Install Fail-Fast Hook
+
+After creating worktrees, install a git pre-commit hook that blocks commits
+to main. This is Layer 0: infrastructure enforcement that prevents isolation
+violations before they occur.
+
+```bash
+# Back up existing pre-commit hook if present
+if [ -f .git/hooks/pre-commit ]; then
+  cp .git/hooks/pre-commit .git/hooks/pre-commit.saw-backup
+fi
+
+cat > .git/hooks/pre-commit << 'HOOKEOF'
+#!/bin/sh
+# SAW worktree isolation guard. Installed by saw-teams-worktree setup.
+branch=$(git symbolic-ref --short HEAD 2>/dev/null)
+if [ "$branch" = "main" ] && [ -z "$SAW_ALLOW_MAIN_COMMIT" ]; then
+  if ls .claude/worktrees/wave*-agent-* 1>/dev/null 2>&1; then
+    echo ""
+    echo "BLOCKED: commit to main during active SAW wave."
+    echo ""
+    echo "You are a teammate in a SAW wave. Commits to main are not"
+    echo "permitted during wave execution. Your assigned worktree:"
+    echo ""
+    for wt in .claude/worktrees/wave*-agent-*; do
+      echo "  $wt (branch: $(basename $wt))"
+    done
+    echo ""
+    echo "cd to your assigned worktree and commit there."
+    exit 1
+  fi
+fi
+HOOKEOF
+chmod +x .git/hooks/pre-commit
+```
+
+The hook checks: if branch is `main` AND SAW worktrees exist AND
+`SAW_ALLOW_MAIN_COMMIT` is not set, block the commit with an instructive
+error listing available worktrees. The lead sets `SAW_ALLOW_MAIN_COMMIT=1`
+before its own legitimate commits to main (scaffold commits, post-merge
+commits, lint fix commits).
+
 ### Why Manual Pre-Creation Is Required
 
 Unlike standard SAW where the Agent tool's `isolation: "worktree"` parameter
@@ -242,3 +284,13 @@ done
 
 Clean up even if agents failed; stale worktrees and branches will interfere
 with future waves.
+
+After removing worktrees, restore the original pre-commit hook:
+
+```bash
+if [ -f .git/hooks/pre-commit.saw-backup ]; then
+  mv .git/hooks/pre-commit.saw-backup .git/hooks/pre-commit
+else
+  rm -f .git/hooks/pre-commit
+fi
+```

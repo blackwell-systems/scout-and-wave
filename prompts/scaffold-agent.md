@@ -84,7 +84,7 @@ surface the failure before any worktrees are created.
 
 ```bash
 git add <scaffold files>
-git commit -m "feat: add type scaffold for <feature-slug>"
+SAW_ALLOW_MAIN_COMMIT=1 git commit -m "feat: add type scaffold for <feature-slug>"
 ```
 
 Commit only the scaffold files. Do not stage or commit the IMPL doc or any

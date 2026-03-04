@@ -1,4 +1,4 @@
-<!-- saw-worktree v0.4.4 -->
+<!-- saw-worktree v0.4.5 -->
 # SAW Worktree Lifecycle
 
 Manage git worktree creation, verification, and cleanup for wave agents.
@@ -117,6 +117,48 @@ for agent in A B C; do
 done
 ```
 
+### Install Fail-Fast Hook
+
+After creating worktrees, install a git pre-commit hook that blocks agent
+commits to main. This is Layer 0: infrastructure enforcement that prevents
+isolation violations before they occur.
+
+```bash
+# Back up existing pre-commit hook if present
+if [ -f .git/hooks/pre-commit ]; then
+  cp .git/hooks/pre-commit .git/hooks/pre-commit.saw-backup
+fi
+
+cat > .git/hooks/pre-commit << 'HOOKEOF'
+#!/bin/sh
+# SAW worktree isolation guard. Installed by saw-worktree setup.
+branch=$(git symbolic-ref --short HEAD 2>/dev/null)
+if [ "$branch" = "main" ] && [ -z "$SAW_ALLOW_MAIN_COMMIT" ]; then
+  if ls .claude/worktrees/wave*-agent-* 1>/dev/null 2>&1; then
+    echo ""
+    echo "BLOCKED: commit to main during active SAW wave."
+    echo ""
+    echo "You are an agent in a SAW wave. Commits to main are not"
+    echo "permitted during wave execution. Your assigned worktree:"
+    echo ""
+    for wt in .claude/worktrees/wave*-agent-*; do
+      echo "  $wt (branch: $(basename $wt))"
+    done
+    echo ""
+    echo "cd to your assigned worktree and commit there."
+    exit 1
+  fi
+fi
+HOOKEOF
+chmod +x .git/hooks/pre-commit
+```
+
+The hook checks: if branch is `main` AND SAW worktrees exist AND
+`SAW_ALLOW_MAIN_COMMIT` is not set, block the commit with an instructive
+error listing available worktrees. The Orchestrator sets
+`SAW_ALLOW_MAIN_COMMIT=1` before its own legitimate commits to main
+(scaffold commits, post-merge commits, lint fix commits).
+
 ### Why Manual Pre-Creation Alongside isolation: "worktree"
 
 Always pre-create worktrees manually even when using `isolation: "worktree"`
@@ -198,10 +240,11 @@ template):
 2. Agent verifies pwd, git branch, and worktree list
 3. If verification fails after cd attempt, agent exits without modifying files
 
-This is defense-in-depth: the orchestrator pre-creates worktrees (Layer 1),
-the Task tool's `isolation: "worktree"` provides runtime isolation (Layer 2),
-agents self-correct and verify (Layer 3, Field 0), and the merge procedure's
-trip wire (Step 1.5) catches all failures before any merge occurs (Layer 4).
+This is defense-in-depth: a pre-commit hook blocks agent commits to main
+(Layer 0), the orchestrator pre-creates worktrees (Layer 1), the Task tool's
+`isolation: "worktree"` provides runtime isolation (Layer 2), agents
+self-correct and verify (Layer 3, Field 0), and the merge procedure's trip
+wire (Step 1.5) catches all failures before any merge occurs (Layer 4).
 
 ## Cleanup
 
@@ -217,3 +260,13 @@ done
 
 Clean up even if agents failed; stale worktrees and branches will interfere
 with future waves.
+
+After removing worktrees, restore the original pre-commit hook:
+
+```bash
+if [ -f .git/hooks/pre-commit.saw-backup ]; then
+  mv .git/hooks/pre-commit.saw-backup .git/hooks/pre-commit
+else
+  rm -f .git/hooks/pre-commit
+fi
+```

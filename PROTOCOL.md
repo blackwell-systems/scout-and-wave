@@ -249,8 +249,16 @@ corrected first. This is distinct from post-execution conflict prediction:
 pre-launch catches scout planning errors; post-execution catches runtime
 deviations where an agent touched files outside its declared scope.
 
-**E4: Worktree isolation.** Four layers protect against isolation failures:
+**E4: Worktree isolation.** Five layers protect against isolation failures:
 
+- **Layer 0 — Pre-commit hook:** A git pre-commit hook installed during
+  worktree setup blocks commits to main during active waves. Agents that
+  attempt to commit to main receive an instructive error with their assigned
+  worktree path. The orchestrator bypasses the hook via
+  `SAW_ALLOW_MAIN_COMMIT=1` for legitimate main commits. This is
+  infrastructure enforcement: it prevents the violation rather than detecting
+  it. The hook is ephemeral — installed during worktree creation, removed
+  during cleanup.
 - **Layer 1 — Manual pre-creation:** The orchestrator creates all worktrees
   before launching any agent (`git worktree add`). This is the primary
   mechanism. It is deterministic and does not depend on agent cooperation.
@@ -264,8 +272,9 @@ deviations where an agent touched files outside its declared scope.
   verifies each agent branch has commits beyond the base. Empty branch = hard
   stop. This catches all isolation failures regardless of cause.
 
-Layers 1 and 2 may both fire; this is harmless. If both fail, Layer 3 may
-catch it. If all three fail, Layer 4 catches it before any incorrect merge.
+Layer 0 prevents the most common failure mode (agent commits to main). Layers
+1 and 2 may both fire; this is harmless. If all prevention layers fail, Layer
+4 catches it before any incorrect merge.
 
 Disjoint file ownership and worktree isolation are complementary layers that protect against different failure modes. Neither substitutes for the other.
 
