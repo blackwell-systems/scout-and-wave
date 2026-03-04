@@ -1,7 +1,7 @@
 # Scout-and-Wave: A Protocol for Safely Parallelizing Human-Guided Agentic Workflows
 
 [![Blackwell Systems™](https://raw.githubusercontent.com/blackwell-systems/blackwell-docs-theme/main/badge-trademark.svg)](https://github.com/blackwell-systems)
-![Version](https://img.shields.io/badge/version-0.6.0-blue)
+![Version](https://img.shields.io/badge/version-0.6.2-blue)
 
 A coordination protocol for safely parallelizing human-guided agentic workflows. Defines participant roles, preconditions, ownership invariants, and verification gates that guarantee agents can work concurrently without conflicts. Human review checkpoints are structural: the protocol does not advance past the suitability gate or between waves without human approval.
 
@@ -16,6 +16,8 @@ The common workaround, running multiple Claude Code sessions in separate termina
 SAW takes the opposite approach: everything runs within a single session. One synchronous orchestrator holds the full coordination state, enforces file ownership before any agent launches, freezes interface contracts so agents can't drift, and handles merge and verification as structured protocol phases. The agents are parallel; the coordination is centralized.
 
 ## Quick Start
+
+> **⚠️ BEFORE YOU START:** Add `"Agent"` to your allow list in `~/.claude/settings.json` or you'll need to manually approve each agent launch. See [Install → Step 1: Configure Permissions](#install) for details.
 
 ```bash
 # 1. Clone and install
@@ -35,8 +37,6 @@ cp ~/code/scout-and-wave/prompts/saw-skill.md ~/.claude/commands/saw.md
 ```
 
 The scout produces a `docs/IMPL-<feature>.md` file: a coordination artifact with file ownership, interface contracts, and per-agent prompts. You review it before any agent writes code. This is the human checkpoint that makes parallel execution safe.
-
-See [Permissions](#permissions) before your first run. `"Agent"` must be in your allow list or every agent launch will pause for approval.
 
 ## How
 
@@ -73,30 +73,15 @@ Scout-and-wave ships as a `/saw` skill for [Claude Code](https://docs.anthropic.
 
 ### Install
 
-**1. Clone the repository** (the skill reads prompt files from it at runtime):
+**Step 1: Configure Permissions (Required)**
+
+SAW requires `"Agent"` in your Claude Code permissions allow list. **Without this, every agent launch will pause for manual approval.**
+
+**If `~/.claude/settings.json` doesn't exist yet**, create it:
 
 ```bash
-git clone https://github.com/blackwell-systems/scout-and-wave.git ~/code/scout-and-wave
-```
-
-**2. Copy the skill to your Claude Code commands directory:**
-
-```bash
-cp ~/code/scout-and-wave/prompts/saw-skill.md ~/.claude/commands/saw.md
-```
-
-The skill loads prompt files from the repository at runtime: `prompts/scout.md`,
-`prompts/agent-template.md`, `prompts/saw-merge.md`, `prompts/saw-worktree.md`,
-`prompts/scaffold-agent.md` (conditional), and `prompts/saw-bootstrap.md` (bootstrap
-only). Keep the repository on disk. To use a non-default location, set
-`SAW_REPO=/path/to/scout-and-wave` in your environment.
-
-### Permissions
-
-SAW requires the following entries in `~/.claude/settings.json` to run without
-blocking on approval prompts at each tool call:
-
-```json
+mkdir -p ~/.claude
+cat > ~/.claude/settings.json <<'EOF'
 {
   "permissions": {
     "allow": [
@@ -113,18 +98,71 @@ blocking on approval prompts at each tool call:
     ]
   }
 }
+EOF
 ```
 
-**`"Agent"` is the critical one.** Without it, every wave agent launch and
-every pipelined scout launch blocks waiting for a keyboard approval. In a
-multi-agent wave, you would need to approve each agent individually before it
-launches asynchronously. Add `"Agent"` once to your user-level settings and all
-future SAW runs are fully hands-free from the moment you invoke `/saw wave`.
+**If `~/.claude/settings.json` already exists**, add `"Agent"` to the `allow` array:
 
-The other entries cover git commands, worktree management, IMPL doc writes, and codebase reads (`Bash`, `Read`, `Write`, `Edit`, `Glob`, `Grep`), task list updates for wave progress tracking (`TodoWrite`), and doc/API lookups during scout analysis (`WebFetch`, `WebSearch`). If your existing settings already allow these, no change is needed.
+```json
+{
+  "permissions": {
+    "allow": [
+      "Agent",  // ← Add this line if missing
+      // ... your other existing entries
+    ]
+  }
+}
+```
 
-For project-scoped settings, add the same block to
-`.claude/settings.json` in the project root.
+**Why these permissions:**
+- **`"Agent"`** (critical): Launches Scout and Wave agents without blocking
+- `"Bash"`, `"Read"`, `"Write"`, `"Edit"`, `"Glob"`, `"Grep"`: Git commands, worktree management, IMPL doc writes, codebase reads
+- `"TodoWrite"`: Wave progress tracking
+- `"WebFetch"`, `"WebSearch"`: Doc/API lookups during scout analysis
+
+For project-scoped settings, add the same block to `.claude/settings.json` in the project root.
+
+**Step 2: Clone the Repository**
+
+The skill reads prompt files from the repository at runtime, so keep it on disk:
+
+```bash
+# Clone to a location of your choice (~/code is just a suggestion)
+git clone https://github.com/blackwell-systems/scout-and-wave.git ~/code/scout-and-wave
+
+# Or anywhere else:
+# git clone https://github.com/blackwell-systems/scout-and-wave.git /path/you/prefer
+```
+
+**If you clone to a non-standard location**, set `SAW_REPO` in your shell profile:
+
+```bash
+# Add to ~/.zshrc or ~/.bashrc:
+export SAW_REPO=/path/you/prefer/scout-and-wave
+```
+
+**Step 3: Install the Skill**
+
+Copy the skill file to Claude Code's commands directory:
+
+```bash
+cp ~/code/scout-and-wave/prompts/saw-skill.md ~/.claude/commands/saw.md
+
+# If you cloned elsewhere, adjust the path:
+# cp $SAW_REPO/prompts/saw-skill.md ~/.claude/commands/saw.md
+```
+
+**Step 4: Verify Installation**
+
+Restart Claude Code (if it was already running), then in any session:
+
+```
+/saw status
+```
+
+**Expected output:** `"No IMPL doc found in this project"` or similar. This confirms the skill loaded successfully.
+
+If you see an error about `/saw` not being recognized, check that `saw.md` is in `~/.claude/commands/` and restart Claude Code.
 
 ### Commands
 
