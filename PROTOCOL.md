@@ -31,6 +31,15 @@ reporting, decision points, approval requests, and error escalation flow through
 the orchestrator; asynchronous agents never surface information to the human
 except through the orchestrator's completion handling.
 
+**Repository context responsibility:** When launching any agent (Scout, Scaffold
+Agent, Wave Agent), the Orchestrator must provide the absolute path to the IMPL
+doc in the agent's launch parameters. Agents derive the repository root from
+this path (the directory containing `docs/`). This prevents multi-repository
+session ambiguity where the session working directory differs from the feature's
+repository. Relative IMPL doc paths or omitting the path entirely will cause
+agents to default to the session's working directory, leading to wrong-repository
+failures.
+
 Running in the user's session is what makes human checkpoints enforceable. A
 background orchestrator would have no interactive session to deliver mandatory
 approvals to. The human is not a separate role; they are present through the
