@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.6.1] | 2026-03-03 | Scout status table includes scaffold rows with commit SHAs |
 | [0.6.0] | 2026-03-03 | Scaffold Agent: new participant; Scout defines contracts, Scaffold Agent materializes them after review |
 | [0.5.3] | 2026-03-03 | Deep consistency pass: 15 issues across 12 files |
 | [0.5.2] | 2026-03-03 | I2 invariant updated: Scout defines and implements interface contracts |
@@ -28,6 +29,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.3.0] | 2026-02-28 | Bootstrap mode for new projects; Wave 0 pattern |
 | [0.2.0] | 2026-02-28 | Decomposed skill prompt; complexity-based suitability heuristic |
 | [0.1.0] | 2026-02-27 | Initial release |
+
+---
+
+## [0.6.1] - 2026-03-03
+
+### Changed
+
+- **`prompts/scout.md` (v0.3.9 → v0.4.0):** Status table in IMPL doc template
+  now includes scaffold rows. Previously the status section only listed wave
+  agent rows; scaffold steps were only visible by digging into the Scaffolds
+  section. Now every IMPL doc produced by the Scout includes `— | Scaffold`
+  rows in the status table at their correct position in the execution sequence,
+  with commit SHA populated once done. Orchestrator row (`— | Orch`) for
+  post-merge integration also added. Scaffold rows are omitted when no
+  scaffolds are needed for a given wave boundary.
 
 ---
 

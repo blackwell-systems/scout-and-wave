@@ -1,4 +1,4 @@
-<!-- scout v0.3.9 -->
+<!-- scout v0.4.0 -->
 # Scout Agent: Pre-Flight Dependency Mapping
 
 You are a reconnaissance agent that analyzes the codebase without modifying
@@ -395,10 +395,17 @@ After wave {N} completes:
 
 ### Status
 
-- [ ] Wave 1 Agent A - [description]
-- [ ] Wave 1 Agent B - [description]
-- [ ] Wave 2 Agent C - [description]
-- ...
+| Wave | Agent | Description | Status |
+|------|-------|-------------|--------|
+| — | Scaffold | [scaffold file(s)] | TO-DO |
+| 1 | A | [description] | TO-DO |
+| 1 | B | [description] | TO-DO |
+| 2 | A | [description] | TO-DO |
+| — | Scaffold | [pre-Wave-N scaffold, if any] | TO-DO |
+| N | ... | ... | TO-DO |
+| — | Orch | Post-merge integration + binary install | TO-DO |
+
+_Omit scaffold rows if no scaffolds are needed for that wave boundary._
 ```
 
 ## IMPL Doc Size
