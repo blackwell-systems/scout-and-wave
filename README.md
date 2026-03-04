@@ -164,6 +164,29 @@ Restart Claude Code (if it was already running), then in any session:
 
 If you see an error about `/saw` not being recognized, check that `saw.md` is in `~/.claude/commands/` and restart Claude Code.
 
+### First Run
+
+Navigate to a project with existing code and run:
+
+```
+/saw scout "add a cache to the API"   # Scout analyzes (30-90s)
+/saw wave                              # Agents execute in parallel (2-5min)
+```
+
+**What happens:**
+
+1. **Scout** analyzes your codebase and writes `docs/IMPL-<feature>.md`
+2. **You review** the wave structure and interface contracts (last chance to change them)
+3. **Scaffold Agent** creates shared type files if needed (10-30s)
+4. **Wave Agents** implement their assigned files in parallel (2-5min)
+5. **Orchestrator** merges, runs tests, reports success
+
+Scout will show you the wave structure and ask for approval before any agent starts.
+
+**Expected timing:** ~5-7 minutes for a 2-agent wave
+
+**New to SAW?** See **[First Run Walkthrough](docs/QUICKSTART.md)** for a detailed step-by-step guide with example output, error handling, and tips for success.
+
 ### Commands
 
 ```
