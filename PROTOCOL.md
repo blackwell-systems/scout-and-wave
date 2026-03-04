@@ -309,6 +309,29 @@ issue, or descope it from the wave) before the merge step proceeds. Agents
 that completed successfully are not re-run, but their worktrees are not merged
 until the full wave is resolved. Partial merges are not permitted.
 
+**E7a: Automatic failure remediation in --auto mode.** When `--auto` is active
+and an agent fails with a correctable issue (isolation failure, missing
+dependency, transient build error), the orchestrator should automatically
+re-launch the agent with corrections rather than surfacing the failure to the
+user. Correctable failures are those where the fix is deterministic and
+requires no human decision:
+
+- **Isolation failures**: Re-launch with explicit repository context (absolute
+  IMPL doc path) so the agent can derive the correct repository root
+- **Missing dependencies**: Install the dependency and re-launch
+- **Transient build errors**: Re-run after a brief delay (network hiccups, race
+  conditions in parallel builds)
+
+Non-correctable failures (logic errors, test failures, interface contract
+violations) always surface to the user regardless of `--auto` mode. The
+distinction: correctable = environmental/setup issue, non-correctable = code
+or design issue requiring human judgment.
+
+In `--auto` mode, the orchestrator may retry a correctable failure up to 2
+times before escalating to the user. Each retry should include an explanatory
+note in logs but should not block wave execution. If an agent succeeds after
+retry, the wave proceeds normally; no user intervention is required.
+
 **E8: Same-wave interface failure.** If any agent reports `status: blocked` due to
 an interface contract being unimplementable as specified, the wave does not
 merge. The orchestrator marks the wave BLOCKED, revises the affected contracts
