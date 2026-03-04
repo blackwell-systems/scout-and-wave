@@ -26,8 +26,10 @@ cp ~/code/scout-and-wave/prompts/saw-skill.md ~/.claude/commands/saw.md
 /saw scout "add a caching layer to the API client"
 # → Scout analyzes the codebase, assigns files to agents, writes docs/IMPL-caching-layer.md
 # → Orchestrator shows you the wave structure and interface contracts for review
+# → You review the IMPL doc. This is the last chance to change interfaces.
 
 /saw wave
+# → If shared types are needed, Scaffold Agent creates them automatically
 # → Parallel agents implement their assigned files concurrently
 # → Orchestrator merges, runs tests, reports result
 ```
