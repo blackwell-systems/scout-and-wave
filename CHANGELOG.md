@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.6.2] | 2026-03-04 | Scout automatically detects shared types for scaffold files |
 | [0.6.1] | 2026-03-03 | Scout status table includes scaffold rows with commit SHAs |
 | [0.6.0] | 2026-03-03 | Scaffold Agent: new participant; Scout defines contracts, Scaffold Agent materializes them after review |
 | [0.5.3] | 2026-03-03 | Deep consistency pass: 15 issues across 12 files |
@@ -29,6 +30,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.3.0] | 2026-02-28 | Bootstrap mode for new projects; Wave 0 pattern |
 | [0.2.0] | 2026-02-28 | Decomposed skill prompt; complexity-based suitability heuristic |
 | [0.1.0] | 2026-02-27 | Initial release |
+
+---
+
+## [0.6.2] - 2026-03-04
+
+### Changed
+
+- **`prompts/scout.md` (v0.4.0 → v0.4.1):** Scout step 5 now automatically
+  detects shared types that cross agent boundaries and adds them to the
+  Scaffolds section. Previously, the Scout could populate scaffolds but relied
+  on manual detection during interface contract design. Now the Scout scans
+  interface contracts after step 4 and counts how many agents will reference
+  each type, struct, enum, or interface. If ≥2 agents will reference it (one
+  defines, another consumes; or both consume), it is automatically added to
+  scaffolds. Detection heuristics: explicit "define type X" + "consume type X"
+  language in contracts, function return types crossing agent boundaries,
+  duplicate struct/interface names in different agent sections. **Prevents
+  merge conflicts:** Without this, Agent A might define `MetricSnapshot` in
+  `fileA.go` while Agent B independently defines it in `fileB.go`, causing a
+  duplicate declaration error at merge time. The Scaffold Agent materializes
+  these shared types before Wave 1, so all agents import from the canonical
+  location rather than redefining.
+
+### Context
+
+This improvement emerged from real-world SAW execution of claudewatch's metrics
+export feature (Wave 1: Agent A + Agent B). Both agents independently created a
+`MetricSnapshot` struct in separate files, causing a merge conflict. Root cause:
+shared types should be in scaffold files committed to HEAD before Wave 1, not
+independently declared by multiple agents. The Scaffolds section already existed
+but was manually populated. This change makes detection automatic and systematic,
+closing the gap between interface contract design and scaffold file generation.
 
 ---
 

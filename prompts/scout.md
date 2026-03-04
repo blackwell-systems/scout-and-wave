@@ -202,14 +202,37 @@ Record the verdict and its rationale in the IMPL doc under a
    code. If you cannot determine a signature, flag it as a blocker that must
    be resolved before launching agents.
 
-5. **Define scaffold contents if needed.** If the interface contracts from
-   step 4 define types, structs, enums, or interfaces that cross agent
-   boundaries — meaning Wave 1 agents must import or reference them — specify
-   the scaffold files in the IMPL doc Scaffolds section. For each scaffold file,
-   list: the file path, the types/interfaces/structs it must contain (exact
-   signatures), and any imports required. Do not create the files; the Scaffold
-   Agent will create them after human review. If no cross-agent types are
-   needed, leave the Scaffolds section empty.
+5. **Detect shared types and define scaffold contents.** After defining interface
+   contracts in step 4, scan for types that cross agent boundaries:
+
+   **Automatic detection:** For each type, struct, enum, or interface in the
+   interface contracts section, count how many agents will reference it. If
+   referenced by ≥2 agents (one defines, another consumes; or both consume),
+   add it to the Scaffolds section.
+
+   **Detection heuristics:**
+   - Agent A's prompt says "define type X" AND Agent B's prompt says "consume type X"
+   - Agent A returns type X from a function AND Agent B calls that function
+   - A type name appears in multiple agent file ownership lists
+   - Same struct name would be created by multiple agents in different files
+
+   **Why this matters:** Agents cannot coordinate at runtime. If Agent A defines
+   `MetricSnapshot` in `fileA.go` and Agent B defines it in `fileB.go`, the merge
+   will fail with duplicate declarations. Creating the shared type in a scaffold
+   file before Wave 1 launches prevents this.
+
+   **Scaffolds section format:**
+
+   | File | Contents | Import path | Status |
+   |------|----------|-------------|--------|
+   | `path/to/types.go` | `TypeName struct (fields)` | `import/path` | pending |
+
+   For each scaffold file, list: the file path, the types/interfaces/structs it
+   must contain (exact signatures), and any imports required. Do not create the
+   files; the Scaffold Agent will create them after human review.
+
+   If no cross-agent types are detected, write in the Scaffolds section:
+   "No scaffolds needed - agents have independent type ownership."
 
 6. **Assign file ownership.** Every file that will change gets assigned to
    exactly one agent. No two agents in the same wave may touch the same file.
