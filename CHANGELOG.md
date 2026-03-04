@@ -8,6 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.6.0] | 2026-03-03 | Scaffold Agent: new participant; Scout defines contracts, Scaffold Agent materializes them after review |
+| [0.5.3] | 2026-03-03 | Deep consistency pass: 15 issues across 12 files |
+| [0.5.2] | 2026-03-03 | I2 invariant updated: Scout defines and implements interface contracts |
+| [0.5.1] | 2026-03-03 | Consistency pass: E-rule count, scaffold handling, Scout definition |
+| [0.5.0] | 2026-03-03 | Wave 0 collapsed into Scout phase; solo-agent short-circuit removed |
 | [0.4.4] | 2026-03-03 | saw-teams/example-settings.json; all required config fields in one copyable block |
 | [0.4.3] | 2026-03-03 | saw-teams hooks, README, and spawn step; complete Agent Teams integration |
 | [0.4.2] | 2026-03-03 | saw-teams prompt set synced to protocol v0.4.1; all invariants/E-rules propagated |
@@ -23,6 +28,273 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.3.0] | 2026-02-28 | Bootstrap mode for new projects; Wave 0 pattern |
 | [0.2.0] | 2026-02-28 | Decomposed skill prompt; complexity-based suitability heuristic |
 | [0.1.0] | 2026-02-27 | Initial release |
+
+---
+
+## [0.6.0] - 2026-03-03
+
+### Added
+
+- **`prompts/scaffold-agent.md` (v0.1.0):** New participant prompt for the Scaffold
+  Agent. A lightweight participant that runs after Scout and human review: reads
+  the approved IMPL doc Scaffolds section, creates the specified type scaffold
+  source files, verifies they compile, commits to HEAD, and updates scaffold
+  status. Embeds I2 and I5 at enforcement points. The Scaffold Agent is not a
+  Wave Agent; it has no 9-field template, no worktree, and no completion report.
+- **Scaffold Agent participant** added to `PROTOCOL.md`. Sits between Scout and
+  Wave Agent in the participant model. Defined in the Participants section with
+  narrow scope: materializes approved interface contracts as source files.
+- **I2 invariant updated** in `PROTOCOL.md`: "The Scout defines all interfaces
+  that cross agent boundaries in the IMPL doc. The Scaffold Agent implements them
+  as type scaffold files committed to HEAD after human review, before any Wave
+  Agent launches." Previously credited Scout with both defining and implementing.
+- **Scaffold Agent conditional spawn** added to `prompts/saw-skill.md` (v0.3.7):
+  after Scout completes and user reviews the IMPL doc, if the Scaffolds section
+  is non-empty and any scaffold file has `Status: pending`, launch Scaffold Agent
+  before creating worktrees. Scaffold Agent is NOT a wave agent; runs via Agent
+  tool with `run_in_background: true`.
+- Same Scaffold Agent spawn step added to `saw-teams/saw-teams-skill.md` (v0.1.4).
+  Scaffold Agent runs before any team is created; it is not a teammate.
+- **`prompts/saw-bootstrap.md` (v0.3.3):** Scout Types Phase rewritten — Scout
+  specifies scaffold file contents in IMPL doc; Scaffold Agent creates them after
+  human review. Added "Why Scaffold Agent, not Scout" rationale. Output format,
+  verification gates, and status checklist now show "Scaffold Agent:" instead of
+  "Scout:". Rules clarified: Scout may create one artifact only (the IMPL doc).
+- **Scaffold commit verification** added to skill files' worktree pre-creation
+  steps: verify all IMPL doc Scaffolds section files show `Status: committed`
+  before creating worktrees or spawning teammates.
+- **Wave numbering note** added to `prompts/agent-template.md` (v0.3.8): waves
+  are 1-indexed; there is no Wave 0; the Scout produces any required type scaffold
+  files (via Scaffold Agent) before Wave 1 launches.
+
+### Changed
+
+- **`prompts/scout.md` (v0.3.9):** Scout no longer creates scaffold source files.
+  Step 5 ("Produce type scaffolds if needed") reverted to "Define scaffold
+  contents if needed" — Scout lists files in the IMPL doc Scaffolds section with
+  exact contents specified, but does not write source files. Rules: "You may
+  create one artifact: the IMPL doc. Do not create, modify, or delete any source
+  files." IMPL doc Scaffolds section template updated: Status column added
+  (`pending` initially, Scaffold Agent sets to `committed`).
+- **`prompts/agent-template.md` (v0.3.8) Field 3:** "Scout-produced scaffold
+  files committed to HEAD" → "Scaffold Agent-produced scaffold files committed to
+  HEAD". Import from scaffold files rather than redefining types.
+- **`saw-teams/teammate-template.md` (v0.1.3) Field 3:** same wording update.
+- **`prompts/README.md`:** added `scaffold-agent.md` row (v0.1.0) to Participant
+  Prompts table. Updated scout.md description: "Never modifies source files" →
+  "Never modifies existing source files" (clarification: it is the Scaffold Agent
+  that creates new ones). Version numbers updated: scout v0.3.9, agent-template
+  v0.3.8, saw-skill v0.3.9.
+- **`PROTOCOL.md` version:** 0.5.2 → 0.6.0.
+- **`README.md` version badge:** 0.5.2 → 0.6.0.
+- **`saw-teams/DESIGN.md`:** I2 row updated to reflect Scaffold Agent role; File
+  Plan updated (saw-teams-skill v0.1.4, teammate-template v0.1.3); status line
+  updated to v0.1.4 synced to protocol v0.6.0.
+
+### Rationale
+
+Introducing the Scaffold Agent restores the human review gate that the v0.5.0
+"Scout creates scaffolds" design eliminated. Previously (v0.5.x), Scout committed
+scaffold files before the user saw the IMPL doc — meaning interface contracts were
+locked in code before human review. With v0.6.0, the flow is: Scout writes IMPL
+doc → human reviews interface contracts → Scaffold Agent materializes them →
+Wave Agents implement against them. The review gate is structural again.
+
+The alternative (spawning Scout twice — once to analyze, once to create scaffolds)
+was rejected: async agents run to completion with no pause/resume, so a "Scout
+continues" design would require two separate Scout invocations with context
+re-establishment overhead. The Scaffold Agent avoids this.
+
+### Solo wave and cross-wave coordination semantics
+
+- **Solo waves do not require scaffolding.** Scaffold files exist so that multiple
+  agents in the same wave can compile against shared types; one agent cannot
+  conflict with itself. Scout leaves the Scaffolds section empty for solo waves.
+- **Cross-wave coordination uses committed code.** Waves execute sequentially.
+  Wave N commits its work to HEAD; Wave N+1 imports from the committed codebase
+  directly. Scaffolds solve the intra-wave problem only.
+- **Scaffolding runs once, before the first wave.** E2 (interface freeze)
+  guarantees all cross-agent types are known at REVIEWED. The state machine's
+  loop-back from "more waves?" to WAVE_PENDING bypasses the scaffold gate by
+  design — there is nothing new to scaffold between waves.
+
+### Worktree isolation hardening
+
+During a live SAW test (brewprune cold-start-r13, 6 parallel agents), all agents
+committed to main instead of their worktree branches. The `isolation: "worktree"`
+parameter on the Agent tool failed silently, Field 0 self-verification did not
+catch it, and the Orchestrator saw "Already up to date" on all 6 branches during
+merge — but proceeded anyway, committing uncommitted changes found on main.
+
+The protocol had three defense layers but no merge-time enforcement. All three
+cooperative layers (Task tool isolation, Field 0 verification, prompt
+instructions) depend on agent behavior being correct. When the execution
+environment fails silently, cooperative layers cannot detect it. The missing
+piece was a deterministic check at merge time — before any `git merge` runs —
+that verifies each agent branch actually has commits.
+
+Correctness guarantees belong in infrastructure, not cooperation. Asking agents
+to maintain worktree isolation through prompt instructions is fragile,
+unenforceable at runtime, and invisible until merge time. Layer 4 transforms
+an invisible failure mode into a loud, explicit error that forces investigation
+before any damage occurs.
+
+- **Layer 4 trip wire** added to merge procedure (`prompts/saw-merge.md` v0.4.5,
+  `saw-teams/saw-teams-merge.md` v0.1.3): before any merge, verify each agent
+  branch has commits beyond the base. Empty branch triggers hard stop. Catches
+  all isolation failures regardless of cause — Task tool, Field 0, or prompt
+  instructions.
+- **Defense-in-depth rationale** added to worktree docs (`prompts/saw-worktree.md`
+  v0.4.4, `saw-teams/saw-teams-worktree.md` v0.1.3): manual pre-creation stays
+  alongside `isolation: "worktree"` as belt + suspenders. Neither mechanism is
+  sufficient alone.
+- **E4 rewritten** in `PROTOCOL.md`: documents 4-layer defense model (manual
+  pre-creation → Task tool isolation → Field 0 verification → merge-time trip
+  wire).
+
+### Pre-commit hook as fail-fast guard (Layer 0)
+
+Layer 4 detects isolation failures at merge time but cannot prevent them. The
+natural follow-up: can we block the bad commit before it happens? A git
+pre-commit hook can. But SAW has no runtime, no binary, no installed tooling.
+The protocol is entirely prompt-driven. There is no hook file to commit to the
+repo and no framework to manage it.
+
+The solution is an ephemeral hook shipped as `hooks/pre-commit-guard.sh` in
+the SAW repository. The Orchestrator copies it to `.git/hooks/pre-commit`
+during worktree setup and removes it during cleanup after merge. Between
+waves, the hook doesn't exist. The project's normal git workflow is
+unaffected. If the project already has a pre-commit hook, SAW backs it up
+and restores it afterward.
+
+The hook blocks agent commits to main with an instructive error listing
+available worktrees so the agent can self-correct (cd to its worktree and
+retry). The Orchestrator bypasses the hook via `SAW_ALLOW_MAIN_COMMIT=1` for
+its own legitimate main commits (scaffold, post-merge, lint fix). Agents never
+have this variable set.
+
+This closes the gap between prevention and detection. Layer 0 prevents the most
+common failure mode (agent commits to main). Layer 4 catches everything Layer 0
+can't prevent (agent works on main without committing, agent on wrong worktree
+branch). Both are deterministic. Neither depends on agent cooperation.
+
+- **Layer 0 pre-commit hook** added to worktree setup (`prompts/saw-worktree.md`
+  v0.4.5, `saw-teams/saw-teams-worktree.md` v0.1.4): blocks agent commits to
+  main during active waves with instructive error output.
+- **`SAW_ALLOW_MAIN_COMMIT` bypass** added to merge procedures
+  (`prompts/saw-merge.md` v0.4.6, `saw-teams/saw-teams-merge.md` v0.1.4) and
+  `prompts/scaffold-agent.md` (v0.1.1) for legitimate Orchestrator commits.
+- **E4 updated** in `PROTOCOL.md`: documents 5-layer defense model (Layer 0
+  through Layer 4).
+
+---
+
+## [0.5.3] - 2026-03-03
+
+### Fixed
+
+- **`PROTOCOL.md` version header:** was `0.4.0`, updated to `0.5.2`.
+- **`PROTOCOL.md` conformance criteria:** added scaffold file support bullet —
+  conforming implementations must support Scout-produced scaffold files and
+  post-merge scaffold integrity verification.
+- **`PROTOCOL.md` audit grep instruction:** updated to include `E{N}` alongside
+  `I{N}` so both invariants and execution rules are covered in consistency audits.
+- **`prompts/README.md`:** updated all stale version numbers (saw-skill v0.3.3→v0.3.6,
+  scout v0.3.5→v0.3.7, agent-template v0.3.4→v0.3.7, saw-worktree v0.4.1→v0.4.3,
+  saw-merge v0.4.2→v0.4.4, saw-bootstrap v0.3.2→v0.3.1); removed "solo-agent check"
+  from saw-worktree description; updated Scout description to reflect scaffold file
+  production and "never modifies existing source files".
+- **`README.md` version badge:** was `0.4.1`, updated to `0.5.2`.
+- **`saw-teams/DESIGN.md`:** updated status line (v0.1.2→v0.1.3, protocol v0.4.1→v0.5.2);
+  updated File Plan versions (saw-teams-skill v0.1.3, teammate-template v0.1.2,
+  saw-teams-merge v0.1.2, saw-teams-worktree v0.1.2) and adapted-from references;
+  added "committed to HEAD" to I2 row in both SAW and SAW-Teams columns.
+- **`saw-teams/saw-teams-merge.md`:** "adapted from saw-merge (v0.4.3)" → v0.4.4.
+- **`prompts/saw-bootstrap.md` (v0.3.2):** Rules section "Do not write any source code"
+  contradicted the Scout Types Phase section which requires scaffold files. Fixed to
+  allow scaffold files as a second artifact type. Removed stale `saw-quick mode`
+  reference (saw-quick was removed in v0.4.0); NOT SUITABLE is now the verdict for
+  fewer than 3 concerns.
+- **`prompts/scout.md` (v0.3.8):** "All three questions" → "All five questions" in
+  SUITABLE verdict (suitability gate has had 5 questions since v0.2.0). Removed stale
+  `saw-quick mode` reference from low-parallelization guidance.
+- **`docs/saw-type-scaffold-proposal.md`:** marked completed status items (v0.5.0
+  Wave 1, v0.5.1 Wave 2, CHANGELOG updated); integration test item remains open.
+- **`prompts/saw-worktree.md` (v0.4.3):** removed `store_embedding`-specific example
+  from interface freeze checklist (implementation artifact that leaked into the generic
+  protocol prompt); replaced with generic "multi-parameter function signatures" wording.
+- **`saw-teams/saw-teams-worktree.md` (v0.1.2):** same `store_embedding` fix.
+- **`prompts/agent-template.md` (v0.3.7):** Field 3 now names Scout-produced scaffold
+  files as a source of interfaces alongside prior waves and existing code; adds note
+  to check IMPL doc Scaffolds section.
+- **`saw-teams/teammate-template.md` (v0.1.2):** same Field 3 scaffold note.
+
+---
+
+## [0.5.2] - 2026-03-03
+
+### Changed
+
+- **I2 invariant redefined:** renamed from "Interface contracts precede
+  implementation" to "Interface contracts precede parallel implementation".
+  Body updated to reflect the Scout's dual role: defines contracts in the IMPL
+  doc AND implements them as type scaffold files committed to HEAD, before any
+  Wave Agent launches. Updated in `PROTOCOL.md` (canonical definition),
+  `prompts/saw-skill.md`, and `saw-teams/saw-teams-skill.md` (embeddings).
+
+### Fixed
+
+- **`saw-teams/DESIGN.md`:** I2 row was mislabeled "Verification gates"
+  (that is I5). Corrected to "Interface contracts precede parallel
+  implementation" with accurate SAW vs SAW-Teams comparison.
+- **`saw-teams/README.md`:** I2 reference updated to name scaffold files
+  explicitly.
+
+---
+
+## [0.5.0] - 2026-03-03
+
+### Changed
+
+- **Wave 0 collapsed into Scout phase.** The Scout now produces a types scaffold file directly — a source file containing all shared interfaces, structs, and error types — rather than writing a Wave 0 agent prompt. The work is identical; the mechanism changes from a sequential solo wave to a Scout output committed before any worktrees are created. Wave 1 is now always the first parallel wave.
+- **Solo-agent short-circuit removed** from `prompts/saw-worktree.md`, `saw-teams/saw-teams-worktree.md`, and `saw-teams/saw-teams-skill.md`. Every wave runs through full wave machinery. A wave that decomposes to one agent signals a decomposition problem or NOT SUITABLE, not a short-circuit path.
+- **Investigation-first items** are now NOT SUITABLE unconditionally. The SUITABLE WITH CAVEATS → Wave 0 workaround path is removed from the suitability gate in `scout.md`.
+- **`saw-bootstrap.md`** reframed: "Wave 0 Pattern (Always Required)" → "Scout Types Phase (Always Required)". Output format, verification gates, status checklist, and rules updated to match.
+- **`PROTOCOL.md`** solo wave definition removed; bootstrap Variants section updated.
+- **`prompts/saw-skill.md`** and **`saw-teams/saw-teams-skill.md`** bootstrap descriptions updated.
+
+### Rationale
+
+Wave 0 was a structural smell: wave machinery applied to a single agent produces pure overhead with no parallelism benefit. The Scout already knows what Wave 0 needs to do — it wrote the Wave 0 agent prompt — so moving that work into the Scout phase requires only a permission change and a format change, not a new decision framework. See `docs/saw-type-scaffold-proposal.md` for the full design discussion.
+
+---
+
+## [0.5.1] - 2026-03-03
+
+### Fixed
+
+- **E-rule count mismatch:** `PROTOCOL.md`, `prompts/saw-skill.md`, and
+  `saw-teams/saw-teams-skill.md` all claimed "E1–E13" despite E14 being defined
+  in PROTOCOL.md since v0.4.0. All three updated to "E1–E14".
+- **Scout definition stale in `PROTOCOL.md` and `README.md`:** both still said
+  "Never modifies source files" after the Wave 0 collapse in v0.5.0. Updated to
+  reflect that the Scout may produce type scaffold files as coordination
+  artifacts; "Never modifies **existing** source files" is preserved.
+- **Scaffold handling not visible in skill files:** the interface freeze
+  checkpoint in `prompts/saw-skill.md` and `saw-teams/saw-teams-skill.md` did
+  not mention scaffold commit verification. Added explicit note: Scout-produced
+  scaffold files must be committed to HEAD before worktrees are created.
+- **Post-merge verification missing scaffold check:** `prompts/saw-merge.md`
+  (v0.4.4) and `saw-teams/saw-teams-merge.md` (v0.1.2) Step 6 now include a
+  scaffold integrity check — verify scaffold files are present and unmodified
+  after merge; any agent-modified scaffold is a protocol deviation.
+- **Wave numbering not documented in `agent-template.md`:** added explicit note
+  that waves are 1-indexed and Wave 0 no longer exists.
+
+### Version bumps
+
+`saw-skill.md` v0.3.6, `saw-merge.md` v0.4.4, `agent-template.md` v0.3.6,
+`saw-teams-skill.md` v0.1.3, `saw-teams-merge.md` v0.1.2.
 
 ---
 

@@ -33,7 +33,7 @@
       <mxGeometry relative="1" as="geometry"/>
     </mxCell>
 
-    <!-- REVIEWED revise contracts self-loop (dashed) -->
+    <!-- REVIEWED revise contracts self-loop (dashed) — unchanged -->
     <mxCell id="e3" edge="1" parent="1" source="reviewed" target="reviewed" style="edgeStyle=orthogonalEdgeStyle;html=1;dashed=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0;entryDx=0;entryDy=0;fontSize=16;" value="revise contracts">
       <mxGeometry relative="1" as="geometry">
         <Array as="points">
@@ -43,19 +43,59 @@
       </mxGeometry>
     </mxCell>
 
-    <!-- WAVE_PENDING -->
-    <mxCell id="wave_pending" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=18;" value="WAVE_PENDING" vertex="1">
-      <mxGeometry height="64" width="200" x="500" y="460" as="geometry"/>
-    </mxCell>
-
-    <!-- REVIEWED → WAVE_PENDING -->
-    <mxCell id="e4" edge="1" parent="1" source="reviewed" target="wave_pending" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=16;" value="human approves">
+    <!-- REVIEWED → scaffold_needed ("human approves") -->
+    <mxCell id="e4" edge="1" parent="1" source="reviewed" target="scaffold_needed" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=16;" value="human approves">
       <mxGeometry relative="1" as="geometry"/>
     </mxCell>
 
-    <!-- Solo wave? diamond -->
+    <!-- Scaffold files needed? diamond -->
+    <mxCell id="scaffold_needed" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=16;" value="Scaffold files&#xa;needed?" vertex="1">
+      <mxGeometry height="110" width="200" x="500" y="440" as="geometry"/>
+    </mxCell>
+
+    <!-- SCAFFOLDING state (violet) -->
+    <mxCell id="scaffolding" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=18;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;" value="SCAFFOLDING" vertex="1">
+      <mxGeometry height="64" width="200" x="500" y="610" as="geometry"/>
+    </mxCell>
+
+    <!-- SCAFFOLD_FAILED terminal (red) -->
+    <mxCell id="scaffold_failed" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;fontSize=18;" value="SCAFFOLD_FAILED" vertex="1">
+      <mxGeometry height="64" width="200" x="870" y="610" as="geometry"/>
+    </mxCell>
+
+    <!-- scaffold_needed → SCAFFOLDING (yes) -->
+    <mxCell id="e_sa_yes" edge="1" parent="1" source="scaffold_needed" target="scaffolding" style="edgeStyle=orthogonalEdgeStyle;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;fontSize=16;" value="yes">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- scaffold_needed → WAVE_PENDING (no, left bypass arc) -->
+    <mxCell id="e_sa_no" edge="1" parent="1" source="scaffold_needed" target="wave_pending" style="edgeStyle=orthogonalEdgeStyle;html=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;fontSize=16;" value="no">
+      <mxGeometry relative="1" as="geometry">
+        <Array as="points">
+          <mxPoint x="380" y="495"/>
+          <mxPoint x="380" y="792"/>
+        </Array>
+      </mxGeometry>
+    </mxCell>
+
+    <!-- SCAFFOLDING → WAVE_PENDING (scaffold committed) -->
+    <mxCell id="e_sa_committed" edge="1" parent="1" source="scaffolding" target="wave_pending" style="edgeStyle=orthogonalEdgeStyle;html=1;fontSize=16;" value="scaffold committed">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- SCAFFOLDING → SCAFFOLD_FAILED (compile FAIL) -->
+    <mxCell id="e_sa_fail" edge="1" parent="1" source="scaffolding" target="scaffold_failed" style="edgeStyle=orthogonalEdgeStyle;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;fontSize=16;" value="compile FAIL">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- WAVE_PENDING (shifted +300) -->
+    <mxCell id="wave_pending" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=18;" value="WAVE_PENDING" vertex="1">
+      <mxGeometry height="64" width="200" x="500" y="760" as="geometry"/>
+    </mxCell>
+
+    <!-- Solo wave? diamond (shifted +300) -->
     <mxCell id="solo_d" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=18;" value="Solo&#xa;wave?" vertex="1">
-      <mxGeometry height="110" width="200" x="500" y="580" as="geometry"/>
+      <mxGeometry height="110" width="200" x="500" y="880" as="geometry"/>
     </mxCell>
 
     <!-- WAVE_PENDING → solo diamond -->
@@ -63,9 +103,9 @@
       <mxGeometry relative="1" as="geometry"/>
     </mxCell>
 
-    <!-- WAVE_EXECUTING (solo) -->
+    <!-- WAVE_EXECUTING (solo) (shifted +300) -->
     <mxCell id="exec_solo" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=16;align=left;spacingLeft=10;" value="&lt;b&gt;WAVE_EXECUTING&lt;/b&gt;&#xa;agent runs on main&#xa;no worktrees" vertex="1">
-      <mxGeometry height="90" width="240" x="80" y="760" as="geometry"/>
+      <mxGeometry height="90" width="240" x="80" y="1060" as="geometry"/>
     </mxCell>
 
     <!-- solo diamond → WAVE_EXECUTING solo (yes) -->
@@ -73,9 +113,9 @@
       <mxGeometry relative="1" as="geometry"/>
     </mxCell>
 
-    <!-- pre-create worktrees -->
+    <!-- pre-create worktrees (shifted +300) -->
     <mxCell id="precreate" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=16;" value="pre-create worktrees&#xa;launch agents" vertex="1">
-      <mxGeometry height="64" width="220" x="870" y="610" as="geometry"/>
+      <mxGeometry height="64" width="220" x="870" y="910" as="geometry"/>
     </mxCell>
 
     <!-- solo diamond → pre-create (no) -->
@@ -83,9 +123,9 @@
       <mxGeometry relative="1" as="geometry"/>
     </mxCell>
 
-    <!-- WAVE_EXECUTING (multi) -->
+    <!-- WAVE_EXECUTING (multi) (shifted +300) -->
     <mxCell id="exec_multi" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=16;align=left;spacingLeft=10;" value="&lt;b&gt;WAVE_EXECUTING&lt;/b&gt;&#xa;agents run in parallel&#xa;in isolated worktrees" vertex="1">
-      <mxGeometry height="90" width="240" x="860" y="750" as="geometry"/>
+      <mxGeometry height="90" width="240" x="860" y="1050" as="geometry"/>
     </mxCell>
 
     <!-- pre-create → WAVE_EXECUTING multi -->
@@ -93,9 +133,9 @@
       <mxGeometry relative="1" as="geometry"/>
     </mxCell>
 
-    <!-- WAVE_MERGING -->
+    <!-- WAVE_MERGING (shifted +300) -->
     <mxCell id="wave_merging" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=16;align=left;spacingLeft=10;" value="&lt;b&gt;WAVE_MERGING&lt;/b&gt;&#xa;conflict prediction&#xa;merge sequence&#xa;worktree cleanup" vertex="1">
-      <mxGeometry height="110" width="240" x="860" y="920" as="geometry"/>
+      <mxGeometry height="110" width="240" x="860" y="1220" as="geometry"/>
     </mxCell>
 
     <!-- WAVE_EXECUTING multi → WAVE_MERGING -->
@@ -103,28 +143,28 @@
       <mxGeometry relative="1" as="geometry"/>
     </mxCell>
 
-    <!-- Post-merge verification diamond -->
+    <!-- Post-merge verification diamond (shifted +300) -->
     <mxCell id="verify_d" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=16;" value="post-merge&#xa;verification" vertex="1">
-      <mxGeometry height="110" width="220" x="490" y="1120" as="geometry"/>
+      <mxGeometry height="110" width="220" x="490" y="1420" as="geometry"/>
     </mxCell>
 
-    <!-- WAVE_MERGING → verification (exit left, enter top) -->
+    <!-- WAVE_MERGING → verification -->
     <mxCell id="e10" edge="1" parent="1" source="wave_merging" target="verify_d" style="edgeStyle=orthogonalEdgeStyle;html=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;fontSize=16;">
       <mxGeometry relative="1" as="geometry"/>
     </mxCell>
 
-    <!-- WAVE_EXECUTING solo → verification (exit bottom, enter left) -->
+    <!-- WAVE_EXECUTING solo → verification (arc point updated +300) -->
     <mxCell id="e11" edge="1" parent="1" source="exec_solo" target="verify_d" style="edgeStyle=orthogonalEdgeStyle;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;fontSize=16;" value="agent completes&#xa;(WAVE_MERGING skipped)">
       <mxGeometry relative="1" as="geometry">
         <Array as="points">
-          <mxPoint x="200" y="1175"/>
+          <mxPoint x="200" y="1475"/>
         </Array>
       </mxGeometry>
     </mxCell>
 
-    <!-- WAVE_VERIFIED -->
+    <!-- WAVE_VERIFIED (shifted +300) -->
     <mxCell id="wave_verified" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=18;" value="WAVE_VERIFIED" vertex="1">
-      <mxGeometry height="64" width="200" x="500" y="1310" as="geometry"/>
+      <mxGeometry height="64" width="200" x="500" y="1610" as="geometry"/>
     </mxCell>
 
     <!-- verification → WAVE_VERIFIED (PASS) -->
@@ -132,9 +172,9 @@
       <mxGeometry relative="1" as="geometry"/>
     </mxCell>
 
-    <!-- BLOCKED -->
+    <!-- BLOCKED (shifted +300) -->
     <mxCell id="blocked" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;fontSize=18;" value="BLOCKED" vertex="1">
-      <mxGeometry height="64" width="180" x="870" y="1143" as="geometry"/>
+      <mxGeometry height="64" width="180" x="870" y="1443" as="geometry"/>
     </mxCell>
 
     <!-- verification → BLOCKED (FAIL) -->
@@ -142,19 +182,19 @@
       <mxGeometry relative="1" as="geometry"/>
     </mxCell>
 
-    <!-- BLOCKED → WAVE_VERIFIED (fix + re-verify, arc right side) -->
+    <!-- BLOCKED → WAVE_VERIFIED (arc points updated +300) -->
     <mxCell id="e14" edge="1" parent="1" source="blocked" target="wave_verified" style="edgeStyle=orthogonalEdgeStyle;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;fontSize=16;" value="fix + re-verify passes">
       <mxGeometry relative="1" as="geometry">
         <Array as="points">
-          <mxPoint x="1120" y="1175"/>
-          <mxPoint x="1120" y="1342"/>
+          <mxPoint x="1120" y="1475"/>
+          <mxPoint x="1120" y="1642"/>
         </Array>
       </mxGeometry>
     </mxCell>
 
-    <!-- More waves? diamond -->
+    <!-- More waves? diamond (shifted +300) -->
     <mxCell id="more_d" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=18;" value="More&#xa;waves?" vertex="1">
-      <mxGeometry height="110" width="200" x="500" y="1450" as="geometry"/>
+      <mxGeometry height="110" width="200" x="500" y="1750" as="geometry"/>
     </mxCell>
 
     <!-- WAVE_VERIFIED → more waves diamond -->
@@ -162,9 +202,9 @@
       <mxGeometry relative="1" as="geometry"/>
     </mxCell>
 
-    <!-- COMPLETE -->
+    <!-- COMPLETE (shifted +300) -->
     <mxCell id="complete" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;fontSize=18;" value="COMPLETE" vertex="1">
-      <mxGeometry height="64" width="200" x="500" y="1640" as="geometry"/>
+      <mxGeometry height="64" width="200" x="500" y="1940" as="geometry"/>
     </mxCell>
 
     <!-- more waves → COMPLETE (no) -->
@@ -172,12 +212,12 @@
       <mxGeometry relative="1" as="geometry"/>
     </mxCell>
 
-    <!-- more waves → WAVE_PENDING (yes, big left arc) -->
+    <!-- more waves → WAVE_PENDING (yes, left arc — points updated +300) -->
     <mxCell id="e17" edge="1" parent="1" source="more_d" target="wave_pending" style="edgeStyle=orthogonalEdgeStyle;html=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;fontSize=16;" value="yes (next wave)">
       <mxGeometry relative="1" as="geometry">
         <Array as="points">
-          <mxPoint x="60" y="1505"/>
-          <mxPoint x="60" y="492"/>
+          <mxPoint x="60" y="1805"/>
+          <mxPoint x="60" y="792"/>
         </Array>
       </mxGeometry>
     </mxCell>

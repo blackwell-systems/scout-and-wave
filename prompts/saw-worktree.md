@@ -1,12 +1,12 @@
-<!-- saw-worktree v0.4.2 -->
+<!-- saw-worktree v0.4.5 -->
 # SAW Worktree Lifecycle
 
 Manage git worktree creation, verification, and cleanup for wave agents.
 
 ## Preflight: Working Tree Check
 
-**Run this before anything else** — before the solo agent check, before ownership
-verification, before creating worktrees.
+**Run this before anything else** — before ownership verification, before
+creating worktrees.
 
 ```bash
 git status --porcelain
@@ -47,21 +47,6 @@ merge results. Resolve before proceeding.
 
 Do not proceed until `git status --porcelain` returns empty output.
 
-## Solo Agent Check
-
-**Before creating any worktrees**, count the agents in the current wave.
-
-If the wave has exactly **1 agent**, skip worktree creation entirely. Run the
-agent directly on the main branch with no isolation overhead. Worktree
-isolation exists to prevent inter-agent file conflicts; a solo agent cannot
-conflict with itself, so the overhead is pure waste.
-
-Additional benefit: a solo Wave 0 agent running on main makes its output
-(new types, interfaces) immediately readable by Wave 1 agents without waiting
-for a worktree merge.
-
-Proceed to worktree creation only when the wave has **≥2 agents**.
-
 ## Pre-Launch Ownership Verification
 
 Before creating any worktrees, scan the wave's file ownership table in the
@@ -89,8 +74,8 @@ version of the contracts.
 
 Checklist before creating worktrees:
 - All type signatures in the IMPL doc interface contracts are final
-- All `store_embedding`-style multi-param signatures are agreed on
-- Any schema changes (Wave 0) are committed to HEAD
+- All multi-parameter function signatures and complex return types are agreed on
+- Any Scaffold Agent scaffold files are committed to HEAD
 
 **If worktrees already exist from a previous session**, verify their HEAD
 matches the current HEAD of main before launching agents:
@@ -122,8 +107,7 @@ current HEAD of main, skip creation and proceed to launch. Do not duplicate
 worktrees.
 
 Before launching any agents in a multi-agent wave, create a worktree for each
-agent. Do NOT rely on the Task tool's `isolation: "worktree"` parameter alone
-; it may not create worktrees in all environments.
+agent manually. This is the primary isolation mechanism.
 
 ```bash
 mkdir -p .claude/worktrees
@@ -132,6 +116,47 @@ for agent in A B C; do
   git worktree add ".claude/worktrees/wave{N}-agent-${agent}" -b "wave{N}-agent-${agent}"
 done
 ```
+
+### Install Fail-Fast Hook
+
+After creating worktrees, install a git pre-commit hook that blocks agent
+commits to main. This is Layer 0: infrastructure enforcement that prevents
+isolation violations before they occur.
+
+```bash
+# Back up existing pre-commit hook if present
+if [ -f .git/hooks/pre-commit ]; then
+  cp .git/hooks/pre-commit .git/hooks/pre-commit.saw-backup
+fi
+
+# Install the SAW isolation guard from the repository
+cp "${SAW_REPO:-~/code/scout-and-wave}/hooks/pre-commit-guard.sh" .git/hooks/pre-commit
+chmod +x .git/hooks/pre-commit
+```
+
+The hook (`hooks/pre-commit-guard.sh` in the SAW repository) checks: if
+branch is `main` AND SAW worktrees exist AND `SAW_ALLOW_MAIN_COMMIT` is
+not set, block the commit with an instructive error listing available
+worktrees. The Orchestrator sets `SAW_ALLOW_MAIN_COMMIT=1` before its own
+legitimate commits to main (scaffold commits, post-merge commits, lint fix
+commits).
+
+### Why Manual Pre-Creation Alongside isolation: "worktree"
+
+Always pre-create worktrees manually even when using `isolation: "worktree"`
+on the Agent tool. The two mechanisms are complementary, not redundant:
+
+1. Manual creation provides a fallback when the Task tool's isolation fails
+   silently — agents can still navigate to the pre-created worktree via Field 0
+2. Enables Field 0 agent self-verification (the worktree must exist for the
+   agent to cd into it and verify)
+3. Costs one bash loop (negligible overhead)
+4. Harmless if the Task tool also creates worktrees — git will not duplicate
+   a worktree that already exists at the expected path
+
+Do not rely solely on `isolation: "worktree"`. It may fail silently. The merge
+procedure's trip wire (Step 1.5 in saw-merge.md) is the final safety net that
+catches all isolation failures before any incorrect merge occurs.
 
 ## Verify Creation
 
@@ -197,9 +222,11 @@ template):
 2. Agent verifies pwd, git branch, and worktree list
 3. If verification fails after cd attempt, agent exits without modifying files
 
-This is defense-in-depth: the orchestrator pre-creates worktrees (Layer 1),
-agents self-correct (Layer 1.5), agents verify (Layer 2), and the orchestrator
-checks completion reports (Layer 3).
+This is defense-in-depth: a pre-commit hook blocks agent commits to main
+(Layer 0), the orchestrator pre-creates worktrees (Layer 1), the Task tool's
+`isolation: "worktree"` provides runtime isolation (Layer 2), agents
+self-correct and verify (Layer 3, Field 0), and the merge procedure's trip
+wire (Step 1.5) catches all failures before any merge occurs (Layer 4).
 
 ## Cleanup
 
@@ -215,3 +242,13 @@ done
 
 Clean up even if agents failed; stale worktrees and branches will interfere
 with future waves.
+
+After removing worktrees, restore the original pre-commit hook:
+
+```bash
+if [ -f .git/hooks/pre-commit.saw-backup ]; then
+  mv .git/hooks/pre-commit.saw-backup .git/hooks/pre-commit
+else
+  rm -f .git/hooks/pre-commit
+fi
+```

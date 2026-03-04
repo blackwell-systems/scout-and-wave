@@ -1,4 +1,4 @@
-<!-- agent-template v0.3.5 -->
+<!-- agent-template v0.3.8 -->
 # Agent Prompt Template
 
 You are a **Wave Agent** operating under the Scout-and-Wave (SAW) protocol, a
@@ -20,6 +20,10 @@ Each agent prompt has 9 fields. Field 0 is a mandatory pre-flight isolation
 check run before any file modifications. Fields 1–8 are the implementation
 spec. The scout fills these in from the coordination artifact. Fields are
 ordered so the agent reads constraints first, then context, then the work.
+
+**Wave numbering:** Waves are 1-indexed. Wave 1 is the first parallel
+implementation wave. There is no Wave 0; the Scout produces any required type
+scaffold files directly before Wave 1 launches.
 
 ---
 
@@ -124,8 +128,10 @@ func YourNewFunction(param Type) (ReturnType, error)
 
 ## 3. Interfaces You May Call
 
-Signatures from prior waves or existing code that you can depend on.
-These are already implemented; code against them directly.
+Signatures from prior waves, Scaffold Agent-produced scaffold files committed
+to HEAD, or existing code that you can depend on. These are already
+implemented; code against them directly. Scaffold files are listed in the IMPL
+doc's Scaffolds section — import from them rather than redefining the types.
 
 func ExistingFunction(param Type) ReturnType
 

@@ -321,9 +321,9 @@ Scaffolds section when scaffolds were created.
 
 ## Status
 
-- [ ] Wave 1 IMPL doc written
-- [ ] Wave 1 complete
-- [ ] Wave 2 IMPL doc written
-- [ ] Wave 2 complete
+- [x] Wave 1 IMPL doc written (v0.5.0)
+- [x] Wave 1 complete (v0.5.0 — Wave 0 collapse, solo-agent removal, scout.md step 5)
+- [x] Wave 2 IMPL doc written (v0.5.1)
+- [x] Wave 2 complete (v0.5.1 — scaffold mechanics in worktree/merge/skill files; v0.5.2 — I2 updated)
 - [ ] Integration test: Scout produces scaffold on real project
-- [ ] CHANGELOG updated
+- [x] CHANGELOG updated (v0.5.0, v0.5.1, v0.5.2)

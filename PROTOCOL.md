@@ -1,6 +1,6 @@
 # Scout-and-Wave Protocol Specification
 
-**Version:** 0.4.0
+**Version:** 0.6.0
 **Status:** Active
 
 Scout-and-Wave (SAW) is a protocol for safely parallelizing human-guided
@@ -15,7 +15,7 @@ The prompts in `prompts/` are reference implementations of this protocol.
 
 ## Participants
 
-SAW has three participant roles. All three are agents (AI model instances
+SAW has four participant roles. All four are agents (AI model instances
 running with tool access). They differ only in execution mode and responsibility.
 
 **Orchestrator:** The synchronous agent running in the user's own interactive
@@ -45,9 +45,22 @@ moment; which specific stops are mandatory is a separate question from whether
 intervention is possible at all.
 
 **Scout:** An asynchronous agent launched by the orchestrator. Analyzes the
-codebase, produces the IMPL doc, and exits. Never modifies source files. Never
+codebase, produces the IMPL doc, and exits. Defines all interface contracts and
+specifies any required scaffold files in the IMPL doc Scaffolds section — but
+does not create source files. Never modifies existing source files. Never
 participates in wave execution. The orchestrator waits for the scout's
 completion notification before entering REVIEWED state.
+
+**Scaffold Agent:** An asynchronous agent launched by the orchestrator after
+human review of the IMPL doc. Reads the approved interface contracts and
+Scaffolds section from the IMPL doc, creates the specified type scaffold files
+(shared interfaces, traits, structs — no behavior), verifies they compile, and
+commits them to HEAD. Runs once, before the first wave — E2 (interface freeze)
+guarantees all cross-agent types are known at REVIEWED, so there is nothing new
+to scaffold between waves. Runs only when the IMPL doc Scaffolds section is
+non-empty. Never modifies existing source files. Exits after committing and
+updating the Scaffolds section status. The orchestrator waits for the Scaffold
+Agent before creating worktrees.
 
 **Wave Agent:** An asynchronous agent launched by the orchestrator. Owns a
 disjoint set of files, implements against the interface contracts defined in the
@@ -116,7 +129,8 @@ Invariants are identified by number (I1–I6). When referenced in prompt files,
 the I-number serves as an anchor for cross-referencing and audit; the canonical
 definition is embedded verbatim alongside it so each document remains
 self-contained without requiring a lookup. To audit consistency, grep prompt
-files for `I{N}` and verify the embedded definition matches this section.
+files for `I{N}` and `E{N}` and verify the embedded definitions match this
+section and the Execution Rules section.
 
 **I1: Disjoint file ownership.** No two agents in the same wave own the same
 file. This is a hard constraint, not a preference. It is the mechanism that
@@ -127,9 +141,11 @@ distinct from an I1 violation. A single agent cannot conflict with itself.
 Such out-of-scope changes must be justified, documented in the completion
 report, and verified by the post-merge gate.
 
-**I2: Interface contracts precede implementation.** All interfaces that cross
-agent boundaries are defined in the IMPL doc before any agent launches.
-Agents implement against the spec; they never coordinate directly.
+**I2: Interface contracts precede parallel implementation.** The Scout defines
+all interfaces that cross agent boundaries in the IMPL doc. The Scaffold Agent
+implements them as type scaffold files committed to HEAD after human review,
+before any Wave Agent launches. Agents implement against the spec; they never
+coordinate directly.
 
 **I3: Wave sequencing.** Wave N+1 does not launch until Wave N has been
 merged and post-merge verification has passed.
@@ -143,14 +159,14 @@ predictably resolvable.
 worktree branch before writing a completion report. Uncommitted state at report
 time is a protocol deviation and must be noted in the report.
 
-**I6: Role separation.** The Orchestrator does not perform Scout or Wave Agent
-duties. Codebase analysis, IMPL doc production, and source code implementation
-are delegated to the appropriate asynchronous agent. If the Orchestrator finds
-itself doing any of these, it has violated the protocol; it must stop and
-launch the correct agent. This invariant is not a style preference: an
-Orchestrator performing Scout work bypasses async execution, pollutes the
-orchestrator's context window, and breaks observability (no Scout agent means
-no SAW session is detectable by monitoring tools).
+**I6: Role separation.** The Orchestrator does not perform Scout, Scaffold
+Agent, or Wave Agent duties. Codebase analysis, IMPL doc production, scaffold
+file creation, and source code implementation are delegated to the appropriate
+asynchronous agent. If the Orchestrator finds itself doing any of these, it has
+violated the protocol; it must stop and launch the correct agent. This invariant
+is not a style preference: an Orchestrator performing Scout work bypasses async
+execution, pollutes the orchestrator's context window, and breaks observability
+(no Scout agent means no SAW session is detectable by monitoring tools).
 
 ---
 
@@ -167,7 +183,6 @@ re-runs verification. BLOCKED → WAVE_VERIFIED on verification pass.
 **Solo wave:** A wave containing exactly one agent runs the agent on the main
 branch with no worktrees. There is nothing to conflict with. The WAVE_MERGING
 state is skipped. Post-wave verification is still required before advancing.
-Wave 0 in bootstrap projects is always a solo wave.
 
 The solo wave agent must still operate in the Wave Agent role: launched by the
 Orchestrator as an asynchronous agent, not executed directly by the
@@ -175,12 +190,24 @@ Orchestrator. Executing solo wave work inline violates I6 regardless of wave
 size. The absence of worktrees changes the isolation mechanism; it does not
 change the participant roles.
 
+Solo waves do not require scaffolding. Scaffold files exist so that multiple
+agents in the same wave can compile against shared types; one agent cannot
+conflict with itself. Scout leaves the Scaffolds section empty for solo waves.
+
+**Cross-wave coordination:** Waves execute sequentially. When Wave N completes,
+its implementations are committed to HEAD. Wave N+1 agents branch from that
+commit and import from the committed codebase directly — not from scaffolds.
+This is ordinary software development: you import from what is already merged.
+Scaffolds solve the intra-wave problem (parallel agents that cannot see each
+other's code); cross-wave coordination needs no special mechanism because later
+waves always have access to earlier waves' committed work.
+
 ---
 
 ## Execution Rules
 
 These rules govern orchestrator behavior during wave execution. They are not
-captured by the state machine alone. Rules are numbered E1–E13 for
+captured by the state machine alone. Rules are numbered E1–E14 for
 cross-referencing and audit; the same convention as invariants (I1–I6).
 
 **E1: Background execution.** All agent launches, CI polling, and long-running watch commands must execute asynchronously without blocking the orchestrator's main execution thread (e.g. Claude Code's `run_in_background: true` on the Agent and Bash tools). A blocking agent launch serializes the wave; the orchestrator waits for one agent before launching the next, eliminating parallelism. This is a protocol violation, not a performance preference. Any implementation that blocks the orchestrator on agent execution or polling is non-conforming.
@@ -222,12 +249,34 @@ corrected first. This is distinct from post-execution conflict prediction:
 pre-launch catches scout planning errors; post-execution catches runtime
 deviations where an agent touched files outside its declared scope.
 
-**E4: Worktree pre-creation.** For multi-agent waves, the orchestrator creates all
-worktrees before launching any agent. Do not rely on agent runtime isolation
-primitives alone (e.g. Claude Code's `isolation: "worktree"` Agent parameter);
-they do not guarantee each agent starts in the correct worktree. Explicit
-pre-creation is the mechanism that enforces isolation; agent-side isolation
-verification (Field 0) is defense-in-depth.
+**E4: Worktree isolation.** Five layers protect against isolation failures:
+
+- **Layer 0 — Pre-commit hook:** A git pre-commit hook installed during
+  worktree setup blocks commits to main during active waves. Agents that
+  attempt to commit to main receive an instructive error with their assigned
+  worktree path. The orchestrator bypasses the hook via
+  `SAW_ALLOW_MAIN_COMMIT=1` for legitimate main commits. This is
+  infrastructure enforcement: it prevents the violation rather than detecting
+  it. The hook is shipped as `hooks/pre-commit-guard.sh` and installed
+  ephemerally: copied to `.git/hooks/pre-commit` during worktree creation,
+  removed during cleanup.
+- **Layer 1 — Manual pre-creation:** The orchestrator creates all worktrees
+  before launching any agent (`git worktree add`). This is the primary
+  mechanism. It is deterministic and does not depend on agent cooperation.
+- **Layer 2 — Task tool isolation:** `isolation: "worktree"` on the Agent tool
+  provides runtime isolation. This is the secondary mechanism. It may fail
+  silently — do not rely on it alone.
+- **Layer 3 — Field 0 self-verification:** Each agent verifies its working
+  directory at startup (cd, pwd, git branch). If verification fails, the agent
+  exits without modifying files. This is agent-cooperative defense-in-depth.
+- **Layer 4 — Merge-time trip wire:** Before any merge, the orchestrator
+  verifies each agent branch has commits beyond the base. Empty branch = hard
+  stop. This catches all isolation failures regardless of cause.
+
+Layer 0 prevents the most common failure mode (agent commits to main). Layers
+1 and 2 may both fire; this is harmless. If all prevention layers fail, Layer
+4 catches it before any incorrect merge.
+
 Disjoint file ownership and worktree isolation are complementary layers that protect against different failure modes. Neither substitutes for the other.
 
 - **Disjoint file ownership (I1)** prevents merge conflicts: no two agents produce edits to the same file, so the merge step is always conflict-free.
@@ -413,6 +462,31 @@ Free-form notes follow the structured block for anything that doesn't fit.
 as specified. `downstream_action_required: true` means the orchestrator must
 update affected downstream agent prompts before the next wave launches.
 
+### Scaffolds Section
+
+Written by the Scout into the IMPL doc to specify type scaffold files. Read and
+materialized by the Scaffold Agent after human review. Canonical four-column
+format:
+
+```markdown
+### Scaffolds
+
+[Omit this section if no scaffold files are needed.]
+
+| File | Contents | Import path | Status |
+|------|----------|-------------|--------|
+| `path/to/types.go` | [exact types, interfaces, structs with signatures] | `module/internal/types` | pending |
+```
+
+`Status` lifecycle: `pending` (Scout wrote spec, Scaffold Agent not yet run) →
+`committed (sha)` (Scaffold Agent created, compiled, and committed the file) →
+`FAILED: {reason}` (Scaffold Agent could not compile; no file committed).
+
+The Orchestrator verifies all files show `committed` status before creating
+worktrees. A `FAILED` status is a protocol stop: report the failure to the
+human, surface the reason, and do not proceed to worktree creation. The human
+must revise the interface contracts in the IMPL doc and re-run the Scaffold Agent.
+
 ---
 
 ## Protocol Violations
@@ -427,7 +501,7 @@ guarantees.
 | Wave N+1 launched before Wave N verified | I3 | Cascade failures surface at end |
 | Completion report written to chat only | I4 | Downstream agents get stale context |
 | Agent reports complete with uncommitted changes | I5 | Merge requires manual copy |
-| Orchestrator performs Scout or Wave Agent duties | I6 | Context pollution, broken observability, async execution bypassed |
+| Orchestrator performs Scout, Scaffold Agent, or Wave Agent duties | I6 | Context pollution, broken observability, async execution bypassed |
 
 ---
 
@@ -446,11 +520,11 @@ When all preconditions hold and all invariants are maintained:
 ## Variants
 
 **Bootstrap mode** (`prompts/saw-bootstrap.md`): Design-first execution for new
-projects with no existing codebase. The scout acts as architect: gathers
-requirements, designs package structure, and defines interface contracts before
-any code is written. Always begins with a mandatory solo Wave 0 that creates the
-shared types module. All subsequent agents implement against Wave 0 contracts
-without seeing each other's code.
+projects with no existing codebase. The Scout acts as architect: gathers
+requirements, designs package structure, defines interface contracts, and
+specifies a types scaffold in the IMPL doc Scaffolds section. The Scaffold Agent
+materializes it after human review. Wave 1 agents implement in parallel against
+those contracts without seeing each other's code.
 
 ---
 
@@ -461,7 +535,8 @@ The canonical prompts that implement this protocol for Claude Code:
 | File | Role |
 |------|------|
 | `prompts/scout.md` | Scout participant: suitability gate + IMPL doc production |
-| `prompts/agent-template.md` | Agent participant: 9-field prompt template |
+| `prompts/scaffold-agent.md` | Scaffold Agent participant: materializes approved interface contracts as type scaffold source files |
+| `prompts/agent-template.md` | Wave Agent participant: 9-field prompt template |
 | `prompts/saw-skill.md` | Orchestrator: command routing and wave execution |
 | `prompts/saw-worktree.md` | Orchestrator: worktree lifecycle |
 | `prompts/saw-merge.md` | Orchestrator: merge procedure |
@@ -476,6 +551,7 @@ The canonical prompts that implement this protocol for Claude Code:
 - The state machine transitions, including mandatory human checkpoints at the suitability gate and REVIEWED state
 - The message formats: suitability verdict, completion report YAML schema, and IMPL doc section structure
 - The suitability gate: five-question assessment with NOT SUITABLE as a first-class outcome
+- Scaffold file support: the Scout may produce type scaffold files committed to HEAD before worktrees are created; agents implement against them; the post-merge gate verifies scaffold files are present and unmodified (I2)
 
 What may vary across implementations: the agent runtime primitives (tool names, parameter syntax, isolation mechanism), the programming language of the target project, the specific verification commands, and the UI surface for human checkpoints.
 

@@ -1,7 +1,7 @@
 # Scout-and-Wave: A Protocol for Safely Parallelizing Human-Guided Agentic Workflows
 
 [![Blackwell Systems™](https://raw.githubusercontent.com/blackwell-systems/blackwell-docs-theme/main/badge-trademark.svg)](https://github.com/blackwell-systems)
-![Version](https://img.shields.io/badge/version-0.4.1-blue)
+![Version](https://img.shields.io/badge/version-0.6.0-blue)
 
 A coordination protocol for safely parallelizing human-guided agentic workflows. Defines participant roles, preconditions, ownership invariants, and verification gates that guarantee agents can work concurrently without conflicts. Human review checkpoints are structural: the protocol does not advance past the suitability gate or between waves without human approval.
 
@@ -26,8 +26,10 @@ cp ~/code/scout-and-wave/prompts/saw-skill.md ~/.claude/commands/saw.md
 /saw scout "add a caching layer to the API client"
 # → Scout analyzes the codebase, assigns files to agents, writes docs/IMPL-caching-layer.md
 # → Orchestrator shows you the wave structure and interface contracts for review
+# → You review the IMPL doc. This is the last chance to change interfaces.
 
 /saw wave
+# → If shared types are needed, Scaffold Agent creates them automatically
 # → Parallel agents implement their assigned files concurrently
 # → Orchestrator merges, runs tests, reports result
 ```
@@ -38,11 +40,13 @@ See [Permissions](#permissions) before your first run. `"Agent"` must be in your
 
 ## How
 
-Scout-and-wave fixes this before any agent starts, through three participant roles:
+Scout-and-wave fixes this before any agent starts, through four participant roles:
 
 - **Orchestrator:** the synchronous agent running in the user's own session. The human reviews, approves, and intervenes through it directly. There is no separate human role because the Orchestrator is already the user's agent. Drives all protocol state transitions: launches the Scout and Wave Agents, waits for completion, executes the merge procedure, verifies the result, and advances state. Does not perform Scout or Wave Agent duties (I6: Role Separation).
 
-- **Scout:** an asynchronous agent launched by the Orchestrator. Analyzes the codebase and produces a coordination artifact: a dependency graph, exact interface contracts, a file ownership table, and a wave structure. Every file that will change is assigned to exactly one agent. No two agents in the same wave may touch the same file (I1: Disjoint File Ownership). The Scout resolves ownership conflicts at planning time or declares the work NOT SUITABLE for parallel execution. Never modifies source files.
+- **Scout:** an asynchronous agent launched by the Orchestrator. Analyzes the codebase and produces a coordination artifact: a dependency graph, exact interface contracts, a file ownership table, and a wave structure. Every file that will change is assigned to exactly one agent. No two agents in the same wave may touch the same file (I1: Disjoint File Ownership). The Scout resolves ownership conflicts at planning time or declares the work NOT SUITABLE for parallel execution. If shared types are needed, specifies their contents in the IMPL doc Scaffolds section; the Scaffold Agent materializes them after human review. Never modifies source files.
+
+- **Scaffold Agent:** an asynchronous agent launched by the Orchestrator after human review of the IMPL doc. Reads the Scaffolds section, creates the specified type scaffold source files (shared interfaces, traits, structs), verifies they compile, and commits them to HEAD. Runs once, before any Wave Agent launches. If compilation fails, writes a FAILED status to the IMPL doc and stops; the Orchestrator surfaces the failure before any worktree is created. This is the structural human checkpoint: scaffold files exist in HEAD and are frozen at worktree creation time, so all Wave Agents implement against the same compiled contracts (I2: Interface contracts precede parallel implementation).
 
 - **Wave Agents:** asynchronous agents launched by the Orchestrator in parallel. Each owns a disjoint set of files, implements against the pre-defined interface contracts, runs the verification gate, commits its work, and writes a structured completion report (interface deviations, out-of-scope discoveries, verification result). Build and test gates verify each wave before the next begins.
 
@@ -81,9 +85,11 @@ git clone https://github.com/blackwell-systems/scout-and-wave.git ~/code/scout-a
 cp ~/code/scout-and-wave/prompts/saw-skill.md ~/.claude/commands/saw.md
 ```
 
-The skill loads `prompts/scout.md`, `prompts/saw-merge.md`, and `prompts/saw-worktree.md`
-from the repository at runtime. Keep the repository on disk. To use a non-default
-location, set `SAW_REPO=/path/to/scout-and-wave` in your environment.
+The skill loads prompt files from the repository at runtime: `prompts/scout.md`,
+`prompts/agent-template.md`, `prompts/saw-merge.md`, `prompts/saw-worktree.md`,
+`prompts/scaffold-agent.md` (conditional), and `prompts/saw-bootstrap.md` (bootstrap
+only). Keep the repository on disk. To use a non-default location, set
+`SAW_REPO=/path/to/scout-and-wave` in your environment.
 
 ### Permissions
 
@@ -138,9 +144,11 @@ For project-scoped settings, add the same block to
 
 2. **Review:** Read the IMPL doc. Verify ownership is clean, interfaces are correct, and wave order makes sense. Adjust before proceeding. This is the last moment to change interface signatures.
 
-3. **Wave:** `/saw wave` launches parallel agents for the current wave, merges on completion, and runs the verification gate.
+3. **Scaffold Agent (conditional):** If the IMPL doc has a non-empty Scaffolds section, the Orchestrator launches the Scaffold Agent automatically. It creates the shared type files, verifies compilation, and commits to HEAD. If any scaffold fails to compile, the run stops here — fix the contracts in the IMPL doc before proceeding. When all scaffolds show `Status: committed`, the interface contracts are frozen.
 
-4. **Repeat:** `/saw wave` for each subsequent wave, or `/saw wave --auto` to run all remaining waves unattended. Auto mode still pauses if verification fails.
+4. **Wave:** `/saw wave` launches parallel agents for the current wave, merges on completion, and runs the verification gate.
+
+5. **Repeat:** `/saw wave` for each subsequent wave, or `/saw wave --auto` to run all remaining waves unattended. Auto mode still pauses if verification fails.
 
 ### How it works under the hood
 
@@ -164,6 +172,20 @@ SAW enforces two independent constraints that together make parallel execution c
 
 Neither constraint substitutes for the other. Disjoint ownership without worktrees: merge is safe, but concurrent builds are flaky. Worktrees without disjoint ownership: execution is clean, but merge produces unresolvable conflicts. Both must hold for a wave to be correct and reproducible.
 
+### Worktree Isolation Defense (5 layers)
+
+Agents don't always respect isolation instructions. v0.6.0 adds a layered defense model that treats worktree isolation as an infrastructure problem, not a cooperation problem:
+
+| Layer | Mechanism | Type |
+|-------|-----------|------|
+| 0 | **Pre-commit hook** (`hooks/pre-commit-guard.sh`) — copied to `.git/hooks/pre-commit` during worktree setup, removed during cleanup. Blocks commits to main during active waves. Agents receive an instructive error with their worktree path. Orchestrator bypasses via `SAW_ALLOW_MAIN_COMMIT=1`. | Prevention |
+| 1 | **Manual worktree pre-creation** — Orchestrator creates all worktrees before any agent launches | Deterministic |
+| 2 | **`isolation: "worktree"` parameter** — each agent launch specifies worktree isolation at the tool level | Tool-level |
+| 3 | **Field 0 self-verification** — agents verify their own branch and working directory on startup | Cooperative |
+| 4 | **Merge-time trip wire** — Orchestrator counts commits per worktree branch before merging. Zero commits = isolation failure. Stops with recovery options. | Deterministic |
+
+Layers 0 and 4 are the structural guarantees: Layer 0 prevents agents from committing to main, Layer 4 detects if isolation failed by any mechanism. Layers 1-3 are defense-in-depth.
+
 ## Protocol Specification
 
 [`PROTOCOL.md`](PROTOCOL.md). Formal specification: participant roles, preconditions, invariants (I1–I6), state machine, execution rules, message formats, and correctness guarantees. Invariants are numbered I1–I6; prompt files embed them verbatim alongside their I-number for self-containment and auditability. The prompts in `prompts/` are reference implementations of this spec.
@@ -171,19 +193,25 @@ Neither constraint substitutes for the other. Disjoint ownership without worktre
 ## Prompts
 
 - [`prompts/scout.md`](prompts/scout.md): The scout prompt that produces the coordination artifact
+- [`prompts/scaffold-agent.md`](prompts/scaffold-agent.md): Scaffold Agent prompt — materializes type scaffolds from the IMPL doc Scaffolds section after human review, before any Wave Agent launches
 - [`prompts/agent-template.md`](prompts/agent-template.md): The 9-field agent prompt template stamped per-agent (Field 0: isolation verification; Fields 1–8: implementation spec)
 - [`prompts/saw-skill.md`](prompts/saw-skill.md): Claude Code `/saw` skill router (copy to `~/.claude/commands/saw.md`)
 - [`prompts/saw-bootstrap.md`](prompts/saw-bootstrap.md): Design-first architecture for new projects with no existing codebase
 - [`prompts/saw-merge.md`](prompts/saw-merge.md): Merge procedure: conflict detection, agent merging, post-merge verification
 - [`prompts/saw-worktree.md`](prompts/saw-worktree.md): Worktree lifecycle: creation, verification, diagnosis, cleanup
 
+## SAW-Teams (Experimental)
+
+[`saw-teams/`](saw-teams/) is an alternate execution layer using Claude Code Agent Teams. Same protocol, same IMPL doc, same Scout. Different wave plumbing: teammates replace background Agent tool calls, providing inter-agent messaging and real-time deviation alerts. Trade-off: better visibility during execution, worse crash recovery. See [`saw-teams/README.md`](saw-teams/README.md) for setup and usage.
+
 ## Blog Post
 
-Three-part series on the pattern, the lessons learned from dogfooding it, and how the skill file evolved:
+Four-part series on the pattern, the lessons learned from dogfooding it, and how the protocol evolved:
 
 1. [Scout-and-Wave: A Coordination Pattern for Parallel AI Agents](https://blog.blackwell-systems.com/posts/scout-and-wave/). The pattern: failure modes of naive parallelism, the scout deliverable, wave execution, and a worked example from brewprune.
 2. [Scout-and-Wave, Part 2: What Dogfooding Taught Us](https://blog.blackwell-systems.com/posts/scout-and-wave-part2/). The audit-fix-audit loop, overhead measurement (88% slower when ignored), Quick mode, and the bootstrap problem for new projects.
 3. [Scout-and-Wave, Part 3: Five Failures, Five Fixes](https://blog.blackwell-systems.com/posts/scout-and-wave-part3/). How the skill file decomposed from a 400-line monolith, why version headers matter, and five scout prompt fixes driven by real failures.
+4. [Scout-and-Wave, Part 4: Trust Is Structural](https://blog.blackwell-systems.com/posts/scout-and-wave-part4/). The Scaffold Agent, the 5-layer worktree isolation defense, and why correctness belongs in infrastructure rather than cooperation.
 
 ## License
 

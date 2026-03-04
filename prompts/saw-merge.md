@@ -1,4 +1,4 @@
-<!-- saw-merge v0.4.3 -->
+<!-- saw-merge v0.4.6 -->
 # SAW Merge Procedure
 
 Merge agent worktrees back into the main branch after a wave completes.
@@ -19,6 +19,51 @@ Read each agent's structured completion report from the IMPL doc
 - `files_changed` + `files_created`: used for conflict prediction
 - `interface_deviations`: flag for orchestrator review before merging
 - `out_of_scope_deps`: queue for post-merge fixes
+
+## Step 1.5: Verify Agent Commits (Trip Wire)
+
+Before attempting any merges, verify each agent produced commits to its
+worktree branch. This catches all isolation failures — regardless of whether
+the Task tool, Field 0, or prompt instructions failed.
+
+Record the base commit (HEAD before merge begins):
+
+```bash
+base_commit=$(git rev-parse HEAD)
+```
+
+For each agent with `status: complete`:
+
+```bash
+branch="wave{N}-agent-{letter}"
+commit_count=$(git rev-list ${base_commit}..${branch} --count)
+```
+
+If `commit_count` is 0 for ANY agent: **STOP immediately.** This is a protocol
+violation — the agent did not commit to its worktree branch. Do not proceed to
+the next agent. Do not commit uncommitted changes found on main.
+
+Present the isolation failure and recovery options to the user:
+
+```
+ISOLATION FAILURE: Agent {letter} branch wave{N}-agent-{letter} has 0 commits.
+Base commit: {base_commit}
+Agent(s) may have worked on main instead of their worktrees.
+
+Recovery options:
+  1. Re-run wave — discard all changes, re-create worktrees, re-launch agents.
+     Safest option. All agent work is lost and re-executed.
+  2. Investigate — check main for uncommitted/committed changes, attempt to
+     attribute changes to agents using the IMPL doc file ownership table.
+     Manual and error-prone; only practical for small waves.
+  3. Accept as-is — run full test suite on main; if passing, commit and
+     proceed. Bypasses merge correctness guarantees (conflict prediction,
+     per-agent verification, structured merge history).
+```
+
+**Do not choose a recovery path autonomously.** Wait for the user to decide.
+The Orchestrator is synchronous so the human can make this judgment call.
+Path 1 costs compute time. Path 3 costs trust in the result.
 
 ## Step 2: Conflict Prediction
 
@@ -113,7 +158,7 @@ else
     cp "$worktree/$file" "./$file"
     git add "./$file"
   done
-  git commit -m "Apply agent {letter} changes from worktree"
+  SAW_ALLOW_MAIN_COMMIT=1 git commit -m "Apply agent {letter} changes from worktree"
 fi
 ```
 
@@ -167,7 +212,7 @@ If it did, commit those changes before running build and tests:
 
 ```bash
 git add -A
-git commit -m "style: post-merge lint/format fix"
+SAW_ALLOW_MAIN_COMMIT=1 git commit -m "style: post-merge lint/format fix"
 ```
 
 This is the correct place for auto-fix: one centralized pass on the merged
@@ -194,6 +239,12 @@ different crate constructs the type without the new field.
 
 Pay particular attention to cascade candidates listed in the IMPL doc: files
 outside agent scope that reference changed interfaces.
+
+**Scaffold files:** If the Scaffold Agent produced type scaffold files for this wave,
+verify they are present and unchanged in the merged result. Scaffold files are
+committed to HEAD before worktrees branch; agents implement against them but do
+not own them. If a scaffold file is missing or was modified by an agent, this
+is a protocol deviation — investigate before proceeding.
 
 If verification fails, fix before proceeding. Do not launch the next wave
 with a broken build.

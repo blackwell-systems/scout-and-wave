@@ -1,4 +1,4 @@
-<!-- saw-teams-worktree v0.1.1 -->
+<!-- saw-teams-worktree v0.1.4 -->
 # SAW-Teams Worktree Lifecycle
 
 Manage git worktree creation, verification, and cleanup for Agent Teams wave
@@ -11,8 +11,8 @@ teammates and passes the worktree path in each teammate's spawn context.
 
 ## Preflight: Working Tree Check
 
-**Run this before anything else** — before the solo agent check, before
-ownership verification, before creating worktrees.
+**Run this before anything else** — before ownership verification, before
+creating worktrees.
 
 ```bash
 git status --porcelain
@@ -53,26 +53,6 @@ merge results. Resolve before proceeding.
 
 Do not proceed until `git status --porcelain` returns empty output.
 
-## Solo Agent Check
-
-**Before creating any worktrees or any Agent Team**, count the agents in the
-current wave.
-
-If the wave has exactly **1 agent**:
-
-- Do NOT create an Agent Team; Agent Teams overhead is not justified for a
-  single agent
-- Do NOT create worktrees; a solo agent cannot conflict with itself
-- Launch the agent directly via the Agent tool with `run_in_background: true`
-  on the main branch (same as standard SAW solo wave behavior)
-- Proceed directly to post-wave verification after the agent completes
-
-Additional benefit: a solo Wave 0 agent running on main makes its output
-(new types, interfaces) immediately readable by Wave 1 agents without waiting
-for a worktree merge.
-
-Proceed to team creation and worktree setup only when the wave has **≥2 agents**.
-
 ## Pre-Launch Ownership Verification
 
 Before creating any worktrees, scan the wave's file ownership table in the
@@ -100,8 +80,8 @@ version of the contracts.
 
 Checklist before creating worktrees:
 - All type signatures in the IMPL doc interface contracts are final
-- All `store_embedding`-style multi-param signatures are agreed on
-- Any schema changes (Wave 0) are committed to HEAD
+- All multi-parameter function signatures and complex return types are agreed on
+- Any Scaffold Agent scaffold files are committed to HEAD
 
 **If worktrees already exist from a previous session**, verify their HEAD
 matches the current HEAD of main before spawning teammates:
@@ -132,8 +112,9 @@ If the expected worktrees are already present and their HEAD matches the
 current HEAD of main, skip creation and proceed to teammate spawn. Do not
 duplicate worktrees.
 
-Before spawning any teammates, create a worktree for each agent. The lead
-creates worktrees; Agent Teams has no built-in worktree creation mechanism.
+Before spawning any teammates, create a worktree for each agent manually.
+The lead creates worktrees; Agent Teams has no built-in worktree creation
+mechanism. This is the primary isolation mechanism.
 
 ```bash
 mkdir -p .claude/worktrees
@@ -145,6 +126,41 @@ done
 
 Pass the absolute worktree path to each teammate in its spawn context so it
 knows where to navigate during Field 0 isolation verification.
+
+### Install Fail-Fast Hook
+
+After creating worktrees, install a git pre-commit hook that blocks commits
+to main. This is Layer 0: infrastructure enforcement that prevents isolation
+violations before they occur.
+
+```bash
+# Back up existing pre-commit hook if present
+if [ -f .git/hooks/pre-commit ]; then
+  cp .git/hooks/pre-commit .git/hooks/pre-commit.saw-backup
+fi
+
+# Install the SAW isolation guard from the repository
+cp "${SAW_REPO:-~/code/scout-and-wave}/hooks/pre-commit-guard.sh" .git/hooks/pre-commit
+chmod +x .git/hooks/pre-commit
+```
+
+The hook (`hooks/pre-commit-guard.sh` in the SAW repository) checks: if
+branch is `main` AND SAW worktrees exist AND `SAW_ALLOW_MAIN_COMMIT` is
+not set, block the commit with an instructive error listing available
+worktrees. The lead sets `SAW_ALLOW_MAIN_COMMIT=1` before its own
+legitimate commits to main (scaffold commits, post-merge commits, lint fix
+commits).
+
+### Why Manual Pre-Creation Is Required
+
+Unlike standard SAW where the Agent tool's `isolation: "worktree"` parameter
+provides a secondary isolation mechanism, Agent Teams does not support
+`isolation: "worktree"` on teammate spawn. Manual pre-creation is the only
+worktree creation mechanism. If it fails, worktrees do not exist.
+
+The merge procedure's trip wire (Step 1.5 in saw-teams-merge.md) catches
+isolation failures before any incorrect merge occurs — this is the safety net
+when both manual pre-creation and Field 0 self-verification fail.
 
 ## Verify Creation
 
@@ -250,3 +266,13 @@ done
 
 Clean up even if agents failed; stale worktrees and branches will interfere
 with future waves.
+
+After removing worktrees, restore the original pre-commit hook:
+
+```bash
+if [ -f .git/hooks/pre-commit.saw-backup ]; then
+  mv .git/hooks/pre-commit.saw-backup .git/hooks/pre-commit
+else
+  rm -f .git/hooks/pre-commit
+fi
+```
