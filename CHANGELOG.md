@@ -160,11 +160,12 @@ pre-commit hook can. But SAW has no runtime, no binary, no installed tooling.
 The protocol is entirely prompt-driven. There is no hook file to commit to the
 repo and no framework to manage it.
 
-The solution is an ephemeral hook. The Orchestrator creates the hook during
-worktree setup (a `cat > .git/hooks/pre-commit` inline in the worktree docs)
-and removes it during cleanup after merge. Between waves, the hook doesn't
-exist. The project's normal git workflow is unaffected. If the project already
-has a pre-commit hook, SAW backs it up and restores it afterward.
+The solution is an ephemeral hook shipped as `hooks/pre-commit-guard.sh` in
+the SAW repository. The Orchestrator copies it to `.git/hooks/pre-commit`
+during worktree setup and removes it during cleanup after merge. Between
+waves, the hook doesn't exist. The project's normal git workflow is
+unaffected. If the project already has a pre-commit hook, SAW backs it up
+and restores it afterward.
 
 The hook blocks agent commits to main with an instructive error listing
 available worktrees so the agent can self-correct (cd to its worktree and

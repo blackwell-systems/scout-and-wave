@@ -178,7 +178,7 @@ Agents don't always respect isolation instructions. v0.6.0 adds a layered defens
 
 | Layer | Mechanism | Type |
 |-------|-----------|------|
-| 0 | **Pre-commit hook** — ephemeral git hook installed during worktree setup, blocks commits to main during active waves. Agents receive an instructive error with their worktree path. Orchestrator bypasses via `SAW_ALLOW_MAIN_COMMIT=1`. | Prevention |
+| 0 | **Pre-commit hook** (`hooks/pre-commit-guard.sh`) — copied to `.git/hooks/pre-commit` during worktree setup, removed during cleanup. Blocks commits to main during active waves. Agents receive an instructive error with their worktree path. Orchestrator bypasses via `SAW_ALLOW_MAIN_COMMIT=1`. | Prevention |
 | 1 | **Manual worktree pre-creation** — Orchestrator creates all worktrees before any agent launches | Deterministic |
 | 2 | **`isolation: "worktree"` parameter** — each agent launch specifies worktree isolation at the tool level | Tool-level |
 | 3 | **Field 0 self-verification** — agents verify their own branch and working directory on startup | Cooperative |

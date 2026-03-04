@@ -257,8 +257,9 @@ deviations where an agent touched files outside its declared scope.
   worktree path. The orchestrator bypasses the hook via
   `SAW_ALLOW_MAIN_COMMIT=1` for legitimate main commits. This is
   infrastructure enforcement: it prevents the violation rather than detecting
-  it. The hook is ephemeral — installed during worktree creation, removed
-  during cleanup.
+  it. The hook is shipped as `hooks/pre-commit-guard.sh` and installed
+  ephemerally: copied to `.git/hooks/pre-commit` during worktree creation,
+  removed during cleanup.
 - **Layer 1 — Manual pre-creation:** The orchestrator creates all worktrees
   before launching any agent (`git worktree add`). This is the primary
   mechanism. It is deterministic and does not depend on agent cooperation.

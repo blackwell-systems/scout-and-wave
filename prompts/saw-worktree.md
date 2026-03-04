@@ -129,35 +129,17 @@ if [ -f .git/hooks/pre-commit ]; then
   cp .git/hooks/pre-commit .git/hooks/pre-commit.saw-backup
 fi
 
-cat > .git/hooks/pre-commit << 'HOOKEOF'
-#!/bin/sh
-# SAW worktree isolation guard. Installed by saw-worktree setup.
-branch=$(git symbolic-ref --short HEAD 2>/dev/null)
-if [ "$branch" = "main" ] && [ -z "$SAW_ALLOW_MAIN_COMMIT" ]; then
-  if ls .claude/worktrees/wave*-agent-* 1>/dev/null 2>&1; then
-    echo ""
-    echo "BLOCKED: commit to main during active SAW wave."
-    echo ""
-    echo "You are an agent in a SAW wave. Commits to main are not"
-    echo "permitted during wave execution. Your assigned worktree:"
-    echo ""
-    for wt in .claude/worktrees/wave*-agent-*; do
-      echo "  $wt (branch: $(basename $wt))"
-    done
-    echo ""
-    echo "cd to your assigned worktree and commit there."
-    exit 1
-  fi
-fi
-HOOKEOF
+# Install the SAW isolation guard from the repository
+cp "${SAW_REPO:-~/code/scout-and-wave}/hooks/pre-commit-guard.sh" .git/hooks/pre-commit
 chmod +x .git/hooks/pre-commit
 ```
 
-The hook checks: if branch is `main` AND SAW worktrees exist AND
-`SAW_ALLOW_MAIN_COMMIT` is not set, block the commit with an instructive
-error listing available worktrees. The Orchestrator sets
-`SAW_ALLOW_MAIN_COMMIT=1` before its own legitimate commits to main
-(scaffold commits, post-merge commits, lint fix commits).
+The hook (`hooks/pre-commit-guard.sh` in the SAW repository) checks: if
+branch is `main` AND SAW worktrees exist AND `SAW_ALLOW_MAIN_COMMIT` is
+not set, block the commit with an instructive error listing available
+worktrees. The Orchestrator sets `SAW_ALLOW_MAIN_COMMIT=1` before its own
+legitimate commits to main (scaffold commits, post-merge commits, lint fix
+commits).
 
 ### Why Manual Pre-Creation Alongside isolation: "worktree"
 
