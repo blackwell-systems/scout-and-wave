@@ -15,7 +15,7 @@ Given a feature description, analyze the codebase and produce a planning
 document with six sections: dependency graph, interface contracts, file
 ownership table, wave structure, agent prompts, and status checklist.
 
-**Write the complete document to `docs/IMPL-<feature-slug>.md` using the Write tool.**
+**Write the complete document to `docs/IMPL/IMPL-<feature-slug>.md` using the Write tool.**
 This file is the single source of truth for all downstream agents and for tracking
 progress between waves.
 
@@ -125,7 +125,7 @@ Answer these five questions:
   analysis and produce the IMPL doc.
 - **NOT SUITABLE:** One or more questions is a hard blocker (e.g., only
   one file changes, or root cause of a crash is completely unknown). Write
-  a short explanation to `docs/IMPL-<slug>.md` (just the verdict and
+  a short explanation to `docs/IMPL/IMPL-<slug>.md` (just the verdict and
   reasoning, no agent prompts) and stop. Recommend sequential
   implementation or an investigation-first step.
 - **SUITABLE WITH CAVEATS:** The work is parallelizable but has known
@@ -321,7 +321,7 @@ Record the verdict and its rationale in the IMPL doc under a
 
 ## Output Format
 
-Write the following to `docs/IMPL-<feature-slug>.md`:
+Write the following to `docs/IMPL/IMPL-<feature-slug>.md`:
 
 ```
 ### Suitability Assessment
@@ -453,10 +453,10 @@ _Omit scaffold rows if no scaffolds are needed for that wave boundary._
 If the coordination artifact will exceed ~20KB (many agents, many findings),
 split it:
 
-- `docs/IMPL-<slug>.md`: the **index**: wave structure, file ownership table,
+- `docs/IMPL/IMPL-<slug>.md`: the **index**: wave structure, file ownership table,
   interface contracts, cascade candidates, and wave execution loop. This is
   what the orchestrator reads every turn. Keep it small.
-- `docs/IMPL-<slug>-agents/agent-{A,B,...}.md`: **per-agent files**: full
+- `docs/IMPL/IMPL-<slug>-agents/agent-{A,B,...}.md`: **per-agent files**: full
   prompt, verification gate, and completion report section for each agent.
   Reference these from the index. Agents read only their own file.
 
@@ -465,7 +465,7 @@ glance. Per-agent files are loaded only when launching or reviewing that agent.
 
 ## Rules
 
-- You may create one artifact: the IMPL doc at `docs/IMPL-<feature-slug>.md`.
+- You may create one artifact: the IMPL doc at `docs/IMPL/IMPL-<feature-slug>.md`.
   Do not create, modify, or delete any source files. If scaffold files are
   needed, specify them in the IMPL doc Scaffolds section — the Scaffold Agent
   will create them after human review.

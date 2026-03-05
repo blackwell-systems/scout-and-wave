@@ -134,7 +134,7 @@ Scaffold Agent creates the scaffold source files after human review.
 - No source files created at this stage — specification only
 
 **Scaffold Agent creates the types scaffold (after human review):**
-- Reads the approved Scaffolds section from `docs/IMPL-bootstrap.md`
+- Reads the approved Scaffolds section from `docs/IMPL/IMPL-bootstrap.md`
 - Creates the scaffold source files with the specified types
 - No implementation — interfaces, traits, and types only
 - Verifies the scaffold compiles, then commits to HEAD
@@ -161,7 +161,7 @@ This is inherently integrative work and may have only one or two agents.
 
 ## Output Format
 
-Write `docs/IMPL-bootstrap.md`:
+Write `docs/IMPL/IMPL-bootstrap.md`:
 
 ```markdown
 ### Project Architecture
@@ -237,7 +237,7 @@ Wave 2: [build full project] + [full test suite]
 
 ## Rules
 
-- You may create one artifact: the IMPL doc at `docs/IMPL-bootstrap.md`. Do not create, modify, or delete any source files. Specify scaffold file contents in the IMPL doc Scaffolds section — the Scaffold Agent will create them after human review.
+- You may create one artifact: the IMPL doc at `docs/IMPL/IMPL-bootstrap.md`. Do not create, modify, or delete any source files. Specify scaffold file contents in the IMPL doc Scaffolds section — the Scaffold Agent will create them after human review.
 - Every interface you define is a binding contract. Wave 1 agents implement
   against these without seeing each other's code.
 - The Scout must specify a types scaffold in the IMPL doc Scaffolds section. Do not skip it even if

@@ -26,16 +26,16 @@ Read the agent template at `prompts/agent-template.md` from the scout-and-wave r
 If the argument is `bootstrap <project-description>`:
 1. Read `prompts/saw-bootstrap.md` from the scout-and-wave repository and follow the bootstrap procedure.
 2. Gather requirements (language, project type, key concerns) before designing anything.
-3. Design the package structure and interface contracts, then write `docs/IMPL-bootstrap.md`.
+3. Design the package structure and interface contracts, then write `docs/IMPL/IMPL-bootstrap.md`.
 4. Report the architecture design and wave structure. Ask the user to review before proceeding.
 
-If no `docs/IMPL-*.md` file exists for the current feature:
+If no `docs/IMPL/IMPL-*.md` file exists for the current feature:
 1. Launch a **Scout agent** using the Agent tool with `subagent_type: scout` and `run_in_background: true`. The prompt parameter is the feature description (the type definition carries the full behavioral instructions). If `subagent_type: scout` fails, fall back to `subagent_type: general-purpose` with the contents of `prompts/scout.md` as its prompt and the feature description as context. The Scout analyzes the codebase, runs the suitability gate, and writes the IMPL doc; the Orchestrator does not perform this analysis itself. Inform the user that the Scout is running.
-2. When the Scout completes, read the resulting `docs/IMPL-<feature-slug>.md`.
+2. When the Scout completes, read the resulting `docs/IMPL/IMPL-<feature-slug>.md`.
 3. Report the suitability verdict to the user, and if suitable: the wave structure, file ownership table, interface contracts, and Scaffolds section. Ask the user to review before proceeding.
 4. **Scaffold Agent (conditional):** If the IMPL doc Scaffolds section is non-empty and any scaffold file has `Status: pending`, launch a **Scaffold Agent** using the Agent tool with `subagent_type: scaffold-agent` and `run_in_background: true`. The prompt parameter is the path to the IMPL doc and the feature slug. If `subagent_type: scaffold-agent` fails, fall back to `subagent_type: general-purpose` with the contents of `prompts/scaffold-agent.md` as its prompt. Use `[SAW:scaffold:<feature-slug>]` as the description prefix so claudewatch can identify the run. The Scaffold Agent reads the approved contracts and creates the scaffold source files. Inform the user the Scaffold Agent is running. Wait for it to complete, then read the Scaffolds section: if any file shows `Status: FAILED`, stop immediately — report the failure reason to the user and do not create worktrees. The user must revise the interface contracts in the IMPL doc and re-run the Scaffold Agent. If all files show `Status: committed`, proceed.
 
-If a `docs/IMPL-*.md` file already exists:
+If a `docs/IMPL/IMPL-*.md` file already exists:
 1. Read it and identify the current wave (the first wave with unchecked status items). Also check the Scaffolds section: if any scaffold file has `Status: pending`, the Scaffold Agent has not yet run — spawn it now (see step 4 of the Scout flow above) before creating any worktrees. If any file shows `Status: FAILED`, stop and report the failure to the user before proceeding.
 2. **Worktree setup:** Read `prompts/saw-worktree.md` from the scout-and-wave repository and follow the pre-creation procedure. Create a worktree for each agent before launching any agents. **Interface freeze checkpoint:** interface contracts become immutable when worktrees are created. This is the last moment to revise type signatures, add fields, or restructure APIs. After this point, any interface change requires removing and recreating all worktrees for the wave. Verify that all scaffold files listed in the IMPL doc Scaffolds section show `Status: committed` before creating worktrees.
 3. For each agent in the current wave, launch a parallel **Wave agent** using the Agent tool with `subagent_type: wave-agent`, `run_in_background: true`, and the agent prompt from the IMPL doc as the prompt parameter. Use `isolation: "worktree"` for each agent. If `subagent_type: wave-agent` fails, fall back to `subagent_type: general-purpose` with the same prompt. **Async execution:** All Scout, Scaffold Agent, and Wave agent launches MUST use `run_in_background: true` so the Orchestrator remains responsive while agents work. Launch all agents in the current wave in a single message, then immediately inform the user that agents are running. **I1: Disjoint File Ownership:** no two agents in the same wave own the same file; this is a hard constraint, not a preference, and is the mechanism that makes parallel execution safe. Worktree isolation does not substitute for it; the IMPL doc's file ownership table is the enforcement mechanism. **I2: Interface contracts precede parallel implementation.** The Scout defines all interfaces that cross agent boundaries in the IMPL doc. The Scaffold Agent implements them as type scaffold files committed to HEAD after human review, before any Wave Agent launches. Agents implement against the spec; they never coordinate directly. Verify scaffold files are committed (Scaffolds section status) before creating worktrees. **SAW tag requirement:** The `description` parameter of every Task tool call must be prefixed with a structured SAW tag in this exact format: `[SAW:wave{N}:agent-{X}] {short description}`, where `{N}` is the 1-indexed wave number and `{X}` is the uppercase agent letter. Examples: `[SAW:wave1:agent-A] implement cache layer`, `[SAW:wave2:agent-B] add MCP tools`. This enables claudewatch to automatically parse wave timing and agent breakdown from session transcripts; structured observability with zero overhead.
@@ -50,12 +50,12 @@ Arguments:
   disjoint file ownership before any code is written. Gathers requirements
   (language, project type, key concerns), designs package structure and interface
   contracts, produces a types scaffold file with all shared interfaces, and
-  writes `docs/IMPL-bootstrap.md` with parallel implementation waves starting
+  writes `docs/IMPL/IMPL-bootstrap.md` with parallel implementation waves starting
   from Wave 1. Use when starting from scratch.
 - `scout <feature-description>`: The Orchestrator launches a Scout agent
   (asynchronous) to analyze the codebase and produce the IMPL doc. The Scout
   runs the suitability gate first; if the work is not suitable, it writes a
-  short verdict to `docs/IMPL-<slug>.md` and stops without producing agent
+  short verdict to `docs/IMPL/IMPL-<slug>.md` and stops without producing agent
   prompts. The Orchestrator waits for the Scout to complete, then reports the
   verdict and asks the user to review.
 - `wave`: Execute the next pending wave, pause for review after each wave
