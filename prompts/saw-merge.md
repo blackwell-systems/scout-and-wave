@@ -65,6 +65,37 @@ Recovery options:
 The Orchestrator is synchronous so the human can make this judgment call.
 Path 1 costs compute time. Path 3 costs trust in the result.
 
+## Step 1.75: File Ownership Verification
+
+Before merging, verify each agent only touched files in its ownership table.
+This catches ownership violations whether agents committed to branches or main.
+
+For each agent, compare its actual changed files against the IMPL doc's File
+Ownership table:
+
+```bash
+# If agent committed to a branch:
+branch="wave{N}-agent-{letter}"
+actual_files=$(git diff --name-only ${base_commit}..${branch})
+
+# If agents committed directly to main (isolation failure):
+# Use the completion report's files_changed + files_created lists instead.
+```
+
+For each file in `actual_files`, check it appears in the agent's ownership row.
+Flag any file that either:
+- Belongs to a different agent in the same wave (I1 violation)
+- Is not in the ownership table at all (undeclared modification)
+
+**Exceptions:** The IMPL doc itself (`docs/IMPL-*.md`) is expected to be
+modified by all agents (completion reports). Ignore it in this check.
+
+If violations are found, **stop and report before merging.** Show which agent
+touched which unexpected file. The orchestrator decides whether to accept
+(if the change is harmless, e.g. a go.sum update) or re-run the agent.
+
+If no violations, proceed to Step 2.
+
 ## Step 2: Conflict Prediction
 
 Before touching the working tree, cross-reference all agents' `files_changed`

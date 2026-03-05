@@ -265,6 +265,22 @@ Record the verdict and its rationale in the IMPL doc under a
    CI config, or build scripts. Emit the exact commands each agent must run.
    Do not use generic placeholders; use the project's actual toolchain.
 
+   **Lint command extraction (agent verification gates):**
+   Identify the project's lint or static analysis command in **check mode**
+   (not auto-fix mode) from the CI config. Common patterns:
+
+   | Language | Check-mode command |
+   |----------|--------------------|
+   | Go       | `go vet ./...` and/or `golangci-lint run` |
+   | Rust     | `cargo clippy -- -D warnings` |
+   | Node     | `npm run lint` or `npx eslint .` |
+   | Python   | `ruff check .` or `flake8` or `pylint` |
+
+   Include this command in every agent's verification gate between the build
+   command and the test command. Record it as `lint_command` in the IMPL doc
+   header alongside `test_command`. If the project has no linter configured,
+   write `lint_command: none`.
+
    **Linter auto-fix (orchestrator responsibility, not agent responsibility):**
    Check the CI config for a lint or formatting step that applies auto-fixes.
    Common patterns: `golangci-lint run --fix`, `ruff --fix`, `eslint --fix`,
@@ -320,6 +336,7 @@ Write the following to `docs/IMPL-<feature-slug>.md`:
 
 Verdict: SUITABLE | NOT SUITABLE | SUITABLE WITH CAVEATS
 test_command: [full test suite command — e.g. `go test ./...` | `cargo test --workspace` | `pytest` | `mvn test` | `npx jest`]
+lint_command: [check-mode lint command — e.g. `golangci-lint run` | `cargo clippy -- -D warnings` | `ruff check .` | `none`]
 
 [One paragraph explaining the verdict. If NOT SUITABLE, stop here; do not
 write the sections below. If SUITABLE WITH CAVEATS, describe what the
