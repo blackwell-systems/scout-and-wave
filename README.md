@@ -152,7 +152,28 @@ cp ~/code/scout-and-wave/prompts/saw-skill.md ~/.claude/commands/saw.md
 # cp $SAW_REPO/prompts/saw-skill.md ~/.claude/commands/saw.md
 ```
 
-**Step 4: Verify Installation**
+**Step 4: Install Custom Agent Types (Optional)**
+
+SAW can use custom Claude Code agent types that provide structural tool restrictions (e.g., scout cannot edit source files, wave agents cannot spawn sub-agents). This is **optional** — the skill automatically falls back to `general-purpose` agents with full prompts if these are not installed.
+
+```bash
+# Symlink agent types from the SAW repo to Claude Code's agents directory
+mkdir -p ~/.claude/agents
+ln -sf ~/code/scout-and-wave/prompts/agents/scout.md ~/.claude/agents/scout.md
+ln -sf ~/code/scout-and-wave/prompts/agents/scaffold-agent.md ~/.claude/agents/scaffold-agent.md
+ln -sf ~/code/scout-and-wave/prompts/agents/wave-agent.md ~/.claude/agents/wave-agent.md
+
+# If you cloned elsewhere, adjust the paths:
+# ln -sf $SAW_REPO/prompts/agents/scout.md ~/.claude/agents/scout.md
+# ln -sf $SAW_REPO/prompts/agents/scaffold-agent.md ~/.claude/agents/scaffold-agent.md
+# ln -sf $SAW_REPO/prompts/agents/wave-agent.md ~/.claude/agents/wave-agent.md
+```
+
+**Why symlinks?** The SAW repo is the single source of truth for agent definitions. Symlinks mean `git pull` on the repo automatically updates your agent types — no reinstall step needed.
+
+**What you get:** When installed, the skill launches agents with their custom `subagent_type` (e.g., `subagent_type: scout`), which provides runtime-enforced tool restrictions. Without them, agents use `subagent_type: general-purpose` with the full prompt — functionally identical, but without structural tool enforcement.
+
+**Step 5: Verify Installation**
 
 Restart Claude Code (if it was already running), then in any session:
 
@@ -257,6 +278,9 @@ Layers 0 and 4 are the structural guarantees: Layer 0 prevents agents from commi
 - [`prompts/scaffold-agent.md`](prompts/scaffold-agent.md): Scaffold Agent prompt — materializes type scaffolds from the IMPL doc Scaffolds section after human review, before any Wave Agent launches
 - [`prompts/agent-template.md`](prompts/agent-template.md): The 9-field agent prompt template stamped per-agent (Field 0: isolation verification; Fields 1–8: implementation spec)
 - [`prompts/saw-skill.md`](prompts/saw-skill.md): Claude Code `/saw` skill router (copy to `~/.claude/commands/saw.md`)
+- [`prompts/agents/scout.md`](prompts/agents/scout.md): Custom agent type definition for Scout (optional, see Install Step 4)
+- [`prompts/agents/scaffold-agent.md`](prompts/agents/scaffold-agent.md): Custom agent type definition for Scaffold Agent (optional)
+- [`prompts/agents/wave-agent.md`](prompts/agents/wave-agent.md): Custom agent type definition for Wave Agent (optional)
 - [`prompts/saw-bootstrap.md`](prompts/saw-bootstrap.md): Design-first architecture for new projects with no existing codebase
 - [`prompts/saw-merge.md`](prompts/saw-merge.md): Merge procedure: conflict detection, agent merging, post-merge verification
 - [`prompts/saw-worktree.md`](prompts/saw-worktree.md): Worktree lifecycle: creation, verification, diagnosis, cleanup

@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.6.6] | 2026-03-04 | Custom agent subtypes (optional); scout agent definition synced to v0.4.0; suitability gate question count fix |
 | [0.6.5] | 2026-03-04 | SAW skill implements E7a: automatic retry logic for correctable agent failures |
 | [0.6.4] | 2026-03-04 | E7a protocol rule: automatic failure remediation in --auto mode (spec) |
 | [0.6.3] | 2026-03-04 | Scaffold Agent: repository context derivation from IMPL doc location |
@@ -33,6 +34,60 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.3.0] | 2026-02-28 | Bootstrap mode for new projects; Wave 0 pattern |
 | [0.2.0] | 2026-02-28 | Decomposed skill prompt; complexity-based suitability heuristic |
 | [0.1.0] | 2026-02-27 | Initial release |
+
+---
+
+## [0.6.6] - 2026-03-04
+
+### Added
+
+- **Custom agent subtypes** (`prompts/agents/`): Three Claude Code agent type
+  definitions — `scout.md`, `scaffold-agent.md`, `wave-agent.md` — with YAML
+  frontmatter specifying `name`, `description`, `tools`, `model`, and `color`.
+  When installed to `~/.claude/agents/` (or symlinked), these provide structural
+  tool restrictions: scout cannot Edit source files, scaffold-agent can only
+  Read/Write/Bash, wave-agent cannot spawn sub-agents. **This is optional.**
+  The `/saw` skill falls back to `subagent_type: general-purpose` with the full
+  prompt file if custom types are not installed. Users who prefer the existing
+  workflow (general-purpose agents with full prompts) need not change anything.
+
+- **`prompts/saw-skill.md` (v0.3.9 → v0.4.0):** Skill now specifies
+  `subagent_type` when launching each agent — `scout`, `scaffold-agent`, or
+  `wave-agent` — with automatic fallback to `general-purpose` if the custom
+  type is not available. Added agent type preference paragraph explaining the
+  two-tier design: type definition carries behavioral instructions and tool
+  restrictions, prompt parameter carries task-specific context.
+
+### Fixed
+
+- **`prompts/scout.md` and `prompts/agents/scout.md`:** Suitability gate text
+  said "Answer these three questions" but listed five numbered items. Changed
+  to "Answer these five questions" in both files. The five questions have been
+  present since v0.4.0; only the count text was wrong.
+
+### Changed
+
+- **`prompts/agents/scout.md`:** Synced from stale 160-line condensed version
+  to full v0.4.0 content (475 lines). Previously missing: IMPL doc size
+  guidance, type rename cascade checks, test performance guidance, linter
+  auto-fix guidance, detailed pre-implementation check format, and
+  time-to-value estimate format.
+
+### Context
+
+Custom agent subtypes are a layered enhancement. The tool restrictions they
+provide (e.g., scout cannot `Edit`) are structural — enforced by the Claude Code
+runtime, not by prompt instructions. A scout that tries to edit a source file
+will be blocked at the tool level, not just told not to. This closes a class of
+I6 violations where agents ignore role separation instructions. However, the
+full-prompt approach remains the default and continues to work identically.
+Installation is a symlink from the SAW repo to `~/.claude/agents/`:
+
+```bash
+ln -sf ~/code/scout-and-wave/prompts/agents/scout.md ~/.claude/agents/scout.md
+ln -sf ~/code/scout-and-wave/prompts/agents/scaffold-agent.md ~/.claude/agents/scaffold-agent.md
+ln -sf ~/code/scout-and-wave/prompts/agents/wave-agent.md ~/.claude/agents/wave-agent.md
+```
 
 ---
 
