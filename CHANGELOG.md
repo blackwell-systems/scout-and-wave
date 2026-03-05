@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.6.7] | 2026-03-05 | Wave Agent: explicit worktree isolation protocol using git -C flag |
 | [0.6.6] | 2026-03-04 | Custom agent subtypes (optional); scout agent definition synced to v0.4.0; suitability gate question count fix |
 | [0.6.5] | 2026-03-04 | SAW skill implements E7a: automatic retry logic for correctable agent failures |
 | [0.6.4] | 2026-03-04 | E7a protocol rule: automatic failure remediation in --auto mode (spec) |
@@ -36,6 +37,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.1.0] | 2026-02-27 | Initial release |
 
 ---
+
+## [0.6.7] - 2026-03-05
+
+### Changed
+
+- **Wave Agent worktree isolation protocol** (`prompts/agents/wave-agent.md` v0.2.0): Added explicit instructions for using `git -C /full/worktree/path` flag for all git operations instead of relying on `cd`. Root cause: Bash tool in Claude Code does not persist working directory between command invocations, so `cd worktree && git commit` fails — the commit runs from the original CWD (main repo). New protocol section added at top of prompt with CORRECT/INCORRECT examples, branch verification command, and updated rules throughout. Fixes agents committing to main instead of worktree branches.
 
 ## [0.6.6] - 2026-03-04
 
