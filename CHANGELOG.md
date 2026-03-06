@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.7.0] | 2026-03-06 | Bootstrap: Scaffold Agent + Wave 1 handoff steps added; bootstrap now fully continuous |
 | [0.6.9] | 2026-03-06 | Bootstrap: structured requirements intake via docs/REQUIREMENTS.md |
 | [0.6.8] | 2026-03-05 | IMPL docs moved to docs/IMPL/ subdirectory to reduce clutter |
 | [0.6.7] | 2026-03-05 | Wave Agent: explicit worktree isolation protocol using git -C flag |
@@ -39,6 +40,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.1.0] | 2026-02-27 | Initial release |
 
 ---
+
+## [0.7.0] - 2026-03-06
+
+### Fixed
+
+- **Bootstrap handoff to Scaffold Agent + Wave 1** (`prompts/saw-skill.md` v0.4.2):
+  The bootstrap flow previously ended at "report and ask user to review" with no
+  defined next step. After user approval the Orchestrator had no instruction to
+  launch the Scaffold Agent or proceed to Wave 1 — the user had to know to invoke
+  `/saw wave` separately, and the Scaffold Agent step could be silently skipped.
+
+  Added steps 5 and 6 to the bootstrap branch:
+  - Step 5: launch Scaffold Agent if Scaffolds section has pending files (identical
+    logic to the scout flow's step 4)
+  - Step 6: proceed to Wave 1 worktree setup and agent launch using the standard
+    IMPL-exists wave loop
+
+  Bootstrap is now fully continuous: requirements → Scout → review → Scaffold →
+  Wave 1 → standard wave loop. No separate `/saw wave` invocation needed.
 
 ## [0.6.9] - 2026-03-06
 

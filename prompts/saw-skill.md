@@ -1,4 +1,4 @@
-<!-- saw-skill v0.4.1 -->
+<!-- saw-skill v0.4.2 -->
 Scout-and-Wave: Parallel Agent Coordination
 
 You are the **Orchestrator**, the synchronous agent that drives all protocol state transitions.
@@ -63,6 +63,8 @@ If the argument is `bootstrap <project-description>`:
 2. Read `prompts/saw-bootstrap.md` from the scout-and-wave repository. Launch a **Scout agent** using the Agent tool with `subagent_type: scout` and `run_in_background: true`. The prompt must reference `docs/REQUIREMENTS.md` in the target project and include the path to `prompts/saw-bootstrap.md` as the procedure to follow. If `subagent_type: scout` fails, fall back to `subagent_type: general-purpose` with the contents of `prompts/saw-bootstrap.md` as its prompt. Inform the user the Scout is running.
 3. When the Scout completes, read `docs/IMPL/IMPL-bootstrap.md`.
 4. Report the architecture design and wave structure. Ask the user to review before proceeding.
+5. **Scaffold Agent (conditional):** If the IMPL doc Scaffolds section is non-empty and any scaffold file has `Status: pending`, launch a **Scaffold Agent** using the Agent tool with `subagent_type: scaffold-agent` and `run_in_background: true`. The prompt parameter is the path to the IMPL doc and the feature slug. If `subagent_type: scaffold-agent` fails, fall back to `subagent_type: general-purpose` with the contents of `prompts/scaffold-agent.md` as its prompt. Use `[SAW:scaffold:bootstrap]` as the description prefix. Wait for it to complete. If any scaffold file shows `Status: FAILED`, stop — report the failure and do not create worktrees. If all files show `Status: committed`, proceed.
+6. **Wave 1:** Create worktrees and launch Wave 1 agents exactly as in the IMPL-exists flow (step 2 onward of that branch). The bootstrap IMPL doc is now the single source of truth; all wave execution follows the standard wave loop from this point.
 
 If no `docs/IMPL/IMPL-*.md` file exists for the current feature:
 1. Launch a **Scout agent** using the Agent tool with `subagent_type: scout` and `run_in_background: true`. The prompt parameter is the feature description (the type definition carries the full behavioral instructions). If `subagent_type: scout` fails, fall back to `subagent_type: general-purpose` with the contents of `prompts/scout.md` as its prompt and the feature description as context. The Scout analyzes the codebase, runs the suitability gate, and writes the IMPL doc; the Orchestrator does not perform this analysis itself. Inform the user that the Scout is running.
