@@ -40,6 +40,16 @@ repository. Relative IMPL doc paths or omitting the path entirely will cause
 agents to default to the session's working directory, leading to wrong-repository
 failures.
 
+**Cross-repository orchestration limitation:** The orchestrator and target
+repository must be the same. When the orchestrator runs from repository A but
+needs to coordinate work in repository B, worktree isolation mechanisms fail:
+runtime isolation parameters (e.g., `isolation: "worktree"`) create worktrees
+relative to the orchestrator's repository context (A), not the target repository
+(B). Manually-created worktrees in B cannot be used because agents spawn in A's
+context. Field 0 verification will correctly detect and block this mismatch. To
+orchestrate work in repository B, the orchestrator must run from B's working
+directory. This is an architectural constraint, not a fixable bug.
+
 Running in the user's session is what makes human checkpoints enforceable. A
 background orchestrator would have no interactive session to deliver mandatory
 approvals to. The human is not a separate role; they are present through the
@@ -258,7 +268,20 @@ corrected first. This is distinct from post-execution conflict prediction:
 pre-launch catches scout planning errors; post-execution catches runtime
 deviations where an agent touched files outside its declared scope.
 
-**E4: Worktree isolation.** Five layers protect against isolation failures:
+**E4: Worktree isolation.** All Wave agents MUST use worktree isolation. There are
+no exceptions for work type (documentation-only, simple refactors, file moves,
+etc.). If work is too small to justify worktrees, it is too small for SAW; use
+sequential implementation instead.
+
+**Rationale for mandatory isolation:**
+- Worktrees enforce I1 (disjoint file ownership) mechanically, preventing
+  concurrent writes to the same files on the main branch
+- Enable independent verification of each agent's work before merge
+- Provide rollback capability via worktree removal without affecting main
+- Prevent execution-time interference from concurrent operations (builds, tests,
+  file system operations)
+
+**Five layers protect against isolation failures:**
 
 - **Layer 0 — Pre-commit hook:** A git pre-commit hook installed during
   worktree setup blocks commits to main during active waves. Agents that
@@ -273,11 +296,22 @@ deviations where an agent touched files outside its declared scope.
   before launching any agent (`git worktree add`). This is the primary
   mechanism. It is deterministic and does not depend on agent cooperation.
 - **Layer 2 — Task tool isolation:** `isolation: "worktree"` on the Agent tool
-  provides runtime isolation. This is the secondary mechanism. It may fail
-  silently — do not rely on it alone.
+  provides runtime isolation when the orchestrator and target repository are
+  the same. This is the secondary mechanism. **Cross-repository limitation:**
+  When orchestrating repo B from repo A, this parameter creates worktrees in
+  repo A's context (wrong). In cross-repository scenarios, omit this parameter
+  and rely on Layer 1 (manual worktree creation in target repo) and Layer 3
+  (Field 0 cd navigation). Layer 2 may fail silently — do not rely on it alone
+  even in same-repository scenarios.
 - **Layer 3 — Field 0 self-verification:** Each agent verifies its working
   directory at startup (cd, pwd, git branch). If verification fails, the agent
   exits without modifying files. This is agent-cooperative defense-in-depth.
+  **Cross-repository requirement:** In cross-repository scenarios where Layer 2
+  is omitted, Field 0's cd command MUST succeed (not use `|| true` to suppress
+  errors). All subsequent agent operations inherit this working directory. If
+  the cd fails, the agent must exit immediately with status 1. Alternatively,
+  agents can use explicit paths for all operations (git -C, absolute file paths)
+  or prefix each command with `cd $WORKTREE_PATH &&` to ensure correct context.
 - **Layer 4 — Merge-time trip wire:** Before any merge, the orchestrator
   verifies each agent branch has commits beyond the base. Empty branch = hard
   stop. This catches all isolation failures regardless of cause.
