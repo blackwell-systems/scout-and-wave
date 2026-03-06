@@ -50,15 +50,15 @@ The scout produces an **IMPL doc** (`docs/IMPL/IMPL-<feature>.md`): a structured
 4. Wave Agents launch in parallel → Each works in isolated worktree
 5. Orchestrator merges → Runs tests → Cleans up worktrees
 
-Scout-and-wave fixes this before any agent starts, through four participant roles:
+Scout-and-wave fixes this before any agent starts, through four participants: the **Orchestrator** (your Claude Code session), **Scout**, **Scaffold Agent**, and **Wave Agents**:
 
-- **Orchestrator:** the synchronous agent running in the user's own session. The human reviews, approves, and intervenes through it directly. There is no separate human role because the Orchestrator is already the user's agent. Drives all protocol state transitions: launches the Scout and Wave Agents, waits for completion, executes the merge procedure, verifies the result, and advances state. Does not perform Scout or Wave Agent duties (I6: Role Separation).
+- **Orchestrator:** the synchronous agent running in your Claude Code session. The human reviews, approves, and intervenes through it directly. There is no separate human role because the Orchestrator is already the user's agent. Drives all protocol state transitions: launches the Scout and Wave Agents, waits for completion, executes the merge procedure, verifies the result, and advances state. Does not perform Scout or Wave Agent duties (I6: Role Separation).
 
 - **Scout:** an asynchronous agent launched by the Orchestrator. Analyzes the codebase and produces a coordination artifact: a dependency graph, exact interface contracts, a file ownership table, and a wave structure. Every file that will change is assigned to exactly one agent. No two agents in the same wave may touch the same file (**I1: Disjoint File Ownership** — I1-I6 are protocol invariants defined in PROTOCOL.md). **Example:** Agent A owns `cache.go`, Agent B owns `client.go`. Neither can touch the other's files. This guarantees conflict-free merges. The Scout resolves ownership conflicts at planning time or declares the work NOT SUITABLE for parallel execution. If shared types are needed, specifies their contents in the IMPL doc Scaffolds section; the Scaffold Agent materializes them after human review. Never modifies source files.
 
 - **Scaffold Agent:** an asynchronous agent launched by the Orchestrator after human review of the IMPL doc. Reads the Scaffolds section, creates the specified type scaffold source files (shared interfaces, traits, structs), verifies they compile, and commits them to HEAD. **Why this matters:** Parallel agents work in isolated **git worktrees** (separate working directories that share git history but have independent files), so they can't see each other's code. They need shared types to be already committed on main before they start. Runs once, before any Wave Agent launches. If compilation fails, writes a FAILED status to the IMPL doc and stops; the Orchestrator surfaces the failure before any worktree is created. This is the structural human checkpoint: scaffold files exist in HEAD and are frozen at worktree creation time, so all Wave Agents implement against the same compiled contracts (I2: Interface contracts precede parallel implementation).
 
-- **Wave Agents:** asynchronous agents launched by the Orchestrator in parallel. Each owns a disjoint set of files, implements against the pre-defined interface contracts, runs the verification gate, commits its work, and writes a structured completion report (interface deviations, out-of-scope discoveries, verification result). Build and test gates verify each wave before the next begins.
+- **Wave Agents:** asynchronous agents launched by the Orchestrator in parallel (multiple agents per wave). Each owns a disjoint set of files, implements against the pre-defined interface contracts, runs the verification gate, commits its work, and writes a structured completion report (interface deviations, out-of-scope discoveries, verification result). Build and test gates verify each wave before the next begins.
 
 The protocol has a built-in suitability gate. The scout answers five questions before producing any agent prompts:
 
@@ -252,12 +252,12 @@ Navigate to a project with existing code and run:
 1. **Scout** analyzes your codebase and writes `docs/IMPL-<feature>.md`
 2. **You review** the wave structure and interface contracts (last chance to change them)
 3. **Scaffold Agent** creates shared type files if needed (10-30s)
-4. **Wave Agents** implement their assigned files in parallel (2-5min)
+4. **Wave Agents** (multiple agents per wave) implement their assigned files in parallel (2-5min per wave)
 5. **Orchestrator** merges, runs tests, reports success
 
 Scout will show you the wave structure and ask for approval before any agent starts.
 
-**Expected timing:** ~5-7 minutes for a 2-agent wave
+**Expected timing:** ~5-7 minutes total for Wave 1 (2 agents running in parallel)
 
 **New to SAW?** See **[First Run Walkthrough](docs/QUICKSTART.md)** for a detailed step-by-step guide with example output, error handling, and tips for success.
 
@@ -273,11 +273,9 @@ Scout will show you the wave structure and ask for approval before any agent sta
 /saw status            → Shows current wave and progress
 ```
 
-**Bootstrap (new empty projects only):**
-```
-/saw bootstrap <project-name>   # Designs project structure from scratch
-```
-Use this when you have no existing code. For existing codebases, use `/saw scout` instead.
+**Which command to use:**
+- **Empty repo or no architecture yet?** → `/saw bootstrap <project-name>` (designs structure from scratch)
+- **Existing codebase, adding a feature?** → `/saw scout <feature-description>` (analyzes and parallelizes work)
 
 ### Workflow
 
