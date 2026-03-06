@@ -72,6 +72,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - agent-template.md Field 0: Added "Cross-repository scenarios" paragraph explaining workaround
   - saw-skill.md step 3: Added "Cross-repository orchestration" conditional logic for omitting isolation parameter
 
+- **Field 0 cd strict in all scenarios** (`prompts/agent-template.md`, `PROTOCOL.md`):
+  Removed `|| true` from Field 0 Step 1 cd command. Previously allowed silent failure with the assumption that Step 2 verification would catch problems. This weakened isolation enforcement and required complex conditional logic in documentation (alternative strategies for cross-repo scenarios).
+
+  The strict cd works uniformly in both scenarios without conditional behavior:
+  - Same-repo: Layer 2 (isolation parameter) positions agent correctly, cd is a no-op that succeeds
+  - Cross-repo: Layer 2 omitted, cd performs actual navigation or fails fast if worktree doesn't exist
+
+  This simplifies the protocol (one implementation instead of multiple strategies) and strengthens defense-in-depth (both Step 1 and Step 2 enforce, rather than Step 1 falling back to Step 2).
+
 **Dogfooding reference:** These fixes address gaps #1 and #6 from `docs/dogfooding-2026-03-06-protocol-extraction.md`, which blocked Wave 1 execution during protocol extraction work.
 
 ## [0.7.1] - 2026-03-06
