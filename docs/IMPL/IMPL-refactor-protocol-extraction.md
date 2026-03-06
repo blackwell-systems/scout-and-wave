@@ -2412,6 +2412,16 @@ branch: wave1-5-agent-E0
 commit: (no commit - read-only verification)
 files_changed: []
 files_created: []
+### Agent G - Completion Report
+
+```yaml
+status: complete
+worktree: /Users/dayna.blackwell/code/scout-and-wave/.claude/worktrees/wave2-agent-G
+branch: wave2-agent-G
+commit: b272597
+files_changed: []
+files_created:
+  - IMPL-SCHEMA.md (608 lines)
 interface_deviations: []
 out_of_scope_deps: []
 tests_added: []
@@ -2547,3 +2557,22 @@ Moved 14 files total:
 Git correctly recognized all moves as renames (100% similarity), preserving full commit history. Verified old locations no longer exist and new locations contain all expected files and directories.
 
 Isolation verified successfully before file operations. All verification gate checks passed.
+  - File exists: IMPL-SCHEMA.md
+  - All 11 required sections present: Suitability Assessment, Scaffolds, Known Issues, Dependency Graph, Interface Contracts, File Ownership, Wave Structure, Agent Prompts, Wave Execution Loop, Orchestrator Post-Merge Checklist, Status, Completion Reports
+  - Links to protocol/message-formats.md and templates/ present
+  - File naming convention documented (docs/IMPL/IMPL-<feature-slug>.md)
+```
+
+**Notes:**
+- Successfully created comprehensive IMPL doc schema reference document
+- Documented all 11 required sections with purpose, format, required fields, constraints, and examples
+- Included detailed breakdown of completion report YAML schema
+- Documented size considerations (~20KB threshold for splitting)
+- Documented concurrent write handling (E14 write discipline)
+- Documented parsing requirements for orchestrators
+- Cross-referenced protocol/message-formats.md for full YAML schemas
+- Cross-referenced templates/agent-prompt-template.md for 9-field structure
+- Added "Relationship to Other Documents" section linking to protocol/*.md and templates/*.md files
+- Version 1.0.0 with version history section for future updates
+- All verification gates passed
+- Committed to worktree branch wave2-agent-G with commit b272597
