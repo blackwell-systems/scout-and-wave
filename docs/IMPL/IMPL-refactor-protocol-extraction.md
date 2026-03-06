@@ -2360,3 +2360,21 @@ verification: PASS (all checks passed)
 - impl-doc-template.md has frontmatter + scaffolds + waves + completion reports + usage notes
 - Both templates include "Template Variables Reference" sections for implementer clarity
 - Ready for developers implementing SAW in other runtimes to copy and adapt
+
+### Agent H - Completion Report
+
+status: complete
+worktree: /Users/dayna.blackwell/code/scout-and-wave/.claude/worktrees/wave2-agent-H
+branch: wave2-agent-H
+commit: dab0ab7
+files_changed: []
+files_created:
+  - implementations/manual/README.md (90 lines - overview, when to use, workflow, time estimates)
+  - implementations/manual/scout-guide.md (472 lines - P1-P5 assessment, IMPL doc production, agent prompts)
+  - implementations/manual/wave-guide.md (478 lines - worktree setup, parallel execution, team coordination)
+  - implementations/manual/merge-guide.md (594 lines - conflict prediction, per-agent merge, post-merge verification)
+  - implementations/manual/checklist.md (468 lines - printable checkbox format for all phases)
+interface_deviations: []
+out_of_scope_deps: []
+tests_added: []
+verification: PASS (all 5 guides complete, suitability gate + merge procedure documented)
