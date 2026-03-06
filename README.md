@@ -36,17 +36,27 @@ cp ~/code/scout-and-wave/prompts/saw-skill.md ~/.claude/commands/saw.md
 # → Orchestrator merges, runs tests, reports result
 ```
 
-The scout produces a `docs/IMPL-<feature>.md` file: a coordination artifact with file ownership, interface contracts, and per-agent prompts. You review it before any agent writes code. This is the human checkpoint that makes parallel execution safe.
+The scout produces an **IMPL doc** (`docs/IMPL/IMPL-<feature>.md`): a structured coordination document that defines which files each agent will modify, what interfaces they'll implement, and how they'll work in parallel. You review it before any agent writes code. This is the human checkpoint that makes parallel execution safe.
+
+**First time using SAW?** Complete the [First Run Walkthrough](docs/QUICKSTART.md) for step-by-step guidance with example output.
 
 ## How
+
+**What happens when you run SAW:**
+
+1. You run `/saw scout "feature"` → Scout analyzes codebase
+2. Scout writes IMPL doc → You review interface contracts
+3. You run `/saw wave` → Scaffold Agent creates shared types (if needed)
+4. Wave Agents launch in parallel → Each works in isolated worktree
+5. Orchestrator merges → Runs tests → Cleans up worktrees
 
 Scout-and-wave fixes this before any agent starts, through four participant roles:
 
 - **Orchestrator:** the synchronous agent running in the user's own session. The human reviews, approves, and intervenes through it directly. There is no separate human role because the Orchestrator is already the user's agent. Drives all protocol state transitions: launches the Scout and Wave Agents, waits for completion, executes the merge procedure, verifies the result, and advances state. Does not perform Scout or Wave Agent duties (I6: Role Separation).
 
-- **Scout:** an asynchronous agent launched by the Orchestrator. Analyzes the codebase and produces a coordination artifact: a dependency graph, exact interface contracts, a file ownership table, and a wave structure. Every file that will change is assigned to exactly one agent. No two agents in the same wave may touch the same file (I1: Disjoint File Ownership). The Scout resolves ownership conflicts at planning time or declares the work NOT SUITABLE for parallel execution. If shared types are needed, specifies their contents in the IMPL doc Scaffolds section; the Scaffold Agent materializes them after human review. Never modifies source files.
+- **Scout:** an asynchronous agent launched by the Orchestrator. Analyzes the codebase and produces a coordination artifact: a dependency graph, exact interface contracts, a file ownership table, and a wave structure. Every file that will change is assigned to exactly one agent. No two agents in the same wave may touch the same file (**I1: Disjoint File Ownership** — I1-I6 are protocol invariants defined in PROTOCOL.md). **Example:** Agent A owns `cache.go`, Agent B owns `client.go`. Neither can touch the other's files. This guarantees conflict-free merges. The Scout resolves ownership conflicts at planning time or declares the work NOT SUITABLE for parallel execution. If shared types are needed, specifies their contents in the IMPL doc Scaffolds section; the Scaffold Agent materializes them after human review. Never modifies source files.
 
-- **Scaffold Agent:** an asynchronous agent launched by the Orchestrator after human review of the IMPL doc. Reads the Scaffolds section, creates the specified type scaffold source files (shared interfaces, traits, structs), verifies they compile, and commits them to HEAD. Runs once, before any Wave Agent launches. If compilation fails, writes a FAILED status to the IMPL doc and stops; the Orchestrator surfaces the failure before any worktree is created. This is the structural human checkpoint: scaffold files exist in HEAD and are frozen at worktree creation time, so all Wave Agents implement against the same compiled contracts (I2: Interface contracts precede parallel implementation).
+- **Scaffold Agent:** an asynchronous agent launched by the Orchestrator after human review of the IMPL doc. Reads the Scaffolds section, creates the specified type scaffold source files (shared interfaces, traits, structs), verifies they compile, and commits them to HEAD. **Why this matters:** Parallel agents work in isolated **git worktrees** (separate working directories that share git history but have independent files), so they can't see each other's code. They need shared types to be already committed on main before they start. Runs once, before any Wave Agent launches. If compilation fails, writes a FAILED status to the IMPL doc and stops; the Orchestrator surfaces the failure before any worktree is created. This is the structural human checkpoint: scaffold files exist in HEAD and are frozen at worktree creation time, so all Wave Agents implement against the same compiled contracts (I2: Interface contracts precede parallel implementation).
 
 - **Wave Agents:** asynchronous agents launched by the Orchestrator in parallel. Each owns a disjoint set of files, implements against the pre-defined interface contracts, runs the verification gate, commits its work, and writes a structured completion report (interface deviations, out-of-scope discoveries, verification result). Build and test gates verify each wave before the next begins.
 
@@ -58,7 +68,7 @@ The protocol has a built-in suitability gate. The scout answers five questions b
 4. Are any items already implemented?
 5. Does parallelization gain exceed the overhead of scout + merge?
 
-If any question is a hard blocker, the scout emits NOT SUITABLE and stops. A poor-fit assessment is useful output: it tells you SAW isn't the right tool before any agent spends time on it.
+If any question is a hard blocker, the scout emits NOT SUITABLE and stops. **SAW isn't for everything.** A poor-fit assessment is useful output: it tells you SAW isn't the right tool before any agent spends time on it. This prevents bad decompositions.
 
 When all preconditions hold and all invariants are maintained, the protocol provides a concrete correctness guarantee: if the suitability gate passes and the verification gates pass, the work was safe to parallelize. That's the difference between parallel agents with coordination overhead and parallel agents with structural safety properties.
 
@@ -101,14 +111,13 @@ cat > ~/.claude/settings.json <<'EOF'
 EOF
 ```
 
-**If `~/.claude/settings.json` already exists**, add `"Agent"` to the `allow` array:
+**If `~/.claude/settings.json` already exists**, add `"Agent"` to the `allow` array if it's not there:
 
 ```json
 {
   "permissions": {
     "allow": [
-      "Agent",  // ← Add this line if missing
-      // ... your other existing entries
+      "Agent"
     ]
   }
 }
@@ -122,7 +131,7 @@ EOF
 
 For project-scoped settings, add the same block to `.claude/settings.json` in the project root.
 
-**Step 2: Clone the Repository**
+**Step 2: Clone the Repository (Required)**
 
 The skill reads prompt files from the repository at runtime, so keep it on disk:
 
@@ -141,7 +150,7 @@ git clone https://github.com/blackwell-systems/scout-and-wave.git ~/code/scout-a
 export SAW_REPO=/path/you/prefer/scout-and-wave
 ```
 
-**Step 3: Install the Skill**
+**Step 3: Install the Skill (Required)**
 
 Copy the skill file to Claude Code's commands directory:
 
@@ -171,7 +180,49 @@ ln -sf ~/code/scout-and-wave/prompts/agents/wave-agent.md ~/.claude/agents/wave-
 
 **Why symlinks?** The SAW repo is the single source of truth for agent definitions. Symlinks mean `git pull` on the repo automatically updates your agent types — no reinstall step needed.
 
-**What you get:** When installed, the skill launches agents with their custom `subagent_type` (e.g., `subagent_type: scout`), which provides runtime-enforced tool restrictions. Without them, agents use `subagent_type: general-purpose` with the full prompt — functionally identical, but without structural tool enforcement.
+**What you get:** When installed, the skill launches agents with their custom `subagent_type` (e.g., `subagent_type: scout`), which provides runtime-enforced tool restrictions and better observability. Without them, agents use `subagent_type: general-purpose` with the full prompt — functionally identical, but without structural tool enforcement.
+
+**Why two prompt directories?** `prompts/agents/` contains custom agent types (optional). `prompts/` contains fallback prompts used when custom types aren't installed. You'll use one or the other automatically—the skill detects what's available and adapts.
+
+#### Agent Architecture: Dual-Structure Design
+
+SAW uses a dual-structure architecture that supports both custom agent types and graceful fallback to general-purpose agents:
+
+**Directory structure:**
+```
+prompts/
+├── scout.md              # Fallback prompt (no YAML frontmatter)
+├── scaffold-agent.md     # Fallback prompt (no YAML frontmatter)
+├── agent-template.md     # Template Scout fills to generate wave agent prompts
+└── agents/
+    ├── scout.md          # Custom agent type (with YAML frontmatter)
+    ├── scaffold-agent.md # Custom agent type (with YAML frontmatter)
+    └── wave-agent.md     # Custom agent type (with YAML frontmatter)
+```
+
+**How fallback works:**
+
+1. **Error-based, not config-based:** The Orchestrator always tries custom types first (`subagent_type: scout`). Only when Claude Code returns an error ("subagent type 'scout' not found") does it fall back to `subagent_type: general-purpose` with the full prompt from `prompts/scout.md`.
+
+2. **Zero configuration required:** Users simply don't install custom agent types if they don't want them. The system automatically detects the absence and uses the fallback behavior.
+
+3. **Behavioral equivalence:** With or without custom types, agents produce the same results. Custom types add runtime tool enforcement (scout cannot Edit source files) and observability (claudewatch can track agent types separately), but don't change the logic.
+
+**Wave agents are special:**
+
+Wave agents use a **two-layer architecture**:
+
+- **Type layer** (`prompts/agents/wave-agent.md`): Shared behavior across all wave agents — worktree isolation protocol, completion report format, invariants (I1, I2, I5)
+- **Instance layer** (`prompts/agent-template.md`): Scout fills this template to generate Agent A, Agent B, Agent C prompts with specific files, interfaces, and tests
+
+When custom types are installed, both layers combine. In fallback mode, the filled template already contains all necessary instructions (it's self-contained), so wave agents work identically.
+
+**Why root-level prompts exist:**
+
+The files in `prompts/` (without YAML frontmatter) serve two purposes:
+
+1. **Active fallback code paths:** When custom types aren't installed, these are the actual prompts passed to general-purpose agents
+2. **Historical preservation:** They document what the prompts looked like before the custom agent types refactoring (commit c43bd41), preserving the evolution from "everything runs through general-purpose agents" to "specialized agent types with focused prompts"
 
 **Step 5: Verify Installation**
 
@@ -194,6 +245,8 @@ Navigate to a project with existing code and run:
 /saw wave                              # Agents execute in parallel (2-5min)
 ```
 
+**Want to see a real example?** Check `examples/brewprune-IMPL-brew-native.md` for an actual IMPL doc from a Go CLI tool audit.
+
 **What happens:**
 
 1. **Scout** analyzes your codebase and writes `docs/IMPL-<feature>.md`
@@ -210,13 +263,21 @@ Scout will show you the wave structure and ask for approval before any agent sta
 
 ### Commands
 
+**Command flow:**
 ```
-/saw bootstrap <project-description>   # Design-first architecture for new projects
-/saw scout <feature-description>       # Run the scout phase, produce docs/IMPL-<feature>.md
-/saw wave                              # Execute the next pending wave, pause for review
-/saw wave --auto                       # Execute all waves; only pause if verification fails
-/saw status                            # Show current progress
+/saw scout <feature>   → Analyzes, writes IMPL doc
+[You review IMPL doc]
+/saw wave              → Runs next pending wave
+/saw wave              → Runs next wave (repeat for multi-wave)
+/saw wave --auto       → Runs ALL remaining waves hands-free
+/saw status            → Shows current wave and progress
 ```
+
+**Bootstrap (new empty projects only):**
+```
+/saw bootstrap <project-name>   # Designs project structure from scratch
+```
+Use this when you have no existing code. For existing codebases, use `/saw scout` instead.
 
 ### Workflow
 
@@ -228,7 +289,7 @@ Scout will show you the wave structure and ask for approval before any agent sta
 
 3. **Scaffold Agent (conditional):** If the IMPL doc has a non-empty Scaffolds section, the Orchestrator launches the Scaffold Agent automatically. It creates the shared type files, verifies compilation, and commits to HEAD. If any scaffold fails to compile, the run stops here — fix the contracts in the IMPL doc before proceeding. When all scaffolds show `Status: committed`, the interface contracts are frozen.
 
-4. **Wave:** `/saw wave` launches parallel agents for the current wave, merges on completion, and runs the verification gate.
+4. **Wave:** `/saw wave` launches parallel agents for the current wave, merges on completion, and runs the **verification gate** (build + tests + lint).
 
 5. **Repeat:** `/saw wave` for each subsequent wave, or `/saw wave --auto` to run all remaining waves unattended. Auto mode still pauses if verification fails.
 
@@ -253,6 +314,8 @@ SAW enforces two independent constraints that together make parallel execution c
 **Worktree isolation** prevents execution-time interference. Each agent works in its own git worktree, a separate directory that shares the same git history but has an independent file tree. This means concurrent `go build`, `go test`, and tool-cache writes don't race on shared build caches, lock files, or intermediate object files. Without worktrees, two agents building simultaneously in the same directory produce flaky failures that look like code bugs but are filesystem races.
 
 Neither constraint substitutes for the other. Disjoint ownership without worktrees: merge is safe, but concurrent builds are flaky. Worktrees without disjoint ownership: execution is clean, but merge produces unresolvable conflicts. Both must hold for a wave to be correct and reproducible.
+
+**Cascade failures:** These happen when Agent A changes a function signature and Agent B's code breaks at integration time, even though both passed isolated tests. The post-merge verification gate catches these cross-package issues that individual agents can't see in their isolated worktrees.
 
 ### Worktree Isolation Defense (5 layers)
 
