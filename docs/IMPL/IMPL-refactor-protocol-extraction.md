@@ -1555,6 +1555,37 @@ If you encountered issues, set `status: blocked` and explain in free-form notes 
 
 ---
 
+### Agent F2 - Completion Report
+
+**Status:** complete
+
+**Worktree:** /Users/dayna.blackwell/code/scout-and-wave/.claude/worktrees/wave2-agent-F2
+
+**Branch:** wave2-agent-F2
+
+**Commit:** 52b0117
+
+**Files changed:**
+- README.md (modified, +52/-262 lines) - rewritten as navigation hub
+- implementations/README.md (created, +103 lines) - comparison table and implementation chooser
+- implementations/claude-code/README.md (created, +285 lines) - installation and usage guide
+
+**Interface deviations:** None
+
+**Out of scope dependencies:** None
+
+**Verification:**
+- [x] implementations/README.md exists
+- [x] implementations/claude-code/README.md exists
+- [x] README.md exists and links to protocol/README.md
+- [x] README.md links to implementations/
+- [x] All verification checks PASS
+
+**Notes:**
+Root README successfully transformed from Claude Code installation manual into a navigation hub. Implementation-specific content extracted to implementations/claude-code/README.md. Protocol links properly reference the protocol/ directory created by Wave 1 agents.
+
+---
+
 ### Agent G - Create IMPL-SCHEMA.md
 
 **Wave:** 2
@@ -2360,3 +2391,115 @@ verification: PASS (all checks passed)
 - impl-doc-template.md has frontmatter + scaffolds + waves + completion reports + usage notes
 - Both templates include "Template Variables Reference" sections for implementer clarity
 - Ready for developers implementing SAW in other runtimes to copy and adapt
+
+---
+
+## Wave 1.5 (Verification)
+
+### Agent E0 - Extraction Completeness Verification
+
+This verification agent runs between Wave 1 and Wave 2 to confirm all content from PROTOCOL.md was successfully extracted to protocol/*.md files with no gaps or duplicates.
+
+**Read-only verification:** No files modified. This agent only verifies Wave 1's work.
+
+---
+
+### Agent E0 - Completion Report
+
+status: complete
+worktree: /Users/dayna.blackwell/code/scout-and-wave/.claude/worktrees/wave1-5-agent-E0
+branch: wave1-5-agent-E0
+commit: (no commit - read-only verification)
+files_changed: []
+files_created: []
+interface_deviations: []
+out_of_scope_deps: []
+tests_added: []
+verification: PASS
+
+**Coverage Report:**
+
+Lines extracted from PROTOCOL.md:
+- Lines 16-96: Participants → protocol/participants.md (Agent A) ✓
+- Lines 99-139: Preconditions → protocol/preconditions.md (Agent B) ✓
+- Lines 142-189: Invariants → protocol/invariants.md (Agent B) ✓
+- Lines 192-223: State Machine → protocol/state-machine.md (Agent C) ✓
+- Lines 226-441: Execution Rules → protocol/execution-rules.md (Agent B) ✓
+- Lines 444-550: Message Formats → protocol/message-formats.md (Agent C) ✓
+- Lines 553+: Procedures → protocol/procedures.md (Agent C, new content not in original) ✓
+
+**Definition Completeness:**
+- All I1-I6 (invariants) present in protocol/invariants.md ✓
+- All E1-E14 (execution rules) present in protocol/execution-rules.md ✓
+- All P1-P5 (preconditions) present in protocol/preconditions.md ✓
+
+**Duplicate Analysis:**
+- Each I{N} definition appears in exactly ONE file (protocol/invariants.md) ✓
+- Each E{N} definition appears in exactly ONE file (protocol/execution-rules.md) ✓
+- Each P{N} definition appears in exactly ONE file (protocol/preconditions.md) ✓
+- Other occurrences are cross-references (citations), which is correct ✓
+
+**Semantic Coverage:**
+- All four participant roles (Orchestrator, Scout, Scaffold Agent, Wave Agent) ✓
+- All five preconditions with enforcement details ✓
+- All six invariants with enforcement mechanisms ✓
+- All fourteen execution rules with trigger conditions ✓
+- Complete state machine with transitions and guards ✓
+- All message formats (suitability, prompts, reports, scaffolds) ✓
+- Operational procedures for scout, scaffold, wave, merge, recovery ✓
+
+**Gaps:** None detected
+
+**Verdict:** Wave 1's extraction work is complete and correct. All substantive content from PROTOCOL.md (lines 16-550) has been extracted to protocol/*.md files with proper organization. Each definition (I/E/P) appears in exactly one canonical file with cross-references elsewhere. No content was lost, no duplicates created.
+
+**Notes:**
+- protocol/procedures.md contains new procedural content not in the original PROTOCOL.md, which is an enhancement (Agent C added operational step-by-step guides)
+- The extraction preserves all cross-references (I{N}, E{N}, P{N}) for audit traceability
+- protocol/README.md provides navigation and adoption guidance (Agent A)
+- All extracted files maintain version 0.6.0 consistency
+- Ready for Wave 2 (template conversion and documentation enhancement)
+
+### Agent E - Completion Report
+
+status: complete
+worktree: /Users/dayna.blackwell/code/scout-and-wave/.claude/worktrees/wave2-agent-E
+branch: wave2-agent-E
+commit: d13b420
+files_changed:
+  - PROTOCOL.md
+files_created: []
+interface_deviations: []
+out_of_scope_deps: []
+tests_added: []
+verification: PASS
+
+**Summary:**
+Successfully refactored PROTOCOL.md from 624 lines to 239 lines (61% reduction) by delegating detailed content to protocol/*.md files while preserving high-level overview and navigation structure.
+
+**Key Changes:**
+- Added Navigation section linking to all protocol/*.md files
+- Created Quick Reference tables for I1-I6 (invariants) and E1-E14 (execution rules) with links
+- Replaced long-form participant descriptions with summaries + link to protocol/participants.md
+- Replaced full invariant definitions with quick reference table + link to protocol/invariants.md
+- Replaced full execution rule definitions with quick reference table + link to protocol/execution-rules.md
+- Kept state machine diagram reference, added link to protocol/state-machine.md
+- Condensed message formats to brief summaries + link to protocol/message-formats.md
+- Preserved version header, conformance section, reference implementation table
+- Removed all Claude Code-specific tool references
+
+**Verification Results:**
+- ✓ File exists and was modified (not deleted)
+- ✓ All links to protocol/ directory present (participants, invariants, execution-rules, state-machine, message-formats, preconditions)
+- ✓ All invariants I1-I6 referenced
+- ✓ All execution rules E1-E14 referenced
+- ✓ No Claude Code tool names remain
+- ✓ File reduced to 239 lines (target: <300 lines)
+
+**Diff Summary:**
+- +140 insertions, -525 deletions
+- Maintained all I/E/P anchor references for cross-referencing
+- Preserved protocol correctness guarantees
+- Enhanced navigability with structured quick reference tables
+
+**Notes:**
+PROTOCOL.md now serves as the entry point for protocol documentation, providing a clear overview and directing readers to detailed specifications in protocol/*.md. All substantive content remains available through the protocol/ directory, maintaining completeness while improving readability and navigation.
