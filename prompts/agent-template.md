@@ -92,7 +92,17 @@ Actual: [paste output from pwd and git branch]
 
 **If verification passes:** Document briefly in completion report, then proceed with work.
 
-**Rationale:** Defense-in-depth isolation enforcement (discovered in brewprune Round 5 Waves 1-2). Layer 1: orchestrator pre-creates worktrees. Layer 1.5: agent attempts self-correction via cd. Layer 2: agent verifies isolation and fails fast if incorrect. Layer 3: orchestrator checks completion reports for failures. This design handles cases where Task tool's `isolation: "worktree"` parameter doesn't automatically change working directory.
+**Rationale:** Defense-in-depth isolation enforcement (discovered in brewprune Round 5 Waves 1-2; refined in protocol extraction dogfooding 2026-03-06).
+
+**E4: Worktree isolation is MANDATORY for all Wave agents.** No exceptions for work type (documentation-only, simple refactors, etc.). If work is too small for worktrees, use sequential implementation instead.
+
+**Isolation layers:**
+- Layer 1: Orchestrator pre-creates worktrees manually
+- Layer 1.5: Agent attempts self-correction via cd (Step 1 above)
+- Layer 2: Agent verifies isolation and fails fast if incorrect (Step 2 above)
+- Layer 3: Orchestrator checks completion reports for failures
+
+**Cross-repository scenarios:** When orchestrating repo B from repo A, the orchestrator should NOT use `isolation: "worktree"` parameter (it creates worktrees in repo A's context). Instead: manually create worktrees in repo B (Layer 1), and rely on this Field 0 cd (Layer 1.5) as the primary navigation mechanism. The `|| true` in Step 1 allows silent failure for same-repo cases where isolation parameter already positioned the agent correctly; Step 2's strict verification catches actual failures in both scenarios.
 
 ## 1. File Ownership
 

@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.7.2] | 2026-03-06 | Protocol: mandatory worktree isolation (E4) and cross-repository orchestration limitation documented |
 | [0.7.1] | 2026-03-06 | Documentation: new-user onboarding gaps addressed; critical concepts defined on first mention |
 | [0.7.0] | 2026-03-06 | Bootstrap: Scaffold Agent + Wave 1 handoff steps added; bootstrap now fully continuous |
 | [0.6.9] | 2026-03-06 | Bootstrap: structured requirements intake via docs/REQUIREMENTS.md |
@@ -41,6 +42,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.1.0] | 2026-02-27 | Initial release |
 
 ---
+
+## [0.7.2] - 2026-03-06
+
+### Fixed
+
+- **E4: Worktree isolation now mandatory for all Wave agents** (`PROTOCOL.md`, `prompts/agent-template.md`, `prompts/saw-skill.md`):
+  Previously E4 allowed exceptions for "simple" work (documentation-only, refactors). The 2026-03-06 protocol extraction dogfooding session revealed this loophole caused Wave 1 execution failures when agents ran in wrong directories. E4 now states: "All Wave agents MUST use worktree isolation. There are no exceptions for work type. If work is too small to justify worktrees, it is too small for SAW; use sequential implementation instead."
+
+  **Rationale added:** Worktrees enforce I1 (disjoint file ownership) mechanically, prevent concurrent write interference, enable independent verification before merge, and provide rollback capability. These benefits apply regardless of whether an agent modifies code or documentation.
+
+  **Changes:**
+  - PROTOCOL.md E4: Updated opening paragraph to remove exceptions, added rationale section
+  - agent-template.md Field 0: Added "E4: Worktree isolation is MANDATORY" statement in rationale
+  - saw-skill.md: No change needed (already enforces worktree creation before agent launch)
+
+- **Cross-repository orchestration limitation documented** (`PROTOCOL.md`, `prompts/agent-template.md`, `prompts/saw-skill.md`):
+  When Orchestrator runs from repo A but needs to coordinate work in repo B, the `isolation: "worktree"` parameter creates worktrees in A's context (wrong). Discovered during 2026-03-06 dogfooding when orchestrating scout-and-wave work from agentic-cold-start-audit directory.
+
+  **Architectural constraint:** This is not a fixable bug. The task tool's isolation parameter operates relative to the orchestrator's working directory. To orchestrate work in repo B, the orchestrator must run from B's directory.
+
+  **Workaround for cross-repo scenarios:**
+  - Orchestrator: Manually create worktrees in target repo (Layer 1), omit `isolation: "worktree"` parameter
+  - Agent: Field 0 cd command MUST succeed (not use `|| true`), or use explicit paths for all operations
+  - Defense layers: Layer 1 (manual worktree creation) + Layer 3 (Field 0 verification) still provide isolation
+
+  **Changes:**
+  - PROTOCOL.md: Added "Cross-repository orchestration limitation" section to Orchestrator definition; updated E4 Layer 2 and Layer 3 with cross-repo guidance
+  - agent-template.md Field 0: Added "Cross-repository scenarios" paragraph explaining workaround
+  - saw-skill.md step 3: Added "Cross-repository orchestration" conditional logic for omitting isolation parameter
+
+**Dogfooding reference:** These fixes address gaps #1 and #6 from `docs/dogfooding-2026-03-06-protocol-extraction.md`, which blocked Wave 1 execution during protocol extraction work.
 
 ## [0.7.1] - 2026-03-06
 
