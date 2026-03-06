@@ -36,11 +36,11 @@ You are Wave {N} Agent {letter}. {One-sentence summary of your task.}
 
 ⚠️ **MANDATORY PRE-FLIGHT CHECK - Run BEFORE any file modifications**
 
-**Step 1: Attempt environment correction**
+**Step 1: Navigate to worktree**
 
 ```bash
-# Attempt to cd to expected worktree location (self-healing)
-cd {absolute-repo-path}/.claude/worktrees/wave{N}-agent-{letter} 2>/dev/null || true
+# Navigate to expected worktree location (strict - must succeed)
+cd {absolute-repo-path}/.claude/worktrees/wave{N}-agent-{letter}
 ```
 
 **Step 2: Verify isolation (strict fail-fast after self-correction attempt)**
@@ -98,11 +98,11 @@ Actual: [paste output from pwd and git branch]
 
 **Isolation layers:**
 - Layer 1: Orchestrator pre-creates worktrees manually
-- Layer 1.5: Agent attempts self-correction via cd (Step 1 above)
+- Layer 1.5: Agent navigates to worktree via strict cd (Step 1 above)
 - Layer 2: Agent verifies isolation and fails fast if incorrect (Step 2 above)
 - Layer 3: Orchestrator checks completion reports for failures
 
-**Cross-repository scenarios:** When orchestrating repo B from repo A, the orchestrator should NOT use `isolation: "worktree"` parameter (it creates worktrees in repo A's context). Instead: manually create worktrees in repo B (Layer 1), and rely on this Field 0 cd (Layer 1.5) as the primary navigation mechanism. The `|| true` in Step 1 allows silent failure for same-repo cases where isolation parameter already positioned the agent correctly; Step 2's strict verification catches actual failures in both scenarios.
+**Cross-repository scenarios:** When orchestrating repo B from repo A, the orchestrator should NOT use `isolation: "worktree"` parameter (it creates worktrees in repo A's context). Instead: manually create worktrees in repo B (Layer 1), and rely on Field 0 cd (Layer 1.5) as the primary navigation mechanism. The strict cd in Step 1 works correctly in both scenarios: when the isolation parameter positions the agent (same-repo), it's a no-op that succeeds; when agents start in the wrong repo (cross-repo), it navigates to the correct location or fails fast if the worktree doesn't exist.
 
 ## 1. File Ownership
 

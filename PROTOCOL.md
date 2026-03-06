@@ -304,14 +304,14 @@ sequential implementation instead.
   (Field 0 cd navigation). Layer 2 may fail silently — do not rely on it alone
   even in same-repository scenarios.
 - **Layer 3 — Field 0 self-verification:** Each agent verifies its working
-  directory at startup (cd, pwd, git branch). If verification fails, the agent
-  exits without modifying files. This is agent-cooperative defense-in-depth.
-  **Cross-repository requirement:** In cross-repository scenarios where Layer 2
-  is omitted, Field 0's cd command MUST succeed (not use `|| true` to suppress
-  errors). All subsequent agent operations inherit this working directory. If
-  the cd fails, the agent must exit immediately with status 1. Alternatively,
-  agents can use explicit paths for all operations (git -C, absolute file paths)
-  or prefix each command with `cd $WORKTREE_PATH &&` to ensure correct context.
+  directory at startup (cd, pwd, git branch). The cd command is strict (no
+  `|| true` suppression) — if navigation to the worktree fails, the agent exits
+  immediately with status 1. This works correctly in both same-repo and
+  cross-repo scenarios: when Layer 2 positioned the agent correctly (same-repo),
+  cd is a no-op that succeeds; when Layer 2 is omitted (cross-repo), cd performs
+  actual navigation. All subsequent agent operations inherit this working
+  directory. If verification fails after successful cd, the agent exits without
+  modifying files. This is agent-cooperative defense-in-depth.
 - **Layer 4 — Merge-time trip wire:** Before any merge, the orchestrator
   verifies each agent branch has commits beyond the base. Empty branch = hard
   stop. This catches all isolation failures regardless of cause.
