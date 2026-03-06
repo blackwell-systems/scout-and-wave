@@ -2243,3 +2243,53 @@ interface_deviations: []
 out_of_scope_deps: []
 tests_added: []
 verification: PASS (all states present, schemas match, 5 layers documented, no tool references)
+
+### Agent D - Completion Report
+
+status: complete
+worktree: .claude/worktrees/wave1-agent-D
+branch: wave1-agent-D
+commit: 2b8a1b2
+files_changed: []
+files_created:
+  - templates/agent-prompt-template.md
+  - templates/impl-doc-template.md
+interface_deviations: []
+out_of_scope_deps: []
+tests_added: []
+verification: PASS (all checks passed)
+
+**Isolation verification:** ✓ Verified worktree path and branch before file modifications
+
+**Template generalization approach:**
+- Extracted structure from prompts/agent-template.md and existing IMPL docs
+- Replaced all hardcoded paths with {curly-brace} placeholder variables
+- Removed Claude Code-specific tool names (Read tool, Write tool, Bash tool, Agent tool)
+- Replaced with generic instructions: "read the file", "write to file", "run commands"
+- Preserved Field 0-8 structure exactly (load-bearing for protocol compliance)
+- Preserved YAML schema for completion reports
+- Added template variable reference tables for implementer guidance
+
+**Key design decisions:**
+- Used {repo-root}, {wave-number}, {agent-letter} placeholder notation throughout
+- Preserved all I{N} and E{N} protocol references (cross-reference anchors)
+- Kept isolation verification script structure (5-layer defense-in-depth)
+- Maintained completion report YAML schema (parsed by orchestrators)
+- Templates reference protocol/*.md files (those are also implementation-agnostic)
+
+**Verification results:**
+```bash
+✓ Files exist (templates/agent-prompt-template.md, templates/impl-doc-template.md)
+✓ Field structure present (Field 0 through Field 8 in agent template)
+✓ No hardcoded paths (checked for /Users/dayna.blackwell)
+✓ No tool names (checked for "Read tool", "Write tool", "Bash tool", "Agent tool")
+✓ Placeholders present ({repo-root}, {wave-number}, {agent-letter})
+✓ Commit successful: 2b8a1b2
+```
+
+**Notes:**
+- Templates are now portable to Python, Rust, manual workflows, or any SAW implementation
+- agent-prompt-template.md has 9 fields + variable reference table (self-documenting)
+- impl-doc-template.md has frontmatter + scaffolds + waves + completion reports + usage notes
+- Both templates include "Template Variables Reference" sections for implementer clarity
+- Ready for developers implementing SAW in other runtimes to copy and adapt
