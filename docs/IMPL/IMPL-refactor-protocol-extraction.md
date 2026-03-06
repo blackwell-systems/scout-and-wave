@@ -393,11 +393,11 @@ After completing all work and verification:
 status: complete
 worktree: /Users/dayna.blackwell/code/scout-and-wave/.claude/worktrees/wave1-agent-A
 branch: wave1-agent-A
-commit: fd5756a289992fcf6a8fd30d43191e7390754207
+commit: 79d8c25cb64737be1afc5ae4872a6b149f78e076
 files_changed: []
 files_created:
-  - protocol/README.md (103 lines)
-  - protocol/participants.md (229 lines)
+  - protocol/README.md (59 lines)
+  - protocol/participants.md (125 lines)
 interface_deviations: []
 out_of_scope_deps: []
 tests_added: []
@@ -2243,3 +2243,71 @@ interface_deviations: []
 out_of_scope_deps: []
 tests_added: []
 verification: PASS (all states present, schemas match, 5 layers documented, no tool references)
+
+### Agent B - Completion Report
+
+status: complete
+worktree: /Users/dayna.blackwell/code/scout-and-wave/.claude/worktrees/wave1-agent-B
+branch: wave1-agent-B
+commit: 5f76def
+files_changed: []
+files_created:
+  - protocol/preconditions.md
+  - protocol/invariants.md
+  - protocol/execution-rules.md
+interface_deviations: []
+out_of_scope_deps: []
+tests_added: []
+verification: PASS (P1-P5 present, I1-I6 present, E1-E14 present, no tool references)
+
+**Extraction details:**
+- Extracted preconditions P1-P5 from PROTOCOL.md lines 99-139 (P5 was actually present in the source)
+- Extracted invariants I1-I6 from PROTOCOL.md lines 142-189
+- Extracted execution rules E1-E14 from PROTOCOL.md lines 226-441
+- Removed all Claude Code tool references (Read tool, Write tool, Bash tool, Agent tool, run_in_background)
+- Preserved all cross-references to other sections (I{N}, E{N}, P{N} anchors)
+- Maintained implementation-agnostic language while keeping generic examples (git commands, file operations)
+
+**Files created (568 lines total):**
+- preconditions.md: 133 lines - P1-P5 with definitions, consequences, and suitability verdict format
+- invariants.md: 169 lines - I1-I6 with formal statements, enforcement mechanisms, and protocol violations table
+- execution-rules.md: 266 lines - E1-E14 with triggers, required actions, failure handling, and rationale
+
+### Agent C - Completion Report
+
+**Status:** complete
+
+**Worktree:** /Users/dayna.blackwell/code/scout-and-wave/.claude/worktrees/wave1-agent-C
+
+**Branch:** wave1-agent-C
+
+**Commit:** d305e30
+
+**Files created:**
+- protocol/state-machine.md
+- protocol/message-formats.md
+- protocol/procedures.md
+
+**Files changed:** []
+
+**Interface deviations:** []
+
+**Out of scope dependencies:** []
+
+**Tests added:** []
+
+**Verification:** PASS (all verification checks passed)
+
+**Notes:**
+
+Successfully extracted protocol dynamic behavior specification from PROTOCOL.md into three separate documentation files:
+
+1. **state-machine.md** - Documented all lifecycle states (SCOUT_PENDING, REVIEWED, SCAFFOLD_PENDING, WAVE_PENDING, WAVE_EXECUTING, WAVE_MERGING, WAVE_VERIFIED, BLOCKED, COMPLETE, NOT_SUITABLE), state transitions with guards, terminal states, solo wave variant, and cross-wave coordination. Preserved state names exactly as they appear in IMPL docs.
+
+2. **message-formats.md** - Documented IMPL doc structure, suitability verdict formats (SUITABLE/NOT SUITABLE/WITH CAVEATS), 9-field agent prompt structure (Field 0-8), completion report YAML schema, and Scaffolds section format. Cross-referenced prompts/agent-template.md for full field definitions.
+
+3. **procedures.md** - Documented five core procedures: Scout (suitability gate + IMPL doc production), Scaffold Agent (type scaffold materialization), Wave execution loop (6 phases), Merge (4 phases), and Inter-wave checkpoint. Included error recovery procedures for BLOCKED state and interface contract failures.
+
+All content extracted from PROTOCOL.md lines 192-624. Language adapted to be implementation-agnostic (describes orchestrator actions generically: "launch agent", "read completion report", "merge branch" rather than specific tool invocations). State machine correctness properties documented. No tool names present in any file.
+
+Isolation verified successfully at start. All verification gate checks passed.
