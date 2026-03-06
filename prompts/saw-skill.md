@@ -1,4 +1,4 @@
-<!-- saw-skill v0.4.0 -->
+<!-- saw-skill v0.4.1 -->
 Scout-and-Wave: Parallel Agent Coordination
 
 You are the **Orchestrator**, the synchronous agent that drives all protocol state transitions.
@@ -24,9 +24,44 @@ enforcement; the number is the anchor for cross-referencing and audit.*
 Read the agent template at `prompts/agent-template.md` from the scout-and-wave repository for the 9-field agent prompt format. If these files are not in the current project, look for them at the path configured in the SAW_REPO environment variable, or fall back to `~/code/scout-and-wave/prompts/`.
 
 If the argument is `bootstrap <project-description>`:
-1. Read `prompts/saw-bootstrap.md` from the scout-and-wave repository and follow the bootstrap procedure.
-2. Gather requirements (language, project type, key concerns) before designing anything.
-3. Design the package structure and interface contracts, then write `docs/IMPL/IMPL-bootstrap.md`.
+1. **Requirements intake (Orchestrator duty).** Before launching any agent, gather requirements and write `docs/REQUIREMENTS.md` in the target project directory. This is Orchestrator work, not Scout work — it captures decisions already made by the user. Use this template:
+
+   ```markdown
+   # Requirements: <project-name>
+
+   ## Language & Ecosystem
+   <!-- e.g., TypeScript / Next.js App Router -->
+
+   ## Project Type
+   <!-- e.g., Web application (SPA with serverless API routes) -->
+
+   ## Deployment Target
+   <!-- e.g., Vercel (static + serverless) -->
+
+   ## Key Concerns (3-6 major responsibility areas)
+   <!-- These become packages/modules. Each gets its own agent. -->
+   1. ...
+   2. ...
+
+   ## Storage
+   <!-- e.g., Supabase (Postgres + Storage) -->
+
+   ## External Integrations
+   <!-- e.g., Anthropic API, Supabase Auth, Typst WASM -->
+
+   ## Source Codebase (if porting/adapting)
+   <!-- Path to existing repo the scout should analyze for domain model extraction -->
+   <!-- e.g., ~/code/rezmakr/ — Python CLI tool with collection model + AI tailoring -->
+
+   ## Architectural Decisions Already Made
+   <!-- Constraints the scout must respect, not rediscover -->
+   <!-- e.g., BYOK pricing model, Typst WASM for in-browser PDF rendering -->
+   ```
+
+   Ask the user to confirm the requirements before proceeding. If requirements were already discussed in conversation, fill in what you know and ask the user to confirm or adjust.
+
+2. Read `prompts/saw-bootstrap.md` from the scout-and-wave repository. Launch a **Scout agent** using the Agent tool with `subagent_type: scout` and `run_in_background: true`. The prompt must reference `docs/REQUIREMENTS.md` in the target project and include the path to `prompts/saw-bootstrap.md` as the procedure to follow. If `subagent_type: scout` fails, fall back to `subagent_type: general-purpose` with the contents of `prompts/saw-bootstrap.md` as its prompt. Inform the user the Scout is running.
+3. When the Scout completes, read `docs/IMPL/IMPL-bootstrap.md`.
 4. Report the architecture design and wave structure. Ask the user to review before proceeding.
 
 If no `docs/IMPL/IMPL-*.md` file exists for the current feature:
@@ -45,13 +80,13 @@ If a `docs/IMPL/IMPL-*.md` file already exists:
 7. If verification fails, report the failures and ask the user how to proceed.
 
 Arguments:
-- `bootstrap <project-description>`: Design-first architecture for new projects
-  with no existing codebase. Acts as architect rather than analyst: designs
-  disjoint file ownership before any code is written. Gathers requirements
-  (language, project type, key concerns), designs package structure and interface
-  contracts, produces a types scaffold file with all shared interfaces, and
-  writes `docs/IMPL/IMPL-bootstrap.md` with parallel implementation waves starting
-  from Wave 1. Use when starting from scratch.
+- `bootstrap <project-name>`: Design-first architecture for new projects with no
+  existing codebase. The Orchestrator writes `docs/REQUIREMENTS.md` first
+  (capturing language, deployment, integrations, and architectural decisions
+  already made), then launches a Scout agent that reads that file and designs
+  disjoint file ownership. Produces `docs/IMPL/IMPL-bootstrap.md` with interface
+  contracts, scaffolds, and parallel implementation waves. Use when starting from
+  scratch or from an empty repo.
 - `scout <feature-description>`: The Orchestrator launches a Scout agent
   (asynchronous) to analyze the codebase and produce the IMPL doc. The Scout
   runs the suitability gate first; if the work is not suitable, it writes a

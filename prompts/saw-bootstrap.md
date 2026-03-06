@@ -1,4 +1,4 @@
-<!-- saw-bootstrap v0.3.3 -->
+<!-- saw-bootstrap v0.3.4 -->
 # SAW Bootstrap: Design-First Project Architecture
 
 Use this mode when starting a new project from scratch with no existing codebase.
@@ -44,19 +44,31 @@ git commit -m "chore: initial commit"
 This costs nothing and prevents bootstrap from failing silently mid-execution
 when agents try to create worktrees or branches.
 
-## Phase 0: Gather Requirements
+## Phase 0: Read Requirements
 
-Before designing anything, ask the user:
+The Orchestrator writes `docs/REQUIREMENTS.md` in the target project directory
+before launching you. This file captures decisions already made by the user —
+language, deployment target, external integrations, source codebase to analyze,
+and architectural constraints you must respect.
 
-1. **Language + ecosystem:** Go? Python? TypeScript? Determines package/module
-   structure conventions.
-2. **Project type:** CLI tool? REST API? Library? Background worker?
-3. **Key concerns:** What are the 3-5 major responsibilities?
-   (e.g., "CLI parsing, business logic, storage, output formatting")
-4. **Storage needs:** File system? Database? In-memory only?
-5. **External integrations:** APIs, auth systems, message queues?
+**Read `docs/REQUIREMENTS.md` first.** If it does not exist, stop and report
+the error — the Orchestrator must create it before launching the Scout.
 
-Use the answers to identify the major concerns that become packages/modules.
+Extract from the requirements doc:
+1. **Language + ecosystem** — determines package/module structure conventions
+2. **Project type** — CLI, API, library, web app, etc.
+3. **Key concerns** — the 3-6 major responsibility areas that become packages
+4. **Storage needs** — file system, database, in-memory
+5. **External integrations** — APIs, auth systems, message queues
+6. **Source codebase** (if any) — path to existing repo for domain model extraction
+7. **Architectural decisions already made** — constraints to respect, not rediscover
+
+If the requirements doc references a source codebase (e.g., "porting from
+~/code/myproject/"), read the relevant source files to understand the domain
+model before designing the architecture. The requirements doc should list
+specific files or directories to analyze.
+
+Use the requirements to identify the major concerns that become packages/modules.
 Aim for 3-6 concerns: fewer means nothing to parallelize, more means
 over-engineering a bootstrap.
 

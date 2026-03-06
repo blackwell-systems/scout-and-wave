@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.6.9] | 2026-03-06 | Bootstrap: structured requirements intake via docs/REQUIREMENTS.md |
 | [0.6.8] | 2026-03-05 | IMPL docs moved to docs/IMPL/ subdirectory to reduce clutter |
 | [0.6.7] | 2026-03-05 | Wave Agent: explicit worktree isolation protocol using git -C flag |
 | [0.6.6] | 2026-03-04 | Custom agent subtypes (optional); scout agent definition synced to v0.4.0; suitability gate question count fix |
@@ -38,6 +39,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.1.0] | 2026-02-27 | Initial release |
 
 ---
+
+## [0.6.9] - 2026-03-06
+
+### Changed
+
+- **Bootstrap: structured requirements intake** (`prompts/saw-skill.md`, `prompts/saw-bootstrap.md`):
+  The bootstrap flow now has a distinct pre-Scout step where the Orchestrator
+  writes `docs/REQUIREMENTS.md` in the target project before launching the Scout
+  agent. This file captures language, deployment target, external integrations,
+  source codebase path, and architectural decisions already made. The Scout reads
+  this file instead of receiving ad-hoc context in a massive prompt.
+
+  **Why:** In practice, bootstrap requirements emerge organically over long
+  conversations. By the time the Scout launches, context has been lost to
+  compaction or scattered across chat history. A persistent requirements file
+  survives session boundaries, gives the Scout structured input, and makes
+  architectural constraints explicit rather than buried in prose.
+
+  Files changed:
+  - `prompts/saw-skill.md` v0.4.1: Bootstrap argument writes `docs/REQUIREMENTS.md`
+    with structured template, asks user to confirm, then launches Scout referencing it
+  - `prompts/saw-bootstrap.md` v0.3.4: Phase 0 changed from interactive question
+    gathering to reading `docs/REQUIREMENTS.md`; fails fast if file missing
 
 ## [0.6.7] - 2026-03-05
 
