@@ -60,7 +60,7 @@ Scout-and-wave fixes this before any agent starts, through four participants: th
 
 - **Wave Agents:** asynchronous agents launched by the Orchestrator in parallel (multiple agents per wave). Each owns a disjoint set of files, implements against the pre-defined interface contracts, runs the verification gate, commits its work, and writes a structured completion report (interface deviations, out-of-scope discoveries, verification result). Build and test gates verify each wave before the next begins.
 
-The protocol has a built-in suitability gate. The scout answers five questions before producing any agent prompts:
+The protocol has a built-in **suitability gate**: the scout answers five questions before producing any agent prompts:
 
 1. Can the work decompose into disjoint file groups?
 2. Are there investigation-first blockers?
@@ -68,7 +68,7 @@ The protocol has a built-in suitability gate. The scout answers five questions b
 4. Are any items already implemented?
 5. Does parallelization gain exceed the overhead of scout + merge?
 
-If any question is a hard blocker, the scout emits NOT SUITABLE and stops. **SAW isn't for everything.** A poor-fit assessment is useful output: it tells you SAW isn't the right tool before any agent spends time on it. This prevents bad decompositions.
+If any of these five questions is a hard blocker, the scout emits NOT SUITABLE and stops. **SAW isn't for everything.** A poor-fit assessment is useful output: it tells you SAW isn't the right tool before any agent spends time on it. This prevents bad decompositions.
 
 When all preconditions hold and all invariants are maintained, the protocol provides a concrete correctness guarantee: if the suitability gate passes and the verification gates pass, the work was safe to parallelize. That's the difference between parallel agents with coordination overhead and parallel agents with structural safety properties.
 
