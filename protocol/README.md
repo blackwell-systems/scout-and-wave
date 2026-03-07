@@ -22,7 +22,7 @@ Read these documents in order to understand the complete protocol:
 
 **To implement SAW in a new runtime:**
 
-1. Read protocol docs in order: participants → preconditions → invariants → execution-rules → state-machine → message-formats → procedures
+1. Read the protocol docs in the order listed in the Navigation table above
 2. Identify which participant roles your runtime will support (minimum: Orchestrator + Wave Agent)
 3. Choose an isolation mechanism that satisfies I1 (worktree isolation): git worktrees, filesystem snapshots, containers, etc.
 4. Implement the state machine transitions (see [state-machine.md](state-machine.md))

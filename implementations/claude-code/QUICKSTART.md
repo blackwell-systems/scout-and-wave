@@ -4,7 +4,7 @@ This guide walks you through your first SAW session step-by-step, showing exactl
 
 ## Prerequisites
 
-Before starting, ensure you've completed the [installation steps](../README.md#install) in the main README:
+Before starting, ensure you've completed the [installation steps](README.md#installation) in the main README:
 - [x] Permissions configured (`"Agent"` in allow list)
 - [x] Repository cloned
 - [x] Skill installed (`~/.claude/commands/saw.md`)
@@ -536,7 +536,7 @@ Solution: Check `~/.claude/commands/saw.md` exists and restart Claude Code.
 
 **Problem: "Agent tool not allowed"**
 
-Solution: Add `"Agent"` to `~/.claude/settings.json` permissions allow list (see [Install -> Step 1](../README.md#install)).
+Solution: Add `"Agent"` to `~/.claude/settings.json` permissions allow list (see [Install -> Step 1](README.md#installation)).
 
 **Problem: Scaffold Agent says "Build failed"**
 

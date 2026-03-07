@@ -25,15 +25,24 @@ SAW fixes this before any agent starts, through four participants coordinating w
 
 **Key mechanisms:**
 
-- **Orchestrator:** Synchronous agent in your session. Launches Scout and Wave Agents, enforces file ownership, executes merge procedure, runs verification gates. Human reviews and approves through it directly.
+- **Orchestrator:** Synchronous coordination agent in your session. Launches Scout and Wave Agents, enforces file ownership, executes merge procedure, runs verification gates. Human reviews and approves through it directly.
 
 - **Scout:** Asynchronous agent. Analyzes codebase, produces IMPL doc with dependency graph, interface contracts, file ownership table, and wave structure. Every file assigned to exactly one agent. Resolves ownership conflicts at planning time or declares work NOT SUITABLE.
 
-- **Scaffold Agent:** Asynchronous agent. Creates shared type files from IMPL doc contracts, verifies compilation, commits to HEAD. Runs once before any Wave Agent launches. If compilation fails, wave stops before worktrees are created.
+- **Scaffold Agent:** Asynchronous agent. Creates shared type files (called "scaffolds") from IMPL doc contracts, verifies compilation, commits to HEAD. Runs once before any Wave Agent launches. If compilation fails, wave stops before worktrees are created.
 
 - **Wave Agents:** Asynchronous agents running in parallel. Each owns disjoint files, implements against frozen interface contracts, runs verification gate, commits work, writes completion report.
 
 The protocol has a built-in **suitability gate** that answers five questions before producing any agent prompts. If preconditions don't hold, the scout emits NOT SUITABLE and stops. **SAW isn't for everything.** A poor-fit assessment prevents bad decompositions.
+
+The five questions assess whether the work:
+1. Decomposes into independent files
+2. Avoids investigation-first blockers
+3. Has discoverable interfaces
+4. Doesn't require pre-implementation scanning
+5. Provides value from parallelization
+
+See [protocol/preconditions.md](protocol/preconditions.md) for details.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/saw-scout-wave-dark.svg">
@@ -112,6 +121,8 @@ Neither constraint substitutes for the other. Disjoint ownership without worktre
 ### Worktree Isolation Defense (5 layers)
 
 Agents don't always respect isolation instructions. v0.6.0 adds a layered defense model that treats worktree isolation as an infrastructure problem, not a cooperation problem:
+
+(Layers numbered 0-4. Layer 0 is the foundational prevention layer; higher layers add defense-in-depth.)
 
 | Layer | Mechanism | Type |
 |-------|-----------|------|
