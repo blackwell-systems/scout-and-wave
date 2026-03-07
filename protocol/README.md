@@ -30,9 +30,6 @@ Read these documents in order to understand the complete protocol:
 6. Verify your implementation satisfies all six invariants (see [invariants.md](invariants.md))
 7. Test with a multi-agent feature that meets all five preconditions (see [preconditions.md](preconditions.md))
 
-**For manual orchestration:**
-
-Humans can orchestrate SAW workflows without tooling by following the execution rules manually. See `implementations/manual/` for step-by-step guides on running each participant role.
 
 ## Protocol Guarantees
 
@@ -54,6 +51,5 @@ Current version: **0.8.0**
 ## Reference Implementations
 
 - **Claude Code:** `implementations/claude-code/` — Fully automated implementation using Claude Code's agent runtime and git worktree isolation
-- **Manual:** `implementations/manual/` — Human-executable guides for orchestrating SAW workflows without tooling
 
 Each implementation documents its deviations (if any) from this specification.

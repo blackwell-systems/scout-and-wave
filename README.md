@@ -115,9 +115,8 @@ The protocol is defined independent of any implementation. Read these to underst
 SAW can be executed in different ways:
 
 - **[implementations/claude-code/](implementations/claude-code/)** - Fully automated implementation using Claude Code
-- **[implementations/manual/](implementations/manual/)** - Human-executable guides for manual orchestration
 
-See **[implementations/README.md](implementations/README.md)** for a comparison table and guidance on choosing an implementation.
+See **[implementations/README.md](implementations/README.md)** for details.
 
 ## When to Use It
 
@@ -160,7 +159,7 @@ To implement SAW in a different runtime (Python, Rust, TypeScript, etc.):
 1. Read protocol docs in order: [participants](protocol/participants.md) → [preconditions](protocol/preconditions.md) → [invariants](protocol/invariants.md) → [execution-rules](protocol/execution-rules.md) → [state-machine](protocol/state-machine.md) → [message-formats](protocol/message-formats.md) → [procedures](protocol/procedures.md)
 2. Identify which participant roles your runtime will support (minimum: Orchestrator + Wave Agent)
 3. Choose an isolation mechanism that satisfies I1 (worktree isolation): git worktrees, filesystem snapshots, containers, etc.
-4. Use [implementations/manual/](implementations/manual/) guides as reference for orchestrator logic
+4. Use the [protocol/](protocol/) specification as reference for orchestrator logic
 5. Use [templates/](templates/) for fillable IMPL doc and agent prompt templates
 6. Verify your implementation satisfies all six invariants (I1-I6)
 
