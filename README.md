@@ -4,6 +4,8 @@
 ![Version](https://img.shields.io/badge/version-0.9.3-blue)
 [![Agent Skills](assets/badge-agentskills.svg)](https://agentskills.io)
 
+SAW is published as an [Agent Skill](https://agentskills.io) — a portable, tool-agnostic package for adding capabilities to AI coding agents.
+
 **Parallel AI agents that don't break each other's code.**
 
 Other multi-agent frameworks run fast and merge chaos. SAW gives every agent its own worktree, assigns every file to exactly one agent, and shows you the full plan before any agent touches your code. Conflicts are resolved at planning time - not at merge time, after two agents have already built divergent solutions.
@@ -34,8 +36,8 @@ Four participants coordinate within a single session: the **Orchestrator** (your
 **What happens when you run SAW:**
 
 1. You run `/saw scout "feature"` → Scout analyzes codebase, assigns files to agents
-2. Scout writes IMPL doc (implementation plan with file ownership and interface contracts) → You review wave structure
-3. You run `/saw wave` → Scaffold Agent creates shared types (if needed)
+2. Scout writes IMPL doc (implementation document — a markdown coordination artifact that defines file ownership, interface contracts, and wave structure for the feature) → You review the wave structure (waves are groups of agents that execute in parallel)
+3. You run `/saw wave` → Scaffold Agent creates scaffold files (type/interface definitions shared across agents, created before any wave launches) if needed
 4. Wave Agents launch in parallel → Each works in isolated worktree on disjoint files
 5. Orchestrator merges → Runs tests → Cleans up worktrees
 
@@ -75,7 +77,10 @@ See [protocol/preconditions.md](protocol/preconditions.md) for details.
 # 1. Clone and install
 git clone https://github.com/blackwell-systems/scout-and-wave.git ~/code/scout-and-wave
 
-# Create skill directory and symlink files (see implementations/claude-code/README.md for full install)
+# Quick install
+~/code/scout-and-wave/install.sh
+
+# Or manually (see implementations/claude-code/README.md for full install):
 mkdir -p ~/.claude/skills/saw/agents
 ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/saw-skill.md ~/.claude/skills/saw/SKILL.md
 ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/saw-bootstrap.md ~/.claude/skills/saw/saw-bootstrap.md
@@ -101,6 +106,17 @@ The scout produces an **Implementation Document (IMPL doc)** (`docs/IMPL/IMPL-<f
 
 **First time using SAW?** See [implementations/claude-code/QUICKSTART.md](implementations/claude-code/QUICKSTART.md) for step-by-step guidance with example output.
 
+## Ways to Use SAW
+
+SAW has two interfaces backed by two separate repositories, both implementing the same protocol.
+
+| Interface | Repository | Description |
+|-----------|------------|-------------|
+| Claude Code skill (`/saw`) | [scout-and-wave](https://github.com/blackwell-systems/scout-and-wave) (this repo) | Runs inside Claude Code as a slash command. The orchestrator is Claude itself. Fastest way to get started. |
+| Standalone CLI (`saw`) | [scout-and-wave-go](https://github.com/blackwell-systems/scout-and-wave-go) | Go binary with built-in web UI (`saw serve`). Supports both API and CLI backends. Works with Claude Max (no API key required). |
+
+Both implement the same SAW protocol and produce identical IMPL docs. Use the Claude Code skill to start quickly. Use the Go CLI when you want a standalone binary, the web UI, or Claude Max support.
+
 ## Documentation
 
 ### Protocol Specification
@@ -110,8 +126,8 @@ The protocol is defined independent of any implementation. Read these to underst
 - **[protocol/README.md](protocol/README.md)** - Protocol overview and navigation guide
 - **[protocol/participants.md](protocol/participants.md)** - Four participant roles and their responsibilities
 - **[protocol/preconditions.md](protocol/preconditions.md)** - Five preconditions for suitability gate
-- **[protocol/invariants.md](protocol/invariants.md)** - Six invariants that ensure correctness (I1-I6)
-- **[protocol/execution-rules.md](protocol/execution-rules.md)** - Ten rules governing state transitions and merges
+- **[protocol/invariants.md](protocol/invariants.md)** - Six invariants (I1–I6) — formal correctness rules that every implementation must satisfy (e.g., I1: worktree isolation, I2: disjoint file ownership)
+- **[protocol/execution-rules.md](protocol/execution-rules.md)** - Ten execution rules (E1–E14) governing state transitions and merges
 - **[protocol/state-machine.md](protocol/state-machine.md)** - Protocol states and transitions
 - **[protocol/message-formats.md](protocol/message-formats.md)** - IMPL doc and completion report schemas
 - **[protocol/procedures.md](protocol/procedures.md)** - Step-by-step merge and verification procedures
@@ -167,7 +183,7 @@ To implement SAW in a different runtime (Python, Rust, TypeScript, etc.):
 3. Choose an isolation mechanism that satisfies I1 (worktree isolation): git worktrees, filesystem snapshots, containers, etc.
 4. Use the [protocol/](protocol/) specification as reference for orchestrator logic
 5. Use [protocol/message-formats.md](protocol/message-formats.md) as reference for IMPL doc structure and message schemas
-6. Verify your implementation satisfies all six invariants (I1-I6)
+6. Verify your implementation satisfies all six invariants (I1–I6) defined in [protocol/invariants.md](protocol/invariants.md)
 
 See [protocol/README.md](protocol/README.md) for the full adoption guide.
 

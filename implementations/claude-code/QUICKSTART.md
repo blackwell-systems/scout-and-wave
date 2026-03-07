@@ -553,5 +553,5 @@ Solution: This is the point of the unscoped test gate. Fix the cross-package iss
 ## Further Reading
 
 - [README](../README.md) - Main documentation
-- [PROTOCOL.md](../PROTOCOL.md) - Formal specification
+- [Protocol specification](../../protocol/) - Formal specification
 - [Blog series](https://blog.blackwell-systems.com/posts/scout-and-wave/) - Pattern evolution and lessons learned
