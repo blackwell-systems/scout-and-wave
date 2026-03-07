@@ -12,7 +12,11 @@ allowed-tools: |
   Read, Write, Glob, Grep, Bash(git *), Bash(cd *), Bash(mkdir *),
   Agent(subagent_type=scout), Agent(subagent_type=scaffold-agent),
   Agent(subagent_type=wave-agent)
-version: 0.5.0
+license: MIT
+compatibility: Requires Claude Code (Skills API). Git 2.20+ required for worktree support.
+metadata:
+  author: blackwell-systems
+  version: "0.5.0"
 ---
 
 # Scout-and-Wave: Parallel Agent Coordination
