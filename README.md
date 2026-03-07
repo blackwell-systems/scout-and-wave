@@ -63,6 +63,8 @@ See [protocol/preconditions.md](protocol/preconditions.md) for details.
 
 > **⚠️ BEFORE YOU START:** Add `"Agent"` to your allow list in `~/.claude/settings.json` or you'll need to manually approve each agent launch. See [implementations/claude-code/README.md](implementations/claude-code/README.md#step-1-configure-permissions-required) for details.
 
+> **ℹ️ Claude Code implementation shown below.** The `/saw` commands use Claude Code's Agent Skills syntax. Other Agent Skills-compatible tools (Cursor, GitHub Copilot, etc.) use their own invocation syntax — see [`implementations/`](implementations/) for the appropriate guide.
+
 ```bash
 # 1. Clone and install
 git clone https://github.com/blackwell-systems/scout-and-wave.git ~/code/scout-and-wave
