@@ -1,7 +1,7 @@
 # Scout-and-Wave: A Protocol for Safely Parallelizing Human-Guided Agentic Workflows
 
 [![Blackwell Systems™](https://raw.githubusercontent.com/blackwell-systems/blackwell-docs-theme/main/badge-trademark.svg)](https://github.com/blackwell-systems)
-![Version](https://img.shields.io/badge/version-0.6.2-blue)
+![Version](https://img.shields.io/badge/version-0.8.0-blue)
 
 A coordination protocol for safely parallelizing human-guided agentic workflows. Defines participant roles, preconditions, ownership invariants, and verification gates that guarantee agents can work concurrently without conflicts. Human review checkpoints are structural: the protocol does not advance past the suitability gate or between waves without human approval.
 
@@ -18,7 +18,7 @@ SAW fixes this before any agent starts, through four participants coordinating w
 **What happens when you run SAW:**
 
 1. You run `/saw scout "feature"` → Scout analyzes codebase, assigns files to agents
-2. Scout writes IMPL doc → You review interface contracts and wave structure
+2. Scout writes IMPL doc (implementation plan with file ownership and interface contracts) → You review wave structure
 3. You run `/saw wave` → Scaffold Agent creates shared types (if needed)
 4. Wave Agents launch in parallel → Each works in isolated worktree on disjoint files
 5. Orchestrator merges → Runs tests → Cleans up worktrees
@@ -74,7 +74,7 @@ The protocol is defined independent of any implementation. Read these to underst
 - **[protocol/README.md](protocol/README.md)** - Protocol overview and navigation guide
 - **[protocol/participants.md](protocol/participants.md)** - Four participant roles and their responsibilities
 - **[protocol/preconditions.md](protocol/preconditions.md)** - Five preconditions for suitability gate
-- **[protocol/invariants.md](protocol/invariants.md)** - Seven invariants that ensure correctness (I1-I7)
+- **[protocol/invariants.md](protocol/invariants.md)** - Six invariants that ensure correctness (I1-I6)
 - **[protocol/execution-rules.md](protocol/execution-rules.md)** - Ten rules governing state transitions and merges
 - **[protocol/state-machine.md](protocol/state-machine.md)** - Protocol states and transitions
 - **[protocol/message-formats.md](protocol/message-formats.md)** - IMPL doc and completion report schemas
@@ -132,7 +132,7 @@ To implement SAW in a different runtime (Python, Rust, TypeScript, etc.):
 3. Choose an isolation mechanism that satisfies I1 (worktree isolation): git worktrees, filesystem snapshots, containers, etc.
 4. Use [implementations/manual/](implementations/manual/) guides as reference for orchestrator logic
 5. Use [templates/](templates/) for fillable IMPL doc and agent prompt templates
-6. Verify your implementation satisfies all seven invariants (I1-I7)
+6. Verify your implementation satisfies all six invariants (I1-I6)
 
 See [protocol/README.md](protocol/README.md) for the full adoption guide.
 
