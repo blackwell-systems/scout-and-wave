@@ -160,7 +160,7 @@ To implement SAW in a different runtime (Python, Rust, TypeScript, etc.):
 2. Identify which participant roles your runtime will support (minimum: Orchestrator + Wave Agent)
 3. Choose an isolation mechanism that satisfies I1 (worktree isolation): git worktrees, filesystem snapshots, containers, etc.
 4. Use the [protocol/](protocol/) specification as reference for orchestrator logic
-5. Use [templates/](templates/) for fillable IMPL doc and agent prompt templates
+5. Use [protocol/message-formats.md](protocol/message-formats.md) as reference for IMPL doc structure and message schemas
 6. Verify your implementation satisfies all six invariants (I1-I6)
 
 See [protocol/README.md](protocol/README.md) for the full adoption guide.
