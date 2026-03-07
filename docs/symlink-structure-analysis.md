@@ -2,6 +2,14 @@
 
 **Date:** 2026-03-06
 
+## TL;DR
+
+**Source of truth:** `implementations/claude-code/prompts/` (all actual files live here)
+
+**Installation:** Symlink from source → `~/.claude/skills/saw/` (not commands anymore)
+
+**Pattern:** Same as current setup, just different target directory + skills API features
+
 ## Directory Structure Discovery
 
 ### Repository Structure (scout-and-wave)
@@ -10,7 +18,7 @@
 scout-and-wave/
 ├── .claude/
 │   └── commands/
-│       └── saw.md -> ../../prompts/saw-skill.md (SYMLINK)
+│       └── saw.md -> ../../prompts/saw-skill.md (CURRENT - will migrate to skills/)
 ├── prompts/ -> implementations/claude-code/prompts/ (SYMLINK)
 ├── hooks/ -> implementations/claude-code/hooks/ (SYMLINK)
 ├── examples/ -> implementations/claude-code/examples/ (SYMLINK)
@@ -31,41 +39,21 @@ scout-and-wave/
                 └── scaffold-agent.md (23,467 bytes)
 ```
 
-### Workspace Global Structure
+### Workspace Global Structure (Current)
 
 ```
 /Users/dayna.blackwell/workspace/.claude/
 ├── commands/
-│   └── saw.md -> /Users/dayna.blackwell/code/scout-and-wave/prompts/saw-skill.md (SYMLINK)
+│   └── saw.md -> /Users/dayna.blackwell/code/scout-and-wave/prompts/saw-skill.md
 └── agents/
-    ├── scout.md -> /Users/dayna.blackwell/code/scout-and-wave/prompts/agents/scout.md (SYMLINK)
-    ├── wave-agent.md -> /Users/dayna.blackwell/code/scout-and-wave/prompts/agents/wave-agent.md (SYMLINK)
-    └── scaffold-agent.md -> /Users/dayna.blackwell/code/scout-and-wave/prompts/agents/scaffold-agent.md (SYMLINK)
+    ├── scout.md -> /Users/dayna.blackwell/code/scout-and-wave/prompts/agents/scout.md
+    ├── wave-agent.md -> /Users/dayna.blackwell/code/scout-and-wave/prompts/agents/wave-agent.md
+    └── scaffold-agent.md -> /Users/dayna.blackwell/code/scout-and-wave/prompts/agents/scaffold-agent.md
 ```
 
-### Personal ~/.claude Directory
-
-```
-/Users/dayna.blackwell/.claude/
-├── skills/ (DOES NOT EXIST)
-└── commands/ (DOES NOT EXIST)
-```
-
-**Note:** No personal global skills/commands for SAW. All access is through:
-1. Local repo `.claude/commands/` (when working in scout-and-wave)
-2. Workspace global `/workspace/.claude/commands/` (when working in any project under /workspace)
-
-## Resolution Chain
+## Resolution Chain (Current)
 
 ### For saw-skill.md
-
-**From repo local:**
-```
-.claude/commands/saw.md
-  → ../../prompts/saw-skill.md
-  → ../../implementations/claude-code/prompts/saw-skill.md (via prompts/ symlink)
-  → implementations/claude-code/prompts/saw-skill.md (ACTUAL FILE)
-```
 
 **From workspace global:**
 ```
@@ -74,8 +62,6 @@ scout-and-wave/
   → /Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/prompts/saw-skill.md
   → implementations/claude-code/prompts/saw-skill.md (ACTUAL FILE)
 ```
-
-Both resolve to the same actual file.
 
 ## Supporting Files Location
 
@@ -113,124 +99,65 @@ environment variable, or fall back to `~/code/scout-and-wave/prompts/`.
 3. Requires SAW_REPO environment variable for portability
 4. Complex logic with multiple fallback strategies
 
-## Implications for ${CLAUDE_SKILL_DIR}
+## Proposed Solution: Skills API Migration
 
-### Current Setup (Command-based)
+### What Changes
 
+**Location:**
 ```
-Location: .claude/commands/saw.md
-${CLAUDE_SKILL_DIR}: NOT AVAILABLE (only available for skills/)
-Relative path to supporting files: ../../../implementations/claude-code/prompts/
-```
-
-### Option A: Convert to Proper Skill (Project-local)
-
-```
-New location: .claude/skills/saw/SKILL.md
-${CLAUDE_SKILL_DIR}: /Users/dayna.blackwell/code/scout-and-wave/.claude/skills/saw
-Relative to supporting files: ../../../implementations/claude-code/prompts/
+OLD: ~/.claude/commands/saw.md
+NEW: ~/.claude/skills/saw/SKILL.md
 ```
 
-**File structure:**
+**Supporting files:**
 ```
-.claude/skills/saw/
-└── SKILL.md -> ../../../implementations/claude-code/prompts/saw-skill.md
-```
-
-**Supporting file reference in SKILL.md:**
-```markdown
-Read the agent template at `${CLAUDE_SKILL_DIR}/../../../implementations/claude-code/prompts/agent-template.md`
+OLD: Not co-located, complex path resolution
+NEW: Symlinked into skill directory, simple ${CLAUDE_SKILL_DIR} reference
 ```
 
-### Option B: Convert to Proper Skill (Workspace global)
-
+**Path resolution:**
 ```
-New location: /workspace/.claude/skills/saw/SKILL.md
-${CLAUDE_SKILL_DIR}: /Users/dayna.blackwell/workspace/.claude/skills/saw
-Absolute reference: /Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/prompts/
+OLD: 3 fallback strategies (relative, env var, hardcoded)
+NEW: 1 strategy (${CLAUDE_SKILL_DIR}/filename.md)
 ```
 
-**Still requires absolute path or environment variable.**
+### What Stays the Same
 
-### Option C: Bundle Supporting Files with Skill
+- ✅ Source of truth: `implementations/claude-code/prompts/` (unchanged)
+- ✅ Symlink-based installation (same pattern)
+- ✅ git pull updates everything (same benefit)
+- ✅ Single edit point (same as before)
+
+### New Directory Structure
 
 ```
-.claude/skills/saw/
-├── SKILL.md
-├── saw-bootstrap.md -> ../../../implementations/claude-code/prompts/saw-bootstrap.md
-├── saw-merge.md -> ../../../implementations/claude-code/prompts/saw-merge.md
-├── saw-worktree.md -> ../../../implementations/claude-code/prompts/saw-worktree.md
-├── agent-template.md -> ../../../implementations/claude-code/prompts/agent-template.md
+~/.claude/skills/saw/
+├── SKILL.md -> ~/code/scout-and-wave/implementations/claude-code/prompts/saw-skill.md
+├── saw-bootstrap.md -> ~/code/scout-and-wave/implementations/claude-code/prompts/saw-bootstrap.md
+├── saw-merge.md -> ~/code/scout-and-wave/implementations/claude-code/prompts/saw-merge.md
+├── saw-worktree.md -> ~/code/scout-and-wave/implementations/claude-code/prompts/saw-worktree.md
+├── agent-template.md -> ~/code/scout-and-wave/implementations/claude-code/prompts/agent-template.md
 └── agents/
-    ├── scout.md -> ../../../../implementations/claude-code/prompts/agents/scout.md
-    ├── wave-agent.md -> ../../../../implementations/claude-code/prompts/agents/wave-agent.md
-    └── scaffold-agent.md -> ../../../../implementations/claude-code/prompts/agents/scaffold-agent.md
+    ├── scout.md -> ~/code/scout-and-wave/implementations/claude-code/prompts/agents/scout.md
+    ├── wave-agent.md -> ~/code/scout-and-wave/implementations/claude-code/prompts/agents/wave-agent.md
+    └── scaffold-agent.md -> ~/code/scout-and-wave/implementations/claude-code/prompts/agents/scaffold-agent.md
 ```
 
-**Supporting file reference in SKILL.md:**
-```markdown
-Read the agent template at `${CLAUDE_SKILL_DIR}/agent-template.md`
-```
+## Path References Update
 
-**Advantages:**
-- Simplest path resolution
-- All supporting files discoverable from skill directory
-- No complex fallback logic needed
-- Works with `${CLAUDE_SKILL_DIR}` naturally
+### In saw-skill.md
 
-**Disadvantages:**
-- More symlinks to manage
-- Duplication of structure (but not content, thanks to symlinks)
+**Replace all instances like this:**
 
-## Recommended Approach
+| Old Reference | New Reference |
+|--------------|---------------|
+| `prompts/agent-template.md` + fallbacks | `${CLAUDE_SKILL_DIR}/agent-template.md` |
+| `prompts/saw-bootstrap.md` + fallbacks | `${CLAUDE_SKILL_DIR}/saw-bootstrap.md` |
+| `prompts/saw-merge.md` + fallbacks | `${CLAUDE_SKILL_DIR}/saw-merge.md` |
+| `prompts/saw-worktree.md` + fallbacks | `${CLAUDE_SKILL_DIR}/saw-worktree.md` |
+| `prompts/agents/scout.md` + fallbacks | `${CLAUDE_SKILL_DIR}/agents/scout.md` |
 
-### Phase 1: Add to Enhancement Analysis (Completed)
-
-Document the symlink structure and path resolution implications.
-
-### Phase 2: Create Skill Directory Structure (Immediate)
-
-**Convert from command to skill while maintaining current source location:**
-
-```bash
-# Create skill directory
-mkdir -p .claude/skills/saw
-
-# Move the command symlink to skill location
-mv .claude/commands/saw.md .claude/skills/saw/SKILL.md
-
-# Create symlinks for supporting files in skill directory
-cd .claude/skills/saw
-ln -s ../../../implementations/claude-code/prompts/saw-bootstrap.md saw-bootstrap.md
-ln -s ../../../implementations/claude-code/prompts/saw-merge.md saw-merge.md
-ln -s ../../../implementations/claude-code/prompts/saw-worktree.md saw-worktree.md
-ln -s ../../../implementations/claude-code/prompts/agent-template.md agent-template.md
-
-# Create agents subdirectory
-mkdir -p agents
-cd agents
-ln -s ../../../../implementations/claude-code/prompts/agents/scout.md scout.md
-ln -s ../../../../implementations/claude-code/prompts/agents/wave-agent.md wave-agent.md
-ln -s ../../../../implementations/claude-code/prompts/agents/scaffold-agent.md scaffold-agent.md
-```
-
-**Result:**
-```
-.claude/skills/saw/
-├── SKILL.md -> ../../../implementations/claude-code/prompts/saw-skill.md
-├── saw-bootstrap.md -> ../../../implementations/claude-code/prompts/saw-bootstrap.md
-├── saw-merge.md -> ../../../implementations/claude-code/prompts/saw-merge.md
-├── saw-worktree.md -> ../../../implementations/claude-code/prompts/saw-worktree.md
-├── agent-template.md -> ../../../implementations/claude-code/prompts/agent-template.md
-└── agents/
-    ├── scout.md -> ../../../../implementations/claude-code/prompts/agents/scout.md
-    ├── wave-agent.md -> ../../../../implementations/claude-code/prompts/agents/wave-agent.md
-    └── scaffold-agent.md -> ../../../../implementations/claude-code/prompts/agents/scaffold-agent.md
-```
-
-### Phase 3: Update saw-skill.md Path References
-
-**Replace this (line 24):**
+**Example before:**
 ```markdown
 Read the agent template at `prompts/agent-template.md` from the scout-and-wave
 repository for the 9-field agent prompt format. If these files are not in the
@@ -238,42 +165,89 @@ current project, look for them at the path configured in the SAW_REPO
 environment variable, or fall back to `~/code/scout-and-wave/prompts/`.
 ```
 
-**With this:**
+**Example after:**
 ```markdown
 Read the agent template at `${CLAUDE_SKILL_DIR}/agent-template.md` for the
 9-field agent prompt format.
 ```
 
-**Similarly, all supporting file references:**
+## Migration Steps
 
-| Old Reference | New Reference |
-|--------------|---------------|
-| `prompts/saw-bootstrap.md` | `${CLAUDE_SKILL_DIR}/saw-bootstrap.md` |
-| `prompts/saw-merge.md` | `${CLAUDE_SKILL_DIR}/saw-merge.md` |
-| `prompts/saw-worktree.md` | `${CLAUDE_SKILL_DIR}/saw-worktree.md` |
-| `prompts/agent-template.md` | `${CLAUDE_SKILL_DIR}/agent-template.md` |
-| `prompts/agents/scout.md` | `${CLAUDE_SKILL_DIR}/agents/scout.md` |
+### 1. Update Source File
 
-### Phase 4: Update Workspace Global Symlink
+**File:** `implementations/claude-code/prompts/saw-skill.md`
+
+**Changes:**
+1. Add YAML frontmatter at top
+2. Replace all path references with `${CLAUDE_SKILL_DIR}/filename.md`
+3. Add supporting files section
+4. Update version to 0.5.0
+
+### 2. Update Installation Instructions
+
+**File:** `implementations/claude-code/README.md`
+
+**Update Step 3 from:**
+```bash
+cp ~/code/scout-and-wave/implementations/claude-code/prompts/saw-skill.md \
+   ~/.claude/commands/saw.md
+```
+
+**To:**
+```bash
+# Create skill directory
+mkdir -p ~/.claude/skills/saw/agents
+
+# Symlink main skill file
+ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/saw-skill.md \
+       ~/.claude/skills/saw/SKILL.md
+
+# Symlink supporting files
+ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/saw-bootstrap.md \
+       ~/.claude/skills/saw/saw-bootstrap.md
+ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/saw-merge.md \
+       ~/.claude/skills/saw/saw-merge.md
+ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/saw-worktree.md \
+       ~/.claude/skills/saw/saw-worktree.md
+ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agent-template.md \
+       ~/.claude/skills/saw/agent-template.md
+
+# Symlink agent files
+ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agents/scout.md \
+       ~/.claude/skills/saw/agents/scout.md
+ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agents/wave-agent.md \
+       ~/.claude/skills/saw/agents/wave-agent.md
+ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agents/scaffold-agent.md \
+       ~/.claude/skills/saw/agents/scaffold-agent.md
+```
+
+### 3. Migrate Personal/Workspace Global Installations
 
 ```bash
 # Remove old command symlink
-rm /Users/dayna.blackwell/workspace/.claude/commands/saw.md
+rm ~/.claude/commands/saw.md 2>/dev/null
+rm /workspace/.claude/commands/saw.md 2>/dev/null
 
-# Create new skills directory if needed
-mkdir -p /Users/dayna.blackwell/workspace/.claude/skills/saw
+# Create new skill directory
+mkdir -p ~/.claude/skills/saw/agents
 
-# Create symlink to project skill directory
-ln -s /Users/dayna.blackwell/code/scout-and-wave/.claude/skills/saw/SKILL.md \
-      /Users/dayna.blackwell/workspace/.claude/skills/saw/SKILL.md
+# Run the install commands from step 2
+# (Same symlinks, just in ~/.claude/skills/saw/ instead of ~/.claude/commands/)
+```
 
-# Symlink supporting files too
-cd /Users/dayna.blackwell/workspace/.claude/skills/saw
-ln -s /Users/dayna.blackwell/code/scout-and-wave/.claude/skills/saw/saw-bootstrap.md
-ln -s /Users/dayna.blackwell/code/scout-and-wave/.claude/skills/saw/saw-merge.md
-ln -s /Users/dayna.blackwell/code/scout-and-wave/.claude/skills/saw/saw-worktree.md
-ln -s /Users/dayna.blackwell/code/scout-and-wave/.claude/skills/saw/agent-template.md
-ln -s /Users/dayna.blackwell/code/scout-and-wave/.claude/skills/saw/agents agents
+### 4. Test
+
+```bash
+# Restart Claude Code
+
+# Test skill discovery
+/saw status
+
+# Test supporting file loading
+/saw bootstrap test-project
+
+# Verify ${CLAUDE_SKILL_DIR} resolves
+# (Check that Claude can find agent-template.md, saw-bootstrap.md, etc.)
 ```
 
 ## Benefits of This Approach
@@ -284,43 +258,71 @@ ln -s /Users/dayna.blackwell/code/scout-and-wave/.claude/skills/saw/agents agent
 4. **Skills API compliant:** Follows proper skill structure with supporting files
 5. **Discoverable:** All supporting files visible in skill directory
 6. **Simple logic:** No complex fallback strategies, no environment variables
+7. **Same pattern:** Symlink-based install, git pull updates, single edit point
 
-## Testing After Migration
+## Comparison: Before vs After
 
-1. **From scout-and-wave repo:**
-   ```bash
-   cd /Users/dayna.blackwell/code/scout-and-wave
-   # Test that skill is discoverable
-   # /saw status should work
-   ```
+| Aspect | Before (Command) | After (Skill) |
+|--------|------------------|---------------|
+| **Location** | `~/.claude/commands/saw.md` | `~/.claude/skills/saw/SKILL.md` |
+| **Supporting files** | Not co-located, complex paths | Symlinked into skill dir |
+| **Path resolution** | 3 strategies (relative, env, hardcoded) | 1 strategy (`${CLAUDE_SKILL_DIR}`) |
+| **Portability** | Requires SAW_REPO env var | Works anywhere |
+| **Discoverability** | Supporting files hidden | All files visible |
+| **Standards** | Legacy commands API | Skills API with frontmatter |
+| **Tool restrictions** | None | Can enforce via frontmatter |
+| **Version tracking** | HTML comment | Structured frontmatter |
+| **Source of truth** | implementations/... (unchanged) | implementations/... (unchanged) |
+| **Install method** | Symlink (unchanged) | Symlink (unchanged) |
 
-2. **From another project:**
-   ```bash
-   cd /Users/dayna.blackwell/workspace/some-other-project
-   # Test that skill is discoverable from workspace global
-   # /saw status should work
-   ```
+## Why This Works
 
-3. **Verify supporting files load:**
-   ```bash
-   # Run bootstrap and check that agent-template.md is found
-   # /saw bootstrap test-project
-   ```
+**The key insight:** We're not reorganizing the repository structure. We're just:
 
-## Migration Checklist
+1. **Changing the install target:** `commands/` → `skills/saw/`
+2. **Adding more symlinks:** Not just SKILL.md, but all supporting files too
+3. **Simplifying path logic:** Replace complex fallbacks with `${CLAUDE_SKILL_DIR}`
 
-- [ ] Create `.claude/skills/saw/` directory
-- [ ] Move `.claude/commands/saw.md` to `.claude/skills/saw/SKILL.md`
-- [ ] Create symlinks for all supporting files in skill directory
-- [ ] Update path references in `saw-skill.md` to use `${CLAUDE_SKILL_DIR}`
-- [ ] Add YAML frontmatter to `saw-skill.md`
-- [ ] Test from scout-and-wave repo
-- [ ] Update workspace global symlinks
-- [ ] Test from other projects
-- [ ] Update documentation
+The source of truth (`implementations/claude-code/prompts/`) never moves.
+The installation pattern (symlinks) stays the same.
+We just gain all the skills API features.
+
+## Rollback Plan
+
+If something breaks:
+
+```bash
+# Remove skill symlinks
+rm -rf ~/.claude/skills/saw
+
+# Restore old command symlink
+ln -sf ~/code/scout-and-wave/prompts/saw-skill.md ~/.claude/commands/saw.md
+
+# Restart Claude Code
+```
+
+The source files are unchanged, so rollback is instant.
+
+## Next Steps
+
+1. ✅ **Documented the pattern** (this file)
+2. **Update saw-skill.md** (add frontmatter, fix paths)
+3. **Update README.md** (install instructions)
+4. **Test migration** (personal install)
+5. **Update workspace global** (workspace/.claude/skills/saw/)
+6. **Document in CHANGELOG**
 
 ## Conclusion
 
-The current symlink structure already provides a single source of truth in `implementations/claude-code/prompts/`. Converting to the skills API with proper symlinks maintains this architecture while adding portability through `${CLAUDE_SKILL_DIR}`.
+The migration to skills API is straightforward because the existing pattern is already correct:
 
-The key insight: **symlink the supporting files into the skill directory**, not just the main SKILL.md file. This makes all references relative to `${CLAUDE_SKILL_DIR}` and eliminates complex path resolution logic.
+- Source of truth is centralized ✓
+- Installation is via symlinks ✓
+- git pull updates everything ✓
+
+We just need to:
+- Move symlinks from `commands/` to `skills/saw/`
+- Add symlinks for supporting files
+- Update path references to use `${CLAUDE_SKILL_DIR}`
+
+No complex reorganization needed. Same pattern, better features.

@@ -70,42 +70,66 @@ git clone https://github.com/blackwell-systems/scout-and-wave.git ~/code/scout-a
 # git clone https://github.com/blackwell-systems/scout-and-wave.git /path/you/prefer
 ```
 
-**If you clone to a non-standard location**, set `SAW_REPO` in your shell profile:
-
-```bash
-# Add to ~/.zshrc or ~/.bashrc:
-export SAW_REPO=/path/you/prefer/scout-and-wave
-```
-
 ### Step 3: Install the Skill (Required)
 
-Copy the skill file to Claude Code's commands directory:
+Create the skill directory and symlink all required files:
 
 ```bash
-cp ~/code/scout-and-wave/implementations/claude-code/prompts/saw-skill.md ~/.claude/commands/saw.md
+# Create skill directory structure
+mkdir -p ~/.claude/skills/saw/agents
 
-# If you cloned elsewhere, adjust the path:
-# cp $SAW_REPO/implementations/claude-code/prompts/saw-skill.md ~/.claude/commands/saw.md
+# Symlink main skill file
+ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/saw-skill.md \
+       ~/.claude/skills/saw/SKILL.md
+
+# Symlink supporting files
+ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/saw-bootstrap.md \
+       ~/.claude/skills/saw/saw-bootstrap.md
+ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/saw-merge.md \
+       ~/.claude/skills/saw/saw-merge.md
+ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/saw-worktree.md \
+       ~/.claude/skills/saw/saw-worktree.md
+ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agent-template.md \
+       ~/.claude/skills/saw/agent-template.md
+ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/scout.md \
+       ~/.claude/skills/saw/scout.md
+ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/scaffold-agent.md \
+       ~/.claude/skills/saw/scaffold-agent.md
+
+# If you cloned elsewhere, adjust all paths:
+# mkdir -p ~/.claude/skills/saw/agents
+# ln -sf /your/path/scout-and-wave/implementations/claude-code/prompts/saw-skill.md ~/.claude/skills/saw/SKILL.md
+# ... (repeat for all supporting files)
 ```
+
+**Why symlinks?** The SAW repo is the single source of truth. Symlinks mean `git pull` on the repo automatically updates the skill — no reinstall step needed.
+
+**What changed in v0.5.0:** The skill now uses the Claude Code Skills API instead of the legacy commands API. Supporting files are co-located in the skill directory and referenced via `${CLAUDE_SKILL_DIR}`, eliminating hardcoded paths and environment variables.
 
 ### Step 4: Install Custom Agent Types (Optional)
 
 SAW can use custom Claude Code agent types that provide structural tool restrictions (e.g., scout cannot edit source files, wave agents cannot spawn sub-agents). This is **optional** — the skill automatically falls back to `general-purpose` agents with full prompts if these are not installed.
 
+**As of v0.5.0, agent types can be symlinked into the skill directory or globally:**
+
 ```bash
-# Symlink agent types from the SAW repo to Claude Code's agents directory
+# Option A: Install agent types into the skill directory (recommended)
+ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agents/scout.md \
+       ~/.claude/skills/saw/agents/scout.md
+ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agents/wave-agent.md \
+       ~/.claude/skills/saw/agents/wave-agent.md
+ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agents/scaffold-agent.md \
+       ~/.claude/skills/saw/agents/scaffold-agent.md
+
+# Option B: Install agent types globally (works for all skills that use them)
 mkdir -p ~/.claude/agents
-ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agents/scout.md ~/.claude/agents/scout.md
-ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agents/scaffold-agent.md ~/.claude/agents/scaffold-agent.md
-ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agents/wave-agent.md ~/.claude/agents/wave-agent.md
-
-# If you cloned elsewhere, adjust the paths:
-# ln -sf $SAW_REPO/implementations/claude-code/prompts/agents/scout.md ~/.claude/agents/scout.md
-# ln -sf $SAW_REPO/implementations/claude-code/prompts/agents/scaffold-agent.md ~/.claude/agents/scaffold-agent.md
-# ln -sf $SAW_REPO/implementations/claude-code/prompts/agents/wave-agent.md ~/.claude/agents/wave-agent.md
+ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agents/scout.md \
+       ~/.claude/agents/scout.md
+ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agents/scaffold-agent.md \
+       ~/.claude/agents/scaffold-agent.md
+ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agents/wave-agent.md \
+       ~/.claude/agents/wave-agent.md
 ```
-
-**Why symlinks?** The SAW repo is the single source of truth for agent definitions. Symlinks mean `git pull` on the repo automatically updates your agent types — no reinstall step needed.
 
 **What you get:** When installed, the skill launches agents with their custom `subagent_type` (e.g., `subagent_type: scout`), which provides runtime-enforced tool restrictions and better observability. Without them, agents use `subagent_type: general-purpose` with the full prompt — functionally identical, but without structural tool enforcement.
 
@@ -121,7 +145,16 @@ Restart Claude Code (if it was already running), then in any session:
 
 **Expected output:** `"No IMPL doc found in this project"` or similar. This confirms the skill loaded successfully.
 
-If you see an error about `/saw` not being recognized, check that `saw.md` is in `~/.claude/commands/` and restart Claude Code.
+**If you see an error about `/saw` not being recognized:**
+- Check that `SKILL.md` exists in `~/.claude/skills/saw/`
+- Verify all supporting files are symlinked correctly: `ls -la ~/.claude/skills/saw/`
+- Restart Claude Code
+
+**To check symlinks:**
+```bash
+ls -la ~/.claude/skills/saw/
+# Should show symlinks pointing to implementations/claude-code/prompts/
+```
 
 ## Usage
 
@@ -191,15 +224,18 @@ This implementation uses Claude Code's tool suite:
 
 ## Skill Architecture
 
-The `/saw` skill consists of several specialized prompts:
+The `/saw` skill consists of several specialized prompts, all installed to `~/.claude/skills/saw/`:
 
-- **`prompts/saw-skill.md`** - Command router (Orchestrator role)
-- **`prompts/saw-merge.md`** - Merge procedure implementation
-- **`prompts/saw-worktree.md`** - Worktree lifecycle management
-- **`prompts/saw-bootstrap.md`** - Bootstrap mode for new projects
-- **`prompts/scout.md`** - Scout agent prompt (or `prompts/agents/scout.md` if custom types installed)
-- **`prompts/scaffold-agent.md`** - Scaffold Agent prompt
-- **`prompts/agent-template.md`** - Wave Agent template (Scout fills this to generate per-agent prompts)
+- **`SKILL.md`** (from `implementations/claude-code/prompts/saw-skill.md`) - Main orchestrator with YAML frontmatter
+- **`saw-merge.md`** - Merge procedure implementation
+- **`saw-worktree.md`** - Worktree lifecycle management
+- **`saw-bootstrap.md`** - Bootstrap mode for new projects
+- **`scout.md`** - Scout agent fallback prompt (used when custom types not installed)
+- **`scaffold-agent.md`** - Scaffold Agent fallback prompt
+- **`agent-template.md`** - Wave Agent template (Scout fills this to generate per-agent prompts)
+- **`agents/`** (optional) - Custom agent type definitions for enhanced tool restrictions
+
+All files are symlinked from `implementations/claude-code/prompts/` (the single source of truth). The skill references them via `${CLAUDE_SKILL_DIR}` for portability.
 
 ## Agent Architecture: Dual-Structure Design
 
@@ -267,8 +303,8 @@ If the work doesn't decompose cleanly, the Scout says so. It runs a suitability 
 - Restart Claude Code after modifying settings
 
 **Skill not found (`/saw` not recognized):**
-- Verify `saw.md` is in `~/.claude/commands/`
-- Check the file name is exactly `saw.md`
+- Verify `SKILL.md` is in `~/.claude/skills/saw/`
+- Check all supporting files are symlinked: `ls -la ~/.claude/skills/saw/`
 - Restart Claude Code
 
 **Worktree isolation failures:**

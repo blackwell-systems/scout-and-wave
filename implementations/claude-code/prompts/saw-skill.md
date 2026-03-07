@@ -1,5 +1,21 @@
-<!-- saw-skill v0.4.2 -->
-Scout-and-Wave: Parallel Agent Coordination
+---
+name: saw
+description: |
+  Scout-and-Wave protocol for parallel agent coordination. Use when implementing
+  features that can be decomposed into multiple independent work units with clear
+  interfaces. Suitable for: multi-package architectures, parallel refactors,
+  coordinated feature additions across modules.
+argument-hint: "[bootstrap <project-name> | scout <feature> | wave [--auto] | status]"
+disable-model-invocation: true
+user-invocable: true
+allowed-tools: |
+  Read, Write, Glob, Grep, Bash(git *), Bash(cd *), Bash(mkdir *),
+  Agent(subagent_type=scout), Agent(subagent_type=scaffold-agent),
+  Agent(subagent_type=wave-agent)
+version: 0.5.0
+---
+
+# Scout-and-Wave: Parallel Agent Coordination
 
 You are the **Orchestrator**, the synchronous agent that drives all protocol state transitions.
 You launch Scout and Wave agents; you do not do their work yourself.
@@ -21,7 +37,32 @@ enforcement; the number is the anchor for cross-referencing and audit.*
 
 **Agent type preference:** Use custom `subagent_type` values (`scout`, `scaffold-agent`, `wave-agent`) when launching agents. These provide tool-level enforcement (scout cannot Edit source, wave-agent cannot spawn sub-agents) and carry behavioral instructions in the type definition. If a custom type fails to load, fall back to `subagent_type: general-purpose` with the full prompt from the prompts directory.
 
-Read the agent template at `prompts/agent-template.md` from the scout-and-wave repository for the 9-field agent prompt format. If these files are not in the current project, look for them at the path configured in the SAW_REPO environment variable, or fall back to `~/code/scout-and-wave/prompts/`.
+## Supporting Files
+
+All supporting files are symlinked into the skill directory during installation.
+Reference them using `${CLAUDE_SKILL_DIR}/filename.md`:
+
+- **agent-template.md** - 9-field agent prompt format. Load when constructing agent prompts.
+- **saw-bootstrap.md** - Bootstrap procedure for new projects. Load when `bootstrap` argument is provided.
+- **saw-worktree.md** - Worktree creation protocol. Load before launching wave agents.
+- **saw-merge.md** - Merge procedure after wave completion. Load at merge step.
+- **agents/scout.md** - Scout subagent definition (optional, for custom agent types).
+- **agents/wave-agent.md** - Wave subagent definition (optional, for custom agent types).
+- **agents/scaffold-agent.md** - Scaffold subagent definition (optional, for custom agent types).
+
+Read the agent template at `${CLAUDE_SKILL_DIR}/agent-template.md` for the 9-field agent prompt format.
+
+## Invocation Modes
+
+| Command | Purpose |
+|---------|---------|
+| `/saw bootstrap <name>` | Design new project from scratch |
+| `/saw scout <feature>` | Analyze codebase and plan feature |
+| `/saw wave` | Execute next wave with review |
+| `/saw wave --auto` | Execute all waves automatically |
+| `/saw status` | Show current progress |
+
+## Execution Logic
 
 If the argument is `bootstrap <project-description>`:
 1. **Requirements intake (Orchestrator duty).** Before launching any agent, gather requirements and write `docs/REQUIREMENTS.md` in the target project directory. This is Orchestrator work, not Scout work — it captures decisions already made by the user. Use this template:
@@ -60,28 +101,29 @@ If the argument is `bootstrap <project-description>`:
 
    Ask the user to confirm the requirements before proceeding. If requirements were already discussed in conversation, fill in what you know and ask the user to confirm or adjust.
 
-2. Read `prompts/saw-bootstrap.md` from the scout-and-wave repository. Launch a **Scout agent** using the Agent tool with `subagent_type: scout` and `run_in_background: true`. The prompt must reference `docs/REQUIREMENTS.md` in the target project and include the path to `prompts/saw-bootstrap.md` as the procedure to follow. If `subagent_type: scout` fails, fall back to `subagent_type: general-purpose` with the contents of `prompts/saw-bootstrap.md` as its prompt. Inform the user the Scout is running.
+2. Read `${CLAUDE_SKILL_DIR}/saw-bootstrap.md` from the scout-and-wave repository. Launch a **Scout agent** using the Agent tool with `subagent_type: scout` and `run_in_background: true`. The prompt must reference `docs/REQUIREMENTS.md` in the target project and include the path to `${CLAUDE_SKILL_DIR}/saw-bootstrap.md` as the procedure to follow. If `subagent_type: scout` fails, fall back to `subagent_type: general-purpose` with the contents of `${CLAUDE_SKILL_DIR}/saw-bootstrap.md` as its prompt. Inform the user the Scout is running.
 3. When the Scout completes, read `docs/IMPL/IMPL-bootstrap.md`.
 4. Report the architecture design and wave structure. Ask the user to review before proceeding.
-5. **Scaffold Agent (conditional):** If the IMPL doc Scaffolds section is non-empty and any scaffold file has `Status: pending`, launch a **Scaffold Agent** using the Agent tool with `subagent_type: scaffold-agent` and `run_in_background: true`. The prompt parameter is the path to the IMPL doc and the feature slug. If `subagent_type: scaffold-agent` fails, fall back to `subagent_type: general-purpose` with the contents of `prompts/scaffold-agent.md` as its prompt. Use `[SAW:scaffold:bootstrap]` as the description prefix. Wait for it to complete. If any scaffold file shows `Status: FAILED`, stop — report the failure and do not create worktrees. If all files show `Status: committed`, proceed.
+5. **Scaffold Agent (conditional):** If the IMPL doc Scaffolds section is non-empty and any scaffold file has `Status: pending`, launch a **Scaffold Agent** using the Agent tool with `subagent_type: scaffold-agent` and `run_in_background: true`. The prompt parameter is the path to the IMPL doc and the feature slug. If `subagent_type: scaffold-agent` fails, fall back to `subagent_type: general-purpose` with the contents of `${CLAUDE_SKILL_DIR}/scaffold-agent.md` as its prompt. Use `[SAW:scaffold:bootstrap]` as the description prefix. Wait for it to complete. If any scaffold file shows `Status: FAILED`, stop — report the failure and do not create worktrees. If all files show `Status: committed`, proceed.
 6. **Wave 1:** Create worktrees and launch Wave 1 agents exactly as in the IMPL-exists flow (step 2 onward of that branch). The bootstrap IMPL doc is now the single source of truth; all wave execution follows the standard wave loop from this point.
 
 If no `docs/IMPL/IMPL-*.md` file exists for the current feature:
-1. Launch a **Scout agent** using the Agent tool with `subagent_type: scout` and `run_in_background: true`. The prompt parameter is the feature description (the type definition carries the full behavioral instructions). If `subagent_type: scout` fails, fall back to `subagent_type: general-purpose` with the contents of `prompts/scout.md` as its prompt and the feature description as context. The Scout analyzes the codebase, runs the suitability gate, and writes the IMPL doc; the Orchestrator does not perform this analysis itself. Inform the user that the Scout is running.
+1. Launch a **Scout agent** using the Agent tool with `subagent_type: scout` and `run_in_background: true`. The prompt parameter is the feature description (the type definition carries the full behavioral instructions). If `subagent_type: scout` fails, fall back to `subagent_type: general-purpose` with the contents of `${CLAUDE_SKILL_DIR}/scout.md` as its prompt and the feature description as context. The Scout analyzes the codebase, runs the suitability gate, and writes the IMPL doc; the Orchestrator does not perform this analysis itself. Inform the user that the Scout is running.
 2. When the Scout completes, read the resulting `docs/IMPL/IMPL-<feature-slug>.md`.
 3. Report the suitability verdict to the user, and if suitable: the wave structure, file ownership table, interface contracts, and Scaffolds section. Ask the user to review before proceeding.
-4. **Scaffold Agent (conditional):** If the IMPL doc Scaffolds section is non-empty and any scaffold file has `Status: pending`, launch a **Scaffold Agent** using the Agent tool with `subagent_type: scaffold-agent` and `run_in_background: true`. The prompt parameter is the path to the IMPL doc and the feature slug. If `subagent_type: scaffold-agent` fails, fall back to `subagent_type: general-purpose` with the contents of `prompts/scaffold-agent.md` as its prompt. Use `[SAW:scaffold:<feature-slug>]` as the description prefix so claudewatch can identify the run. The Scaffold Agent reads the approved contracts and creates the scaffold source files. Inform the user the Scaffold Agent is running. Wait for it to complete, then read the Scaffolds section: if any file shows `Status: FAILED`, stop immediately — report the failure reason to the user and do not create worktrees. The user must revise the interface contracts in the IMPL doc and re-run the Scaffold Agent. If all files show `Status: committed`, proceed.
+4. **Scaffold Agent (conditional):** If the IMPL doc Scaffolds section is non-empty and any scaffold file has `Status: pending`, launch a **Scaffold Agent** using the Agent tool with `subagent_type: scaffold-agent` and `run_in_background: true`. The prompt parameter is the path to the IMPL doc and the feature slug. If `subagent_type: scaffold-agent` fails, fall back to `subagent_type: general-purpose` with the contents of `${CLAUDE_SKILL_DIR}/scaffold-agent.md` as its prompt. Use `[SAW:scaffold:<feature-slug>]` as the description prefix so claudewatch can identify the run. The Scaffold Agent reads the approved contracts and creates the scaffold source files. Inform the user the Scaffold Agent is running. Wait for it to complete, then read the Scaffolds section: if any file shows `Status: FAILED`, stop immediately — report the failure reason to the user and do not create worktrees. The user must revise the interface contracts in the IMPL doc and re-run the Scaffold Agent. If all files show `Status: committed`, proceed.
 
 If a `docs/IMPL/IMPL-*.md` file already exists:
 1. Read it and identify the current wave (the first wave with unchecked status items). Also check the Scaffolds section: if any scaffold file has `Status: pending`, the Scaffold Agent has not yet run — spawn it now (see step 4 of the Scout flow above) before creating any worktrees. If any file shows `Status: FAILED`, stop and report the failure to the user before proceeding.
-2. **Worktree setup:** Read `prompts/saw-worktree.md` from the scout-and-wave repository and follow the pre-creation procedure. Create a worktree for each agent before launching any agents. **Interface freeze checkpoint:** interface contracts become immutable when worktrees are created. This is the last moment to revise type signatures, add fields, or restructure APIs. After this point, any interface change requires removing and recreating all worktrees for the wave. Verify that all scaffold files listed in the IMPL doc Scaffolds section show `Status: committed` before creating worktrees.
+2. **Worktree setup:** Read `${CLAUDE_SKILL_DIR}/saw-worktree.md` and follow the pre-creation procedure. Create a worktree for each agent before launching any agents. **Interface freeze checkpoint:** interface contracts become immutable when worktrees are created. This is the last moment to revise type signatures, add fields, or restructure APIs. After this point, any interface change requires removing and recreating all worktrees for the wave. Verify that all scaffold files listed in the IMPL doc Scaffolds section show `Status: committed` before creating worktrees.
 3. For each agent in the current wave, launch a parallel **Wave agent** using the Agent tool with `subagent_type: wave-agent`, `run_in_background: true`, and the agent prompt from the IMPL doc as the prompt parameter. **Cross-repository orchestration:** If the orchestrator and target repository are the same, use `isolation: "worktree"` for each agent. If orchestrating repo B from repo A, do NOT use the `isolation` parameter (it creates worktrees in repo A's context, not repo B). Instead, rely on manual worktree creation (step 2) and Field 0 cd navigation (Layer 1 + Layer 3 defense-in-depth). If `subagent_type: wave-agent` fails, fall back to `subagent_type: general-purpose` with the same prompt. **Async execution:** All Scout, Scaffold Agent, and Wave agent launches MUST use `run_in_background: true` so the Orchestrator remains responsive while agents work. Launch all agents in the current wave in a single message, then immediately inform the user that agents are running. **I1: Disjoint File Ownership:** no two agents in the same wave own the same file; this is a hard constraint, not a preference, and is the mechanism that makes parallel execution safe. Worktree isolation does not substitute for it; the IMPL doc's file ownership table is the enforcement mechanism. **I2: Interface contracts precede parallel implementation.** The Scout defines all interfaces that cross agent boundaries in the IMPL doc. The Scaffold Agent implements them as type scaffold files committed to HEAD after human review, before any Wave Agent launches. Agents implement against the spec; they never coordinate directly. Verify scaffold files are committed (Scaffolds section status) before creating worktrees. **SAW tag requirement:** The `description` parameter of every Task tool call must be prefixed with a structured SAW tag in this exact format: `[SAW:wave{N}:agent-{X}] {short description}`, where `{N}` is the 1-indexed wave number and `{X}` is the uppercase agent letter. Examples: `[SAW:wave1:agent-A] implement cache layer`, `[SAW:wave2:agent-B] add MCP tools`. This enables claudewatch to automatically parse wave timing and agent breakdown from session transcripts; structured observability with zero overhead.
 4. After all Wave agents in the wave complete, read each agent's completion report from their named section in the IMPL doc (`### Agent {letter} - Completion Report`). **I4: IMPL doc is the single source of truth.** Completion reports, interface contract updates, and status are written to the IMPL doc. Chat output is not the record. If a completion report is missing from the IMPL doc, do not proceed; the agent has not completed the protocol. **I5: Agents commit before reporting.** Each agent commits its changes to its worktree branch before writing a completion report. If a report is present but the agent's worktree branch has no commits, flag this as a protocol deviation before merging. **E7: Agent failure handling.** If any agent reports `status: partial` or `status: blocked`, the wave does not merge; it goes to BLOCKED. Resolve the failing agent (re-run, manually fix, or descope) before the merge step proceeds. Agents that completed successfully are not re-run, but their worktrees are not merged until the full wave is resolved. Partial merges are not permitted. **E7a: Automatic failure remediation in --auto mode.** When `--auto` is active and an agent fails with a correctable issue, automatically re-launch the agent with corrections (up to 2 retries per agent). Correctable failures: (a) isolation failures (wrong directory/branch) - re-launch with explicit repository context including absolute IMPL doc path; (b) missing dependencies - install and re-launch; (c) transient build errors - retry after brief delay. Non-correctable failures (logic errors, test failures, interface contract violations) always surface to the user regardless of `--auto`. Track retries per agent; after 2 failed attempts, escalate to user even in `--auto` mode. **E8: Same-wave interface failure.** If any agent reports `status: blocked` due to an interface contract being unimplementable as specified, the wave does not merge. Mark the wave BLOCKED, revise the affected contracts in the IMPL doc, and re-issue prompts to all agents whose work depends on the changed contract. Agents that completed cleanly against unaffected contracts do not re-run. The wave restarts from WAVE_PENDING with the corrected contracts.
-5. **Merge and verify:** Read `prompts/saw-merge.md` from the scout-and-wave repository and follow the merge procedure (conflict detection → merge each agent → cleanup → post-merge verification → update IMPL doc).
+5. **Merge and verify:** Read `${CLAUDE_SKILL_DIR}/saw-merge.md` and follow the merge procedure (conflict detection → merge each agent → cleanup → post-merge verification → update IMPL doc).
 6. **I3: Wave sequencing.** Wave N+1 does not launch until Wave N has been merged and post-merge verification has passed. If `--auto` was passed and verification passed, immediately proceed to the next wave. Otherwise, report the wave result and ask the user if they want to continue.
 7. If verification fails, report the failures and ask the user how to proceed.
 
-Arguments:
+## Arguments
+
 - `bootstrap <project-name>`: Design-first architecture for new projects with no
   existing codebase. The Orchestrator writes `docs/REQUIREMENTS.md` first
   (capturing language, deployment, integrations, and architectural decisions

@@ -8,6 +8,8 @@
 
 The current saw-skill implementation is functional but doesn't leverage several powerful features introduced in Claude Code's skill system. This analysis identifies 10 enhancement opportunities categorized by impact and effort, with specific implementation recommendations.
 
+**Key Pattern:** Source of truth remains in `implementations/claude-code/prompts/`. Installation continues via symlinks, just to `~/.claude/skills/saw/` instead of `~/.claude/commands/`.
+
 ## Current Implementation Assessment
 
 ### What's Working Well
@@ -16,6 +18,8 @@ The current saw-skill implementation is functional but doesn't leverage several 
 - ✅ Argument handling with `$ARGUMENTS`
 - ✅ Multiple execution modes (bootstrap, scout, wave, status)
 - ✅ Strong invariant enforcement (I1-I6, E1-E14)
+- ✅ Source of truth in `implementations/claude-code/prompts/`
+- ✅ Symlink-based installation pattern
 
 ### What's Missing
 - ❌ No YAML frontmatter metadata
@@ -26,6 +30,7 @@ The current saw-skill implementation is functional but doesn't leverage several 
 - ❌ No use of `${CLAUDE_SKILL_DIR}` for portable file references
 - ❌ Supporting files not properly documented
 - ❌ No hooks integration
+- ❌ Using old commands API instead of skills API
 
 ## Enhancement Opportunities
 
@@ -76,15 +81,28 @@ environment variable, or fall back to `~/code/scout-and-wave/prompts/`.
 
 **Enhanced:**
 ```markdown
-Read the agent template at `${CLAUDE_SKILL_DIR}/../prompts/agent-template.md`
-for the 9-field agent prompt format. All SAW protocol files are co-located in
-the skill's parent directory.
+Read the agent template at `${CLAUDE_SKILL_DIR}/agent-template.md`
+for the 9-field agent prompt format.
+```
+
+**How it works:**
+```bash
+# Source remains in implementations/claude-code/prompts/saw-skill.md (actual file)
+# Installation via symlink to ~/.claude/skills/saw/SKILL.md
+# Supporting files also symlinked into skill directory
+
+mkdir -p ~/.claude/skills/saw
+ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/saw-skill.md \
+       ~/.claude/skills/saw/SKILL.md
+ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agent-template.md \
+       ~/.claude/skills/saw/agent-template.md
 ```
 
 **Benefits:**
 - No hardcoded paths
 - Works regardless of installation location
 - Simpler logic, more reliable
+- Same symlink pattern as existing install
 
 #### 1.3 Document Supporting Files in SKILL.md
 
@@ -92,18 +110,20 @@ the skill's parent directory.
 ```markdown
 ## Supporting Files
 
-The SAW skill includes several reference documents loaded on-demand:
+All supporting files are symlinked into the skill directory during installation.
+Reference them using `${CLAUDE_SKILL_DIR}/filename.md`:
 
-- **[prompts/saw-bootstrap.md](../prompts/saw-bootstrap.md)** - Bootstrap procedure
-  for new projects. Load when `bootstrap` argument is provided.
-- **[prompts/agent-template.md](../prompts/agent-template.md)** - 9-field agent
-  prompt format. Load when constructing agent prompts.
-- **[prompts/saw-worktree.md](../prompts/saw-worktree.md)** - Worktree creation
-  protocol. Load before launching wave agents.
-- **[prompts/saw-merge.md](../prompts/saw-merge.md)** - Merge procedure after
-  wave completion. Load at merge step.
-- **[PROTOCOL.md](../../PROTOCOL.md)** - Full protocol specification with
-  invariants I1-I6 and execution rules E1-E14. Reference for audit and debugging.
+- **[agent-template.md](agent-template.md)** - 9-field agent prompt format.
+  Load when constructing agent prompts.
+- **[saw-bootstrap.md](saw-bootstrap.md)** - Bootstrap procedure for new projects.
+  Load when `bootstrap` argument is provided.
+- **[saw-worktree.md](saw-worktree.md)** - Worktree creation protocol.
+  Load before launching wave agents.
+- **[saw-merge.md](saw-merge.md)** - Merge procedure after wave completion.
+  Load at merge step.
+- **[agents/scout.md](agents/scout.md)** - Scout subagent definition (optional).
+- **[agents/wave-agent.md](agents/wave-agent.md)** - Wave subagent definition (optional).
+- **[agents/scaffold-agent.md](agents/scaffold-agent.md)** - Scaffold subagent definition (optional).
 
 Load these files only when needed. The orchestrator instructions in SKILL.md
 tell you when to reference each document.
@@ -113,6 +133,7 @@ tell you when to reference each document.
 - Claude knows what files are available and when to load them
 - Keeps main skill content focused
 - Clear navigation structure
+- Matches existing install pattern
 
 ### Priority 2: Safety & Observability (High Impact, Medium Effort)
 
@@ -282,23 +303,32 @@ agent: Explore
 
 ## Implementation Roadmap
 
-### Phase 1: Quick Wins (1-2 hours)
-1. Add YAML frontmatter with description, argument-hint, version
-2. Set `disable-model-invocation: true` (user-only invocation)
-3. Document supporting files with relative paths using `${CLAUDE_SKILL_DIR}`
+### Phase 1: Update Source Files (1-2 hours)
+1. Add YAML frontmatter to `implementations/claude-code/prompts/saw-skill.md`
+2. Update all path references to use `${CLAUDE_SKILL_DIR}/filename.md`
+3. Document supporting files in SKILL.md content
 4. Add invocation mode table
+5. Update version to 0.5.0
 
-### Phase 2: Safety & Polish (2-3 hours)
+### Phase 2: Update Installation Instructions (30 min)
+1. Update `implementations/claude-code/README.md` Step 3
+2. Change from `~/.claude/commands/` to `~/.claude/skills/saw/`
+3. Add symlink commands for all supporting files
+4. Update verification steps to use skills API
+
+### Phase 3: Test Migration (30 min)
+1. Remove old command symlink
+2. Create new skill directory with all symlinks
+3. Test in scout-and-wave repo (local .claude/skills/saw/)
+4. Test from workspace global (~/.claude/skills/saw/)
+5. Verify `${CLAUDE_SKILL_DIR}` resolves correctly
+6. Verify all supporting files load
+
+### Phase 4: Advanced (Optional, 2-3 hours)
 1. Add `allowed-tools` restrictions
-2. Test tool enforcement (orchestrator tries to Edit)
-3. Add dynamic context injection for status
-4. Update version to 0.5.0
-
-### Phase 3: Advanced (Optional, 4-6 hours)
-1. Implement lifecycle hooks
-2. Evaluate skill splitting strategy
-3. Test fork context for scout
-4. Add integration with claudewatch MCP for observability
+2. Add dynamic context injection for status
+3. Add lifecycle hooks for protocol violations
+4. Test hook enforcement
 
 ## Testing Plan
 
@@ -324,9 +354,9 @@ agent: Explore
    - Expected: Status appears instantly without manual file reading
 
 5. **Portable Paths**
-   - Move skill to different location
+   - Move skill symlinks to different location
    - Run `/saw bootstrap test-project`
-   - Expected: Still finds agent-template.md and other supporting files
+   - Expected: Still finds agent-template.md and other supporting files via `${CLAUDE_SKILL_DIR}`
 
 ## Recommendations
 
@@ -336,14 +366,76 @@ agent: Explore
 3. ✅ **Add supporting files documentation** - 20 minutes, improves discoverability
 
 ### Next Sprint
-4. **Add `allowed-tools` restrictions** - 30 minutes, prevents protocol violations
-5. **Add version tracking to frontmatter** - 5 minutes, better tracking
-6. **Add invocation mode table** - 15 minutes, better UX
+4. **Update README install instructions** - 30 minutes, critical for users
+5. **Add `allowed-tools` restrictions** - 30 minutes, prevents protocol violations
+6. **Add version tracking to frontmatter** - 5 minutes, better tracking
+7. **Add invocation mode table** - 15 minutes, better UX
 
 ### Future Consideration
-7. **Evaluate skill splitting** - only if SKILL.md grows beyond 500 lines
-8. **Add lifecycle hooks** - if protocol violations become common
-9. **Fork context for scout** - if context pollution becomes measurable issue
+8. **Evaluate skill splitting** - only if SKILL.md grows beyond 500 lines
+9. **Add lifecycle hooks** - if protocol violations become common
+10. **Fork context for scout** - if context pollution becomes measurable issue
+
+## Installation Pattern
+
+### Source of Truth (Unchanged)
+
+```
+implementations/claude-code/prompts/
+├── saw-skill.md          ← ACTUAL FILE
+├── saw-bootstrap.md      ← ACTUAL FILE
+├── saw-merge.md          ← ACTUAL FILE
+├── saw-worktree.md       ← ACTUAL FILE
+├── agent-template.md     ← ACTUAL FILE
+├── scout.md              ← ACTUAL FILE
+├── scaffold-agent.md     ← ACTUAL FILE
+└── agents/
+    ├── scout.md          ← ACTUAL FILE
+    ├── wave-agent.md     ← ACTUAL FILE
+    └── scaffold-agent.md ← ACTUAL FILE
+```
+
+### Installation (Updated)
+
+**Old pattern (commands API):**
+```bash
+cp ~/code/scout-and-wave/implementations/claude-code/prompts/saw-skill.md \
+   ~/.claude/commands/saw.md
+```
+
+**New pattern (skills API):**
+```bash
+# Create skill directory
+mkdir -p ~/.claude/skills/saw/agents
+
+# Symlink main skill file
+ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/saw-skill.md \
+       ~/.claude/skills/saw/SKILL.md
+
+# Symlink supporting files
+ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/saw-bootstrap.md \
+       ~/.claude/skills/saw/saw-bootstrap.md
+ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/saw-merge.md \
+       ~/.claude/skills/saw/saw-merge.md
+ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/saw-worktree.md \
+       ~/.claude/skills/saw/saw-worktree.md
+ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agent-template.md \
+       ~/.claude/skills/saw/agent-template.md
+
+# Symlink agent files (optional but recommended)
+ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agents/scout.md \
+       ~/.claude/skills/saw/agents/scout.md
+ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agents/wave-agent.md \
+       ~/.claude/skills/saw/agents/wave-agent.md
+ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agents/scaffold-agent.md \
+       ~/.claude/skills/saw/agents/scaffold-agent.md
+```
+
+**Benefits:**
+- Same symlink-based approach (git pull updates everything)
+- Source of truth unchanged
+- Single edit point in implementations/claude-code/prompts/
+- All skill features now available
 
 ## References
 
@@ -351,8 +443,9 @@ agent: Explore
 - Agent Skills Open Standard: https://agentskills.io
 - Current saw-skill.md: `/implementations/claude-code/prompts/saw-skill.md`
 - Current version: v0.4.2
+- Target version: v0.5.0
 
-## Appendix: Example Enhanced SKILL.md Structure
+## Appendix: Example Enhanced SKILL.md Header
 
 ```yaml
 ---
@@ -378,20 +471,21 @@ You are the **Orchestrator**, the synchronous agent that drives all protocol
 state transitions. You launch Scout and Wave agents; you do not do their work
 yourself.
 
-[... rest of current content ...]
+[... existing I6 and protocol content ...]
 
 ## Supporting Files
 
-The SAW skill includes several reference documents loaded on-demand:
+All supporting files are symlinked into the skill directory during installation.
+Reference them using `${CLAUDE_SKILL_DIR}/filename.md`:
 
-- **[prompts/saw-bootstrap.md](${CLAUDE_SKILL_DIR}/../prompts/saw-bootstrap.md)**
-  - Bootstrap procedure for new projects. Load when `bootstrap` argument is provided.
-- **[prompts/agent-template.md](${CLAUDE_SKILL_DIR}/../prompts/agent-template.md)**
-  - 9-field agent prompt format. Load when constructing agent prompts.
-- **[prompts/saw-worktree.md](${CLAUDE_SKILL_DIR}/../prompts/saw-worktree.md)**
-  - Worktree creation protocol. Load before launching wave agents.
-- **[prompts/saw-merge.md](${CLAUDE_SKILL_DIR}/../prompts/saw-merge.md)**
-  - Merge procedure after wave completion. Load at merge step.
+- **[agent-template.md](${CLAUDE_SKILL_DIR}/agent-template.md)** - 9-field agent
+  prompt format. Load when constructing agent prompts.
+- **[saw-bootstrap.md](${CLAUDE_SKILL_DIR}/saw-bootstrap.md)** - Bootstrap procedure
+  for new projects. Load when `bootstrap` argument is provided.
+- **[saw-worktree.md](${CLAUDE_SKILL_DIR}/saw-worktree.md)** - Worktree creation
+  protocol. Load before launching wave agents.
+- **[saw-merge.md](${CLAUDE_SKILL_DIR}/saw-merge.md)** - Merge procedure after wave
+  completion. Load at merge step.
 
 [... rest of execution logic ...]
 ```
@@ -401,8 +495,14 @@ The SAW skill includes several reference documents loaded on-demand:
 The saw skill is already well-designed for its core purpose. These enhancements add:
 - **Safety:** Tool restrictions prevent protocol violations
 - **Discoverability:** Proper metadata helps Claude know when to use it
-- **Portability:** No hardcoded paths
+- **Portability:** No hardcoded paths via `${CLAUDE_SKILL_DIR}`
 - **Observability:** Better integration with monitoring tools
+- **Standards compliance:** Using skills API instead of legacy commands
 
-Estimated total implementation time: 2-4 hours for Priority 1 & 2 items.
-Expected impact: 20-30% reduction in protocol violations, better user experience.
+**Key insight:** The existing symlink-based pattern is already correct. We just need to:
+1. Update the symlink target from `~/.claude/commands/` to `~/.claude/skills/saw/`
+2. Add frontmatter to the source file
+3. Replace hardcoded paths with `${CLAUDE_SKILL_DIR}`
+
+Estimated total implementation time: 2-3 hours for Priority 1 & 2 items.
+Expected impact: 20-30% reduction in protocol violations, better user experience, full skills API benefits.
