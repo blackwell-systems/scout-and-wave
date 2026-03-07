@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.9.1] | 2026-03-06 | Open standard repositioning: Agent Skills badge, dual MIT/Apache-2.0 license, PROTOCOL.md removed |
 | [0.9.0] | 2026-03-06 | Claude Code implementation: Skills API migration with YAML frontmatter, portable paths, tool restrictions |
 | [0.8.0] | 2026-03-06 | Refactor: protocol extraction into protocol/ directory; implementations layer separation; manual orchestration guides |
 | [0.7.2] | 2026-03-06 | Protocol: mandatory worktree isolation (E4) and cross-repository orchestration limitation documented |
@@ -42,6 +43,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.3.0] | 2026-02-28 | Bootstrap mode for new projects; Wave 0 pattern |
 | [0.2.0] | 2026-02-28 | Decomposed skill prompt; complexity-based suitability heuristic |
 | [0.1.0] | 2026-02-27 | Initial release |
+
+---
+
+## [0.9.1] - 2026-03-06
+
+### Added
+
+- **Agent Skills badge** (`README.md`, `assets/badge-agentskills.svg`): Visual indicator of open standard compliance; badge asset moved to `assets/` directory
+- **Dual license** (`LICENSE`, `LICENSE-MIT`, `LICENSE-APACHE`): Project now licensed under MIT OR Apache-2.0 at user's choice; `license` field in `saw-skill.md` frontmatter updated to `MIT OR Apache-2.0`
+- **Open standard positioning** (`README.md`): Added note identifying SAW as an Agent Skills open standard implementation compatible with Claude Code, Cursor, GitHub Copilot, and other tools; quickstart callout clarifies Claude Code syntax is implementation-specific
+
+### Removed
+
+- **`PROTOCOL.md`** (root-level consolidated spec): Removed — `protocol/` directory is the authoritative source; all internal cross-references updated to link directly to the relevant `protocol/*.md` files
+- **Stale analysis and working docs** (`docs/`): Deleted `saw-skill-enhancement-analysis.md`, `saw-type-scaffold-proposal.md`, `scaffold-agent-rationale.md`, `NOTES-pattern-improvements.md`, `IMPL-FIXES-APPLIED.md`, `IMPL-FIXES-refactor-protocol-extraction.md`
+
+### Changed
+
+- **GitHub repository description**: Updated to reflect open standard positioning (removed "Reference implementation: /saw skill for Claude Code")
+- **Protocol cross-references**: All `See PROTOCOL.md §...` references in `protocol/*.md` and `implementations/` updated to link to specific protocol files
 
 ---
 
