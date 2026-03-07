@@ -6,9 +6,9 @@
 
 **Parallel AI agents that don't break each other's code.**
 
-Other multi-agent frameworks run fast and merge chaos. SAW gives every agent its own worktree, assigns every file to exactly one agent, and shows you the full plan before any agent touches your code. Conflicts are resolved at planning time — not at merge time, after two agents have already built divergent solutions.
+Other multi-agent frameworks run fast and merge chaos. SAW gives every agent its own worktree, assigns every file to exactly one agent, and shows you the full plan before any agent touches your code. Conflicts are resolved at planning time - not at merge time, after two agents have already built divergent solutions.
 
-> Follows the [Agent Skills](https://agentskills.io) open standard — compatible with Claude Code, Cursor, GitHub Copilot, and other Agent Skills-compatible tools. See [`implementations/`](implementations/) for reference implementations.
+> Follows the [Agent Skills](https://agentskills.io) open standard - compatible with Claude Code, Cursor, GitHub Copilot, and other Agent Skills-compatible tools. See [`implementations/`](implementations/) for reference implementations.
 
 > **New to Scout-and-Wave?** Follow this path:
 > 1. Read this README (15 min) - understand "why" and "how" at a high level
@@ -18,13 +18,13 @@ Other multi-agent frameworks run fast and merge chaos. SAW gives every agent its
 
 ## Why
 
-You've run parallel agents before. You know what happens: two agents edit the same file, the merge produces garbage, and you spend longer fixing it than if you'd done the work sequentially. Or worse — the merge succeeds silently because both agents touched different functions in the same file, but they made contradictory assumptions about shared state. You find out at runtime.
+You've run parallel agents before. You know what happens: two agents edit the same file, the merge produces garbage, and you spend longer fixing it than if you'd done the work sequentially. Or worse - the merge succeeds silently because both agents touched different functions in the same file, but they made contradictory assumptions about shared state. You find out at runtime.
 
 Most frameworks try to solve this with better prompts. SAW solves it with structure:
 
 - **Disjoint file ownership.** The Scout assigns every file to exactly one agent before any code is written. Two agents in the same wave cannot produce edits to the same file. Merge conflicts become structurally impossible.
-- **Per-agent worktree isolation.** Each agent works in its own git worktree — a separate directory with an independent file tree. Concurrent builds, tests, and tool-cache writes don't race on shared state.
-- **Human review before execution.** You see the full plan — file assignments, interface contracts, wave structure — and approve it before any agent launches. This is the last point where changing the architecture is cheap.
+- **Per-agent worktree isolation.** Each agent works in its own git worktree - a separate directory with an independent file tree. Concurrent builds, tests, and tool-cache writes don't race on shared state.
+- **Human review before execution.** You see the full plan - file assignments, interface contracts, wave structure - and approve it before any agent launches. This is the last point where changing the architecture is cheap.
 - **Suitability gate.** SAW says "no" when the work doesn't decompose cleanly. A poor-fit assessment prevents bad decompositions from producing expensive failures.
 
 Four participants coordinate within a single session: the **Orchestrator** (your Claude Code session), **Scout** (analyzes codebase, assigns files to agents), **Scaffold Agent** (creates shared types before parallel work begins), and **Wave Agents** (implement their assigned files in parallel worktrees, one wave at a time). The scout enforces disjoint ownership at planning time, the scaffold agent creates interface contracts before parallelization, and wave agents work in isolated worktrees. Everything is coordinated by a single orchestrator that holds full state.
@@ -69,7 +69,7 @@ See [protocol/preconditions.md](protocol/preconditions.md) for details.
 
 > **⚠️ BEFORE YOU START:** Add `"Agent"` to your allow list in `~/.claude/settings.json` or you'll need to manually approve each agent launch. See [implementations/claude-code/README.md](implementations/claude-code/README.md#step-1-configure-permissions-required) for details.
 
-> **ℹ️ Claude Code implementation shown below.** The `/saw` commands use Claude Code's Agent Skills syntax. Other Agent Skills-compatible tools (Cursor, GitHub Copilot, etc.) use their own invocation syntax — see [`implementations/`](implementations/) for the appropriate guide.
+> **ℹ️ Claude Code implementation shown below.** The `/saw` commands use Claude Code's Agent Skills syntax. Other Agent Skills-compatible tools (Cursor, GitHub Copilot, etc.) use their own invocation syntax - see [`implementations/`](implementations/) for the appropriate guide.
 
 ```bash
 # 1. Clone and install
@@ -136,7 +136,7 @@ SAW enforces two independent constraints that together make parallel execution c
 
 **Disjoint file ownership** prevents merge conflicts. Every file that will change is assigned to exactly one agent in the IMPL doc. No two agents in the same wave can produce edits to the same file, so the merge step is always conflict-free regardless of what agents do during execution.
 
-**Worktree isolation** prevents execution-time interference. Each agent works in its own git worktree—a separate directory that shares the same git history but has an independent file tree. This means concurrent `go build`, `go test`, and tool-cache writes don't race on shared build caches, lock files, or intermediate object files.
+**Worktree isolation** prevents execution-time interference. Each agent works in its own git worktree - a separate directory that shares the same git history but has an independent file tree. This means concurrent `go build`, `go test`, and tool-cache writes don't race on shared build caches, lock files, or intermediate object files.
 
 Neither constraint substitutes for the other. Disjoint ownership without worktrees: merge is safe, but concurrent builds are flaky. Worktrees without disjoint ownership: execution is clean, but merge produces unresolvable conflicts. Both must hold for a wave to be correct and reproducible.
 
@@ -150,11 +150,11 @@ Agents don't always respect isolation instructions. v0.6.0 adds a layered defens
 
 | Layer | Mechanism | Type |
 |-------|-----------|------|
-| 0 | **Pre-commit hook** (`hooks/pre-commit-guard.sh`) — copied to `.git/hooks/pre-commit` during worktree setup, removed during cleanup. Blocks commits to main during active waves. Agents receive an instructive error with their worktree path. Orchestrator bypasses via `SAW_ALLOW_MAIN_COMMIT=1`. | Prevention |
-| 1 | **Manual worktree pre-creation** — Orchestrator creates all worktrees before any agent launches | Deterministic |
-| 2 | **`isolation: "worktree"` parameter** — each agent launch specifies worktree isolation at the tool level | Tool-level |
-| 3 | **Field 0 self-verification** — agents verify their own branch and working directory on startup | Cooperative |
-| 4 | **Merge-time trip wire** — Orchestrator counts commits per worktree branch before merging. Zero commits = isolation failure. Stops with recovery options. | Deterministic |
+| 0 | **Pre-commit hook** (`hooks/pre-commit-guard.sh`) - copied to `.git/hooks/pre-commit` during worktree setup, removed during cleanup. Blocks commits to main during active waves. Agents receive an instructive error with their worktree path. Orchestrator bypasses via `SAW_ALLOW_MAIN_COMMIT=1`. | Prevention |
+| 1 | **Manual worktree pre-creation** - Orchestrator creates all worktrees before any agent launches | Deterministic |
+| 2 | **`isolation: "worktree"` parameter** - each agent launch specifies worktree isolation at the tool level | Tool-level |
+| 3 | **Field 0 self-verification** - agents verify their own branch and working directory on startup | Cooperative |
+| 4 | **Merge-time trip wire** - Orchestrator counts commits per worktree branch before merging. Zero commits = isolation failure. Stops with recovery options. | Deterministic |
 
 Layers 0 and 4 are the structural guarantees: Layer 0 prevents agents from committing to main, Layer 4 detects if isolation failed by any mechanism. Layers 1-3 are defense-in-depth.
 
