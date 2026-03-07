@@ -63,9 +63,18 @@ See [protocol/preconditions.md](protocol/preconditions.md) for details.
 ```bash
 # 1. Clone and install
 git clone https://github.com/blackwell-systems/scout-and-wave.git ~/code/scout-and-wave
-cp ~/code/scout-and-wave/implementations/claude-code/prompts/saw-skill.md ~/.claude/commands/saw.md
 
-# 2. In any Claude Code session, on any project:
+# Create skill directory and symlink files (see implementations/claude-code/README.md for full install)
+mkdir -p ~/.claude/skills/saw/agents
+ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/saw-skill.md ~/.claude/skills/saw/SKILL.md
+ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/saw-bootstrap.md ~/.claude/skills/saw/saw-bootstrap.md
+ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/saw-merge.md ~/.claude/skills/saw/saw-merge.md
+ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/saw-worktree.md ~/.claude/skills/saw/saw-worktree.md
+ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agent-template.md ~/.claude/skills/saw/agent-template.md
+ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/scout.md ~/.claude/skills/saw/scout.md
+ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/scaffold-agent.md ~/.claude/skills/saw/scaffold-agent.md
+
+# 2. Restart Claude Code, then in any session on any project:
 /saw scout "add a caching layer to the API client"
 # → Scout analyzes the codebase, assigns files to agents, writes docs/IMPL/IMPL-caching-layer.md
 # → Orchestrator shows you the wave structure and interface contracts for review
