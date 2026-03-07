@@ -1,6 +1,6 @@
 # Scout-and-Wave Protocol Specification
 
-**Version:** 0.6.0
+**Version:** 0.8.0
 **Status:** Active
 
 Scout-and-Wave (SAW) is a protocol for safely parallelizing human-guided agentic workflows. It defines preconditions, invariants, participant roles, state transitions, and message formats that guarantee agents can work concurrently without conflicts. Human review checkpoints are structural: the protocol does not advance past the suitability gate or between waves without human approval.

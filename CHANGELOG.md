@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.8.0] | 2026-03-06 | Refactor: protocol extraction into protocol/ directory; implementations layer separation; manual orchestration guides |
 | [0.7.2] | 2026-03-06 | Protocol: mandatory worktree isolation (E4) and cross-repository orchestration limitation documented |
 | [0.7.1] | 2026-03-06 | Documentation: new-user onboarding gaps addressed; critical concepts defined on first mention |
 | [0.7.0] | 2026-03-06 | Bootstrap: Scaffold Agent + Wave 1 handoff steps added; bootstrap now fully continuous |
@@ -43,6 +44,74 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+
+
+## [0.8.0] - 2026-03-06
+
+### Changed
+
+- **Protocol Extraction:** Refactored monolithic PROTOCOL.md (590 lines) into structured protocol/ directory with 8 implementation-agnostic specification files (1,755 lines total):
+  - `protocol/README.md` - Navigation and adoption guide
+  - `protocol/participants.md` - Orchestrator, Scout, Scaffold Agent, Wave Agent definitions
+  - `protocol/preconditions.md` - P1-P5 suitability gate criteria
+  - `protocol/invariants.md` - I1-I6 hard constraints
+  - `protocol/execution-rules.md` - E1-E14 state transition rules
+  - `protocol/state-machine.md` - Lifecycle states and transitions
+  - `protocol/message-formats.md` - IMPL doc structure, completion reports
+  - `protocol/procedures.md` - Scout, Wave, Merge operational procedures
+
+- **PROTOCOL.md Refactored:** Reduced from 590 to 239 lines (59% reduction), now serves as navigation hub with quick reference tables for I1-I6 and E1-E14, linking to protocol/ for detailed specifications
+
+- **Implementations Layer:** Reorganized Claude Code-specific files into `implementations/claude-code/` directory:
+  - Moved `prompts/` → `implementations/claude-code/prompts/` (14 files)
+  - Moved `examples/` → `implementations/claude-code/examples/`
+  - Moved `hooks/` → `implementations/claude-code/hooks/`
+  - Moved `docs/QUICKSTART.md` → `implementations/claude-code/QUICKSTART.md`
+  - Created backward compatibility symlinks (`prompts`, `examples`, `hooks`) to maintain existing user workflows
+  - Created `implementations/claude-code/README.md` with installation and usage instructions
+
+- **README.md Restructured:** Root README transformed from Claude Code manual to protocol navigation hub:
+  - Condensed Why/How sections while preserving key concepts
+  - Added Protocol Documentation section linking to protocol/README.md
+  - Added Implementations section linking to implementations/README.md
+  - Moved installation instructions to implementations/claude-code/README.md
+  - Updated Quick Start with new file paths (backward compatible via symlinks)
+
+### Added
+
+- **Manual Orchestration Guides** (`implementations/manual/`): Complete guide for humans orchestrating SAW without AI runtime (2,102 lines):
+  - `README.md` - When to orchestrate manually, prerequisites, workflow overview
+  - `scout-guide.md` - Manual codebase analysis, suitability assessment, IMPL doc creation (612 lines)
+  - `wave-guide.md` - Team coordination using worktrees, parallel work management (472 lines)
+  - `merge-guide.md` - Step-by-step merge procedure with conflict resolution (609 lines)
+  - `checklist.md` - Printable checkbox format for Scout → Wave → Merge phases (239 lines)
+
+- **IMPL-SCHEMA.md** (608 lines): Canonical IMPL doc structure specification documenting all 11 required sections with purpose, format, required fields, constraints, and examples
+
+- **Generic Templates** (`templates/`): Implementation-agnostic starter templates (480 lines):
+  - `agent-prompt-template.md` - 9-field agent prompt structure with placeholder variables
+  - `impl-doc-template.md` - IMPL doc scaffold with frontmatter, scaffolds, wave structure
+
+- **Implementations README** (`implementations/README.md`): Comparison table between Claude Code and manual orchestration with implementation chooser guidance
+
+### Backward Compatibility
+
+- All file moves preserve git history (100% rename similarity)
+- Symlinks at old locations (`prompts/`, `examples/`, `hooks/`) maintain backward compatibility
+- Existing installations work without modification
+- `/saw scout` and `/saw wave` commands unchanged
+- All agent prompts functionally equivalent (with documented improvements from v0.7.2)
+
+### Validation
+
+- Executed via Scout-and-Wave protocol (10 agents across 3 waves)
+- Cross-repository orchestration pattern validated (0 isolation failures)
+- All protocol content preserved and expanded
+- No breaking changes to user workflows
+
+**Dogfooding reference:** Full execution log in `docs/dogfooding-2026-03-06-protocol-extraction.md`
+
+**Net change:** +11,390 lines added, -758 removed
 ## [0.7.2] - 2026-03-06
 
 ### Fixed
