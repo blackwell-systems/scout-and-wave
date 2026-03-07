@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.9.0] | 2026-03-06 | Claude Code implementation: Skills API migration with YAML frontmatter, portable paths, tool restrictions |
 | [0.8.0] | 2026-03-06 | Refactor: protocol extraction into protocol/ directory; implementations layer separation; manual orchestration guides |
 | [0.7.2] | 2026-03-06 | Protocol: mandatory worktree isolation (E4) and cross-repository orchestration limitation documented |
 | [0.7.1] | 2026-03-06 | Documentation: new-user onboarding gaps addressed; critical concepts defined on first mention |
@@ -44,7 +45,65 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.9.0] - 2026-03-06
 
+### Changed
+
+- **Claude Code Implementation: Skills API Migration** (`implementations/claude-code/prompts/saw-skill.md`, v0.5.0):
+  - **YAML frontmatter added:** Structured metadata including `name`, `description`, `argument-hint`, `allowed-tools`, `version`
+  - **Portable path references:** Replaced hardcoded paths (`~/code/scout-and-wave/prompts/`) and `SAW_REPO` environment variable fallback with `${CLAUDE_SKILL_DIR}/filename.md` references
+  - **Tool restrictions:** `allowed-tools` frontmatter field prevents orchestrator from performing agent duties (e.g., cannot use `Edit` on source files, enforcing I6 role separation)
+  - **Supporting files documentation:** Added "Supporting Files" section listing all 7 files co-located in skill directory
+  - **Invocation modes table:** Quick reference for all `/saw` commands with purpose column
+
+- **Installation Method Updated** (`implementations/claude-code/README.md`):
+  - **Target directory:** Changed from `~/.claude/commands/saw.md` to `~/.claude/skills/saw/SKILL.md`
+  - **Supporting files:** All supporting files now symlinked into skill directory (7 files total: `saw-bootstrap.md`, `saw-merge.md`, `saw-worktree.md`, `agent-template.md`, `scout.md`, `scaffold-agent.md`, plus 3 agent types in `agents/` subdirectory)
+  - **Symlink-based:** Maintains single source of truth in `implementations/claude-code/prompts/`, git pull updates skill automatically
+  - **No environment variables:** Removed `SAW_REPO` requirement entirely
+
+### Added
+
+- **Enhanced autocomplete:** `argument-hint` field provides inline documentation: `[bootstrap <project-name> | scout <feature> | wave [--auto] | status]`
+- **Skills API compliance:** Follows [Agent Skills](https://agentskills.io) open standard with Claude Code extensions
+- **Documentation:** Three analysis documents in `docs/`:
+  - `saw-skill-enhancement-analysis.md` - Comprehensive enhancement analysis with prioritized recommendations
+  - `symlink-structure-analysis.md` - Current state, migration strategy, benefits comparison
+  - `symlink-diagram-v2.md` - Visual diagrams of symlink structure before/after
+
+### Benefits
+
+- **Portability:** Works regardless of where scout-and-wave repository is cloned (no hardcoded paths)
+- **Simplicity:** Single path resolution strategy (`${CLAUDE_SKILL_DIR}`) replaces 3-strategy fallback logic
+- **Safety:** Tool restrictions prevent protocol violations (orchestrator cannot accidentally perform agent work)
+- **Discoverability:** All supporting files visible in skill directory structure
+- **Standards compliance:** Full Skills API features (frontmatter, tool restrictions, hooks support)
+
+### Backward Compatibility
+
+- **Source location unchanged:** All actual files remain in `implementations/claude-code/prompts/` (single source of truth preserved)
+- **Symlink pattern preserved:** Same installation approach (symlinks), just to different target directory
+- **Agent behavior unchanged:** Functional equivalence maintained; only installation and path resolution changed
+
+### Migration
+
+Users must migrate their installation to use the new skills directory:
+
+```bash
+# Remove old command
+rm ~/.claude/commands/saw.md
+
+# Create new skill directory structure
+mkdir -p ~/.claude/skills/saw/agents
+
+# Symlink all files (see README.md Step 3 for full commands)
+ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/saw-skill.md ~/.claude/skills/saw/SKILL.md
+# ... (7 total files to symlink)
+```
+
+Restart Claude Code after migration. Test with `/saw status`.
+
+**Net change:** +58 lines added to saw-skill.md (frontmatter + documentation), -3 lines removed (path logic simplified)
 
 ## [0.8.0] - 2026-03-06
 
