@@ -12,7 +12,7 @@ Read these documents in order to understand the complete protocol:
 |----------|-------------|
 | [participants.md](participants.md) | Defines the four participant roles (Orchestrator, Scout, Scaffold Agent, Wave Agent), their execution modes, responsibilities, and forbidden actions |
 | [preconditions.md](preconditions.md) | Lists the five preconditions that must hold before the protocol may run (file decomposition, investigation-first blockers, interface discoverability, pre-implementation scan, parallelization value) |
-| [invariants.md](invariants.md) | Specifies the seven invariants that must hold throughout protocol execution (worktree isolation, disjoint file ownership, interface freeze, etc.) |
+| [invariants.md](invariants.md) | Specifies the six invariants that must hold throughout protocol execution (worktree isolation, disjoint file ownership, interface freeze, etc.) |
 | [execution-rules.md](execution-rules.md) | Defines the ten execution rules that govern state transitions, agent launches, completion handling, merge procedures, and verification gates |
 | [state-machine.md](state-machine.md) | Documents the protocol state machine: states, transitions, triggers, and termination conditions |
 | [message-formats.md](message-formats.md) | Specifies structured message formats for IMPL docs, agent prompts, completion reports, and merge summaries |
