@@ -1,6 +1,6 @@
 # Scout-and-Wave Implementations
 
-Scout-and-Wave is a coordination protocol for safely parallelizing human-guided agentic workflows. This directory contains different implementations of the protocol.
+Scout-and-Wave is an open protocol for safely parallelizing human-guided agentic workflows. It follows the [Agent Skills](https://agentskills.io) open standard, making it compatible with Claude Code, Cursor, GitHub Copilot, and other Agent Skills-compatible tools. This directory contains implementations of the protocol for different runtimes.
 
 ## Available Implementations
 
