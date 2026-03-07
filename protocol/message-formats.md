@@ -1,6 +1,6 @@
 # Scout-and-Wave Message Formats
 
-**Version:** 0.6.0
+**Version:** 0.8.0
 
 This document defines the structured data formats exchanged between participants: suitability verdicts, agent prompts, completion reports, and scaffold specifications.
 

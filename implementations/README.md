@@ -73,7 +73,7 @@ See [`manual/README.md`](manual/README.md) for detailed process.
 All implementations must conform to the protocol specification in [`../protocol/`](../protocol/). Key documents:
 
 - [`participants.md`](../protocol/participants.md) - Participant roles and responsibilities
-- [`invariants.md`](../protocol/invariants.md) - Correctness guarantees (I1-I7)
+- [`invariants.md`](../protocol/invariants.md) - Correctness guarantees (I1-I6)
 - [`execution-rules.md`](../protocol/execution-rules.md) - State transitions and verification gates
 - [`message-formats.md`](../protocol/message-formats.md) - IMPL doc and completion report formats
 
@@ -86,7 +86,7 @@ To implement Scout-and-Wave in a different runtime (Python, Rust, TypeScript, et
 3. Choose an isolation mechanism that satisfies I1 (worktree isolation): git worktrees, filesystem snapshots, containers, etc.
 4. Use `manual/` guides as a reference for orchestrator logic
 5. Use `templates/` for fillable IMPL doc and agent prompt templates
-6. Verify your implementation satisfies all seven invariants (I1-I7)
+6. Verify your implementation satisfies all six invariants (I1-I6)
 
 See [`../protocol/README.md`](../protocol/README.md) for the full adoption guide.
 

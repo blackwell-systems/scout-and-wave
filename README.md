@@ -5,6 +5,13 @@
 
 A coordination protocol for safely parallelizing human-guided agentic workflows. Defines participant roles, preconditions, ownership invariants, and verification gates that guarantee agents can work concurrently without conflicts. Human review checkpoints are structural: the protocol does not advance past the suitability gate or between waves without human approval.
 
+
+> **New to Scout-and-Wave?** Follow this path:
+> 1. Read this README (15 min) - understand "why" and "how" at a high level
+> 2. Read [implementations/claude-code/QUICKSTART.md](implementations/claude-code/QUICKSTART.md) (20 min) - see a real example with output
+> 3. Try it yourself: `/saw scout "feature"` on a test project
+> 4. Deep dive: [protocol/](protocol/) specification when building a new implementation
+
 ## Why
 
 Parallel AI agents working on the same codebase produce merge conflicts, contradictory implementations, and expensive rework. Agents make local decisions without global context, and those decisions collide.
@@ -29,7 +36,7 @@ SAW fixes this before any agent starts, through four participants coordinating w
 
 - **Scout:** Asynchronous agent. Analyzes codebase, produces IMPL doc with dependency graph, interface contracts, file ownership table, and wave structure. Every file assigned to exactly one agent. Resolves ownership conflicts at planning time or declares work NOT SUITABLE.
 
-- **Scaffold Agent:** Asynchronous agent. Creates shared type files (called "scaffolds") from IMPL doc contracts, verifies compilation, commits to HEAD. Runs once before any Wave Agent launches. If compilation fails, wave stops before worktrees are created.
+- **Scaffold Agent:** Asynchronous agent. Runs once before Wave 1 if the IMPL doc specifies shared types that multiple agents need (e.g., interface definitions). Creates shared type files (called "scaffolds") from IMPL doc contracts, verifies compilation, commits to HEAD. Runs once before any Wave Agent launches. If compilation fails, wave stops before worktrees are created.
 
 - **Wave Agents:** Asynchronous agents running in parallel. Each owns disjoint files, implements against frozen interface contracts, runs verification gate, commits work, writes completion report.
 
@@ -70,7 +77,7 @@ cp ~/code/scout-and-wave/implementations/claude-code/prompts/saw-skill.md ~/.cla
 # → Orchestrator merges, runs tests, reports result
 ```
 
-The scout produces an **IMPL doc** (`docs/IMPL/IMPL-<feature>.md`): a structured coordination document that defines which files each agent will modify, what interfaces they'll implement, and how they'll work in parallel. You review it before any agent writes code. This is the human checkpoint that makes parallel execution safe.
+The scout produces an **Implementation Document (IMPL doc)** (`docs/IMPL/IMPL-<feature>.md`): a structured coordination document that defines which files each agent will modify, what interfaces they'll implement, and how they'll work in parallel. You review it before any agent writes code. This is the human checkpoint that makes parallel execution safe.
 
 **First time using SAW?** See [implementations/claude-code/QUICKSTART.md](implementations/claude-code/QUICKSTART.md) for step-by-step guidance with example output.
 
@@ -112,7 +119,7 @@ SAW enforces two independent constraints that together make parallel execution c
 
 **Disjoint file ownership** prevents merge conflicts. Every file that will change is assigned to exactly one agent in the IMPL doc. No two agents in the same wave can produce edits to the same file, so the merge step is always conflict-free regardless of what agents do during execution.
 
-**Worktree isolation** prevents execution-time interference. Each agent works in its own git worktree, a separate directory that shares the same git history but has an independent file tree. This means concurrent `go build`, `go test`, and tool-cache writes don't race on shared build caches, lock files, or intermediate object files. Without worktrees, two agents building simultaneously in the same directory produce flaky failures that look like code bugs but are filesystem races.
+**Worktree isolation** prevents execution-time interference. Each agent works in its own git worktree—a separate directory that shares the same git history but has an independent file tree. This means concurrent `go build`, `go test`, and tool-cache writes don't race on shared build caches, lock files, or intermediate object files.
 
 Neither constraint substitutes for the other. Disjoint ownership without worktrees: merge is safe, but concurrent builds are flaky. Worktrees without disjoint ownership: execution is clean, but merge produces unresolvable conflicts. Both must hold for a wave to be correct and reproducible.
 

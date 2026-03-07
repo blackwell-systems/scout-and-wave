@@ -1,6 +1,6 @@
 # Scout-and-Wave Procedures
 
-**Version:** 0.6.0
+**Version:** 0.8.0
 
 This document defines the operational procedures executed by the Orchestrator and other participants: suitability assessment, scaffold materialization, wave execution, and merge operations.
 

@@ -27,7 +27,7 @@ Read these documents in order to understand the complete protocol:
 3. Choose an isolation mechanism that satisfies I1 (worktree isolation): git worktrees, filesystem snapshots, containers, etc.
 4. Implement the state machine transitions (see [state-machine.md](state-machine.md))
 5. Implement structured message parsing (see [message-formats.md](message-formats.md))
-6. Verify your implementation satisfies all seven invariants (see [invariants.md](invariants.md))
+6. Verify your implementation satisfies all six invariants (see [invariants.md](invariants.md))
 7. Test with a multi-agent feature that meets all five preconditions (see [preconditions.md](preconditions.md))
 
 **For manual orchestration:**

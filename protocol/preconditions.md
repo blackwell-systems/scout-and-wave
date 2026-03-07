@@ -1,6 +1,6 @@
 # Scout-and-Wave Protocol Preconditions
 
-**Version:** 0.6.0
+**Version:** 0.8.0
 
 This document defines the preconditions that must hold before the Scout-and-Wave protocol may execute. The scout's suitability gate checks these before producing agent prompts.
 
