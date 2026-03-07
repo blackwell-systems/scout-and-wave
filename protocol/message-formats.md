@@ -349,4 +349,36 @@ Written by the Scout into the IMPL doc to specify type scaffold files. Read and 
 
 ---
 
+---
+
+## IMPL Doc Size
+
+**Threshold:** If the IMPL doc exceeds ~20KB (roughly 500 lines), consider splitting.
+
+**Split strategy:**
+- Keep suitability verdict, scaffolds, dependency graph, interface contracts, file ownership, wave structure, and status in the main IMPL doc
+- Move agent prompts to separate files: `docs/IMPL/IMPL-<feature>-wave{N}-agent-{X}.md`
+- Main IMPL doc links to per-agent files: `See [Agent A prompt](IMPL-<feature>-wave1-agent-A.md)`
+
+**When NOT to split:**
+- Documentation-only refactors (agent prompts are small)
+- Simple features with <5 agents total
+- When unified audit trail is more valuable than file size
+
+---
+
+## Orchestrator Parsing Requirements
+
+Orchestrators must parse these fields from each completion report:
+
+1. **Status values:** `status: complete | partial | blocked` — gates merge decision
+2. **Interface deviations:** `interface_deviations` array — identifies blocked downstream agents; items with `downstream_action_required: true` must be propagated before next wave
+3. **Out-of-scope dependencies:** `out_of_scope_deps` array — generates post-merge fix list
+4. **Verification results:** `verification: PASS | FAIL` — gates merge per agent
+5. **File lists:** `files_changed` and `files_created` — used for conflict prediction before touching the working tree
+
+**Format assumption:** All structured data is in YAML code blocks with consistent field names. Orchestrators should reject malformed YAML or missing required fields.
+
+---
+
 **Reference:** See `state-machine.md` for protocol states and transitions. See `procedures.md` for orchestrator actions when reading and processing these messages.

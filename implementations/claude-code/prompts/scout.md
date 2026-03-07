@@ -322,8 +322,7 @@ Record the verdict and its rationale in the IMPL doc under a
 ## Output Format
 
 Write the following to `docs/IMPL/IMPL-<feature-slug>.md`. For full section
-definitions, field constraints, and examples, see `IMPL-SCHEMA.md` at the
-repository root.
+definitions, field constraints, and examples, see `protocol/message-formats.md`.
 
 ```
 ## Suitability Assessment
