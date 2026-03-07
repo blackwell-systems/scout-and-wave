@@ -51,10 +51,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
-- **`branch:` field missing from completion reports** (`agent-template.md`): Agents were not emitting `branch: wave{N}-agent-{letter}` in their YAML completion reports, despite it being specified in `IMPL-SCHEMA.md` and `protocol/message-formats.md`. Field added to agent-template.md schema.
+- **`branch:` field missing from completion reports** (`agent-template.md`): Agents were not emitting `branch: wave{N}-agent-{letter}` in their YAML completion reports, despite it being specified in `protocol/message-formats.md`. Field added to agent-template.md schema.
 - **Stale `PROTOCOL.md` reference** (`agent-template.md`): Line 16 referenced deleted `PROTOCOL.md` as the source for I{N}/E{N} notation. Updated to reference `protocol/invariants.md` and `protocol/execution-rules.md`.
-- **IMPL doc heading level drift** (`scout.md`): Output format template used `###` (h3) for all top-level IMPL doc sections. Schema specifies `##` (h2). Corrected all 11 section headings in scout's output template to match `IMPL-SCHEMA.md`.
-- **`IMPL-SCHEMA.md` undiscoverable** (`scout.md`): Schema document had no inbound links from the agent prompts that produce IMPL docs. Added reference in scout's Output Format section so scouts can consult the full schema.
+- **IMPL doc heading level drift** (`scout.md`): Output format template used `###` (h3) for all top-level IMPL doc sections. Schema specifies `##` (h2). Corrected all 11 section headings in scout's output template.
+- **`IMPL-SCHEMA.md` merged into `protocol/message-formats.md`**: Standalone schema doc at repo root had no discoverable path from agent prompts. Unique content (size guidance, orchestrator parsing requirements) merged into `protocol/message-formats.md`; `IMPL-SCHEMA.md` deleted. Scout's output format section now references `protocol/message-formats.md`.
 
 ---
 
