@@ -113,4 +113,4 @@ The IMPL doc contains only this verdict. No agent prompts are written. The proto
 
 - See `invariants.md` for runtime constraints that must hold during execution
 - See `execution-rules.md` for orchestrator behavior rules
-- See PROTOCOL.md §Suitability Verdict for complete message format specification
+- See [message-formats.md](message-formats.md) for complete message format specification

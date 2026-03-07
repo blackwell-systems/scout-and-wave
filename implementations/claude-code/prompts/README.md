@@ -1,7 +1,7 @@
 # Prompts
 
-Reference implementations of the [SAW protocol](../PROTOCOL.md). Each file
-maps to a specific participant role or procedure defined in the spec.
+Reference implementations of the SAW protocol. Each file maps to a specific
+participant role or procedure defined in the [protocol/](../protocol/) specification.
 
 ## Entry Point
 
@@ -39,7 +39,7 @@ instructions in them directly.
 
 ## Protocol Invariants Referenced
 
-Invariants I1–I6 are defined in [`PROTOCOL.md`](../PROTOCOL.md). Where
+Invariants I1–I6 are defined in [`protocol/invariants.md`](../protocol/invariants.md). Where
 invariants appear in these prompts, they are embedded verbatim alongside
 their I-number so each prompt is self-contained. To audit consistency:
 

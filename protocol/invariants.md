@@ -51,7 +51,7 @@ To audit consistency, search implementation files for `I{N}` and verify the embe
 
 **Cross-Wave Coordination:** Waves execute sequentially. This provides coordination without special mechanisms: later waves always have access to earlier waves' committed work. Scaffold files solve the intra-wave problem (parallel agents that cannot see each other's code); cross-wave coordination is ordinary software development.
 
-**Related Rules:** See state machine transitions in PROTOCOL.md
+**Related Rules:** See [state-machine.md](state-machine.md) for state transitions
 
 ---
 
@@ -75,7 +75,7 @@ To audit consistency, search implementation files for `I{N}` and verify the embe
 
 **Rationale:** The orchestrator merges from agent branch commits. If work is uncommitted, the merge step cannot proceed without manual intervention.
 
-**Related Rules:** See E4 (worktree isolation) and completion report format in PROTOCOL.md
+**Related Rules:** See E4 (worktree isolation) and completion report format in [message-formats.md](message-formats.md)
 
 ---
 
@@ -93,7 +93,7 @@ To audit consistency, search implementation files for `I{N}` and verify the embe
 
 **Scope:** The solo wave agent must still operate in the Wave Agent role: launched by the Orchestrator as an asynchronous agent, not executed directly by the Orchestrator. Executing solo wave work inline violates I6 regardless of wave size. The absence of worktrees changes the isolation mechanism; it does not change the participant roles.
 
-**Related Rules:** See Participants section in PROTOCOL.md
+**Related Rules:** See [participants.md](participants.md)
 
 ---
 
@@ -128,4 +128,4 @@ When all preconditions hold and all invariants are maintained:
 
 - See `preconditions.md` for conditions that must hold before execution begins
 - See `execution-rules.md` for orchestrator behavior rules that enforce these invariants
-- See PROTOCOL.md for complete state machine and message format specifications
+- See `state-machine.md` and `message-formats.md` for state machine and message format specifications

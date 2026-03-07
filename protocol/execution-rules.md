@@ -318,4 +318,4 @@ Three distinct conflict types can arise; each has a different resolution path:
 
 - See `preconditions.md` for conditions that must hold before execution begins
 - See `invariants.md` for runtime constraints that must hold during execution
-- See PROTOCOL.md for complete state machine and message format specifications
+- See `state-machine.md` and `message-formats.md` for state machine and message format specifications

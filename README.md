@@ -110,8 +110,6 @@ The protocol is defined independent of any implementation. Read these to underst
 - **[protocol/message-formats.md](protocol/message-formats.md)** - IMPL doc and completion report schemas
 - **[protocol/procedures.md](protocol/procedures.md)** - Step-by-step merge and verification procedures
 
-**Quick reference:** [PROTOCOL.md](PROTOCOL.md) (consolidated single-file version)
-
 ### Implementations
 
 SAW can be executed in different ways:

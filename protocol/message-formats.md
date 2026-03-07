@@ -144,7 +144,7 @@ Emitted by the Scout at the end of the suitability gate. Written to the IMPL doc
 - `Failed preconditions`: Names each precondition that blocked the verdict by number and name, with specific evidence
 - `Suggested alternative`: Makes the verdict actionable rather than a stop sign
 
-**Precondition reference (from PROTOCOL.md §Preconditions):**
+**Precondition reference (from [preconditions.md](preconditions.md)):**
 1. File decomposition
 2. No investigation-first blockers
 3. Interface discoverability
