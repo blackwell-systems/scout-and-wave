@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.9.3] | 2026-03-06 | Cleanup: templates/ deleted, IMPL-SCHEMA merged into protocol/message-formats.md, manual implementation removed |
 | [0.9.2] | 2026-03-06 | Protocol drift fixes: branch field in completion reports, PROTOCOL.md ref, heading levels, IMPL-SCHEMA discoverability |
 | [0.9.1] | 2026-03-06 | Open standard repositioning: Agent Skills badge, dual MIT/Apache-2.0 license, PROTOCOL.md removed |
 | [0.9.0] | 2026-03-06 | Claude Code implementation: Skills API migration with YAML frontmatter, portable paths, tool restrictions |
@@ -44,6 +45,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.3.0] | 2026-02-28 | Bootstrap mode for new projects; Wave 0 pattern |
 | [0.2.0] | 2026-02-28 | Decomposed skill prompt; complexity-based suitability heuristic |
 | [0.1.0] | 2026-02-27 | Initial release |
+
+---
+
+## [0.9.3] - 2026-03-06
+
+### Removed
+
+- **`templates/` directory** (`templates/agent-prompt-template.md`, `templates/impl-doc-template.md`): Fillable templates created for the manual implementation are no longer needed — the Scout generates IMPL docs automatically and stamps agent prompts directly into them. Schemas are now covered by `protocol/message-formats.md`. Active references in `README.md` and `implementations/README.md` updated to point to `protocol/message-formats.md`.
+- **`implementations/manual/`**: Human-executable orchestration guides removed — protocol is now Claude Code only. Choosing table and examples block removed from `implementations/README.md`.
+
+### Changed
+
+- **`IMPL-SCHEMA.md` merged into `protocol/message-formats.md`**: Standalone schema doc at repo root had no discoverable path from agent prompts. Unique content (size guidance, orchestrator parsing requirements) merged into `protocol/message-formats.md`. `IMPL-SCHEMA.md` deleted. Scout's output format section now references `protocol/message-formats.md`.
 
 ---
 
