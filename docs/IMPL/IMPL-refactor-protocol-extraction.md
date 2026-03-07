@@ -1,4 +1,5 @@
 # IMPL: Protocol Extraction Refactor
+<!-- SAW:COMPLETE 2026-03-05 -->
 
 **Feature:** Extract Scout-and-Wave protocol into implementation-agnostic specification, separating it from Claude Code reference implementation
 
