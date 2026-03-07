@@ -321,10 +321,12 @@ Record the verdict and its rationale in the IMPL doc under a
 
 ## Output Format
 
-Write the following to `docs/IMPL/IMPL-<feature-slug>.md`:
+Write the following to `docs/IMPL/IMPL-<feature-slug>.md`. For full section
+definitions, field constraints, and examples, see `IMPL-SCHEMA.md` at the
+repository root.
 
 ```
-### Suitability Assessment
+## Suitability Assessment
 
 Verdict: SUITABLE | NOT SUITABLE | SUITABLE WITH CAVEATS
 test_command: [full test suite command — e.g. `go test ./...` | `cargo test --workspace` | `pytest` | `mvn test` | `npx jest`]
@@ -334,7 +336,7 @@ lint_command: [check-mode lint command — e.g. `golangci-lint run` | `cargo cli
 write the sections below. If SUITABLE WITH CAVEATS, describe what the
 caveats are and how they are handled.]
 
-### Scaffolds
+## Scaffolds
 
 [Omit this section if no scaffold files are needed.]
 
@@ -348,7 +350,7 @@ types.
 |------|----------|-------------|--------|
 | `...` | `...` | `...` | pending |
 
-### Known Issues
+## Known Issues
 
 List any pre-existing test failures, build warnings, or known bugs that agents
 should be aware of. This helps distinguish expected failures from regressions.
@@ -361,23 +363,23 @@ Example:
 
 [If no known issues, write "None identified."]
 
-### Dependency Graph
+## Dependency Graph
 
 [Description of the DAG. Which files/modules are roots, which are leaves,
 which have cross-dependencies. Call out any files that were split or
 extracted to resolve ownership conflicts.]
 
-### Interface Contracts
+## Interface Contracts
 
 [Exact function/method/type signatures that cross agent boundaries.]
 
-### File Ownership
+## File Ownership
 
 | File | Agent | Wave | Depends On |
 |------|-------|------|------------|
 | ...  | ...   | ...  | ...        |
 
-### Wave Structure
+## Wave Structure
 
 Wave 1: [A] [B] [C]          <- 3 parallel agents (foundation)
            | (A+B complete)
@@ -385,11 +387,11 @@ Wave 2:   [D] [E]            <- 2 parallel agents
            | (D+E complete)
 Wave 3:    [F] [G]           <- 2 parallel agents
 
-### Agent Prompts
+## Agent Prompts
 
 [Full prompt for each agent, using the 9-field format.]
 
-### Wave Execution Loop
+## Wave Execution Loop
 
 After each wave completes, work through the Orchestrator Post-Merge Checklist
 below in order. The checklist is the executable form; this loop is the rationale.
@@ -403,7 +405,7 @@ The merge procedure detail is in `saw-merge.md`. Key principles:
   codebase surfaces cross-package failures none of them saw individually.
 - Fix before proceeding. Do not launch the next wave with a broken build.
 
-### Orchestrator Post-Merge Checklist
+## Orchestrator Post-Merge Checklist
 
 **Instructions for Scout:** Replace the bracketed placeholders below with
 feature-specific content. Keep the standard items exactly as written. Add any
@@ -433,7 +435,7 @@ After wave {N} completes:
 - [ ] Commit: `git commit -m "[insert commit message]"`
 - [ ] Launch next wave (or pause for review if not `--auto`)
 
-### Status
+## Status
 
 | Wave | Agent | Description | Status |
 |------|-------|-------------|--------|

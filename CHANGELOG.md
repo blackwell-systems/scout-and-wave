@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.9.2] | 2026-03-06 | Protocol drift fixes: branch field in completion reports, PROTOCOL.md ref, heading levels, IMPL-SCHEMA discoverability |
 | [0.9.1] | 2026-03-06 | Open standard repositioning: Agent Skills badge, dual MIT/Apache-2.0 license, PROTOCOL.md removed |
 | [0.9.0] | 2026-03-06 | Claude Code implementation: Skills API migration with YAML frontmatter, portable paths, tool restrictions |
 | [0.8.0] | 2026-03-06 | Refactor: protocol extraction into protocol/ directory; implementations layer separation; manual orchestration guides |
@@ -43,6 +44,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.3.0] | 2026-02-28 | Bootstrap mode for new projects; Wave 0 pattern |
 | [0.2.0] | 2026-02-28 | Decomposed skill prompt; complexity-based suitability heuristic |
 | [0.1.0] | 2026-02-27 | Initial release |
+
+---
+
+## [0.9.2] - 2026-03-06
+
+### Fixed
+
+- **`branch:` field missing from completion reports** (`agent-template.md`): Agents were not emitting `branch: wave{N}-agent-{letter}` in their YAML completion reports, despite it being specified in `IMPL-SCHEMA.md` and `protocol/message-formats.md`. Field added to agent-template.md schema.
+- **Stale `PROTOCOL.md` reference** (`agent-template.md`): Line 16 referenced deleted `PROTOCOL.md` as the source for I{N}/E{N} notation. Updated to reference `protocol/invariants.md` and `protocol/execution-rules.md`.
+- **IMPL doc heading level drift** (`scout.md`): Output format template used `###` (h3) for all top-level IMPL doc sections. Schema specifies `##` (h2). Corrected all 11 section headings in scout's output template to match `IMPL-SCHEMA.md`.
+- **`IMPL-SCHEMA.md` undiscoverable** (`scout.md`): Schema document had no inbound links from the agent prompts that produce IMPL docs. Added reference in scout's Output Format section so scouts can consult the full schema.
 
 ---
 

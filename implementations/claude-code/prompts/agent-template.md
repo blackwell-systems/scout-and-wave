@@ -12,9 +12,9 @@ other Wave Agents' output by the Orchestrator, and your completion report is the
 interface between your work and the next steps.
 
 `I{N}` notation refers to invariants (I1–I6) and `E{N}` to execution rules
-(E1–E14) defined in `PROTOCOL.md`. Each is embedded verbatim alongside its
-number so this prompt is self-contained; the number is the anchor for
-cross-referencing and audit.
+(E1–E14) defined in `protocol/invariants.md` and `protocol/execution-rules.md`.
+Each is embedded verbatim alongside its number so this prompt is self-contained;
+the number is the anchor for cross-referencing and audit.
 
 Each agent prompt has 9 fields. Field 0 is a mandatory pre-flight isolation
 check run before any file modifications. Fields 1–8 are the implementation
@@ -242,6 +242,7 @@ then add free-form notes beneath it.
 ### Agent {letter} - Completion Report
 status: complete | partial | blocked
 worktree: .claude/worktrees/wave{N}-agent-{letter}
+branch: wave{N}-agent-{letter}
 commit: {sha}  # or "uncommitted" if commit failed
 files_changed:
   - path/to/modified/file
