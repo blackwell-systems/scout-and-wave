@@ -318,4 +318,4 @@ If the work doesn't decompose cleanly, the Scout says so. It runs a suitability 
 
 ## License
 
-[MIT](../../LICENSE)
+[MIT OR Apache-2.0](../../LICENSE)

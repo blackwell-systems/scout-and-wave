@@ -12,7 +12,7 @@ allowed-tools: |
   Read, Write, Glob, Grep, Bash(git *), Bash(cd *), Bash(mkdir *),
   Agent(subagent_type=scout), Agent(subagent_type=scaffold-agent),
   Agent(subagent_type=wave-agent)
-license: MIT
+license: MIT OR Apache-2.0
 compatibility: Requires Claude Code (Skills API). Git 2.20+ required for worktree support.
 metadata:
   author: blackwell-systems

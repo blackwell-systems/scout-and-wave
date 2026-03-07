@@ -181,4 +181,4 @@ Four-part series on the pattern, the lessons learned from dogfooding it, and how
 
 ## License
 
-[MIT](LICENSE)
+[MIT OR Apache-2.0](LICENSE)

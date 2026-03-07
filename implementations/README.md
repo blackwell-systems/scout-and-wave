@@ -100,4 +100,4 @@ These demonstrate how the protocol handles complex features in practice.
 
 ## License
 
-[MIT](../LICENSE)
+[MIT OR Apache-2.0](../LICENSE)
