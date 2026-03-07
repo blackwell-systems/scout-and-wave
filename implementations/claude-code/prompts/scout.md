@@ -248,9 +248,11 @@ Record the verdict and its rationale in the IMPL doc under a
    - Annotate each wave transition with the *specific* agent(s) that unblock
      it, not "blocked on Wave 1" but "blocked on Agent A completing."
 
-8. **Write agent prompts.** For each agent, produce a complete prompt using
-   the standard 9-field format (see [agent template](agent-template.md)). The
-   prompt must be self-contained: an agent receiving it should need nothing
+8. **Write agent prompts under `## Wave N` headers.** Each wave MUST have its
+   own `## Wave N` section in the IMPL doc. Agent prompts go under `### Agent X`
+   subsections within their wave. Do NOT group all agents under a single flat
+   section. Use the standard 9-field format (see [agent template](agent-template.md)).
+   The prompt must be self-contained: an agent receiving it should need nothing
    beyond the prompt and the existing codebase to do its work.
 
 9. **Determine verification gates from the build system.** Read the Makefile,
@@ -378,17 +380,30 @@ extracted to resolve ownership conflicts.]
 |------|-------|------|------------|
 | ...  | ...   | ...  | ...        |
 
-## Wave Structure
+## Wave 1
 
-Wave 1: [A] [B] [C]          <- 3 parallel agents (foundation)
-           | (A+B complete)
-Wave 2:   [D] [E]            <- 2 parallel agents
-           | (D+E complete)
-Wave 3:    [F] [G]           <- 2 parallel agents
+[Wave-level introduction: what this wave delivers, what it depends on.]
 
-## Agent Prompts
+### Agent A - {Role Description}
 
-[Full prompt for each agent, using the 9-field format.]
+[Full prompt using the 9-field format.]
+
+### Agent B - {Role Description}
+
+[Full prompt using the 9-field format.]
+
+## Wave 2
+
+[What this wave delivers. Which agents from Wave 1 must complete first.]
+
+### Agent C - {Role Description}
+
+[Full prompt using the 9-field format.]
+
+[Continue with ## Wave N for each wave. Every wave MUST have its own
+## Wave N heading. Do NOT use a flat "## Agent Prompts" section with
+all agents grouped together — the parser and web UI use ## Wave N
+headers to determine wave grouping.]
 
 ## Wave Execution Loop
 

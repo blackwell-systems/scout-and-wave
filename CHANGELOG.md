@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.9.4] | 2026-03-07 | E15: IMPL doc completion lifecycle; Scout output requires ## Wave N headers; documentation audit fixes |
 | [0.9.3] | 2026-03-06 | Cleanup: templates/ deleted, IMPL-SCHEMA merged into protocol/message-formats.md, manual implementation removed |
 | [0.9.2] | 2026-03-06 | Protocol drift fixes: branch field in completion reports, PROTOCOL.md ref, heading levels, IMPL-SCHEMA discoverability |
 | [0.9.1] | 2026-03-06 | Open standard repositioning: Agent Skills badge, dual MIT/Apache-2.0 license, PROTOCOL.md removed |
@@ -45,6 +46,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.3.0] | 2026-02-28 | Bootstrap mode for new projects; Wave 0 pattern |
 | [0.2.0] | 2026-02-28 | Decomposed skill prompt; complexity-based suitability heuristic |
 | [0.1.0] | 2026-02-27 | Initial release |
+
+---
+
+## [0.9.4] - 2026-03-07
+
+### Added
+
+- **E15: IMPL Doc Completion Marker** — new execution rule. After the final wave's post-merge verification passes, the orchestrator writes `<!-- SAW:COMPLETE YYYY-MM-DD -->` to the IMPL doc. HTML comment tag: invisible in rendered markdown, parseable with one regex, greppable across a directory.
+  - `protocol/execution-rules.md`: E15 definition with trigger, required action, constraints
+  - `protocol/message-formats.md`: IMPL doc schema updated with `<!-- SAW:COMPLETE -->` tag
+  - `protocol/state-machine.md`: COMPLETE entry action, WAVE_VERIFIED->COMPLETE guard, terminal state description all reference E15
+  - `protocol/README.md`: execution rule count updated to E1-E15
+  - Orchestrator skill (`saw-skill.md`): step 6 writes completion marker after final wave
+  - All active prompt files updated from E1-E14 to E1-E15
+
+### Changed
+
+- **Scout output format requires `## Wave N` headers.** Agent prompts must be organized under `## Wave 1`, `## Wave 2`, etc. — not grouped under a flat `## Agent Prompts` section. The parser and web UI use these headers to determine wave grouping. (scout.md steps 7-8, output format template)
+- ROADMAP.md: IMPL completion lifecycle marked as implemented (v0.9.4); remaining work noted (Go engine parser, API, web UI picker)
+
+### Fixed
+
+- **Documentation audit** (new user experience): install script created, dead `PROTOCOL.md` link in QUICKSTART.md fixed, Agent Skills badge explained, jargon defined on first use (IMPL doc, waves, scaffolds, I1-I6), "Ways to Use SAW" section bridging two repos added to README
 
 ---
 
