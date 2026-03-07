@@ -8,7 +8,7 @@ This document defines the execution rules that govern orchestrator behavior duri
 
 ## Overview
 
-Rules are numbered E1–E14 for cross-referencing and audit; the same convention as invariants (I1–I6). When referenced in implementation files, the E-number serves as an anchor; implementations should embed the canonical definition verbatim alongside the reference.
+Rules are numbered E1–E15 for cross-referencing and audit; the same convention as invariants (I1–I6). When referenced in implementation files, the E-number serves as an anchor; implementations should embed the canonical definition verbatim alongside the reference.
 
 To audit consistency, search implementation files for `E{N}` and verify the embedded definitions match this document.
 
@@ -311,6 +311,20 @@ Three distinct conflict types can arise; each has a different resolution path:
 **Related Invariants:** See I4 (IMPL doc is single source of truth) and I5 (agents commit before reporting)
 
 **Related Rules:** See E12 (merge conflict taxonomy)
+
+---
+
+## E15: IMPL Doc Completion Marker
+
+**Trigger:** Final wave's post-merge verification passes (WAVE_VERIFIED → COMPLETE transition)
+
+**Required Action:** The orchestrator writes `**Status:** COMPLETE` and `**Completed:** {ISO date}` to the IMPL doc header, then commits the update. This is the formal close of the IMPL lifecycle. The marker must be written before the orchestrator reports completion to the user.
+
+**Constraint:** Only the orchestrator writes this marker. Agents never modify the Status field (E14 already prohibits agents from editing earlier sections). If Status is already COMPLETE, do not overwrite.
+
+**Backward Compatibility:** IMPL docs without a `**Status:**` field are treated as ACTIVE. No migration is required.
+
+**Related Rules:** See E14 (IMPL doc write discipline). See state-machine.md for the WAVE_VERIFIED → COMPLETE transition guard.
 
 ---
 

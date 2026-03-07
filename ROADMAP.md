@@ -108,23 +108,11 @@ Scout reads `docs/SAW.md` before the suitability gate. After a wave completes, o
 
 ---
 
-### IMPL Doc Completion Lifecycle
+### ~~IMPL Doc Completion Lifecycle~~ — Implemented (v0.9.4)
 
-**Current state:** The Status table in IMPL docs tracks individual agents (TO-DO → COMPLETE), but there is no final "this IMPL is done" marker. Completed IMPL docs remain in `docs/IMPL/` indefinitely and continue appearing in the `saw serve` picker alongside active work.
+Implemented as E15 in `protocol/execution-rules.md`. The orchestrator writes `**Status:** COMPLETE` and `**Completed:** {date}` to the IMPL doc header after final wave verification. IMPL doc schema updated in `protocol/message-formats.md`, state machine updated in `protocol/state-machine.md`, orchestrator skill updated with step 6.
 
-**Problem:** No protocol step closes the loop. The orchestrator stops after the last wave's post-merge verification, leaving the IMPL doc in a liminal state — all agents complete, but the document itself is unmarked. This creates clutter in the picker and ambiguity about whether follow-up work is expected.
-
-**Proposed:** Add a completion lifecycle with three steps:
-
-1. **Orchestrator marks completion.** After the final wave's post-merge verification passes, the orchestrator writes `## Status: COMPLETE` at the top of the IMPL doc (below the title). This is a protocol-level state transition, not a human action.
-
-2. **Web UI distinguishes complete IMPLs.** The picker shows completed docs with a muted style or under a "Completed" accordion. Active docs appear first. Completed docs are still accessible for reference.
-
-3. **Optional archival.** Users may move completed docs to `docs/IMPL/done/` or delete them. This is a user choice, not a protocol requirement — the `COMPLETE` marker is sufficient for the orchestrator and web UI to behave correctly.
-
-**New E-rule:** After the final wave merges and post-merge verification passes, the orchestrator MUST write `## Status: COMPLETE` to the IMPL doc before any commit or push. This is the formal close of the IMPL lifecycle.
-
-**Protocol changes required:** New E-rule in `protocol/execution-rules.md`, IMPL doc schema update in `protocol/message-formats.md` (add `## Status` as a recognized top-level section), `saw serve` picker logic to read and filter by status, orchestrator skill update to write the marker.
+Remaining work: Go engine parser support (`pkg/protocol/parser.go`), API response field (`doc_status`), web UI picker filtering (active vs completed).
 
 ---
 
