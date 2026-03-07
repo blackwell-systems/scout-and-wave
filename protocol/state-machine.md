@@ -131,7 +131,7 @@ Transitions are conditional. The following guards determine whether a transition
 
 ### WAVE_VERIFIED → COMPLETE
 
-**Guard:** No additional waves defined in IMPL doc AND orchestrator has written `**Status:** COMPLETE` and `**Completed:** {date}` to the IMPL doc header (E15).
+**Guard:** No additional waves defined in IMPL doc AND orchestrator has written `<!-- SAW:COMPLETE YYYY-MM-DD -->` to the IMPL doc (E15).
 
 ### BLOCKED → WAVE_VERIFIED
 
@@ -147,7 +147,7 @@ Transitions are conditional. The following guards determine whether a transition
 
 ## Terminal States
 
-**COMPLETE:** All waves verified, feature fully implemented. The IMPL doc carries `**Status:** COMPLETE` and `**Completed:** {date}` as the permanent record of closure (E15). Protocol execution ends successfully.
+**COMPLETE:** All waves verified, feature fully implemented. The IMPL doc carries `<!-- SAW:COMPLETE YYYY-MM-DD -->` as the permanent record of closure (E15). Protocol execution ends successfully.
 
 **NOT_SUITABLE:** Scout determined preconditions not satisfied. No IMPL doc produced. No waves executed. Orchestrator surfaces suitability verdict to human with failed preconditions and suggested alternatives.
 
@@ -169,7 +169,7 @@ These actions occur automatically when entering each state.
 | **WAVE_MERGING** | Orchestrator runs conflict prediction (E11), executes merge procedure per agent |
 | **WAVE_VERIFIED** | Orchestrator runs post-merge verification (unscoped), updates IMPL doc state |
 | **BLOCKED** | Orchestrator surfaces failure details to human, awaits resolution |
-| **COMPLETE** | Orchestrator writes `Status: COMPLETE` to IMPL doc (E15), reports final status, cleans up worktrees |
+| **COMPLETE** | Orchestrator writes `<!-- SAW:COMPLETE -->` tag to IMPL doc (E15), reports final status, cleans up worktrees |
 | **NOT_SUITABLE** | Orchestrator surfaces suitability verdict, suggests alternatives |
 
 ---

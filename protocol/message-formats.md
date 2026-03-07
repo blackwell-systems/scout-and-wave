@@ -23,8 +23,8 @@ The IMPL doc is a markdown file with the following sections in order:
 ```markdown
 # IMPL: {Feature Name}
 
-**Status:** ACTIVE | COMPLETE
-**Completed:** {ISO date — present only when COMPLETE}
+<!-- SAW:COMPLETE YYYY-MM-DD -->
+<!-- Present only when all waves are merged and verified. Omit entirely for active IMPL docs. -->
 
 **Feature:** {One-line description}
 **Repository:** {Absolute path to repository root}

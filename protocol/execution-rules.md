@@ -318,11 +318,13 @@ Three distinct conflict types can arise; each has a different resolution path:
 
 **Trigger:** Final wave's post-merge verification passes (WAVE_VERIFIED → COMPLETE transition)
 
-**Required Action:** The orchestrator writes `**Status:** COMPLETE` and `**Completed:** {ISO date}` to the IMPL doc header, then commits the update. This is the formal close of the IMPL lifecycle. The marker must be written before the orchestrator reports completion to the user.
+**Required Action:** The orchestrator writes `<!-- SAW:COMPLETE YYYY-MM-DD -->` (with the current ISO date) on the line immediately after the IMPL doc title, then commits the update. This is the formal close of the IMPL lifecycle. The marker must be written before the orchestrator reports completion to the user.
 
-**Constraint:** Only the orchestrator writes this marker. Agents never modify the Status field (E14 already prohibits agents from editing earlier sections). If Status is already COMPLETE, do not overwrite.
+**Format:** HTML comment tag. Invisible in rendered markdown. Parseable with a single regex: `<!-- SAW:COMPLETE (\d{4}-\d{2}-\d{2}) -->`. Tooling can grep a directory of IMPL docs without parsing each file.
 
-**Backward Compatibility:** IMPL docs without a `**Status:**` field are treated as ACTIVE. No migration is required.
+**Constraint:** Only the orchestrator writes this marker. Agents never add or modify it (E14 already prohibits agents from editing earlier sections). If the marker is already present, do not overwrite.
+
+**Backward Compatibility:** IMPL docs without the `<!-- SAW:COMPLETE -->` tag are treated as active. No migration is required.
 
 **Related Rules:** See E14 (IMPL doc write discipline). See state-machine.md for the WAVE_VERIFIED → COMPLETE transition guard.
 
