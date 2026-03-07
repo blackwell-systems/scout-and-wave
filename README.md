@@ -1,13 +1,14 @@
-# Scout-and-Wave: A Protocol for Safely Parallelizing Human-Guided Agentic Workflows
+# Scout-and-Wave
 
 [![Blackwell Systems™](https://raw.githubusercontent.com/blackwell-systems/blackwell-docs-theme/main/badge-trademark.svg)](https://github.com/blackwell-systems)
 ![Version](https://img.shields.io/badge/version-0.9.3-blue)
 [![Agent Skills](assets/badge-agentskills.svg)](https://agentskills.io)
 
-A coordination protocol for safely parallelizing human-guided agentic workflows. Defines participant roles, preconditions, ownership invariants, and verification gates that guarantee agents can work concurrently without conflicts. Human review checkpoints are structural: the protocol does not advance past the suitability gate or between waves without human approval.
+**Parallel AI agents that don't break each other's code.**
+
+Other multi-agent frameworks run fast and merge chaos. SAW gives every agent its own worktree, assigns every file to exactly one agent, and shows you the full plan before any agent touches your code. Conflicts are resolved at planning time — not at merge time, after two agents have already built divergent solutions.
 
 > Follows the [Agent Skills](https://agentskills.io) open standard — compatible with Claude Code, Cursor, GitHub Copilot, and other Agent Skills-compatible tools. See [`implementations/`](implementations/) for reference implementations.
-
 
 > **New to Scout-and-Wave?** Follow this path:
 > 1. Read this README (15 min) - understand "why" and "how" at a high level
@@ -17,11 +18,16 @@ A coordination protocol for safely parallelizing human-guided agentic workflows.
 
 ## Why
 
-Parallel AI agents working on the same codebase produce merge conflicts, contradictory implementations, and expensive rework. Agents make local decisions without global context, and those decisions collide.
+You've run parallel agents before. You know what happens: two agents edit the same file, the merge produces garbage, and you spend longer fixing it than if you'd done the work sequentially. Or worse — the merge succeeds silently because both agents touched different functions in the same file, but they made contradictory assumptions about shared state. You find out at runtime.
 
-The root cause isn't that agents are careless; it's that nothing stops two agents from claiming the same file. Worktrees isolate working directories, not merge outcomes. Two agents can still produce incompatible edits to the same file; the conflict is discovered at merge time, after both have implemented divergent solutions.
+Most frameworks try to solve this with better prompts. SAW solves it with structure:
 
-SAW fixes this before any agent starts, through four participants coordinating within a single session: the **Orchestrator** (your Claude Code session), **Scout** (analyzes codebase, assigns files to agents), **Scaffold Agent** (creates shared types before parallel work begins), and **Wave Agents** (groups of agents that execute in parallel; each wave runs sequentially) implement their assigned files in parallel worktrees. The scout enforces disjoint file ownership at planning time, the scaffold agent creates interface contracts before parallelization, and wave agents work in isolated worktrees. Everything is coordinated by a single orchestrator that holds full state.
+- **Disjoint file ownership.** The Scout assigns every file to exactly one agent before any code is written. Two agents in the same wave cannot produce edits to the same file. Merge conflicts become structurally impossible.
+- **Per-agent worktree isolation.** Each agent works in its own git worktree — a separate directory with an independent file tree. Concurrent builds, tests, and tool-cache writes don't race on shared state.
+- **Human review before execution.** You see the full plan — file assignments, interface contracts, wave structure — and approve it before any agent launches. This is the last point where changing the architecture is cheap.
+- **Suitability gate.** SAW says "no" when the work doesn't decompose cleanly. A poor-fit assessment prevents bad decompositions from producing expensive failures.
+
+Four participants coordinate within a single session: the **Orchestrator** (your Claude Code session), **Scout** (analyzes codebase, assigns files to agents), **Scaffold Agent** (creates shared types before parallel work begins), and **Wave Agents** (implement their assigned files in parallel worktrees, one wave at a time). The scout enforces disjoint ownership at planning time, the scaffold agent creates interface contracts before parallelization, and wave agents work in isolated worktrees. Everything is coordinated by a single orchestrator that holds full state.
 
 ## How
 

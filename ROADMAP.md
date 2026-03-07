@@ -108,6 +108,73 @@ Scout reads `docs/SAW.md` before the suitability gate. After a wave completes, o
 
 ---
 
+## Quality Gates
+
+### Automated Post-Wave Verification
+
+**Current state:** SAW's only quality check is the human review checkpoint after the Scout produces the IMPL doc. Once waves execute, there is no automated verification — a wave agent that writes broken code, leaves stubs, or breaks tests is only caught when a human looks at the output.
+
+**Problem:** The review checkpoint is pre-execution. There is no gate between wave agent completion and merge. Broken code silently merges into the integration branch.
+
+**Proposed:** After each wave agent writes `[COMPLETE]` to its IMPL doc section, the orchestrator runs a quality gate before considering the story done. Gates are subprocess calls — not AI prompts — that check the exit code of real project tools.
+
+**Gate types:**
+
+```
+typecheck  →  tsc --noEmit  /  mypy .  /  pyright
+test       →  pytest -v  /  npm test  /  cargo test  /  go test ./...
+lint       →  ruff check .  /  eslint .  /  cargo clippy
+custom     →  any command defined in saw.config.json
+```
+
+Project type is auto-detected from marker files (`package.json`, `Cargo.toml`, `pyproject.toml`, `go.mod`). Each gate type has a fallback chain — if `mypy` is not installed, try `pyright`, then `python -m mypy`. Gates are configured as `required` (blocks merge) or `optional` (warns only).
+
+**AI Verification Gate** — separate from subprocess gates. A Task agent reads the wave agent's acceptance criteria from the IMPL doc and the changed files, and answers: did the agent actually implement what was specified, or did it leave stubs? Skeleton code patterns that trigger failure: `pass`, `...`, `NotImplementedError`, `TODO`, `FIXME`, `implement later`.
+
+**Failure handling:** A required gate failure feeds directly into the failure taxonomy — the orchestrator classifies it as `fixable` (test failure with known error) or `escalate` (compilation broken, no clear path). In automatic retry mode, the orchestrator re-runs the wave agent up to N times before escalating to the human.
+
+**Flow levels** (maps to protocol suitability gate severity):
+
+| Level | Gates | Behavior on failure |
+|-------|-------|---------------------|
+| `quick` | none | no gates run |
+| `standard` | all gates | failure is a warning, merge proceeds |
+| `full` | all gates | required gate failure blocks merge |
+
+**Protocol changes required:** New E-rule in `protocol/execution-rules.md` requiring orchestrator to run configured gates before marking a wave agent complete, new `quality_gates` section in `protocol/message-formats.md` defining gate config schema, `scout.md` updated to optionally emit gate config in IMPL doc.
+
+---
+
+### Stub Detection at Review Checkpoint
+
+**Current state:** The review checkpoint is a human reading the IMPL doc and approving the wave structure. There is no automated check on what the wave agents actually produced.
+
+**Problem:** An agent can write a function shell — correct signature, correct file location, correct import — but with `pass`, `...`, or `raise NotImplementedError` as the body, then mark `[COMPLETE]`. The IMPL doc looks fine. The human reviewer looking at the plan (not the diff) would not catch it. The stub ships.
+
+**Proposed:** After all wave agents complete and before the review checkpoint, the orchestrator scans every file touched by wave agents for stub patterns:
+
+```
+pass          # Python empty body
+...           # Python ellipsis body
+NotImplementedError
+TODO
+FIXME
+raise NotImplementedError
+// TODO
+/* TODO */
+throw new Error("not implemented")
+unimplemented!()   # Rust
+todo!()            # Rust
+```
+
+Stubs found in changed files → listed in the IMPL doc under a new `## Stub Report` section, flagged on the review screen. The human sees exactly which functions are hollow before approving.
+
+This is distinct from quality gates (which run project tools). Stub detection is a static text scan — no build required, works on any language, zero false-negative risk on the patterns above.
+
+**Protocol changes required:** New E-rule requiring orchestrator to run stub scan after wave completes, new `## Stub Report` section in IMPL doc schema (`protocol/message-formats.md`), review screen in web UI surfaces stub report prominently.
+
+---
+
 ## Web Product
 
 ### Local-First Web UI (`saw serve`)
