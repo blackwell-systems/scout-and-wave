@@ -8,7 +8,7 @@ This document defines the execution rules that govern orchestrator behavior duri
 
 ## Overview
 
-Rules are numbered E1–E15 for cross-referencing and audit; the same convention as invariants (I1–I6). When referenced in implementation files, the E-number serves as an anchor; implementations should embed the canonical definition verbatim alongside the reference.
+Rules are numbered E1–E16 for cross-referencing and audit; the same convention as invariants (I1–I6). When referenced in implementation files, the E-number serves as an anchor; implementations should embed the canonical definition verbatim alongside the reference.
 
 To audit consistency, search implementation files for `E{N}` and verify the embedded definitions match this document.
 
@@ -330,8 +330,34 @@ Three distinct conflict types can arise; each has a different resolution path:
 
 ---
 
+## E16: Scout Output Validation
+
+**Trigger:** Scout writes IMPL doc to disk
+
+**Required Action:** Orchestrator runs the IMPL doc validator before entering REVIEWED state.
+If validation fails, the specific errors are fed back to Scout as a correction prompt.
+Scout rewrites only the failing sections. This loops until the doc passes or a retry limit
+(default: 3) is reached.
+
+**Validator scope:** Only typed-block sections (IC-1: `type=impl-*` blocks). Prose sections
+are excluded from validation.
+
+**Correction prompt format:** The orchestrator's correction prompt to Scout must list each error with the section name, the specific failure (e.g., "impl-dep-graph block: Wave 2 missing `depends on:` line for agent [C]"), and the line number or block identifier where the error occurred. This gives Scout precise targets for correction without requiring it to re-read the whole doc.
+
+**Retry limit:** Default 3 attempts. After the 3rd failed validation, enter BLOCKED. Implementations may override this default, but the default is 3.
+
+**On retry limit exhausted:** Enter BLOCKED state. Orchestrator surfaces validation errors
+to human. Do not enter REVIEWED.
+
+**On validation pass:** Proceed to REVIEWED normally.
+
+**Relationship to structured outputs:** For API-backend runs using structured output enforcement, the validator always passes on first attempt (the output was already schema-validated). E16's correction loop is effectively a no-op in that path but must still be present in the protocol for CLI-backend and hand-edited docs.
+
+---
+
 ## Cross-References
 
 - See `preconditions.md` for conditions that must hold before execution begins
 - See `invariants.md` for runtime constraints that must hold during execution
 - See `state-machine.md` and `message-formats.md` for state machine and message format specifications
+- See `state-machine.md` for the SCOUT_VALIDATING state triggered by E16
