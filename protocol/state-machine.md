@@ -15,6 +15,7 @@ SAW execution progresses through a series of states orchestrated by the synchron
 | State | Description | Entry Condition | Exit Condition |
 |-------|-------------|-----------------|----------------|
 | **SCOUT_PENDING** | Initial state. Scout analysis not yet complete. | Protocol invoked | Scout completes, produces IMPL doc |
+| **SCOUT_VALIDATING** | Orchestrator running validator on Scout output; feeding errors back to Scout if needed. | Scout writes IMPL doc | Validation passes OR retry limit exhausted |
 | **REVIEWED** | IMPL doc produced, awaiting human review and approval. | Scout complete | Human approves plan |
 | **SCAFFOLD_PENDING** | Scaffold Agent creating type scaffold files from approved contracts. | Human approved IMPL doc, Scaffolds section non-empty | Scaffold Agent commits all files, updates IMPL doc |
 | **WAVE_PENDING** | Ready to launch wave agents. Worktrees not yet created. | Scaffolds committed (or no scaffolds needed) | Orchestrator creates worktrees, launches all agents |
@@ -33,7 +34,9 @@ SAW execution progresses through a series of states orchestrated by the synchron
 
 ```
 SCOUT_PENDING
-    ↓ (Scout completes)
+    ↓ (Scout completes, IMPL doc written)
+SCOUT_VALIDATING
+    ↓ (Validation passes)
 REVIEWED
     ↓ (Human approves)
 SCAFFOLD_PENDING (if Scaffolds section non-empty)
@@ -52,6 +55,15 @@ COMPLETE
 ```
 
 ### Failure Paths
+
+**Validation Failure Path:**
+```
+SCOUT_VALIDATING
+    ↓ (Validation fails, retries remain)
+SCOUT_VALIDATING (self-loop: correction prompt → Scout rewrites → revalidate)
+    ↓ (Retry limit exhausted)
+BLOCKED
+```
 
 **Suitability Gate Failure:**
 ```
@@ -84,11 +96,25 @@ WAVE_PENDING (wave restarts with corrected contracts)
 
 Transitions are conditional. The following guards determine whether a transition may proceed.
 
-### SCOUT_PENDING → REVIEWED
+### SCOUT_PENDING → SCOUT_VALIDATING
 
-**Guard:** Scout completion notification received AND IMPL doc contains suitability verdict AND verdict is SUITABLE or SUITABLE WITH CAVEATS.
+**Guard:** Scout completion notification received AND IMPL doc written to disk.
+
+**Note:** SCOUT_VALIDATING is now interposed between SCOUT_PENDING and REVIEWED. The previous direct transition from SCOUT_PENDING to REVIEWED no longer fires on Scout completion; validation must pass first.
+
+### SCOUT_VALIDATING → REVIEWED
+
+**Guard:** Validator reports no errors on all `type=impl-*` typed-block sections in the IMPL doc AND suitability verdict is SUITABLE or SUITABLE WITH CAVEATS.
 
 **Failure:** If verdict is NOT SUITABLE, transition to NOT_SUITABLE (terminal).
+
+### SCOUT_VALIDATING → SCOUT_VALIDATING (self-loop)
+
+**Guard:** Validator reports errors AND retry count < retry limit (default: 3, per E16). Orchestrator issues correction prompt to Scout identifying each error with section name and location; Scout rewrites only the failing sections; validator re-runs.
+
+### SCOUT_VALIDATING → BLOCKED
+
+**Guard:** Validator reports errors AND retry count >= retry limit (default: 3, per E16). Orchestrator surfaces validation errors to human. Do not enter REVIEWED.
 
 ### REVIEWED → SCAFFOLD_PENDING
 
@@ -162,6 +188,7 @@ These actions occur automatically when entering each state.
 | State | Entry Actions |
 |-------|---------------|
 | **SCOUT_PENDING** | Orchestrator launches Scout agent with absolute IMPL doc path |
+| **SCOUT_VALIDATING** | Orchestrator runs validator on all `type=impl-*` blocks in IMPL doc; on failure, issues correction prompt to Scout (E16); on pass, advances to REVIEWED |
 | **REVIEWED** | Orchestrator surfaces IMPL doc to human, requests approval |
 | **SCAFFOLD_PENDING** | Orchestrator launches Scaffold Agent with absolute IMPL doc path |
 | **WAVE_PENDING** | Orchestrator runs pre-launch ownership verification (E3) |
@@ -202,7 +229,7 @@ Waves execute sequentially (I3: Wave sequencing). When Wave N completes, its imp
 
 ## State Machine Correctness Properties
 
-When all invariants (I1–I6) and execution rules (E1–E15) are maintained:
+When all invariants (I1–I6) and execution rules (E1–E16) are maintained:
 
 - **Progress:** The state machine always advances or terminates. No infinite loops.
 - **Human checkpoints enforced:** REVIEWED state requires explicit approval. Suitability gate requires human review of NOT SUITABLE verdicts.
