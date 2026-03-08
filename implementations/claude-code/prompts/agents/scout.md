@@ -256,9 +256,11 @@ Record the verdict and its rationale in the IMPL doc under a
    - Annotate each wave transition with the *specific* agent(s) that unblock
      it, not "blocked on Wave 1" but "blocked on Agent A completing."
 
-8. **Write agent prompts.** For each agent, produce a complete prompt using
-   the standard 9-field format (see [agent template](agent-template.md)). The
-   prompt must be self-contained: an agent receiving it should need nothing
+8. **Write agent prompts under `## Wave N` headers.** Each wave MUST have its
+   own `## Wave N` section in the IMPL doc. Agent prompts go under `### Agent X`
+   subsections within their wave. Do NOT group all agents under a single flat
+   section. Use the standard 9-field format (see [agent template](agent-template.md)).
+   The prompt must be self-contained: an agent receiving it should need nothing
    beyond the prompt and the existing codebase to do its work.
 
 9. **Determine verification gates from the build system.** Read the Makefile,
@@ -346,7 +348,7 @@ Record the verdict and its rationale in the IMPL doc under a
 Write the following to `docs/IMPL/IMPL-<feature-slug>.md`:
 
 ```
-### Suitability Assessment
+## Suitability Assessment
 
 Verdict: SUITABLE | NOT SUITABLE | SUITABLE WITH CAVEATS
 test_command: [full test suite command — e.g. `go test ./...` | `cargo test --workspace` | `pytest` | `mvn test` | `npx jest`]
@@ -356,7 +358,7 @@ lint_command: [check-mode lint command — e.g. `golangci-lint run` | `cargo cli
 write the sections below. If SUITABLE WITH CAVEATS, describe what the
 caveats are and how they are handled.]
 
-### Scaffolds
+## Scaffolds
 
 [Omit this section if no scaffold files are needed.]
 
@@ -370,7 +372,7 @@ types.
 |------|----------|-------------|--------|
 | `...` | `...` | `...` | pending |
 
-### Pre-Mortem
+## Pre-Mortem
 
 Write the Pre-Mortem before the human review checkpoint. Think adversarially about what could go wrong with your plan.
 
@@ -382,7 +384,7 @@ Write the Pre-Mortem before the human review checkpoint. Think adversarially abo
 |----------|-----------|--------|------------|
 | {description of what could go wrong} | low | medium | {concrete action to prevent or recover} |
 
-### Known Issues
+## Known Issues
 
 List any pre-existing test failures, build warnings, or known bugs that agents
 should be aware of. This helps distinguish expected failures from regressions.
@@ -395,7 +397,7 @@ Example:
 
 [If no known issues, write "None identified."]
 
-### Dependency Graph
+## Dependency Graph
 
 ```yaml type=impl-dep-graph
 Wave 1 (N parallel agents[, description]):
@@ -418,11 +420,11 @@ dependencies on other agents' work) get the ✓ root note. Call out any files
 that were split or extracted to resolve ownership conflicts after the closing
 code fence.]
 
-### Interface Contracts
+## Interface Contracts
 
 [Exact function/method/type signatures that cross agent boundaries.]
 
-### File Ownership
+## File Ownership
 
 ```yaml type=impl-file-ownership
 | File | Agent | Wave | Depends On |
@@ -430,7 +432,7 @@ code fence.]
 | ...  | ...   | ...  | ...        |
 ```
 
-### Wave Structure
+## Wave Structure
 
 ```yaml type=impl-wave-structure
 Wave 1: [A] [B] [C]          <- 3 parallel agents (foundation)
@@ -440,11 +442,32 @@ Wave 2:   [D] [E]            <- 2 parallel agents
 Wave 3:    [F] [G]           <- 2 parallel agents
 ```
 
-### Agent Prompts
+## Wave 1
 
-[Full prompt for each agent, using the 9-field format.]
+[Wave-level introduction: what this wave delivers, what it depends on.]
 
-### Wave Execution Loop
+### Agent A - {Role Description}
+
+[Full prompt using the 9-field format.]
+
+### Agent B - {Role Description}
+
+[Full prompt using the 9-field format.]
+
+## Wave 2
+
+[What this wave delivers. Which agents from Wave 1 must complete first.]
+
+### Agent C - {Role Description}
+
+[Full prompt using the 9-field format.]
+
+[Continue with ## Wave N for each wave. Every wave MUST have its own
+## Wave N heading. Do NOT use a flat "## Agent Prompts" section with
+all agents grouped together — the parser and web UI use ## Wave N
+headers to determine wave grouping.]
+
+## Wave Execution Loop
 
 After each wave completes, work through the Orchestrator Post-Merge Checklist
 below in order. The checklist is the executable form; this loop is the rationale.

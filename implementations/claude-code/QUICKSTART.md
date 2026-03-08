@@ -116,20 +116,9 @@ Verify:
 ```markdown
 ## Scaffolds
 
-| File | Status | Commit |
-|------|--------|--------|
-| src/cache/types.go | pending | - |
-
-Contents:
-```go
-package cache
-
-type CacheInterface interface {
-    Get(key string) ([]byte, bool)
-    Set(key string, value []byte)
-    Delete(key string)
-}
-```
+| File | Contents | Import path | Status |
+|------|----------|-------------|--------|
+| `src/cache/types.go` | `CacheInterface interface { Get, Set, Delete }` | `example/cache` | pending |
 ```
 
 If scaffolds are listed, the Scaffold Agent will create them automatically in the next step.

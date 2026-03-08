@@ -57,7 +57,7 @@ The five questions assess whether the work:
 1. Decomposes into independent files
 2. Avoids investigation-first blockers
 3. Has discoverable interfaces
-4. Doesn't require pre-implementation scanning
+4. Has been pre-scanned for already-implemented items (from audit/findings lists)
 5. Provides value from parallelization
 
 See [protocol/preconditions.md](protocol/preconditions.md) for details.
