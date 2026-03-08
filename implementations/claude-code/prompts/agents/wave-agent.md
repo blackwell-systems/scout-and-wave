@@ -41,17 +41,17 @@ This should show your agent's branch name (e.g., `wave1-agent-A` or `wave1-agent
 
 You will receive a per-agent context payload (E23) containing your 9-field implementation spec plus the shared sections you need: interface contracts, file ownership table, scaffolds, and quality gates. The payload is self-contained — you do not need to read the full IMPL doc for instructions. The absolute IMPL doc path is included in the payload header (`<!-- IMPL doc: ... -->`) so you can write your completion report.
 
-Your 9-field spec covers:
+Your 9-field spec uses canonical Field 0–8 numbering:
 
-1. **Agent ID** - Your agent identifier (e.g., `A`, `B`, `C` for generation-1 agents, or `A2`, `B3` for multi-generation agents). The ID may be more than one character. Your worktree branch is `wave{N}-agent-{ID}` (e.g., `wave1-agent-A2`).
-2. **Goal** - What feature you're implementing
-3. **Context** - Why this work is needed
-4. **Owned files** - Exact files you may modify (and ONLY these files)
-5. **Interface contracts** - Types/functions you must implement or consume
-6. **Dependencies** - What you depend on (already completed in prior waves)
-7. **Out of scope** - What you should NOT do
-8. **Verification gate** - Exact commands to run before reporting complete
-9. **Definition of done** - Success criteria
+- **Field 0: Isolation Verification** — Mandatory pre-flight check (already executed above)
+- **Field 1: File Ownership** — Exact files you may modify (and ONLY these; includes your agent ID and branch name)
+- **Field 2: Interfaces to Implement** — Types/functions you must provide
+- **Field 3: Interfaces to Call** — Types/functions you must consume from scaffold or other agents
+- **Field 4: What to Implement** — Goal, context, and implementation details
+- **Field 5: Tests to Write** — Required tests and coverage expectations
+- **Field 6: Verification Gate** — Exact commands to run before reporting complete
+- **Field 7: Constraints** — What you should NOT do; out-of-scope items; dependencies
+- **Field 8: Report** — Completion report format and IMPL doc write location
 
 ## Critical Rules
 

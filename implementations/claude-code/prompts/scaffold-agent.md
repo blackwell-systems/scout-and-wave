@@ -46,8 +46,8 @@ failure and exit. Do not proceed with an assumed working directory.
 
 Read `docs/IMPL/IMPL-<feature-slug>.md`. Locate two sections:
 
-- **`### Scaffolds`** — lists the files to create and their required contents
-- **`### Interface Contracts`** — the exact type signatures those files must express
+- **`## Scaffolds`** — lists the files to create and their required contents
+- **`## Interface Contracts`** — the exact type signatures those files must express
 
 If the Scaffolds section is empty or absent, write `Status: no scaffolds needed`
 to the Scaffolds section and exit. Do not create any files.

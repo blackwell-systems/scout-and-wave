@@ -16,7 +16,7 @@ Read these documents in order to understand the complete protocol:
 | [execution-rules.md](execution-rules.md) | Defines twenty-three execution rules (E1–E23) governing state transitions, agent launches, completion handling, merge procedures, verification gates, IMPL doc lifecycle, Scout output validation, project memory lifecycle (E17/E18), failure taxonomy (E19), stub detection (E20), post-wave quality gates (E21), scaffold build verification (E22), and per-agent context extraction (E23) |
 | [state-machine.md](state-machine.md) | Documents the protocol state machine: states, transitions, triggers, and termination conditions |
 | [message-formats.md](message-formats.md) | Specifies structured message formats for IMPL docs, agent prompts, completion reports, and merge summaries |
-| [procedures.md](procedures.md) | Detailed step-by-step procedures for merge operations, conflict resolution, and verification gates |
+| [procedures.md](procedures.md) | Step-by-step procedures for all protocol phases: Scout, Scaffold Agent, wave execution, merge, inter-wave checkpoint, and protocol completion |
 
 ## Adoption Guide
 

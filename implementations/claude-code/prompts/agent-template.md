@@ -28,8 +28,8 @@ spec. The scout fills these in from the coordination artifact. Fields are
 ordered so the agent reads constraints first, then context, then the work.
 
 **Wave numbering:** Waves are 1-indexed. Wave 1 is the first parallel
-implementation wave. There is no Wave 0; the Scout produces any required type
-scaffold files directly before Wave 1 launches.
+implementation wave. There is no Wave 0; the Scaffold Agent creates shared type scaffold files
+(specified by the Scout in the IMPL doc Scaffolds section) before Wave 1 launches.
 
 ---
 

@@ -27,6 +27,20 @@ ownership table, wave structure, agent prompts, and status checklist.
 This file is the single source of truth for all downstream agents and for tracking
 progress between waves.
 
+## Step 0: Read Project Memory (E17)
+
+Before running the suitability gate, check for `docs/CONTEXT.md` in the
+target project. If it exists, read it in full:
+
+- `established_interfaces` — avoid proposing types that already exist
+- `decisions` — respect prior architectural decisions; do not contradict them
+- `conventions` — follow project naming, error handling, and testing patterns
+- `features_completed` — understand what waves have already shipped
+
+If `docs/CONTEXT.md` does not exist, proceed normally.
+
+---
+
 ## Suitability Gate
 
 Run this gate before any file analysis. If the work is not suitable, stop

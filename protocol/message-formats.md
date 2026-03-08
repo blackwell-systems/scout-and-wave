@@ -142,7 +142,7 @@ Certain sections of the IMPL doc are machine-parsed by the orchestrator and the 
 - Precise validation: validator errors reference the block type (e.g., "`impl-file-ownership` block: missing Agent column") instead of "line 47"
 - Stability: sections can be reordered or have prose added around them without breaking parsers
 
-**Prose sections remain free-form.** The following sections do NOT use typed blocks and are excluded from validator scope: Suitability Assessment, Pre-Mortem, Scaffolds, Known Issues, Interface Contracts, Wave Execution Loop, Orchestrator Post-Merge Checklist, Status table, and all agent prompt sections.
+**Prose sections remain free-form.** The following sections do NOT use typed blocks and are excluded from validator scope: Suitability Assessment, Quality Gates, Pre-Mortem, Scaffolds, Known Issues, Interface Contracts, Wave Execution Loop, Orchestrator Post-Merge Checklist, Status table, and all agent prompt sections.
 
 ### Block Types
 

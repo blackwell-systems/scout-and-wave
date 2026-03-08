@@ -24,8 +24,8 @@
 
 set -euo pipefail
 
-# Find the active IMPL doc (most recently modified docs/IMPL-*.md).
-IMPL_DOC=$(find docs -maxdepth 1 -name "IMPL-*.md" 2>/dev/null \
+# Find the active IMPL doc (most recently modified docs/IMPL/IMPL-*.md).
+IMPL_DOC=$(find docs/IMPL -name "IMPL-*.md" 2>/dev/null \
   | xargs ls -t 2>/dev/null \
   | head -1)
 

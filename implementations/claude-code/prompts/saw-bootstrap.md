@@ -258,6 +258,12 @@ No pseudocode. These are binding contracts.]
 | Scaffold compilation fails (wrong import path or missing dependency) | low | high | Scaffold Agent runs go build before committing; fix reported before Wave 1 launches |
 | Wave 2 wiring agent has implicit dependency on Wave 1 internals not in interface contracts | medium | medium | Add required internals to contracts during review; agents must not access unexported symbols |
 
+## Known Issues
+
+[Optional. Document any known risks or ambiguities discovered during analysis
+that do not rise to Pre-Mortem level but should be tracked. Format:
+`- {issue}: {mitigation or note}`. Omit if none.]
+
 ## Dependency Graph
 
 ```yaml type=impl-dep-graph

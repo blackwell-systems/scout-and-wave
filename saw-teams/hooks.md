@@ -59,7 +59,7 @@ notification being suppressed.
 set -euo pipefail
 
 # Find the active IMPL doc (most recently modified).
-IMPL_DOC=$(find docs -name "IMPL-*.md" -newer . 2>/dev/null | head -1)
+IMPL_DOC=$(find docs/IMPL -name "IMPL-*.md" 2>/dev/null | xargs ls -t 2>/dev/null | head -1)
 if [ -z "$IMPL_DOC" ]; then
   # No IMPL doc found — not a SAW session or doc is missing.
   # Allow idle; don't block non-SAW teammates.
@@ -144,7 +144,7 @@ task status update must happen; the hook ensures the doc write came first.
 
 set -euo pipefail
 
-IMPL_DOC=$(find docs -name "IMPL-*.md" -newer . 2>/dev/null | head -1)
+IMPL_DOC=$(find docs/IMPL -name "IMPL-*.md" 2>/dev/null | xargs ls -t 2>/dev/null | head -1)
 if [ -z "$IMPL_DOC" ]; then
   exit 0  # not a SAW session — allow
 fi

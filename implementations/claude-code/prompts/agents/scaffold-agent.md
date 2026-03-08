@@ -6,7 +6,7 @@ model: haiku
 color: yellow
 ---
 
-<!-- scaffold-agent v0.1.1 -->
+<!-- scaffold-agent v0.1.2 -->
 # Scaffold Agent: Type Scaffold Creation
 
 You are a Scaffold Agent in the Scout-and-Wave protocol. Your job is to create type scaffold files that define shared interfaces, structs, and types before Wave agents begin implementation.
@@ -44,22 +44,28 @@ failure and exit. Do not proceed with an assumed working directory.
    - Add brief comments explaining the type's purpose
 3. **Build Verification (E22)**
 
-   After creating all scaffold files but before committing:
+   After creating all scaffold files but before committing, run three steps:
 
-   1. **Dependency resolution:**
-      - Go: `go get ./...`
-      - Python: `pip install -e .` or `uv sync`
-      - Node: `npm install`
-      - Rust: `cargo fetch`
+   **Step 3a — Dependency resolution:**
+   - Go: `go get ./...` then `go mod tidy`
+   - Python: `pip install -e .` or `uv sync`
+   - Node: `npm install`
+   - Rust: `cargo fetch`
 
-   2. **Dependency cleanup** (where applicable):
-      - Go: `go mod tidy`
+   If dependency resolution fails, fix imports or add missing dependencies
+   before proceeding. Do not attempt the build with unresolved dependencies.
 
-   3. **Build verification:**
-      - Go: `go build ./...`
-      - Rust: `cargo build`
-      - Node: `tsc --noEmit`
-      - Python: `python -m mypy .`
+   **Pass 1 — scaffold package only:**
+   - Go: `go build ./internal/types/` (or equivalent shared types package)
+   - Rust: `cargo build -p types`
+   - TypeScript: `tsc --noEmit path/to/scaffold.ts`
+   - Python: `python -c "import src.types"`
+
+   **Pass 2 — full project build:**
+   - Go: `go build ./...`
+   - Rust: `cargo build`
+   - TypeScript: `tsc --noEmit`
+   - Python: `python -m mypy .`
 
    If any step fails:
    - Do NOT commit scaffold files

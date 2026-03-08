@@ -612,4 +612,4 @@ This assembled payload is passed as the `prompt` parameter when launching the ag
 - E19: Orchestrator applies `failure_type` decision tree on partial/blocked agents — see also E7, E7a, `message-formats.md`
 - E20: Orchestrator runs stub detection after each wave — see also E21, `message-formats.md` (## Stub Report Section Format)
 - E21: Orchestrator runs post-wave verification gates before merge — see also E20, E22, `message-formats.md` (## Quality Gates Section Format)
-- E22: Scaffold Agent runs build verification before committing scaffold files — see also E5, `message-formats.md` (Scaffolds Section Format), `agents/scaffold-agent.md`
+- E22: Scaffold Agent runs build verification before committing scaffold files — see also `procedures.md` (Procedure 2: Scaffold Agent), `message-formats.md` (Scaffolds Section Format), `implementations/claude-code/prompts/agents/scaffold-agent.md`

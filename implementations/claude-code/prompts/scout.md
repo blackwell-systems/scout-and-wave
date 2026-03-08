@@ -66,6 +66,9 @@ Answer these five questions:
 4. **Pre-implementation status check.** If the work is based on an audit report,
    bug list, or requirements document, check each item against the current
    codebase to determine implementation status:
+
+   > **CONTEXT.md cross-check:** After reading `docs/CONTEXT.md` (Step 0), also check `established_interfaces` for any interfaces that overlap with the feature being planned. If an interface already exists and matches what you would define, reference it in the IMPL doc's Interface Contracts section rather than redefining it.
+
    - Read the source files that would change for each item
    - Classify each item as: **TO-DO** (not implemented), **DONE** (already
      implemented), or **PARTIAL** (partially implemented)
@@ -557,6 +560,9 @@ After wave {N} completes:
       appearing in >1 agent's list before touching the working tree
 - [ ] Review `interface_deviations` — update downstream agent prompts for any
       item with `downstream_action_required: true`
+- [ ] Run E20 stub scan: `bash "${CLAUDE_SKILL_DIR}/scripts/scan-stubs.sh" {files_changed}`
+      Append output to IMPL doc under `## Stub Report — Wave {N}`
+- [ ] Run E21 quality gates (if `## Quality Gates` section present in IMPL doc)
 - [ ] Merge each agent: `git merge --no-ff <branch> -m "Merge wave{N}-agent-{X}: <desc>"`
 - [ ] Worktree cleanup: `git worktree remove <path>` + `git branch -d <branch>` for each
 - [ ] Post-merge verification:
