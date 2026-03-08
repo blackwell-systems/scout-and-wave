@@ -184,6 +184,40 @@ Add a Claude chat panel to `saw serve`. Read-only diagnostic mode first (why did
 
 ---
 
+## Multi-Generation Agent IDs
+
+### Extended Agent Identifier Format (A2, B3, ...)
+
+**Current state:** Agent identifiers are single uppercase letters A–Z, giving a maximum of 26 agents per wave. The IMPL doc format, parser, and all agent prompts assume single-character IDs.
+
+**Problem:** 26 agents per wave is a practical ceiling. Large features with many parallel work streams, or a future meta-orchestrator running multiple concurrent IMPLs, could exceed this. There is also no systematic color/identity scheme for agents — single letters were sufficient when the number was small.
+
+**Proposed identifier format:** `[Letter][Generation]` where Generation is omitted for generation 1:
+
+| ID | Letter | Generation | Meaning |
+|----|--------|------------|---------|
+| `A` | A | 1 | First agent of A-family |
+| `B` | B | 1 | First agent of B-family |
+| `A2` | A | 2 | Second agent of A-family (same hue, different shade) |
+| `B3` | B | 3 | Third agent of B-family |
+
+Letter families provide color identity continuity (see web UI roadmap). Generation distinguishes agents within a family while keeping the visual grouping clear — A and A2 are related; A and B are not.
+
+**When to use multi-generation IDs:** The Scout assigns them when a feature requires more agents than available letters (>26), or when agents within a letter family share a logical sub-domain (e.g., A handles API layer; A2 handles API tests for the same subsystem). The Scout decides — the orchestrator does not assign IDs manually.
+
+**Protocol changes required:**
+
+- `protocol/message-formats.md` — Agent ID field definition updated: `[A-Z][2-9]?` (letter + optional digit 2–9; generation 1 is the bare letter). Examples in file ownership table and wave structure sections updated.
+- `protocol/execution-rules.md` — E-rules referencing "agent letter" updated to "agent ID". SAW tag format updated: `[SAW:wave1:agent-A2]` is valid.
+- `implementations/claude-code/prompts/agents/scout.md` — Scout briefing updated to explain multi-generation IDs and when to assign them.
+- `implementations/claude-code/prompts/agents/wave-agent.md` — Wave agent briefing updated to accept multi-char `letter` field in Field 0.
+- Parser (`pkg/protocol/parser.go` in scout-and-wave-web) — regex for agent letter updated from `[A-Z]` to `[A-Z][2-9]?`.
+- Web UI (`lib/agentColors.ts`) — color derivation updated to decompose multi-char IDs into `(letter, generation)` and apply tonal variation. See web UI roadmap.
+
+**Non-change:** Worktree branch names already use the full agent ID as a string (`wave1-agent-A2`), so no branch naming changes are needed.
+
+---
+
 ## Protocol Hardening (Cross-Repo Lessons)
 
 Items identified during the engine extraction (Wave 2, 2026-03-08) that should be added to the protocol.
