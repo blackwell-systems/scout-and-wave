@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.14.2] | 2026-03-08 | Second-pass audit — saw-teams parity (E23 payload, IMPL paths, E19/E20/E21), bootstrap completeness |
+| [0.14.1] | 2026-03-08 | First-pass audit — E1–E23 propagation, failure_type timeout, Quality Gates template, E17 fallback |
 | [0.14.0] | 2026-03-08 | E23 per-agent context extraction — eliminates O(N²) token waste in large IMPL docs |
 | [0.13.0] | 2026-03-08 | Quality gates (E20 stub detection, E21 post-wave verification, E22 scaffold build check) |
 | [0.12.0] | 2026-03-08 | Project memory (docs/CONTEXT.md, E17/E18) + failure taxonomy (failure_type field, E19) |
@@ -58,6 +60,44 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.3.0] | 2026-02-28 | Bootstrap mode for new projects; Wave 0 pattern |
 | [0.2.0] | 2026-02-28 | Decomposed skill prompt; complexity-based suitability heuristic |
 | [0.1.0] | 2026-02-27 | Initial release |
+
+---
+
+## [0.14.2] - 2026-03-08
+
+### Fixed
+
+**Second-pass deep audit — saw-teams layer parity and bootstrap completeness**
+
+- **`saw-teams/teammate-template.md` completion report** — block was using bare `` ```yaml `` fence; changed to `` ```yaml type=impl-completion-report `` so the lead can machine-parse it. Added missing `failure_type` and `branch` fields. Moved `### Agent {letter} - Completion Report` heading outside the fence (was incorrectly embedded inside the YAML block).
+- **`saw-teams-skill.md` step 3c — E23 payload construction** — spawn context previously passed the raw agent section only; now explicitly extracts the 6 E23 fields (agent section, Interface Contracts, File Ownership, Scaffolds, Quality Gates, absolute IMPL doc path header). Teams layer now matches standard SAW E23 behavior.
+- **`saw-teams-skill.md` IMPL doc paths** — all five references used pre-v0.6.8 path format `docs/IMPL-*.md`; updated to `docs/IMPL/IMPL-*.md` throughout.
+- **`saw-teams-skill.md` step 5 — missing E19/E20/E21/E7a** — added failure_type decision tree (E19), stub scan (E20), quality gate verification (E21), and automatic failure remediation in --auto mode (E7a). Teams orchestrator now has full parity with standard SAW step 4.
+- **`saw-bootstrap.md` — E17 missing** — added "Step 0: Read Project Memory (E17)" before Phase 0. Bootstrap scouts now check `docs/CONTEXT.md` to avoid contradicting prior architectural decisions.
+- **`saw-bootstrap.md` — E16 validation feedback missing** — added note to Rules section: after writing the IMPL doc, expect validator correction prompts; rewrite only failing sections.
+- **`saw-bootstrap.md` — Wave Execution Loop and Orchestrator Post-Merge Checklist missing** — added both sections to the Output Format template. Bootstrap IMPL docs now include the post-merge checklist (E20 stub scan, E21 quality gates, merge, verification, commit steps) that multi-wave projects require.
+- **`protocol/execution-rules.md` E22 cross-ref** — `agents/scaffold-agent.md` (ambiguous relative path) corrected to full path `implementations/claude-code/prompts/agents/scaffold-agent.md`.
+- **`saw-teams-merge.md` attribution** — updated from v0.4.4 to v0.4.6 to match current `saw-merge.md`.
+- **`implementations/claude-code/prompts/scaffold-agent.md` Step 3** — E22-noncompliant: was performing two-pass compile only. Added Step 3a dependency resolution (`go get ./...` + `go mod tidy`, `cargo fetch`, `npm install`, `pip install -e .`) before the build passes, matching the three-step order required by E22.
+- **`implementations/claude-code/prompts/agent-template.md`** — removed project-specific history note "(discovered in brewprune Round 5 Waves 1-2; refined in protocol extraction dogfooding 2026-03-06)" from the Field 0 rationale. Replaced with generic description.
+
+---
+
+## [0.14.1] - 2026-03-08
+
+### Fixed
+
+**First-pass deep audit — E-rule range propagation and doc consistency**
+
+- **E-rule range E1–E22 → E1–E23** in seven files that weren't updated when E23 was added in v0.14.0: `saw-skill.md`, `agent-template.md`, `wave-agent.md`, `prompts/scaffold-agent.md`, `docs/ECOSYSTEM.md`, `saw-teams/teammate-template.md`, `saw-teams/saw-teams-skill.md`.
+- **E20–E22 → E20–E23** (orchestrator-only rule annotation) + "per-agent context extraction" description added in: `wave-agent.md`, `agent-template.md`, `teammate-template.md`.
+- **`wave-agent.md` `failure_type`** — `timeout` value was missing from the completion report template enum; added alongside `transient | fixable | needs_replan | escalate`.
+- **`scout.md` version marker** — was still `v0.4.0`; updated to `v0.5.0` (E17 content was added in v0.12.0 but version comment not bumped).
+- **`saw-skill.md` step 3 wave launch** — described passing "the agent prompt from the IMPL doc" (raw section); updated to describe E23 payload construction with all 6 fields. Corrects the inconsistency between the spec and the orchestrator's instruction.
+- **`scout.md` Output Format template** — `## Quality Gates` section was absent from the IMPL doc template; added between Suitability Assessment and Scaffolds, matching `message-formats.md` canonical section order. Scout following the template literally would have placed Quality Gates in the wrong position or omitted it.
+- **`protocol/procedures.md` E18 cross-reference** — pointed to `execution-rules.md` for the full CONTEXT.md schema; schema actually lives in `message-formats.md` (## docs/CONTEXT.md — Project Memory section). Cross-reference corrected.
+- **`protocol/execution-rules.md` E22** — Related Rules contained "E5 (scaffold agent gate)"; E5 is Worktree Naming Convention, not a scaffold gate. Replaced with correct reference to `procedures.md` (Procedure 2: Scaffold Agent).
+- **`scout.md` fallback (prompts/)** — E17 "Step 0: Read Project Memory" was missing. The `agents/scout.md` custom type had it; the fallback prompt used when the custom type fails to load did not. Added equivalent Step 0 section.
 
 ---
 
