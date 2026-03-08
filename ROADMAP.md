@@ -233,6 +233,29 @@ Agents MUST NOT report `status: complete` if their functions are BUILD STUBs. Th
 
 ---
 
+### Short IMPL-Referencing Prompts for Wave Agent Launches
+
+**Current state:** The orchestrator copy-pastes the full agent brief (file ownership table, interface contracts, verification gate, completion report format) into each `Agent` tool call's `prompt` parameter. Each prompt is 800–1200 tokens, generated token-by-token before any tool calls fire.
+
+**Problem:** Prompt generation is the bottleneck when launching parallel wave agents, not API latency. All 5 agents in a wave are launched in a single message, but each long prompt must be fully generated in sequence before the tool calls fire. A 1000-token prompt takes 5–10 seconds to generate; 5 agents × 1000 tokens = 5000 tokens of generation before anything executes.
+
+**Proposed:** Use short IMPL-referencing prompts instead of copy-pasting the brief:
+
+```
+Read the agent prompt for Wave 2 Agent F from the IMPL doc at:
+  /path/to/docs/IMPL/IMPL-feature.md
+
+Find the section "### Agent F — ..." and follow it exactly.
+The worktree branch wave2-agent-F is already checked out at
+.claude/worktrees/wave2-agent-F. Begin immediately.
+```
+
+~60 tokens per agent vs ~1000. For 5 parallel agents: 300 tokens total vs 5000, firing ~10–15× faster. The agent reads the full brief from the IMPL doc on its first tool call — no information is lost.
+
+**Protocol changes required:** `saw-skill.md` orchestration section — note that wave agent `prompt` parameters should be short IMPL-referencing stubs, not copy-pasted briefs. The IMPL doc is already the single source of truth (I4); the prompt should reference it, not duplicate it.
+
+---
+
 ### `go.work` Recommendation for Cross-Repo Worktree LSP
 
 **Current state:** When the orchestrating repo and target repo are different Go modules, wave agents working in worktrees of the target repo get LSP errors for cross-repo imports because the `replace` directive in `go.mod` points to a path that doesn't match the worktree layout.
