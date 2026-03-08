@@ -13,7 +13,11 @@ Read each agent's structured completion report from the IMPL doc
   The failing agent must be resolved (re-run, manually fixed, or descoped) before
   the merge step proceeds. Agents that completed successfully are not re-run, but
   their worktrees are not merged until the full wave is resolved. Partial merges
-  are not permitted.
+  are not permitted. Also read `failure_type` on any non-complete agent and record
+  it in your merge assessment. `failure_type: transient` or `fixable` may be
+  automatically remediable per E19 before escalating to BLOCKED state.
+  `failure_type: needs_replan` or `escalate` always require human review — do not
+  attempt automatic retry.
 - `worktree`: path used for merge
 - `commit`: sha for `git merge`, or "uncommitted" (requires manual copy)
 - `files_changed` + `files_created`: used for conflict prediction
