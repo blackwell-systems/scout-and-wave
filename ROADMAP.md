@@ -183,7 +183,43 @@ This is distinct from quality gates (which run project tools). Stub detection is
 
 ---
 
-## Web Product
+## Structured Output Parsing
+
+### Schema-Validated Scout Output (API Backend)
+
+**Current state:** The Scout writes a free-form markdown IMPL doc to disk. The Go engine parses it with a line-by-line state machine that is brittle — format deviations (wrong header levels, missing sections, non-standard dep graph notation) cause silent parse failures or fallback to raw text in the UI.
+
+**Problem:** The app's correctness depends entirely on the AI producing output that conforms to an implicit format. When it doesn't, the UI degrades unpredictably. Parser fixes are a treadmill — each new Scout-written doc can introduce new formatting variations.
+
+**Proposed:** When running Scout via the API backend, use Claude's structured outputs (`output_config.format`) to constrain the Scout's response to a JSON schema matching `types.IMPLDoc`. The orchestrator receives validated JSON, writes the IMPL doc markdown from it (keeping human-readable files on disk), and serves the parsed struct directly — bypassing the markdown parser entirely for this path.
+
+**Flow:**
+
+```
+API backend:   Scout prompt → output_config schema → validated JSON → write markdown + serve struct
+CLI backend:   Scout prompt → free-form markdown → disk → markdown parser (fallback, as today)
+```
+
+**Schema:** Based on the existing `types.IMPLDoc` Go struct — suitability verdict, file ownership table, wave/agent assignments, dependency graph (structured, not prose), interface contracts, scaffolds, known issues. The JSON schema is generated from the Go struct and passed as `output_config.format.json_schema`.
+
+**Benefits:**
+- Eliminates parse failures for API-backend users
+- Dep graph rendering, wave structure panel, file ownership table all guaranteed to populate
+- Completion reports (currently YAML blocks) can use the same approach — `types.CompletionReport` schema passed when running wave agents
+- Parser kept as fallback for CLI backend and hand-written/legacy docs
+
+**Implementation path:**
+1. Define JSON schema from `types.IMPLDoc` and `types.CompletionReport`
+2. Pass schema via `output_config` when invoking Scout and Wave agents via API backend
+3. On response, unmarshal directly to struct — skip `protocol.ParseIMPLDoc`
+4. Write markdown IMPL doc from struct (so files remain human-readable/editable)
+5. Keep `protocol.ParseIMPLDoc` as fallback for CLI backend and existing docs
+
+**Protocol changes required:** `protocol/message-formats.md` updated to note JSON schema as the canonical spec; `scout.md` and `wave-agent.md` updated to note that structured outputs are used when available; `scout-and-wave-go` backend interface extended with `RunStructured` method.
+
+---
+
+
 
 ### Local-First Web UI (`saw serve`)
 
