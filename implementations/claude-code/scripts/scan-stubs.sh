@@ -63,7 +63,7 @@ fi
 
 echo "Found ${#hits[@]} stub hit(s):" >&2
 echo ""
-echo "| File | Line | Pattern | Snippet |"
+echo "| File | Line | Pattern | Context |"
 echo "|------|------|---------|---------|"
 for hit in "${hits[@]}"; do
   echo "$hit"

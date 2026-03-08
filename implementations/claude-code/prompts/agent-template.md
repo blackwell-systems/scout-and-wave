@@ -6,15 +6,21 @@ coordination protocol for safely parallelizing human-guided agentic workflows.
 Your role is formally defined: you own a disjoint set of files, implement against
 interface contracts defined before you launched, run the verification gate, commit
 your work, and write a structured completion report. You do not need the full
-protocol specification to do your job; everything you need is in this prompt and
-the IMPL doc. But you are not working in isolation: your output will be merged with
+protocol specification to do your job; everything you need is in this prompt.
+The Orchestrator has extracted your 9-field spec, interface contracts, file
+ownership table, scaffolds, and quality gates into this payload — you do not
+need to read the full IMPL doc to implement. The IMPL doc absolute path is
+included so you can write your completion report. But you are not working in isolation: your output will be merged with
 other Wave Agents' output by the Orchestrator, and your completion report is the
 interface between your work and the next steps.
 
 `I{N}` notation refers to invariants (I1–I6) and `E{N}` to execution rules
-(E1–E19) defined in `protocol/invariants.md` and `protocol/execution-rules.md`.
+(E1–E22) defined in `protocol/invariants.md` and `protocol/execution-rules.md`.
 Each is embedded verbatim alongside its number so this prompt is self-contained;
-the number is the anchor for cross-referencing and audit.
+the number is the anchor for cross-referencing and audit. Note: E20–E22 are
+orchestrator-only rules (stub detection, quality gates, scaffold build
+verification); agents do not implement them but may see their results referenced
+in the IMPL doc.
 
 Each agent prompt has 9 fields. Field 0 is a mandatory pre-flight isolation
 check run before any file modifications. Fields 1–8 are the implementation
@@ -242,7 +248,7 @@ then add free-form notes beneath it.
 
 ```yaml type=impl-completion-report
 status: complete | partial | blocked
-failure_type: transient | fixable | needs_replan | escalate
+failure_type: transient | fixable | needs_replan | escalate | timeout
   # Required when status is partial or blocked. Omit when status is complete.
 worktree: .claude/worktrees/wave{N}-agent-{letter}
 branch: wave{N}-agent-{letter}
@@ -265,6 +271,7 @@ verification: PASS | FAIL ({command} - N/N tests)
 - `fixable` — you know the specific fix (missing dependency, wrong path); describe it in your notes
 - `needs_replan` — the IMPL doc decomposition is wrong (ownership conflict, undiscoverable interface); describe what the Scout got wrong
 - `escalate` — no path forward; human judgment required
+- `timeout` — you are approaching the turn limit and cannot finish; commit whatever is complete, document exactly what remains, and stop cleanly so the Orchestrator can retry with scope-reduction instructions
 
 **E19: Failure type.** When reporting `status: partial` or `status: blocked`, the `failure_type` field enables the Orchestrator to apply the appropriate remediation strategy automatically rather than always surfacing to the human.
 

@@ -16,6 +16,9 @@ Read each agent's structured completion report from the IMPL doc
   are not permitted. Also read `failure_type` on any non-complete agent and record
   it in your merge assessment. `failure_type: transient` or `fixable` may be
   automatically remediable per E19 before escalating to BLOCKED state.
+  `failure_type: timeout` — retry once with scope-reduction instructions: instruct
+  the agent to commit partial work immediately, complete only essential work, and
+  defer non-critical work; if the retry also times out, escalate.
   `failure_type: needs_replan` or `escalate` always require human review — do not
   attempt automatic retry.
 - `worktree`: path used for merge

@@ -1,6 +1,6 @@
 # Scout-and-Wave Protocol Execution Rules
 
-**Version:** 0.9.0
+**Version:** 0.14.0
 
 This document defines the execution rules that govern orchestrator behavior during Scout-and-Wave protocol execution. These rules are not captured by the state machine alone.
 
@@ -8,7 +8,7 @@ This document defines the execution rules that govern orchestrator behavior duri
 
 ## Overview
 
-Rules are numbered E1–E16 for cross-referencing and audit; the same convention as invariants (I1–I6). When referenced in implementation files, the E-number serves as an anchor; implementations should embed the canonical definition verbatim alongside the reference.
+Rules are numbered E1–E23 for cross-referencing and audit; the same convention as invariants (I1–I6). When referenced in implementation files, the E-number serves as an anchor; implementations should embed the canonical definition verbatim alongside the reference.
 
 To audit consistency, search implementation files for `E{N}` and verify the embedded definitions match this document.
 
@@ -470,6 +470,7 @@ corresponding action:
 | `fixable`      | Read agent's free-form notes for the specific fix. Apply the fix (install dependency, correct path, update config). Relaunch the agent. One retry only; if it fails again, escalate. |
 | `needs_replan` | Do not retry. Re-engage Scout with the agent's completion report as additional context. Scout produces a revised IMPL doc. Human reviews before wave re-executes. |
 | `escalate`     | Surface immediately to human with agent's full completion report. No automatic action. |
+| `timeout`      | Retry once with an explicit note in the retry prompt: "Your previous run exhausted its turn limit. Commit any partial work immediately, then complete only what is essential. Defer non-critical work." If the retry also times out, escalate to human — scope may need to be reduced in the IMPL doc. |
 
 **Backward compatibility:** If `failure_type` is absent from a completion report
 that has `status: partial` or `status: blocked`, treat as `escalate` (most
@@ -490,6 +491,116 @@ remediation), message-formats.md (failure_type field definition).
 
 ---
 
+## E20: Stub Detection Post-Wave
+
+**Trigger:** After all wave agents in a wave write their completion reports and before the review checkpoint.
+
+**Required Action:** The Orchestrator:
+1. Collects the union of all `files_changed` and `files_created` from wave agent completion reports.
+2. Runs `bash ${CLAUDE_SKILL_DIR}/scripts/scan-stubs.sh {file1} {file2} ...` with that file list.
+3. Appends the scan output to the IMPL doc under `## Stub Report — Wave {N}` (after the last completion report section for this wave).
+
+Exit code of `scan-stubs.sh` is always 0 — stub detection is informational only. Stubs found are surfaced at the review checkpoint but do not block merge automatically.
+
+**Note:** The script carries the comment `# scan-stubs.sh — SAW stub detection scanner (E20)` — E20 was reserved in the script header before this rule was written.
+
+**Rationale:** An agent can write a syntactically correct function shell with a stub body (`pass`, `...`, `raise NotImplementedError`) and mark `[COMPLETE]`. The human reviewer approving the plan (not the diff) may not catch it. Stub detection surfaces hollow implementations before they ship.
+
+**Related Rules:** See E21 (post-wave verification gates), `message-formats.md` (## Stub Report Section Format).
+
+---
+
+## E21: Automated Post-Wave Verification
+
+**Trigger:** After all wave agents in a wave report complete and after E20 stub scan, before merge.
+
+**Required Action:** If the IMPL doc contains a `## Quality Gates` section, the Orchestrator reads the configured gates and runs each command:
+
+| Gate type   | Example command              |
+|-------------|------------------------------|
+| `typecheck` | `tsc --noEmit`, `mypy .`     |
+| `test`      | `go test ./...`, `npm test`  |
+| `lint`      | `go vet ./...`, `ruff check` |
+| `custom`    | Any command in the IMPL doc  |
+
+For each gate:
+- `required: true` — non-zero exit code **blocks merge**. Report failure to user.
+- `required: false` — non-zero exit code is a **warning only**. Log and continue.
+
+**Flow levels** (set in `## Quality Gates` section):
+- `quick` — skip all gates
+- `standard` — run all gates; failures warn
+- `full` — run all gates; required failures block merge
+
+**Out of scope:** AI Verification Gate (an agent that reviews implementation correctness). Subprocess-based gates only.
+
+**Rationale:** Individual agents run gates in isolation (their own package scope). The orchestrator's post-wave gate runs unscoped — catching cross-package cascade failures that agent-scoped gates miss.
+
+**Related Rules:** See E20 (stub detection), E22 (scaffold build verification), `message-formats.md` (## Quality Gates Section Format).
+
+---
+
+## E22: Scaffold Build Verification
+
+**Trigger:** Scaffold Agent completes file creation, before committing.
+
+**Required Action:** The Scaffold Agent must run, in order:
+
+1. **Dependency resolution** — ensure declared dependencies resolve:
+   - Go: `go get ./...`
+   - Python: `pip install -e .` or `uv sync`
+   - Node: `npm install`
+   - Rust: `cargo fetch`
+
+2. **Dependency cleanup** (where applicable):
+   - Go: `go mod tidy`
+
+3. **Build verification** — confirm the project compiles with scaffold files present:
+   - Go: `go build ./...`
+   - Rust: `cargo build`
+   - Node: `tsc --noEmit` or `npm run build`
+   - Python: `python -m mypy .` or `python -m py_compile`
+
+**Failure behavior:** If any step fails, the Scaffold Agent:
+- Does NOT commit the scaffold files
+- Marks each failing scaffold file's status as `FAILED: {error output}` in the IMPL doc Scaffolds section
+- Reports `status: FAILED` in its completion report
+
+The Orchestrator reads this and halts before creating any worktrees. The user must revise the interface contracts and re-run the Scaffold Agent.
+
+**Rationale:** Scaffold files define types and interfaces that Wave agents import. A scaffold file with a syntax error, wrong import path, or missing dependency causes every Wave agent in the next wave to fail immediately — wasting the full wave execution.
+
+**Related Rules:** See E5 (scaffold agent gate), `message-formats.md` (Scaffolds Section Format), `agents/scaffold-agent.md`.
+
+---
+
+## E23: Per-Agent Context Extraction
+
+**Trigger:** Orchestrator is about to launch a Wave agent.
+
+**Required Action:** The orchestrator constructs a per-agent context payload for each Wave agent instead of passing the full IMPL doc. The payload contains exactly:
+
+1. The agent's 9-field prompt section (extracted from IMPL doc by heading: `### Agent {letter} - {Role}`)
+2. The full `## Interface Contracts` section
+3. The full `## File Ownership` table
+4. The full `## Scaffolds` section (agent needs to know what is pre-built)
+5. The full `## Quality Gates` section (agent needs its verification commands)
+6. The absolute path to the IMPL doc (agent writes completion report here per I5)
+
+This assembled payload is passed as the `prompt` parameter when launching the agent. The agent does not receive or read the full IMPL doc.
+
+**Excluded sections:** Other agents' 9-field prompt sections, `## Suitability Assessment`, `## Dependency Graph`, `## Pre-Mortem`, `## Known Issues`, `## Wave Structure` prose, completion reports from prior waves.
+
+**Rationale:** Without extraction, N agents each receive N−1 other agents' full prompts — O(N²) token consumption that grows with wave size. With extraction, every agent receives the same payload size regardless of wave count. A 14-agent wave eliminates 182 unnecessary prompt reads (14 × 13). Context quality also improves: agents reason about their own task without unrelated implementation plans in working context.
+
+**E6 interaction:** E6 (Agent Prompt Propagation) is unchanged. When the orchestrator updates an agent's section in the IMPL doc (interface deviation propagation), it re-extracts the updated payload before re-launching. The IMPL doc remains source of truth (I4); E23 describes how agents consume it at launch time.
+
+**I4 interaction:** I4 (IMPL doc is source of truth) is unchanged. Agents write completion reports to the full IMPL doc via the absolute path included in the payload.
+
+**Related:** See Per-Agent Context Payload in `message-formats.md`.
+
+---
+
 ## Cross-References
 
 - See `preconditions.md` for conditions that must hold before execution begins
@@ -499,3 +610,6 @@ remediation), message-formats.md (failure_type field definition).
 - E17: Scout reads `docs/CONTEXT.md` before suitability assessment — see also `message-formats.md` (docs/CONTEXT.md schema)
 - E18: Orchestrator creates/updates `docs/CONTEXT.md` after WAVE_VERIFIED → COMPLETE — see also E15, `message-formats.md`
 - E19: Orchestrator applies `failure_type` decision tree on partial/blocked agents — see also E7, E7a, `message-formats.md`
+- E20: Orchestrator runs stub detection after each wave — see also E21, `message-formats.md` (## Stub Report Section Format)
+- E21: Orchestrator runs post-wave verification gates before merge — see also E20, E22, `message-formats.md` (## Quality Gates Section Format)
+- E22: Scaffold Agent runs build verification before committing scaffold files — see also E5, `message-formats.md` (Scaffolds Section Format), `agents/scaffold-agent.md`

@@ -6,7 +6,49 @@ Items are grouped by theme, not priority. Nothing here is committed or scheduled
 
 ## Protocol Enhancements
 
+### Contract Builder Phase
+
+**Insight:** Forge separates *detecting* cross-agent boundaries from *specifying* the contracts at those boundaries. The planner emits **integration hints** — lightweight annotations flagging where tasks interact ("task-1 produces this API, task-2 consumes it"). A dedicated **Contract Builder** phase reads those hints and generates precise binding contracts before any agent launches.
+
+**Current SAW state:** The Scout generates interface contracts in a single pass. It detects seams AND specifies contracts simultaneously. This works for type-level contracts (where the Scaffold Agent materializes them) but leaves API-level contracts implicit — agents infer request/response shapes from prose descriptions, not machine-readable specs.
+
+**Proposed:** Add integration hints as a structured field in the IMPL doc. Scout emits hints during analysis; a Contract Builder phase (analogous to Scaffold Agent but for API contracts) generates precise specs:
+- API contracts: method, path, request/response field types, auth requirements, producer/consumer task mapping
+- Type contracts: shared data structures used across agent boundaries (already handled by Scaffold Agent)
+- Event/message contracts: for event-driven interfaces
+
+Contracts are injected into agent prompts as binding requirements. The reviewer verifies contract compliance as a distinct check.
+
+**Protocol changes required:**
+- `message-formats.md` — integration hint schema, API contract format
+- `agents/scout.md` — emit integration hints alongside interface contracts
+- New `contract-builder.md` agent type (or extend Scaffold Agent scope)
+- `agent-template.md` — API contracts section in per-agent payload
+
+---
+
+### Tier 2 Merge Conflict Resolution Agent
+
+**Insight:** Forge uses a tiered merge conflict strategy: Tier 1 auto-retries the merge (in case main advanced and the conflict resolves on retry); Tier 2 spawns a dedicated resolver agent that reads conflict markers and edits them to produce a clean merge.
+
+**Current SAW state:** `saw-merge.md` Step 4 detects conflicts and surfaces them to the user but has no automated resolution path. The human must resolve manually.
+
+**Proposed:** Add tiered resolution to the merge procedure:
+- **Tier 1 (automatic):** Retry the merge after a brief delay — handles the common case where another agent merged concurrently and the working branch advanced
+- **Tier 2 (resolver agent):** If Tier 1 fails, spawn a Wave Agent variant with: the conflicting files (with conflict markers), both agents' completion reports, and instructions to resolve by choosing or synthesizing the correct version
+- Tier 2 resolver agent commits the resolved files and reports its decision rationale
+- If Tier 2 also fails: escalate to human (current behavior)
+
+**Protocol changes required:**
+- `saw-merge.md` Step 4 — tiered resolution procedure
+- New `resolver-agent.md` agent type (slim variant of wave-agent, owned-file scope is the conflicting files only)
+- `execution-rules.md` — new E-rule for conflict resolution tiers
+
+---
+
 ### Full Research Output on NOT SUITABLE Verdicts
+
+> **UI implemented — 2026-03-08 (v0.17.0):** `NotSuitableResearchPanel` renders the full research output (verdict banner, rationale, blockers callout, serial implementation notes, Archive button). Protocol changes (scout.md, message-formats.md) to require scouts to always write full research sections regardless of verdict are still pending.
 
 **Current state:** When Scout returns NOT SUITABLE, it writes a short verdict with a brief rationale and stops. The IMPL doc is minimal — just the verdict and a sentence or two explaining why.
 
@@ -32,72 +74,27 @@ The verdict badge on the review screen changes color (red/amber/green) but the r
 
 ---
 
-## Quality Gates
+## Per-Agent Context Slicing for Large IMPL Docs
 
-### Automated Post-Wave Verification
+> **Implemented — 2026-03-08:** E23 (`ExtractAgentContext` / `FormatAgentContextPayload`) shipped in `scout-and-wave-go` v0.2.0, wired into `launchAgent` before `ExecuteStreaming`. UI: `AgentContextToggle` + `AgentContextPanel` in `scout-and-wave-web` v0.18.0 expose the per-agent payload for inspection in ReviewScreen.
 
-**Current state:** SAW's only quality check is the human review checkpoint after the Scout produces the IMPL doc. Once waves execute, there is no automated verification — a wave agent that writes broken code, leaves stubs, or breaks tests is only caught when a human looks at the output.
+**Current state:** When an IMPL doc contains many agents (10+), every Wave agent receives the full IMPL doc as context. Agent A reads all 13 other agents' full prompts, dep graph prose, pre-mortem, and known issues — sections it has no use for.
 
-**Problem:** The review checkpoint is pre-execution. There is no gate between wave agent completion and merge. Broken code silently merges into the integration branch.
+**Problem:** Context waste scales with team size. A 14-agent IMPL doc is ~3× larger than a 5-agent one. Each extra agent prompt consumed by every other agent compounds: N agents × N prompts = O(N²) token waste for context that belongs to no one agent. This isn't just cost — it erodes the signal-to-noise ratio in the agent's working context for the duration of its run.
 
-**Proposed:** After each wave agent writes `[COMPLETE]` to its IMPL doc section, the orchestrator runs a quality gate before considering the story done. Gates are subprocess calls — not AI prompts — that check the exit code of real project tools.
+**Proposed: Per-agent context extraction.** The orchestrator constructs a trimmed payload for each agent before launch, containing only:
+1. That agent's 9-field prompt section
+2. Interface contracts (every agent needs these)
+3. File ownership table (needed for I1 invariant verification)
+4. Scaffolds section (needed to know what's pre-built)
+5. Quality gates (needed for verification gate)
 
-**Gate types:**
+Other agents' prompts, the full dep graph prose, pre-mortem, and known issues are omitted. The full IMPL doc stays on disk as source of truth (I4 unchanged) — agents still write completion reports to it. The per-agent payload is a read-only extract for consumption at launch time only.
 
-```
-typecheck  →  tsc --noEmit  /  mypy .  /  pyright
-test       →  pytest -v  /  npm test  /  cargo test  /  go test ./...
-lint       →  ruff check .  /  eslint .  /  cargo clippy
-custom     →  any command defined in saw.config.json
-```
-
-Project type is auto-detected from marker files (`package.json`, `Cargo.toml`, `pyproject.toml`, `go.mod`). Each gate type has a fallback chain — if `mypy` is not installed, try `pyright`, then `python -m mypy`. Gates are configured as `required` (blocks merge) or `optional` (warns only).
-
-**AI Verification Gate** — separate from subprocess gates. A Task agent reads the wave agent's acceptance criteria from the IMPL doc and the changed files, and answers: did the agent actually implement what was specified, or did it leave stubs? Skeleton code patterns that trigger failure: `pass`, `...`, `NotImplementedError`, `TODO`, `FIXME`, `implement later`.
-
-**Failure handling:** A required gate failure feeds directly into the failure taxonomy — the orchestrator classifies it as `fixable` (test failure with known error) or `escalate` (compilation broken, no clear path). In automatic retry mode, the orchestrator re-runs the wave agent up to N times before escalating to the human.
-
-**Flow levels** (maps to protocol suitability gate severity):
-
-| Level | Gates | Behavior on failure |
-|-------|-------|---------------------|
-| `quick` | none | no gates run |
-| `standard` | all gates | failure is a warning, merge proceeds |
-| `full` | all gates | required gate failure blocks merge |
-
-**Protocol changes required:** New E-rule in `protocol/execution-rules.md` requiring orchestrator to run configured gates before marking a wave agent complete, new `quality_gates` section in `protocol/message-formats.md` defining gate config schema, `scout.md` updated to optionally emit gate config in IMPL doc.
-
----
-
-### Stub Detection at Review Checkpoint
-
-**Current state:** `implementations/claude-code/scripts/scan-stubs.sh` (E17) exists and correctly scans changed files for stub patterns. **Not yet done:** the E-rule requiring the orchestrator to run it automatically post-wave, the `## Stub Report` section written to IMPL doc by the orchestrator, and the web UI panel surfacing the report before approve buttons.
-
-**Problem:** An agent can write a function shell — correct signature, correct file location, correct import — but with `pass`, `...`, or `raise NotImplementedError` as the body, then mark `[COMPLETE]`. The IMPL doc looks fine. The human reviewer looking at the plan (not the diff) would not catch it. The stub ships.
-
-**Remaining work:** Wire `scan-stubs.sh` into orchestrator as an automatic post-wave step (E-rule in `execution-rules.md`), write results to `## Stub Report` in IMPL doc, surface in web UI review screen.
-
-**Proposed:** After all wave agents complete and before the review checkpoint, the orchestrator scans every file touched by wave agents for stub patterns:
-
-```
-pass          # Python empty body
-...           # Python ellipsis body
-NotImplementedError
-TODO
-FIXME
-raise NotImplementedError
-// TODO
-/* TODO */
-throw new Error("not implemented")
-unimplemented!()   # Rust
-todo!()            # Rust
-```
-
-Stubs found in changed files → listed in the IMPL doc under a new `## Stub Report` section, flagged on the review screen. The human sees exactly which functions are hollow before approving.
-
-This is distinct from quality gates (which run project tools). Stub detection is a static text scan — no build required, works on any language, zero false-negative risk on the patterns above.
-
-**Protocol changes required:** New E-rule requiring orchestrator to run stub scan after wave completes, new `## Stub Report` section in IMPL doc schema (`protocol/message-formats.md`), review screen in web UI surfaces stub report prominently.
+**Protocol changes required:**
+- `saw-skill.md` — orchestrator constructs per-agent payload before launching each Wave agent rather than passing the raw full doc
+- `agent-template.md` — Field 0 updated: agents receive a trimmed context object, not necessarily the full IMPL doc
+- `message-formats.md` — define Per-Agent Context Payload schema: sections always included vs. elided
 
 ---
 
@@ -221,23 +218,6 @@ Letter families provide color identity continuity (see web UI roadmap). Generati
 ## Protocol Hardening (Cross-Repo Lessons)
 
 Items identified during the engine extraction (Wave 2, 2026-03-08) that should be added to the protocol.
-
-### Scaffold Agent Must Verify Build After Creating Stubs
-
-**Current state:** The Scaffold Agent creates stub files and commits them, but does not verify the project builds.
-
-**Problem:** Scaffold files define types and interfaces that Wave agents import. If the scaffold file has a syntax error, wrong import path, or references a missing dependency, every Wave agent in the next wave will fail immediately with a build error — wasting the full wave execution.
-
-**Proposed:** Scaffold Agent required to run after creating stubs:
-1. `go get ./...` (or language-equivalent) — ensure declared dependencies resolve
-2. `go mod tidy` — clean up go.sum
-3. `go build ./...` — confirm the project compiles with the new stubs
-
-If any step fails, Scaffold Agent reports `status: FAILED` with the error output and does not commit. The orchestrator halts before creating worktrees.
-
-**Protocol changes required:** Add to `agents/scaffold-agent.md` and `protocol/execution-rules.md`.
-
----
 
 ### Cross-Repo Field 8 Completion Report Path
 

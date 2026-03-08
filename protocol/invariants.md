@@ -1,6 +1,6 @@
 # Scout-and-Wave Protocol Invariants
 
-**Version:** 0.9.0
+**Version:** 0.14.0
 
 This document defines the invariants that must hold throughout the entire Scout-and-Wave protocol execution. Violations break the correctness guarantees.
 

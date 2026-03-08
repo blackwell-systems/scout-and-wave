@@ -176,17 +176,17 @@ This is inherently integrative work and may have only one or two agents.
 Write `docs/IMPL/IMPL-bootstrap.md`:
 
 ```markdown
-### Project Architecture
+## Project Architecture
 
 **Language:** [language]
 **Project type:** [CLI / API / library / worker]
 **Key concerns:** [comma-separated list]
 
-### Package Structure
+## Package Structure
 
 [Directory tree with one-line description per package]
 
-### Suitability Assessment
+## Suitability Assessment
 
 Verdict: SUITABLE
 
@@ -202,12 +202,24 @@ Total: ~T min
 Sequential baseline: ~B min
 Time savings: ~D min (P% faster/slower)
 
-### Interface Contracts
+## Quality Gates
+
+level: standard
+
+gates:
+  - type: test
+    command: [e.g. go test ./... | npm test | cargo test | pytest]
+    required: true
+  - type: lint
+    command: [e.g. golangci-lint run | cargo clippy | ruff check .]
+    required: false
+
+## Interface Contracts
 
 [Exact, language-native, fully typed signatures for every cross-package boundary.
 No pseudocode. These are binding contracts.]
 
-### File Ownership
+## File Ownership
 
 ```yaml type=impl-file-ownership
 | File | Agent | Wave | Depends On |
@@ -215,13 +227,24 @@ No pseudocode. These are binding contracts.]
 | path/to/file | B | 1 | — |
 ```
 
-### Scaffolds
+## Scaffolds
 
 | File | Contents | Import path | Status |
 |------|----------|-------------|--------|
 | `path/to/types.go` | [list exact types, interfaces, structs] | `module/path/types` | pending |
 
-### Dependency Graph
+## Pre-Mortem
+
+**Overall risk:** low | medium | high
+
+**Failure modes:**
+
+| Scenario | Likelihood | Impact | Mitigation |
+|----------|-----------|--------|------------|
+| Scaffold compilation fails (wrong import path or missing dependency) | low | high | Scaffold Agent runs go build before committing; fix reported before Wave 1 launches |
+| Wave 2 wiring agent has implicit dependency on Wave 1 internals not in interface contracts | medium | medium | Add required internals to contracts during review; agents must not access unexported symbols |
+
+## Dependency Graph
 
 ```yaml type=impl-dep-graph
 Wave 1 (N parallel agents — package implementations):
@@ -239,7 +262,7 @@ Wave 2 (1 agent — entry point wiring):
          depends on: [B] [C] [D]
 ```
 
-### Wave Structure
+## Wave Structure
 
 ```yaml type=impl-wave-structure
 Scaffold Agent: [Types scaffold]

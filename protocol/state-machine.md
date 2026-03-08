@@ -1,6 +1,6 @@
 # Scout-and-Wave State Machine
 
-**Version:** 0.8.0
+**Version:** 0.14.0
 
 This document defines the lifecycle states, transitions, and terminal conditions for Scout-and-Wave protocol execution.
 
@@ -136,12 +136,13 @@ Transitions are conditional. The following guards determine whether a transition
 
 ### WAVE_EXECUTING → WAVE_MERGING
 
-**Guard:** All agents in the wave have written completion reports to IMPL doc.
+**Guard:** All agents in the wave have written completion reports to IMPL doc AND E20 stub scan has run and results appended to IMPL doc AND E21 quality gates have run (required gates passing).
 
 **Failure conditions:**
-- Any agent reports `status: partial` → enter BLOCKED
-- Any agent reports `status: blocked` → enter BLOCKED
+- Any agent reports `status: partial` → enter BLOCKED (see `failure_type` field and E19 decision tree)
+- Any agent reports `status: blocked` → enter BLOCKED (see `failure_type` field and E19 decision tree)
 - Agent failed isolation verification (Field 0) → enter BLOCKED
+- E21 required quality gate fails → enter BLOCKED
 
 **Solo wave exception:** Skip WAVE_MERGING entirely. Proceed directly to WAVE_VERIFIED for post-wave verification.
 
@@ -196,7 +197,7 @@ These actions occur automatically when entering each state.
 | **WAVE_MERGING** | Orchestrator runs conflict prediction (E11), executes merge procedure per agent |
 | **WAVE_VERIFIED** | Orchestrator runs post-merge verification (unscoped), updates IMPL doc state |
 | **BLOCKED** | Orchestrator surfaces failure details to human, awaits resolution |
-| **COMPLETE** | Orchestrator writes `<!-- SAW:COMPLETE -->` tag to IMPL doc (E15), reports final status, cleans up worktrees |
+| **COMPLETE** | Orchestrator writes `<!-- SAW:COMPLETE -->` tag to IMPL doc (E15); updates `docs/CONTEXT.md` with feature summary (E18); reports final status; cleans up worktrees |
 | **NOT_SUITABLE** | Orchestrator surfaces suitability verdict, suggests alternatives |
 
 ---
@@ -229,7 +230,7 @@ Waves execute sequentially (I3: Wave sequencing). When Wave N completes, its imp
 
 ## State Machine Correctness Properties
 
-When all invariants (I1–I6) and execution rules (E1–E16) are maintained:
+When all invariants (I1–I6) and execution rules (E1–E22) are maintained:
 
 - **Progress:** The state machine always advances or terminates. No infinite loops.
 - **Human checkpoints enforced:** REVIEWED state requires explicit approval. Suitability gate requires human review of NOT SUITABLE verdicts.

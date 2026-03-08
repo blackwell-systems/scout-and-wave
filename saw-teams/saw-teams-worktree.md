@@ -140,7 +140,7 @@ if [ -f .git/hooks/pre-commit ]; then
 fi
 
 # Install the SAW isolation guard from the repository
-cp "${SAW_REPO:-~/code/scout-and-wave}/hooks/pre-commit-guard.sh" .git/hooks/pre-commit
+cp "${CLAUDE_SKILL_DIR}/hooks/pre-commit-guard.sh" .git/hooks/pre-commit
 chmod +x .git/hooks/pre-commit
 ```
 

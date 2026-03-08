@@ -1,6 +1,6 @@
 # Scout-and-Wave Procedures
 
-**Version:** 0.9.0
+**Version:** 0.14.0
 
 This document defines the operational procedures executed by the Orchestrator and other participants: suitability assessment, scaffold materialization, wave execution, and merge operations.
 
@@ -182,8 +182,8 @@ Scaffold files are committed to HEAD before worktrees are created. Once worktree
 
 1. **Launch agents in parallel:** For each agent in wave:
    - Orchestrator launches agent asynchronously (background execution, non-blocking)
-   - Pass absolute IMPL doc path so agent can derive repository root
-   - Agent reads its 9-field prompt from IMPL doc (section `### Agent {letter} - {Role}`)
+   - Construct per-agent context payload (E23): extract from the IMPL doc the agent's 9-field section + `## Interface Contracts` + `## File Ownership` table + `## Scaffolds` + `## Quality Gates` + absolute IMPL doc path. Pass assembled payload as the `prompt` parameter.
+   - Agent receives extracted payload — does not read the full IMPL doc for instructions. Writes completion report to the provided IMPL doc path (I4, I5).
    - **E1 requirement:** All launches must be non-blocking. Blocking on one agent before launching the next eliminates parallelism (protocol violation).
 
 2. **Monitor for completion:** Orchestrator monitors for completion notifications
@@ -375,14 +375,16 @@ For each agent (in any order):
 
 3. **E15: Write completion marker.** Write `<!-- SAW:COMPLETE YYYY-MM-DD -->` (with the current ISO date) on the line immediately after the IMPL doc title (`# IMPL: ...`), then commit the update. This must be written before reporting completion to the user. If the marker is already present, do not overwrite it.
 
-4. **Report to human:**
+4. **E18: Update project memory.** Read `docs/CONTEXT.md` in the project root (create it if absent). Update the `features_completed` list with this feature slug and summary. Update `established_interfaces` if any new cross-cutting interfaces were defined. Update `architecture` or `decisions` if the feature introduced structural changes. Commit the updated `docs/CONTEXT.md`. See E18 in `execution-rules.md` for the full CONTEXT.md schema.
+
+5. **Report to human:**
    - Protocol complete
    - Total time elapsed
    - Number of waves executed
    - Number of agents launched
    - Link to IMPL doc with all completion reports
 
-5. **Transition:** Enter COMPLETE (terminal state)
+6. **Transition:** Enter COMPLETE (terminal state)
 
 ---
 
@@ -403,6 +405,7 @@ For each agent (in any order):
    - Isolation failure: Re-launch with absolute IMPL doc path
    - Missing dependency: Install, re-launch agent
    - Transient build error: Re-launch after delay
+   - `failure_type: timeout`: Retry once with explicit instruction to commit partial work and prioritize essential work only; if retry also times out, escalate — scope may need reduction in the IMPL doc
    - Up to 2 automatic retries before surfacing to human
 
 3. **Non-correctable failures (always surface to human):**
