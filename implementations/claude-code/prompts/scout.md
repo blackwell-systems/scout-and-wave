@@ -366,9 +366,26 @@ Example:
 
 ## Dependency Graph
 
-[Description of the DAG. Which files/modules are roots, which are leaves,
-which have cross-dependencies. Call out any files that were split or
-extracted to resolve ownership conflicts.]
+```
+Wave 1 (N parallel agents[, description]):
+    [A] path/to/file.go
+         (brief description of what agent A does)
+         ✓ root (no dependencies on other agents)
+
+    [B] path/to/other.go
+         (brief description)
+         depends on: [A]
+
+Wave 2 (N parallel agents):
+    [C] path/to/file.go
+         (brief description)
+         depends on: [A] [B]
+```
+
+[List only cross-agent dependencies in "depends on:" lines. Root agents (no
+dependencies on other agents' work) get the ✓ root note. Call out any files
+that were split or extracted to resolve ownership conflicts after the closing
+code fence.]
 
 ## Interface Contracts
 

@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.9.5] | 2026-03-07 | Scout dep graph format prescribed; structured Wave/Agent/depends-on template replaces free-form prose |
 | [0.9.4] | 2026-03-07 | E15: IMPL doc completion lifecycle; Scout output requires ## Wave N headers; documentation audit fixes |
 | [0.9.3] | 2026-03-06 | Cleanup: templates/ deleted, IMPL-SCHEMA merged into protocol/message-formats.md, manual implementation removed |
 | [0.9.2] | 2026-03-06 | Protocol drift fixes: branch field in completion reports, PROTOCOL.md ref, heading levels, IMPL-SCHEMA discoverability |
@@ -48,6 +49,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.1.0] | 2026-02-27 | Initial release |
 
 ---
+
+## [0.9.5] - 2026-03-07
+
+### Changed
+
+- **Scout dep graph format prescribed.** Both `agents/scout.md` and `prompts/scout.md` now specify an exact structured format for the `### Dependency Graph` section — a fenced code block with `Wave N (...):` headers, `[A] description` agent lines, and `depends on: [X]` dependency annotations. Previously the section was free-form prose, which caused the SAW web UI dep graph panel to fall back to raw `<pre>` text rendering.
 
 ## [0.9.4] - 2026-03-07
 
