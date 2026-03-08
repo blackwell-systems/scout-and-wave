@@ -230,8 +230,8 @@ Scaffold files are committed to HEAD before worktrees are created. Once worktree
 2. **Read completion reports:** Orchestrator parses structured YAML blocks from IMPL doc
 
 3. **Check for failures:**
-   - Any agent `status: partial` → enter BLOCKED
-   - Any agent `status: blocked` → enter BLOCKED
+   - Any agent `status: partial` → enter BLOCKED (see `failure_type` field and E19 for automatic remediation decision tree)
+   - Any agent `status: blocked` → enter BLOCKED (see `failure_type` field and E19 for automatic remediation decision tree)
    - Any agent isolation verification failed → enter BLOCKED
    - All agents `status: complete` → proceed to Phase 6
 
@@ -395,7 +395,7 @@ For each agent (in any order):
 **Steps:**
 
 1. **Identify failure type:**
-   - Read completion reports for `status: partial` or `status: blocked`
+   - Read completion reports for `status: partial` or `status: blocked` (see `failure_type` field and E19 for automatic remediation decision tree)
    - Read verification output for build/lint/test failures
    - Check merge procedure output for git conflicts
 
@@ -417,7 +417,7 @@ For each agent (in any order):
 
 ### Recovery from Interface Contract Failure (E8)
 
-**Cause:** Agent reports `status: blocked` due to unimplementable interface contract
+**Cause:** Agent reports `status: blocked` due to unimplementable interface contract (see `failure_type` field and E19 for automatic remediation decision tree)
 
 **Steps:**
 

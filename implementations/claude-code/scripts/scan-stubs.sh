@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scan-stubs.sh — SAW stub detection scanner (E17)
+# scan-stubs.sh — SAW stub detection scanner (E20)
 #
 # Usage: bash scripts/scan-stubs.sh <file1> [file2 ...]
 #

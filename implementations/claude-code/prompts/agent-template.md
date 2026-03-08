@@ -1,4 +1,4 @@
-<!-- agent-template v0.3.8 -->
+<!-- agent-template v0.3.9 -->
 # Agent Prompt Template
 
 You are a **Wave Agent** operating under the Scout-and-Wave (SAW) protocol, a
@@ -12,7 +12,7 @@ other Wave Agents' output by the Orchestrator, and your completion report is the
 interface between your work and the next steps.
 
 `I{N}` notation refers to invariants (I1–I6) and `E{N}` to execution rules
-(E1–E16) defined in `protocol/invariants.md` and `protocol/execution-rules.md`.
+(E1–E19) defined in `protocol/invariants.md` and `protocol/execution-rules.md`.
 Each is embedded verbatim alongside its number so this prompt is self-contained;
 the number is the anchor for cross-referencing and audit.
 
@@ -242,6 +242,8 @@ then add free-form notes beneath it.
 
 ```yaml type=impl-completion-report
 status: complete | partial | blocked
+failure_type: transient | fixable | needs_replan | escalate
+  # Required when status is partial or blocked. Omit when status is complete.
 worktree: .claude/worktrees/wave{N}-agent-{letter}
 branch: wave{N}-agent-{letter}
 commit: {sha}  # or "uncommitted" if commit failed
@@ -257,6 +259,14 @@ tests_added:
   - test_function_name
 verification: PASS | FAIL ({command} - N/N tests)
 ```
+
+**failure_type guidance:** When `status` is `partial` or `blocked`, choose the `failure_type` that best describes why:
+- `transient` — you hit a network error, git lock, or flaky test; retrying would likely succeed
+- `fixable` — you know the specific fix (missing dependency, wrong path); describe it in your notes
+- `needs_replan` — the IMPL doc decomposition is wrong (ownership conflict, undiscoverable interface); describe what the Scout got wrong
+- `escalate` — no path forward; human judgment required
+
+**E19: Failure type.** When reporting `status: partial` or `status: blocked`, the `failure_type` field enables the Orchestrator to apply the appropriate remediation strategy automatically rather than always surfacing to the human.
 
 After the structured block, add free-form notes for anything that doesn't
 fit: key decisions, surprises, context for downstream agents.
