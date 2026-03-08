@@ -326,7 +326,12 @@ This separates human-readable prose from machine-parsed data without requiring t
 
 **Project memory** — `docs/SAW.md` viewer/editor. Shows established decisions, conventions, completed features timeline.
 
-**Engine:** `scout-and-wave-go` exposes HTTP + WebSocket API. Web frontend connects to it. IMPL doc is the source of truth — UI reads from and writes to it, never to a separate database.
+**Engine:** `scout-and-wave-go` exposes HTTP + SSE API. Web frontend connects to it. IMPL doc is the source of truth — UI reads from and writes to it, never to a separate database.
+
+**Transport decisions:**
+- Live wave events (agent status, output streaming) → SSE. One-way server→client, works through proxies without config, browser auto-reconnects.
+- Plan edits (user submits changes to dep graph, wave structure, interface contracts) → HTTP POST. Simple, sufficient for single-user local tool.
+- WebSocket deferred — only needed if real-time collaborative editing becomes a requirement. SSE stream is unaffected either way; only the edit path would change.
 
 ---
 
