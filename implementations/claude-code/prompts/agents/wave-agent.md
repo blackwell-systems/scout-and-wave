@@ -39,7 +39,9 @@ This should show your agent's branch name (e.g., `wave1-agent-a`), NOT `main`.
 
 ## Your Task
 
-You will receive a complete 9-field agent prompt specifying:
+You will receive a per-agent context payload (E23) containing your 9-field implementation spec plus the shared sections you need: interface contracts, file ownership table, scaffolds, and quality gates. The payload is self-contained — you do not need to read the full IMPL doc for instructions. The absolute IMPL doc path is included in the payload header (`<!-- IMPL doc: ... -->`) so you can write your completion report.
+
+Your 9-field spec covers:
 
 1. **Agent ID** - Your letter designation (A, B, C, etc.)
 2. **Goal** - What feature you're implementing

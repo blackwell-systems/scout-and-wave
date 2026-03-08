@@ -1,6 +1,6 @@
 # Scout-and-Wave Message Formats
 
-**Version:** 0.13.0
+**Version:** 0.14.0
 
 This document defines the structured data formats exchanged between participants: suitability verdicts, agent prompts, completion reports, and scaffold specifications.
 
@@ -681,6 +681,51 @@ The Pre-Mortem section uses a markdown table in free-form prose. It is human-fac
 - Documentation-only refactors (agent prompts are small)
 - Simple features with <5 agents total
 - When unified audit trail is more valuable than file size
+
+---
+
+## Per-Agent Context Payload
+
+The orchestrator constructs a per-agent context payload (E23) before launching each Wave agent. The payload is a markdown string passed as the `prompt` parameter to the Agent tool — agents do not receive the full IMPL doc.
+
+**Sections always included:**
+
+| Section | Source in IMPL doc | Purpose |
+|---------|-------------------|---------|
+| Agent's 9-field prompt | `### Agent {letter} - {Role}` through next `### Agent` heading | Complete implementation spec |
+| Interface contracts | `## Interface Contracts` | Cross-agent boundary definitions |
+| File ownership table | `## File Ownership` typed block | Agent verifies its row; sees peers' rows for I1 reasoning |
+| Scaffolds | `## Scaffolds` | Pre-built type files the agent imports |
+| Quality gates | `## Quality Gates` | Verification commands required before completion report |
+| IMPL doc path | Literal string preamble | Agent writes completion report here (I4, I5) |
+
+**Sections excluded:** Other agents' 9-field prompt sections, `## Suitability Assessment`, `## Dependency Graph`, `## Pre-Mortem`, `## Known Issues`, `## Wave Structure` prose, completion reports from prior waves.
+
+**Payload format:**
+
+```markdown
+<!-- IMPL doc: /absolute/path/to/docs/IMPL/IMPL-feature.md -->
+
+{agent 9-field prompt section}
+
+## Interface Contracts
+
+{extracted contracts}
+
+## File Ownership
+
+{extracted ownership table}
+
+## Scaffolds
+
+{extracted scaffolds table}
+
+## Quality Gates
+
+{extracted gates}
+```
+
+**Stability:** Payload format is identical across waves. Wave 2 agents receive the same structure as Wave 1 agents — their own section extracted, same shared sections included.
 
 ---
 

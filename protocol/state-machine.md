@@ -1,6 +1,6 @@
 # Scout-and-Wave State Machine
 
-**Version:** 0.13.0
+**Version:** 0.14.0
 
 This document defines the lifecycle states, transitions, and terminal conditions for Scout-and-Wave protocol execution.
 

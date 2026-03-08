@@ -1,6 +1,6 @@
 # Scout-and-Wave Procedures
 
-**Version:** 0.13.0
+**Version:** 0.14.0
 
 This document defines the operational procedures executed by the Orchestrator and other participants: suitability assessment, scaffold materialization, wave execution, and merge operations.
 
@@ -182,8 +182,8 @@ Scaffold files are committed to HEAD before worktrees are created. Once worktree
 
 1. **Launch agents in parallel:** For each agent in wave:
    - Orchestrator launches agent asynchronously (background execution, non-blocking)
-   - Pass absolute IMPL doc path so agent can derive repository root
-   - Agent reads its 9-field prompt from IMPL doc (section `### Agent {letter} - {Role}`)
+   - Construct per-agent context payload (E23): extract from the IMPL doc the agent's 9-field section + `## Interface Contracts` + `## File Ownership` table + `## Scaffolds` + `## Quality Gates` + absolute IMPL doc path. Pass assembled payload as the `prompt` parameter.
+   - Agent receives extracted payload — does not read the full IMPL doc for instructions. Writes completion report to the provided IMPL doc path (I4, I5).
    - **E1 requirement:** All launches must be non-blocking. Blocking on one agent before launching the next eliminates parallelism (protocol violation).
 
 2. **Monitor for completion:** Orchestrator monitors for completion notifications

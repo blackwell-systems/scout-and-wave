@@ -13,7 +13,7 @@ Read these documents in order to understand the complete protocol:
 | [participants.md](participants.md) | Defines the four participant roles (Orchestrator, Scout, Scaffold Agent, Wave Agent), their execution modes, responsibilities, and forbidden actions |
 | [preconditions.md](preconditions.md) | Lists the five preconditions that must hold before the protocol may run (file decomposition, investigation-first blockers, interface discoverability, pre-implementation scan, parallelization value) |
 | [invariants.md](invariants.md) | Specifies the six invariants that must hold throughout protocol execution (disjoint file ownership, interface contracts precede parallel implementation, wave sequencing, etc.) |
-| [execution-rules.md](execution-rules.md) | Defines twenty-two execution rules (E1–E22) governing state transitions, agent launches, completion handling, merge procedures, verification gates, IMPL doc lifecycle, Scout output validation, project memory lifecycle (E17/E18), failure taxonomy (E19), stub detection (E20), post-wave quality gates (E21), and scaffold build verification (E22) |
+| [execution-rules.md](execution-rules.md) | Defines twenty-three execution rules (E1–E23) governing state transitions, agent launches, completion handling, merge procedures, verification gates, IMPL doc lifecycle, Scout output validation, project memory lifecycle (E17/E18), failure taxonomy (E19), stub detection (E20), post-wave quality gates (E21), scaffold build verification (E22), and per-agent context extraction (E23) |
 | [state-machine.md](state-machine.md) | Documents the protocol state machine: states, transitions, triggers, and termination conditions |
 | [message-formats.md](message-formats.md) | Specifies structured message formats for IMPL docs, agent prompts, completion reports, and merge summaries |
 | [procedures.md](procedures.md) | Detailed step-by-step procedures for merge operations, conflict resolution, and verification gates |
@@ -49,7 +49,7 @@ See [execution-rules.md](execution-rules.md) for the formal correctness argument
 
 This protocol specification follows semantic versioning. Breaking changes to invariants, preconditions, or message formats increment the major version. New optional fields or clarifications increment the minor version.
 
-Current version: **0.13.0**
+Current version: **0.14.0**
 
 ## Reference Implementations
 

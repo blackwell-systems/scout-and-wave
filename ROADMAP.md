@@ -32,6 +32,28 @@ The verdict badge on the review screen changes color (red/amber/green) but the r
 
 ---
 
+## Per-Agent Context Slicing for Large IMPL Docs
+
+**Current state:** When an IMPL doc contains many agents (10+), every Wave agent receives the full IMPL doc as context. Agent A reads all 13 other agents' full prompts, dep graph prose, pre-mortem, and known issues — sections it has no use for.
+
+**Problem:** Context waste scales with team size. A 14-agent IMPL doc is ~3× larger than a 5-agent one. Each extra agent prompt consumed by every other agent compounds: N agents × N prompts = O(N²) token waste for context that belongs to no one agent. This isn't just cost — it erodes the signal-to-noise ratio in the agent's working context for the duration of its run.
+
+**Proposed: Per-agent context extraction.** The orchestrator constructs a trimmed payload for each agent before launch, containing only:
+1. That agent's 9-field prompt section
+2. Interface contracts (every agent needs these)
+3. File ownership table (needed for I1 invariant verification)
+4. Scaffolds section (needed to know what's pre-built)
+5. Quality gates (needed for verification gate)
+
+Other agents' prompts, the full dep graph prose, pre-mortem, and known issues are omitted. The full IMPL doc stays on disk as source of truth (I4 unchanged) — agents still write completion reports to it. The per-agent payload is a read-only extract for consumption at launch time only.
+
+**Protocol changes required:**
+- `saw-skill.md` — orchestrator constructs per-agent payload before launching each Wave agent rather than passing the raw full doc
+- `agent-template.md` — Field 0 updated: agents receive a trimmed context object, not necessarily the full IMPL doc
+- `message-formats.md` — define Per-Agent Context Payload schema: sections always included vs. elided
+
+---
+
 ## Structured Output Parsing
 
 ### Schema-Validated Scout Output (API Backend)

@@ -1,7 +1,7 @@
 # Scout-and-Wave
 
 [![Blackwell Systems™](https://raw.githubusercontent.com/blackwell-systems/blackwell-docs-theme/main/badge-trademark.svg)](https://github.com/blackwell-systems)
-![Version](https://img.shields.io/badge/version-0.13.0-blue)
+![Version](https://img.shields.io/badge/version-0.14.0-blue)
 [![Agent Skills](assets/badge-agentskills.svg)](https://agentskills.io)
 
 SAW is published as an [Agent Skill](https://agentskills.io) — a portable, tool-agnostic package for adding capabilities to AI coding agents.
@@ -127,7 +127,7 @@ The protocol is defined independent of any implementation. Read these to underst
 - **[protocol/participants.md](protocol/participants.md)** - Four participant roles and their responsibilities
 - **[protocol/preconditions.md](protocol/preconditions.md)** - Five preconditions for suitability gate
 - **[protocol/invariants.md](protocol/invariants.md)** - Six invariants (I1–I6) — formal correctness rules that every implementation must satisfy (e.g., I1: disjoint file ownership, I2: interface contracts precede parallel implementation)
-- **[protocol/execution-rules.md](protocol/execution-rules.md)** - Execution rules (E1–E22) governing state transitions, agent launches, completion handling, merge procedures, verification gates, IMPL doc lifecycle, Scout output validation (E16A/B/C), project memory lifecycle (E17/E18), failure taxonomy (E19), stub detection (E20), post-wave quality gates (E21), and scaffold build verification (E22)
+- **[protocol/execution-rules.md](protocol/execution-rules.md)** - Execution rules (E1–E23) governing state transitions, agent launches, completion handling, merge procedures, verification gates, IMPL doc lifecycle, Scout output validation (E16A/B/C), project memory lifecycle (E17/E18), failure taxonomy (E19), stub detection (E20), post-wave quality gates (E21), scaffold build verification (E22), and per-agent context extraction (E23)
 - **[protocol/state-machine.md](protocol/state-machine.md)** - Protocol states and transitions
 - **[protocol/message-formats.md](protocol/message-formats.md)** - IMPL doc and completion report schemas
 - **[protocol/procedures.md](protocol/procedures.md)** - Step-by-step merge and verification procedures

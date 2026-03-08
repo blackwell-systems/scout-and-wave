@@ -1,6 +1,6 @@
 # Scout-and-Wave Protocol Execution Rules
 
-**Version:** 0.13.0
+**Version:** 0.14.0
 
 This document defines the execution rules that govern orchestrator behavior during Scout-and-Wave protocol execution. These rules are not captured by the state machine alone.
 
@@ -8,7 +8,7 @@ This document defines the execution rules that govern orchestrator behavior duri
 
 ## Overview
 
-Rules are numbered E1–E22 for cross-referencing and audit; the same convention as invariants (I1–I6). When referenced in implementation files, the E-number serves as an anchor; implementations should embed the canonical definition verbatim alongside the reference.
+Rules are numbered E1–E23 for cross-referencing and audit; the same convention as invariants (I1–I6). When referenced in implementation files, the E-number serves as an anchor; implementations should embed the canonical definition verbatim alongside the reference.
 
 To audit consistency, search implementation files for `E{N}` and verify the embedded definitions match this document.
 
@@ -571,6 +571,33 @@ The Orchestrator reads this and halts before creating any worktrees. The user mu
 **Rationale:** Scaffold files define types and interfaces that Wave agents import. A scaffold file with a syntax error, wrong import path, or missing dependency causes every Wave agent in the next wave to fail immediately — wasting the full wave execution.
 
 **Related Rules:** See E5 (scaffold agent gate), `message-formats.md` (Scaffolds Section Format), `agents/scaffold-agent.md`.
+
+---
+
+## E23: Per-Agent Context Extraction
+
+**Trigger:** Orchestrator is about to launch a Wave agent.
+
+**Required Action:** The orchestrator constructs a per-agent context payload for each Wave agent instead of passing the full IMPL doc. The payload contains exactly:
+
+1. The agent's 9-field prompt section (extracted from IMPL doc by heading: `### Agent {letter} - {Role}`)
+2. The full `## Interface Contracts` section
+3. The full `## File Ownership` table
+4. The full `## Scaffolds` section (agent needs to know what is pre-built)
+5. The full `## Quality Gates` section (agent needs its verification commands)
+6. The absolute path to the IMPL doc (agent writes completion report here per I5)
+
+This assembled payload is passed as the `prompt` parameter when launching the agent. The agent does not receive or read the full IMPL doc.
+
+**Excluded sections:** Other agents' 9-field prompt sections, `## Suitability Assessment`, `## Dependency Graph`, `## Pre-Mortem`, `## Known Issues`, `## Wave Structure` prose, completion reports from prior waves.
+
+**Rationale:** Without extraction, N agents each receive N−1 other agents' full prompts — O(N²) token consumption that grows with wave size. With extraction, every agent receives the same payload size regardless of wave count. A 14-agent wave eliminates 182 unnecessary prompt reads (14 × 13). Context quality also improves: agents reason about their own task without unrelated implementation plans in working context.
+
+**E6 interaction:** E6 (Agent Prompt Propagation) is unchanged. When the orchestrator updates an agent's section in the IMPL doc (interface deviation propagation), it re-extracts the updated payload before re-launching. The IMPL doc remains source of truth (I4); E23 describes how agents consume it at launch time.
+
+**I4 interaction:** I4 (IMPL doc is source of truth) is unchanged. Agents write completion reports to the full IMPL doc via the absolute path included in the payload.
+
+**Related:** See Per-Agent Context Payload in `message-formats.md`.
 
 ---
 
