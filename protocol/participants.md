@@ -10,6 +10,8 @@ SAW has four participant roles. All four are agents (AI model instances running 
 
 The synchronous agent running in the user's own interactive session. Drives all protocol state transitions: reads the IMPL doc, creates worktrees, launches scouts and wave agents, waits for completion notifications, reads completion reports, executes the merge procedure, verifies the merged result, and advances state. The orchestrator serializes all state changes; it is the single-threaded coordinator that processes completion events and decides what runs next.
 
+**IMPL doc validation (E16):** After the Scout writes the IMPL doc, the Orchestrator runs a deterministic validator on all `type=impl-*` typed-block sections before entering REVIEWED state. If validation fails, the Orchestrator issues a correction prompt to the Scout listing specific errors by section and block. The Orchestrator loops (up to the E16 retry limit) until the doc passes or retry limit is exhausted. On exhaustion, the Orchestrator enters BLOCKED and surfaces the errors to the human. The validator is a protocol-level tool, not an implementation detail — it is part of the Orchestrator's required capabilities.
+
 The only participant that interacts with the human directly. All progress reporting, decision points, approval requests, and error escalation flow through the orchestrator; asynchronous agents never surface information to the human except through the orchestrator's completion handling.
 
 **Repository context responsibility:** When launching any agent (Scout, Scaffold Agent, Wave Agent), the Orchestrator must provide the absolute path to the IMPL doc in the agent's launch parameters. Agents derive the repository root from this path (the directory containing `docs/`). This prevents multi-repository session ambiguity where the session working directory differs from the feature's repository. Relative IMPL doc paths or omitting the path entirely will cause agents to default to the session's working directory, leading to wrong-repository failures.
@@ -37,6 +39,7 @@ The orchestrator may modify orchestrator-owned files (append-only shared files l
 - Launch asynchronous agents with specified prompts
 - Wait for completion notifications from background agents
 - Parse structured messages (completion reports, agent prompts)
+- Run IMPL doc validator on typed-block sections and issue correction prompts to Scout (E16)
 
 ## Scout
 
