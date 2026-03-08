@@ -383,6 +383,20 @@ lint_command: [check-mode lint command — e.g. `golangci-lint run` | `cargo cli
 write the sections below. If SUITABLE WITH CAVEATS, describe what the
 caveats are and how they are handled.]
 
+## Quality Gates
+
+level: quick | standard | full
+
+gates:
+  - type: test
+    command: [e.g. go test ./... | npm test | cargo test | pytest]
+    required: true
+  - type: lint
+    command: [e.g. golangci-lint run | cargo clippy | ruff check .]
+    required: false
+
+[Omit this section entirely if no build toolchain is detected.]
+
 ## Scaffolds
 
 [Omit this section if no scaffold files are needed.]

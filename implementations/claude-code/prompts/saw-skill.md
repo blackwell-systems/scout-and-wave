@@ -36,7 +36,7 @@ observability (no Scout agent means no SAW session is detectable by monitoring
 tools).
 
 *`I{N}` notation refers to invariants (I1–I6) and `E{N}` to execution rules
-(E1–E16) defined in `protocol/invariants.md` and `protocol/execution-rules.md`.
+(E1–E22) defined in `protocol/invariants.md` and `protocol/execution-rules.md`.
 Each is embedded verbatim at its point of enforcement; the number is the anchor
 for cross-referencing and audit.*
 
@@ -117,7 +117,7 @@ If no `docs/IMPL/IMPL-*.md` file exists for the current feature:
 2. When the Scout completes, read the resulting `docs/IMPL/IMPL-<feature-slug>.md`.
 3. **E16: Validate IMPL doc before review.** After Scout writes the IMPL doc, run the validator:
    ```bash
-   bash /Users/dayna.blackwell/.claude/skills/saw/scripts/validate-impl.sh "<absolute-path-to-impl-doc>"
+   bash "${CLAUDE_SKILL_DIR}/scripts/validate-impl.sh" "<absolute-path-to-impl-doc>"
    ```
    If exit code is 0, proceed to human review. If exit code is 1, the stdout contains a plain-text error list — send it to Scout as a correction prompt: "Your IMPL doc failed validation. Fix only these sections:\n{errors}". Retry up to 3 attempts. On retry limit exhaustion, enter BLOCKED and surface the validation errors to the human. Do not present the doc for human review until validation passes.
 

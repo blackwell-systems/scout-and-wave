@@ -119,23 +119,6 @@ Add a Claude chat panel to `saw serve`. Read-only diagnostic mode first (why did
 
 Items identified during the engine extraction (Wave 2, 2026-03-08) that should be added to the protocol.
 
-### Scaffold Agent Must Verify Build After Creating Stubs
-
-**Current state:** The Scaffold Agent creates stub files and commits them, but does not verify the project builds.
-
-**Problem:** Scaffold files define types and interfaces that Wave agents import. If the scaffold file has a syntax error, wrong import path, or references a missing dependency, every Wave agent in the next wave will fail immediately with a build error — wasting the full wave execution.
-
-**Proposed:** Scaffold Agent required to run after creating stubs:
-1. `go get ./...` (or language-equivalent) — ensure declared dependencies resolve
-2. `go mod tidy` — clean up go.sum
-3. `go build ./...` — confirm the project compiles with the new stubs
-
-If any step fails, Scaffold Agent reports `status: FAILED` with the error output and does not commit. The orchestrator halts before creating worktrees.
-
-**Protocol changes required:** Add to `agents/scaffold-agent.md` and `protocol/execution-rules.md`.
-
----
-
 ### Cross-Repo Field 8 Completion Report Path
 
 **Current state:** The agent template Field 8 (completion report) instructs agents to write the report to the IMPL doc. In cross-repo waves, the IMPL doc is in repo A (the spec repo) while the agent works in repo B. Agents that don't receive an absolute IMPL doc path write their report to the wrong location — or not at all.

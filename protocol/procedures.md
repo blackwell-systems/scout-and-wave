@@ -1,6 +1,6 @@
 # Scout-and-Wave Procedures
 
-**Version:** 0.9.0
+**Version:** 0.13.0
 
 This document defines the operational procedures executed by the Orchestrator and other participants: suitability assessment, scaffold materialization, wave execution, and merge operations.
 
@@ -375,7 +375,9 @@ For each agent (in any order):
 
 3. **E15: Write completion marker.** Write `<!-- SAW:COMPLETE YYYY-MM-DD -->` (with the current ISO date) on the line immediately after the IMPL doc title (`# IMPL: ...`), then commit the update. This must be written before reporting completion to the user. If the marker is already present, do not overwrite it.
 
-4. **Report to human:**
+4. **E18: Update project memory.** Read `docs/CONTEXT.md` in the project root (create it if absent). Update the `features_completed` list with this feature slug and summary. Update `established_interfaces` if any new cross-cutting interfaces were defined. Update `architecture` or `decisions` if the feature introduced structural changes. Commit the updated `docs/CONTEXT.md`. See E18 in `execution-rules.md` for the full CONTEXT.md schema.
+
+5. **Report to human:**
    - Protocol complete
    - Total time elapsed
    - Number of waves executed
