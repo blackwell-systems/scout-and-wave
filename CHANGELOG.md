@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.13.0] | 2026-03-08 | Quality gates (E20 stub detection, E21 post-wave verification, E22 scaffold build check) |
 | [0.12.0] | 2026-03-08 | Project memory (docs/CONTEXT.md, E17/E18) + failure taxonomy (failure_type field, E19) |
 | [0.11.2] | 2026-03-08 | Fix: validate-impl.sh path in saw-skill.md — use absolute symlink path |
 | [0.11.1] | 2026-03-08 | Roadmap: engine extraction complete; protocol hardening items from cross-repo wave |
@@ -56,6 +57,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.3.0] | 2026-02-28 | Bootstrap mode for new projects; Wave 0 pattern |
 | [0.2.0] | 2026-02-28 | Decomposed skill prompt; complexity-based suitability heuristic |
 | [0.1.0] | 2026-02-27 | Initial release |
+
+---
+
+## [0.13.0] - 2026-03-08
+
+### Added
+- **E20 — Stub Detection Post-Wave:** Orchestrator runs `scan-stubs.sh` against all files touched by wave agents after wave completes; writes `## Stub Report — Wave {N}` section to IMPL doc. Stub patterns: `TODO`, `FIXME`, `pass`, `...`, `NotImplementedError`, `raise NotImplementedError`, `throw new Error("not implemented")`, `unimplemented!()`, `todo!()`, `panic("not implemented")`.
+- **E21 — Automated Post-Wave Verification:** IMPL doc `## Quality Gates` section defines gates (typecheck, test, lint, custom). Orchestrator runs configured gates after stub scan; required gates failing block merge, optional gates warn only. Level field (`quick`/`standard`/`full`) controls which gates run.
+- **E22 — Scaffold Build Verification:** Scaffold Agent runs `go mod tidy` + `go build ./...` (or equivalent) after creating scaffold files. Build failure sets scaffold status to `FAILED` and blocks wave launch.
+- `## Stub Report Section Format` and `## Quality Gates Section Format` schemas in `protocol/message-formats.md`.
+- Scout emits `## Quality Gates` section with auto-detected gate config (`go.mod` → `go test ./...`, `package.json` → `npm test`, `Cargo.toml` → `cargo test`, `pyproject.toml` → `pytest`).
+- Scaffold Agent build verification step wired into scaffold commit procedure.
+- `saw-skill.md` orchestrator wiring: E20 stub scan and E21 gate run between wave completion and human review.
 
 ---
 

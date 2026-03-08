@@ -1,4 +1,5 @@
 # IMPL: Quality Gate Enhancements (Stub Detection, Post-Wave Verification, Scaffold Build Check)
+<!-- SAW:COMPLETE 2026-03-08 -->
 
 **Feature:** Three protocol quality gate enhancements: E20 stub-detection rule, E21 post-wave verification rule, E22 scaffold build verification rule; corresponding schema additions to `message-formats.md`; orchestrator wiring in `saw-skill.md`; and scaffold agent hardening in `scaffold-agent.md`.
 **Repository:** /Users/dayna.blackwell/code/scout-and-wave
@@ -489,6 +490,63 @@ After wave 1 completes:
 
 | Wave | Agent | Description | Status |
 |------|-------|-------------|--------|
-| 1 | A | E20/E21/E22 rules in execution-rules.md + schema in message-formats.md | TO-DO |
-| 1 | B | Scaffold-agent build verification + saw-skill.md wiring + scout.md emission | TO-DO |
+| 1 | A | E20/E21/E22 rules in execution-rules.md + schema in message-formats.md | COMPLETE |
+| 1 | B | Scaffold-agent build verification + saw-skill.md wiring + scout.md emission | COMPLETE |
 | — | Orch | Post-merge consistency review + commit | TO-DO |
+
+---
+
+### Agent A - Completion Report
+
+```yaml type=impl-completion-report
+status: complete
+worktree: .claude/worktrees/wave1-agent-a
+branch: wave1-agent-a
+commit: 5efca99
+files_changed:
+  - protocol/execution-rules.md
+  - protocol/message-formats.md
+files_created: []
+interface_deviations: []
+out_of_scope_deps: []
+tests_added: []
+verification: PASS
+```
+
+All three E-rules (E20, E21, E22) added to `protocol/execution-rules.md` after E19, following the existing Trigger/Required Action/Rationale/Related Rules pattern. Cross-References updated with entries for all three.
+
+Two new schema sections added to `protocol/message-formats.md`: `## Stub Report Section Format` (human-facing prose, not a typed block, with both the no-stubs and stubs-found table templates) and `## Quality Gates Section Format` (YAML schema with auto-detection table for go.mod/package.json/Cargo.toml/pyproject.toml). IMPL Doc Structure updated to insert `## Quality Gates` between Suitability Assessment and Scaffolds, and to show `## Stub Report — Wave {N}` placement after completion reports. Message Flow Sequence updated with steps 5a (E20 stub scan) and 5b (E21 gates).
+
+One decision: placed `## Stub Report Section Format` and `## Quality Gates Section Format` together after the existing `## Scaffolds Section Format` section, before `## docs/CONTEXT.md` — this groups all "orchestrator-written IMPL doc sections" together and keeps the file's section order consistent with how an IMPL doc flows top-to-bottom.
+
+Note for Agent B: the `## Quality Gates` section in IMPL doc structure uses the YAML schema defined in `## Quality Gates Section Format`. The `level` field and `gates` array structure are canonical — Agent B's scout.md additions should reference the same schema verbatim or by cross-reference to `message-formats.md`.
+
+---
+
+### Agent B - Completion Report
+
+```yaml type=impl-completion-report
+status: complete
+worktree: .claude/worktrees/wave1-agent-b
+branch: wave1-agent-b
+commit: 79e3b58
+files_changed:
+  - implementations/claude-code/prompts/agents/scaffold-agent.md
+  - implementations/claude-code/prompts/saw-skill.md
+  - implementations/claude-code/prompts/agents/scout.md
+files_created: []
+interface_deviations: []
+out_of_scope_deps: []
+tests_added: []
+verification: PASS
+```
+
+All three files updated as specified. Key decisions:
+
+- scaffold-agent.md: inserted Build Verification (E22) as step 3 between file creation and commit; renumbered old steps 3 and 4 to 4 and 5. Updated Verification section (pre-commit build check added as item 2) and Rules section (E22 rationale appended as final bullet).
+
+- saw-skill.md: E20 and E21 steps inserted immediately before "5. Merge and verify" — after the step 4 completion-report reading block closes. The existing failure-handling logic (E7, E7a, E8 text) within step 4 was not touched.
+
+- agents/scout.md: new step 11 (Quality Gates emission) inserted between old step 10 (verification gates / lint command) and old step 11 (E16 validation feedback, now renumbered step 12). Uses marker-file auto-detection table as specified. Scout is directed to reuse commands already identified for test_command — no redundant tool discovery.
+
+One discrepancy to flag: the IMPL doc File Ownership table lists `implementations/claude-code/prompts/scout.md` but the actual file path is `implementations/claude-code/prompts/agents/scout.md`. The agent prompt text correctly specifies the agents/ path. Recommend the orchestrator correct the file ownership table entry at post-merge.
