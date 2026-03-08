@@ -215,11 +215,11 @@ CLI backend:   Scout prompt → free-form markdown → disk → markdown parser 
 4. Write markdown IMPL doc from struct (so files remain human-readable/editable)
 5. Keep `protocol.ParseIMPLDoc` as fallback for CLI backend and existing docs
 
-**Protocol changes required:** `protocol/message-formats.md` updated to note JSON schema as the canonical spec; `scout.md` and `wave-agent.md` updated to note that structured outputs are used when available; `scout-and-wave-go` backend interface extended with `RunStructured` method.
+**Implementation scope:** Engine only (`scout-and-wave-go`). No protocol changes — the protocol defines what the IMPL doc contains, not how it is generated.
 
 ---
 
-### Validation + Correction Loop
+### Validation + Correction Loop *(protocol-level — essential)*
 
 **The deeper problem:** Structured outputs solve format enforcement at generation time — but only for the API backend, and only for new runs. Existing docs, CLI-backend users, and hand-edited files all bypass it. The root issue is there is no feedback loop: the AI writes something, the parser tries to read it, and if it fails the error is silent.
 
@@ -236,9 +236,14 @@ This is how compilers work — the LLM doesn't need to be perfect on the first t
 
 **Validator scope:** Only machine-parsed sections need validation — dep graph, file ownership table, wave/agent structure, completion reports. Prose sections (suitability rationale, interface contracts narrative) are intentionally free-form and excluded.
 
+**Protocol changes required:**
+- `protocol/execution-rules.md` — new E-rule (E16): after Scout writes the IMPL doc, orchestrator runs the validator; on failure, re-engages Scout with the error list; proceeds to human review only when validation passes or retry limit is reached
+- `protocol/state-machine.md` — new SCOUT_VALIDATING state between SCOUT_COMPLETE and PENDING_REVIEW; transitions: pass → PENDING_REVIEW, fail + retries remain → SCOUT_VALIDATING, fail + retries exhausted → BLOCKED
+- `protocol/participants.md` — orchestrator responsibilities updated to include validation step
+
 ---
 
-### Structured Metadata Blocks
+### Structured Metadata Blocks *(protocol-level — essential)*
 
 **Complementary to the correction loop.** Instead of Scout writing a blank page, the machine-parsed sections are required to be fenced code blocks with declared types:
 
@@ -260,6 +265,12 @@ The validator only needs to check typed blocks — it ignores prose entirely. Th
 This separates human-readable prose from machine-parsed data without requiring the whole doc to be JSON. The IMPL doc stays readable; the structured sections are unambiguous.
 
 **Structured outputs as the strong form of this:** For API-backend runs, `output_config` schema enforcement means the validator always passes — the correction loop becomes a no-op. For CLI backend, the loop provides the same guarantee through iteration rather than constraint.
+
+**Protocol changes required:**
+- `protocol/message-formats.md` — IMPL doc schema updated: machine-parsed sections (file ownership, dep graph, wave structure, completion reports) required to use typed fenced blocks (`type=impl-*`); prose sections remain free-form
+- `agents/scout.md` and `prompts/scout.md` — output format template updated to use typed blocks for all structured sections
+- `agents/wave-agent.md` — completion report format updated to typed block
+- `protocol/participants.md` — validator described as a protocol-level tool, not an implementation detail
 
 ---
 
