@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.10.0] | 2026-03-07 | Typed metadata blocks (type=impl-*), E16 validation+correction loop, Pre-Mortem section, SCOUT_VALIDATING state |
 | [0.9.5] | 2026-03-07 | Scout dep graph format prescribed; structured Wave/Agent/depends-on template replaces free-form prose |
 | [0.9.4] | 2026-03-07 | E15: IMPL doc completion lifecycle; Scout output requires ## Wave N headers; documentation audit fixes |
 | [0.9.3] | 2026-03-06 | Cleanup: templates/ deleted, IMPL-SCHEMA merged into protocol/message-formats.md, manual implementation removed |
@@ -47,6 +48,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.3.0] | 2026-02-28 | Bootstrap mode for new projects; Wave 0 pattern |
 | [0.2.0] | 2026-02-28 | Decomposed skill prompt; complexity-based suitability heuristic |
 | [0.1.0] | 2026-02-27 | Initial release |
+
+---
+
+## [0.10.0] - 2026-03-07
+
+### Added
+
+- **Typed metadata blocks (`type=impl-*`).** Machine-parsed sections of the IMPL doc now use typed fenced code blocks with a `type=impl-*` annotation on the opening fence. Four block types defined: `impl-file-ownership`, `impl-dep-graph`, `impl-wave-structure`, `impl-completion-report`. Prose sections remain free-form. Defined in `protocol/message-formats.md`.
+
+- **E16: Scout Output Validation.** New execution rule requiring the Orchestrator to run a deterministic validator on all `type=impl-*` typed-block sections after the Scout writes the IMPL doc, before human review. On validation failure, the Orchestrator issues a correction prompt to the Scout listing specific errors by block type and location. Scout rewrites only the failing sections. Loop continues up to 3 attempts; on exhaustion, enters BLOCKED. Added to `protocol/execution-rules.md`.
+
+- **SCOUT_VALIDATING state.** New protocol state interposed between SCOUT_PENDING and REVIEWED. Covers the validation + correction loop lifecycle: self-loop on correction, transitions to REVIEWED on pass or BLOCKED on retry exhaustion. Added to `protocol/state-machine.md` (catalog, flow diagram, failure paths, transition guards, entry actions).
+
+- **Pre-Mortem section.** New required Scout output section (`## Pre-Mortem`) written before the human review checkpoint. Contains an overall risk rating (low/medium/high) and a failure modes table (Scenario / Likelihood / Impact / Mitigation). Forces adversarial thinking before human approval. Schema defined in `protocol/message-formats.md`; output template added to both scout prompt files.
+
+### Changed
+
+- **`protocol/participants.md`** — Orchestrator Responsibilities section updated: E16 validation responsibility and required capability ("Run IMPL doc validator on typed-block sections") added.
+
+- **`implementations/claude-code/prompts/saw-skill.md`** — E16 correction loop step added to the scout flow (between IMPL doc read and human review); step numbering updated; E-rule range updated to E1–E16.
+
+- **`implementations/claude-code/prompts/agents/scout.md`** and **`implementations/claude-code/prompts/scout.md`** — Output format template updated: dep graph, file ownership, and wave structure sections now use `type=impl-*` fence annotations. Pre-Mortem section template added. E16 correction-loop awareness note added as Step 10.
+
+- **`implementations/claude-code/prompts/agents/wave-agent.md`** — Completion report template updated to use `type=impl-completion-report` opening fence; YAML fields aligned with `message-formats.md` schema.
+
+- **`protocol/procedures.md`** — Procedure 1 (Scout) exit state updated from REVIEWED to SCOUT_VALIDATING; Orchestrator Actions section updated with validation loop steps.
 
 ---
 
