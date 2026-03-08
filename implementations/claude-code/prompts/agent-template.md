@@ -238,8 +238,9 @@ Use the structured format below; the orchestrator parses these fields to
 automate conflict detection and merging. Write the structured block first,
 then add free-form notes beneath it.
 
-```yaml
 ### Agent {letter} - Completion Report
+
+```yaml type=impl-completion-report
 status: complete | partial | blocked
 worktree: .claude/worktrees/wave{N}-agent-{letter}
 branch: wave{N}-agent-{letter}

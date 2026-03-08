@@ -7,7 +7,7 @@ This guide walks you through your first SAW session step-by-step, showing exactl
 Before starting, ensure you've completed the [installation steps](README.md#installation) in the main README:
 - [x] Permissions configured (`"Agent"` in allow list)
 - [x] Repository cloned
-- [x] Skill installed (`~/.claude/commands/saw.md`)
+- [x] Skill installed (`~/.claude/skills/saw/SKILL.md`)
 - [x] Installation verified (`/saw status` works)
 
 ## Your First SAW Run
@@ -39,7 +39,7 @@ Scout is analyzing your codebase:
 -> Designing wave structure
 -> Defining interface contracts
 -> Assigning files to agents
--> Writing docs/IMPL-simple-cache.md...
+-> Writing docs/IMPL/IMPL-simple-cache.md...
 ```
 
 **Scout completes and reports:**
@@ -74,7 +74,7 @@ Interface Contracts:
       Delete(key string)
   }
 
-IMPL doc written to: docs/IMPL-simple-cache.md
+IMPL doc written to: docs/IMPL/IMPL-simple-cache.md
 
 Review the IMPL doc. This is your last chance to change interface signatures.
 Ready to proceed?
@@ -532,7 +532,7 @@ Not directly. Each IMPL doc is specific to one feature. But you can copy the fil
 
 **Problem: `/saw` not recognized**
 
-Solution: Check `~/.claude/commands/saw.md` exists and restart Claude Code.
+Solution: Check `~/.claude/skills/saw/SKILL.md` exists and restart Claude Code.
 
 **Problem: "Agent tool not allowed"**
 

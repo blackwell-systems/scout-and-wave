@@ -24,7 +24,7 @@ Read these documents in order to understand the complete protocol:
 
 1. Read the protocol docs in the order listed in the Navigation table above
 2. Identify which participant roles your runtime will support (minimum: Orchestrator + Wave Agent)
-3. Choose an isolation mechanism that satisfies I1 (worktree isolation): git worktrees, filesystem snapshots, containers, etc.
+3. Choose an isolation mechanism that satisfies I1 (disjoint file ownership): git worktrees, filesystem snapshots, containers, etc.
 4. Implement the state machine transitions (see [state-machine.md](state-machine.md))
 5. Implement structured message parsing (see [message-formats.md](message-formats.md))
 6. Verify your implementation satisfies all six invariants (see [invariants.md](invariants.md))
@@ -46,7 +46,7 @@ See [execution-rules.md](execution-rules.md) for the formal correctness argument
 
 This protocol specification follows semantic versioning. Breaking changes to invariants, preconditions, or message formats increment the major version. New optional fields or clarifications increment the minor version.
 
-Current version: **0.8.0**
+Current version: **0.10.2**
 
 ## Reference Implementations
 

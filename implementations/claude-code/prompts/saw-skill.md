@@ -36,8 +36,9 @@ observability (no Scout agent means no SAW session is detectable by monitoring
 tools).
 
 *`I{N}` notation refers to invariants (I1–I6) and `E{N}` to execution rules
-(E1–E16) defined in `PROTOCOL.md`. Each is embedded verbatim at its point of
-enforcement; the number is the anchor for cross-referencing and audit.*
+(E1–E16) defined in `protocol/invariants.md` and `protocol/execution-rules.md`.
+Each is embedded verbatim at its point of enforcement; the number is the anchor
+for cross-referencing and audit.*
 
 **Agent type preference:** Use custom `subagent_type` values (`scout`, `scaffold-agent`, `wave-agent`) when launching agents. These provide tool-level enforcement (scout cannot Edit source, wave-agent cannot spawn sub-agents) and carry behavioral instructions in the type definition. If a custom type fails to load, fall back to `subagent_type: general-purpose` with the full prompt from the prompts directory.
 

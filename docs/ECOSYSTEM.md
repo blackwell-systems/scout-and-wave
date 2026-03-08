@@ -175,10 +175,11 @@ an IMPL doc and reconstruct exactly what was parallelized, who owned what,
 and what deviated. Task lists and chat histories don't survive.
 
 **Protocol, not product.** SAW is a set of markdown files: prompt templates,
-a skill router, and a formal spec (PROTOCOL.md with invariants I1–I6). No
-binary, no server, no SDK, no vendor lock-in. It runs inside whatever agent
-tool you already use. Today that's Claude Code; tomorrow it could be Codex,
-Cursor, or a custom agent. The protocol is portable; the mechanism is
+a skill router, and a formal spec (the `protocol/` directory, with invariants
+I1–I6). No binary, no server, no SDK, no vendor lock-in. It runs inside
+whatever agent tool you already use. Today that's Claude Code; tomorrow it
+could be Codex, Cursor, or a custom agent. The protocol is portable; the
+mechanism is
 swappable.
 
 This is a deliberate design choice, not a limitation. The intellectual claim
@@ -204,7 +205,7 @@ it's simpler, more portable, and proves something worth proving.
 
 ## Further Reading
 
-- [PROTOCOL.md](../PROTOCOL.md): formal specification of invariants I1–I6
+- [protocol/README.md](../protocol/README.md): protocol overview and specification index (invariants I1–I6, rules E1–E16)
 - [Scout-and-Wave: A Coordination Pattern for Parallel AI Agents](https://blog.blackwell-systems.com/posts/scout-and-wave/): the pattern, the failure modes of naive parallelism, and a worked example
 - [Scout-and-Wave, Part 2: What Dogfooding Taught Us](https://blog.blackwell-systems.com/posts/scout-and-wave-part2/): overhead measurement, the audit-fix-audit loop, and the bootstrap problem
 - [Scout-and-Wave, Part 3: Five Failures, Five Fixes](https://blog.blackwell-systems.com/posts/scout-and-wave-part3/): prompt engineering evolution driven by real failures

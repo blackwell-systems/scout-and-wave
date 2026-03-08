@@ -1,7 +1,7 @@
 # Scout-and-Wave
 
 [![Blackwell Systems™](https://raw.githubusercontent.com/blackwell-systems/blackwell-docs-theme/main/badge-trademark.svg)](https://github.com/blackwell-systems)
-![Version](https://img.shields.io/badge/version-0.9.4-blue)
+![Version](https://img.shields.io/badge/version-0.10.2-blue)
 [![Agent Skills](assets/badge-agentskills.svg)](https://agentskills.io)
 
 SAW is published as an [Agent Skill](https://agentskills.io) — a portable, tool-agnostic package for adding capabilities to AI coding agents.
@@ -126,8 +126,8 @@ The protocol is defined independent of any implementation. Read these to underst
 - **[protocol/README.md](protocol/README.md)** - Protocol overview and navigation guide
 - **[protocol/participants.md](protocol/participants.md)** - Four participant roles and their responsibilities
 - **[protocol/preconditions.md](protocol/preconditions.md)** - Five preconditions for suitability gate
-- **[protocol/invariants.md](protocol/invariants.md)** - Six invariants (I1–I6) — formal correctness rules that every implementation must satisfy (e.g., I1: worktree isolation, I2: disjoint file ownership)
-- **[protocol/execution-rules.md](protocol/execution-rules.md)** - Execution rules (E1–E16) governing state transitions, agent launches, completion handling, merge procedures, verification gates, IMPL doc lifecycle, and Scout output validation
+- **[protocol/invariants.md](protocol/invariants.md)** - Six invariants (I1–I6) — formal correctness rules that every implementation must satisfy (e.g., I1: disjoint file ownership, I2: interface contracts precede parallel implementation)
+- **[protocol/execution-rules.md](protocol/execution-rules.md)** - Execution rules (E1–E16) governing state transitions, agent launches, completion handling, merge procedures, verification gates, IMPL doc lifecycle, and Scout output validation (E16A: required block presence; E16B: dep graph grammar; E16C: out-of-band dep graph warning)
 - **[protocol/state-machine.md](protocol/state-machine.md)** - Protocol states and transitions
 - **[protocol/message-formats.md](protocol/message-formats.md)** - IMPL doc and completion report schemas
 - **[protocol/procedures.md](protocol/procedures.md)** - Step-by-step merge and verification procedures
@@ -180,7 +180,7 @@ To implement SAW in a different runtime (Python, Rust, TypeScript, etc.):
 
 1. Read protocol docs in order: [participants](protocol/participants.md) → [preconditions](protocol/preconditions.md) → [invariants](protocol/invariants.md) → [execution-rules](protocol/execution-rules.md) → [state-machine](protocol/state-machine.md) → [message-formats](protocol/message-formats.md) → [procedures](protocol/procedures.md)
 2. Identify which participant roles your runtime will support (minimum: Orchestrator + Wave Agent)
-3. Choose an isolation mechanism that satisfies I1 (worktree isolation): git worktrees, filesystem snapshots, containers, etc.
+3. Choose an isolation mechanism that satisfies I1 (disjoint file ownership): git worktrees, filesystem snapshots, containers, etc.
 4. Use the [protocol/](protocol/) specification as reference for orchestrator logic
 5. Use [protocol/message-formats.md](protocol/message-formats.md) as reference for IMPL doc structure and message schemas
 6. Verify your implementation satisfies all six invariants (I1–I6) defined in [protocol/invariants.md](protocol/invariants.md)

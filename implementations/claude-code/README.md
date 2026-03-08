@@ -308,7 +308,7 @@ If the work doesn't decompose cleanly, the Scout says so. It runs a suitability 
 - Restart Claude Code
 
 **Worktree isolation failures:**
-- See [worktree defense layers](../../protocol/invariants.md#i1-worktree-isolation) in protocol docs
+- See [worktree defense layers](../../protocol/invariants.md#i1-disjoint-file-ownership) in protocol docs
 - Check pre-commit hook is active: `cat .git/hooks/pre-commit`
 
 **For more help:**

@@ -55,31 +55,11 @@ This maps to an orchestrator decision tree instead of the current "halt and surf
 
 ---
 
-### Pre-Mortem in Scout Output
+### ~~Pre-Mortem in Scout Output~~ — Implemented (v0.10.0)
 
-**Current state:** Scout runs the suitability gate (P1-P5) and produces a binary SUITABLE / NOT SUITABLE / SUITABLE WITH CAVEATS verdict.
+Implemented as a required Scout output section (`## Pre-Mortem`) written before the human review checkpoint. Contains an overall risk rating (low/medium/high) and a failure modes table (Scenario / Likelihood / Impact / Mitigation). Schema defined in `protocol/message-formats.md`; output template added to both scout prompt files (`prompts/scout.md` and `prompts/agents/scout.md`).
 
-**Problem:** The verdict tells you whether to proceed, but not what could go wrong if you do. Agents discover failure modes at execution time rather than surfacing them at the review checkpoint.
-
-**Proposed:** Add a `## Pre-Mortem` section to the IMPL doc, written by the Scout before the human review checkpoint:
-
-```yaml
-pre_mortem:
-  overall_risk: low | medium | high
-  failure_modes:
-    - scenario: "Agent B cannot compile without Agent A's type definitions"
-      likelihood: medium
-      impact: high
-      mitigation: "Scaffold Agent creates shared types before Wave 1"
-    - scenario: "Interface contract between waves is underspecified"
-      likelihood: low
-      impact: high
-      mitigation: "Scout specifies exact function signatures, not prose descriptions"
-```
-
-The pre-mortem appears on the IMPL doc review screen in the web UI — it's the first thing the human reads before approving the wave structure. Forces the scout to think adversarially about its own plan.
-
-**Protocol changes required:** New section in `protocol/message-formats.md`, scout output format in `scout.md`.
+Remaining work: Web UI review screen — Pre-Mortem section displayed as a callout before the wave structure approval buttons.
 
 ---
 
@@ -136,7 +116,7 @@ Scout reads `docs/SAW.md` before the suitability gate. After a wave completes, o
 
 ### ~~IMPL Doc Completion Lifecycle~~ — Implemented (v0.9.4)
 
-Implemented as E15 in `protocol/execution-rules.md`. The orchestrator writes `**Status:** COMPLETE` and `**Completed:** {date}` to the IMPL doc header after final wave verification. IMPL doc schema updated in `protocol/message-formats.md`, state machine updated in `protocol/state-machine.md`, orchestrator skill updated with step 6.
+Implemented as E15 in `protocol/execution-rules.md`. The orchestrator writes `<!-- SAW:COMPLETE YYYY-MM-DD -->` on the line immediately after the IMPL doc title after final wave verification. IMPL doc schema updated in `protocol/message-formats.md`, state machine updated in `protocol/state-machine.md`, orchestrator skill updated with step 6.
 
 Remaining work: Go engine parser support (`pkg/protocol/parser.go`), API response field (`doc_status`), web UI picker filtering (active vs completed).
 
@@ -245,7 +225,7 @@ CLI backend:   Scout prompt → free-form markdown → disk → markdown parser 
 
 ---
 
-### Validation + Correction Loop *(protocol-level — essential)*
+### ~~Validation + Correction Loop~~ — Implemented (v0.10.0)
 
 **The deeper problem:** Structured outputs solve format enforcement at generation time — but only for the API backend, and only for new runs. Existing docs, CLI-backend users, and hand-edited files all bypass it. The root issue is there is no feedback loop: the AI writes something, the parser tries to read it, and if it fails the error is silent.
 
@@ -269,7 +249,7 @@ This is how compilers work — the LLM doesn't need to be perfect on the first t
 
 ---
 
-### Structured Metadata Blocks *(protocol-level — essential)*
+### ~~Structured Metadata Blocks~~ — Implemented (v0.10.0)
 
 **Complementary to the correction loop.** Instead of Scout writing a blank page, the machine-parsed sections are required to be fenced code blocks with declared types:
 
@@ -300,9 +280,13 @@ This separates human-readable prose from machine-parsed data without requiring t
 
 ---
 
-### ~~E16 Validator as Bundled Skill Script~~ — Implemented (v0.10.1)
+### ~~E16 Validator as Bundled Skill Script~~ — Implemented (v0.10.1–0.10.2)
 
 Implemented as `implementations/claude-code/scripts/validate-impl.sh`, symlinked into `~/.claude/skills/saw/scripts/`. Validates all `type=impl-*` typed blocks (file-ownership, dep-graph, wave-structure, completion-report) with structural regex checks. Exits 0 on pass, 1 on failure with plain-text errors the orchestrator passes directly to Scout. `saw-skill.md` step 3 calls it by relative path: `bash scripts/validate-impl.sh "<impl-doc>"`. Script outputs go to stderr (progress) and stdout (errors), following the Agent Skills cross-platform spec for deterministic skill logic.
+
+v0.10.2 added:
+- **E16A:** Required block presence enforcement — docs with any typed blocks must include all three of `impl-file-ownership`, `impl-dep-graph`, and `impl-wave-structure`, or validation fails with a distinct error per missing type. Pre-v0.10.0 docs (no typed blocks) are unaffected.
+- **E16C:** Out-of-band dep graph detection — a second scan pass checks all plain fenced blocks for `[A-Z]` agent refs + the word `Wave`; emits a WARNING to stdout but does not cause exit 1. Orchestrator includes E16C warnings in the Scout correction prompt.
 
 ---
 
