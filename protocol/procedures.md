@@ -384,7 +384,7 @@ For each agent (in any order):
    - Number of agents launched
    - Link to IMPL doc with all completion reports
 
-5. **Transition:** Enter COMPLETE (terminal state)
+6. **Transition:** Enter COMPLETE (terminal state)
 
 ---
 
@@ -405,6 +405,7 @@ For each agent (in any order):
    - Isolation failure: Re-launch with absolute IMPL doc path
    - Missing dependency: Install, re-launch agent
    - Transient build error: Re-launch after delay
+   - `failure_type: timeout`: Retry once with explicit instruction to commit partial work and prioritize essential work only; if retry also times out, escalate — scope may need reduction in the IMPL doc
    - Up to 2 automatic retries before surfacing to human
 
 3. **Non-correctable failures (always surface to human):**

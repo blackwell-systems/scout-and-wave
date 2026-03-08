@@ -235,13 +235,14 @@ No pseudocode. These are binding contracts.]
 
 ## Pre-Mortem
 
-**What could go wrong:**
-- [Risk 1 — e.g. scaffold compilation fails if import paths are wrong]
-- [Risk 2 — e.g. Wave 2 wiring agent has implicit dependency on Wave 1 internals not captured in interface contracts]
+**Overall risk:** low | medium | high
 
-**Mitigations:**
-- [Mitigation 1]
-- [Mitigation 2]
+**Failure modes:**
+
+| Scenario | Likelihood | Impact | Mitigation |
+|----------|-----------|--------|------------|
+| Scaffold compilation fails (wrong import path or missing dependency) | low | high | Scaffold Agent runs go build before committing; fix reported before Wave 1 launches |
+| Wave 2 wiring agent has implicit dependency on Wave 1 internals not in interface contracts | medium | medium | Add required internals to contracts during review; agents must not access unexported symbols |
 
 ## Dependency Graph
 

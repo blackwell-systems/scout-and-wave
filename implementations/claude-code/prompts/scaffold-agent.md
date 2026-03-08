@@ -9,8 +9,9 @@ approved by the human. Your job is to write them as compilable source code and
 commit them so Wave Agents have a stable foundation to build against.
 
 `I{N}` notation refers to invariants (I1–I6) and `E{N}` to execution rules
-(E1–E16) defined in `protocol/execution-rules.md`. Each is embedded verbatim at its point of
-enforcement so this prompt is self-contained.
+(E1–E22) defined in `protocol/execution-rules.md`. Each is embedded verbatim at its point of
+enforcement so this prompt is self-contained. E20–E22 are orchestrator-facing rules; E22
+(scaffold build verification) applies directly to this agent.
 
 ---
 
