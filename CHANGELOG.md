@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.14.3] | 2026-03-08 | Third-pass audit — 25 findings: hooks path, saw-teams I6/E16/E15/E18/paths, scaffold 2-pass build, scout Step 0/cross-check, solo agent check |
 | [0.14.2] | 2026-03-08 | Second-pass audit — saw-teams parity (E23 payload, IMPL paths, E19/E20/E21), bootstrap completeness |
 | [0.14.1] | 2026-03-08 | First-pass audit — E1–E23 propagation, failure_type timeout, Quality Gates template, E17 fallback |
 | [0.14.0] | 2026-03-08 | E23 per-agent context extraction — eliminates O(N²) token waste in large IMPL docs |
@@ -60,6 +61,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.3.0] | 2026-02-28 | Bootstrap mode for new projects; Wave 0 pattern |
 | [0.2.0] | 2026-02-28 | Decomposed skill prompt; complexity-based suitability heuristic |
 | [0.1.0] | 2026-02-27 | Initial release |
+
+---
+
+## [0.14.3] - 2026-03-08
+
+### Fixed
+
+- **hooks: IMPL doc path** — `teammate-idle-saw.sh`, `task-completed-saw.sh`, `hooks.md` all used pre-v0.6.8 `find docs -name "IMPL-*.md"` pattern; updated to `find docs/IMPL -name "IMPL-*.md"` (F3)
+- **saw-teams-skill: path resolution** — Replaced hardcoded `SAW_REPO` env var / `~/code/scout-and-wave/` fallback with `${CLAUDE_SKILL_DIR}/` matching saw-skill.md v0.9.0 approach for `scout.md`, `scaffold-agent.md`, `saw-bootstrap.md`, `saw-teams-merge.md` references (F17)
+- **saw-teams-skill: bootstrap I6 violation** — Step 3 instructed Orchestrator to "design the package structure and interface contracts" directly; replaced with Scout agent delegation (F18)
+- **saw-teams-skill: E16 validation** — Added IMPL doc validation step between Scout completion and human review, matching saw-skill.md (F15)
+- **saw-teams-skill: E20 stub scan** — `${SAW_SKILL_DIR}` corrected to `${CLAUDE_SKILL_DIR}` (F4)
+- **saw-teams-skill: E15/E18 post-final-wave** — Added IMPL doc completion marker (E15) and project memory update (E18) steps after final wave merge; were present in saw-skill.md but absent here (F25)
+- **saw-teams-skill: merge file reference** — Updated `saw-teams/saw-teams-merge.md` to `${CLAUDE_SKILL_DIR}/saw-teams-merge.md`
+- **agents/scaffold-agent.md: E22 two-pass build** — Added explicit Pass 1 (scaffold package only) before Pass 2 (full project build) to match `prompts/scaffold-agent.md` and `execution-rules.md` E22 spec (F2)
+- **agents/scaffold-agent.md: version marker** — Bumped `v0.1.1` → `v0.1.2` (F19)
+- **prompts/scaffold-agent.md: heading levels** — `### Scaffolds` and `### Interface Contracts` corrected to `## Scaffolds` and `## Interface Contracts` to match canonical IMPL doc heading levels (F9)
+- **execution-rules.md: E22 cross-references footer** — Removed stale `E5` reference; corrected short path `agents/scaffold-agent.md` to full path `implementations/claude-code/prompts/agents/scaffold-agent.md`; added `procedures.md (Procedure 2)` (F1)
+- **agents/scout.md: Step 0 E17 block** — Added standalone `## Step 0: Read Project Memory (E17)` section before Suitability Gate, matching `prompts/scout.md` v0.5.0 structure (F5)
+- **prompts/scout.md: CONTEXT.md cross-check** — Added `> CONTEXT.md cross-check` blockquote to suitability gate step 4 matching the equivalent already present in `agents/scout.md` (F6)
+- **saw-skill.md: solo agent check** — Added step 2 solo agent check (1-agent wave → skip worktrees, launch directly) before worktree setup step, matching saw-teams-skill.md (F7)
+- **saw-bootstrap.md: Known Issues section** — Added `## Known Issues` template section between Pre-Mortem and Dependency Graph to match canonical IMPL doc structure (F8)
+- **scout.md: Orchestrator Post-Merge Checklist** — Added explicit E20 stub scan and E21 quality gates checkboxes; bootstrap template already had them but scout-generated IMPL docs did not (F12)
+- **procedures.md: E18 architecture field** — Clarified "update architecture" to "update `architecture.description` and `architecture.modules` list" with schema cross-reference (F14)
+- **message-formats.md: Quality Gates validator exclusion** — Added "Quality Gates" to prose-sections exclusion list; it uses free-form YAML, not a typed block (F13)
+- **protocol/README.md: procedures.md description** — Updated from merge-only description to full scope: Scout, Scaffold Agent, wave execution, merge, checkpoint, completion (F21)
+- **agent-template.md: Scaffold Agent attribution** — Corrected "Scout produces type scaffold files" to "Scaffold Agent creates shared type scaffold files (specified by the Scout)" (F23)
+- **agents/wave-agent.md: field numbering** — Updated "Your Task" spec from 1-indexed custom field names to canonical Field 0–8 numbering matching agent-template.md (F24)
+- **teammate-template.md: worktree field** — `{letter}` placeholder corrected to `{ID}` in worktree field of completion report template (F16)
 
 ---
 
