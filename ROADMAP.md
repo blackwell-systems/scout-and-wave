@@ -219,6 +219,50 @@ CLI backend:   Scout prompt → free-form markdown → disk → markdown parser 
 
 ---
 
+### Validation + Correction Loop
+
+**The deeper problem:** Structured outputs solve format enforcement at generation time — but only for the API backend, and only for new runs. Existing docs, CLI-backend users, and hand-edited files all bypass it. The root issue is there is no feedback loop: the AI writes something, the parser tries to read it, and if it fails the error is silent.
+
+**Proposed:** After Scout writes the IMPL doc, the orchestrator runs a deterministic validator before the human review checkpoint. If validation fails, the specific errors are fed back to Scout as a correction prompt. Scout rewrites only the failing sections. This loops until the doc passes or a retry limit is hit.
+
+```
+Scout writes → validator runs → pass: proceed to review
+                              → fail: "dep graph missing Wave N headers (line 47),
+                                       file ownership table missing Wave column" →
+                                Scout corrects → validator runs again → ...
+```
+
+This is how compilers work — the LLM doesn't need to be perfect on the first try, it needs to respond correctly to deterministic feedback. Works on any backend, works on existing docs when re-validated.
+
+**Validator scope:** Only machine-parsed sections need validation — dep graph, file ownership table, wave/agent structure, completion reports. Prose sections (suitability rationale, interface contracts narrative) are intentionally free-form and excluded.
+
+---
+
+### Structured Metadata Blocks
+
+**Complementary to the correction loop.** Instead of Scout writing a blank page, the machine-parsed sections are required to be fenced code blocks with declared types:
+
+````
+```yaml type=impl-file-ownership
+| File | Agent | Wave | Action |
+...
+```
+
+```yaml type=impl-dep-graph
+Wave 1 (2 parallel agents):
+    [A] pkg/...
+...
+```
+````
+
+The validator only needs to check typed blocks — it ignores prose entirely. The declared type tells the parser exactly which schema to apply. A block that fails to parse produces a precise error message ("impl-dep-graph block: Wave 2 agent [C] missing depends-on line") that Scout can act on.
+
+This separates human-readable prose from machine-parsed data without requiring the whole doc to be JSON. The IMPL doc stays readable; the structured sections are unambiguous.
+
+**Structured outputs as the strong form of this:** For API-backend runs, `output_config` schema enforcement means the validator always passes — the correction loop becomes a no-op. For CLI backend, the loop provides the same guarantee through iteration rather than constraint.
+
+---
+
 
 
 ### Local-First Web UI (`saw serve`)
