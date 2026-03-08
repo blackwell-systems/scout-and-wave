@@ -44,6 +44,20 @@ git commit -m "chore: initial commit"
 This costs nothing and prevents bootstrap from failing silently mid-execution
 when agents try to create worktrees or branches.
 
+## Step 0: Read Project Memory (E17)
+
+Before reading requirements or running the suitability gate, check for
+`docs/CONTEXT.md` in the target project. If it exists, read it in full:
+
+- `established_interfaces` — avoid proposing types that already exist
+- `decisions` — respect prior architectural decisions; do not contradict them
+- `conventions` — follow project naming, error handling, and testing patterns
+- `features_completed` — understand what waves have already shipped
+
+If `docs/CONTEXT.md` does not exist, proceed normally.
+
+---
+
 ## Phase 0: Read Requirements
 
 The Orchestrator writes `docs/REQUIREMENTS.md` in the target project directory
@@ -309,6 +323,37 @@ Wave 2: [build full project] + [full test suite]
 - [ ] Wave 1 Agent C - [package: description]
 - [ ] Wave 1 Agent D - [package: description]
 - [ ] Wave 2 Agent A - [entry point wiring]
+
+## Wave Execution Loop
+
+After each wave completes, work through the Orchestrator Post-Merge Checklist
+below. The merge procedure detail is in `saw-merge.md`. Key principles:
+- Read completion reports first — a `status: partial` or `status: blocked` blocks
+  the merge entirely. No partial merges.
+- Post-merge verification is the real gate. Agents pass in isolation; the merged
+  codebase surfaces cross-package failures none of them saw individually.
+
+## Orchestrator Post-Merge Checklist
+
+After each wave completes:
+
+- [ ] Read all agent completion reports — confirm all `status: complete`; if any
+      `partial` or `blocked`, stop and resolve before merging
+- [ ] Conflict prediction — cross-reference `files_changed` lists
+- [ ] Review `interface_deviations` — update downstream agent prompts for any
+      item with `downstream_action_required: true`
+- [ ] Run E20 stub scan: `bash "${CLAUDE_SKILL_DIR}/scripts/scan-stubs.sh" {files}`
+      Append output to IMPL doc under `## Stub Report — Wave {N}`
+- [ ] Run E21 quality gates (if `## Quality Gates` section present)
+- [ ] Merge each agent: `git merge --no-ff <branch> -m "Merge wave{N}-agent-{X}: <desc>"`
+- [ ] Worktree cleanup: `git worktree remove <path>` + `git branch -d <branch>` for each
+- [ ] Post-merge verification: `[build + test command from Verification Gates]`
+- [ ] Fix any cascade failures
+- [ ] Tick status checkboxes in this IMPL doc
+- [ ] Feature-specific steps:
+      - [ ] Register new crate in root `Cargo.toml` members (Rust only)
+- [ ] Commit: `git commit -m "[wave N merge message]"`
+- [ ] Launch next wave (or pause for review)
 ```
 
 ## Rules
@@ -325,3 +370,7 @@ Wave 2: [build full project] + [full test suite]
   A CLI tool with 3 concerns needs 3 packages, not 8.
 - If fewer than 3 concerns are identified, flag as NOT SUITABLE and recommend
   sequential implementation or a redesign that produces more separable concerns.
+- After writing the IMPL doc, expect validation feedback (E16). If the
+  orchestrator returns errors for typed-block sections (`impl-file-ownership`,
+  `impl-dep-graph`, `impl-wave-structure`), rewrite only the failing sections.
+  Do not regenerate the entire document.

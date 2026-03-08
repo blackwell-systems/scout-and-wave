@@ -280,10 +280,13 @@ Use the structured format below; the lead parses these fields to automate
 conflict detection and merging. Write the structured block first, then add
 free-form notes beneath it.
 
-```yaml
 ### Agent {letter} - Completion Report
+
+```yaml type=impl-completion-report
 status: complete | partial | blocked
+failure_type: transient | fixable | needs_replan | escalate | timeout  # required when status is partial or blocked
 worktree: .claude/worktrees/wave{N}-agent-{letter}
+branch: wave{N}-agent-{ID}
 commit: {sha}  # or "uncommitted" if commit failed
 files_changed:
   - path/to/modified/file

@@ -35,16 +35,16 @@ the SAW_REPO environment variable, or fall back to `~/code/scout-and-wave/`.
 If the argument is `bootstrap <project-description>`:
 1. Read `prompts/saw-bootstrap.md` from the scout-and-wave repository and follow the bootstrap procedure.
 2. Gather requirements (language, project type, key concerns) before designing anything.
-3. Design the package structure and interface contracts, then write `docs/IMPL-bootstrap.md`.
+3. Design the package structure and interface contracts, then write `docs/IMPL/IMPL-bootstrap.md`.
 4. Report the architecture design and wave structure. Ask the user to review before proceeding.
 
-If no `docs/IMPL-*.md` file exists for the current feature:
+If no `docs/IMPL/IMPL-*.md` file exists for the current feature:
 1. Launch a **Scout agent** using the Agent tool with `run_in_background: true` and the contents of `prompts/scout.md` as its prompt and the feature description as context. The Scout is NOT a teammate; it runs before any team exists and does not need inter-agent messaging. The Scout analyzes the codebase, runs the suitability gate, and writes the IMPL doc; the Orchestrator does not perform this analysis itself. Inform the user that the Scout is running.
-2. When the Scout completes, read the resulting `docs/IMPL-<feature-slug>.md`.
+2. When the Scout completes, read the resulting `docs/IMPL/IMPL-<feature-slug>.md`.
 3. Report the suitability verdict to the user, and if suitable: the wave structure, file ownership table, interface contracts, and Scaffolds section. Ask the user to review before proceeding.
 4. **Scaffold Agent (conditional):** If the IMPL doc Scaffolds section is non-empty and any scaffold file has `Status: pending`, launch a **Scaffold Agent** using the Agent tool with `run_in_background: true` and the contents of `prompts/scaffold-agent.md` as its prompt. Use `[SAW:scaffold:<feature-slug>]` as the description prefix so claudewatch can identify the run. The Scaffold Agent is NOT a teammate; it runs before any team exists. Wait for it to complete, then read the Scaffolds section: if any file shows `Status: FAILED`, stop immediately — report the failure reason to the user and do not create worktrees or teams. The user must revise the interface contracts in the IMPL doc and re-run the Scaffold Agent. If all files show `Status: committed`, proceed.
 
-If a `docs/IMPL-*.md` file already exists:
+If a `docs/IMPL/IMPL-*.md` file already exists:
 1. Read it and identify the current wave (the first wave with unchecked status items). Also check the Scaffolds section: if any scaffold file has `Status: pending`, spawn the Scaffold Agent now (see step 4 of the Scout flow above) before creating any worktrees or teams. If any file shows `Status: FAILED`, stop and report the failure to the user before proceeding.
 2. **Solo agent check:** If the wave has exactly 1 agent, skip team creation and worktree creation. Launch the agent directly via the Agent tool with `run_in_background: true` on the main branch. After the agent completes, proceed to Step 5. (The solo wave agent must still operate in the Wave Agent role — not executed inline by the lead. Executing solo wave work inline violates I6 regardless of wave size.)
 3. **Multi-agent wave: Agent Teams execution:**
@@ -66,8 +66,15 @@ If a `docs/IMPL-*.md` file already exists:
          Without them, the teammate will self-claim tasks (the Agent Teams
          default behavior) and may not write its completion report.
 
-      2. The **agent prompt from the IMPL doc** (the full `# Wave {N} Agent {X}`
-         section: Fields 0–8 as written by the Scout).
+      2. The **per-agent context payload (E23)** extracted from the IMPL doc.
+         Do NOT pass the full IMPL doc. Extract only:
+         - The agent's own `# Wave {N} Agent {X}` section (Fields 0–8)
+         - The `## Interface Contracts` section
+         - The `## File Ownership` table
+         - The `## Scaffolds` section
+         - The `## Quality Gates` section (if present)
+         - Absolute IMPL doc path as a header comment:
+           `<!-- IMPL doc: /abs/path/to/docs/IMPL/IMPL-slug.md -->`
 
       3. The **absolute worktree path** explicitly stated:
          `Your worktree is at: {absolute-repo-path}/.claude/worktrees/wave{N}-agent-{X}`
@@ -118,7 +125,10 @@ If a `docs/IMPL-*.md` file already exists:
    - Update the IMPL doc's interface contracts in real time
    - Decide whether to halt the wave or let it continue
 
-5. After all teammates in the wave complete, read each teammate's completion report from their named section in the IMPL doc (`### Agent {letter} - Completion Report`). Cross-reference with any messages received during execution. **I4: IMPL doc is the single source of truth.** Completion reports, interface contract updates, and status are written to the IMPL doc. Chat output is not the record. If a completion report is missing from the IMPL doc, do not proceed; the teammate has not completed the protocol. **I5: Agents Commit Before Reporting.** Each agent commits its changes to its worktree branch before writing a completion report. If a report is present but the teammate's worktree branch has no commits, flag this as a protocol deviation before merging. **E7: Agent failure handling.** If any teammate reports `status: partial` or `status: blocked`, the wave does not merge; it goes to BLOCKED. Resolve the failing teammate (re-run, manually fix, or descope) before the merge step proceeds. Teammates that completed successfully are not re-run, but their worktrees are not merged until the full wave is resolved. Partial merges are not permitted. **E8: Same-wave interface failure.** If any teammate reports `status: blocked` due to an interface contract being unimplementable as specified, the wave does not merge. Mark the wave BLOCKED, revise the affected contracts in the IMPL doc, and re-issue prompts to all teammates whose work depends on the changed contract. Teammates that completed cleanly against unaffected contracts do not re-run. The wave restarts from WAVE_PENDING with the corrected contracts.
+5. After all teammates in the wave complete, read each teammate's completion report from their named section in the IMPL doc (`### Agent {letter} - Completion Report`). Cross-reference with any messages received during execution. **I4: IMPL doc is the single source of truth.** Completion reports, interface contract updates, and status are written to the IMPL doc. Chat output is not the record. If a completion report is missing from the IMPL doc, do not proceed; the teammate has not completed the protocol. **I5: Agents Commit Before Reporting.** Each agent commits its changes to its worktree branch before writing a completion report. If a report is present but the teammate's worktree branch has no commits, flag this as a protocol deviation before merging. **E7: Agent failure handling.** If any teammate reports `status: partial` or `status: blocked`, the wave does not merge; it goes to BLOCKED. Resolve the failing teammate (re-run, manually fix, or descope) before the merge step proceeds. Teammates that completed successfully are not re-run, but their worktrees are not merged until the full wave is resolved. Partial merges are not permitted. **E8: Same-wave interface failure.** If any teammate reports `status: blocked` due to an interface contract being unimplementable as specified, the wave does not merge. Mark the wave BLOCKED, revise the affected contracts in the IMPL doc, and re-issue prompts to all teammates whose work depends on the changed contract. Teammates that completed cleanly against unaffected contracts do not re-run. The wave restarts from WAVE_PENDING with the corrected contracts. **E19: Failure type decision tree.** Read the `failure_type` field on any non-complete teammate: `transient` → retry automatically (up to 2 times); `fixable` → read notes, apply fix, relaunch; `needs_replan` → re-engage Scout with teammate's completion report as context; `escalate` → surface to human immediately. If `failure_type` is absent, treat as `escalate`.
+   **E20: Stub scan.** After all teammates complete, collect the union of all `files_changed` and `files_created` from completion reports. Run `bash "${SAW_SKILL_DIR}/scripts/scan-stubs.sh" {file1} {file2} ...`. Append output to the IMPL doc under `## Stub Report — Wave {N}`. Exit code is always 0 — informational only. Surface stubs at the review checkpoint.
+   **E21: Quality gate verification.** If the IMPL doc contains a `## Quality Gates` section, run each configured gate. Required-gate failure blocks merge. Optional-gate failure is a warning only.
+   **E7a: Automatic failure remediation in --auto mode.** When `--auto` is active and a teammate fails with a correctable issue, re-launch with corrections (up to 2 retries). Non-correctable failures always surface to the user. After 2 failed attempts, escalate regardless of `--auto`.
 6. **Merge and verify:** Read `saw-teams/saw-teams-merge.md` from the scout-and-wave repository and follow the merge procedure (team cleanup → conflict detection → merge each agent → worktree cleanup → post-merge verification → update IMPL doc).
 7. **I3: Wave sequencing.** Wave N+1 does not launch until Wave N has been merged and post-merge verification has passed. If `--auto` was passed and verification passed, immediately proceed to the next wave (create a new team). Otherwise, report the wave result and ask the user if they want to continue.
 8. If verification fails, report the failures and ask the user how to proceed.
@@ -129,13 +139,13 @@ Arguments:
   disjoint file ownership before any code is written. Gathers requirements
   (language, project type, key concerns), designs package structure and interface
   contracts, specifies types scaffold in IMPL doc Scaffolds section (Scaffold
-  Agent creates it after human review), and writes `docs/IMPL-bootstrap.md`
+  Agent creates it after human review), and writes `docs/IMPL/IMPL-bootstrap.md`
   with parallel implementation waves starting from Wave 1. Use when starting
   from scratch.
 - `scout <feature-description>`: The Orchestrator launches a Scout agent
   (asynchronous) to analyze the codebase and produce the IMPL doc. The Scout
   runs the suitability gate first; if the work is not suitable, it writes a
-  short verdict to `docs/IMPL-<slug>.md` and stops without producing agent
+  short verdict to `docs/IMPL/IMPL-<slug>.md` and stops without producing agent
   prompts. The Orchestrator waits for the Scout to complete, then reports the
   verdict and asks the user to review.
 - `wave`: Execute the next pending wave, pause for review after each wave

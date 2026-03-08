@@ -2,7 +2,7 @@
 # SAW-Teams Merge Procedure
 
 Merge teammate worktrees back into the main branch after a wave completes.
-Adapted from `prompts/saw-merge.md` (v0.4.4): same merge mechanics, same
+Adapted from `prompts/saw-merge.md` (v0.4.6): same merge mechanics, same
 invariants, with teammate messaging as a supplement.
 
 ## Step 1: Parse Completion Reports

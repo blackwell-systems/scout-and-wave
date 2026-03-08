@@ -570,7 +570,7 @@ The Orchestrator reads this and halts before creating any worktrees. The user mu
 
 **Rationale:** Scaffold files define types and interfaces that Wave agents import. A scaffold file with a syntax error, wrong import path, or missing dependency causes every Wave agent in the next wave to fail immediately — wasting the full wave execution.
 
-**Related Rules:** See `procedures.md` (Procedure 2: Scaffold Agent), `message-formats.md` (Scaffolds Section Format), `agents/scaffold-agent.md`.
+**Related Rules:** See `procedures.md` (Procedure 2: Scaffold Agent), `message-formats.md` (Scaffolds Section Format), `implementations/claude-code/prompts/agents/scaffold-agent.md`.
 
 ---
 

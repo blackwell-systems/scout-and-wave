@@ -75,9 +75,30 @@ Do not deviate from the contracts — if a contract is ambiguous, write a commen
 in the scaffold file flagging the ambiguity and implement the most literal
 reading. Do not guess at intent.
 
-## Step 3: Verify Scaffold Files Compile
+## Step 3: Verify Scaffold Files Compile (E22)
 
-Run a two-pass build: first the scaffold package in isolation, then the full project to confirm the scaffold doesn't break existing code. Do not run the full test suite.
+Run dependency resolution, then a two-pass build: first the scaffold package
+in isolation, then the full project. Do not run the full test suite.
+
+**Step 3a — dependency resolution:**
+
+```bash
+# Go
+go get ./...
+go mod tidy
+
+# Rust
+cargo fetch
+
+# Node
+npm install
+
+# Python
+pip install -e .   # or: uv sync
+```
+
+If dependency resolution fails, fix imports or add missing dependencies before
+proceeding. Do not attempt the build with unresolved dependencies.
 
 **Pass 1 — scaffold package only:**
 

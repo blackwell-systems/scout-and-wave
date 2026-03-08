@@ -98,7 +98,7 @@ Actual: [paste output from pwd and git branch]
 
 **If verification passes:** Document briefly in completion report, then proceed with work.
 
-**Rationale:** Defense-in-depth isolation enforcement (discovered in brewprune Round 5 Waves 1-2; refined in protocol extraction dogfooding 2026-03-06).
+**Rationale:** Defense-in-depth isolation enforcement. The Bash tool does not preserve working directory between invocations; every git operation must specify the path explicitly.
 
 **E4: Worktree isolation is MANDATORY for all Wave agents.** No exceptions for work type (documentation-only, simple refactors, etc.). If work is too small for worktrees, use sequential implementation instead.
 
