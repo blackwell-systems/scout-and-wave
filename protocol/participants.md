@@ -16,7 +16,20 @@ The only participant that interacts with the human directly. All progress report
 
 **Repository context responsibility:** When launching any agent (Scout, Scaffold Agent, Wave Agent), the Orchestrator must provide the absolute path to the IMPL doc in the agent's launch parameters. Agents derive the repository root from this path (the directory containing `docs/`). This prevents multi-repository session ambiguity where the session working directory differs from the feature's repository. Relative IMPL doc paths or omitting the path entirely will cause agents to default to the session's working directory, leading to wrong-repository failures.
 
-**Cross-repository orchestration limitation:** The orchestrator and target repository must be the same. When the orchestrator runs from repository A but needs to coordinate work in repository B, worktree isolation mechanisms fail: runtime isolation parameters (e.g., `isolation: "worktree"`) create worktrees relative to the orchestrator's repository context (A), not the target repository (B). Manually-created worktrees in B cannot be used because agents spawn in A's context. Field 0 verification will correctly detect and block this mismatch. To orchestrate work in repository B, the orchestrator must run from B's working directory. This is an architectural constraint, not a fixable bug.
+**Cross-repository orchestration:** The Orchestrator supports two modes:
+
+*Single-repo mode (default):* Orchestrator and all agents work in the same repository. All five isolation layers (E4) are available, including Layer 2 (`isolation: "worktree"`).
+
+*Cross-repo mode:* Agents work in two or more repositories simultaneously. This is supported but requires modified isolation procedure:
+- **Omit Layer 2** (`isolation: "worktree"`) for all agents — it would create worktrees in the Orchestrator's repo context, not the target repos. Omitting it is intentional.
+- **Apply Layer 1 manually in each target repo** — Orchestrator creates worktrees in each repo before launching any agents (see `saw-worktree.md` Cross-Repo Mode).
+- **Layer 0 in each repo** — Pre-commit guard installed in each repo's `.git/hooks/`.
+- **Layer 3 unchanged** — Field 0 navigates to the correct repo+worktree via absolute path.
+- **Layer 4 per-repo** — Merge-time trip wire runs in each repo independently.
+- The IMPL doc file ownership table must include a `Repo` column.
+- Merge runs independently in each repo; there is no cross-repo merge operation.
+
+The Orchestrator always provides absolute IMPL doc paths to agents so they can derive repository roots unambiguously, regardless of mode.
 
 Running in the user's session is what makes human checkpoints enforceable. A background orchestrator would have no interactive session to deliver mandatory approvals to. The human is not a separate role; they are present through the orchestrator's session.
 

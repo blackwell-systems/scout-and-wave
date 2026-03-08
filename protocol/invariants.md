@@ -1,6 +1,6 @@
 # Scout-and-Wave Protocol Invariants
 
-**Version:** 0.8.0
+**Version:** 0.9.0
 
 This document defines the invariants that must hold throughout the entire Scout-and-Wave protocol execution. Violations break the correctness guarantees.
 
@@ -21,6 +21,8 @@ To audit consistency, search implementation files for `I{N}` and verify the embe
 **Enforcement:** This is a hard constraint, not a preference. It is the mechanism that makes parallel execution safe. Worktree isolation does not substitute for it.
 
 **Scope:** A single agent modifying files outside its declared ownership scope is distinct from an I1 violation. A single agent cannot conflict with itself. Such out-of-scope changes must be justified, documented in the completion report, and verified by the post-merge gate.
+
+**Cross-repo scope:** In cross-repo waves, I1 applies per-repository. Files in different repositories are inherently disjoint — no two agents can conflict on a file that exists in only one repo's filesystem. The disjoint ownership constraint still applies within each repository: no two agents in the same wave may own the same file path within the same repository.
 
 **Related Rules:** See E3 (pre-launch ownership verification) and E11 (conflict prediction before merge)
 

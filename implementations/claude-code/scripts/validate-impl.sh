@@ -202,7 +202,8 @@ done < "$impl_doc"
 
 if [[ $block_count -gt 0 ]]; then
   for required in impl-file-ownership impl-dep-graph impl-wave-structure; do
-    seen_var="seen_${required//-/_}"
+    seen_var="seen_${required#impl-}"   # strip "impl-" prefix: impl-file-ownership → seen_file_ownership
+    seen_var="${seen_var//-/_}"
     if [[ "${!seen_var}" != "true" ]]; then
       add_error "missing required block: $required"
     fi

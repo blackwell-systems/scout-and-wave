@@ -1,6 +1,6 @@
 # Scout-and-Wave Message Formats
 
-**Version:** 0.8.0
+**Version:** 0.9.0
 
 This document defines the structured data formats exchanged between participants: suitability verdicts, agent prompts, completion reports, and scaffold specifications.
 
@@ -26,7 +26,8 @@ The IMPL doc is a markdown file with the following sections in order:
     <!-- Present only when all waves are merged and verified. Omit entirely for active IMPL docs. -->
 
     **Feature:** {One-line description}
-    **Repository:** {Absolute path to repository root}
+    **Repository:** {Absolute path to primary repository root}
+    **Repositories:** {Comma-separated list of absolute paths — omit for single-repo waves}
     **Plan Reference:** {Path to original plan/audit/issue}
 
     ---
@@ -137,6 +138,7 @@ Certain sections of the IMPL doc are machine-parsed by the orchestrator and the 
 
 **`impl-file-ownership` — File Ownership table:**
 
+Single-repo format:
 ```yaml type=impl-file-ownership
 | File | Agent | Wave | Depends On |
 |------|-------|------|------------|
@@ -144,6 +146,18 @@ Certain sections of the IMPL doc are machine-parsed by the orchestrator and the 
 | protocol/execution-rules.md | B | 1 | — |
 | implementations/claude-code/prompts/agents/scout.md | C | 2 | A, B |
 ```
+
+Cross-repo format (add `Repo` column when agents work in different repositories):
+```yaml type=impl-file-ownership
+| File | Agent | Wave | Depends On | Repo |
+|------|-------|------|------------|------|
+| pkg/engine/runner.go | A | 1 | — | saw-engine |
+| pkg/engine/types.go | A | 1 | — | saw-engine |
+| pkg/api/adapter.go | B | 1 | — | saw-web |
+| cmd/saw/main.go | B | 1 | — | saw-web |
+```
+
+The `Repo` column value is the short repo name (matches the directory name). E3 ownership verification is performed per-repo: the same file path in different repos is not a conflict.
 
 **`impl-dep-graph` — Dependency Graph:**
 
@@ -175,6 +189,7 @@ Wave 2: [C] [D]                    <- 2 parallel agents (consumer files)
 
 ```yaml type=impl-completion-report
 status: complete | partial | blocked
+repo: /absolute/path/to/repo  # omit for single-repo waves
 worktree: .claude/worktrees/wave{N}-agent-{letter}
 branch: wave{N}-agent-{letter}
 commit: {sha}
@@ -364,6 +379,8 @@ verification: PASS | FAIL ({command} - N/N tests)
   - `complete`: All work done, verification passed, committed
   - `partial`: Some work done, but incomplete or verification failed. Explain what remains in notes.
   - `blocked`: Cannot proceed without changes outside agent's scope (interface contract unimplementable, missing dependency, etc.). Explain blocker in notes.
+
+- **repo:** Absolute path to the repository this agent worked in. Required for cross-repo waves so the Orchestrator knows which repo to merge in. Omit for single-repo waves.
 
 - **worktree:** Canonical worktree path. Must match E5 naming convention: `.claude/worktrees/wave{N}-agent-{letter}`
 

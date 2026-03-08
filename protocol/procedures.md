@@ -1,6 +1,6 @@
 # Scout-and-Wave Procedures
 
-**Version:** 0.8.0
+**Version:** 0.9.0
 
 This document defines the operational procedures executed by the Orchestrator and other participants: suitability assessment, scaffold materialization, wave execution, and merge operations.
 
@@ -149,9 +149,17 @@ Scaffold files are committed to HEAD before worktrees are created. Once worktree
    - Check: No file appears in more than one agent's Field 1 (File Ownership) list
    - If overlap found: Protocol stop, surface error to human, correct IMPL doc before continuing
 
-2. **Repository context check:** Verify Orchestrator and target repository are the same
-   - Cross-repository orchestration fails: worktree isolation creates worktrees in wrong repo
-   - If cross-repo detected: Report error, suggest running Orchestrator from target repo
+2. **Repository context check:** Determine whether this is a single-repo or cross-repo wave.
+
+   **Single-repo wave:** Orchestrator and all agents work in the same repository. Use all five isolation layers (E4). Layer 2 (`isolation: "worktree"`) is available.
+
+   **Cross-repo wave:** Agents work in two or more repositories simultaneously (e.g., engine extraction where Agent A works in `saw-engine/` and Agent B works in `saw-web/`). Cross-repo waves are supported with modified isolation procedure:
+   - **Omit Layer 2** (`isolation: "worktree"` on the Agent tool) — it creates worktrees in the Orchestrator's repo, not the target repo. Omitting it is intentional, not a failure.
+   - **Apply Layer 1 in each repo** — Orchestrator manually creates worktrees in every repo that agents touch before launching any agents (see `saw-worktree.md` Cross-Repo Mode section).
+   - **Layer 0 in each repo** — Install pre-commit guard in each repo's `.git/hooks/pre-commit`.
+   - **Layer 3 applies unchanged** — Each agent's Field 0 navigates to its repo+worktree via absolute path.
+   - **Layer 4 applies per-repo** — Merge-time trip wire runs independently in each repo.
+   - The IMPL doc file ownership table must include a `Repo` column identifying which repository each file belongs to.
 
 ### Phase 2: Worktree Creation
 
@@ -252,6 +260,7 @@ Scaffold files are committed to HEAD before worktrees are created. Once worktree
 **Exit state:** WAVE_VERIFIED (if merge succeeds and verification passes) or BLOCKED (if conflicts or verification fails)
 **Executor:** Orchestrator
 **Skip condition:** Solo waves skip merge entirely (one agent on main, nothing to merge)
+**Cross-repo note:** For cross-repo waves, all phases of this procedure run independently in each repository. The orchestrator merges each repo's agent branches into that repo's main branch. There is no cross-repo merge operation. Post-merge verification runs in each repo independently.
 
 ### Phase 1: Pre-Merge Conflict Prediction (E11)
 
@@ -426,15 +435,23 @@ For each agent (in any order):
 
 ### Recovery from Cross-Repository Mismatch
 
-**Cause:** Orchestrator running from repo A, attempting to coordinate work in repo B
+**Cause:** Layer 2 (`isolation: "worktree"`) was used in a cross-repo wave, creating worktrees in the wrong repository.
+
+**Distinguish from intentional cross-repo waves:** An intentional cross-repo wave omits Layer 2 and pre-creates worktrees manually in each target repo. This failure mode occurs when Layer 2 was mistakenly applied.
 
 **Steps:**
 
-1. **Detect:** Field 0 isolation verification fails for all agents (wrong directory)
+1. **Detect:** Field 0 isolation verification fails for agents — worktree paths resolve to the Orchestrator's repo, not the target repo.
 
-2. **Surface to human:** Explain cross-repository limitation (architectural constraint, not fixable bug)
+2. **Do not retry with Layer 2.** Remove any incorrectly created worktrees from the Orchestrator's repo:
+   ```bash
+   git worktree remove .claude/worktrees/wave{N}-agent-{letter} --force
+   git branch -D wave{N}-agent-{letter}
+   ```
 
-3. **Resolution:** Human must restart Orchestrator session from target repository's working directory
+3. **Re-create worktrees manually** in the correct target repos following the Cross-Repo Mode procedure in `saw-worktree.md`.
+
+4. **Re-launch agents** without `isolation: "worktree"` parameter.
 
 ---
 

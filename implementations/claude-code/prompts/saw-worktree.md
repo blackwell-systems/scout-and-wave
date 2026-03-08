@@ -1,7 +1,91 @@
-<!-- saw-worktree v0.4.5 -->
+<!-- saw-worktree v0.5.0 -->
 # SAW Worktree Lifecycle
 
 Manage git worktree creation, verification, and cleanup for wave agents.
+
+## Cross-Repo Mode
+
+When a wave spans multiple repositories — for example, an engine extraction
+where Agent A works in `scout-and-wave-engine/` and Agent B works in
+`scout-and-wave-web/` — the single-repo procedure applies independently to
+each repository. Run every step (preflight, ownership verification, worktree
+creation, hook installation) in each repo before launching any agents.
+
+**IMPL doc convention for cross-repo waves:**
+
+The file ownership table must include a `Repo` column identifying which
+repository each file belongs to:
+
+| File | Agent | Wave | Action | Repo |
+|------|-------|------|--------|------|
+| pkg/engine/runner.go | A | 1 | new | saw-engine |
+| pkg/api/adapter.go | B | 1 | modify | saw-web |
+
+Agents use Field 0 (`cd /absolute/path/to/repo/.claude/worktrees/...`) to
+navigate to their repo+worktree. The Orchestrator is responsible for ensuring
+each repo's worktrees exist before launching agents.
+
+**Preflight across all repos:**
+
+```bash
+# Run in each repo
+for repo in ~/code/saw-engine ~/code/saw-web; do
+  echo "=== $repo ==="
+  git -C "$repo" status --porcelain
+done
+```
+
+All repos must be clean before proceeding.
+
+**Worktree creation across all repos:**
+
+```bash
+# Create worktrees in each repo for the agents that own files there
+# saw-engine: Agent A
+mkdir -p ~/code/saw-engine/.claude/worktrees
+git -C ~/code/saw-engine worktree add \
+  ".claude/worktrees/wave1-agent-A" -b "wave1-agent-A"
+
+# saw-web: Agent B
+mkdir -p ~/code/saw-web/.claude/worktrees
+git -C ~/code/saw-web worktree add \
+  ".claude/worktrees/wave1-agent-B" -b "wave1-agent-B"
+```
+
+If an agent owns files in multiple repos, create a worktree for that agent
+in each repo it touches.
+
+**Hook installation across all repos:**
+
+Install the pre-commit guard in each repo's `.git/hooks/` independently.
+Each repo enforces its own isolation boundary.
+
+**Merge step:**
+
+Run the merge procedure separately in each repo. The Orchestrator merges
+each repo's agent branches into that repo's main branch. There is no
+cross-repo merge operation — each repo is an independent merge unit.
+
+**Cleanup across all repos:**
+
+```bash
+for repo in ~/code/saw-engine ~/code/saw-web; do
+  for agent in A B; do
+    git -C "$repo" worktree remove \
+      ".claude/worktrees/wave1-agent-${agent}" --force 2>/dev/null || true
+    git -C "$repo" branch -d "wave1-agent-${agent}" 2>/dev/null || true
+  done
+done
+```
+
+**Key constraint:** An agent that owns files in multiple repos must be given
+explicit absolute paths for each repo's worktree in its prompt. Field 0
+should cd to the primary repo; subsequent sections should reference the
+secondary repo by absolute path. Keep cross-repo agent ownership to a minimum
+— prefer agents that own files in exactly one repo so isolation boundaries
+stay clean.
+
+---
 
 ## Preflight: Working Tree Check
 

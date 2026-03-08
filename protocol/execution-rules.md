@@ -1,6 +1,6 @@
 # Scout-and-Wave Protocol Execution Rules
 
-**Version:** 0.8.0
+**Version:** 0.9.0
 
 This document defines the execution rules that govern orchestrator behavior during Scout-and-Wave protocol execution. These rules are not captured by the state machine alone.
 
@@ -67,7 +67,9 @@ When an interface change is required after worktrees exist and some agents have 
 
 **Required Action:** The orchestrator scans the wave's file ownership table in the IMPL doc and verifies no file appears in more than one agent's ownership list.
 
-**Failure Handling:** If an overlap is found, the wave does not launch; the IMPL doc must be corrected first.
+**Cross-repo waves:** The file ownership table must include a `Repo` column. Disjointness is checked per-repo — the same filename in different repositories is not a conflict. Files in different repos are inherently disjoint (no shared filesystem). E3 verification runs per-repo: within each repo, no two agents may own the same file.
+
+**Failure Handling:** If an overlap is found within the same repo, the wave does not launch; the IMPL doc must be corrected first.
 
 **Distinction:** This is distinct from post-execution conflict prediction (E11). Pre-launch catches scout planning errors; post-execution catches runtime deviations where an agent touched files outside its declared scope.
 
@@ -107,7 +109,8 @@ When an interface change is required after worktrees exist and some agents have 
 **Layer 2 — Task tool isolation:**
 - Runtime isolation parameters provide isolation when the orchestrator and target repository are the same
 - This is the secondary mechanism
-- **Cross-repository limitation:** When orchestrating repo B from repo A, such parameters may create worktrees in repo A's context (wrong). In cross-repository scenarios, omit this parameter and rely on Layer 1 (manual worktree creation in target repo) and Layer 3 (Field 0 navigation). Layer 2 may fail silently — do not rely on it alone even in same-repository scenarios.
+- **Cross-repository waves: omit Layer 2 intentionally.** When agents work in a different repo from the Orchestrator, `isolation: "worktree"` creates worktrees in the Orchestrator's repo (wrong repo). Omit the parameter entirely for cross-repo agents. Layer 1 (manual worktree creation in each target repo) and Layer 3 (Field 0 absolute path navigation) provide the isolation instead. Omitting Layer 2 in a cross-repo wave is correct protocol, not a degraded fallback.
+- Layer 2 may also fail silently in same-repo scenarios — do not rely on it alone.
 
 **Layer 3 — Field 0 self-verification:**
 - Each agent verifies its working directory at startup (change directory, verify path, verify branch)

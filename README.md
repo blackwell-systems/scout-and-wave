@@ -1,7 +1,7 @@
 # Scout-and-Wave
 
 [![Blackwell Systems™](https://raw.githubusercontent.com/blackwell-systems/blackwell-docs-theme/main/badge-trademark.svg)](https://github.com/blackwell-systems)
-![Version](https://img.shields.io/badge/version-0.10.3-blue)
+![Version](https://img.shields.io/badge/version-0.11.0-blue)
 [![Agent Skills](assets/badge-agentskills.svg)](https://agentskills.io)
 
 SAW is published as an [Agent Skill](https://agentskills.io) — a portable, tool-agnostic package for adding capabilities to AI coding agents.
@@ -168,7 +168,7 @@ Agents don't always respect isolation instructions. v0.6.0 adds a layered defens
 |-------|-----------|------|
 | 0 | **Pre-commit hook** (`hooks/pre-commit-guard.sh`) - copied to `.git/hooks/pre-commit` during worktree setup, removed during cleanup. Blocks commits to main during active waves. Agents receive an instructive error with their worktree path. Orchestrator bypasses via `SAW_ALLOW_MAIN_COMMIT=1`. | Prevention |
 | 1 | **Manual worktree pre-creation** - Orchestrator creates all worktrees before any agent launches | Deterministic |
-| 2 | **`isolation: "worktree"` parameter** - each agent launch specifies worktree isolation at the tool level | Tool-level |
+| 2 | **`isolation: "worktree"` parameter** - each agent launch specifies worktree isolation at the tool level. **Omitted for cross-repo waves** (would create worktrees in the wrong repo); Layer 1 and Layer 3 provide isolation instead. See `saw-worktree.md` Cross-Repo Mode. | Tool-level |
 | 3 | **Field 0 self-verification** - agents verify their own branch and working directory on startup | Cooperative |
 | 4 | **Merge-time trip wire** - Orchestrator counts commits per worktree branch before merging. Zero commits = isolation failure. Stops with recovery options. | Deterministic |
 
