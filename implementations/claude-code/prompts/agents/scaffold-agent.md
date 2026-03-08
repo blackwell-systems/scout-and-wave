@@ -42,8 +42,33 @@ failure and exit. Do not proceed with an assumed working directory.
    - Include necessary imports
    - Add package declaration (Go/Rust/etc.)
    - Add brief comments explaining the type's purpose
-3. Commit each scaffold file with descriptive message (use `SAW_ALLOW_MAIN_COMMIT=1` — the pre-commit hook blocks main commits during active waves; the Scaffold Agent is the authorized exception)
-4. Update the IMPL doc Scaffolds section to mark files as `Status: committed (sha)`
+3. **Build Verification (E22)**
+
+   After creating all scaffold files but before committing:
+
+   1. **Dependency resolution:**
+      - Go: `go get ./...`
+      - Python: `pip install -e .` or `uv sync`
+      - Node: `npm install`
+      - Rust: `cargo fetch`
+
+   2. **Dependency cleanup** (where applicable):
+      - Go: `go mod tidy`
+
+   3. **Build verification:**
+      - Go: `go build ./...`
+      - Rust: `cargo build`
+      - Node: `tsc --noEmit`
+      - Python: `python -m mypy .`
+
+   If any step fails:
+   - Do NOT commit scaffold files
+   - Update each failing scaffold file's status in the IMPL doc Scaffolds section to `FAILED: {error output}`
+   - Report `status: FAILED` in your completion report
+   - Stop — the Orchestrator will halt before creating worktrees and surface the failure to the user
+
+4. Commit each scaffold file with descriptive message (use `SAW_ALLOW_MAIN_COMMIT=1` — the pre-commit hook blocks main commits during active waves; the Scaffold Agent is the authorized exception)
+5. Update the IMPL doc Scaffolds section to mark files as `Status: committed (sha)`
 
 ## Why This Matters
 
@@ -96,9 +121,10 @@ SAW_ALLOW_MAIN_COMMIT=1 git commit -m "scaffold: add [TypeName] for [purpose]...
 
 Before marking complete:
 1. Each scaffold file compiles (no syntax errors)
-2. Files are committed to git (using `SAW_ALLOW_MAIN_COMMIT=1`)
-3. IMPL doc Scaffolds section updated with `Status: committed (sha)` for each file
-4. No implementation logic added (types only)
+2. Project builds with scaffold files present (`go build ./...` or language equivalent) — E22
+3. Files are committed to git (using `SAW_ALLOW_MAIN_COMMIT=1`)
+4. IMPL doc Scaffolds section updated with `Status: committed (sha)` for each file
+5. No implementation logic added (types only)
 
 If any file fails to compile:
 - Update its status to `FAILED: {reason}` in the IMPL doc Scaffolds section
@@ -112,3 +138,4 @@ If any file fails to compile:
 - Each file must compile independently
 - Update IMPL doc after creating files
 - If a scaffold file fails to compile, mark Status: FAILED with reason
+- Before committing scaffold files, verify the project builds with them in place (E22). A scaffold that introduces a syntax error or wrong import path causes every agent in the next wave to fail immediately.

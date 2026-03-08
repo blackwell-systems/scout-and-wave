@@ -342,7 +342,19 @@ Record the verdict and its rationale in the IMPL doc under a
    # Rust: cargo build && cargo clippy -- -D warnings && cargo test
    ```
 
-11. **Expect validation feedback (E16).** After you write the IMPL doc, the orchestrator
+11. **Emit quality gates (optional).** If the project has a known build toolchain, add a `## Quality Gates` section to the IMPL doc between Suitability Assessment and Scaffolds:
+
+    Auto-detect from marker files:
+    - `go.mod` → Go gates (`go build ./...`, `go test ./...`, `go vet ./...`)
+    - `package.json` → Node gates (`tsc --noEmit`, `npm test`, `eslint .`)
+    - `Cargo.toml` → Rust gates (`cargo build`, `cargo test`, `cargo clippy`)
+    - `pyproject.toml` → Python gates (`mypy .`, `pytest`, `ruff check .`)
+
+    Use the same toolchain commands already identified for the `test_command` field — no new discovery needed.
+
+    Omit this section entirely if no build toolchain is detected or the project is markdown/documentation only.
+
+12. **Expect validation feedback (E16).** After you write the IMPL doc, the orchestrator
     runs a validator on all `type=impl-*` blocks (E16). If the validator reports errors,
     you will receive a correction prompt listing specific failures by section name and
     block type. Rewrite only the failing sections — do not regenerate the entire document.
