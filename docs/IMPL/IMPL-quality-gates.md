@@ -492,7 +492,7 @@ After wave 1 completes:
 |------|-------|-------------|--------|
 | 1 | A | E20/E21/E22 rules in execution-rules.md + schema in message-formats.md | COMPLETE |
 | 1 | B | Scaffold-agent build verification + saw-skill.md wiring + scout.md emission | COMPLETE |
-| — | Orch | Post-merge consistency review + commit | TO-DO |
+| — | Orch | Post-merge consistency review + commit | COMPLETE |
 
 ---
 
