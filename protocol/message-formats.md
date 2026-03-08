@@ -191,8 +191,8 @@ Wave 2: [C] [D]                    <- 2 parallel agents (consumer files)
 status: complete | partial | blocked
 failure_type: transient | fixable | needs_replan | escalate  # required when status is partial or blocked; omit when status is complete
 repo: /absolute/path/to/repo  # omit for single-repo waves
-worktree: .claude/worktrees/wave{N}-agent-{letter}
-branch: wave{N}-agent-{letter}
+worktree: .claude/worktrees/wave{N}-agent-{ID}
+branch: wave{N}-agent-{ID}
 commit: {sha}
 files_changed:
   - path/to/file
@@ -342,11 +342,26 @@ echo "✓ Isolation verified: $ACTUAL_DIR on $ACTUAL_BRANCH"
 
 ---
 
+## Agent ID Format
+
+Agent identifiers follow the `[Letter][Generation]` scheme:
+
+- **Format:** An uppercase letter (A–Z) optionally followed by a single digit 2–9. Regex: `[A-Z][2-9]?`
+- **Generation 1:** The bare letter, e.g., `A`, `B`, `C`. The digit is omitted for generation 1. `A` and `A1` are NOT both valid — only `A` represents generation 1.
+- **Multi-generation:** `A2`, `B3`, `C4`, etc. Used when >26 agents are needed, or when the Scout wants to express that agents share a logical sub-domain (e.g., `A`, `A2`, `A3` for closely related work).
+- **Appears in:** file ownership tables (`Agent` column), dep graph blocks (`[A2]`), wave structure blocks, SAW tags, worktree branch names, and completion report sections.
+- **Worktree naming:** `wave{N}-agent-{ID}` — e.g., `wave1-agent-A2`, `wave2-agent-B3`.
+- **SAW tag format:** `[SAW:wave{N}:agent-{ID}]` — e.g., `[SAW:wave1:agent-A2]`.
+
+Generation-1 IDs (`A`, `B`, `C`, …) are valid wherever an agent ID appears. Multi-generation IDs are assigned by the Scout when needed; agents receive their full ID (e.g., `A2`) in Field 0 of their prompt.
+
+---
+
 ## Completion Report Format
 
 Structured YAML block written by each agent to the IMPL doc. Machine-readable. Orchestrator parses these before merging.
 
-**E14: Write discipline:** Agents append completion reports at the end of the IMPL doc under `### Agent {letter} - Completion Report`. Agents never edit earlier sections (interface contracts, ownership table, suitability verdict). Those sections are frozen at worktree creation (E2).
+**E14: Write discipline:** Agents append completion reports at the end of the IMPL doc under `### Agent {ID} - Completion Report`. Agents never edit earlier sections (interface contracts, ownership table, suitability verdict). Those sections are frozen at worktree creation (E2).
 
 **Structure:**
 
@@ -355,8 +370,8 @@ status: complete | partial | blocked
 failure_type: transient | fixable | needs_replan | escalate
   # Required when status is partial or blocked.
   # Omit (or set to null) when status is complete.
-worktree: .claude/worktrees/wave{N}-agent-{letter}
-branch: wave{N}-agent-{letter}
+worktree: .claude/worktrees/wave{N}-agent-{ID}
+branch: wave{N}-agent-{ID}
 commit: {sha}  # or "uncommitted" if commit failed
 files_changed:
   - path/to/modified/file
@@ -393,9 +408,9 @@ verification: PASS | FAIL ({command} - N/N tests)
 
 - **repo:** Absolute path to the repository this agent worked in. Required for cross-repo waves so the Orchestrator knows which repo to merge in. Omit for single-repo waves.
 
-- **worktree:** Canonical worktree path. Must match E5 naming convention: `.claude/worktrees/wave{N}-agent-{letter}`
+- **worktree:** Canonical worktree path. Must match E5 naming convention: `.claude/worktrees/wave{N}-agent-{ID}`
 
-- **branch:** Branch name. Must match worktree naming: `wave{N}-agent-{letter}`
+- **branch:** Branch name. Must match worktree naming: `wave{N}-agent-{ID}`
 
 - **commit:** Git commit SHA if changes were committed. `"uncommitted"` if no changes or commit failed. I5 requires agents commit before reporting.
 
@@ -601,7 +616,7 @@ The Pre-Mortem section uses a markdown table in free-form prose. It is human-fac
 
 **Split strategy:**
 - Keep suitability verdict, scaffolds, dependency graph, interface contracts, file ownership, wave structure, and status in the main IMPL doc
-- Move agent prompts to separate files: `docs/IMPL/IMPL-<feature>-wave{N}-agent-{X}.md`
+- Move agent prompts to separate files: `docs/IMPL/IMPL-<feature>-wave{N}-agent-{ID}.md`
 - Main IMPL doc links to per-agent files: `See [Agent A prompt](IMPL-<feature>-wave1-agent-A.md)`
 
 **When NOT to split:**
@@ -622,7 +637,7 @@ Orchestrators must parse these fields from each completion report:
 5. **File lists:** `files_changed` and `files_created` — used for conflict prediction before touching the working tree
 6. **Failure type:** `failure_type: transient | fixable | needs_replan | escalate` — drives automatic remediation decision tree (E19). Present only when `status` is `partial` or `blocked`.
 
-**Location:** The orchestrator locates completion reports by finding `` ```yaml type=impl-completion-report `` blocks in the IMPL doc — not by heading text, line number, or free-form YAML heuristics. Each such block is associated with the nearest preceding `### Agent {letter} - Completion Report` heading. Plain `` ```yaml `` blocks without the `type=` annotation are not parsed as completion reports.
+**Location:** The orchestrator locates completion reports by finding `` ```yaml type=impl-completion-report `` blocks in the IMPL doc — not by heading text, line number, or free-form YAML heuristics. Each such block is associated with the nearest preceding `### Agent {ID} - Completion Report` heading. Plain `` ```yaml `` blocks without the `type=` annotation are not parsed as completion reports.
 
 **Format assumption:** All structured data is in `type=impl-completion-report` typed blocks with consistent field names. Orchestrators should reject malformed YAML or missing required fields.
 

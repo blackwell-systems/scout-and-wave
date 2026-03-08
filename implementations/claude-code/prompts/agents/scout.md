@@ -255,11 +255,17 @@ Record the verdict and its rationale in the IMPL doc under a
    If no cross-agent types are detected, write in the Scaffolds section:
    "No scaffolds needed - agents have independent type ownership."
 
-7. **Assign file ownership.** Every file that will change gets assigned to
+7. **Assign file ownership and agent IDs.** Every file that will change gets assigned to
    exactly one agent. No two agents in the same wave may touch the same file.
    If two tasks need the same file, resolve the conflict now: extract an
    interface, split the file, or create a new file so ownership is disjoint.
    This is a hard constraint, not a preference.
+
+   **Agent ID format:** Agent identifiers follow the `[Letter][Generation]` scheme (regex: `[A-Z][2-9]?`). Generation 1 is the bare letter (`A`, `B`, `C`, …); the digit is omitted. Multi-generation IDs (`A2`, `B3`, `C4`, …) are assigned when:
+   - More than 26 agents are needed in a wave (exhausting single letters), OR
+   - Agents share a logical sub-domain and the Scout wants to express that grouping explicitly (e.g., `A`, `A2`, `A3` for three closely related data-layer agents).
+
+   Note: `A` and `A1` are NOT both valid — only the bare letter represents generation 1. Worktree branches follow the same ID: `wave1-agent-A2`, `wave2-agent-B3`.
 
 8. **Structure waves from the DAG.** Group agents into waves:
    - Wave 1: Agents whose files have no dependencies on other new work.

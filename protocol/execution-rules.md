@@ -144,7 +144,7 @@ Disjoint file ownership and worktree isolation are complementary layers that pro
 
 **Trigger:** Creating worktrees
 
-**Required Action:** Worktrees must be named `.claude/worktrees/wave{N}-agent-{letter}` where `{N}` is the 1-based wave number and `{letter}` is the agent identifier (A, B, C...).
+**Required Action:** Worktrees must be named `.claude/worktrees/wave{N}-agent-{ID}` where `{N}` is the 1-based wave number and `{ID}` is the agent identifier. Agent identifiers follow the `[A-Z][2-9]?` pattern: a single uppercase letter (generation 1, e.g., `A`, `B`, `C`) or a letter followed by a digit 2–9 (multi-generation, e.g., `A2`, `B3`). Examples: `wave1-agent-A`, `wave1-agent-A2`, `wave2-agent-B3`.
 
 **Why This Is Not a Style Choice:** This is a canonical requirement. The naming scheme is the mechanism by which external tooling identifies SAW sessions and correlates agents to waves. Deviating from it breaks observability silently. Any tooling that consumes SAW session data must treat this naming scheme as the stable interface.
 
@@ -303,7 +303,7 @@ Three distinct conflict types can arise; each has a different resolution path:
 
 **Trigger:** Agent writes completion report
 
-**Required Action:** Agents write to the IMPL doc exactly once: by appending their named completion report section at the end of the file under `### Agent {letter} - Completion Report`.
+**Required Action:** Agents write to the IMPL doc exactly once: by appending their named completion report section at the end of the file under `### Agent {ID} - Completion Report`.
 
 **Prohibition:** Agents must not edit any earlier section of the IMPL doc (interface contracts, file ownership table, suitability verdict, wave structure). Those sections are frozen at worktree creation (E2).
 
@@ -358,18 +358,18 @@ Trigger condition: E16A fires only when `block_count > 0`. Docs with no typed bl
 Canonical dep graph grammar:
 ```
 Wave N (label):          # one or more Wave sections; N is a digit
-    [X] path/to/file     # one or more agent entries per wave; X is A-Z
+    [X] path/to/file     # one or more agent entries per wave; X is an agent ID matching [A-Z][2-9]?
         ✓ root           # root agents declare ✓ root
     [Y] path/to/file
-        depends on: X    # dependent agents declare depends on: <letters>
+        depends on: X    # dependent agents declare depends on: <agent IDs>
 ```
 
 Rules:
 - At least one `Wave N` line (where N is one or more digits) must appear.
-- At least one `[X]` agent entry must appear.
+- At least one `[X]` agent entry must appear. `X` is an agent ID matching `[A-Z][2-9]?` (e.g., `A`, `B2`, `C3`).
 - Each agent entry must be followed (before the next agent entry) by either `✓ root` or `depends on:` on an indented line.
 
-**E16C — Out-of-band dep graph detection (warn only):** If a plain fenced block (no `type=` annotation) contains both a `[A-Z]` agent reference pattern and the word `Wave`, the validator emits a warning to stdout but does not fail. This catches dep graphs written as ASCII art outside typed blocks.
+**E16C — Out-of-band dep graph detection (warn only):** If a plain fenced block (no `type=` annotation) contains both a `[A-Z][2-9]?` agent reference pattern and the word `Wave`, the validator emits a warning to stdout but does not fail. This catches dep graphs written as ASCII art outside typed blocks.
 
 Warning format: `WARNING: possible dep-graph content found outside typed block at line N — use \`\`\`yaml type=impl-dep-graph\`\`\``
 

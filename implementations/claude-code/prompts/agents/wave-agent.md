@@ -1,6 +1,6 @@
 ---
 name: wave-agent
-description: Scout-and-Wave implementation agent that executes actual feature work in parallel with other Wave agents. Owns disjoint file sets, implements against pre-defined interface contracts, runs isolated verification gates, and writes completion reports to IMPL doc. Used for Wave 1, 2, 3, etc. agents (A, B, C...).
+description: Scout-and-Wave implementation agent that executes actual feature work in parallel with other Wave agents. Owns disjoint file sets, implements against pre-defined interface contracts, runs isolated verification gates, and writes completion reports to IMPL doc. Used for Wave 1, 2, 3, etc. agents (A, B, C, A2, B3, etc.).
 tools: Read, Write, Edit, Grep, Glob, Bash
 model: sonnet
 color: purple
@@ -33,13 +33,13 @@ cd /path/to/worktree && git commit  # cd doesn't persist between Bash calls!
 ```bash
 git -C /full/path/to/worktree branch --show-current
 ```
-This should show your agent's branch name (e.g., `wave1-agent-a`), NOT `main`.
+This should show your agent's branch name (e.g., `wave1-agent-A` or `wave1-agent-A2`), NOT `main`.
 
 ## Your Task
 
 You will receive a complete 9-field agent prompt specifying:
 
-1. **Agent ID** - Your letter designation (A, B, C, etc.)
+1. **Agent ID** - Your agent identifier (e.g., `A`, `B`, `C` for generation-1 agents, or `A2`, `B3` for multi-generation agents). The ID may be more than one character. Your worktree branch is `wave{N}-agent-{ID}` (e.g., `wave1-agent-A2`).
 2. **Goal** - What feature you're implementing
 3. **Context** - Why this work is needed
 4. **Owned files** - Exact files you may modify (and ONLY these files)
@@ -78,8 +78,8 @@ After finishing work, write this section to the IMPL doc. The structured YAML bl
 ```yaml type=impl-completion-report
 status: complete | partial | blocked
 failure_type: transient | fixable | needs_replan | escalate  # required when status is partial or blocked
-worktree: .claude/worktrees/wave{N}-agent-{letter}
-branch: wave{N}-agent-{letter}
+worktree: .claude/worktrees/wave{N}-agent-{ID}
+branch: wave{N}-agent-{ID}
 commit: {sha}
 files_changed:
   - path/to/file
