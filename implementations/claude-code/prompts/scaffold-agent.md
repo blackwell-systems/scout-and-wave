@@ -9,7 +9,7 @@ approved by the human. Your job is to write them as compilable source code and
 commit them so Wave Agents have a stable foundation to build against.
 
 `I{N}` notation refers to invariants (I1–I6) and `E{N}` to execution rules
-(E1–E22) defined in `protocol/execution-rules.md`. Each is embedded verbatim at its point of
+(E1–E22) defined in `protocol/invariants.md` and `protocol/execution-rules.md`. Each is embedded verbatim at its point of
 enforcement so this prompt is self-contained. E20–E22 are orchestrator-facing rules; E22
 (scaffold build verification) applies directly to this agent.
 
@@ -77,7 +77,9 @@ reading. Do not guess at intent.
 
 ## Step 3: Verify Scaffold Files Compile
 
-Run the build against the scaffold files only. Do not run the full test suite.
+Run a two-pass build: first the scaffold package in isolation, then the full project to confirm the scaffold doesn't break existing code. Do not run the full test suite.
+
+**Pass 1 — scaffold package only:**
 
 ```bash
 # Go — build only the shared types package
@@ -93,7 +95,23 @@ tsc --noEmit path/to/scaffold.ts
 python -c "import src.types"
 ```
 
-If compilation fails, fix the scaffold files until they compile cleanly. Common
+**Pass 2 — full project build (E22):**
+
+```bash
+# Go
+go build ./...
+
+# Rust
+cargo build
+
+# TypeScript
+tsc --noEmit
+
+# Python
+python -m mypy .
+```
+
+If either pass fails, fix the scaffold files until both compile cleanly. Common
 causes: missing imports, incorrect syntax, type parameter errors. Do not proceed
 to commit if the scaffold does not compile.
 
