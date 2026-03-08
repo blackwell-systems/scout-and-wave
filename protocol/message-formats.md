@@ -20,66 +20,172 @@ SAW uses the IMPL doc (Implementation Document) as the single source of truth (I
 
 The IMPL doc is a markdown file with the following sections in order:
 
-```markdown
-# IMPL: {Feature Name}
+    # IMPL: {Feature Name}
 
-<!-- SAW:COMPLETE YYYY-MM-DD -->
-<!-- Present only when all waves are merged and verified. Omit entirely for active IMPL docs. -->
+    <!-- SAW:COMPLETE YYYY-MM-DD -->
+    <!-- Present only when all waves are merged and verified. Omit entirely for active IMPL docs. -->
 
-**Feature:** {One-line description}
-**Repository:** {Absolute path to repository root}
-**Plan Reference:** {Path to original plan/audit/issue}
+    **Feature:** {One-line description}
+    **Repository:** {Absolute path to repository root}
+    **Plan Reference:** {Path to original plan/audit/issue}
+
+    ---
+
+    ## Suitability Assessment
+
+    {Suitability verdict - see format below}
+
+    ---
+
+    ## Pre-Mortem
+
+    {Pre-mortem risk table — see Pre-Mortem Section Format below}
+
+    ---
+
+    ## Scaffolds
+
+    {Scaffold files table - see format below}
+    {Omit this section if no scaffold files needed}
+
+    ---
+
+    ## Known Issues
+
+    {Known issues list, or "None identified."}
+
+    ---
+
+    ## Dependency Graph
+
+    ```yaml type=impl-dep-graph
+    {dependency graph — see Typed Metadata Blocks below}
+    ```
+
+    ---
+
+    ## File Ownership
+
+    ```yaml type=impl-file-ownership
+    {file ownership table — see Typed Metadata Blocks below}
+    ```
+
+    ---
+
+    ## Wave Structure
+
+    ```yaml type=impl-wave-structure
+    {wave structure diagram — see Typed Metadata Blocks below}
+    ```
+
+    ---
+
+    ## Wave 1
+
+    {Wave-level introduction}
+
+    ### Agent A - {Role Description}
+
+    {9-field agent prompt - see format below}
+
+    ### Agent B - {Role Description}
+
+    {9-field agent prompt}
+
+    ...
+
+    ---
+
+    ## Wave 2
+
+    {Similar structure for additional waves}
+
+    ---
+
+    ## Completion Reports
+
+    ### Agent A - Completion Report
+
+    ```yaml type=impl-completion-report
+    {Structured fields - see Typed Metadata Blocks below}
+    ```
+
+    {Free-form notes}
+
+    ### Agent B - Completion Report
+
+    ```yaml type=impl-completion-report
+    {Structured fields}
+    ```
+
+    {Free-form notes}
 
 ---
 
-## Suitability Assessment
+## Typed Metadata Blocks
 
-{Suitability verdict - see format below}
+Certain sections of the IMPL doc are machine-parsed by the orchestrator and the IMPL doc validator (E16). These sections use fenced code blocks with a `type=impl-*` annotation on the opening fence, whitespace-separated from the language tag. This annotation serves as a precise parser anchor and enables validation errors to reference specific block types rather than line numbers.
 
----
+**Why typed blocks exist:**
+- Parser anchors: orchestrator locates sections by `type=` annotation, not by heading text or line number
+- Precise validation: validator errors reference the block type (e.g., "`impl-file-ownership` block: missing Agent column") instead of "line 47"
+- Stability: sections can be reordered or have prose added around them without breaking parsers
 
-## Scaffolds
+**Prose sections remain free-form.** The following sections do NOT use typed blocks and are excluded from validator scope: Suitability Assessment, Pre-Mortem, Scaffolds, Known Issues, Interface Contracts, Wave Execution Loop, Orchestrator Post-Merge Checklist, Status table, and all agent prompt sections.
 
-{Scaffold files table - see format below}
-{Omit this section if no scaffold files needed}
+### Block Types
 
----
+**`impl-file-ownership` — File Ownership table:**
 
-## Wave 1
+```yaml type=impl-file-ownership
+| File | Agent | Wave | Depends On |
+|------|-------|------|------------|
+| protocol/message-formats.md | A | 1 | — |
+| protocol/execution-rules.md | B | 1 | — |
+| implementations/claude-code/prompts/agents/scout.md | C | 2 | A, B |
+```
 
-{Wave-level introduction}
+**`impl-dep-graph` — Dependency Graph:**
 
-### Agent A - {Role Description}
+```yaml type=impl-dep-graph
+Wave 1 (2 parallel agents — foundation spec):
+    [A] protocol/message-formats.md
+         Defines canonical typed-block syntax and pre-mortem schema.
+         ✓ root (no dependencies on other agents)
 
-{9-field agent prompt - see format below}
+    [B] protocol/execution-rules.md
+         Adds E16: validation + correction loop rule.
+         ✓ root (no dependencies on other agents)
 
-### Agent B - {Role Description}
+Wave 2 (2 parallel agents — consumer files):
+    [C] implementations/claude-code/prompts/agents/scout.md
+         Updates Scout prompt to use typed blocks. Depends on [A] for syntax spec.
+         depends on: [A] [B]
+```
 
-{9-field agent prompt}
+**`impl-wave-structure` — Wave Structure diagram:**
 
-...
+```yaml type=impl-wave-structure
+Wave 1: [A] [B]                    <- 2 parallel agents (spec foundation)
+              | (A+B complete)
+Wave 2: [C] [D]                    <- 2 parallel agents (consumer files)
+```
 
----
+**`impl-completion-report` — Completion Report (written by Wave agents):**
 
-## Wave 2
-
-{Similar structure for additional waves}
-
----
-
-## Completion Reports
-
-### Agent A - Completion Report
-
-{Structured YAML block - see format below}
-
-{Free-form notes}
-
-### Agent B - Completion Report
-
-{Structured YAML block}
-
-{Free-form notes}
+```yaml type=impl-completion-report
+status: complete | partial | blocked
+worktree: .claude/worktrees/wave{N}-agent-{letter}
+branch: wave{N}-agent-{letter}
+commit: {sha}
+files_changed:
+  - path/to/file
+files_created:
+  - path/to/file
+interface_deviations: []
+out_of_scope_deps: []
+tests_added: []
+verification: PASS | FAIL ({command})
 ```
 
 ---
@@ -228,8 +334,7 @@ Structured YAML block written by each agent to the IMPL doc. Machine-readable. O
 
 **Structure:**
 
-```yaml
-### Agent {letter} - Completion Report
+```yaml type=impl-completion-report
 status: complete | partial | blocked
 worktree: .claude/worktrees/wave{N}-agent-{letter}
 branch: wave{N}-agent-{letter}
@@ -282,6 +387,8 @@ verification: PASS | FAIL ({command} - N/N tests)
 
 **Free-form notes section:** After the structured YAML block, agents may add free-form notes for context that doesn't fit structured fields: key decisions, surprises, warnings, recommendations for downstream agents.
 
+**Typed-block annotation:** The opening fence must be `` ```yaml type=impl-completion-report `` (not plain `` ```yaml ``). The orchestrator locates completion reports by finding `type=impl-completion-report` blocks, not by heading text or YAML heuristics. Plain YAML blocks are not machine-parsed.
+
 ---
 
 ## Scaffolds Section Format
@@ -325,9 +432,58 @@ Written by the Scout into the IMPL doc to specify type scaffold files. Read and 
 
 ---
 
+## Pre-Mortem Section Format
+
+Written by the Scout into the IMPL doc before the human review checkpoint. Placement: immediately after the Scaffolds section (or after Suitability Assessment if Scaffolds is omitted), before Known Issues and agent prompts.
+
+The Pre-Mortem section uses a markdown table in free-form prose. It is human-facing and is NOT a typed block — it is excluded from validator scope.
+
+**Schema:**
+
+```markdown
+## Pre-Mortem
+
+**Overall risk:** low | medium | high
+
+**Failure modes:**
+
+| Scenario | Likelihood | Impact | Mitigation |
+|----------|-----------|--------|------------|
+| {description of what could go wrong} | low | medium | {concrete action to prevent or recover} |
+| {description of what could go wrong} | medium | high | {concrete action to prevent or recover} |
+```
+
+**Example with realistic SAW failure modes:**
+
+```markdown
+## Pre-Mortem
+
+**Overall risk:** medium
+
+**Failure modes:**
+
+| Scenario | Likelihood | Impact | Mitigation |
+|----------|-----------|--------|------------|
+| Agent C writes typed-block examples that don't match the syntax Agent A defined in message-formats.md | medium | high | Agent C must read message-formats.md in full before editing; interface contract specifies exact fence annotation |
+| Two agents claim ownership of the same file due to ambiguous decomposition | low | high | Scout verifies disjoint ownership before writing prompts; orchestrator checks ownership table for duplicates pre-launch |
+| Scaffold file fails to compile, blocking all wave agents | low | high | Scaffold Agent must compile and commit before worktrees are created; FAILED status is a protocol stop |
+| Wave 2 agent uses a state name that conflicts with Wave 1 agent's definition | low | medium | Interface contracts lock all shared names verbatim; agents must use these exactly |
+```
+
+**Field definitions:**
+
+- **Overall risk:** Single token: `low`, `medium`, or `high`. Reflects aggregate risk across all failure modes.
+- **Scenario:** Plain-language description of a specific failure mode. One row per scenario.
+- **Likelihood:** `low`, `medium`, or `high`. How probable is this failure?
+- **Impact:** `low`, `medium`, or `high`. How bad is the outcome if it occurs?
+- **Mitigation:** Concrete action that prevents the failure or reduces its impact. Not "be careful" — a specific protocol step, check, or constraint.
+
+---
+
 ## Message Flow Sequence
 
 1. **Scout → IMPL doc:** Writes suitability verdict, Scaffolds section (if needed), agent prompts
+1a. **Orchestrator → Scout (E16):** Orchestrator runs validator on typed-block sections of the IMPL doc. If errors are found, feeds a correction prompt back to Scout specifying the exact failing blocks. Scout rewrites only the failing sections. This loop repeats until the doc passes validation or the retry limit (default: 3) is reached. On retry limit exhausted, Orchestrator enters BLOCKED state and surfaces errors to human. On pass, proceeds normally.
 2. **Human → Orchestrator:** Approves or rejects IMPL doc
 3. **Scaffold Agent → IMPL doc:** Updates Scaffolds section Status column with commit SHAs or FAILED
 4. **Orchestrator → Agents:** Launches agents with absolute IMPL doc path (agents read their prompts from IMPL doc)
@@ -380,7 +536,9 @@ Orchestrators must parse these fields from each completion report:
 4. **Verification results:** `verification: PASS | FAIL` — gates merge per agent
 5. **File lists:** `files_changed` and `files_created` — used for conflict prediction before touching the working tree
 
-**Format assumption:** All structured data is in YAML code blocks with consistent field names. Orchestrators should reject malformed YAML or missing required fields.
+**Location:** The orchestrator locates completion reports by finding `` ```yaml type=impl-completion-report `` blocks in the IMPL doc — not by heading text, line number, or free-form YAML heuristics. Each such block is associated with the nearest preceding `### Agent {letter} - Completion Report` heading. Plain `` ```yaml `` blocks without the `type=` annotation are not parsed as completion reports.
+
+**Format assumption:** All structured data is in `type=impl-completion-report` typed blocks with consistent field names. Orchestrators should reject malformed YAML or missing required fields.
 
 ---
 
