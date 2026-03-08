@@ -197,6 +197,9 @@ If `docs/CONTEXT.md` does not exist, orchestrator creates it with the schema abo
 | implementations/claude-code/prompts/agents/scout.md | C | 2 | A, B |
 | implementations/claude-code/prompts/agents/wave-agent.md | D | 2 | A, B |
 | implementations/claude-code/prompts/agent-template.md | D | 2 | A, B |
+| implementations/claude-code/prompts/saw-skill.md | E | 2 | A, B |
+| implementations/claude-code/prompts/saw-merge.md | E | 2 | A, B |
+| protocol/procedures.md | E | 2 | A, B |
 ```
 
 ---
@@ -204,9 +207,9 @@ If `docs/CONTEXT.md` does not exist, orchestrator creates it with the schema abo
 ## Wave Structure
 
 ```yaml type=impl-wave-structure
-Wave 1: [A] [B]              <- 2 parallel agents (protocol spec foundation)
+Wave 1: [A] [B]                 <- 2 parallel agents (protocol spec foundation)
               | (A+B complete)
-Wave 2: [C] [D]              <- 2 parallel agents (implementation prompt layer)
+Wave 2: [C] [D] [E]             <- 3 parallel agents (implementation prompt layer)
 ```
 
 ---
@@ -989,6 +992,119 @@ commit: {sha}
 files_changed:
   - implementations/claude-code/prompts/agents/wave-agent.md
   - implementations/claude-code/prompts/agent-template.md
+files_created: []
+interface_deviations: []
+out_of_scope_deps: []
+tests_added: []
+verification: PASS | FAIL
+```
+
+{Free-form notes}
+```
+
+---
+
+### Agent E — Orchestrator Files: saw-skill.md + saw-merge.md + procedures.md
+
+You are Wave 2 Agent E. Your task is to update three orchestrator-facing files to reference the new `failure_type` field and CONTEXT.md E-rules defined by Wave 1.
+
+#### 0. CRITICAL: Isolation Verification (RUN FIRST)
+
+```bash
+cd /Users/dayna.blackwell/code/scout-and-wave/.claude/worktrees/wave2-agent-e
+
+ACTUAL_DIR=$(pwd)
+EXPECTED_DIR="/Users/dayna.blackwell/code/scout-and-wave/.claire/worktrees/wave2-agent-e"
+# Accept either .claude or .claire path
+if [ "$ACTUAL_DIR" != "$EXPECTED_DIR" ] && [ "$ACTUAL_DIR" != "/Users/dayna.blackwell/code/scout-and-wave/.claude/worktrees/wave2-agent-e" ]; then
+  echo "ISOLATION FAILURE: Wrong directory. Actual: $ACTUAL_DIR"
+  exit 1
+fi
+
+ACTUAL_BRANCH=$(git branch --show-current)
+if [ "$ACTUAL_BRANCH" != "wave2-agent-e" ]; then
+  echo "ISOLATION FAILURE: Wrong branch. Actual: $ACTUAL_BRANCH"
+  exit 1
+fi
+
+echo "Isolation verified: $ACTUAL_DIR on $ACTUAL_BRANCH"
+```
+
+#### 1. File Ownership
+
+You own exactly three files:
+- `implementations/claude-code/prompts/saw-skill.md` — modify
+- `implementations/claude-code/prompts/saw-merge.md` — modify
+- `protocol/procedures.md` — modify
+
+Do not touch any other file.
+
+#### 2. Read Wave 1 Output First
+
+Before making any edits, read the current state of these files (Wave 1 agents may have modified them — they did not, but verify):
+- `protocol/execution-rules.md` — find E17, E18, E19 and their exact wording
+- `protocol/message-formats.md` — find the exact `failure_type` values and conditionality rules
+
+Use those exact E-rule numbers and `failure_type` values in your edits. Do not invent or change them.
+
+#### 3. Changes to `saw-skill.md`
+
+This is the Orchestrator skill prompt. It references `status: partial/blocked` handling in the wave execution loop (step 4). Update it to:
+
+1. **Wave execution loop step 4** — where it currently says agents with `status: partial` or `status: blocked` cause the wave to go BLOCKED, add: "Read the `failure_type` field on any non-complete agent (see E19 in `protocol/execution-rules.md`). The failure type drives automatic remediation: `transient` → retry automatically; `fixable` → apply fix and relaunch; `needs_replan` → re-engage Scout with agent's findings; `escalate` → surface to human immediately."
+
+2. **CONTEXT.md update step** — after the E15 completion marker step (step 6), add a new step: "**E18: Update CONTEXT.md.** If `docs/CONTEXT.md` exists in the project root, append this feature's architectural decisions, any new established interfaces from scaffold files, and a `features_completed` entry. If `docs/CONTEXT.md` does not exist, create it using the schema defined in `protocol/message-formats.md`. Commit the update."
+
+Keep the surrounding text and structure intact. Only insert the new content; do not rewrite sections you are not adding to.
+
+#### 4. Changes to `saw-merge.md`
+
+This is the merge procedure document. It references `status: blocked` handling (Step 1, the completion report parsing step). Update it to:
+
+In the Step 1 section where it says "if any agent has `status: partial` or `status: blocked`, the wave does not proceed to merge", add: "Also read `failure_type` on any non-complete agent and record it in your assessment. `failure_type: transient` or `fixable` may be automatically remediable before escalating to BLOCKED — see E19 in `protocol/execution-rules.md`. `failure_type: needs_replan` or `escalate` always surface to the human."
+
+Do not restructure the merge procedure. Only insert the failure_type reference at the appropriate point.
+
+#### 5. Changes to `procedures.md`
+
+Read the file first to find the sections at lines ~233–236 and ~398–420 that reference `status: partial` / `status: blocked` handling. Add a parenthetical note at each occurrence: "(see `failure_type` field in E19 for automatic remediation decision tree)".
+
+If the line numbers have shifted, search for "status: partial" and "status: blocked" to find the right locations.
+
+#### 6. Verification
+
+After all edits:
+1. Re-read each file you modified and confirm `failure_type` is referenced correctly
+2. Confirm E17, E18, E19 numbers match what you read from `protocol/execution-rules.md`
+3. Confirm `CONTEXT.md` (not `SAW.md`) is used everywhere you wrote it
+
+#### 7. Commit
+
+```bash
+cd /Users/dayna.blackwell/code/scout-and-wave/.claude/worktrees/wave2-agent-e
+git add implementations/claude-code/prompts/saw-skill.md \
+        implementations/claude-code/prompts/saw-merge.md \
+        protocol/procedures.md
+git commit -m "feat(wave2-agent-e): failure_type + CONTEXT.md refs in saw-skill, saw-merge, procedures"
+```
+
+#### 8. Completion Report
+
+Append to `/Users/dayna.blackwell/code/scout-and-wave/docs/IMPL/IMPL-context-and-failure-taxonomy.md`:
+
+```
+### Agent E - Completion Report
+
+```yaml type=impl-completion-report
+status: complete | partial | blocked
+failure_type: transient | fixable | needs_replan | escalate  # if not complete
+worktree: .claude/worktrees/wave2-agent-e
+branch: wave2-agent-e
+commit: {sha}
+files_changed:
+  - implementations/claude-code/prompts/saw-skill.md
+  - implementations/claude-code/prompts/saw-merge.md
+  - protocol/procedures.md
 files_created: []
 interface_deviations: []
 out_of_scope_deps: []
