@@ -221,6 +221,316 @@ CLI backend:   Scout prompt → free-form markdown → disk → markdown parser 
 
 ---
 
+## Orchestration UX
+
+### Claude Orchestrator Chat Panel
+
+**Current state:** The web UI workflow is button-driven. User clicks Approve → watches WaveBoard as agents execute → manually intervenes when failures occur. The orchestrator runs autonomously once triggered; the user is an observer until something breaks. When an agent fails, the user must:
+1. Read the completion report to understand what went wrong
+2. Inspect logs, diffs, or git state to diagnose
+3. Decide whether to retry, skip, or abort
+4. Execute the decision via `saw` CLI or by manually restarting the server
+
+**Problem:** SAW orchestrates parallel agent execution, but the user orchestrates the orchestrator. When errors occur, the system halts and waits for human judgment. The user has state (IMPL doc, agent results, git history) but no reasoning partner. They must translate error messages, interpret completion reports, and decide on recovery paths without assistance.
+
+**Proposed:** Add a **Claude chat panel** to the web UI. The user can converse with Claude about the workflow state and ask Claude to execute orchestration actions. Claude has direct access to orchestrator primitives as tools and can reason about IMPL doc structure, wave dependencies, agent status, and failure context.
+
+---
+
+#### Architecture
+
+**Hybrid model:** Keep existing UI buttons for deterministic operations (Approve, Start Wave, Reject). Add Claude chat as a copilot for:
+- Error diagnosis: "Why did agent B fail?" → Claude reads completion report, checks git state, explains in plain language
+- Recovery guidance: "Should I retry agent B or skip it?" → Claude analyzes dependencies, suggests trade-offs
+- Smart resumption: "Continue from where it failed" → Claude checks wave state, determines which agents need rerun
+- Proactive orchestration: "Start wave 1, and if all agents succeed, start wave 2" → Claude monitors and chains operations
+
+Claude is the **navigator who can grab the wheel**, not autopilot. Buttons remain the primary interface for users who want direct control. Chat is for when you want help reasoning about the next action.
+
+**Backend: Claude agent with orchestrator tools**
+
+New Go package `pkg/orchestrator/assistant` provides a Claude agent configured with tools for workflow control:
+
+```go
+type OrchestratorTool interface {
+  Name() string
+  Description() string
+  Schema() map[string]interface{}
+  Execute(ctx context.Context, params map[string]interface{}) (interface{}, error)
+}
+
+// Tools exposed to Claude:
+- read_impl(slug string)           // Parse and return IMPL doc structure
+- get_status(slug string)          // Current wave/agent state, completion status
+- start_wave(slug string, wave int)
+- retry_agent(slug string, wave int, agent string)
+- skip_agent(slug string, wave int, agent string)
+- view_logs(slug string, wave int, agent string)  // Read completion report + stderr
+- read_file(path string)           // Read source file from repo
+- git_status(slug string)          // Check working tree state, conflicts
+- git_diff(slug string, ref string)
+- list_branches(slug string)       // Show wave branches, merged status
+- explain_dependency(slug string, agent string)  // Why agent X depends on Y
+```
+
+Tools have **direct access** to the orchestrator state machine and git operations. They do not shell out to `saw` CLI — they invoke the same internal functions that the REST API uses.
+
+**System prompt:** Claude is briefed on the SAW protocol (wave structure, agent isolation, merge gates, completion reports). On each chat session start, the system injects:
+- Full IMPL doc text (slug, suitability, waves, agents, dependencies, scaffolds)
+- Current orchestrator state (which waves/agents have run, which are pending, which failed)
+- Recent SSE events (last 10 events: agent_started, agent_complete, agent_failed, etc.)
+
+Claude's role: "You are assisting a developer using the Scout-and-Wave protocol. The developer will ask you questions about the workflow or request you to perform orchestration actions. Use your tools to inspect state and execute commands. Always explain what you're doing and why. For destructive operations (start wave, retry agent), confirm your understanding before executing."
+
+**API endpoint:**
+
+```
+POST /api/impl/{slug}/chat
+WebSocket or SSE stream
+
+Request:
+{
+  "message": "Why did agent B fail?",
+  "conversation_id": "uuid"  // maintain chat history per session
+}
+
+Response (streamed):
+{
+  "type": "assistant_message",
+  "content": "Let me check agent B's completion report..."
+}
+{
+  "type": "tool_use",
+  "tool": "view_logs",
+  "input": {"slug": "demo-complex", "wave": 1, "agent": "B"}
+}
+{
+  "type": "tool_result",
+  "content": "..."
+}
+{
+  "type": "assistant_message",
+  "content": "Agent B failed because of a merge conflict in types.ts. The conflict is between..."
+}
+```
+
+Conversation history is stored in memory per `conversation_id`. When user opens the chat panel, a new conversation starts with fresh context injection. History persists for the browser session but is not saved to disk (ephemeral — each feature's workflow is independent).
+
+**Frontend: Chat panel component**
+
+New React component `ChatPanel.tsx`:
+
+```tsx
+<ChatPanel slug={slug}>
+  <MessageList>
+    {messages.map(msg => (
+      msg.role === 'user' ? <UserMessage>{msg.content}</UserMessage> :
+      msg.role === 'assistant' ? <ClaudeMessage>{msg.content}</ClaudeMessage> :
+      msg.role === 'tool_use' ? <ToolCallBadge tool={msg.tool} input={msg.input} /> :
+      msg.role === 'tool_result' ? <ToolResultCollapsible>{msg.content}</ToolResultCollapsible> : null
+    ))}
+  </MessageList>
+  <ChatInput
+    onSubmit={handleSend}
+    placeholder="Ask Claude about the workflow or request an action..."
+    disabled={loading}
+  />
+</ChatPanel>
+```
+
+**Integration into ReviewScreen:**
+
+Chat panel appears as a **docked sidebar** on the right side of ReviewScreen (or as a toggle panel like Pre-Mortem/Wave Structure). When docked:
+- Always visible alongside other panels
+- Resizable/collapsible (similar to left nav)
+- Can be opened from WaveBoard too (so user can chat during wave execution)
+
+Alternative: Chat panel as a **modal overlay** that can be opened from any screen via a floating action button. Modal dims the background, shows full chat interface, closes on ESC or explicit close button.
+
+**UX flow examples:**
+
+*Example 1: Error diagnosis*
+```
+User: "Why did agent B fail?"
+Claude: [calls view_logs(wave=1, agent="B")]
+Claude: "Agent B failed with status 'blocked'. The completion report shows:
+        - Attempted to modify `src/types.ts`
+        - Merge conflict detected during verification
+        - Conflict markers found at lines 42-48
+
+        The conflict is between Agent A's changes (added `PreMortem` type) and
+        Agent B's changes (added `StubReport` type) in the same exports block.
+
+        Would you like me to show you the diff?"
+
+User: "Yes, show the diff"
+Claude: [calls git_diff(ref="wave1-agent-b")]
+Claude: [displays formatted diff with conflict markers highlighted]
+Claude: "The fix is straightforward — both types need to be exported. You can:
+        1. Let me retry Agent B with instructions to preserve both exports
+        2. Manually resolve the conflict and mark Agent B complete
+        3. Skip Agent B and continue (not recommended — breaks Wave 2 dependency)
+
+        What would you like to do?"
+```
+
+*Example 2: Proactive orchestration*
+```
+User: "Start wave 1"
+Claude: [calls start_wave(wave=1)]
+Claude: "Starting Wave 1 with 4 agents: A, B, C, D. All agents are running in parallel..."
+Claude: [monitors SSE events]
+Claude: "Agent A completed successfully ✓"
+Claude: "Agent C completed successfully ✓"
+Claude: "Agent D completed successfully ✓"
+Claude: "Agent B failed with a merge conflict ✗"
+Claude: "Wave 1 is 75% complete (3/4 agents). Agent B's failure blocks the merge gate.
+        Should I retry Agent B, or would you like to investigate the conflict first?"
+```
+
+*Example 3: Dependency explanation*
+```
+User: "Why does agent J depend on F and G?"
+Claude: [calls read_impl(), calls explain_dependency(agent="J")]
+Claude: "Agent J depends on F and G because:
+        - Agent F creates `pkg/types/scaffold.go` with the `ScaffoldFile` type
+        - Agent G creates `pkg/protocol/parser.go` with the `parseScaffoldsSection` function
+        - Agent J implements `pkg/api/impl.go` which imports both types and uses them to
+          build the API response
+
+        The dependency graph shows:
+        Wave 2: F, G (parallel)
+        Wave 3: J (waits for F and G to merge)
+
+        This is a classic 'shared type dependency' — J consumes what F and G produce."
+```
+
+*Example 4: Smart recovery*
+```
+User: "Wave 1 failed. Continue from where it left off."
+Claude: [calls get_status()]
+Claude: "Wave 1 status:
+        - Agent A: complete ✓
+        - Agent B: failed (merge conflict)
+        - Agent C: complete ✓
+        - Agent D: complete ✓
+
+        Agent B is the only blocker. Let me check the failure..."
+Claude: [calls view_logs(agent="B")]
+Claude: "Agent B's merge conflict is in `types.ts` (exports block). I can retry Agent B
+        with explicit instructions to preserve existing exports. Should I proceed?"
+
+User: "Yes"
+Claude: [calls retry_agent(wave=1, agent="B")]
+Claude: "Retrying Agent B with merge conflict guidance..."
+Claude: [monitors]
+Claude: "Agent B completed successfully on retry ✓"
+Claude: "Wave 1 is now 100% complete. Ready to merge. Should I start Wave 2?"
+```
+
+---
+
+#### Implementation Phases
+
+**Phase 1: Read-only assistant (Diagnostic mode)**
+- Chat panel UI component (message list, input, loading states)
+- API endpoint: `POST /api/impl/{slug}/chat` with conversation history
+- Backend: Claude agent with **read-only tools** only:
+  - `read_impl`, `get_status`, `view_logs`, `read_file`, `git_status`, `git_diff`, `explain_dependency`
+- System prompt: Claude briefed on SAW protocol + current IMPL state
+- Goal: User can ask "why did X fail?" and get answers, but Claude cannot execute actions yet
+
+**Phase 2: Orchestration actions (Copilot mode)**
+- Add **write tools**:
+  - `start_wave`, `retry_agent`, `skip_agent`
+- Tool execution requires **confirmation for destructive ops**:
+  - Before calling `start_wave` or `retry_agent`, Claude asks "Should I proceed?" and waits for user reply
+  - User can say "yes", "no", or "explain first"
+- Goal: User can delegate recovery actions to Claude ("retry agent B")
+
+**Phase 3: Proactive monitoring (Navigator mode)**
+- Claude **subscribes to SSE events** and provides commentary:
+  - "Agent A just completed ✓"
+  - "Agent B failed — checking logs now..."
+- Chat panel shows **live updates** as agents run (not just responses to user messages)
+- User can ask "what's happening?" mid-execution and Claude summarizes current state
+- Goal: Claude watches the workflow and surfaces issues proactively
+
+**Phase 4: Autonomous chains (Autopilot mode - optional)**
+- User can request **multi-step workflows**:
+  - "Run wave 1, and if all agents succeed, start wave 2"
+  - "Retry failed agents up to 3 times before escalating"
+- Claude plans the sequence, confirms with user, then executes autonomously
+- User can interrupt at any time ("stop", "pause")
+- Goal: Claude handles routine workflows end-to-end with user oversight
+
+**Phase 4 is speculative** — may not be needed if Phases 1-3 cover 90% of use cases. The goal is to make error recovery easier, not to replace the user's judgment.
+
+---
+
+#### Design Considerations
+
+**Latency:**
+- Button click = instant action (direct REST call)
+- Chat message = 2-4s for Claude to reason + call tools
+- **Tradeoff accepted:** Buttons remain for fast deterministic ops. Chat is for when you need reasoning, not speed.
+
+**Cost:**
+- Every chat message costs tokens (system prompt + conversation history + tool results)
+- Worst case: ~10-20k tokens per error diagnosis (IMPL doc + logs + git diff)
+- **Mitigation:** User is on Max Plan (unlimited); token cost is not a concern for this use case. If deploying for API-key users, add conversation limits or require opt-in.
+
+**Reliability:**
+- What if Claude misinterprets "skip agent B" as "skip wave 2"?
+- **Mitigation:** Tool schemas are strict. `skip_agent` requires `wave: int, agent: string`. Claude cannot skip an entire wave with the skip_agent tool. For ambiguous requests, Claude asks clarifying questions.
+- Destructive ops (start wave, retry, skip) require confirmation before execution.
+
+**Trust:**
+- Will users trust Claude to drive merges, branch creation, retries?
+- **Mitigation:** Phase 1 (read-only) builds trust first. Users see Claude accurately diagnose errors before granting write access. Phase 2 adds confirmation prompts. By Phase 3, users have seen Claude's reasoning enough to trust autonomous monitoring.
+
+**Multi-repo:**
+- Chat is scoped to one IMPL doc (one repo). If user runs multiple `saw serve` instances, each has independent chat history.
+- Claude does not have cross-repo context (consistent with single-repo-per-instance design).
+
+**Conversation persistence:**
+- Chat history is **ephemeral** (in-memory for the session).
+- Rationale: Each IMPL doc is independent. Knowledge from one feature's troubleshooting does not carry over. If persistence is needed later, store conversations in `~/.saw/chat-history/{slug}.jsonl`.
+
+**Alternative: Terminal emulator (rejected for v1)**
+- Could embed xterm.js and spawn `claude` CLI with PTY for full terminal experience
+- **Rejected because:**
+  - Cannot inject IMPL doc context automatically (user would need to paste it)
+  - Security risk (PTY gives shell access to host)
+  - Harder to instrument (no structured tool call logs)
+  - Chat UI is more accessible for non-terminal-fluent users
+
+**Comparison to existing tools:**
+- **GitHub Copilot Chat:** IDE-scoped, reads open files, suggests code edits. SAW chat is workflow-scoped, reads IMPL docs + git state, executes orchestrator actions.
+- **Anthropic Console:** Generic Claude chat, no project context. SAW chat is pre-loaded with IMPL structure and can execute domain-specific tools.
+- **Aider:** Terminal-based coding agent with git integration. SAW chat is GUI-based and orchestrates multi-agent workflows (not single-agent coding).
+
+**Why this is high-value:**
+- **Error recovery is the hardest part of SAW.** When an agent fails, the user must diagnose (read logs, check git, understand dependencies) and decide (retry? skip? abort?). This is exactly where Claude's reasoning shines.
+- **Lowers the skill floor.** New SAW users don't need to memorize orchestrator states or understand wave dependencies — they can ask Claude.
+- **Scales with complexity.** Simple workflows (1 wave, 2 agents) don't need chat. Complex workflows (3 waves, 11 agents, scaffold step, cross-wave dependencies) benefit immensely.
+
+**Success criteria:**
+- Phase 1: Users naturally ask Claude "why did this fail?" instead of reading raw completion reports
+- Phase 2: >50% of retry/skip actions are delegated to Claude rather than manual CLI
+- Phase 3: Users leave chat panel open during wave execution for live commentary
+- Phase 4: Users request autonomous workflows ("run all waves") and trust Claude to handle transient failures
+
+---
+
+#### Protocol Changes Required
+
+**None.** This is a UX enhancement to `scout-and-wave-go` (the engine). The protocol defines IMPL doc structure and execution rules, not how users interact with the orchestrator. Chat is a new interface on top of existing orchestrator primitives.
+
+The only protocol-adjacent addition: if chat proves valuable, future protocol versions could define a **standard tool interface** for orchestrator actions, allowing any Claude-based UI (not just `saw serve`) to implement the same orchestration tools.
+
+---
+
 ## Implementation Notes
 
 Items above are not independent — the failure taxonomy feeds the web UI action buttons, the pre-mortem feeds the review screen, `docs/SAW.md` feeds both the scout and the project memory view. They are designed to ship together as a coherent v1.0 rather than as separate incremental additions.
