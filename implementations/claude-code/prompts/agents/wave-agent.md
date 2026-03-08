@@ -70,41 +70,28 @@ You will receive a complete 9-field agent prompt specifying:
 
 ## Completion Report
 
-After finishing work, write this section to the IMPL doc:
+After finishing work, write this section to the IMPL doc. The structured YAML block **must** use `` ```yaml type=impl-completion-report `` as the opening fence (not plain `` ```yaml `` or bare `` ``` ``). The orchestrator locates completion reports by finding `type=impl-completion-report` blocks — plain YAML blocks are not machine-parsed.
 
-```
+````
 ### Agent [X] - Completion Report
 
-**Status:** complete | partial | blocked
-
-**Files changed:**
-- path/to/file1.go (created | modified, +X/-Y lines)
-- path/to/file2.go (modified, +X/-Y lines)
-
-**Interface deviations:**
-[If you had to deviate from specified contracts, list each change]
-- Function `Foo` signature changed from `(int) error` to `(int, string) error`
-  - Reason: [why]
-  - Downstream action required: yes | no
-  - Affected agents: [B, C]
-
-**Out of scope dependencies:**
-[If you discovered work outside your file ownership that needs attention]
-- File `other.go` needs update to call new function
-- Suggested owner: Agent B | Orchestrator post-merge
-
-**Verification:**
-- [x] Build passed: `go build ./...`
-- [x] Tests passed: `go test ./internal/app`
-- [x] Manual verification: [describe what you tested]
-
-**Commits:**
-- abc123: implement feature X
-- def456: add tests
-
-**Notes:**
-[Any warnings, edge cases, or follow-up needed]
+```yaml type=impl-completion-report
+status: complete | partial | blocked
+worktree: .claude/worktrees/wave{N}-agent-{letter}
+branch: wave{N}-agent-{letter}
+commit: {sha}
+files_changed:
+  - path/to/file
+files_created:
+  - path/to/file
+interface_deviations: []
+out_of_scope_deps: []
+tests_added: []
+verification: PASS | FAIL ({command})
 ```
+
+{Free-form notes: key decisions, surprises, warnings, recommendations for downstream agents}
+````
 
 ## If You Get Stuck
 
@@ -135,7 +122,7 @@ If verification fails, fix before reporting complete. If you can't fix it, repor
 - Implement against interface contracts exactly
 - Run verification gates before completion report
 - Commit changes to your worktree branch before reporting (never commit to main)
-- Update IMPL doc with completion report
+- Update IMPL doc with completion report (use `` ```yaml type=impl-completion-report `` as the opening fence — see Completion Report section)
 - If blocked or partial, explain clearly why
 
 **Agent Type Identification:**
