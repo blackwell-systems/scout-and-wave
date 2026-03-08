@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.12.0] | 2026-03-08 | Project memory (docs/CONTEXT.md, E17/E18) + failure taxonomy (failure_type field, E19) |
 | [0.11.2] | 2026-03-08 | Fix: validate-impl.sh path in saw-skill.md — use absolute symlink path |
 | [0.11.1] | 2026-03-08 | Roadmap: engine extraction complete; protocol hardening items from cross-repo wave |
 | [0.11.0] | 2026-03-08 | Cross-repo wave support: multi-repo worktree coordination, Repo column in file ownership, updated isolation layers |
@@ -55,6 +56,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.3.0] | 2026-02-28 | Bootstrap mode for new projects; Wave 0 pattern |
 | [0.2.0] | 2026-02-28 | Decomposed skill prompt; complexity-based suitability heuristic |
 | [0.1.0] | 2026-02-27 | Initial release |
+
+---
+
+## [0.12.0] - 2026-03-08
+
+### Added
+
+- **E17: Scout reads project memory** — before running the suitability gate, Scout checks for `docs/CONTEXT.md` in the target project. If present, reads it in full: `established_interfaces` prevents proposing types that already exist, `decisions` prevents contradicting prior architectural choices, `conventions` enforces project style, `features_completed` informs history.
+- **E18: Orchestrator updates project memory** — after a feature's final wave post-merge verification passes (same trigger as E15), Orchestrator creates or updates `docs/CONTEXT.md`: appends to `features_completed`, `decisions`, and `established_interfaces`. File is optional; created on first completion.
+- **E19: Failure type decision tree** — agents reporting `status: partial` or `status: blocked` now include `failure_type: transient | fixable | needs_replan | escalate`. Orchestrator action per type: `transient` → retry automatically (up to 2×); `fixable` → apply agent's noted fix, relaunch; `needs_replan` → re-engage Scout with agent findings; `escalate` → surface to human immediately. Backward compat: absent `failure_type` treated as `escalate`.
+- **`docs/CONTEXT.md` schema** in `protocol/message-formats.md` — canonical YAML schema for the project memory file with field documentation.
+- **`failure_type` field** in completion report schema (`message-formats.md`), `wave-agent.md`, and `agent-template.md` (v0.3.9). Conditionality: required when `status: partial | blocked`, omitted when `status: complete`.
+- **Scout prompt updated** (`scout.md` v0.5.0) — CONTEXT.md reading inserted as new Step 1; existing steps renumbered 2–11; CONTEXT.md cross-check added to suitability gate.
+- **Orchestrator files updated** — `saw-skill.md`, `saw-merge.md`, `procedures.md` all reference `failure_type` and E19 decision tree.
 
 ---
 
