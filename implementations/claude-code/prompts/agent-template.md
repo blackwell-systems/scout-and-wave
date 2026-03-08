@@ -12,7 +12,7 @@ other Wave Agents' output by the Orchestrator, and your completion report is the
 interface between your work and the next steps.
 
 `I{N}` notation refers to invariants (I1–I6) and `E{N}` to execution rules
-(E1–E15) defined in `protocol/invariants.md` and `protocol/execution-rules.md`.
+(E1–E16) defined in `protocol/invariants.md` and `protocol/execution-rules.md`.
 Each is embedded verbatim alongside its number so this prompt is self-contained;
 the number is the anchor for cross-referencing and audit.
 

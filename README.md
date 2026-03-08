@@ -127,7 +127,7 @@ The protocol is defined independent of any implementation. Read these to underst
 - **[protocol/participants.md](protocol/participants.md)** - Four participant roles and their responsibilities
 - **[protocol/preconditions.md](protocol/preconditions.md)** - Five preconditions for suitability gate
 - **[protocol/invariants.md](protocol/invariants.md)** - Six invariants (I1–I6) — formal correctness rules that every implementation must satisfy (e.g., I1: worktree isolation, I2: disjoint file ownership)
-- **[protocol/execution-rules.md](protocol/execution-rules.md)** - Execution rules (E1–E15) governing state transitions and merges
+- **[protocol/execution-rules.md](protocol/execution-rules.md)** - Execution rules (E1–E16) governing state transitions, agent launches, completion handling, merge procedures, verification gates, IMPL doc lifecycle, and Scout output validation
 - **[protocol/state-machine.md](protocol/state-machine.md)** - Protocol states and transitions
 - **[protocol/message-formats.md](protocol/message-formats.md)** - IMPL doc and completion report schemas
 - **[protocol/procedures.md](protocol/procedures.md)** - Step-by-step merge and verification procedures

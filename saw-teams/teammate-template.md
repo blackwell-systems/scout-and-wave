@@ -19,7 +19,7 @@ messaging for deviations, clarifications, and completion notification. The IMPL
 doc remains the source of truth (I4).
 
 `I{N}` notation in this template refers to invariants (I1–I6) and `E{N}` to
-execution rules (E1–E15) defined in `PROTOCOL.md` (the SAW protocol
+execution rules (E1–E16) defined in `protocol/execution-rules.md` (the SAW protocol
 specification). Each is embedded verbatim alongside its number so this prompt
 is self-contained; the number is the anchor for cross-referencing and audit.
 
