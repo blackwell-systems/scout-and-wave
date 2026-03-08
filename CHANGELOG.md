@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.10.4] | 2026-03-07 | Second consistency pass — scout heading levels, layer labels, suitability gate, invariant examples |
 | [0.10.3] | 2026-03-07 | Documentation consistency pass; roadmap pruned to outstanding items only |
 | [0.10.2] | 2026-03-07 | E16A required block presence enforcement; E16C out-of-band dep graph warning |
 | [0.10.1] | 2026-03-07 | E16 validator script (scripts/validate-impl.sh); saw-skill.md calls script by path |
@@ -51,6 +52,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.3.0] | 2026-02-28 | Bootstrap mode for new projects; Wave 0 pattern |
 | [0.2.0] | 2026-02-28 | Decomposed skill prompt; complexity-based suitability heuristic |
 | [0.1.0] | 2026-02-27 | Initial release |
+
+---
+
+## [0.10.4] - 2026-03-07
+
+### Fixed
+
+- **`agents/scout.md` output format heading levels** — top-level IMPL doc sections used `###` instead of `##`; flat `### Agent Prompts` replaced with correct per-wave `## Wave N` / `### Agent X - {Role}` structure. A scout using the custom-type agent would have produced malformed IMPL docs.
+- **`agent-template.md` isolation layer label** — "Layer 3" applied to the merge-time orchestrator trip wire; corrected to "Layer 4" matching E4's canonical 5-layer model.
+- **`README.md` P4 suitability description** — "Doesn't require pre-implementation scanning" inverted the meaning of P4; corrected to "Has been pre-scanned for already-implemented items."
+- **`protocol/README.md` invariant examples** — listed "worktree isolation" and "interface freeze" as invariant examples; neither is an invariant (they are E4 and E2). Replaced with accurate examples from I1–I6.
+- **`implementations/claude-code/QUICKSTART.md` scaffold table** — used a non-canonical 3-column format; replaced with the canonical 4-column `| File | Contents | Import path | Status |` from `protocol/message-formats.md`.
+- **`agents/scout.md` Step 8** — missing explicit `## Wave N` headers requirement; added to match the fallback `prompts/scout.md`.
 
 ---
 
