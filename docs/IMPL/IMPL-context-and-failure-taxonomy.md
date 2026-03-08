@@ -1,4 +1,5 @@
 # IMPL: Project Memory (CONTEXT.md) + Failure Taxonomy
+<!-- SAW:COMPLETE 2026-03-08 -->
 
 **Feature:** Two protocol enhancements — persistent project memory document (`docs/CONTEXT.md`) and `failure_type` field in completion reports
 **Repository:** /Users/dayna.blackwell/code/scout-and-wave
@@ -1180,3 +1181,107 @@ After Wave 2 completes:
 | 2 | C | Add CONTEXT.md reading step to `implementations/claude-code/prompts/agents/scout.md` | TO-DO |
 | 2 | D | Add `failure_type` to `wave-agent.md` and `agent-template.md` | TO-DO |
 | — | Orch | Post-merge cascade review + optional docs/CONTEXT.md creation for this repo | TO-DO |
+
+---
+
+### Agent B - Completion Report
+
+```yaml type=impl-completion-report
+status: complete
+worktree: .claude/worktrees/wave1-agent-b
+branch: wave1-agent-b
+commit: 874e068
+files_changed:
+  - protocol/execution-rules.md
+files_created: []
+interface_deviations: []
+out_of_scope_deps: []
+tests_added: []
+verification: PASS
+```
+
+All three rules appended after E16 in the established document format. E17, E18, and E19 headers confirmed present; all four `failure_type` values (`transient`, `fixable`, `needs_replan`, `escalate`) confirmed spelled correctly; E16 confirmed untouched; no `docs/SAW.md` references; all CONTEXT.md references use the correct filename. The Cross-References section was extended with entries for E17, E18, and E19 pointing to `message-formats.md` and related rules. No deviations from the specified rule text.
+
+## Completion Reports
+
+### Agent A - Completion Report
+
+```yaml type=impl-completion-report
+status: complete
+worktree: .claude/worktrees/wave1-agent-a
+branch: wave1-agent-a
+commit: 097e76d
+files_changed:
+  - protocol/message-formats.md
+files_created: []
+interface_deviations: []
+out_of_scope_deps: []
+tests_added: []
+verification: PASS
+```
+
+All three additions landed in the correct locations:
+
+1. `failure_type` added to the `impl-completion-report` typed block in the Typed Metadata Blocks section — matches the exact inline comment form specified.
+2. `failure_type` added to the canonical schema in Completion Report Format with the three-line conditionality comment block, followed by a full field definition entry listing all four values with descriptions.
+3. Item 6 added to the Orchestrator Parsing Requirements section covering `failure_type` and its E19 reference.
+4. New `## docs/CONTEXT.md — Project Memory` section added between Scaffolds Section Format and Pre-Mortem Section Format, containing the description, canonical YAML schema, per-field documentation, and the usage/optionality note.
+
+No existing content was modified beyond the four insertion points. `CONTEXT.md` naming (not `SAW.md`) is used consistently throughout. All four `failure_type` values (`transient`, `fixable`, `needs_replan`, `escalate`) are present and spelled exactly as specified.
+
+### Agent D - Completion Report
+
+```yaml type=impl-completion-report
+status: complete
+worktree: .claude/worktrees/wave2-agent-d
+branch: wave2-agent-d
+commit: 1f92ea5ad9f90b7f1233fe21f1fc668defd93449
+files_changed:
+  - implementations/claude-code/prompts/agents/wave-agent.md
+  - implementations/claude-code/prompts/agent-template.md
+files_created: []
+interface_deviations: []
+out_of_scope_deps: []
+tests_added: []
+verification: PASS
+```
+
+All changes applied as specified. `failure_type` added immediately after `status` in the YAML completion report template in both files. The "If You Get Stuck" section in wave-agent.md updated with `failure_type` guidance for both partial and blocked cases. agent-template.md received the full `failure_type guidance` block, the E19 cross-reference note, and the version bump to v0.3.9. The E1–E16 reference in the preamble was also updated to E1–E19 for accuracy. No `docs/SAW.md` references found or introduced. All four `failure_type` values (`transient`, `fixable`, `needs_replan`, `escalate`) spelled exactly as specified.
+
+### Agent C - Completion Report
+
+```yaml type=impl-completion-report
+status: complete
+worktree: .claude/worktrees/wave2-agent-c
+branch: wave2-agent-c
+commit: 1ed1313033970d7c2e0166ed0c9e9bef59b0745c
+files_changed:
+  - implementations/claude-code/prompts/agents/scout.md
+files_created: []
+interface_deviations: []
+out_of_scope_deps: []
+tests_added: []
+verification: PASS
+```
+
+New Step 1 inserted at top of Process section with E17 reference and all four CONTEXT.md sub-fields (`established_interfaces`, `decisions`, `conventions`, `features_completed`). Existing steps renumbered 1-10 to 2-11. Internal cross-reference "contracts in step 4" updated to "contracts in step 5" (in step 6 body). CONTEXT.md cross-check blockquote added inside Suitability Gate step 4. Version bumped to v0.5.0. No SAW.md references introduced. All five verification gate checks passed.
+
+### Agent E - Completion Report
+
+```yaml type=impl-completion-report
+status: complete
+worktree: .claude/worktrees/wave2-agent-e
+branch: wave2-agent-e
+commit: 30e6cef
+files_changed:
+  - implementations/claude-code/prompts/saw-skill.md
+  - implementations/claude-code/prompts/saw-merge.md
+  - protocol/procedures.md
+files_created: []
+interface_deviations: []
+out_of_scope_deps: []
+tests_added: []
+verification: PASS
+```
+
+All three insertions applied as specified. `failure_type`/E19 added to step 4 of the IMPL-exists wave execution loop in `saw-skill.md` (appended to the E8 paragraph). E18/CONTEXT.md step added to step 6 of `saw-skill.md` (appended to the E15 paragraph). `failure_type`/E19 note added to Step 1 of `saw-merge.md` in the `status` bullet. Parenthetical `(see failure_type field and E19 for automatic remediation decision tree)` added at all three distinct occurrences in `protocol/procedures.md`: Phase 5 check-for-failures bullets (two lines), error recovery step 1 read-completion-reports line, and the E8 recovery section cause line. No `docs/SAW.md` references introduced. All four `failure_type` values spelled exactly as in `message-formats.md`.
