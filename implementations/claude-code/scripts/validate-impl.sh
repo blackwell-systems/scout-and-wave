@@ -170,6 +170,10 @@ validate_completion_report() {
 
 block_count=0
 lineno=0
+# E16A: track which required block types have been seen
+seen_file_ownership=false
+seen_dep_graph=false
+seen_wave_structure=false
 
 while IFS= read -r line; do
   lineno=$((lineno + 1))
@@ -182,14 +186,61 @@ while IFS= read -r line; do
     echo "  checking $block_type block at line $lineno" >&2
 
     case "$block_type" in
-      impl-file-ownership)   validate_file_ownership "$block_content" "$lineno" ;;
-      impl-dep-graph)        validate_dep_graph       "$block_content" "$lineno" ;;
-      impl-wave-structure)   validate_wave_structure  "$block_content" "$lineno" ;;
+      impl-file-ownership)   validate_file_ownership "$block_content" "$lineno"; seen_file_ownership=true ;;
+      impl-dep-graph)        validate_dep_graph       "$block_content" "$lineno"; seen_dep_graph=true ;;
+      impl-wave-structure)   validate_wave_structure  "$block_content" "$lineno"; seen_wave_structure=true ;;
       impl-completion-report) validate_completion_report "$block_content" "$lineno" ;;
       *)
         echo "  unknown block type '$block_type' at line $lineno — skipping" >&2
         ;;
     esac
+  fi
+done < "$impl_doc"
+
+# ── E16A: Required block presence ─────────────────────────────────────────────
+# Only fires when block_count > 0 (pre-typed-block docs skip this check).
+
+if [[ $block_count -gt 0 ]]; then
+  for required in impl-file-ownership impl-dep-graph impl-wave-structure; do
+    seen_var="seen_${required//-/_}"
+    if [[ "${!seen_var}" != "true" ]]; then
+      add_error "missing required block: $required"
+    fi
+  done
+fi
+
+# ── E16C: Out-of-band dep graph detection (warn only) ─────────────────────────
+# Scan plain fenced blocks (no type= annotation) for likely dep graph content.
+# Warns to stdout but does NOT add to errors[] and does NOT affect exit code.
+
+in_plain_block=false
+plain_block_start=0
+plain_block_buf=""
+plain_lineno=0
+
+while IFS= read -r line; do
+  plain_lineno=$((plain_lineno + 1))
+
+  if [[ "$line" =~ ^\`\`\`[a-zA-Z]*$ ]] && [[ ! "$line" =~ type= ]]; then
+    # Opening plain fence (no type= annotation)
+    in_plain_block=true
+    plain_block_start=$plain_lineno
+    plain_block_buf=""
+    continue
+  fi
+
+  if [[ "$in_plain_block" == "true" ]]; then
+    if [[ "$line" =~ ^\`\`\`[[:space:]]*$ ]]; then
+      # Closing fence — check accumulated content
+      if echo "$plain_block_buf" | grep -qE "\[[A-Z]\]" && echo "$plain_block_buf" | grep -q "Wave"; then
+        echo "WARNING: possible dep-graph content found outside typed block at line $plain_block_start — use \`\`\`yaml type=impl-dep-graph\`\`\`"
+      fi
+      in_plain_block=false
+      plain_block_buf=""
+    else
+      plain_block_buf="$plain_block_buf
+$line"
+    fi
   fi
 done < "$impl_doc"
 

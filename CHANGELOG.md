@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.10.2] | 2026-03-07 | E16A required block presence enforcement; E16C out-of-band dep graph warning |
 | [0.10.1] | 2026-03-07 | E16 validator script (scripts/validate-impl.sh); saw-skill.md calls script by path |
 | [0.10.0] | 2026-03-07 | Typed metadata blocks (type=impl-*), E16 validation+correction loop, Pre-Mortem section, SCOUT_VALIDATING state |
 | [0.9.5] | 2026-03-07 | Scout dep graph format prescribed; structured Wave/Agent/depends-on template replaces free-form prose |
@@ -49,6 +50,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.3.0] | 2026-02-28 | Bootstrap mode for new projects; Wave 0 pattern |
 | [0.2.0] | 2026-02-28 | Decomposed skill prompt; complexity-based suitability heuristic |
 | [0.1.0] | 2026-02-27 | Initial release |
+
+---
+
+## [0.10.2] - 2026-03-07
+
+### Added
+
+- **E16A: required block presence enforcement.** Both `validate-impl.sh` and `ValidateIMPLDoc` (Go) now require `impl-file-ownership`, `impl-dep-graph`, and `impl-wave-structure` blocks to be present whenever any typed block appears in the doc. Only fires when `block_count > 0`, so pre-v0.10.0 docs without typed blocks are unaffected. Missing blocks are reported as distinct errors (one per missing type).
+
+- **E16C: out-of-band dep graph detection.** A second scan pass checks all plain fenced blocks (no `type=` annotation) for content matching the dep graph pattern (`[A-Z]` agent refs + the word `Wave`). When found, a `WARNING` is emitted to stdout but does not cause exit 1. The Orchestrator E16 step now includes E16C warnings in the Scout correction prompt so that dep graph content inadvertently placed in a prose block gets moved into a typed `impl-dep-graph` block.
+
+### Changed
+
+- **`protocol/execution-rules.md`** — E16 "Validator scope" section updated with canonical E16A/B/C sub-rule documentation, including dep graph grammar (Wave N section header + indented `[X]` entries + `✓ root` or `depends on:` annotations).
+- **`implementations/claude-code/prompts/saw-skill.md`** — E16 step now includes an E16A note explaining the required-block enforcement and E16C warning handling.
 
 ---
 

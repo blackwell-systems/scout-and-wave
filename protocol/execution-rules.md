@@ -339,8 +339,38 @@ If validation fails, the specific errors are fed back to Scout as a correction p
 Scout rewrites only the failing sections. This loops until the doc passes or a retry limit
 (default: 3) is reached.
 
-**Validator scope:** Only typed-block sections (IC-1: `type=impl-*` blocks). Prose sections
-are excluded from validation.
+**Validator scope:** Typed-block sections (`type=impl-*` blocks) plus document-level presence checks. Prose sections are excluded from content validation.
+
+**E16A — Required block presence:** An IMPL doc that contains any typed blocks must include all three of the following, or validation fails:
+- `type=impl-file-ownership`
+- `type=impl-dep-graph`
+- `type=impl-wave-structure`
+
+Error format: `missing required block: impl-dep-graph`
+
+Trigger condition: E16A fires only when `block_count > 0`. Docs with no typed blocks (pre-v0.10.0 format) skip this check and receive the existing "no typed blocks found" warning instead.
+
+**E16B — Dep graph grammar:** When an `impl-dep-graph` block is present, its contents must conform to the canonical grammar. This check already exists in both the bash and Go validators; this rule documents it authoritatively.
+
+Canonical dep graph grammar:
+```
+Wave N (label):          # one or more Wave sections; N is a digit
+    [X] path/to/file     # one or more agent entries per wave; X is A-Z
+        ✓ root           # root agents declare ✓ root
+    [Y] path/to/file
+        depends on: X    # dependent agents declare depends on: <letters>
+```
+
+Rules:
+- At least one `Wave N` line (where N is one or more digits) must appear.
+- At least one `[X]` agent entry must appear.
+- Each agent entry must be followed (before the next agent entry) by either `✓ root` or `depends on:` on an indented line.
+
+**E16C — Out-of-band dep graph detection (warn only):** If a plain fenced block (no `type=` annotation) contains both a `[A-Z]` agent reference pattern and the word `Wave`, the validator emits a warning to stdout but does not fail. This catches dep graphs written as ASCII art outside typed blocks.
+
+Warning format: `WARNING: possible dep-graph content found outside typed block at line N — use \`\`\`yaml type=impl-dep-graph\`\`\``
+
+E16C warnings appear in the correction prompt fed back to Scout but do not trigger a retry on their own. They are informational — the Scout should move the content into a typed block.
 
 **Correction prompt format:** The orchestrator's correction prompt to Scout must list each error with the section name, the specific failure (e.g., "impl-dep-graph block: Wave 2 missing `depends on:` line for agent [C]"), and the line number or block identifier where the error occurred. This gives Scout precise targets for correction without requiring it to re-read the whole doc.
 
