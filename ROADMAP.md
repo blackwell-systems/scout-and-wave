@@ -48,6 +48,8 @@ Contracts are injected into agent prompts as binding requirements. The reviewer 
 
 ### Full Research Output on NOT SUITABLE Verdicts
 
+> **UI implemented — 2026-03-08 (v0.17.0):** `NotSuitableResearchPanel` renders the full research output (verdict banner, rationale, blockers callout, serial implementation notes, Archive button). Protocol changes (scout.md, message-formats.md) to require scouts to always write full research sections regardless of verdict are still pending.
+
 **Current state:** When Scout returns NOT SUITABLE, it writes a short verdict with a brief rationale and stops. The IMPL doc is minimal — just the verdict and a sentence or two explaining why.
 
 **Problem:** The Scout has already done the work — it analyzed the codebase, mapped the files, identified the dependency structure, assessed the risks. All of that research is discarded. The user gets a dead end with no actionable information.
@@ -73,6 +75,8 @@ The verdict badge on the review screen changes color (red/amber/green) but the r
 ---
 
 ## Per-Agent Context Slicing for Large IMPL Docs
+
+> **Implemented — 2026-03-08:** E23 (`ExtractAgentContext` / `FormatAgentContextPayload`) shipped in `scout-and-wave-go` v0.2.0, wired into `launchAgent` before `ExecuteStreaming`. UI: `AgentContextToggle` + `AgentContextPanel` in `scout-and-wave-web` v0.18.0 expose the per-agent payload for inspection in ReviewScreen.
 
 **Current state:** When an IMPL doc contains many agents (10+), every Wave agent receives the full IMPL doc as context. Agent A reads all 13 other agents' full prompts, dep graph prose, pre-mortem, and known issues — sections it has no use for.
 
