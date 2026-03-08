@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.10.3] | 2026-03-07 | Documentation consistency pass; roadmap pruned to outstanding items only |
 | [0.10.2] | 2026-03-07 | E16A required block presence enforcement; E16C out-of-band dep graph warning |
 | [0.10.1] | 2026-03-07 | E16 validator script (scripts/validate-impl.sh); saw-skill.md calls script by path |
 | [0.10.0] | 2026-03-07 | Typed metadata blocks (type=impl-*), E16 validation+correction loop, Pre-Mortem section, SCOUT_VALIDATING state |
@@ -50,6 +51,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.3.0] | 2026-02-28 | Bootstrap mode for new projects; Wave 0 pattern |
 | [0.2.0] | 2026-02-28 | Decomposed skill prompt; complexity-based suitability heuristic |
 | [0.1.0] | 2026-02-27 | Initial release |
+
+---
+
+## [0.10.3] - 2026-03-07
+
+### Fixed
+
+- **I1/I2 invariant labels swapped** across four files (`README.md`, `protocol/README.md`, `implementations/README.md`, `implementations/claude-code/README.md`). Every occurrence said "I1: worktree isolation" — corrected to "I1: Disjoint File Ownership" and "I2: Interface Contracts Precede Parallel Implementation." A broken anchor `#i1-worktree-isolation` in `claude-code/README.md` was also fixed.
+- **Dead `PROTOCOL.md` references** in `saw-skill.md` and `docs/ECOSYSTEM.md` — `PROTOCOL.md` was removed in v0.9.1; references updated to `protocol/invariants.md` and `protocol/execution-rules.md`.
+- **`agent-template.md` completion report fence** — plain `` ```yaml `` → `` ```yaml type=impl-completion-report `` so the orchestrator can locate completion reports by type annotation.
+- **Stale version table** in `implementations/claude-code/prompts/README.md` — six version numbers and the install path (`~/.claude/commands/saw.md` → `~/.claude/skills/saw/SKILL.md`) corrected.
+- **QUICKSTART IMPL doc path** — two occurrences of `docs/IMPL-simple-cache.md` corrected to `docs/IMPL/IMPL-simple-cache.md`.
+- **`protocol/README.md` version** — still showed `0.8.0`; updated to `0.10.2`.
+- **`ECOSYSTEM.md` Further Reading link** — pointed to removed `PROTOCOL.md`; updated to `protocol/README.md`.
+- **Scout agent E16A awareness** — `agents/scout.md` step 10 now explicitly states that omitting any of the three required typed blocks is itself a validator failure, not just something to fix reactively.
+
+### Changed
+
+- **`ROADMAP.md`** — completed items removed (Pre-Mortem, IMPL doc completion lifecycle, validation+correction loop, structured metadata blocks, E16 validator script); `saw serve` entry updated to reflect what's shipped vs what remains.
 
 ---
 
