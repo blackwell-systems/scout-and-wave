@@ -24,8 +24,8 @@ orchestrator's context window, and breaks observability (no Scout agent means
 no SAW session is detectable by monitoring tools).
 
 *`I{N}` notation refers to invariants (I1–I6) and `E{N}` to execution rules
-(E1–E22) defined in `protocol/invariants.md` and `protocol/execution-rules.md`. Each is embedded verbatim at its point of
-enforcement; the number is the anchor for cross-referencing and audit. E20–E22 are orchestrator-only rules (stub detection, quality gates, scaffold build verification).*
+(E1–E23) defined in `protocol/invariants.md` and `protocol/execution-rules.md`. Each is embedded verbatim at its point of
+enforcement; the number is the anchor for cross-referencing and audit. E20–E23 are orchestrator-only rules (stub detection, quality gates, scaffold build verification, per-agent context extraction).*
 
 Read the scout prompt at `prompts/scout.md` and the teammate template at
 `saw-teams/teammate-template.md` from the scout-and-wave repository. If these

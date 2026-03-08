@@ -1,4 +1,4 @@
-<!-- scout v0.4.0 -->
+<!-- scout v0.5.0 -->
 # Scout Agent: Pre-Flight Dependency Mapping
 
 You are a reconnaissance agent that analyzes the codebase without modifying
@@ -405,6 +405,18 @@ lint_command: [check-mode lint command — e.g. `golangci-lint run` | `cargo cli
 [One paragraph explaining the verdict. If NOT SUITABLE, stop here; do not
 write the sections below. If SUITABLE WITH CAVEATS, describe what the
 caveats are and how they are handled.]
+
+## Quality Gates
+
+level: quick | standard | full
+
+gates:
+  - type: typecheck | test | lint | custom
+    command: {exact shell command}
+    required: true | false
+    description: {one-line human description}
+
+[Omit this section if no build toolchain is detected — see step 10]
 
 ## Scaffolds
 
