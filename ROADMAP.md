@@ -211,7 +211,7 @@ CLI backend:   Scout prompt → free-form markdown → disk → markdown parser 
 
 ### Local-First Web UI (`saw serve`) — Partially implemented
 
-**Implemented (`scout-and-wave-go`):** `saw serve` runs at `localhost:7432`. Review screen shows suitability verdict, pre-mortem, wave structure (SVG timeline + DAG), file ownership table, interface contracts, and Approve/Reject. Split-pane IMPL list with resizable/collapsible sidebar. SSE-based wave board with agent status cards.
+**Implemented (`scout-and-wave-web`):** `saw serve` runs at `localhost:7432`. Review screen shows suitability verdict, pre-mortem, wave structure (SVG timeline + DAG), file ownership table, interface contracts, and Approve/Reject. Split-pane IMPL list with resizable/collapsible sidebar. SSE-based wave board with agent status cards.
 
 **Outstanding:**
 - **Wave execution board** — agent cards live-update as agents write completion reports; failure type badge with action button (retry / fix / re-scout / escalate) per failure taxonomy
@@ -568,8 +568,69 @@ The only protocol-adjacent addition: if chat proves valuable, future protocol ve
 
 ---
 
+## Protocol Hardening (Cross-Repo Lessons)
+
+Items identified during the engine extraction (Wave 2, 2026-03-08) that should be added to the protocol.
+
+### Scaffold Agent Must Verify Build After Creating Stubs
+
+**Current state:** The Scaffold Agent creates stub files and commits them, but does not verify the project builds.
+
+**Problem:** Scaffold files define types and interfaces that Wave agents import. If the scaffold file has a syntax error, wrong import path, or references a missing dependency, every Wave agent in the next wave will fail immediately with a build error — wasting the full wave execution.
+
+**Proposed:** Scaffold Agent required to run after creating stubs:
+1. `go get ./...` (or language-equivalent) — ensure declared dependencies resolve
+2. `go mod tidy` — clean up go.sum
+3. `go build ./...` — confirm the project compiles with the new stubs
+
+If any step fails, Scaffold Agent reports `status: FAILED` with the error output and does not commit. The orchestrator halts before creating worktrees.
+
+**Protocol changes required:** Add to `agents/scaffold-agent.md` and `protocol/execution-rules.md`.
+
+---
+
+### Cross-Repo Field 8 Completion Report Path
+
+**Current state:** The agent template Field 8 (completion report) instructs agents to write the report to the IMPL doc. In cross-repo waves, the IMPL doc is in repo A (the spec repo) while the agent works in repo B. Agents that don't receive an absolute IMPL doc path write their report to the wrong location — or not at all.
+
+**Proposed:** In cross-repo mode, the agent prompt must always include an absolute path to the IMPL doc (not relative). Add an explicit callout to `saw-worktree.md` cross-repo section:
+
+> "When constructing wave agent prompts for cross-repo waves, Field 8 must include the **absolute path** to the IMPL doc in the orchestrating repo. Example: `/Users/dev/code/spec-repo/docs/IMPL/IMPL-feature.md`. A relative path will resolve to the wrong directory in the agent's worktree."
+
+**Protocol changes required:** `saw-worktree.md` cross-repo mode section, `agents/wave-agent.md` Field 8 description.
+
+---
+
+### BUILD STUB Test Discipline
+
+**Current state:** When agents write functions that compile but intentionally leave out implementation (e.g., stubs that will be filled by a later wave), tests that exercise those functions will fail. Agents sometimes mark these as `status: complete` anyway.
+
+**Problem:** Stub functions with passing test suites are misleading. A BUILD STUB is not a COMPLETE stub — it is a deliberate placeholder. Treating it as complete conflates "code compiles" with "feature works."
+
+**Proposed:** Distinguish two stub states in agent prompts:
+- **BUILD STUB** — function is declared, compiles, body panics/returns zero values. Tests are expected to fail. Mark `status: partial` with `failure_type: fixable`.
+- **COMPLETE** — function is fully implemented and tests pass.
+
+Agents MUST NOT report `status: complete` if their functions are BUILD STUBs. The completion report should list each BUILD STUB explicitly.
+
+**Protocol changes required:** `agents/wave-agent.md`, `agent-template.md` Field 9 (status values).
+
+---
+
+### `go.work` Recommendation for Cross-Repo Worktree LSP
+
+**Current state:** When the orchestrating repo and target repo are different Go modules, wave agents working in worktrees of the target repo get LSP errors for cross-repo imports because the `replace` directive in `go.mod` points to a path that doesn't match the worktree layout.
+
+**Proposed:** Add a note to `saw-worktree.md`:
+
+> "For Go cross-repo waves: if the target repo uses a `replace` directive to point at the engine repo, consider creating a `go.work` file at the workspace root that includes both modules. This eliminates LSP 'module not found' noise in agent worktrees and improves IDE diagnostics without affecting production builds."
+
+**Protocol changes required:** `saw-worktree.md` cross-repo mode section.
+
+---
+
 ## Implementation Notes
 
 Items above are not independent — the failure taxonomy feeds the web UI action buttons, the pre-mortem feeds the review screen, `docs/SAW.md` feeds both the scout and the project memory view. They are designed to ship together as a coherent v1.0 rather than as separate incremental additions.
 
-`scout-and-wave-go` is the engine. The `/saw` Claude Code skill and the web UI are both clients on top of it.
+**Engine extraction complete (2026-03-08).** `scout-and-wave-go` is the standalone engine module (agent runner, protocol parser, orchestrator, git, worktree management, types). `scout-and-wave-web` is the web UI + `saw` CLI server, importing the engine via Go module. The `/saw` Claude Code skill and the web UI are both clients on top of it.

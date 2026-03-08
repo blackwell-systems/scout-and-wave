@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.11.1] | 2026-03-08 | Roadmap: engine extraction complete; protocol hardening items from cross-repo wave |
+| [0.11.0] | 2026-03-08 | Cross-repo wave support: multi-repo worktree coordination, Repo column in file ownership, updated isolation layers |
 | [0.10.4] | 2026-03-07 | Second consistency pass — scout heading levels, layer labels, suitability gate, invariant examples |
 | [0.10.3] | 2026-03-07 | Documentation consistency pass; roadmap pruned to outstanding items only |
 | [0.10.2] | 2026-03-07 | E16A required block presence enforcement; E16C out-of-band dep graph warning |
@@ -52,6 +54,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.3.0] | 2026-02-28 | Bootstrap mode for new projects; Wave 0 pattern |
 | [0.2.0] | 2026-02-28 | Decomposed skill prompt; complexity-based suitability heuristic |
 | [0.1.0] | 2026-02-27 | Initial release |
+
+---
+
+## [0.11.1] - 2026-03-08
+
+### Changed
+
+- **Roadmap: engine extraction complete** — `scout-and-wave-go` is the standalone engine module; `scout-and-wave-web` is the web UI client. Implementation Notes updated to reflect this. "Partially implemented" section repo name corrected from `scout-and-wave-go` to `scout-and-wave-web`.
+- **Roadmap: Protocol Hardening section added** — Four hardening items surfaced during the engine extraction cross-repo wave:
+  1. **Scaffold Agent build verification** — Scaffold Agent must run `go get ./...`, `go mod tidy`, and `go build ./...` after creating stubs; reports `FAILED` if any step fails before committing.
+  2. **Cross-repo Field 8 absolute path** — `saw-worktree.md` and `wave-agent.md` must document that cross-repo agents require an absolute IMPL doc path in the prompt.
+  3. **BUILD STUB test discipline** — Agents must report `status: partial` (not `complete`) when functions are BUILD STUBs; completion report must list each stub explicitly.
+  4. **`go.work` for cross-repo LSP** — Recommendation to add `go.work` workspace file to reduce LSP noise in cross-repo worktrees.
+
+---
+
+## [0.11.0] - 2026-03-08
+
+### Added
+
+- **Cross-repo wave support** (`saw-worktree.md`): New "Cross-Repo Mode" section covering multi-repo preflight, per-repo worktree creation, hook installation, merge, and cleanup. Agents in different repositories work simultaneously within a single wave.
+- **`Repo` column in `impl-file-ownership`** (`message-formats.md`): Cross-repo IMPL docs include a `Repo` column identifying which repository each file belongs to. Single-repo format unchanged.
+- **`Repositories:` frontmatter field** (`message-formats.md`): IMPL docs for cross-repo waves list all repository paths in the frontmatter.
+- **`repo` field in completion report** (`message-formats.md`): Cross-repo agents include the absolute repo path in their structured completion report. Optional for single-repo waves.
+
+### Changed
+
+- **E3 ownership verification** (`execution-rules.md`): Disjointness check is now per-repo; same filename in different repositories is not a conflict. Cross-repo tables must include `Repo` column.
+- **E4 Layer 2 documentation** (`execution-rules.md`): Cross-repo omission of `isolation: "worktree"` is now described as intentional correct protocol, not a degraded fallback.
+- **I1 disjoint ownership** (`invariants.md`): Added cross-repo scope note — I1 applies per-repository; files in different repos are inherently disjoint.
+- **Orchestrator participant** (`participants.md`): "Cross-repository orchestration limitation" section replaced with "Cross-repository orchestration" describing both single-repo and cross-repo modes.
+- **Procedure 3, Phase 1, Step 2** (`procedures.md`): Repository context check now describes cross-repo mode procedure instead of treating it as an error.
+- **Merge procedure** (`procedures.md`): Cross-repo note added — merge runs independently per-repo.
+- **Recovery from Cross-Repository Mismatch** (`procedures.md`): Now describes recovery from accidental Layer 2 use in cross-repo context, not treatment of cross-repo as an unrecoverable error.
+- Protocol document versions bumped to 0.9.0 (`procedures.md`, `execution-rules.md`, `invariants.md`, `message-formats.md`).
+- `saw-worktree.md` bumped to v0.5.0.
 
 ---
 
