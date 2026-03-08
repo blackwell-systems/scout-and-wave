@@ -6,6 +6,46 @@ Items are grouped by theme, not priority. Nothing here is committed or scheduled
 
 ## Protocol Enhancements
 
+### Contract Builder Phase (from Forge comparison)
+
+**Insight:** Forge separates *detecting* cross-agent boundaries from *specifying* the contracts at those boundaries. The planner emits **integration hints** — lightweight annotations flagging where tasks interact ("task-1 produces this API, task-2 consumes it"). A dedicated **Contract Builder** phase reads those hints and generates precise binding contracts before any agent launches.
+
+**Current SAW state:** The Scout generates interface contracts in a single pass. It detects seams AND specifies contracts simultaneously. This works for type-level contracts (where the Scaffold Agent materializes them) but leaves API-level contracts implicit — agents infer request/response shapes from prose descriptions, not machine-readable specs.
+
+**Proposed:** Add integration hints as a structured field in the IMPL doc. Scout emits hints during analysis; a Contract Builder phase (analogous to Scaffold Agent but for API contracts) generates precise specs:
+- API contracts: method, path, request/response field types, auth requirements, producer/consumer task mapping
+- Type contracts: shared data structures used across agent boundaries (already handled by Scaffold Agent)
+- Event/message contracts: for event-driven interfaces
+
+Contracts are injected into agent prompts as binding requirements. The reviewer verifies contract compliance as a distinct check.
+
+**Protocol changes required:**
+- `message-formats.md` — integration hint schema, API contract format
+- `agents/scout.md` — emit integration hints alongside interface contracts
+- New `contract-builder.md` agent type (or extend Scaffold Agent scope)
+- `agent-template.md` — API contracts section in per-agent payload
+
+---
+
+### Tier 2 Merge Conflict Resolution Agent (from Forge comparison)
+
+**Insight:** Forge uses a tiered merge conflict strategy: Tier 1 auto-retries the merge (in case main advanced and the conflict resolves on retry); Tier 2 spawns a dedicated resolver agent that reads conflict markers and edits them to produce a clean merge.
+
+**Current SAW state:** `saw-merge.md` Step 4 detects conflicts and surfaces them to the user but has no automated resolution path. The human must resolve manually.
+
+**Proposed:** Add tiered resolution to the merge procedure:
+- **Tier 1 (automatic):** Retry the merge after a brief delay — handles the common case where another agent merged concurrently and the working branch advanced
+- **Tier 2 (resolver agent):** If Tier 1 fails, spawn a Wave Agent variant with: the conflicting files (with conflict markers), both agents' completion reports, and instructions to resolve by choosing or synthesizing the correct version
+- Tier 2 resolver agent commits the resolved files and reports its decision rationale
+- If Tier 2 also fails: escalate to human (current behavior)
+
+**Protocol changes required:**
+- `saw-merge.md` Step 4 — tiered resolution procedure
+- New `resolver-agent.md` agent type (slim variant of wave-agent, owned-file scope is the conflicting files only)
+- `execution-rules.md` — new E-rule for conflict resolution tiers
+
+---
+
 ### Full Research Output on NOT SUITABLE Verdicts
 
 **Current state:** When Scout returns NOT SUITABLE, it writes a short verdict with a brief rationale and stops. The IMPL doc is minimal — just the verdict and a sentence or two explaining why.
