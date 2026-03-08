@@ -33,7 +33,7 @@ cd /path/to/worktree && git commit  # cd doesn't persist between Bash calls!
 ```bash
 git -C /full/path/to/worktree branch --show-current
 ```
-This should show your agent's branch name (e.g., `saw/wave1-agent-a`), NOT `main`.
+This should show your agent's branch name (e.g., `wave1-agent-a`), NOT `main`.
 
 ## Your Task
 

@@ -209,8 +209,11 @@ No pseudocode. These are binding contracts.]
 
 ### File Ownership
 
+```yaml type=impl-file-ownership
 | File | Agent | Wave | Depends On |
 |------|-------|------|------------|
+| path/to/file | B | 1 | — |
+```
 
 ### Scaffolds
 
@@ -218,19 +221,57 @@ No pseudocode. These are binding contracts.]
 |------|----------|-------------|--------|
 | `path/to/types.go` | [list exact types, interfaces, structs] | `module/path/types` | pending |
 
+### Dependency Graph
+
+```yaml type=impl-dep-graph
+Wave 1 (N parallel agents — package implementations):
+    [B] path/to/module
+         Implements [module] against types scaffold.
+         ✓ root (no dependencies on other agents)
+
+    [C] path/to/module
+         Implements [module] against types scaffold.
+         ✓ root (no dependencies on other agents)
+
+Wave 2 (1 agent — entry point wiring):
+    [A] cmd/main.go
+         Wires all packages together.
+         depends on: [B] [C] [D]
+```
+
 ### Wave Structure
 
-Scaffold Agent: [Types scaffold] - shared interfaces and types (created after human review)
+```yaml type=impl-wave-structure
+Scaffold Agent: [Types scaffold]
               | (types package compiles cleanly)
-Wave 1: [B][C][D]      - package implementations (parallel)
+Wave 1: [B] [C] [D]    <- N parallel agents (package implementations)
               | (all packages build, unit tests pass)
-Wave 2: [A]            - entry point wiring and integration
+Wave 2: [A]            <- 1 agent (entry point wiring and integration)
+```
 
-### Agent Prompts
+## Wave 1
 
-[Full 9-field prompt for each agent.]
-[Wave 1 agents: implement against Scaffold Agent-produced type contracts, stub internals are fine.]
-[Wave 2 agent: wire packages together, write integration test.]
+[Wave-level introduction: what this wave delivers. Each Wave 1 agent implements one module/crate against the Scaffold Agent-produced type contracts. Stub internals are fine; signatures must match contracts.]
+
+### Agent B - {Module description}
+
+[Full 9-field prompt.]
+
+### Agent C - {Module description}
+
+[Full 9-field prompt.]
+
+### Agent D - {Module description}
+
+[Full 9-field prompt.]
+
+## Wave 2
+
+[What this wave delivers: entry point wiring and integration. Wire packages together, write integration test.]
+
+### Agent A - Entry point wiring
+
+[Full 9-field prompt.]
 
 ### Verification Gates
 

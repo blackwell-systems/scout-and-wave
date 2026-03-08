@@ -1,7 +1,7 @@
 # Scout-and-Wave
 
 [![Blackwell Systems™](https://raw.githubusercontent.com/blackwell-systems/blackwell-docs-theme/main/badge-trademark.svg)](https://github.com/blackwell-systems)
-![Version](https://img.shields.io/badge/version-0.10.2-blue)
+![Version](https://img.shields.io/badge/version-0.10.3-blue)
 [![Agent Skills](assets/badge-agentskills.svg)](https://agentskills.io)
 
 SAW is published as an [Agent Skill](https://agentskills.io) — a portable, tool-agnostic package for adding capabilities to AI coding agents.

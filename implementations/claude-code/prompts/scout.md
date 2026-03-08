@@ -326,6 +326,15 @@ Record the verdict and its rationale in the IMPL doc under a
     you will receive a correction prompt listing specific failures by section name and
     block type. Rewrite only the failing sections — do not regenerate the entire document.
 
+    **E16A — Required block presence:** Every IMPL doc that contains any typed blocks
+    must include all three of the following, or validation fails:
+    - `` ```yaml type=impl-file-ownership `` (File Ownership section)
+    - `` ```yaml type=impl-dep-graph `` (Dependency Graph section)
+    - `` ```yaml type=impl-wave-structure `` (Wave Structure section)
+
+    Do not omit any of these three blocks. If the work is simple, these sections may be
+    brief, but they must be present whenever you write any typed block.
+
 ## Output Format
 
 Write the following to `docs/IMPL/IMPL-<feature-slug>.md`. For full section

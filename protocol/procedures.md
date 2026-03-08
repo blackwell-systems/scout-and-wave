@@ -364,14 +364,16 @@ For each agent (in any order):
 
 2. **Cleanup:** Remove any remaining worktrees or temporary artifacts
 
-3. **Report to human:**
+3. **E15: Write completion marker.** Write `<!-- SAW:COMPLETE YYYY-MM-DD -->` (with the current ISO date) on the line immediately after the IMPL doc title (`# IMPL: ...`), then commit the update. This must be written before reporting completion to the user. If the marker is already present, do not overwrite it.
+
+4. **Report to human:**
    - Protocol complete
    - Total time elapsed
    - Number of waves executed
    - Number of agents launched
    - Link to IMPL doc with all completion reports
 
-4. **Transition:** Enter COMPLETE (terminal state)
+5. **Transition:** Enter COMPLETE (terminal state)
 
 ---
 

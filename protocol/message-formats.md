@@ -37,16 +37,16 @@ The IMPL doc is a markdown file with the following sections in order:
 
     ---
 
-    ## Pre-Mortem
-
-    {Pre-mortem risk table — see Pre-Mortem Section Format below}
-
-    ---
-
     ## Scaffolds
 
     {Scaffold files table - see format below}
     {Omit this section if no scaffold files needed}
+
+    ---
+
+    ## Pre-Mortem
+
+    {Pre-mortem risk table — see Pre-Mortem Section Format below}
 
     ---
 
@@ -434,7 +434,7 @@ Written by the Scout into the IMPL doc to specify type scaffold files. Read and 
 
 ## Pre-Mortem Section Format
 
-Written by the Scout into the IMPL doc before the human review checkpoint. Placement: immediately after the Scaffolds section (or after Suitability Assessment if Scaffolds is omitted), before Known Issues and agent prompts.
+Written by the Scout into the IMPL doc before the human review checkpoint. Placement: immediately after the Scaffolds section (or immediately after Suitability Assessment if Scaffolds is omitted), before Known Issues and agent prompts.
 
 The Pre-Mortem section uses a markdown table in free-form prose. It is human-facing and is NOT a typed block — it is excluded from validator scope.
 
