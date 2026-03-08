@@ -321,7 +321,41 @@ Record the verdict and its rationale in the IMPL doc under a
    # Rust: cargo build && cargo clippy -- -D warnings && cargo test
    ```
 
-10. **Expect validation feedback (E16).** After you write the IMPL doc, the orchestrator
+10. **Emit Quality Gates section (optional).** After determining verification gates in step 9, check whether the project has a known build toolchain by looking for marker files in the repository root:
+
+    - `go.mod` → Go project (gates: `go vet ./...`, `go build ./...`, `go test ./...`)
+    - `package.json` → Node project (gates: `npm run lint`, `npm run build` or `tsc --noEmit`, `npm test`)
+    - `Cargo.toml` → Rust project (gates: `cargo clippy -- -D warnings`, `cargo build`, `cargo test`)
+    - `pyproject.toml` → Python project (gates: `ruff check .` or `flake8`, `python -m py_compile`, `pytest`)
+
+    If a known toolchain is detected and the IMPL doc has automated verification commands, emit a `## Quality Gates` section in the IMPL doc between the Suitability Assessment and Scaffolds sections. Use this schema:
+
+    ```markdown
+    ## Quality Gates
+
+    level: quick | standard | full
+
+    gates:
+      - type: typecheck | test | lint | custom
+        command: {exact shell command}
+        required: true | false
+        description: {one-line human description}
+    ```
+
+    - `level: quick` — no gates run (use when project has no build toolchain)
+    - `level: standard` — all gates run; required-gate failure warns but does not block
+    - `level: full` — all gates run; required-gate failure blocks merge
+
+    Use the same toolchain commands already identified for the verification gate (Field 6 of agent prompts). Do not invent new commands. Gate commands must be executable from the repository root without modification.
+
+    Omit this section entirely if:
+    - The project has no known build toolchain (markdown-only, scripts-only, etc.)
+    - The user has not configured gates and no marker file is detected
+    - `test_command` and `lint_command` in the IMPL doc header are both `none`
+
+    The section is advisory — the human reviewer can edit gate config (add, remove, or change `required` flags) before approving the IMPL doc. The Orchestrator reads this section and runs gates per E21 after each wave completes.
+
+11. **Expect validation feedback (E16).** After you write the IMPL doc, the orchestrator
     runs a validator on all `type=impl-*` blocks (E16). If the validator reports errors,
     you will receive a correction prompt listing specific failures by section name and
     block type. Rewrite only the failing sections — do not regenerate the entire document.
