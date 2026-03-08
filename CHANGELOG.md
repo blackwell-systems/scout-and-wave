@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.11.2] | 2026-03-08 | Fix: validate-impl.sh path in saw-skill.md — use absolute symlink path |
 | [0.11.1] | 2026-03-08 | Roadmap: engine extraction complete; protocol hardening items from cross-repo wave |
 | [0.11.0] | 2026-03-08 | Cross-repo wave support: multi-repo worktree coordination, Repo column in file ownership, updated isolation layers |
 | [0.10.4] | 2026-03-07 | Second consistency pass — scout heading levels, layer labels, suitability gate, invariant examples |
@@ -54,6 +55,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.3.0] | 2026-02-28 | Bootstrap mode for new projects; Wave 0 pattern |
 | [0.2.0] | 2026-02-28 | Decomposed skill prompt; complexity-based suitability heuristic |
 | [0.1.0] | 2026-02-27 | Initial release |
+
+---
+
+## [0.11.2] - 2026-03-08
+
+### Fixed
+
+- **`validate-impl.sh` path in `saw-skill.md`** — the E16 validation step referenced `bash scripts/validate-impl.sh` (relative path, only worked from specific directories). Changed to the absolute symlink path `bash /Users/dayna.blackwell/.claude/skills/saw/scripts/validate-impl.sh`, which resolves correctly from any project directory. The symlink at `~/.claude/skills/saw/scripts/validate-impl.sh` already pointed to the correct script; only the prompt path was wrong.
 
 ---
 
