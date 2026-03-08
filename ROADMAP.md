@@ -55,14 +55,6 @@ This maps to an orchestrator decision tree instead of the current "halt and surf
 
 ---
 
-### ~~Pre-Mortem in Scout Output~~ — Implemented (v0.10.0)
-
-Implemented as a required Scout output section (`## Pre-Mortem`) written before the human review checkpoint. Contains an overall risk rating (low/medium/high) and a failure modes table (Scenario / Likelihood / Impact / Mitigation). Schema defined in `protocol/message-formats.md`; output template added to both scout prompt files (`prompts/scout.md` and `prompts/agents/scout.md`).
-
-Remaining work: Web UI review screen — Pre-Mortem section displayed as a callout before the wave structure approval buttons.
-
----
-
 ### `docs/SAW.md` — Project Memory
 
 **Current state:** Each IMPL doc is per-feature and ephemeral. The Scout starts cold on every feature — no memory of architectural decisions made in previous features, no record of established conventions, no knowledge of interfaces that already exist from prior waves.
@@ -111,14 +103,6 @@ features_completed:
 Scout reads `docs/SAW.md` before the suitability gate. After a wave completes, orchestrator appends to `decisions`, `established_interfaces`, and `features_completed`. Prevents the scout from redefining types that already exist, proposing architecture that contradicts prior decisions, or missing conventions that the project has established.
 
 **Protocol changes required:** New section in `protocol/message-formats.md` defining the schema, new E-rule requiring Scout to read `docs/SAW.md` if present, orchestrator update step after each completed feature.
-
----
-
-### ~~IMPL Doc Completion Lifecycle~~ — Implemented (v0.9.4)
-
-Implemented as E15 in `protocol/execution-rules.md`. The orchestrator writes `<!-- SAW:COMPLETE YYYY-MM-DD -->` on the line immediately after the IMPL doc title after final wave verification. IMPL doc schema updated in `protocol/message-formats.md`, state machine updated in `protocol/state-machine.md`, orchestrator skill updated with step 6.
-
-Remaining work: Go engine parser support (`pkg/protocol/parser.go`), API response field (`doc_status`), web UI picker filtering (active vs completed).
 
 ---
 
@@ -225,103 +209,15 @@ CLI backend:   Scout prompt → free-form markdown → disk → markdown parser 
 
 ---
 
-### ~~Validation + Correction Loop~~ — Implemented (v0.10.0)
+### Local-First Web UI (`saw serve`) — Partially implemented
 
-**The deeper problem:** Structured outputs solve format enforcement at generation time — but only for the API backend, and only for new runs. Existing docs, CLI-backend users, and hand-edited files all bypass it. The root issue is there is no feedback loop: the AI writes something, the parser tries to read it, and if it fails the error is silent.
+**Implemented (`scout-and-wave-go`):** `saw serve` runs at `localhost:7432`. Review screen shows suitability verdict, pre-mortem, wave structure (SVG timeline + DAG), file ownership table, interface contracts, and Approve/Reject. Split-pane IMPL list with resizable/collapsible sidebar. SSE-based wave board with agent status cards.
 
-**Proposed:** After Scout writes the IMPL doc, the orchestrator runs a deterministic validator before the human review checkpoint. If validation fails, the specific errors are fed back to Scout as a correction prompt. Scout rewrites only the failing sections. This loops until the doc passes or a retry limit is hit.
-
-```
-Scout writes → validator runs → pass: proceed to review
-                              → fail: "dep graph missing Wave N headers (line 47),
-                                       file ownership table missing Wave column" →
-                                Scout corrects → validator runs again → ...
-```
-
-This is how compilers work — the LLM doesn't need to be perfect on the first try, it needs to respond correctly to deterministic feedback. Works on any backend, works on existing docs when re-validated.
-
-**Validator scope:** Only machine-parsed sections need validation — dep graph, file ownership table, wave/agent structure, completion reports. Prose sections (suitability rationale, interface contracts narrative) are intentionally free-form and excluded.
-
-**Protocol changes required:**
-- `protocol/execution-rules.md` — new E-rule (E16): after Scout writes the IMPL doc, orchestrator runs the validator; on failure, re-engages Scout with the error list; proceeds to human review only when validation passes or retry limit is reached
-- `protocol/state-machine.md` — new SCOUT_VALIDATING state between SCOUT_COMPLETE and PENDING_REVIEW; transitions: pass → PENDING_REVIEW, fail + retries remain → SCOUT_VALIDATING, fail + retries exhausted → BLOCKED
-- `protocol/participants.md` — orchestrator responsibilities updated to include validation step
-
----
-
-### ~~Structured Metadata Blocks~~ — Implemented (v0.10.0)
-
-**Complementary to the correction loop.** Instead of Scout writing a blank page, the machine-parsed sections are required to be fenced code blocks with declared types:
-
-````
-```yaml type=impl-file-ownership
-| File | Agent | Wave | Action |
-...
-```
-
-```yaml type=impl-dep-graph
-Wave 1 (2 parallel agents):
-    [A] pkg/...
-...
-```
-````
-
-The validator only needs to check typed blocks — it ignores prose entirely. The declared type tells the parser exactly which schema to apply. A block that fails to parse produces a precise error message ("impl-dep-graph block: Wave 2 agent [C] missing depends-on line") that Scout can act on.
-
-This separates human-readable prose from machine-parsed data without requiring the whole doc to be JSON. The IMPL doc stays readable; the structured sections are unambiguous.
-
-**Structured outputs as the strong form of this:** For API-backend runs, `output_config` schema enforcement means the validator always passes — the correction loop becomes a no-op. For CLI backend, the loop provides the same guarantee through iteration rather than constraint.
-
-**Protocol changes required:**
-- `protocol/message-formats.md` — IMPL doc schema updated: machine-parsed sections (file ownership, dep graph, wave structure, completion reports) required to use typed fenced blocks (`type=impl-*`); prose sections remain free-form
-- `agents/scout.md` and `prompts/scout.md` — output format template updated to use typed blocks for all structured sections
-- `agents/wave-agent.md` — completion report format updated to typed block
-- `protocol/participants.md` — validator described as a protocol-level tool, not an implementation detail
-
----
-
-### ~~E16 Validator as Bundled Skill Script~~ — Implemented (v0.10.1–0.10.2)
-
-Implemented as `implementations/claude-code/scripts/validate-impl.sh`, symlinked into `~/.claude/skills/saw/scripts/`. Validates all `type=impl-*` typed blocks (file-ownership, dep-graph, wave-structure, completion-report) with structural regex checks. Exits 0 on pass, 1 on failure with plain-text errors the orchestrator passes directly to Scout. `saw-skill.md` step 3 calls it by relative path: `bash scripts/validate-impl.sh "<impl-doc>"`. Script outputs go to stderr (progress) and stdout (errors), following the Agent Skills cross-platform spec for deterministic skill logic.
-
-v0.10.2 added:
-- **E16A:** Required block presence enforcement — docs with any typed blocks must include all three of `impl-file-ownership`, `impl-dep-graph`, and `impl-wave-structure`, or validation fails with a distinct error per missing type. Pre-v0.10.0 docs (no typed blocks) are unaffected.
-- **E16C:** Out-of-band dep graph detection — a second scan pass checks all plain fenced blocks for `[A-Z]` agent refs + the word `Wave`; emits a WARNING to stdout but does not cause exit 1. Orchestrator includes E16C warnings in the Scout correction prompt.
-
----
-
-
-
-### Local-First Web UI (`saw serve`)
-
-**Current state:** SAW runs entirely in the terminal. The IMPL doc review checkpoint is opening a markdown file. Wave execution is opaque background processes.
-
-**Proposed:** `saw serve` starts a local web server (default `localhost:7432`). No hosted infrastructure, no auth, no data leaves the machine.
-
-**Core surfaces:**
-
-**Review screen** — shown after `/saw scout`, before `/saw wave`. Displays:
-- Suitability verdict with rationale
-- Pre-mortem failure modes with likelihood/impact
-- Wave structure (visual, not text)
-- File ownership table — each agent's files, color-coded by agent
-- Interface contracts — exact signatures, frozen at this point
-- Approve / Request Changes / Reject buttons
-
-**Wave execution board** — shown during `/saw wave`. Live updates:
-- Agent cards showing status (pending / running / complete / failed)
-- Completion reports streaming in as agents write to IMPL doc
-- Failure type badge on failed agents with appropriate action button
-- Merge progress after wave completes
-
-**Project memory** — `docs/SAW.md` viewer/editor. Shows established decisions, conventions, completed features timeline.
-
-**Engine:** `scout-and-wave-go` exposes HTTP + SSE API. Web frontend connects to it. IMPL doc is the source of truth — UI reads from and writes to it, never to a separate database.
-
-**Transport decisions:**
-- Live wave events (agent status, output streaming) → SSE. One-way server→client, works through proxies without config, browser auto-reconnects.
-- Plan edits (user submits changes to dep graph, wave structure, interface contracts) → HTTP POST. Simple, sufficient for single-user local tool.
-- WebSocket deferred — only needed if real-time collaborative editing becomes a requirement. SSE stream is unaffected either way; only the edit path would change.
+**Outstanding:**
+- **Wave execution board** — agent cards live-update as agents write completion reports; failure type badge with action button (retry / fix / re-scout / escalate) per failure taxonomy
+- **Project memory view** — `docs/SAW.md` viewer/editor showing decisions, conventions, completed features timeline
+- **Stub report panel** — surfaces stub scan results before approve buttons
+- **NOT SUITABLE research panels** — verdict shown prominently but all research sections still render; "What would make it suitable" callout
 
 ---
 
