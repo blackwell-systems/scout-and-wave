@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.14.0] | 2026-03-08 | E23 per-agent context extraction — eliminates O(N²) token waste in large IMPL docs |
 | [0.13.0] | 2026-03-08 | Quality gates (E20 stub detection, E21 post-wave verification, E22 scaffold build check) |
 | [0.12.0] | 2026-03-08 | Project memory (docs/CONTEXT.md, E17/E18) + failure taxonomy (failure_type field, E19) |
 | [0.11.2] | 2026-03-08 | Fix: validate-impl.sh path in saw-skill.md — use absolute symlink path |
@@ -57,6 +58,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.3.0] | 2026-02-28 | Bootstrap mode for new projects; Wave 0 pattern |
 | [0.2.0] | 2026-02-28 | Decomposed skill prompt; complexity-based suitability heuristic |
 | [0.1.0] | 2026-02-27 | Initial release |
+
+---
+
+## [0.14.0] - 2026-03-08
+
+### Added
+- **E23 — Per-Agent Context Extraction:** Orchestrator constructs a trimmed per-agent context payload for each wave agent instead of passing the full IMPL doc. Payload contains only: (1) that agent's 9-field prompt section, (2) Interface Contracts, (3) File Ownership table, (4) Scaffolds, (5) Quality Gates, (6) absolute IMPL doc path. Eliminates O(N²) token waste where N agents each consumed N-1 other agents' full prompts.
+- **Per-Agent Context Payload schema** in `protocol/message-formats.md` — defines exactly which sections are included/excluded in each agent's launch context payload, the payload format (markdown with `<!-- IMPL doc: {path} -->` header), and the fallback behavior when extraction fails.
+- **E23 in `protocol/execution-rules.md`** — trigger: Orchestrator is about to launch a Wave agent. Required action: extract and format per-agent context payload; pass as agent prompt parameter rather than raw IMPL doc contents.
+- **E23 in `protocol/procedures.md`** — Phase 3 Agent Launch step updated: "Construct per-agent context payload (E23)" replaces "Pass absolute IMPL doc path / Agent reads 9-field prompt from IMPL doc".
+- **`agent-template.md` updated** — intro clarifies that agents receive a trimmed E23 payload, not the full IMPL doc; all required context is included in the prompt.
+- **`saw-skill.md` updated** — orchestrator wave launch step updated to describe E23 extraction before passing prompt to each agent.
+- **`wave-agent.md` updated** — "Your Task" section describes per-agent context payload (E23).
+- **Roadmap:** "Per-Agent Context Slicing for Large IMPL Docs", "Contract Builder Phase", "Tier 2 Merge Conflict Resolution Agent" entries added.
+
+### Changed
+- Protocol version: 0.13.0 → 0.14.0 across all protocol files.
+- README badge: 0.13.0 → 0.14.0; E-rule description updated to E1–E23.
 
 ---
 
