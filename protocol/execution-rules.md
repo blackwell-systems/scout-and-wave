@@ -490,6 +490,89 @@ remediation), message-formats.md (failure_type field definition).
 
 ---
 
+## E20: Stub Detection Post-Wave
+
+**Trigger:** After all wave agents in a wave write their completion reports and before the review checkpoint.
+
+**Required Action:** The Orchestrator:
+1. Collects the union of all `files_changed` and `files_created` from wave agent completion reports.
+2. Runs `bash ${CLAUDE_SKILL_DIR}/scripts/scan-stubs.sh {file1} {file2} ...` with that file list.
+3. Appends the scan output to the IMPL doc under `## Stub Report — Wave {N}` (after the last completion report section for this wave).
+
+Exit code of `scan-stubs.sh` is always 0 — stub detection is informational only. Stubs found are surfaced at the review checkpoint but do not block merge automatically.
+
+**Note:** The script carries the comment `# scan-stubs.sh — SAW stub detection scanner (E20)` — E20 was reserved in the script header before this rule was written.
+
+**Rationale:** An agent can write a syntactically correct function shell with a stub body (`pass`, `...`, `raise NotImplementedError`) and mark `[COMPLETE]`. The human reviewer approving the plan (not the diff) may not catch it. Stub detection surfaces hollow implementations before they ship.
+
+**Related Rules:** See E21 (post-wave verification gates), `message-formats.md` (## Stub Report Section Format).
+
+---
+
+## E21: Automated Post-Wave Verification
+
+**Trigger:** After all wave agents in a wave report complete and after E20 stub scan, before merge.
+
+**Required Action:** If the IMPL doc contains a `## Quality Gates` section, the Orchestrator reads the configured gates and runs each command:
+
+| Gate type   | Example command              |
+|-------------|------------------------------|
+| `typecheck` | `tsc --noEmit`, `mypy .`     |
+| `test`      | `go test ./...`, `npm test`  |
+| `lint`      | `go vet ./...`, `ruff check` |
+| `custom`    | Any command in the IMPL doc  |
+
+For each gate:
+- `required: true` — non-zero exit code **blocks merge**. Report failure to user.
+- `required: false` — non-zero exit code is a **warning only**. Log and continue.
+
+**Flow levels** (set in `## Quality Gates` section):
+- `quick` — skip all gates
+- `standard` — run all gates; failures warn
+- `full` — run all gates; required failures block merge
+
+**Out of scope:** AI Verification Gate (an agent that reviews implementation correctness). Subprocess-based gates only.
+
+**Rationale:** Individual agents run gates in isolation (their own package scope). The orchestrator's post-wave gate runs unscoped — catching cross-package cascade failures that agent-scoped gates miss.
+
+**Related Rules:** See E20 (stub detection), E22 (scaffold build verification), `message-formats.md` (## Quality Gates Section Format).
+
+---
+
+## E22: Scaffold Build Verification
+
+**Trigger:** Scaffold Agent completes file creation, before committing.
+
+**Required Action:** The Scaffold Agent must run, in order:
+
+1. **Dependency resolution** — ensure declared dependencies resolve:
+   - Go: `go get ./...`
+   - Python: `pip install -e .` or `uv sync`
+   - Node: `npm install`
+   - Rust: `cargo fetch`
+
+2. **Dependency cleanup** (where applicable):
+   - Go: `go mod tidy`
+
+3. **Build verification** — confirm the project compiles with scaffold files present:
+   - Go: `go build ./...`
+   - Rust: `cargo build`
+   - Node: `tsc --noEmit` or `npm run build`
+   - Python: `python -m mypy .` or `python -m py_compile`
+
+**Failure behavior:** If any step fails, the Scaffold Agent:
+- Does NOT commit the scaffold files
+- Marks each failing scaffold file's status as `FAILED: {error output}` in the IMPL doc Scaffolds section
+- Reports `status: FAILED` in its completion report
+
+The Orchestrator reads this and halts before creating any worktrees. The user must revise the interface contracts and re-run the Scaffold Agent.
+
+**Rationale:** Scaffold files define types and interfaces that Wave agents import. A scaffold file with a syntax error, wrong import path, or missing dependency causes every Wave agent in the next wave to fail immediately — wasting the full wave execution.
+
+**Related Rules:** See E5 (scaffold agent gate), `message-formats.md` (Scaffolds Section Format), `agents/scaffold-agent.md`.
+
+---
+
 ## Cross-References
 
 - See `preconditions.md` for conditions that must hold before execution begins
@@ -499,3 +582,6 @@ remediation), message-formats.md (failure_type field definition).
 - E17: Scout reads `docs/CONTEXT.md` before suitability assessment — see also `message-formats.md` (docs/CONTEXT.md schema)
 - E18: Orchestrator creates/updates `docs/CONTEXT.md` after WAVE_VERIFIED → COMPLETE — see also E15, `message-formats.md`
 - E19: Orchestrator applies `failure_type` decision tree on partial/blocked agents — see also E7, E7a, `message-formats.md`
+- E20: Orchestrator runs stub detection after each wave — see also E21, `message-formats.md` (## Stub Report Section Format)
+- E21: Orchestrator runs post-wave verification gates before merge — see also E20, E22, `message-formats.md` (## Quality Gates Section Format)
+- E22: Scaffold Agent runs build verification before committing scaffold files — see also E5, `message-formats.md` (Scaffolds Section Format), `agents/scaffold-agent.md`
