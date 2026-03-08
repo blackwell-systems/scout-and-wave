@@ -300,6 +300,12 @@ This separates human-readable prose from machine-parsed data without requiring t
 
 ---
 
+### ~~E16 Validator as Bundled Skill Script~~ — Implemented (v0.10.1)
+
+Implemented as `implementations/claude-code/scripts/validate-impl.sh`, symlinked into `~/.claude/skills/saw/scripts/`. Validates all `type=impl-*` typed blocks (file-ownership, dep-graph, wave-structure, completion-report) with structural regex checks. Exits 0 on pass, 1 on failure with plain-text errors the orchestrator passes directly to Scout. `saw-skill.md` step 3 calls it by relative path: `bash scripts/validate-impl.sh "<impl-doc>"`. Script outputs go to stderr (progress) and stdout (errors), following the Agent Skills cross-platform spec for deterministic skill logic.
+
+---
+
 
 
 ### Local-First Web UI (`saw serve`)
