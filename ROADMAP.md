@@ -145,9 +145,11 @@ Project type is auto-detected from marker files (`package.json`, `Cargo.toml`, `
 
 ### Stub Detection at Review Checkpoint
 
-**Current state:** The review checkpoint is a human reading the IMPL doc and approving the wave structure. There is no automated check on what the wave agents actually produced.
+**Current state:** `implementations/claude-code/scripts/scan-stubs.sh` (E17) exists and correctly scans changed files for stub patterns. **Not yet done:** the E-rule requiring the orchestrator to run it automatically post-wave, the `## Stub Report` section written to IMPL doc by the orchestrator, and the web UI panel surfacing the report before approve buttons.
 
 **Problem:** An agent can write a function shell — correct signature, correct file location, correct import — but with `pass`, `...`, or `raise NotImplementedError` as the body, then mark `[COMPLETE]`. The IMPL doc looks fine. The human reviewer looking at the plan (not the diff) would not catch it. The stub ships.
+
+**Remaining work:** Wire `scan-stubs.sh` into orchestrator as an automatic post-wave step (E-rule in `execution-rules.md`), write results to `## Stub Report` in IMPL doc, surface in web UI review screen.
 
 **Proposed:** After all wave agents complete and before the review checkpoint, the orchestrator scans every file touched by wave agents for stub patterns:
 
@@ -214,7 +216,8 @@ CLI backend:   Scout prompt → free-form markdown → disk → markdown parser 
 **Implemented (`scout-and-wave-web`):** `saw serve` runs at `localhost:7432`. Review screen shows suitability verdict, pre-mortem, wave structure (SVG timeline + DAG), file ownership table, interface contracts, and Approve/Reject. Split-pane IMPL list with resizable/collapsible sidebar. SSE-based wave board with agent status cards.
 
 **Outstanding:**
-- **Wave execution board** — agent cards live-update as agents write completion reports; failure type badge with action button (retry / fix / re-scout / escalate) per failure taxonomy
+- **Merge Wave button + post-merge test runner** — in progress (2026-03-08, Wave 1 agents running)
+- **Wave execution board** — failure type badge with action button (retry / fix / re-scout / escalate) per failure taxonomy
 - **Project memory view** — `docs/SAW.md` viewer/editor showing decisions, conventions, completed features timeline
 - **Stub report panel** — surfaces stub scan results before approve buttons
 - **NOT SUITABLE research panels** — verdict shown prominently but all research sections still render; "What would make it suitable" callout
