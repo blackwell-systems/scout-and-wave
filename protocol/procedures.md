@@ -21,7 +21,7 @@ SAW procedures are executed by the Orchestrator (synchronous agent in the user's
 ## Procedure 1: Scout (Suitability Gate + IMPL Doc Production)
 
 **Entry state:** SCOUT_PENDING
-**Exit state:** REVIEWED (if SUITABLE) or NOT_SUITABLE (terminal)
+**Exit state:** SCOUT_VALIDATING (transitions to REVIEWED on validation pass, or BLOCKED on retry exhaustion)
 **Executor:** Scout agent (asynchronous)
 
 ### Steps
@@ -67,13 +67,16 @@ SAW procedures are executed by the Orchestrator (synchronous agent in the user's
    - Field 7: Constraints
    - Field 8: Report instructions
 
-8. **Completion:** Scout reports completion, Orchestrator reads IMPL doc, transitions to REVIEWED
+8. **Completion:** Scout reports completion, Orchestrator reads IMPL doc, transitions to SCOUT_VALIDATING
 
 ### Orchestrator Actions After Scout Completes
 
 - Read IMPL doc suitability verdict
 - If `NOT SUITABLE`: Surface verdict to human with failed preconditions and alternatives, terminate protocol
-- If `SUITABLE`: Surface IMPL doc to human, request review and approval
+- If `SUITABLE`: Run IMPL doc validator on all `type=impl-*` typed-block sections (E16)
+  - **Validation pass:** Transition to REVIEWED; surface IMPL doc to human for review and approval
+  - **Validation fail:** Issue correction prompt to Scout listing each error (block type, failure description, line/block location); Scout rewrites only the failing sections; re-run validator (up to 3 attempts)
+  - **Retry limit exhausted:** Transition to BLOCKED; surface validation errors to human; do not enter REVIEWED
 - Await explicit human approval before advancing to SCAFFOLD_PENDING or WAVE_PENDING
 
 ---

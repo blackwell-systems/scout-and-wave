@@ -1,4 +1,5 @@
 # IMPL: Protocol Robustness — Typed Metadata Blocks, Validation Loop, Pre-Mortem
+<!-- SAW:COMPLETE 2026-03-07 -->
 
 **Feature:** Three protocol-level improvements: typed metadata blocks in IMPL docs, Scout output validation + correction loop (E16), and a Pre-Mortem section requirement.
 **Repository:** /Users/dayna.blackwell/code/scout-and-wave
@@ -922,3 +923,144 @@ Wave 2: [C] [D] [E] [F]    <- 4 parallel agents (consumer files)
 | 2 | E | participants.md — orchestrator validation responsibility | TO-DO |
 | 2 | F | agents/wave-agent.md — typed completion report format | TO-DO |
 | — | Orch | Post-merge integration, cascade candidate checks, SAW:COMPLETE marker | TO-DO |
+
+---
+
+### Agent B - Completion Report
+
+```yaml type=impl-completion-report
+status: complete
+worktree: .claude/worktrees/wave1-agent-B
+branch: wave1-agent-B
+commit: aa5ec92
+files_changed:
+  - protocol/execution-rules.md
+files_created: []
+interface_deviations: []
+out_of_scope_deps: []
+tests_added: []
+verification: PASS (grep -n "## E16" | grep -n "E1–E16" | grep -n "SCOUT_VALIDATING" — all three returned matches)
+```
+
+---
+
+### Agent A - Completion Report
+
+```yaml type=impl-completion-report
+status: complete
+worktree: .claude/worktrees/wave1-agent-A
+branch: wave1-agent-A
+commit: 7c9397a
+files_changed:
+  - protocol/message-formats.md
+files_created: []
+interface_deviations: []
+out_of_scope_deps: []
+tests_added: []
+verification: PASS (wc -l returned 545 lines; grep type=impl- returned 12 matches; grep Pre-Mortem returned 8 matches; grep impl-completion-report returned 10 matches)
+```
+
+All six changes implemented per the agent prompt:
+- (a) IMPL Doc Structure skeleton updated to use indented-block format with typed-block annotations shown on File Ownership, Dependency Graph, Wave Structure, and Completion Reports sections
+- (b) New "Typed Metadata Blocks" section added after IMPL Doc Structure, defining all four block types (impl-file-ownership, impl-dep-graph, impl-wave-structure, impl-completion-report) with exact fence annotations and realistic examples per IC-1
+- (c) Completion Report Format section updated: opening fence changed from plain ```yaml to ```yaml type=impl-completion-report; typed-block annotation note added at end of section
+- (d) Orchestrator Parsing Requirements updated with Location paragraph explaining typed-block lookup method
+- (e) New "Pre-Mortem Section Format" section added after Scaffolds Section Format, with full schema, placement rule, realistic example, and field definitions per IC-2
+- (f) Message Flow Sequence updated with step 1a documenting E16 validation loop between Scout write and human review
+
+Downstream agents (C and F) must read the Typed Metadata Blocks section in full before editing their files — the exact fence annotations are defined there.
+
+---
+
+### Agent C - Completion Report
+
+```yaml type=impl-completion-report
+status: complete
+worktree: .claude/worktrees/wave2-agent-C
+branch: wave2-agent-C
+commit: 7632ffa
+files_changed:
+  - implementations/claude-code/prompts/agents/scout.md
+  - implementations/claude-code/prompts/scout.md
+files_created: []
+interface_deviations: []
+out_of_scope_deps: []
+tests_added: []
+verification: PASS (grep type=impl- returned 3 matches per file; grep Pre-Mortem returned 2 matches per file; grep E16 returned 2 matches per file — all 6 verification gate greps returned matches)
+```
+
+All changes applied identically to both owned files and kept in sync:
+- (a) Dependency Graph block: bare fence replaced with `` ```yaml type=impl-dep-graph ``
+- (b) File Ownership table: wrapped in `` ```yaml type=impl-file-ownership `` fenced block
+- (c) Wave Structure: replaced with `` ```yaml type=impl-wave-structure `` fenced block; `scout.md` required adding a new `## Wave Structure` section before `## Wave 1` since that file had no prior Wave Structure block in its output template
+- (d) Pre-Mortem section template added after Scaffolds, before Known Issues, with overall risk field and failure modes table; includes Scout instruction to think adversarially before human review checkpoint
+- (e) Step 10 added to Process section of both files: E16 correction loop note directing Scout to rewrite only failing sections on correction prompt
+- (f) Both files verified synchronized on all changed sections
+
+---
+
+### Agent D - Completion Report
+
+```yaml type=impl-completion-report
+status: complete
+worktree: .claude/worktrees/wave2-agent-D
+branch: wave2-agent-D
+commit: 8be4487
+files_changed:
+  - protocol/state-machine.md (modified, +31/-4 lines)
+files_created: []
+interface_deviations: []
+out_of_scope_deps:
+  - protocol/procedures.md may need a SCOUT_VALIDATING entry added to match the new state.
+    Suggested owner: Orchestrator post-merge (cascade candidate flagged in IMPL doc checklist).
+tests_added: []
+verification:
+  - "grep -n SCOUT_VALIDATING protocol/state-machine.md: PASS (9 matches — catalog, primary flow diagram x2, failure path x3, transition guards x3, entry actions)"
+  - "grep -n E16 protocol/state-machine.md: PASS (3 matches in transition guards and entry actions)"
+  - "grep -n E1-E16 protocol/state-machine.md: PASS (1 match in correctness properties)"
+```
+
+---
+
+### Agent F - Completion Report
+
+```yaml type=impl-completion-report
+status: complete
+worktree: .claude/worktrees/wave2-agent-F
+branch: wave2-agent-F
+commit: 26122a6
+files_changed:
+  - implementations/claude-code/prompts/agents/wave-agent.md
+files_created: []
+interface_deviations: []
+out_of_scope_deps: []
+tests_added: []
+verification: PASS (grep -n "impl-completion-report" wave-agent.md returned 3 matches)
+```
+
+All three changes implemented per agent prompt:
+- (a) Completion Report template updated from bare fenced block to structured YAML using `yaml type=impl-completion-report` opening fence, with fields matching message-formats.md exactly: status, worktree, branch, commit, files_changed, files_created, interface_deviations, out_of_scope_deps, tests_added, verification
+- (b) Introductory note added to the Completion Report section explicitly stating the YAML block must use `yaml type=impl-completion-report` as the opening fence, with rationale (orchestrator parses by type annotation, not heading text)
+- (c) Rules section updated to reference the typed-block annotation requirement inline with the "Update IMPL doc with completion report" bullet
+
+---
+
+### Agent E - Completion Report
+
+```yaml type=impl-completion-report
+status: complete
+worktree: .claude/worktrees/wave2-agent-E
+branch: wave2-agent-E
+commit: 3205480
+files_changed:
+  - protocol/participants.md (modified, +7/-0 lines)
+  - implementations/claude-code/prompts/saw-skill.md (modified, +5/-4 lines)
+files_created: []
+interface_deviations: []
+out_of_scope_deps: []
+tests_added: []
+verification:
+  - "grep -n E16 protocol/participants.md: PASS (2 matches)"
+  - "grep -n 'validator|validation|typed-block' protocol/participants.md: PASS (2 matches)"
+  - "grep -n 'E16|typed-block|correction prompt' implementations/claude-code/prompts/saw-skill.md: PASS (3 matches)"
+```
