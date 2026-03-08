@@ -327,6 +327,11 @@ Record the verdict and its rationale in the IMPL doc under a
    # Rust: cargo build && cargo clippy -- -D warnings && cargo test
    ```
 
+10. **Expect validation feedback (E16).** After you write the IMPL doc, the orchestrator
+    runs a validator on all `type=impl-*` blocks (E16). If the validator reports errors,
+    you will receive a correction prompt listing specific failures by section name and
+    block type. Rewrite only the failing sections — do not regenerate the entire document.
+
 ## Output Format
 
 Write the following to `docs/IMPL/IMPL-<feature-slug>.md`:
@@ -356,6 +361,18 @@ types.
 |------|----------|-------------|--------|
 | `...` | `...` | `...` | pending |
 
+### Pre-Mortem
+
+Write the Pre-Mortem before the human review checkpoint. Think adversarially about what could go wrong with your plan.
+
+**Overall risk:** low | medium | high
+
+**Failure modes:**
+
+| Scenario | Likelihood | Impact | Mitigation |
+|----------|-----------|--------|------------|
+| {description of what could go wrong} | low | medium | {concrete action to prevent or recover} |
+
 ### Known Issues
 
 List any pre-existing test failures, build warnings, or known bugs that agents
@@ -371,7 +388,7 @@ Example:
 
 ### Dependency Graph
 
-```
+```yaml type=impl-dep-graph
 Wave 1 (N parallel agents[, description]):
     [A] path/to/file.go
          (brief description of what agent A does)
@@ -398,17 +415,21 @@ code fence.]
 
 ### File Ownership
 
+```yaml type=impl-file-ownership
 | File | Agent | Wave | Depends On |
 |------|-------|------|------------|
 | ...  | ...   | ...  | ...        |
+```
 
 ### Wave Structure
 
+```yaml type=impl-wave-structure
 Wave 1: [A] [B] [C]          <- 3 parallel agents (foundation)
            | (A+B complete)
 Wave 2:   [D] [E]            <- 2 parallel agents
            | (D+E complete)
 Wave 3:    [F] [G]           <- 2 parallel agents
+```
 
 ### Agent Prompts
 
