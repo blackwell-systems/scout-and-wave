@@ -388,9 +388,114 @@ to human. Do not enter REVIEWED.
 
 ---
 
+## E17: Scout Reads Project Memory
+
+**Trigger:** Scout begins a new suitability assessment
+
+**Required Action:** Before running the suitability gate, the Scout checks for
+`docs/CONTEXT.md` in the target project. If the file exists, Scout reads it in
+full and uses its contents to inform the suitability assessment:
+- `established_interfaces` — avoids proposing types that already exist
+- `decisions` — respects prior architectural decisions; does not contradict them
+- `conventions` — follows project naming, error handling, and testing conventions
+- `features_completed` — understands project history and prior wave structure
+
+**If absent:** Scout proceeds normally without it. `docs/CONTEXT.md` is optional;
+projects that have never completed a SAW feature will not have one.
+
+**Rationale:** Without project memory, each Scout run starts cold. After several
+features, the project accumulates naming conventions, module boundaries, and
+interface decisions that the Scout would otherwise rediscover (expensively) or
+miss entirely.
+
+**Related Rules:** See E18 (Orchestrator creates/updates docs/CONTEXT.md after
+each completed feature).
+
+---
+
+## E18: Orchestrator Updates Project Memory
+
+**Trigger:** Final wave's post-merge verification passes (WAVE_VERIFIED → COMPLETE
+transition — same trigger as E15)
+
+**Required Action:** The Orchestrator creates or updates `docs/CONTEXT.md` in the
+target project:
+
+1. If `docs/CONTEXT.md` does not exist, create it with the schema defined in
+   `message-formats.md` (## docs/CONTEXT.md — Project Memory section).
+
+2. Append to `features_completed`:
+   ```yaml
+   - slug: {feature-slug}
+     impl_doc: docs/IMPL/IMPL-{feature-slug}.md
+     waves: {N}
+     agents: {total agent count}
+     date: {YYYY-MM-DD}
+   ```
+
+3. Append any architectural decisions made during this feature to `decisions`.
+   Decisions are identified from interface contracts and any `out_of_scope_deps`
+   resolutions that reveal project conventions.
+
+4. Append any new scaffold-file interfaces to `established_interfaces`. An
+   interface is "established" if it was committed as a scaffold file and is now
+   part of the project's public module boundary.
+
+5. Commit: `git commit -m "chore: update docs/CONTEXT.md for {feature-slug}"`
+
+**Constraint:** E18 runs after E15 (IMPL doc completion marker). The commit order
+is: E15 writes `<!-- SAW:COMPLETE -->` to the IMPL doc, then E18 updates
+`docs/CONTEXT.md`, then a single commit captures both.
+
+**When to omit:** If no new decisions, interfaces, or conventions were established
+during the feature, E18 still appends to `features_completed` but may omit the
+other fields.
+
+**Related Rules:** See E15 (IMPL doc completion marker), E17 (Scout reads project
+memory).
+
+---
+
+## E19: Failure Type Decision Tree
+
+**Trigger:** Any agent reports `status: partial` or `status: blocked` with a
+`failure_type` field
+
+**Required Action:** The Orchestrator reads `failure_type` and applies the
+corresponding action:
+
+| failure_type   | Orchestrator action |
+|----------------|---------------------|
+| `transient`    | Retry automatically, up to 2 times. If all retries fail, escalate to human. Log each retry attempt. |
+| `fixable`      | Read agent's free-form notes for the specific fix. Apply the fix (install dependency, correct path, update config). Relaunch the agent. One retry only; if it fails again, escalate. |
+| `needs_replan` | Do not retry. Re-engage Scout with the agent's completion report as additional context. Scout produces a revised IMPL doc. Human reviews before wave re-executes. |
+| `escalate`     | Surface immediately to human with agent's full completion report. No automatic action. |
+
+**Backward compatibility:** If `failure_type` is absent from a completion report
+that has `status: partial` or `status: blocked`, treat as `escalate` (most
+conservative fallback). This preserves compatibility with agents that predate E19.
+
+**Relationship to E7:** E7 defines the general failure handling rule (wave does
+not merge, enters BLOCKED state). E19 is the decision tree within that BLOCKED
+state — it specifies what the Orchestrator does next based on failure classification.
+E7 and E19 are complementary; E19 does not supersede E7.
+
+**Relationship to E7a:** E7a defines automatic remediation for correctable failures
+in `--auto` mode. E19 extends this to non-`--auto` mode for `transient` and
+`fixable` failures. In `--auto` mode, E7a and E19 apply together; E7a's retry
+limit (2 retries) applies.
+
+**Related Rules:** See E7 (agent failure handling), E7a (automatic failure
+remediation), message-formats.md (failure_type field definition).
+
+---
+
 ## Cross-References
 
 - See `preconditions.md` for conditions that must hold before execution begins
 - See `invariants.md` for runtime constraints that must hold during execution
 - See `state-machine.md` and `message-formats.md` for state machine and message format specifications
 - See `state-machine.md` for the SCOUT_VALIDATING state triggered by E16
+- E17: Scout reads `docs/CONTEXT.md` before suitability assessment — see also `message-formats.md` (docs/CONTEXT.md schema)
+- E18: Orchestrator creates/updates `docs/CONTEXT.md` after WAVE_VERIFIED → COMPLETE — see also E15, `message-formats.md`
+- E19: Orchestrator applies `failure_type` decision tree on partial/blocked agents — see also E7, E7a, `message-formats.md`
