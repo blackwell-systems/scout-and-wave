@@ -470,6 +470,7 @@ corresponding action:
 | `fixable`      | Read agent's free-form notes for the specific fix. Apply the fix (install dependency, correct path, update config). Relaunch the agent. One retry only; if it fails again, escalate. |
 | `needs_replan` | Do not retry. Re-engage Scout with the agent's completion report as additional context. Scout produces a revised IMPL doc. Human reviews before wave re-executes. |
 | `escalate`     | Surface immediately to human with agent's full completion report. No automatic action. |
+| `timeout`      | Retry once with an explicit note in the retry prompt: "Your previous run exhausted its turn limit. Commit any partial work immediately, then complete only what is essential. Defer non-critical work." If the retry also times out, escalate to human — scope may need to be reduced in the IMPL doc. |
 
 **Backward compatibility:** If `failure_type` is absent from a completion report
 that has `status: partial` or `status: blocked`, treat as `escalate` (most

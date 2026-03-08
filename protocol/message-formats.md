@@ -199,7 +199,7 @@ Wave 2: [C] [D]                    <- 2 parallel agents (consumer files)
 
 ```yaml type=impl-completion-report
 status: complete | partial | blocked
-failure_type: transient | fixable | needs_replan | escalate  # required when status is partial or blocked; omit when status is complete
+failure_type: transient | fixable | needs_replan | escalate | timeout  # required when status is partial or blocked; omit when status is complete
 repo: /absolute/path/to/repo  # omit for single-repo waves
 worktree: .claude/worktrees/wave{N}-agent-{letter}
 branch: wave{N}-agent-{letter}
@@ -362,7 +362,7 @@ Structured YAML block written by each agent to the IMPL doc. Machine-readable. O
 
 ```yaml type=impl-completion-report
 status: complete | partial | blocked
-failure_type: transient | fixable | needs_replan | escalate
+failure_type: transient | fixable | needs_replan | escalate | timeout
   # Required when status is partial or blocked.
   # Omit (or set to null) when status is complete.
 worktree: .claude/worktrees/wave{N}-agent-{letter}
@@ -399,6 +399,7 @@ verification: PASS | FAIL ({command} - N/N tests)
   - `fixable` — agent hit a concrete blocker but knows the fix (e.g., missing dependency, wrong import path). Orchestrator applies fix and relaunches.
   - `needs_replan` — agent discovered the IMPL doc decomposition is wrong (ownership conflict, undiscoverable interface, scope larger than estimated). Orchestrator re-engages Scout with agent's findings as additional context.
   - `escalate` — agent cannot continue and has no recovery path. Human intervention required.
+  - `timeout` — agent exhausted its turn limit before completing. Orchestrator retries once with an explicit instruction to commit partial work and prioritize essential work only. If retry also times out, escalate — scope reduction in the IMPL doc may be required.
   - Required when `status` is `partial` or `blocked`. Omit when `status` is `complete`.
 
 - **repo:** Absolute path to the repository this agent worked in. Required for cross-repo waves so the Orchestrator knows which repo to merge in. Omit for single-repo waves.
@@ -692,7 +693,7 @@ Orchestrators must parse these fields from each completion report:
 3. **Out-of-scope dependencies:** `out_of_scope_deps` array — generates post-merge fix list
 4. **Verification results:** `verification: PASS | FAIL` — gates merge per agent
 5. **File lists:** `files_changed` and `files_created` — used for conflict prediction before touching the working tree
-6. **Failure type:** `failure_type: transient | fixable | needs_replan | escalate` — drives automatic remediation decision tree (E19). Present only when `status` is `partial` or `blocked`.
+6. **Failure type:** `failure_type: transient | fixable | needs_replan | escalate | timeout` — drives automatic remediation decision tree (E19). Present only when `status` is `partial` or `blocked`.
 
 **Location:** The orchestrator locates completion reports by finding `` ```yaml type=impl-completion-report `` blocks in the IMPL doc — not by heading text, line number, or free-form YAML heuristics. Each such block is associated with the nearest preceding `### Agent {letter} - Completion Report` heading. Plain `` ```yaml `` blocks without the `type=` annotation are not parsed as completion reports.
 

@@ -242,7 +242,7 @@ then add free-form notes beneath it.
 
 ```yaml type=impl-completion-report
 status: complete | partial | blocked
-failure_type: transient | fixable | needs_replan | escalate
+failure_type: transient | fixable | needs_replan | escalate | timeout
   # Required when status is partial or blocked. Omit when status is complete.
 worktree: .claude/worktrees/wave{N}-agent-{letter}
 branch: wave{N}-agent-{letter}
@@ -265,6 +265,7 @@ verification: PASS | FAIL ({command} - N/N tests)
 - `fixable` — you know the specific fix (missing dependency, wrong path); describe it in your notes
 - `needs_replan` — the IMPL doc decomposition is wrong (ownership conflict, undiscoverable interface); describe what the Scout got wrong
 - `escalate` — no path forward; human judgment required
+- `timeout` — you are approaching the turn limit and cannot finish; commit whatever is complete, document exactly what remains, and stop cleanly so the Orchestrator can retry with scope-reduction instructions
 
 **E19: Failure type.** When reporting `status: partial` or `status: blocked`, the `failure_type` field enables the Orchestrator to apply the appropriate remediation strategy automatically rather than always surfacing to the human.
 
