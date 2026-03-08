@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.10.1] | 2026-03-07 | E16 validator script (scripts/validate-impl.sh); saw-skill.md calls script by path |
 | [0.10.0] | 2026-03-07 | Typed metadata blocks (type=impl-*), E16 validation+correction loop, Pre-Mortem section, SCOUT_VALIDATING state |
 | [0.9.5] | 2026-03-07 | Scout dep graph format prescribed; structured Wave/Agent/depends-on template replaces free-form prose |
 | [0.9.4] | 2026-03-07 | E15: IMPL doc completion lifecycle; Scout output requires ## Wave N headers; documentation audit fixes |
@@ -48,6 +49,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.3.0] | 2026-02-28 | Bootstrap mode for new projects; Wave 0 pattern |
 | [0.2.0] | 2026-02-28 | Decomposed skill prompt; complexity-based suitability heuristic |
 | [0.1.0] | 2026-02-27 | Initial release |
+
+---
+
+## [0.10.1] - 2026-03-07
+
+### Added
+
+- **E16 validator script (`implementations/claude-code/scripts/validate-impl.sh`).** Deterministic bash script that validates all `type=impl-*` typed blocks in an IMPL doc. Checks `impl-file-ownership` (header row, data rows, column count), `impl-dep-graph` (Wave headers, agent lines, root/depends-on annotations), `impl-wave-structure` (Wave lines, agent letters), and `impl-completion-report` (required fields, valid status values). Exits 0 on pass, 1 on failure with plain-text error list suitable for direct use as a Scout correction prompt. Per the Agent Skills cross-platform spec — deterministic logic in `scripts/`, LLM reasoning in skill instructions.
+
+### Changed
+
+- **`implementations/claude-code/prompts/saw-skill.md`** — E16 step updated from prose description to concrete script call: `bash scripts/validate-impl.sh "<impl-doc-path>"`. Orchestrator reads exit code and stdout; on failure, sends error output directly to Scout as correction prompt.
 
 ---
 
