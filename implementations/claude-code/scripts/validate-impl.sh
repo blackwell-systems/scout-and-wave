@@ -97,8 +97,8 @@ validate_dep_graph() {
     return
   fi
 
-  # Must have at least one agent line of the form [A] or [B] etc.
-  if ! echo "$content" | grep -qE "\[[A-Z]\]"; then
+  # Must have at least one agent line of the form [A] or [B] or [A2] etc.
+  if ! echo "$content" | grep -qE "\[[A-Z][2-9]?\]"; then
     add_error "impl-dep-graph block (line $lineno): no agent lines found — expected lines like '    [A] path/to/file'"
   fi
 
@@ -107,7 +107,7 @@ validate_dep_graph() {
   local agent_block=""
   local current_agent=""
   while IFS= read -r ln; do
-    if [[ "$ln" =~ ^[[:space:]]+\[([A-Z])\] ]]; then
+    if [[ "$ln" =~ ^[[:space:]]+\[([A-Z][2-9]?)\] ]]; then
       # If we were tracking a previous agent, check it
       if [[ -n "$current_agent" && -n "$agent_block" ]]; then
         if ! echo "$agent_block" | grep -qE "✓ root|depends on:"; then
@@ -139,9 +139,9 @@ validate_wave_structure() {
     return
   fi
 
-  # Must reference at least one agent letter
-  if ! echo "$content" | grep -qE "\[[A-Z]\]"; then
-    add_error "impl-wave-structure block (line $lineno): no agent letters found — expected [A], [B], etc."
+  # Must reference at least one agent ID ([A], [B], [A2], etc.)
+  if ! echo "$content" | grep -qE "\[[A-Z][2-9]?\]"; then
+    add_error "impl-wave-structure block (line $lineno): no agent IDs found — expected [A], [B], [A2], etc."
   fi
 }
 
@@ -233,7 +233,7 @@ while IFS= read -r line; do
   if [[ "$in_plain_block" == "true" ]]; then
     if [[ "$line" =~ ^\`\`\`[[:space:]]*$ ]]; then
       # Closing fence — check accumulated content
-      if echo "$plain_block_buf" | grep -qE "\[[A-Z]\]" && echo "$plain_block_buf" | grep -q "Wave"; then
+      if echo "$plain_block_buf" | grep -qE "\[[A-Z][2-9]?\]" && echo "$plain_block_buf" | grep -q "Wave"; then
         echo "WARNING: possible dep-graph content found outside typed block at line $plain_block_start — use \`\`\`yaml type=impl-dep-graph\`\`\`"
       fi
       in_plain_block=false
