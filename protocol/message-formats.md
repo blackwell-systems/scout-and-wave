@@ -189,6 +189,7 @@ Wave 2: [C] [D]                    <- 2 parallel agents (consumer files)
 
 ```yaml type=impl-completion-report
 status: complete | partial | blocked
+failure_type: transient | fixable | needs_replan | escalate  # required when status is partial or blocked; omit when status is complete
 repo: /absolute/path/to/repo  # omit for single-repo waves
 worktree: .claude/worktrees/wave{N}-agent-{letter}
 branch: wave{N}-agent-{letter}
@@ -351,6 +352,9 @@ Structured YAML block written by each agent to the IMPL doc. Machine-readable. O
 
 ```yaml type=impl-completion-report
 status: complete | partial | blocked
+failure_type: transient | fixable | needs_replan | escalate
+  # Required when status is partial or blocked.
+  # Omit (or set to null) when status is complete.
 worktree: .claude/worktrees/wave{N}-agent-{letter}
 branch: wave{N}-agent-{letter}
 commit: {sha}  # or "uncommitted" if commit failed
@@ -379,6 +383,13 @@ verification: PASS | FAIL ({command} - N/N tests)
   - `complete`: All work done, verification passed, committed
   - `partial`: Some work done, but incomplete or verification failed. Explain what remains in notes.
   - `blocked`: Cannot proceed without changes outside agent's scope (interface contract unimplementable, missing dependency, etc.). Explain blocker in notes.
+
+- **failure_type:**
+  - `transient` — intermittent failure (network, git lock, flaky test). Orchestrator may retry automatically (see E19).
+  - `fixable` — agent hit a concrete blocker but knows the fix (e.g., missing dependency, wrong import path). Orchestrator applies fix and relaunches.
+  - `needs_replan` — agent discovered the IMPL doc decomposition is wrong (ownership conflict, undiscoverable interface, scope larger than estimated). Orchestrator re-engages Scout with agent's findings as additional context.
+  - `escalate` — agent cannot continue and has no recovery path. Human intervention required.
+  - Required when `status` is `partial` or `blocked`. Omit when `status` is `complete`.
 
 - **repo:** Absolute path to the repository this agent worked in. Required for cross-repo waves so the Orchestrator knows which repo to merge in. Omit for single-repo waves.
 
@@ -446,6 +457,63 @@ Written by the Scout into the IMPL doc to specify type scaffold files. Read and 
 - Existing codebase has all needed types: agents import from existing code, no new shared types
 
 **Interface freeze (E2):** Scaffold files are committed to HEAD before worktrees are created. Once worktrees branch from HEAD, interface contracts become immutable. Revising a scaffold file requires recreating all worktrees or descoping the wave.
+
+---
+
+## docs/CONTEXT.md — Project Memory
+
+A persistent project-level document at `docs/CONTEXT.md` in the target project. Created by the Orchestrator after the first completed feature (E18). Read by the Scout before every suitability assessment (E17).
+
+**Canonical schema:**
+
+```yaml
+# docs/CONTEXT.md — Project memory for Scout-and-Wave
+created: YYYY-MM-DD
+protocol_version: "x.y.z"
+
+architecture:
+  description: string
+  modules:
+    - name: string
+      path: string
+      responsibility: string
+
+decisions:
+  - decision: string
+    rationale: string
+    date: YYYY-MM-DD
+    feature: string  # IMPL doc slug
+
+conventions:
+  naming: string
+  error_handling: string
+  testing: string
+
+established_interfaces:
+  - name: string
+    path: string
+    signature: string
+    introduced_in: string  # IMPL doc slug
+
+features_completed:
+  - slug: string
+    impl_doc: string
+    waves: number
+    agents: number
+    date: YYYY-MM-DD
+```
+
+**Field definitions:**
+
+- **created:** ISO date when this file was first created by the Orchestrator.
+- **protocol_version:** SAW protocol version in use when the file was created or last updated.
+- **architecture:** High-level description of the project's structure and its constituent modules.
+- **decisions:** Log of architectural decisions made during SAW feature work, linked to the IMPL doc that introduced them.
+- **conventions:** Project-wide conventions established through SAW waves (naming, error handling, testing patterns).
+- **established_interfaces:** Interfaces introduced by prior waves that downstream agents may depend on.
+- **features_completed:** Ordered record of all features delivered via SAW, for Scout context and project health tracking.
+
+**Usage note:** The file is optional. Projects that have not completed a SAW feature will not have one. Scout handles absence gracefully (E17). Orchestrator creates it on first completion (E18).
 
 ---
 
@@ -552,6 +620,7 @@ Orchestrators must parse these fields from each completion report:
 3. **Out-of-scope dependencies:** `out_of_scope_deps` array — generates post-merge fix list
 4. **Verification results:** `verification: PASS | FAIL` — gates merge per agent
 5. **File lists:** `files_changed` and `files_created` — used for conflict prediction before touching the working tree
+6. **Failure type:** `failure_type: transient | fixable | needs_replan | escalate` — drives automatic remediation decision tree (E19). Present only when `status` is `partial` or `blocked`.
 
 **Location:** The orchestrator locates completion reports by finding `` ```yaml type=impl-completion-report `` blocks in the IMPL doc — not by heading text, line number, or free-form YAML heuristics. Each such block is associated with the nearest preceding `### Agent {letter} - Completion Report` heading. Plain `` ```yaml `` blocks without the `type=` annotation are not parsed as completion reports.
 
