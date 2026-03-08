@@ -77,6 +77,7 @@ After finishing work, write this section to the IMPL doc. The structured YAML bl
 
 ```yaml type=impl-completion-report
 status: complete | partial | blocked
+failure_type: transient | fixable | needs_replan | escalate  # required when status is partial or blocked
 worktree: .claude/worktrees/wave{N}-agent-{letter}
 branch: wave{N}-agent-{letter}
 commit: {sha}
@@ -96,10 +97,10 @@ verification: PASS | FAIL ({command})
 ## If You Get Stuck
 
 **Partial completion:**
-Set `status: partial`, document what works and what doesn't, commit your partial work, and report. The Orchestrator will resolve blockers.
+Set `status: partial`, document what works and what doesn't, commit your partial work, and report. The Orchestrator will resolve blockers. Set `failure_type` to `fixable` if you know what needs fixing, or `needs_replan` if the IMPL doc decomposition itself is wrong.
 
 **Blocked on interface contract:**
-Set `status: blocked`, explain why the contract is unimplementable, and suggest a fix. Wave will not merge until resolved.
+Set `status: blocked`, explain why the contract is unimplementable, and suggest a fix. Wave will not merge until resolved. Set `failure_type: needs_replan` — this signals the Orchestrator to re-engage Scout with your findings.
 
 **Out of scope discovery:**
 Report in `out_of_scope_deps`. Don't improvise fixes outside your ownership.
