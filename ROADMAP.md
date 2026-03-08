@@ -6,7 +6,7 @@ Items are grouped by theme, not priority. Nothing here is committed or scheduled
 
 ## Protocol Enhancements
 
-### Contract Builder Phase (from Forge comparison)
+### Contract Builder Phase
 
 **Insight:** Forge separates *detecting* cross-agent boundaries from *specifying* the contracts at those boundaries. The planner emits **integration hints** — lightweight annotations flagging where tasks interact ("task-1 produces this API, task-2 consumes it"). A dedicated **Contract Builder** phase reads those hints and generates precise binding contracts before any agent launches.
 
@@ -27,7 +27,7 @@ Contracts are injected into agent prompts as binding requirements. The reviewer 
 
 ---
 
-### Tier 2 Merge Conflict Resolution Agent (from Forge comparison)
+### Tier 2 Merge Conflict Resolution Agent
 
 **Insight:** Forge uses a tiered merge conflict strategy: Tier 1 auto-retries the merge (in case main advanced and the conflict resolves on retry); Tier 2 spawns a dedicated resolver agent that reads conflict markers and edits them to produce a clean merge.
 
