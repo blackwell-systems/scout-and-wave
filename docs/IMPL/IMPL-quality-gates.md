@@ -550,3 +550,28 @@ All three files updated as specified. Key decisions:
 - agents/scout.md: new step 11 (Quality Gates emission) inserted between old step 10 (verification gates / lint command) and old step 11 (E16 validation feedback, now renumbered step 12). Uses marker-file auto-detection table as specified. Scout is directed to reuse commands already identified for test_command — no redundant tool discovery.
 
 One discrepancy to flag: the IMPL doc File Ownership table lists `implementations/claude-code/prompts/scout.md` but the actual file path is `implementations/claude-code/prompts/agents/scout.md`. The agent prompt text correctly specifies the agents/ path. Recommend the orchestrator correct the file ownership table entry at post-merge.
+
+---
+
+### Agent B - Completion Report (run 2 — corrected commit)
+
+```yaml type=impl-completion-report
+status: complete
+worktree: .claude/worktrees/agent-a80b87b1
+branch: worktree-agent-a80b87b1
+commit: ee9aabea813744ee1df785f9b2054518d553eafa
+files_changed:
+  - implementations/claude-code/prompts/scout.md
+files_created: []
+interface_deviations: []
+out_of_scope_deps: []
+tests_added: []
+verification: PASS
+```
+
+Context: `scaffold-agent.md` (E22 Build Verification) and `saw-skill.md` (E20 stub scan, E21 quality gate wiring) were already applied to HEAD before this agent session ran — those changes were complete from the prior Agent B run. This session added the missing Quality Gates emission step (step 10) to `implementations/claude-code/prompts/scout.md`, which was the only remaining gap. The new step covers marker-file auto-detection, the `## Quality Gates` YAML schema, omit conditions, and a reference to E21 for orchestrator enforcement. Step numbering in scout.md shifted: old step 10 (E16 validation) is now step 11.
+
+Verification grep output confirmed all three gate checks pass:
+- `scaffold-agent.md`: E22 present at lines 45, 50, 59, 60, 124, 141
+- `saw-skill.md`: E20 at line 133, E21 at line 139, scan-stubs.sh at line 135, Quality Gates at lines 131, 139
+- `scout.md`: Quality Gates / auto-detect at lines 324, 331, 334
