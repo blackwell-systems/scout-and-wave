@@ -282,6 +282,52 @@ The worktree branch wave2-agent-F is already checked out at
 
 ---
 
+## IMPL Doc Length Management
+
+As IMPL docs accumulate completion reports across many waves, they can grow large enough to create context pressure for agents reading them. Three complementary mitigations:
+
+### History Sidecar (Completion Report Archiving)
+
+**Problem:** Completion reports are verbose (file lists, gate outputs, deviation notes). After a wave merges, these reports are historical record — no future agent needs them. Yet they stay in the main IMPL doc, growing it with each wave.
+
+**Proposed:** Once a wave merges successfully, the Orchestrator appends that wave's completion reports to a sidecar file (`docs/IMPL/IMPL-slug-history.md`) and replaces the verbose sections in the main doc with a one-line summary:
+
+```markdown
+### Agent A - Completion Report
+<!-- compressed: status=complete, files=3, gate=pass, 2026-03-08 -->
+```
+
+The main doc stays bounded at roughly `(base_size) + (N_waves × ~50 bytes)` regardless of wave count. The history file holds the full record for auditing and is never passed as agent context.
+
+**Protocol changes required:** `saw-teams-merge.md` post-merge procedure — add "compact completed wave reports" step after verification passes.
+
+---
+
+### Structured Doc Splitting
+
+**Problem:** All IMPL doc concerns live in one file. Scaffold contents in particular can be large and are never re-read after Wave 1.
+
+**Proposed:** Split by concern at creation time:
+- `IMPL-slug.md` — live state: wave structure, file ownership, interface contracts, quality gates, current wave
+- `IMPL-slug-scaffolds.md` — scaffold file contents (extracted by Scaffold Agent, referenced from main doc)
+- `IMPL-slug-log.md` — append-only completion reports and deviation records
+
+Agents receive only the slices relevant to them (E23 extraction becomes trivial — the right content is already in a separate file).
+
+**Protocol changes required:** `protocol/message-formats.md` — IMPL doc format note on optional split layout; `agents/scaffold-agent.md` — write scaffold contents to sidecar.
+
+---
+
+### IMPL Doc Size Gate
+
+**Problem:** Doc growth is currently invisible. There is no enforcement point that catches a bloated IMPL doc before agents consume it.
+
+**Proposed:** Add a `validate-impl.sh` check: if the doc exceeds a configurable byte threshold (default 50 KB), emit a warning recommending history compaction. Not a hard failure — informational only, surfaced at the E16 validation step and in the web UI reviewer.
+
+**Protocol changes required:** `scripts/validate-impl.sh` — size check with configurable threshold; `saw-teams-skill.md` — surface size warning in E16 validation output.
+
+---
+
 ## IMPL-Level Parallelism (Concurrent Feature Execution)
 
 **Current state:** SAW enforces disjoint file ownership within a wave (I1), but IMPL docs are always executed serially. One feature completes and merges before the next begins.
