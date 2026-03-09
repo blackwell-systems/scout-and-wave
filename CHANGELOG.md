@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.14.7] | 2026-03-08 | Seventh-pass convergence — 1 finding: protocol version 0.14.5→0.14.6 in README.md. 98% reduction from pass 6 signals convergence. Zero P0 issues. |
 | [0.14.6] | 2026-03-08 | Sixth-pass audit — 41 findings + 6 verification fixes + 3 follow-ups: {X}→{ID} final cleanup, repo: field in completion reports, E16 in bootstrap flows, E20/E21 in merge procedures, invariant numbers, template consistency, historical docs |
 | [0.14.5] | 2026-03-08 | Fifth-pass audit — 20 findings: {letter}→{ID} in merge/worktree/hooks/DESIGN/QUICKSTART/skill files, saw-bootstrap.md section order canonical, saw-teams-merge parity (failure_type/timeout, Step 1.75 File Ownership Verification), saw-teams-skill bootstrap Scaffold Agent step |
 | [0.14.4] | 2026-03-08 | Fourth-pass audit — 17 findings: {letter}→{ID} propagation, Interface Contracts in IMPL structure, E20/E21 in procedures/checklist, saw-skill CLAUDE_SKILL_DIR note, brewprune attribution removed |
@@ -67,6 +68,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+
+## [0.14.7] - 2026-03-08
+
+### Fixed
+
+**Seventh-pass convergence audit — protocol hardening complete**
+
+- **Protocol version number** — `protocol/README.md` still referenced v0.14.5; updated to v0.14.6 to match CHANGELOG current version.
+
+**Convergence achieved:** Seventh-pass audit found only 1 issue (98% reduction from pass 6's 50 findings). Zero P0 protocol-breaking issues. Zero semantic inconsistencies. Zero cross-reference failures. All E1-E23 + E7a execution rules and I1-I6 invariants verified consistent across 26 core files. Protocol is production-ready.
+
+---
 ## [0.14.6] - 2026-03-08
 
 ### Fixed
