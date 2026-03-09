@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.14.6] | 2026-03-08 | Sixth-pass audit — 41 findings + 6 verification fixes + 3 follow-ups: {X}→{ID} final cleanup, repo: field in completion reports, E16 in bootstrap flows, E20/E21 in merge procedures, invariant numbers, template consistency, historical docs |
 | [0.14.5] | 2026-03-08 | Fifth-pass audit — 20 findings: {letter}→{ID} in merge/worktree/hooks/DESIGN/QUICKSTART/skill files, saw-bootstrap.md section order canonical, saw-teams-merge parity (failure_type/timeout, Step 1.75 File Ownership Verification), saw-teams-skill bootstrap Scaffold Agent step |
 | [0.14.4] | 2026-03-08 | Fourth-pass audit — 17 findings: {letter}→{ID} propagation, Interface Contracts in IMPL structure, E20/E21 in procedures/checklist, saw-skill CLAUDE_SKILL_DIR note, brewprune attribution removed |
 | [0.14.3] | 2026-03-08 | Third-pass audit — 25 findings: hooks path, saw-teams I6/E16/E15/E18/paths, scaffold 2-pass build, scout Step 0/cross-check, solo agent check |
@@ -89,6 +90,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.14.5] - 2026-03-08
 
+
+**Post-commit verification:** Automated verification audit found 6 additional issues (4 remaining `{X}` in prose, 1 version mismatch, 1 dead code line). All corrected via commit amend. Follow-up fixes: `{X}/{letter}→{ID}` in 5 historical IMPL docs and `saw-ops.md`, `failure_type` comment placement in `agent-template.md`.
 ### Fixed
 
 **Fifth-pass deep audit — 20 findings across merge procedures, worktree files, hooks, skill files, and bootstrap flow**
