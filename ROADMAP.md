@@ -571,7 +571,22 @@ allTools := registry.All()                 // Everything
 
 **Implementation scope:** Engine only (`scout-and-wave-go`). No protocol changes required — the protocol defines what tools agents receive (Field 4 in `agent-template.md`), not how implementations structure their tool systems.
 
-**Compatibility:** Refactoring can be staged incrementally. Start with the Registry (non-breaking — `StandardTools()` becomes a registry population helper). Add adapters to eliminate backend serialization duplication. Layer in middleware for Observatory timing. Namespaces can be adopted last.
+**Implementation approach:** Clean-slate refactoring. All five patterns should be implemented together as a cohesive architecture rather than staged incrementally:
+
+1. Delete `StandardTools()` and the current `[]Tool` slice approach entirely
+2. Implement `ToolRegistry` as the foundation with namespace support from day one
+3. Replace `Execute func(...)` fields with the `ToolExecutor` interface
+4. Wrap all executors in the middleware stack (logging, timing, validation, permissions)
+5. Create backend-specific adapters and remove all inline serialization from backend packages
+6. Use namespaced tool names (`file:read`, `git:commit`, etc.) as the primary addressing scheme
+
+This gives a cleaner final architecture without technical debt from compatibility shims. Breaking change acceptable for v0.x engine versions.
+
+**Benefits of unified refactoring:**
+- No half-migrated state where some tools use Registry and others use the old slice
+- Middleware applied uniformly to all tools from the start (Observatory timing works everywhere)
+- Backend adapters eliminate serialization duplication immediately
+- Agent permission models (Scout read-only, Wave read-write) work via namespace filtering from launch
 
 ---
 
