@@ -865,7 +865,7 @@ After Wave 1 completes:
 - [ ] Read all agent completion reports — confirm all `status: complete`; if any `partial` or `blocked`, stop and resolve before merging
 - [ ] Conflict prediction — cross-reference `files_changed` lists; flag any file appearing in >1 agent's list before touching the working tree
 - [ ] Review `interface_deviations` — update Wave 2 agent prompts (C, D, E, F) for any item with `downstream_action_required: true`
-- [ ] Merge each agent: `git merge --no-ff <branch> -m "Merge wave1-agent-{X}: <desc>"`
+- [ ] Merge each agent: `git merge --no-ff <branch> -m "Merge wave1-agent-{ID}: <desc>"`
 - [ ] Worktree cleanup: `git worktree remove <path>` + `git branch -d <branch>` for each
 - [ ] Post-merge verification:
       - [ ] Linter auto-fix pass: n/a (no linter configured)
@@ -886,7 +886,7 @@ After Wave 2 completes:
 - [ ] Read all agent completion reports (C, D, E, F) — confirm all `status: complete`
 - [ ] Conflict prediction — confirm no file appears in >1 agent's `files_changed` list
 - [ ] Review `interface_deviations` — no Wave 3 exists, but note any deviations for manual follow-up
-- [ ] Merge each agent: `git merge --no-ff <branch> -m "Merge wave2-agent-{X}: <desc>"`
+- [ ] Merge each agent: `git merge --no-ff <branch> -m "Merge wave2-agent-{ID}: <desc>"`
 - [ ] Worktree cleanup: `git worktree remove <path>` + `git branch -d <branch>` for each
 - [ ] Post-merge verification:
       - [ ] Linter auto-fix pass: n/a

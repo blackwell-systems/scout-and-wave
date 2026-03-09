@@ -2133,7 +2133,7 @@ After wave N completes:
 - [ ] Read all agent completion reports — confirm all `status: complete`; if any `partial` or `blocked`, stop and resolve before merging
 - [ ] Conflict prediction — cross-reference `files_changed` and `files_created` lists; flag any file appearing in >1 agent's list before touching the working tree
 - [ ] Review `interface_deviations` — update downstream agent prompts for any item with `downstream_action_required: true` (not expected in this refactor)
-- [ ] Merge each agent: `git merge --no-ff <branch> -m "Merge wave{N}-agent-{X}: <desc>"` (if using worktrees; this refactor uses main branch directly)
+- [ ] Merge each agent: `git merge --no-ff <branch> -m "Merge wave{N}-agent-{ID}: <desc>"` (if using worktrees; this refactor uses main branch directly)
 - [ ] Worktree cleanup: not applicable (no worktrees for documentation work)
 - [ ] Post-merge verification:
       - [ ] Linter auto-fix pass: n/a (no linter for markdown)

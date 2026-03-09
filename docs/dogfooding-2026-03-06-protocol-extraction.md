@@ -529,11 +529,11 @@ git reset --hard 582cdfb
 ⚠️ **MANDATORY PRE-FLIGHT CHECK - Run BEFORE any file modifications**
 
 **Step 1: Attempt environment correction**
-cd /Users/dayna.blackwell/code/scout-and-wave/.claude/worktrees/wave{N}-agent-{X} 2>/dev/null || true
+cd /Users/dayna.blackwell/code/scout-and-wave/.claude/worktrees/wave{N}-agent-{ID} 2>/dev/null || true
 
 **Step 2: Verify isolation**
 ACTUAL_DIR=$(pwd)
-EXPECTED_DIR="/Users/dayna.blackwell/code/scout-and-wave/.claude/worktrees/wave{N}-agent-{X}"
+EXPECTED_DIR="/Users/dayna.blackwell/code/scout-and-wave/.claude/worktrees/wave{N}-agent-{ID}"
 
 if [ "$ACTUAL_DIR" != "$EXPECTED_DIR" ]; then
   echo "ISOLATION FAILURE: Wrong directory"
@@ -541,7 +541,7 @@ if [ "$ACTUAL_DIR" != "$EXPECTED_DIR" ]; then
 fi
 
 ACTUAL_BRANCH=$(git branch --show-current)
-EXPECTED_BRANCH="wave{N}-agent-{X}"
+EXPECTED_BRANCH="wave{N}-agent-{ID}"
 
 if [ "$ACTUAL_BRANCH" != "$EXPECTED_BRANCH" ]; then
   echo "ISOLATION FAILURE: Wrong branch"

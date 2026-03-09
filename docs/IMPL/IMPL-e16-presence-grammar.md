@@ -965,7 +965,7 @@ After wave 1 completes:
 - [ ] Read all agent completion reports — confirm all `status: complete`; if any `partial` or `blocked`, stop and resolve before merging
 - [ ] Conflict prediction — cross-reference `files_changed` lists; flag any file appearing in >1 agent's list before touching the working tree
 - [ ] Review `interface_deviations` — update downstream agent prompts for any item with `downstream_action_required: true`
-- [ ] Merge each agent: `git merge --no-ff <branch> -m "Merge wave1-agent-{X}: <desc>"`
+- [ ] Merge each agent: `git merge --no-ff <branch> -m "Merge wave1-agent-{ID}: <desc>"`
   - Note: Agent A and Agent D are both in `scout-and-wave`; merge them sequentially into that repo
   - Agent B is in `scout-and-wave-go`; merge into that repo separately
   - Agent C is in `scout-and-wave`; merge along with A and D

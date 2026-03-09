@@ -243,9 +243,8 @@ then add free-form notes beneath it.
 
 ```yaml type=impl-completion-report
 status: complete | partial | blocked
-failure_type: transient | fixable | needs_replan | escalate | timeout
+failure_type: transient | fixable | needs_replan | escalate | timeout  # Required when status is partial or blocked. Omit when status is complete.
 repo: /absolute/path/to/repo  # omit for single-repo waves
-  # Required when status is partial or blocked. Omit when status is complete.
 worktree: .claude/worktrees/wave{N}-agent-{ID}
 branch: wave{N}-agent-{ID}
 commit: {sha}  # or "uncommitted" if commit failed

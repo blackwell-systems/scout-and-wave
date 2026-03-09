@@ -28,7 +28,7 @@ and interface contracts are there. Do not proceed until you have read it.
 
 ## Step 1: Parse Completion Reports
 
-Read each `### Agent {letter} — Completion Report` section for the current wave.
+Read each `### Agent {ID} — Completion Report` section for the current wave.
 
 Extract per agent:
 - `status`: `complete`, `partial`, or `blocked`
@@ -39,7 +39,7 @@ Extract per agent:
 
 **If any agent has `status: partial` or `status: blocked`:**
 Write the merge report with `status: failed` and `recommendation: halt`.
-Set `halt_reason` to: `"Agent {letter} reported status: {status} — wave cannot
+Set `halt_reason` to: `"Agent {ID} reported status: {status} — wave cannot
 merge until resolved."` Stop here. Do not touch the working tree.
 
 ---
@@ -69,18 +69,18 @@ than per-wave.
 cd <repo-root>
 
 # For each agent:
-worktree=".claude/worktrees/wave{N}-agent-{letter}"
-branch="wave{N}-agent-{letter}"
+worktree=".claude/worktrees/wave{N}-agent-{ID}"
+branch="wave{N}-agent-{ID}"
 commit="{sha from completion report}"
 
 if [ "$commit" != "uncommitted" ]; then
-  git merge --no-ff "$branch" -m "Merge wave{N}-agent-{letter}: {short description}"
+  git merge --no-ff "$branch" -m "Merge wave{N}-agent-{ID}: {short description}"
 else
   for file in {files_changed} {files_created}; do
     cp "$worktree/$file" "./$file"
     git add "./$file"
   done
-  git commit -m "Apply agent {letter} changes from worktree"
+  git commit -m "Apply agent {ID} changes from worktree"
 fi
 ```
 
@@ -158,7 +158,7 @@ worktrees_cleaned:
   - {branch}
 conflicts: []
 deviations:
-  - agent: {letter}
+  - agent: {ID}
     description: "{text}"
     downstream_action_required: true | false
     affects: [{agent-letter}, ...]
