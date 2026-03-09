@@ -372,6 +372,209 @@ With file-granular locking: IMPL-A runs first, locks those six files. IMPL-B wai
 
 ---
 
+## Tool System Refactoring
+
+**Current state:** `pkg/agent/tools.go` in `scout-and-wave-go` implements tools as a `[]Tool` slice where each `Tool` struct contains `Name`, `Description`, `InputSchema`, and an `Execute` function. Tools are constructed via factory functions (`readFileTool()`, `writeFileTool()`, etc.) that close over `workDir`. The `StandardTools(workDir)` function returns the hardcoded set of available tools. Backends serialize this slice into their native tool-call format (Anthropic Messages API `tools` array, OpenAI-compatible `tools` array, etc.) inline before each request.
+
+**Problem:** The current implementation is functional but not extensible. Adding a new tool requires editing `StandardTools()`. Backend-specific serialization is scattered across each backend package (`api/client.go`, `openai/client.go`, `bedrock/client.go`). There's no hook system for logging, timing, or validation. Tool namespacing (e.g., `file:read` vs `git:commit`) is not supported. Custom tools for specific agent types require passing different tool sets through the entire call chain.
+
+**Proposed refactoring approaches** (can be combined):
+
+### 1. Tool Registry Pattern
+
+Replace the hardcoded `StandardTools()` slice with a `ToolRegistry` that supports dynamic registration:
+
+```go
+type ToolRegistry struct {
+    tools map[string]Tool
+}
+
+func (r *ToolRegistry) Register(tool Tool) error
+func (r *ToolRegistry) Get(name string) (Tool, bool)
+func (r *ToolRegistry) All() []Tool
+func (r *ToolRegistry) Namespace(prefix string) []Tool
+```
+
+**Benefits:**
+- Plugins can register custom tools at runtime via `init()` or explicit calls
+- Test suites can register mock tools without editing production code
+- Agent-specific tool sets can be composed from the registry (e.g., Scout gets read-only tools; Wave agents get read+write+bash)
+
+**Example usage:**
+```go
+registry := tools.NewRegistry()
+registry.Register(tools.Read(workDir))
+registry.Register(tools.Write(workDir))
+registry.Register(tools.Bash(workDir))
+
+// Custom tool
+registry.Register(tools.Tool{
+    Name: "query_vector_db",
+    Execute: func(input map[string]interface{}, workDir string) (string, error) { ... },
+})
+
+agentTools := registry.Namespace("file:") // Only file:read, file:write, etc.
+```
+
+### 2. Interface-Based Tool Executor
+
+Replace raw `Execute` function fields with an interface:
+
+```go
+type ToolExecutor interface {
+    Execute(ctx context.Context, input map[string]interface{}) (string, error)
+}
+
+type Tool struct {
+    Name        string
+    Description string
+    InputSchema map[string]interface{}
+    Executor    ToolExecutor
+}
+```
+
+**Benefits:**
+- Executors can carry state (DB connections, API clients, workspace handles)
+- Easier to test (mock implementations of `ToolExecutor`)
+- Supports tool versioning (same tool name, different executor based on agent type)
+
+**Example:**
+```go
+type FileReadExecutor struct {
+    workDir string
+    fs      afero.Fs // Abstract filesystem for testing
+}
+
+func (e *FileReadExecutor) Execute(ctx context.Context, input map[string]interface{}) (string, error) {
+    path := input["path"].(string)
+    return e.fs.ReadFile(filepath.Join(e.workDir, path))
+}
+```
+
+### 3. Tool Middleware / Hook System
+
+Wrap tool execution in a middleware stack for cross-cutting concerns:
+
+```go
+type ToolMiddleware func(next ToolExecutor) ToolExecutor
+
+// Logging middleware
+func LoggingMiddleware(logger *log.Logger) ToolMiddleware {
+    return func(next ToolExecutor) ToolExecutor {
+        return ToolExecutorFunc(func(ctx context.Context, input map[string]interface{}) (string, error) {
+            start := time.Now()
+            logger.Printf("Tool call started: %v", input)
+            result, err := next.Execute(ctx, input)
+            logger.Printf("Tool call finished in %v: err=%v", time.Since(start), err)
+            return result, err
+        })
+    }
+}
+
+// Timing middleware (for Observatory SSE events)
+func TimingMiddleware(onDuration func(toolName string, dur time.Duration)) ToolMiddleware { ... }
+
+// Validation middleware (schema check before execution)
+func ValidationMiddleware(schema map[string]interface{}) ToolMiddleware { ... }
+
+// Permission middleware (enforce read-only mode for Scout agents)
+func PermissionMiddleware(allowedTools []string) ToolMiddleware { ... }
+```
+
+**Benefits:**
+- Agent Observatory timing events can be collected without editing each tool's `Execute` function
+- Unified logging for all tool calls (currently scattered or missing)
+- Input validation enforced before execution
+- Permission enforcement (e.g., Scout agents denied write access) without tool-specific checks
+
+### 4. Backend Adapter Pattern
+
+Extract tool serialization into backend-specific adapters:
+
+```go
+type ToolAdapter interface {
+    Serialize(tools []Tool) interface{}
+    Deserialize(response interface{}) (name string, input map[string]interface{}, error)
+}
+
+// Anthropic Messages API adapter
+type AnthropicToolAdapter struct{}
+
+func (a *AnthropicToolAdapter) Serialize(tools []Tool) interface{} {
+    anthropicTools := make([]map[string]interface{}, len(tools))
+    for i, t := range tools {
+        anthropicTools[i] = map[string]interface{}{
+            "name":         t.Name,
+            "description":  t.Description,
+            "input_schema": t.InputSchema,
+        }
+    }
+    return anthropicTools
+}
+
+// OpenAI-compatible adapter
+type OpenAIToolAdapter struct{}
+
+func (a *OpenAIToolAdapter) Serialize(tools []Tool) interface{} {
+    openaiTools := make([]map[string]interface{}, len(tools))
+    for i, t := range tools {
+        openaiTools[i] = map[string]interface{}{
+            "type": "function",
+            "function": map[string]interface{}{
+                "name":        t.Name,
+                "description": t.Description,
+                "parameters":  t.InputSchema,
+            },
+        }
+    }
+    return openaiTools
+}
+```
+
+**Benefits:**
+- Backend packages no longer contain serialization logic — cleaner separation of concerns
+- Adding a new backend (e.g., Groq, Cohere) requires only implementing a `ToolAdapter`
+- Tool schema changes (e.g., adding a `strict` field for OpenAI) affect only the adapter, not the core `Tool` struct
+
+### 5. Tool Namespaces / Categories
+
+Support namespaced tool names for better organization and filtering:
+
+```go
+// Tool names
+"file:read"
+"file:write"
+"file:list"
+"git:commit"
+"git:diff"
+"web:fetch"
+"claude:agent"  // Agent tool for spawning sub-agents
+```
+
+**Registry namespace filtering:**
+```go
+registry.Register(tools.Read(workDir).WithName("file:read"))
+registry.Register(tools.GitCommit(workDir).WithName("git:commit"))
+
+fileTools := registry.Namespace("file:")   // file:read, file:write, file:list
+gitTools := registry.Namespace("git:")     // git:commit, git:diff
+allTools := registry.All()                 // Everything
+```
+
+**Benefits:**
+- Scout agents can receive only `file:read`, `file:list` (read-only)
+- Wave agents receive `file:*`, `git:*`, `bash`, etc. (read-write)
+- Clearer tool documentation (category is embedded in the name)
+- Observatory SSE events can group tool calls by category
+
+---
+
+**Implementation scope:** Engine only (`scout-and-wave-go`). No protocol changes required — the protocol defines what tools agents receive (Field 4 in `agent-template.md`), not how implementations structure their tool systems.
+
+**Compatibility:** Refactoring can be staged incrementally. Start with the Registry (non-breaking — `StandardTools()` becomes a registry population helper). Add adapters to eliminate backend serialization duplication. Layer in middleware for Observatory timing. Namespaces can be adopted last.
+
+---
+
 ## Implementation Notes
 
 Items above are not independent — the failure taxonomy feeds the web UI action buttons, the pre-mortem feeds the review screen, `docs/SAW.md` feeds both the scout and the project memory view. They are designed to ship together as a coherent v1.0 rather than as separate incremental additions.
