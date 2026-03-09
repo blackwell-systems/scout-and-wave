@@ -429,7 +429,7 @@ target project:
    - slug: {feature-slug}
      impl_doc: docs/IMPL/IMPL-{feature-slug}.md
      waves: {N}
-     agents: {total agent count}
+     agents: {N-agents}
      date: {YYYY-MM-DD}
    ```
 

@@ -82,6 +82,7 @@ After finishing work, write this section to the IMPL doc. The structured YAML bl
 ```yaml type=impl-completion-report
 status: complete | partial | blocked
 failure_type: transient | fixable | needs_replan | escalate | timeout  # required when status is partial or blocked
+repo: /absolute/path/to/repo  # omit for single-repo waves
 worktree: .claude/worktrees/wave{N}-agent-{ID}
 branch: wave{N}-agent-{ID}
 commit: {sha}

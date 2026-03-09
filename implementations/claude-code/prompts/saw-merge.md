@@ -103,6 +103,32 @@ touched which unexpected file. The orchestrator decides whether to accept
 
 If no violations, proceed to Step 2.
 
+## Step 1.9: E20 Stub Detection
+
+After parsing all completion reports and verifying file ownership, collect the union of all `files_changed` and `files_created` fields across all agent completion reports.
+
+Run the stub scanner:
+```bash
+bash "${CLAUDE_SKILL_DIR}/scripts/scan-stubs.sh" {file1} {file2} ...
+```
+
+The scanner exits with code 0 always (informational only). If stubs are detected, append the output to the IMPL doc under `## Stub Report — Wave {N}` (after the last agent completion report). Surface stubs at the review checkpoint before merge — the human decides whether to accept or request fixes.
+
+## Step 1.95: E21 Quality Gates
+
+If the IMPL doc contains a `## Quality Gates` section, parse it and execute each gate:
+
+1. Read `level:` (quick | standard | full) — this determines timeout and failure handling
+2. For each gate in the `gates:` list:
+   - Run the `command:` with a 5-minute timeout
+   - If `required: true` and the gate fails, **stop immediately** — do not merge, report gate failure to user
+   - If `required: false` and the gate fails, log a warning but continue
+
+Quality gates run unscoped (not inside any worktree) — they verify the full project state after all agents complete.
+
+If no Quality Gates section exists, skip this step.
+
+
 ## Step 2: Conflict Prediction
 
 Before touching the working tree, cross-reference all agents' `files_changed`

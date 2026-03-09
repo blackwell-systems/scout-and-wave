@@ -150,6 +150,7 @@ validate_completion_report() {
   local lineno="$2"
 
   local required_fields=("status:" "worktree:" "branch:" "commit:" "files_changed:" "interface_deviations:" "verification:")
+  # Note: failure_type is conditionally required (when status is partial/blocked) but not checked here
   for field in "${required_fields[@]}"; do
     if ! echo "$content" | grep -q "^$field"; then
       add_error "impl-completion-report block (line $lineno): missing required field '$field'"
@@ -252,7 +253,7 @@ echo "" >&2
 if [[ $block_count -eq 0 ]]; then
   echo "WARNING: no typed blocks found in $impl_doc" >&2
   echo "No typed blocks found. If this doc uses the pre-v0.10.0 format, typed blocks are required for validation."
-  exit 0
+  exit 1  # Changed from exit 0 - orchestrator should send this back to Scout
 fi
 
 if [[ ${#errors[@]} -eq 0 ]]; then

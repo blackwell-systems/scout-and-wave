@@ -101,11 +101,6 @@ Actual: [paste output from pwd and git branch]
 **Rationale:** Defense-in-depth isolation enforcement. The Bash tool does not preserve working directory between invocations; every git operation must specify the path explicitly.
 
 **E4: Worktree isolation is MANDATORY for all Wave agents.** No exceptions for work type (documentation-only, simple refactors, etc.). If work is too small for worktrees, use sequential implementation instead.
-
-**Isolation layers (agent-visible subset of the 5-layer model in E4):**
-- Layer 1: Orchestrator pre-creates worktrees manually
-- Layer 1.5: Agent navigates to worktree via strict cd (Step 1 above)
-- Layer 2: Agent verifies isolation and fails fast if incorrect (Step 2 above)
 - Layer 4: Orchestrator trip wire — counts commits per branch before merging; zero commits = isolation failure (E4)
 
 **Cross-repository scenarios:** When orchestrating repo B from repo A, the orchestrator should NOT use `isolation: "worktree"` parameter (it creates worktrees in repo A's context). Instead: manually create worktrees in repo B (Layer 1), and rely on Field 0 cd (Layer 1.5) as the primary navigation mechanism. The strict cd in Step 1 works correctly in both scenarios: when the isolation parameter positions the agent (same-repo), it's a no-op that succeeds; when agents start in the wrong repo (cross-repo), it navigates to the correct location or fails fast if the worktree doesn't exist.
@@ -249,6 +244,7 @@ then add free-form notes beneath it.
 ```yaml type=impl-completion-report
 status: complete | partial | blocked
 failure_type: transient | fixable | needs_replan | escalate | timeout
+repo: /absolute/path/to/repo  # omit for single-repo waves
   # Required when status is partial or blocked. Omit when status is complete.
 worktree: .claude/worktrees/wave{N}-agent-{ID}
 branch: wave{N}-agent-{ID}

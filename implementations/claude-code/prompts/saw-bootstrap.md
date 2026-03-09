@@ -17,7 +17,11 @@ ownership before any code is written.
 - Single-file or trivially small projects
 - Prototypes where structure doesn't matter yet
 
-## Pre-Flight: Ensure Git Repo Exists
+---
+
+## Pre-Flight: Ensure Git Repo Exists (Orchestrator Duty)
+
+**Note:** This section is for the orchestrator, not the Scout. The Scout begins at Step 0 below.
 
 Before gathering requirements, check whether a git repository is initialized:
 
@@ -41,6 +45,8 @@ git add .
 git commit -m "chore: initial commit"
 ```
 
+
+**Bootstrap sequencing note:** In bootstrap mode, the target project path is learned from `docs/REQUIREMENTS.md` (Step 6: Source Codebase). If the requirements specify a source codebase path, check for `docs/CONTEXT.md` in that path. Otherwise, check the current working directory.
 This costs nothing and prevents bootstrap from failing silently mid-execution
 when agents try to create worktrees or branches.
 
@@ -316,13 +322,13 @@ Wave 2: [A]            <- 1 agent (entry point wiring and integration)
 
 [Full 9-field prompt.]
 
-### Verification Gates
+## Verification Gates
 
 Scaffold Agent: [build types module only, e.g., `go build ./internal/types` or `cargo build -p types`]
 Wave 1: [build all modules] + [focused unit tests per module]
 Wave 2: [build full project] + [full test suite]
 
-### Status
+## Status
 
 - [ ] Scaffold Agent: Types scaffold - [description]
 - [ ] Wave 1 Agent B - [package: description]
@@ -351,7 +357,7 @@ After each wave completes:
 - [ ] Run E20 stub scan: `bash "${CLAUDE_SKILL_DIR}/scripts/scan-stubs.sh" {files}`
       Append output to IMPL doc under `## Stub Report — Wave {N}`
 - [ ] Run E21 quality gates (if `## Quality Gates` section present)
-- [ ] Merge each agent: `git merge --no-ff <branch> -m "Merge wave{N}-agent-{X}: <desc>"`
+- [ ] Merge each agent: `git merge --no-ff <branch> -m "Merge wave{N}-agent-{ID}: <desc>"`
 - [ ] Worktree cleanup: `git worktree remove <path>` + `git branch -d <branch>` for each
 - [ ] Post-merge verification: `[build + test command from Verification Gates]`
 - [ ] Fix any cascade failures

@@ -120,7 +120,13 @@ proceed with work.
 pre-creates worktrees. Layer 1.5: teammate attempts self-correction via cd.
 Layer 2: teammate verifies isolation and fails fast if incorrect. Layer 2.5:
 teammate messages lead about failure (real-time awareness). Layer 3: lead
-checks completion reports for failures.
+checks completion reports for failures. (Note: saw-teams layer numbering differs
+from E4's 5-layer model because Layer 2 `isolation: "worktree"` is intentionally
+omitted; remaining layers renumbered accordingly.)
+teammate messages lead about failure (real-time awareness). Layer 3: lead
+checks completion reports for failures. (Note: saw-teams layer numbering differs
+from E4's 5-layer model because Layer 2 `isolation: "worktree"` is intentionally
+omitted; remaining layers renumbered accordingly.)
 
 ## 1. File Ownership
 
@@ -284,6 +290,7 @@ free-form notes beneath it.
 ```yaml type=impl-completion-report
 status: complete | partial | blocked
 failure_type: transient | fixable | needs_replan | escalate | timeout  # required when status is partial or blocked
+repo: /absolute/path/to/repo  # omit for single-repo waves
 worktree: .claude/worktrees/wave{N}-agent-{ID}
 branch: wave{N}-agent-{ID}
 commit: {sha}  # or "uncommitted" if commit failed

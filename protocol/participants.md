@@ -121,9 +121,9 @@ An asynchronous agent launched by the orchestrator. Owns a disjoint set of files
 
 **Forbidden actions:**
 
-- Modify files not in ownership list (Invariant I2 - disjoint file ownership)
+- Modify files not in ownership list (Invariant I1 - disjoint file ownership)
 - Coordinate directly with other wave agents (use IMPL doc instead)
-- Modify interface contracts after REVIEWED state (Invariant I3 - interface freeze)
+- Modify interface contracts after REVIEWED state (Invariant I2 - interface freeze)
 - Launch other agents
 - Merge changes to HEAD (delegated to Orchestrator)
 

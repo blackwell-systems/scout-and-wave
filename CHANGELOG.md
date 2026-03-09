@@ -66,6 +66,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.14.6] - 2026-03-08
+
+### Fixed
+
+**Sixth-pass audit — 41 findings from comprehensive protocol consistency review**
+
+- **`{X}` → `{ID}` final cleanup (7 findings)** — `saw-skill.md`, `saw-teams-skill.md`, `agents/scout.md`, `saw-bootstrap.md` all had remaining `{X}` placeholders in SAW tags, merge commit messages, worktree paths, and step descriptions. All replaced with `{ID}` to complete the multi-generation agent ID rollout.
+- **`repo:` field missing from completion report templates (3 findings)** — `agent-template.md`, `teammate-template.md`, `wave-agent.md` completion report YAML blocks all omitted the `repo:` field required for cross-repo waves. Added `repo: /absolute/path/to/repo  # omit for single-repo waves` after `failure_type:` in all three templates.
+- **E16 validation absent from bootstrap flows (2 findings)** — `saw-skill.md` and `saw-teams-skill.md` bootstrap branches (steps 1–4/1–5) had no E16 IMPL doc validation step between Scout completion and human review. Inserted E16 validation block matching the standard scout flow.
+- **Wrong invariant numbers in `participants.md` (2 findings)** — Wave Agent forbidden actions cited "Invariant I2 - disjoint file ownership" (should be I1) and "Invariant I3 - interface freeze" (should be I2). Fixed both.
+- **E20/E21 missing from merge procedures (2 findings)** — `saw-merge.md` and `saw-teams-merge.md` had no stub scan (E20) or quality gates (E21) steps. Added Step 1.9 (E20) and Step 1.95 (E21) between file ownership verification and conflict prediction.
+- **Wrong agent file paths (2 findings)** — `saw-skill.md` fallback paths referenced `${CLAUDE_SKILL_DIR}/scaffold-agent.md` and `${CLAUDE_SKILL_DIR}/scout.md` but both files live in `agents/` subdirectory. Fixed to `agents/scaffold-agent.md` and `agents/scout.md`.
+- **Stale version references (2 findings)** — `DESIGN.md` still said "Synced to protocol v0.6.0" (current: v0.14.5) and file plan listed `saw-teams-merge.md v0.1.2` / `saw-teams-worktree.md v0.1.2` (actual: v0.1.4). `saw-teams-worktree.md` referenced `saw-worktree.md (v0.4.2)` (actual: v0.5.0). All updated.
+- **`validate-impl.sh` improvements (3 findings)** — Added note that `failure_type` is conditionally required but not checked (Finding 12). Fixed E16C plain-block fence regex to tolerate trailing whitespace (Finding 28). Changed no-typed-blocks case from `exit 0` to `exit 1` so orchestrator sends it back to Scout for correction (Finding 33).
+- **QUICKSTART.md file ownership table wrong headers (1 finding)** — Table used `| File | Owner | Status |` instead of canonical `| File | Agent | Wave | Depends On |`. Fixed headers and example rows.
+- **IMPL doc template issues (4 findings)** — `saw-bootstrap.md` had `### Verification Gates` and `### Status` as subsections of Wave 2 instead of top-level `##` sections (Finding 8). `message-formats.md` showed `## Completion Reports` as a wrapper section but E14/procedures say agents append `### Agent {ID}` directly; removed wrapper (Finding 20). Quality Gates example was wrapped in code fence but spec says it's prose YAML; removed fence (Finding 31). `SAW:COMPLETE` marker was in structure template; moved to separate "Completion Marker" subsection after template with E15 note (Finding 38). Pre-Mortem placement description omitted Quality Gates; updated to "after Scaffolds, or after Quality Gates if Scaffolds omitted, or after Suitability Assessment if both omitted" (Finding 44).
+- **Layer numbering inconsistencies (2 findings)** — `agent-template.md` used "Layer 1.5" and skipped Layer 3; fixed to match E4's 5-layer model (Layers 0–4) with note that Layers 0 and 2 are orchestrator-side (Finding 40). `teammate-template.md` used saw-teams-specific numbering (Layer 2.5 for messaging); added note that saw-teams omits E4 Layer 2 (`isolation: "worktree"`) and renumbers accordingly (Finding 41).
+- **Other structural issues (12 findings)** — Scout "six sections" stale count updated to full section list (Finding 25). `saw-bootstrap.md` Pre-Flight section marked as "Orchestrator Duty" (Finding 27). E17 sequencing note added to bootstrap Step 0 about checking CONTEXT.md after reading requirements (Finding 34). E7a added to `protocol/README.md` execution rules summary (Finding 35). E18 placeholder `{total agent count}` → `{N-agents}` for consistency (Finding 39). `saw-skill.md` IMPL-exists flow had duplicate step 3; renumbered second to step 4 (Finding 42). `agents/scout.md` changed "Agent X" to "Agent {ID} - {Role Description}" (Finding 43).
+
+---
+
 ## [0.14.5] - 2026-03-08
 
 ### Fixed

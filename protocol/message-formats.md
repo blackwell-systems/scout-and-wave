@@ -21,8 +21,6 @@ SAW uses the IMPL doc (Implementation Document) as the single source of truth (I
 The IMPL doc is a markdown file with the following sections in order:
 
     # IMPL: {Feature Name}
-
-    <!-- SAW:COMPLETE YYYY-MM-DD -->
     <!-- Present only when all waves are merged and verified. Omit entirely for active IMPL docs. -->
 
     **Feature:** {One-line description}
@@ -115,8 +113,7 @@ The IMPL doc is a markdown file with the following sections in order:
 
     ---
 
-    ## Completion Reports
-
+### Agent A - Completion Report
     ### Agent A - Completion Report
 
     ```yaml type=impl-completion-report
@@ -139,6 +136,18 @@ The IMPL doc is a markdown file with the following sections in order:
 
 ---
 
+
+### Completion Marker
+
+When all waves are merged and post-merge verification passes, the orchestrator writes:
+
+```html
+<!-- SAW:COMPLETE YYYY-MM-DD -->
+```
+
+**Placement:** At the top of the IMPL doc, immediately after the title.
+
+**E15:** Only the orchestrator writes this marker. Agents never add or modify it. Omit entirely for active IMPL docs.
 ## Typed Metadata Blocks
 
 Certain sections of the IMPL doc are machine-parsed by the orchestrator and the IMPL doc validator (E16). These sections use fenced code blocks with a `type=impl-*` annotation on the opening fence, whitespace-separated from the language tag. This annotation serves as a precise parser anchor and enables validation errors to reference specific block types rather than line numbers.
@@ -529,7 +538,6 @@ Stubs found at the review checkpoint are surfaced to the human reviewer. They do
 Written by the Scout into the IMPL doc between Suitability Assessment and Scaffolds (E21). Optional — omit if no build toolchain is known or gates are not configured.
 
 Schema:
-
 ```yaml
 ## Quality Gates
 
@@ -539,7 +547,6 @@ gates:
   - type: typecheck | test | lint | custom
     command: {exact shell command}
     required: true | false
-    description: {one-line human description}
 ```
 
 Auto-detection from project marker files:
@@ -611,7 +618,7 @@ features_completed:
 
 ## Pre-Mortem Section Format
 
-Written by the Scout into the IMPL doc before the human review checkpoint. Placement: immediately after the Scaffolds section (or immediately after Suitability Assessment if Scaffolds is omitted), before Known Issues and agent prompts.
+Written by the Scout into the IMPL doc before the human review checkpoint. Placement: immediately after the Scaffolds section (or after Quality Gates if Scaffolds is omitted, or after Suitability Assessment if both Quality Gates and Scaffolds are omitted), before Known Issues and agent prompts.
 
 The Pre-Mortem section uses a markdown table in free-form prose. It is human-facing and is NOT a typed block — it is excluded from validator scope.
 

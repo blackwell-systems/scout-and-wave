@@ -85,11 +85,31 @@ Ready to proceed?
 The IMPL doc is the coordination artifact. Key sections to check:
 
 **File Ownership Table:**
-```markdown
-| File | Owner | Status |
-|------|-------|--------|
-| src/cache/cache.go | Agent A | new |
-| src/cache/memory.go | Agent A | new |
+| File | Agent | Wave | Depends On |
+|------|-------|------|------------|
+| src/cache/cache.go | A | 1 | - |
+| src/cache/memory.go | A | 1 | - |
+| src/client/client.go | B | 1 | A |
+| File | Agent | Wave | Depends On |
+|------|-------|------|------------|
+| src/cache/cache.go | A | 1 | - |
+| src/cache/memory.go | A | 1 | - |
+| src/client/client.go | B | 1 | A |
+| File | Agent | Wave | Depends On |
+|------|-------|------|------------|
+| src/cache/cache.go | A | 1 | - |
+| src/cache/memory.go | A | 1 | - |
+| src/client/client.go | B | 1 | A |
+| File | Agent | Wave | Depends On |
+|------|-------|------|------------|
+| src/cache/cache.go | A | 1 | - |
+| src/cache/memory.go | A | 1 | - |
+| src/client/client.go | B | 1 | A |
+| File | Agent | Wave | Depends On |
+|------|-------|------|------------|
+| src/cache/cache.go | A | 1 | - |
+| src/cache/memory.go | A | 1 | - |
+| src/client/client.go | B | 1 | A |
 | src/client/client.go | Agent B | modify |
 ```
 

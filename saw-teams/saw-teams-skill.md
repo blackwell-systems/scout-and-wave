@@ -36,15 +36,24 @@ If the argument is `bootstrap <project-description>`:
 1. Read `${CLAUDE_SKILL_DIR}/saw-bootstrap.md` for the bootstrap procedure.
 2. Gather requirements (language, project type, key concerns) before designing anything.
 3. Launch a **Scout agent** using the Agent tool with `run_in_background: true` and the bootstrap procedure as its prompt. The Scout designs the package structure and interface contracts and writes `docs/IMPL/IMPL-bootstrap.md`. Do NOT do this work yourself — performing Scout duties violates I6 (Role Separation).
-4. When the Scout completes, read `docs/IMPL/IMPL-bootstrap.md`. Report the architecture design and wave structure. Ask the user to review before proceeding.
-5. **Scaffold Agent (conditional):** If the IMPL doc Scaffolds section is non-empty and any scaffold file has `Status: pending`, launch a **Scaffold Agent** using the Agent tool with `run_in_background: true` and the contents of `${CLAUDE_SKILL_DIR}/scaffold-agent.md` as its prompt. Use `[SAW:scaffold:bootstrap]` as the description prefix. The Scaffold Agent is NOT a teammate; it runs before any team exists. Wait for it to complete, then read the Scaffolds section: if any file shows `Status: FAILED`, stop immediately — report the failure reason to the user and do not create worktrees or teams. If all files show `Status: committed`, proceed.
+4. **E16: Validate IMPL doc before review.** After Scout writes the IMPL doc, run the validator:
+   ```bash
+   bash "${CLAUDE_SKILL_DIR}/scripts/validate-impl.sh" "<absolute-path-to-impl-doc>"
+   ```
+   If exit code is 0, proceed to human review. If exit code is 1, the stdout contains a plain-text error list — send it to Scout as a correction prompt: "Your IMPL doc failed validation. Fix only these sections:
+{errors}". Retry up to 3 attempts. On retry limit exhaustion, enter BLOCKED and surface the validation errors to the human. Do not present the doc for human review until validation passes.
+
+   **E16A note:** The validator enforces required block presence — an IMPL doc missing `impl-file-ownership`, `impl-dep-graph`, or `impl-wave-structure` typed blocks will fail even if all present blocks are internally valid. E16C warnings (out-of-band dep graph content) appear in stdout but do not cause exit 1; include them in the correction prompt anyway so Scout moves the content into a typed block.
+
+5. When the Scout completes, read `docs/IMPL/IMPL-bootstrap.md`. Report the architecture design and wave structure. Ask the user to review before proceeding.
+6. **Scaffold Agent (conditional):** If the IMPL doc Scaffolds section is non-empty and any scaffold file has `Status: pending`, launch a **Scaffold Agent** using the Agent tool with `run_in_background: true` and the contents of `${CLAUDE_SKILL_DIR}/scaffold-agent.md` as its prompt. Use `[SAW:scaffold:bootstrap]` as the description prefix. The Scaffold Agent is NOT a teammate; it runs before any team exists. Wait for it to complete, then read the Scaffolds section: if any file shows `Status: FAILED`, stop immediately — report the failure reason to the user and do not create worktrees or teams. If all files show `Status: committed`, proceed.
 
 If no `docs/IMPL/IMPL-*.md` file exists for the current feature:
 1. Launch a **Scout agent** using the Agent tool with `run_in_background: true` and the contents of `${CLAUDE_SKILL_DIR}/scout.md` as its prompt and the feature description as context. The Scout is NOT a teammate; it runs before any team exists and does not need inter-agent messaging. The Scout analyzes the codebase, runs the suitability gate, and writes the IMPL doc; the Orchestrator does not perform this analysis itself. Inform the user that the Scout is running.
 2. When the Scout completes, read the resulting `docs/IMPL/IMPL-<feature-slug>.md`.
 3. **E16: Validate IMPL doc before review.** Run the validator: `bash "${CLAUDE_SKILL_DIR}/scripts/validate-impl.sh" "<absolute-path-to-impl-doc>"`. If exit code is 0, proceed. If exit code is 1, send the error list to Scout as a correction prompt: "Your IMPL doc failed validation. Fix only these sections:\n{errors}". Retry up to 3 attempts. On retry limit exhaustion, enter BLOCKED and surface to the human. Do not present the doc for human review until validation passes.
 4. Report the suitability verdict to the user, and if suitable: the wave structure, file ownership table, interface contracts, and Scaffolds section. Ask the user to review before proceeding.
-5. **Scaffold Agent (conditional):** If the IMPL doc Scaffolds section is non-empty and any scaffold file has `Status: pending`, launch a **Scaffold Agent** using the Agent tool with `run_in_background: true` and the contents of `${CLAUDE_SKILL_DIR}/scaffold-agent.md` as its prompt. Use `[SAW:scaffold:<feature-slug>]` as the description prefix so claudewatch can identify the run. The Scaffold Agent is NOT a teammate; it runs before any team exists. Wait for it to complete, then read the Scaffolds section: if any file shows `Status: FAILED`, stop immediately — report the failure reason to the user and do not create worktrees or teams. The user must revise the interface contracts in the IMPL doc and re-run the Scaffold Agent. If all files show `Status: committed`, proceed.
+6. **Scaffold Agent (conditional):** If the IMPL doc Scaffolds section is non-empty and any scaffold file has `Status: pending`, launch a **Scaffold Agent** using the Agent tool with `run_in_background: true` and the contents of `${CLAUDE_SKILL_DIR}/scaffold-agent.md` as its prompt. Use `[SAW:scaffold:<feature-slug>]` as the description prefix so claudewatch can identify the run. The Scaffold Agent is NOT a teammate; it runs before any team exists. Wait for it to complete, then read the Scaffolds section: if any file shows `Status: FAILED`, stop immediately — report the failure reason to the user and do not create worktrees or teams. The user must revise the interface contracts in the IMPL doc and re-run the Scaffold Agent. If all files show `Status: committed`, proceed.
 
 If a `docs/IMPL/IMPL-*.md` file already exists:
 1. Read it and identify the current wave (the first wave with unchecked status items). Also check the Scaffolds section: if any scaffold file has `Status: pending`, spawn the Scaffold Agent now (see step 5 of the Scout flow above) before creating any worktrees or teams. If any file shows `Status: FAILED`, stop and report the failure to the user before proceeding.
@@ -70,7 +79,7 @@ If a `docs/IMPL/IMPL-*.md` file already exists:
 
       2. The **per-agent context payload (E23)** extracted from the IMPL doc.
          Do NOT pass the full IMPL doc. Extract only:
-         - The agent's own `# Wave {N} Agent {X}` section (Fields 0–8)
+         - The agent's own `# Wave {N} Agent {ID}` section (Fields 0–8)
          - The `## Interface Contracts` section
          - The `## File Ownership` table
          - The `## Scaffolds` section
@@ -79,16 +88,16 @@ If a `docs/IMPL/IMPL-*.md` file already exists:
            `<!-- IMPL doc: /abs/path/to/docs/IMPL/IMPL-slug.md -->`
 
       3. The **absolute worktree path** explicitly stated:
-         `Your worktree is at: {absolute-repo-path}/.claude/worktrees/wave{N}-agent-{X}`
+         `Your worktree is at: {absolute-repo-path}/.claude/worktrees/wave{N}-agent-{ID}`
          This seeds Field 0 self-healing so the teammate knows where to cd.
 
       The combined spawn context is what you pass when you tell Claude to
-      "spawn a teammate named wave{N}-agent-{X} with this prompt: [...]".
+      "spawn a teammate named wave{N}-agent-{ID} with this prompt: [...]".
 
    d. **Create Agent Team and spawn teammates.** Spawn all teammates for the
       current wave in a single instruction to Claude. Use teammate names in
-      `wave{N}-agent-{X}` format (e.g., `wave1-agent-A`). Include the SAW
-      observability tag in the spawn description: `[SAW:wave{N}:agent-{X}]
+      `wave{N}-agent-{ID}` format (e.g., `wave1-agent-A`). Include the SAW
+      observability tag in the spawn description: `[SAW:wave{N}:agent-{ID}]
       {short description}`. Teammate names in this format enable claudewatch
       to parse wave timing and per-agent status from session transcripts.
 
@@ -103,7 +112,7 @@ If a `docs/IMPL/IMPL-*.md` file already exists:
 
    e. **Create tasks in the shared task list.** For each teammate:
       ```
-      Task: "wave{N}-agent-{X}: {short description}"
+      Task: "wave{N}-agent-{ID}: {short description}"
       Status: pending
       ```
       Do NOT create tasks for future waves; tasks are lost during team

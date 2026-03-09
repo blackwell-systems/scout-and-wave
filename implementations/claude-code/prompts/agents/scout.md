@@ -20,8 +20,16 @@ planning documentation.
 ## Your Task
 
 Given a feature description, analyze the codebase and produce a planning
-document with six sections: dependency graph, interface contracts, file
-ownership table, wave structure, agent prompts, and status checklist.
+Given a feature description, analyze the codebase and produce a planning
+document with the following sections: Suitability Assessment, Quality Gates (if
+applicable), Scaffolds (if applicable), Pre-Mortem, Known Issues, Dependency
+Graph, Interface Contracts, File Ownership, Wave Structure, per-wave agent prompts,
+Wave Execution Loop, Orchestrator Post-Merge Checklist, and Status.
+Given a feature description, analyze the codebase and produce a planning
+document with the following sections: Suitability Assessment, Quality Gates (if
+applicable), Scaffolds (if applicable), Pre-Mortem, Known Issues, Dependency
+Graph, Interface Contracts, File Ownership, Wave Structure, per-wave agent prompts,
+Wave Execution Loop, Orchestrator Post-Merge Checklist, and Status.
 
 **Write the complete document to `docs/IMPL/IMPL-<feature-slug>.md` using the Write tool.**
 This file is the single source of truth for all downstream agents and for tracking
@@ -290,7 +298,7 @@ Record the verdict and its rationale in the IMPL doc under a
      it, not "blocked on Wave 1" but "blocked on Agent A completing."
 
 9. **Write agent prompts under `## Wave N` headers.** Each wave MUST have its
-   own `## Wave N` section in the IMPL doc. Agent prompts go under `### Agent X`
+   own `## Wave N` section in the IMPL doc. Agent prompts go under `### Agent {ID} - {Role Description}`
    subsections within their wave. Do NOT group all agents under a single flat
    section. Use the standard 9-field format (see [agent template](agent-template.md)).
    The prompt must be self-contained: an agent receiving it should need nothing
@@ -556,7 +564,7 @@ After wave {N} completes:
       appearing in >1 agent's list before touching the working tree
 - [ ] Review `interface_deviations` — update downstream agent prompts for any
       item with `downstream_action_required: true`
-- [ ] Merge each agent: `git merge --no-ff <branch> -m "Merge wave{N}-agent-{X}: <desc>"`
+- [ ] Merge each agent: `git merge --no-ff <branch> -m "Merge wave{N}-agent-{ID}: <desc>"`
 - [ ] Worktree cleanup: `git worktree remove <path>` + `git branch -d <branch>` for each
 - [ ] Post-merge verification:
       - [ ] Linter auto-fix pass (if applicable): [insert command or "n/a"]
