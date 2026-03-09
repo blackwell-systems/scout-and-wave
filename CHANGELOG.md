@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.14.8] | 2026-03-08 | E16D: Column order validation hardening — validator now enforces File\|Agent\|Wave column order to prevent silent data corruption at runtime. |
 | [0.14.7] | 2026-03-08 | Seventh-pass convergence — 1 finding: protocol version 0.14.5→0.14.6 in README.md. 98% reduction from pass 6 signals convergence. Zero P0 issues. |
 | [0.14.6] | 2026-03-08 | Sixth-pass audit — 41 findings + 6 verification fixes + 3 follow-ups: {X}→{ID} final cleanup, repo: field in completion reports, E16 in bootstrap flows, E20/E21 in merge procedures, invariant numbers, template consistency, historical docs |
 | [0.14.5] | 2026-03-08 | Fifth-pass audit — 20 findings: {letter}→{ID} in merge/worktree/hooks/DESIGN/QUICKSTART/skill files, saw-bootstrap.md section order canonical, saw-teams-merge parity (failure_type/timeout, Step 1.75 File Ownership Verification), saw-teams-skill bootstrap Scaffold Agent step |
@@ -68,6 +69,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.14.8] - 2026-03-08
+
+### Fixed
+
+**E16D: Column order validation hardening**
+
+- **`validate-impl.sh` column order enforcement** — E16 validator now validates that `impl-file-ownership` tables have columns in canonical order: `File | Agent | Wave | ...`. Previously validator only checked that header contained "| File " somewhere, which allowed Scout to write tables with wrong column order (`File | Repo | Agent | ...`). Parser reads by column position (not header name), so wrong order caused silent data corruption at runtime (Repo data appeared in Agent field). New validation extracts first three columns from header row and enforces `File` in col 1, `Agent` in col 2, `Wave` in col 3. Prevents recurrence of IMPL-engine-extraction.md bug where Scout wrote `| File | Repo | Agent | Wave | Depends On |` format that passed validation but broke at runtime.
+
+**Context:** Discovered during multi-repo display debugging in scout-and-wave-web. IMPL-engine-extraction.md had wrong column order that validator didn't catch. This is a pre-validation gap — doc was written before E16 existed, but exposes validator weakness. Hardening prevents future occurrences.
+
+---
 
 ## [0.14.7] - 2026-03-08
 

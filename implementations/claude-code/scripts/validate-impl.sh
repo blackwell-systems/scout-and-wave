@@ -60,10 +60,30 @@ validate_file_ownership() {
   local content="$1"
   local lineno="$2"
 
-  # Must have a header row containing File, Agent, Wave columns
-  if ! echo "$content" | grep -q "| File "; then
-    add_error "impl-file-ownership block (line $lineno): missing header row — expected '| File | Agent | Wave | Depends On |'"
+  # Must have a header row containing File, Agent, Wave columns in correct order
+  local header
+  header=$(echo "$content" | grep -m1 "^|" | head -1)
+
+  if [[ -z "$header" ]]; then
+    add_error "impl-file-ownership block (line $lineno): missing header row — expected '| File | Agent | Wave | ...' in that order"
     return
+  fi
+
+  # E16D: Column order validation — File MUST be col 1, Agent col 2, Wave col 3
+  # Split header by pipe and trim whitespace from each column
+  IFS='|' read -ra cols <<< "$header"
+  local col1=$(echo "${cols[1]}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+  local col2=$(echo "${cols[2]}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+  local col3=$(echo "${cols[3]}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+
+  if [[ "$col1" != "File" ]]; then
+    add_error "impl-file-ownership block (line $lineno): column 1 must be 'File' — got '$col1'"
+  fi
+  if [[ "$col2" != "Agent" ]]; then
+    add_error "impl-file-ownership block (line $lineno): column 2 must be 'Agent' — got '$col2'"
+  fi
+  if [[ "$col3" != "Wave" ]]; then
+    add_error "impl-file-ownership block (line $lineno): column 3 must be 'Wave' — got '$col3'"
   fi
 
   # Must have at least one data row (not the header or separator)
