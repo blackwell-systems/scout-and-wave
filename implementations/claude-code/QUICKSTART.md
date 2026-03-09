@@ -502,7 +502,7 @@ Agents work in isolated worktrees, so you can edit files on main safely. Your ch
 
 **Q: How do I see what agents are doing in real-time?**
 
-Agent work happens in `.claude/worktrees/wave{N}-agent-{letter}/`. You can `cd` into those directories and inspect the changes, but don't commit manually.
+Agent work happens in `.claude/worktrees/wave{N}-agent-{ID}/`. You can `cd` into those directories and inspect the changes, but don't commit manually.
 
 **Q: What if two agents need to modify the same file?**
 

@@ -84,7 +84,7 @@ The 9-field agent template needs adaptation:
 ### Completion reports
 
 Current: agents append structured YAML to the IMPL doc under
-`### Agent {letter} - Completion Report`.
+`### Agent {ID} - Completion Report`.
 
 SAW-Teams option A: teammates message the lead with structured completion
 data. The lead writes all reports to the IMPL doc.

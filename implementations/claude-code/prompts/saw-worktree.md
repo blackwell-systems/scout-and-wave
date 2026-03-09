@@ -167,9 +167,9 @@ matches the current HEAD of main before launching agents:
 ```bash
 git worktree list
 # Compare commit SHAs - if any worktree SHA differs from main HEAD, remove and recreate:
-git worktree remove ".claude/worktrees/wave{N}-agent-{letter}" --force
-git branch -D "wave{N}-agent-{letter}"
-git worktree add ".claude/worktrees/wave{N}-agent-{letter}" -b "wave{N}-agent-{letter}"
+git worktree remove ".claude/worktrees/wave{N}-agent-{ID}" --force
+git branch -D "wave{N}-agent-{ID}"
+git worktree add ".claude/worktrees/wave{N}-agent-{ID}" -b "wave{N}-agent-{ID}"
 ```
 
 Stale worktrees from a previous session will cause agents to implement

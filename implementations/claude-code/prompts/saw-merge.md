@@ -6,7 +6,7 @@ Merge agent worktrees back into the main branch after a wave completes.
 ## Step 1: Parse Completion Reports
 
 Read each agent's structured completion report from the IMPL doc
-(`### Agent {letter} - Completion Report`). Extract:
+(`### Agent {ID} - Completion Report`). Extract:
 
 - `status`: if **any** agent in the wave has `status: partial` or `status: blocked`,
   the wave does not proceed to merge. Stop here. Mark the wave BLOCKED in the IMPL doc.
@@ -42,7 +42,7 @@ base_commit=$(git rev-parse HEAD)
 For each agent with `status: complete`:
 
 ```bash
-branch="wave{N}-agent-{letter}"
+branch="wave{N}-agent-{ID}"
 commit_count=$(git rev-list ${base_commit}..${branch} --count)
 ```
 
@@ -53,7 +53,7 @@ the next agent. Do not commit uncommitted changes found on main.
 Present the isolation failure and recovery options to the user:
 
 ```
-ISOLATION FAILURE: Agent {letter} branch wave{N}-agent-{letter} has 0 commits.
+ISOLATION FAILURE: Agent {ID} branch wave{N}-agent-{ID} has 0 commits.
 Base commit: {base_commit}
 Agent(s) may have worked on main instead of their worktrees.
 
@@ -82,7 +82,7 @@ Ownership table:
 
 ```bash
 # If agent committed to a branch:
-branch="wave{N}-agent-{letter}"
+branch="wave{N}-agent-{ID}"
 actual_files=$(git diff --name-only ${base_commit}..${branch})
 
 # If agents committed directly to main (isolation failure):
@@ -119,8 +119,8 @@ review before merging.
 **Expected conflict: IMPL doc completion reports.** Multiple agents appending
 to the same IMPL doc will produce merge conflicts in that file. This is
 expected; resolve by accepting all appended sections (each agent owns a
-distinct `### Agent {letter} - Completion Report` section). For waves with
-≥5 agents, use per-agent report files (`docs/reports/agent-{letter}.md`)
+distinct `### Agent {ID} - Completion Report` section). For waves with
+≥5 agents, use per-agent report files (`docs/reports/agent-{ID}.md`)
 instead.
 
 ## Step 3: Review Interface Deviations
@@ -183,20 +183,20 @@ For each agent with `status: complete`, in any order (order is safe when file
 ownership is disjoint):
 
 ```bash
-worktree=".claude/worktrees/wave{N}-agent-{letter}"
-branch="wave{N}-agent-{letter}"
+worktree=".claude/worktrees/wave{N}-agent-{ID}"
+branch="wave{N}-agent-{ID}"
 commit="{sha from completion report}"
 
 if [ "$commit" != "uncommitted" ]; then
   # Agent committed - use git merge
-  git merge --no-ff "$branch" -m "Merge wave{N}-agent-{letter}: {short description}"
+  git merge --no-ff "$branch" -m "Merge wave{N}-agent-{ID}: {short description}"
 else
   # Agent left uncommitted changes - copy files manually
   for file in {files_changed} {files_created}; do
     cp "$worktree/$file" "./$file"
     git add "./$file"
   done
-  SAW_ALLOW_MAIN_COMMIT=1 git commit -m "Apply agent {letter} changes from worktree"
+  SAW_ALLOW_MAIN_COMMIT=1 git commit -m "Apply agent {ID} changes from worktree"
 fi
 ```
 

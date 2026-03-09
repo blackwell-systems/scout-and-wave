@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.14.5] | 2026-03-08 | Fifth-pass audit — 20 findings: {letter}→{ID} in merge/worktree/hooks/DESIGN/QUICKSTART/skill files, saw-bootstrap.md section order canonical, saw-teams-merge parity (failure_type/timeout, Step 1.75 File Ownership Verification), saw-teams-skill bootstrap Scaffold Agent step |
 | [0.14.4] | 2026-03-08 | Fourth-pass audit — 17 findings: {letter}→{ID} propagation, Interface Contracts in IMPL structure, E20/E21 in procedures/checklist, saw-skill CLAUDE_SKILL_DIR note, brewprune attribution removed |
 | [0.14.3] | 2026-03-08 | Third-pass audit — 25 findings: hooks path, saw-teams I6/E16/E15/E18/paths, scaffold 2-pass build, scout Step 0/cross-check, solo agent check |
 | [0.14.2] | 2026-03-08 | Second-pass audit — saw-teams parity (E23 payload, IMPL paths, E19/E20/E21), bootstrap completeness |
@@ -62,6 +63,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.3.0] | 2026-02-28 | Bootstrap mode for new projects; Wave 0 pattern |
 | [0.2.0] | 2026-02-28 | Decomposed skill prompt; complexity-based suitability heuristic |
 | [0.1.0] | 2026-02-27 | Initial release |
+
+---
+
+## [0.14.5] - 2026-03-08
+
+### Fixed
+
+**Fifth-pass deep audit — 20 findings across merge procedures, worktree files, hooks, skill files, and bootstrap flow**
+
+- **`{letter}` → `{ID}` final propagation** — `saw-merge.md`, `saw-teams-merge.md`, `saw-worktree.md`, `wave-agent.md` (`### Agent [X]` heading), `hooks.md` (2 occurrences), `DESIGN.md`, `QUICKSTART.md` (worktree path example), `saw-skill.md` (completion report section reference), `saw-teams-skill.md` (completion report section reference) all still used `{letter}` or `[X]` after v0.14.4. All replaced with `{ID}` to complete the `[A-Z][2-9]?` scheme rollout across the full file set.
+- **`saw-bootstrap.md`: section order inverted** — Output Format template had `## Interface Contracts` and `## File Ownership` placed before `## Scaffolds`, inverting the canonical IMPL doc section order (Scaffolds → Dependency Graph → Interface Contracts → File Ownership). Moved to canonical position after `## Dependency Graph`.
+- **`saw-teams-merge.md`: failure_type/timeout handling absent** — Step 1 (Parse Completion Reports) was missing the `failure_type` decision text and the `timeout` retry-with-scope-reduction rule present in `saw-merge.md` v0.4.6. Added to restore parity.
+- **`saw-teams-merge.md`: Step 1.75 File Ownership Verification missing** — `saw-merge.md` v0.4.6 includes a pre-merge ownership verification step (compare each teammate's actual changed files against the File Ownership table, flag I1 violations). This step was entirely absent from the teams merge procedure. Added as Step 1.75.
+- **`saw-teams-skill.md`: bootstrap flow missing Scaffold Agent step** — The `bootstrap` branch (steps 1–4) had no Scaffold Agent conditional launch after human review, unlike the standard scout flow (step 5) and the IMPL-exists branch. Added step 5 with `[SAW:scaffold:bootstrap]` tag prefix.
+- **`protocol/README.md`: version still at 0.14.0** — Not bumped during v0.14.1–v0.14.4 releases. Updated to 0.14.5.
 
 ---
 

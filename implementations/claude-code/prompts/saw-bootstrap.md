@@ -228,19 +228,6 @@ gates:
     command: [e.g. golangci-lint run | cargo clippy | ruff check .]
     required: false
 
-## Interface Contracts
-
-[Exact, language-native, fully typed signatures for every cross-package boundary.
-No pseudocode. These are binding contracts.]
-
-## File Ownership
-
-```yaml type=impl-file-ownership
-| File | Agent | Wave | Depends On |
-|------|-------|------|------------|
-| path/to/file | B | 1 | — |
-```
-
 ## Scaffolds
 
 | File | Contents | Import path | Status |
@@ -280,6 +267,19 @@ Wave 2 (1 agent — entry point wiring):
     [A] cmd/main.go
          Wires all packages together.
          depends on: [B] [C] [D]
+```
+
+## Interface Contracts
+
+[Exact, language-native, fully typed signatures for every cross-package boundary.
+No pseudocode. These are binding contracts.]
+
+## File Ownership
+
+```yaml type=impl-file-ownership
+| File | Agent | Wave | Depends On |
+|------|-------|------|------------|
+| path/to/file | B | 1 | — |
 ```
 
 ## Wave Structure

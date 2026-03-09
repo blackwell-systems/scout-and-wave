@@ -8,7 +8,7 @@ invariants, with teammate messaging as a supplement.
 ## Step 1: Parse Completion Reports
 
 Read each teammate's structured completion report from the IMPL doc
-(`### Agent {letter} - Completion Report`). Extract:
+(`### Agent {ID} - Completion Report`). Extract:
 
 - `status`: if **any** teammate in the wave has `status: partial` or
   `status: blocked`, the wave does not proceed to merge. Stop here. Mark the
@@ -16,6 +16,14 @@ Read each teammate's structured completion report from the IMPL doc
   manually fixed, or descoped) before the merge step proceeds. Teammates that
   completed successfully are not re-run, but their worktrees are not merged
   until the full wave is resolved. Partial merges are not permitted.
+  Also read `failure_type` on any non-complete teammate and record it in your
+  merge assessment. `failure_type: transient` or `fixable` may be automatically
+  remediable per E19 before escalating to BLOCKED state.
+  `failure_type: timeout` — retry once with scope-reduction instructions: instruct
+  the teammate to commit partial work immediately, complete only essential work,
+  and defer non-critical work; if the retry also times out, escalate.
+  `failure_type: needs_replan` or `escalate` always require human review — do not
+  attempt automatic retry.
 - `worktree`: path used for merge
 - `commit`: sha for `git merge`, or "uncommitted" (requires manual copy)
 - `files_changed` + `files_created`: used for conflict prediction
@@ -45,7 +53,7 @@ base_commit=$(git rev-parse HEAD)
 For each teammate with `status: complete`:
 
 ```bash
-branch="wave{N}-agent-{letter}"
+branch="wave{N}-agent-{ID}"
 commit_count=$(git rev-list ${base_commit}..${branch} --count)
 ```
 
@@ -56,7 +64,7 @@ proceed to the next teammate. Do not commit uncommitted changes found on main.
 Present the isolation failure and recovery options to the user:
 
 ```
-ISOLATION FAILURE: Teammate {letter} branch wave{N}-agent-{letter} has 0 commits.
+ISOLATION FAILURE: Teammate {ID} branch wave{N}-agent-{ID} has 0 commits.
 Base commit: {base_commit}
 Teammate(s) may have worked on main instead of their worktrees.
 
@@ -76,6 +84,37 @@ Recovery options:
 The lead is synchronous so the human can make this judgment call.
 Path 1 costs compute time. Path 3 costs trust in the result.
 
+## Step 1.75: File Ownership Verification
+
+Before merging, verify each teammate only touched files in its ownership table.
+This catches ownership violations whether teammates committed to branches or main.
+
+For each teammate, compare its actual changed files against the IMPL doc's File
+Ownership table:
+
+```bash
+# If teammate committed to a branch:
+branch="wave{N}-agent-{ID}"
+actual_files=$(git diff --name-only ${base_commit}..${branch})
+
+# If teammates committed directly to main (isolation failure):
+# Use the completion report's files_changed + files_created lists instead.
+```
+
+For each file in `actual_files`, check it appears in the teammate's ownership row.
+Flag any file that either:
+- Belongs to a different teammate in the same wave (I1 violation)
+- Is not in the ownership table at all (undeclared modification)
+
+**Exceptions:** The IMPL doc itself (`docs/IMPL/IMPL-*.md`) is expected to be
+modified by all teammates (completion reports). Ignore it in this check.
+
+If violations are found, **stop and report before merging.** Show which teammate
+touched which unexpected file. The lead decides whether to accept (if the change
+is harmless, e.g. a go.sum update) or re-run the teammate.
+
+If no violations, proceed to Step 2.
+
 ## Step 2: Conflict Prediction
 
 Before touching the working tree, cross-reference all teammates'
@@ -93,8 +132,8 @@ for review before merging.
 **Expected conflict: IMPL doc completion reports.** Multiple teammates
 appending to the same IMPL doc will produce merge conflicts in that file.
 This is expected; resolve by accepting all appended sections (each teammate
-owns a distinct `### Agent {letter} - Completion Report` section). For waves
-with ≥5 agents, use per-agent report files (`docs/reports/agent-{letter}.md`)
+owns a distinct `### Agent {ID} - Completion Report` section). For waves
+with ≥5 agents, use per-agent report files (`docs/reports/agent-{ID}.md`)
 instead.
 
 ## Step 3: Review Interface Deviations
@@ -166,20 +205,20 @@ For each teammate with `status: complete`, in any order (order is safe when
 file ownership is disjoint):
 
 ```bash
-worktree=".claude/worktrees/wave{N}-agent-{letter}"
-branch="wave{N}-agent-{letter}"
+worktree=".claude/worktrees/wave{N}-agent-{ID}"
+branch="wave{N}-agent-{ID}"
 commit="{sha from completion report}"
 
 if [ "$commit" != "uncommitted" ]; then
   # Teammate committed - use git merge
-  git merge --no-ff "$branch" -m "Merge wave{N}-agent-{letter}: {short description}"
+  git merge --no-ff "$branch" -m "Merge wave{N}-agent-{ID}: {short description}"
 else
   # Teammate left uncommitted changes - copy files manually
   for file in {files_changed} {files_created}; do
     cp "$worktree/$file" "./$file"
     git add "./$file"
   done
-  SAW_ALLOW_MAIN_COMMIT=1 git commit -m "Apply agent {letter} changes from worktree"
+  SAW_ALLOW_MAIN_COMMIT=1 git commit -m "Apply agent {ID} changes from worktree"
 fi
 ```
 
@@ -320,7 +359,7 @@ Recovery procedure:
 1. Check `git worktree list`: identify any worktrees from the crashed wave
 2. For each worktree, check if the branch has commits:
    ```bash
-   git log wave{N}-agent-{letter} --oneline -1
+   git log wave{N}-agent-{ID} --oneline -1
    ```
 3. If commits exist:
    - Read the IMPL doc for a completion report from this teammate

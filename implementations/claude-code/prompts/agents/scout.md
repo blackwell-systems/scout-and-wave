@@ -540,7 +540,7 @@ The merge procedure detail is in `saw-merge.md`. Key principles:
   codebase surfaces cross-package failures none of them saw individually.
 - Fix before proceeding. Do not launch the next wave with a broken build.
 
-### Orchestrator Post-Merge Checklist
+## Orchestrator Post-Merge Checklist
 
 **Instructions for Scout:** Replace the bracketed placeholders below with
 feature-specific content. Keep the standard items exactly as written. Add any

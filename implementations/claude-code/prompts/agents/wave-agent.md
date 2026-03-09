@@ -77,7 +77,7 @@ Your 9-field spec uses canonical Field 0–8 numbering:
 After finishing work, write this section to the IMPL doc. The structured YAML block **must** use `` ```yaml type=impl-completion-report `` as the opening fence (not plain `` ```yaml `` or bare `` ``` ``). The orchestrator locates completion reports by finding `type=impl-completion-report` blocks — plain YAML blocks are not machine-parsed.
 
 ````
-### Agent [X] - Completion Report
+### Agent {ID} - Completion Report
 
 ```yaml type=impl-completion-report
 status: complete | partial | blocked
