@@ -31,9 +31,9 @@ ordered so the teammate reads constraints first, then context, then the work.
 ---
 
 ```
-# Wave {N} Agent {letter}: {short description}
+# Wave {N} Agent {ID}: {short description}
 
-You are Wave {N} Agent {letter}. {One-sentence summary of your task.}
+You are Wave {N} Agent {ID}. {One-sentence summary of your task.}
 
 ## Task Assignment
 
@@ -55,7 +55,7 @@ ownership is assigned at IMPL doc time, not at runtime).
 
 ```bash
 # Attempt to cd to expected worktree location (self-healing)
-cd {absolute-repo-path}/.claude/worktrees/wave{N}-agent-{letter} 2>/dev/null || true
+cd {absolute-repo-path}/.claude/worktrees/wave{N}-agent-{ID} 2>/dev/null || true
 ```
 
 **Step 2: Verify isolation (strict fail-fast after self-correction attempt)**
@@ -63,7 +63,7 @@ cd {absolute-repo-path}/.claude/worktrees/wave{N}-agent-{letter} 2>/dev/null || 
 ```bash
 # Check working directory
 ACTUAL_DIR=$(pwd)
-EXPECTED_DIR="{absolute-repo-path}/.claude/worktrees/wave{N}-agent-{letter}"
+EXPECTED_DIR="{absolute-repo-path}/.claude/worktrees/wave{N}-agent-{ID}"
 
 if [ "$ACTUAL_DIR" != "$EXPECTED_DIR" ]; then
   echo "ISOLATION FAILURE: Wrong directory (even after cd attempt)"
@@ -74,7 +74,7 @@ fi
 
 # Check git branch
 ACTUAL_BRANCH=$(git branch --show-current)
-EXPECTED_BRANCH="wave{N}-agent-{letter}"
+EXPECTED_BRANCH="wave{N}-agent-{ID}"
 
 if [ "$ACTUAL_BRANCH" != "$EXPECTED_BRANCH" ]; then
   echo "ISOLATION FAILURE: Wrong branch"
@@ -97,11 +97,11 @@ echo "✓ Isolation verified: $ACTUAL_DIR on $ACTUAL_BRANCH"
 1. Write error to completion report in the IMPL doc:
 
 ```
-### Agent {letter} - Completion Report
+### Agent {ID} - Completion Report
 
 **ISOLATION VERIFICATION FAILED**
 
-Expected: .claude/worktrees/wave{N}-agent-{letter} on branch wave{N}-agent-{letter}
+Expected: .claude/worktrees/wave{N}-agent-{ID} on branch wave{N}-agent-{ID}
 Actual: [paste output from pwd and git branch]
 
 **No work performed.** Cannot proceed without confirmed isolation.
@@ -116,8 +116,7 @@ Actual: [paste output from pwd and git branch]
 **If verification passes:** Document briefly in completion report, then
 proceed with work.
 
-**Rationale:** Defense-in-depth isolation enforcement (discovered in brewprune
-Round 5 Waves 1-2, adapted for Agent Teams messaging). Layer 1: lead
+**Rationale:** Defense-in-depth isolation enforcement (adapted for Agent Teams messaging). Layer 1: lead
 pre-creates worktrees. Layer 1.5: teammate attempts self-correction via cd.
 Layer 2: teammate verifies isolation and fails fast if incorrect. Layer 2.5:
 teammate messages lead about failure (real-time awareness). Layer 3: lead
@@ -259,14 +258,14 @@ time is a protocol deviation and must be noted in the report.
 ```bash
 cd /path/to/worktree
 git add .
-git commit -m "wave{N}-agent-{letter}: {short description}"
+git commit -m "wave{N}-agent-{ID}: {short description}"
 ```
 
 This lets the lead use `git merge` instead of manual file copying.
 If you cannot commit (e.g., no changes, or git error), note it in your report.
 
 **E14: IMPL doc write discipline.** Append your completion report at the end
-of the IMPL doc under `### Agent {letter} - Completion Report`. Do not edit
+of the IMPL doc under `### Agent {ID} - Completion Report`. Do not edit
 any earlier section of the IMPL doc (interface contracts, file ownership table,
 suitability verdict, wave structure). Those sections are frozen. If you believe
 an interface contract needs updating, report it as an interface deviation below
@@ -280,7 +279,7 @@ Use the structured format below; the lead parses these fields to automate
 conflict detection and merging. Write the structured block first, then add
 free-form notes beneath it.
 
-### Agent {letter} - Completion Report
+### Agent {ID} - Completion Report
 
 ```yaml type=impl-completion-report
 status: complete | partial | blocked
@@ -310,7 +309,7 @@ why. Do not mark `complete` if verification failed.
 **After writing the completion report to the IMPL doc:**
 
 1. Message the lead with a summary:
-   "Agent {letter} complete. Status: {status}. Verification: {PASS|FAIL}.
+   "Agent {ID} complete. Status: {status}. Verification: {PASS|FAIL}.
    Interface deviations: {count}. Out-of-scope deps: {count}."
 
 2. If you have interface deviations with `downstream_action_required: true`,

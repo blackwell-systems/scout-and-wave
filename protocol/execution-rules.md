@@ -580,7 +580,7 @@ The Orchestrator reads this and halts before creating any worktrees. The user mu
 
 **Required Action:** The orchestrator constructs a per-agent context payload for each Wave agent instead of passing the full IMPL doc. The payload contains exactly:
 
-1. The agent's 9-field prompt section (extracted from IMPL doc by heading: `### Agent {letter} - {Role}`)
+1. The agent's 9-field prompt section (extracted from IMPL doc by heading: `### Agent {ID} - {Role}`)
 2. The full `## Interface Contracts` section
 3. The full `## File Ownership` table
 4. The full `## Scaffolds` section (agent needs to know what is pre-built)

@@ -45,7 +45,8 @@ for cross-referencing and audit.*
 ## Supporting Files
 
 All supporting files are symlinked into the skill directory during installation.
-Reference them using `${CLAUDE_SKILL_DIR}/filename.md`:
+Reference them using `${CLAUDE_SKILL_DIR}/filename.md`. The skill directory is set
+in the `CLAUDE_SKILL_DIR` environment variable; if unset, fall back to `~/.claude/skills/saw/`.
 
 - **agent-template.md** - 9-field agent prompt format. Load when constructing agent prompts.
 - **saw-bootstrap.md** - Bootstrap procedure for new projects. Load when `bootstrap` argument is provided.

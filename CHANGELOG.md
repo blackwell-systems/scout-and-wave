@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.14.4] | 2026-03-08 | Fourth-pass audit — 17 findings: {letter}→{ID} propagation, Interface Contracts in IMPL structure, E20/E21 in procedures/checklist, saw-skill CLAUDE_SKILL_DIR note, brewprune attribution removed |
 | [0.14.3] | 2026-03-08 | Third-pass audit — 25 findings: hooks path, saw-teams I6/E16/E15/E18/paths, scaffold 2-pass build, scout Step 0/cross-check, solo agent check |
 | [0.14.2] | 2026-03-08 | Second-pass audit — saw-teams parity (E23 payload, IMPL paths, E19/E20/E21), bootstrap completeness |
 | [0.14.1] | 2026-03-08 | First-pass audit — E1–E23 propagation, failure_type timeout, Quality Gates template, E17 fallback |
@@ -63,6 +64,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.1.0] | 2026-02-27 | Initial release |
 
 ---
+
+## [0.14.4] - 2026-03-08
+
+### Fixed
+
+- **{letter} → {ID} propagation** — `agent-template.md`, `teammate-template.md`, `procedures.md`, `message-formats.md`, `execution-rules.md` (E23), `saw-teams-worktree.md` all used `{letter}` as the placeholder for agent IDs. v0.14.3 fixed `worktree`/`branch` YAML fields but missed template titles, bash scripts, git commit messages, heading names, and worktree path examples. All occurrences replaced with `{ID}` to support the full `[A-Z][2-9]?` scheme (A, A2, B3, etc.)
+- **message-formats.md: Interface Contracts missing from IMPL Doc Structure** — The IMPL Doc Structure section listed Dependency Graph → File Ownership but omitted `## Interface Contracts` between them; added to match scout.md output format and protocol prose
+- **procedures.md: E20/E21 absent from Phase 5** — Completion Collection phase (Procedure 3) had no stub scan or quality gates steps; added E20 (stub detection) and E21 (quality gates) as steps 4–5 after all-complete confirmation
+- **agents/scout.md: E20/E21 absent from Post-Merge Checklist** — Two checklist items added: stub scan (`scan-stubs.sh`) and quality gates (required gates block merge)
+- **agents/scout.md: Step 0 cross-reference** — CONTEXT.md cross-check blockquote referenced "Step 1 of Process"; corrected to "Step 0" to match the `## Step 0: Read Project Memory` heading added in v0.14.3
+- **saw-skill.md: CLAUDE_SKILL_DIR fallback missing** — Supporting Files section documented the env var but not the fallback path; added `if unset, fall back to ~/.claude/skills/saw/` note to match saw-teams-skill.md
+- **saw-teams-skill.md: E16 relative path** — Validator invocation used `bash scripts/validate-impl.sh`; corrected to `bash "${CLAUDE_SKILL_DIR}/scripts/validate-impl.sh"` (absolute, portable)
+- **saw-teams-skill.md: step cross-reference off-by-one** — E16 insertion in v0.14.3 shifted Scaffold Agent to step 5 but the IMPL-exists branch still said "see step 4 of the Scout flow above"; corrected to step 5
+- **teammate-template.md: brewprune attribution removed** — Rationale section contained "discovered in brewprune Round 5 Waves 1-2" attribution; removed (private project history, not relevant to users)
+- **scan-stubs.sh: usage comment path** — Header comment showed `bash scripts/scan-stubs.sh` (incorrect relative path from repo root); corrected to `bash implementations/claude-code/scripts/scan-stubs.sh`
 
 ## [0.14.3] - 2026-03-08
 

@@ -74,7 +74,7 @@ Answer these five questions:
    bug list, or requirements document, check each item against the current
    codebase to determine implementation status:
 
-   > **CONTEXT.md cross-check:** After reading `docs/CONTEXT.md` (Step 1 of Process), also check `established_interfaces` for any interfaces that overlap with the feature being planned. If an interface already exists and matches what you would define, reference it in the IMPL doc's Interface Contracts section rather than redefining it.
+   > **CONTEXT.md cross-check:** After reading `docs/CONTEXT.md` (Step 0 of Process), also check `established_interfaces` for any interfaces that overlap with the feature being planned. If an interface already exists and matches what you would define, reference it in the IMPL doc's Interface Contracts section rather than redefining it.
    - Read the source files that would change for each item
    - Classify each item as: **TO-DO** (not implemented), **DONE** (already
      implemented), or **PARTIAL** (partially implemented)
@@ -561,6 +561,8 @@ After wave {N} completes:
 - [ ] Post-merge verification:
       - [ ] Linter auto-fix pass (if applicable): [insert command or "n/a"]
       - [ ] `[insert full build + test command, e.g. go build ./... && go vet ./... && go test ./...]` ← use `test_command` from IMPL doc header; run unscoped
+- [ ] E20 stub scan: collect `files_changed`+`files_created` from all completion reports; run `bash "${CLAUDE_SKILL_DIR}/scripts/scan-stubs.sh" {file1} {file2} ...`; append output to IMPL doc as `## Stub Report — Wave {N}`
+- [ ] E21 quality gates: if `## Quality Gates` section present in IMPL doc, run all gates marked `required: true`; required gate failures block merge; optional gate failures warn only
 - [ ] Fix any cascade failures — pay attention to cascade candidates listed above
 - [ ] Tick status checkboxes in this IMPL doc for completed agents
 - [ ] Update interface contracts for any deviations logged by agents

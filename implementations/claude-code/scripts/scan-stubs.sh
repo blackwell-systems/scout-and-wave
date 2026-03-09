@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # scan-stubs.sh — SAW stub detection scanner (E20)
 #
-# Usage: bash scripts/scan-stubs.sh <file1> [file2 ...]
+# Usage: bash implementations/claude-code/scripts/scan-stubs.sh <file1> [file2 ...]
 #
 # Exit codes:
 #   0  Always — stub detection is informational, never blocks

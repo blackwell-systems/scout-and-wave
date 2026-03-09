@@ -34,9 +34,9 @@ implementation wave. There is no Wave 0; the Scaffold Agent creates shared type 
 ---
 
 ```
-# Wave {N} Agent {letter}: {short description}
+# Wave {N} Agent {ID}: {short description}
 
-You are Wave {N} Agent {letter}. {One-sentence summary of your task.}
+You are Wave {N} Agent {ID}. {One-sentence summary of your task.}
 
 ## 0. CRITICAL: Isolation Verification (RUN FIRST)
 
@@ -46,7 +46,7 @@ You are Wave {N} Agent {letter}. {One-sentence summary of your task.}
 
 ```bash
 # Navigate to expected worktree location (strict - must succeed)
-cd {absolute-repo-path}/.claude/worktrees/wave{N}-agent-{letter}
+cd {absolute-repo-path}/.claude/worktrees/wave{N}-agent-{ID}
 ```
 
 **Step 2: Verify isolation (strict fail-fast after self-correction attempt)**
@@ -54,7 +54,7 @@ cd {absolute-repo-path}/.claude/worktrees/wave{N}-agent-{letter}
 ```bash
 # Check working directory
 ACTUAL_DIR=$(pwd)
-EXPECTED_DIR="{absolute-repo-path}/.claude/worktrees/wave{N}-agent-{letter}"
+EXPECTED_DIR="{absolute-repo-path}/.claude/worktrees/wave{N}-agent-{ID}"
 
 if [ "$ACTUAL_DIR" != "$EXPECTED_DIR" ]; then
   echo "ISOLATION FAILURE: Wrong directory (even after cd attempt)"
@@ -65,7 +65,7 @@ fi
 
 # Check git branch
 ACTUAL_BRANCH=$(git branch --show-current)
-EXPECTED_BRANCH="wave{N}-agent-{letter}"
+EXPECTED_BRANCH="wave{N}-agent-{ID}"
 
 if [ "$ACTUAL_BRANCH" != "$EXPECTED_BRANCH" ]; then
   echo "ISOLATION FAILURE: Wrong branch"
@@ -86,11 +86,11 @@ echo "✓ Isolation verified: $ACTUAL_DIR on $ACTUAL_BRANCH"
 **If verification fails:** Write error to completion report and exit immediately (do NOT modify files):
 
 ```
-### Agent {letter} - Completion Report
+### Agent {ID} - Completion Report
 
 **ISOLATION VERIFICATION FAILED**
 
-Expected: .claude/worktrees/wave{N}-agent-{letter} on branch wave{N}-agent-{letter}
+Expected: .claude/worktrees/wave{N}-agent-{ID} on branch wave{N}-agent-{ID}
 Actual: [paste output from pwd and git branch]
 
 **No work performed.** Cannot proceed without confirmed isolation.
@@ -223,14 +223,14 @@ time is a protocol deviation and must be noted in the report.
 ```bash
 cd /path/to/worktree
 git add .
-git commit -m "wave{N}-agent-{letter}: {short description}"
+git commit -m "wave{N}-agent-{ID}: {short description}"
 ```
 
 This lets the orchestrator use `git merge` instead of manual file copying.
 If you cannot commit (e.g., no changes, or git error), note it in your report.
 
 **E14: IMPL doc write discipline.** Append your completion report at the end
-of the IMPL doc under `### Agent {letter} - Completion Report`. Do not edit
+of the IMPL doc under `### Agent {ID} - Completion Report`. Do not edit
 any earlier section of the IMPL doc (interface contracts, file ownership table,
 suitability verdict, wave structure). Those sections are frozen. If you believe
 an interface contract needs updating, report it as an interface deviation below
@@ -244,14 +244,14 @@ Use the structured format below; the orchestrator parses these fields to
 automate conflict detection and merging. Write the structured block first,
 then add free-form notes beneath it.
 
-### Agent {letter} - Completion Report
+### Agent {ID} - Completion Report
 
 ```yaml type=impl-completion-report
 status: complete | partial | blocked
 failure_type: transient | fixable | needs_replan | escalate | timeout
   # Required when status is partial or blocked. Omit when status is complete.
-worktree: .claude/worktrees/wave{N}-agent-{letter}
-branch: wave{N}-agent-{letter}
+worktree: .claude/worktrees/wave{N}-agent-{ID}
+branch: wave{N}-agent-{ID}
 commit: {sha}  # or "uncommitted" if commit failed
 files_changed:
   - path/to/modified/file

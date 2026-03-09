@@ -167,10 +167,10 @@ Scaffold files are committed to HEAD before worktrees are created. Once worktree
 
 1. **Create worktrees:** For each agent in wave (excluding solo waves):
    ```
-   git worktree add .claude/worktrees/wave{N}-agent-{letter} -b wave{N}-agent-{letter}
+   git worktree add .claude/worktrees/wave{N}-agent-{ID} -b wave{N}-agent-{ID}
    ```
-   - **E5: Naming convention:** `.claude/worktrees/wave{N}-agent-{letter}` is mandatory (observability requirement)
-   - Branch name: `wave{N}-agent-{letter}` (matches worktree name)
+   - **E5: Naming convention:** `.claude/worktrees/wave{N}-agent-{ID}` is mandatory (observability requirement)
+   - Branch name: `wave{N}-agent-{ID}` (matches worktree name)
    - All worktrees branch from current HEAD (includes committed scaffolds from Scaffold Agent)
 
 2. **Install pre-commit hook (Layer 0 isolation):** Copy `hooks/pre-commit-guard.sh` to `.git/hooks/pre-commit`
@@ -215,11 +215,11 @@ Scaffold files are committed to HEAD before worktrees are created. Once worktree
 
 4. **Commit (I5):** Agent commits changes to worktree branch before reporting
    - `git add .`
-   - `git commit -m "wave{N}-agent-{letter}: {description}"`
+   - `git commit -m "wave{N}-agent-{ID}: {description}"`
    - Record commit SHA
 
 5. **Completion report (E14):** Agent appends structured completion report to IMPL doc
-   - Append under `### Agent {letter} - Completion Report` at end of file
+   - Append under `### Agent {ID} - Completion Report` at end of file
    - Never edit earlier IMPL doc sections (ownership table, interface contracts, wave structure)
    - Write discipline makes IMPL doc conflicts predictably resolvable
 
@@ -233,7 +233,18 @@ Scaffold files are committed to HEAD before worktrees are created. Once worktree
    - Any agent `status: partial` → enter BLOCKED (see `failure_type` field and E19 for automatic remediation decision tree)
    - Any agent `status: blocked` → enter BLOCKED (see `failure_type` field and E19 for automatic remediation decision tree)
    - Any agent isolation verification failed → enter BLOCKED
-   - All agents `status: complete` → proceed to Phase 6
+   - All agents `status: complete` → proceed to steps 4–5
+
+4. **E20: Stub detection.** After all agents complete:
+   - Collect union of all `files_changed` and `files_created` from completion reports
+   - Run `bash "${CLAUDE_SKILL_DIR}/scripts/scan-stubs.sh" {file1} {file2} ...`
+   - Append output to IMPL doc under `## Stub Report — Wave {N}` (exit code is always 0 — informational only)
+   - Surface stubs at the review checkpoint; they do not automatically block merge
+
+5. **E21: Quality gates.** If IMPL doc contains a `## Quality Gates` section:
+   - Run all gates with `required: true`
+   - Required gate failures → enter BLOCKED
+   - Optional gate failures → warn only; do not block merge
 
 ### Phase 6: Failure Handling (If Blocked)
 
@@ -272,7 +283,7 @@ Scaffold files are committed to HEAD before worktrees are created. Once worktree
    - Resolution: Correct IMPL doc ownership table, recreate worktrees, re-run wave
 
 3. **Verify commits exist:** For each agent branch, verify it has commits beyond base
-   - `git log main..wave{N}-agent-{letter} --oneline`
+   - `git log main..wave{N}-agent-{ID} --oneline`
    - Empty branch = isolation failure (agent committed to main instead of worktree)
    - Layer 4 trip wire: catches isolation failures regardless of cause
 
@@ -284,7 +295,7 @@ For each agent (in any order):
 
 1. **Switch to main:** `git checkout main`
 
-2. **Merge agent branch:** `git merge --no-ff wave{N}-agent-{letter} -m "Merge wave{N}-agent-{letter}: {description}"`
+2. **Merge agent branch:** `git merge --no-ff wave{N}-agent-{ID} -m "Merge wave{N}-agent-{ID}: {description}"`
    - `--no-ff` preserves branch history for observability
 
 3. **Handle conflicts:**
@@ -318,12 +329,12 @@ For each agent (in any order):
 
 1. **Remove worktrees:** For each agent:
    ```
-   git worktree remove .claude/worktrees/wave{N}-agent-{letter}
+   git worktree remove .claude/worktrees/wave{N}-agent-{ID}
    ```
 
 2. **Delete branches (optional):**
    ```
-   git branch -d wave{N}-agent-{letter}
+   git branch -d wave{N}-agent-{ID}
    ```
    - Keep branches if history preservation desired
 
@@ -448,8 +459,8 @@ For each agent (in any order):
 
 2. **Do not retry with Layer 2.** Remove any incorrectly created worktrees from the Orchestrator's repo:
    ```bash
-   git worktree remove .claude/worktrees/wave{N}-agent-{letter} --force
-   git branch -D wave{N}-agent-{letter}
+   git worktree remove .claude/worktrees/wave{N}-agent-{ID} --force
+   git branch -D wave{N}-agent-{ID}
    ```
 
 3. **Re-create worktrees manually** in the correct target repos following the Cross-Repo Mode procedure in `saw-worktree.md`.

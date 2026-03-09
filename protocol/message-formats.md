@@ -71,6 +71,12 @@ The IMPL doc is a markdown file with the following sections in order:
 
     ---
 
+    ## Interface Contracts
+
+    {Interface contracts — exact function/method/type signatures that cross agent boundaries. Prose-only, not a typed block. See ## Agent Prompt Format for field definitions.}
+
+    ---
+
     ## File Ownership
 
     ```yaml type=impl-file-ownership
@@ -317,13 +323,13 @@ Emitted by the Scout at the end of the suitability gate. Written to the IMPL doc
 
 **Step 1: Navigate to worktree**
 ```bash
-cd {absolute-repo-path}/.claude/worktrees/wave{N}-agent-{letter}
+cd {absolute-repo-path}/.claude/worktrees/wave{N}-agent-{ID}
 ```
 
 **Step 2: Verify isolation**
 ```bash
 ACTUAL_DIR=$(pwd)
-EXPECTED_DIR="{absolute-repo-path}/.claude/worktrees/wave{N}-agent-{letter}"
+EXPECTED_DIR="{absolute-repo-path}/.claude/worktrees/wave{N}-agent-{ID}"
 
 if [ "$ACTUAL_DIR" != "$EXPECTED_DIR" ]; then
   echo "ISOLATION FAILURE: Wrong directory"
@@ -333,7 +339,7 @@ if [ "$ACTUAL_DIR" != "$EXPECTED_DIR" ]; then
 fi
 
 ACTUAL_BRANCH=$(git branch --show-current)
-EXPECTED_BRANCH="wave{N}-agent-{letter}"
+EXPECTED_BRANCH="wave{N}-agent-{ID}"
 
 if [ "$ACTUAL_BRANCH" != "$EXPECTED_BRANCH" ]; then
   echo "ISOLATION FAILURE: Wrong branch"
@@ -490,7 +496,7 @@ Written by the Scout into the IMPL doc to specify type scaffold files. Read and 
 
 Written by the Orchestrator after wave agent completion reports (E20). Human-facing prose — NOT a typed block.
 
-Placement: After the last `### Agent {letter} - Completion Report` section for a wave, before the next wave section or end of document.
+Placement: After the last `### Agent {ID} - Completion Report` section for a wave, before the next wave section or end of document.
 
 Template — no stubs found:
 
@@ -707,7 +713,7 @@ The orchestrator constructs a per-agent context payload (E23) before launching e
 
 | Section | Source in IMPL doc | Purpose |
 |---------|-------------------|---------|
-| Agent's 9-field prompt | `### Agent {letter} - {Role}` through next `### Agent` heading | Complete implementation spec |
+| Agent's 9-field prompt | `### Agent {ID} - {Role}` through next `### Agent` heading | Complete implementation spec |
 | Interface contracts | `## Interface Contracts` | Cross-agent boundary definitions |
 | File ownership table | `## File Ownership` typed block | Agent verifies its row; sees peers' rows for I1 reasoning |
 | Scaffolds | `## Scaffolds` | Pre-built type files the agent imports |
