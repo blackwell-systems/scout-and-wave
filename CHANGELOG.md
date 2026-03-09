@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.14.9] | 2026-03-09 | Agent Observatory — real-time tool call stream per wave agent |
 | [0.14.8] | 2026-03-08 | E16D: Column order validation hardening — validator now enforces File\|Agent\|Wave column order to prevent silent data corruption at runtime. |
 | [0.14.7] | 2026-03-08 | Seventh-pass convergence — 1 finding: protocol version 0.14.5→0.14.6 in README.md. 98% reduction from pass 6 signals convergence. Zero P0 issues. |
 | [0.14.6] | 2026-03-08 | Sixth-pass audit — 41 findings + 6 verification fixes + 3 follow-ups: {X}→{ID} final cleanup, repo: field in completion reports, E16 in bootstrap flows, E20/E21 in merge procedures, invariant numbers, template consistency, historical docs |
