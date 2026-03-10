@@ -127,14 +127,14 @@ If the argument is `bootstrap <project-description>`:
    Ask the user to confirm the requirements before proceeding. If requirements were already discussed in conversation, fill in what you know and ask the user to confirm or adjust.
 
 2. Read `${CLAUDE_SKILL_DIR}/saw-bootstrap.md` from the scout-and-wave repository. Launch a **Scout agent** using the Agent tool with `subagent_type: scout` and `run_in_background: true`. The prompt must reference `docs/REQUIREMENTS.md` in the target project and include the path to `${CLAUDE_SKILL_DIR}/saw-bootstrap.md` as the procedure to follow. If `subagent_type: scout` fails, fall back to `subagent_type: general-purpose` with the contents of `${CLAUDE_SKILL_DIR}/saw-bootstrap.md` as its prompt. Inform the user the Scout is running.
-3. When the Scout completes, read `docs/IMPL/IMPL-bootstrap.md`.
+3. When the Scout completes, read `docs/IMPL/IMPL-bootstrap.yaml` (or `.md` for legacy Scouts).
 5. Report the architecture design and wave structure. Ask the user to review before proceeding.
 6. **Scaffold Agent (conditional):** If the IMPL doc Scaffolds section is non-empty and any scaffold file has `Status: pending`, launch a **Scaffold Agent** using the Agent tool with `subagent_type: scaffold-agent` and `run_in_background: true`. The prompt parameter is the path to the IMPL doc and the feature slug. If `subagent_type: scaffold-agent` fails, fall back to `subagent_type: general-purpose` with the contents of `${CLAUDE_SKILL_DIR}/agents/scaffold-agent.md` as its prompt. Use `[SAW:scaffold:bootstrap]` as the description prefix. Wait for it to complete. If any scaffold file shows `Status: FAILED`, stop — report the failure and do not create worktrees. If all files show `Status: committed`, proceed.
 7. **Wave 1:** Create worktrees and launch Wave 1 agents exactly as in the IMPL-exists flow (step 2 onward of that branch). The bootstrap IMPL doc is now the single source of truth; all wave execution follows the standard wave loop from this point.
 
-If no `docs/IMPL/IMPL-*.md` file exists for the current feature:
+If no `docs/IMPL/IMPL-*.yaml` or `docs/IMPL/IMPL-*.md` file exists for the current feature:
 1. Launch a **Scout agent** using the Agent tool with `subagent_type: scout` and `run_in_background: true`. The prompt parameter is the feature description (the type definition carries the full behavioral instructions). If `subagent_type: scout` fails, fall back to `subagent_type: general-purpose` with the contents of `${CLAUDE_SKILL_DIR}/agents/scout.md` as its prompt and the feature description as context. The Scout analyzes the codebase, runs the suitability gate, and writes the IMPL doc; the Orchestrator does not perform this analysis itself. Inform the user that the Scout is running.
-2. When the Scout completes, read the resulting `docs/IMPL/IMPL-<feature-slug>.md`.
+2. When the Scout completes, read the resulting `docs/IMPL/IMPL-<feature-slug>.yaml` (or `.md` for legacy Scouts).
 3. **E16: Validate IMPL doc before review.** After Scout writes the IMPL doc, run the validator:
    ```bash
    bash "${CLAUDE_SKILL_DIR}/scripts/validate-impl.sh" "<absolute-path-to-impl-doc>"
@@ -143,11 +143,11 @@ If no `docs/IMPL/IMPL-*.md` file exists for the current feature:
 
    **E16A note:** The validator enforces required block presence — an IMPL doc missing `impl-file-ownership`, `impl-dep-graph`, or `impl-wave-structure` typed blocks will fail even if all present blocks are internally valid. E16C warnings (out-of-band dep graph content) appear in stdout but do not cause exit 1; include them in the correction prompt anyway so Scout moves the content into a typed block.
 
-   **Dual-mode note (Wave 4):** The validator automatically detects YAML manifests (`.yaml` or `.yml` extension) and delegates to `saw validate` (SDK CLI). Markdown IMPL docs (`.md`) use the bash validator. Scout does not yet generate YAML manifests; YAML support is present for forward compatibility after Wave 5 Scout update.
+   **Dual-mode note:** The validator automatically detects YAML manifests (`.yaml` or `.yml` extension) and delegates to `saw validate` (SDK CLI). Markdown IMPL docs (`.md`) use the bash validator. Scout v0.6.0+ generates YAML manifests by default.
 4. Report the suitability verdict to the user, and if suitable: the wave structure, file ownership table, interface contracts, and Scaffolds section. Ask the user to review before proceeding.
 6. **Scaffold Agent (conditional):** If the IMPL doc Scaffolds section is non-empty and any scaffold file has `Status: pending`, launch a **Scaffold Agent** using the Agent tool with `subagent_type: scaffold-agent` and `run_in_background: true`. The prompt parameter is the path to the IMPL doc and the feature slug. If `subagent_type: scaffold-agent` fails, fall back to `subagent_type: general-purpose` with the contents of `${CLAUDE_SKILL_DIR}/agents/scaffold-agent.md` as its prompt. Use `[SAW:scaffold:<feature-slug>]` as the description prefix so claudewatch can identify the run. The Scaffold Agent reads the approved contracts and creates the scaffold source files. Inform the user the Scaffold Agent is running. Wait for it to complete, then read the Scaffolds section: if any file shows `Status: FAILED`, stop immediately — report the failure reason to the user and do not create worktrees. The user must revise the interface contracts in the IMPL doc and re-run the Scaffold Agent. If all files show `Status: committed`, proceed.
 
-If a `docs/IMPL/IMPL-*.md` file already exists:
+If a `docs/IMPL/IMPL-*.yaml` or `docs/IMPL/IMPL-*.md` file already exists:
 1. Read it and identify the current wave (the first wave with unchecked status items). Also check the Scaffolds section: if any scaffold file has `Status: pending`, the Scaffold Agent has not yet run — spawn it now (see step 5 of the Scout flow above) before creating any worktrees. If any file shows `Status: FAILED`, stop and report the failure to the user before proceeding.
 2. **Solo agent check:** If the current wave has exactly 1 agent, skip worktree creation. Launch the agent directly via the Agent tool with `subagent_type: wave-agent` and `run_in_background: true` on the main branch. After the agent completes, proceed to step 4. The solo wave agent must still operate in the Wave Agent role — executing solo wave work inline violates I6 regardless of wave size.
 3. **Worktree setup:** Read `${CLAUDE_SKILL_DIR}/saw-worktree.md` and follow the pre-creation procedure. Create a worktree for each agent before launching any agents. **Interface freeze checkpoint:** interface contracts become immutable when worktrees are created. This is the last moment to revise type signatures, add fields, or restructure APIs. After this point, any interface change requires removing and recreating all worktrees for the wave. **Scaffold and freeze verification (YAML mode):** Before creating worktrees, run `saw validate-scaffolds "<manifest-path>"` (exit 1 = uncommitted scaffolds, do not proceed) and `saw freeze-check "<manifest-path>"` (exit 1 = freeze violations detected, investigate before proceeding). **Markdown mode:** Verify that all scaffold files listed in the IMPL doc Scaffolds section show `Status: committed` before creating worktrees.
@@ -177,13 +177,13 @@ If a `docs/IMPL/IMPL-*.md` file already exists:
   existing codebase. The Orchestrator writes `docs/REQUIREMENTS.md` first
   (capturing language, deployment, integrations, and architectural decisions
   already made), then launches a Scout agent that reads that file and designs
-  disjoint file ownership. Produces `docs/IMPL/IMPL-bootstrap.md` with interface
+  disjoint file ownership. Produces `docs/IMPL/IMPL-bootstrap.yaml` with interface
   contracts, scaffolds, and parallel implementation waves. Use when starting from
   scratch or from an empty repo.
 - `scout <feature-description>`: The Orchestrator launches a Scout agent
   (asynchronous) to analyze the codebase and produce the IMPL doc. The Scout
   runs the suitability gate first; if the work is not suitable, it writes a
-  short verdict to `docs/IMPL/IMPL-<slug>.md` and stops without producing agent
+  short verdict to `docs/IMPL/IMPL-<slug>.yaml` and stops without producing agent
   prompts. The Orchestrator waits for the Scout to complete, then reports the
   verdict and asks the user to review.
 - `wave`: Execute the next pending wave, pause for review after each wave

@@ -94,7 +94,7 @@ Flag any file that either:
 - Belongs to a different agent in the same wave (I1 violation)
 - Is not in the ownership table at all (undeclared modification)
 
-**Exceptions:** The IMPL doc itself (`docs/IMPL/IMPL-*.md`) is expected to be
+**Exceptions:** The IMPL doc itself (`docs/IMPL/IMPL-*.yaml` or `IMPL-*.md`) is expected to be
 modified by all agents (completion reports). Ignore it in this check.
 
 If violations are found, **stop and report before merging.** Show which agent

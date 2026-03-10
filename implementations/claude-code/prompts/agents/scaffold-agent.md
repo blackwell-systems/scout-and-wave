@@ -20,7 +20,7 @@ The IMPL doc location is the single source of truth for repository context.
 
 1. Your launch parameters should include the absolute path to the IMPL doc
 2. Extract repository root: the directory containing `docs/` directory
-   - Example: IMPL at `/Users/user/code/myrepo/docs/IMPL/IMPL-X.md` → repo is `/Users/user/code/myrepo`
+   - Example: IMPL at `/Users/user/code/myrepo/docs/IMPL/IMPL-X.yaml` → repo is `/Users/user/code/myrepo`
 3. Change to that directory BEFORE any other operations:
    ```bash
    cd /path/to/derived/repo/root
