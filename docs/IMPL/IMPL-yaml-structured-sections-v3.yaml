@@ -924,6 +924,45 @@ go vet ./pkg/protocol/...
 4. **Wire Post-Merge Checklist:** Add case in ParseIMPLDoc main loop around line 200 (near Quality Gates case)
 5. **Import types_sections.go:** Add `"github.com/blackwell-systems/scout-and-wave-go/pkg/protocol"` if not already present (types are in same package, no import needed)
 
+### Agent E - Completion Report
+
+```yaml type=impl-completion-report
+status: complete
+repo: /Users/dayna.blackwell/code/scout-and-wave-go
+worktree: /Users/dayna.blackwell/code/scout-and-wave-go
+branch: wave1-agent-E
+commit: a22477981cf2d066105a7d513b95d470e3a7269f
+files_changed:
+  - pkg/protocol/parser.go
+  - pkg/protocol/parser_test.go
+  - pkg/protocol/types.go
+files_created:
+  - pkg/protocol/types_sections.go
+interface_deviations:
+  - description: "parsePostMergeChecklistSection returns *PostMergeChecklist but IMPLDoc.PostMergeChecklistText is still string type. Assignment at line 256 commented out with TODO. Wave 2 Agent I will add PostMergeChecklist field to IMPLDoc."
+    downstream_action_required: true
+    affects:
+      - "Wave 2 Agent I"
+out_of_scope_deps:
+  - "pkg/types/types.go IMPLDoc struct needs PostMergeChecklist field (not in my file ownership)"
+tests_added:
+  - TestExtractTypedBlock
+  - TestParseQualityGatesTypedBlock
+  - TestParsePostMergeChecklistTypedBlock
+  - TestParseKnownIssuesTypedBlock
+verification: PASS (go build, go test, go vet all passed)
+```
+
+**Implementation notes:**
+
+1. **Dependency resolution:** Agent D's types_sections.go and KnownIssue.Title field were needed. Copied types_sections.go from wave1-agent-D branch and added Title field to pkg/protocol/types.go KnownIssue struct to unblock parallel development.
+
+2. **HARD CUTOVER implemented:** All three parser functions (parseQualityGatesSection, parseKnownIssuesSection, parsePostMergeChecklistSection) now use typed-block extraction with no fallback to unfenced YAML or prose parsing. Returns nil if typed block not found.
+
+3. **Type mismatch documented:** parsePostMergeChecklistSection now returns `*PostMergeChecklist` but IMPLDoc only has `PostMergeChecklistText string` field. Existing assignment at line 256 commented out with TODO noting Wave 2 Agent I needs to add the field. This is expected - Wave 2 will integrate the new types into IMPLDoc/IMPLManifest.
+
+4. **extractTypedBlock helper:** Clean extraction logic separated from dispatch logic. Reusable for future typed-block sections.
+
 ---
 
 # Wave 2
@@ -1536,3 +1575,39 @@ Field names match Go struct tags exactly (groups/title/items/description/command
 Updated Typed Metadata Blocks section: removed Quality Gates and Known Issues from prose exclusion list, added three new block types to Block Types subsection with descriptions.
 
 Updated IMPL doc structure section to show typed blocks for all three sections.
+
+
+### Agent B - Completion Report
+
+```yaml type=impl-completion-report
+status: complete
+repo: /Users/dayna.blackwell/code/scout-and-wave
+worktree: N/A
+branch: wave1-agent-B
+commit: 9ffe12c12cb72de4a5ee101d50f9834877839ad6
+files_changed:
+  - implementations/claude-code/prompts/agents/scout.md
+files_created: []
+interface_deviations: []
+out_of_scope_deps: []
+tests_added: []
+verification: PASS (manual verification)
+```
+
+**Implementation notes:**
+
+Successfully updated scout.md to output Quality Gates, Post-Merge Checklist, and Known Issues as typed YAML blocks per the schemas defined by Agent A in protocol/message-formats.md.
+
+**Changes made:**
+1. Updated step 11 (Emit quality gates) to specify typed-block fence syntax for type=impl-quality-gates
+2. Added step 12 for Post-Merge Checklist with typed-block fence syntax for type=impl-post-merge-checklist
+3. Added step 13 for Known Issues with typed-block fence syntax for type=impl-known-issues
+4. Renumbered validation feedback step from 12 to 14
+5. Updated Output Format section with typed-block examples for all 3 sections matching message-formats.md schemas
+
+**Field name verification:**
+- Quality Gates: level, gates, type, command, required, description - matches schema
+- Post-Merge Checklist: groups, title, items, description, command - matches schema  
+- Known Issues: title, description, status, workaround - matches schema
+
+All typed-block examples use exact fence syntax (yaml type=impl-block-type) as required.
