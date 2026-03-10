@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.15.0] | 2026-03-09 | Protocol SDK conformance — 44-gap audit, 3-wave remediation (12 agents), skill prompts v0.6.0 with CLI command integration |
 | [0.14.9] | 2026-03-09 | Agent Observatory — real-time tool call stream per wave agent |
 | [0.14.8] | 2026-03-08 | E16D: Column order validation hardening — validator now enforces File\|Agent\|Wave column order to prevent silent data corruption at runtime. |
 | [0.14.7] | 2026-03-08 | Seventh-pass convergence — 1 finding: protocol version 0.14.5→0.14.6 in README.md. 98% reduction from pass 6 signals convergence. Zero P0 issues. |
@@ -67,6 +68,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.3.0] | 2026-02-28 | Bootstrap mode for new projects; Wave 0 pattern |
 | [0.2.0] | 2026-02-28 | Decomposed skill prompt; complexity-based suitability heuristic |
 | [0.1.0] | 2026-02-27 | Initial release |
+
+---
+
+## [0.15.0] - 2026-03-09
+
+### Added
+
+- **Protocol SDK conformance audit** (`docs/IMPL/IMPL-protocol-sdk-conformance.md`) — deep audit comparing protocol spec (I1–I6, E1–E23, SM-01/SM-02, message formats) against Go SDK implementation. Identified 44 gaps across 6 domains. 3-wave remediation plan with 12 agents (A–L) executed via SAW protocol. Post-remediation re-audit: 91% conformance, zero critical gaps remaining.
+- **Skill prompts v0.6.0** — all 6 new SDK CLI commands (`saw mark-complete`, `saw run-gates`, `saw check-conflicts`, `saw validate-scaffolds`, `saw freeze-check`, `saw update-agent-prompt`) integrated into YAML-mode orchestrator flow across `saw-skill.md`, `saw-merge.md`, and `saw-worktree.md`. Dual-mode command inventory expanded from 3 to 9 CLI commands.
+
+### Changed
+
+- **saw-skill.md** v0.5.0 → v0.6.0 — E15 completion marker uses `saw mark-complete`; E21 quality gates use `saw run-gates`; E8 interface failure uses `saw update-agent-prompt` + `saw check-conflicts`; worktree setup uses `saw validate-scaffolds` + `saw freeze-check`
+- **saw-merge.md** v0.4.6 → v0.5.0 — YAML-mode blocks for quality gates, conflict prediction, and scaffold integrity verification
+- **saw-worktree.md** v0.5.0 → v0.5.1 — pre-worktree 3-command verification checklist for YAML manifests
 
 ---
 
