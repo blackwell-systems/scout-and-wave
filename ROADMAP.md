@@ -318,13 +318,17 @@ With file-granular locking: IMPL-A runs first, locks those six files. IMPL-B wai
 
 ---
 
-## Tool System Refactoring
+## Tool System Refactoring *(shipped v0.19.0)*
 
-**Current state:** `pkg/agent/tools.go` in `scout-and-wave-go` implements tools as a `[]Tool` slice where each `Tool` struct contains `Name`, `Description`, `InputSchema`, and an `Execute` function. Tools are constructed via factory functions (`readFileTool()`, `writeFileTool()`, etc.) that close over `workDir`. The `StandardTools(workDir)` function returns the hardcoded set of available tools. Backends serialize this slice into their native tool-call format (Anthropic Messages API `tools` array, OpenAI-compatible `tools` array, etc.) inline before each request.
+**Shipped.** Unified `pkg/tools` package with Workshop registry, ToolExecutor interface, Middleware type, ToolAdapter (Anthropic/OpenAI/Bedrock), and namespaced tools. 7 standard tools (`read_file`, `write_file`, `list_directory`, `bash`, `edit_file`, `glob`, `grep`). Both Anthropic and OpenAI backends wired to Workshop — 3 old duplicated tool files deleted. Middleware and permission filtering available but not yet wired (future: Observatory timing, Scout read-only mode).
 
-**Problem:** The current implementation is functional but not extensible. Adding a new tool requires editing `StandardTools()`. Backend-specific serialization is scattered across each backend package (`api/client.go`, `openai/client.go`, `bedrock/client.go`). There's no hook system for logging, timing, or validation. Tool namespacing (e.g., `file:read` vs `git:commit`) is not supported. Custom tools for specific agent types require passing different tool sets through the entire call chain.
+**Original problem and design** (retained for reference):
 
-**Proposed refactoring approaches** (can be combined):
+**Current state:** ~~`pkg/agent/tools.go` in `scout-and-wave-go` implements tools as a `[]Tool` slice...~~ Superseded by `pkg/tools/`.
+
+**~~Problem:~~** ~~The current implementation is functional but not extensible...~~ Solved.
+
+**Implemented approaches** (all 5 combined):
 
 ### 1. Tool Registry Pattern
 
@@ -515,24 +519,20 @@ allTools := registry.All()                 // Everything
 
 ---
 
-**Implementation scope:** Engine only (`scout-and-wave-go`). No protocol changes required — the protocol defines what tools agents receive (Field 4 in `agent-template.md`), not how implementations structure their tool systems.
+**Implementation scope:** Engine only (`scout-and-wave-go`). No protocol changes required.
 
-**Implementation approach:** Clean-slate refactoring. All five patterns should be implemented together as a cohesive architecture rather than staged incrementally:
+**What shipped (v0.19.0):**
+1. ~~Delete `StandardTools()`~~ Done — old `pkg/agent/tools.go`, `pkg/agent/backend/api/tools.go`, `pkg/agent/backend/openai/tools.go` deleted
+2. ~~Implement `ToolRegistry`~~ Done — `pkg/tools/workshop.go` (`DefaultWorkshop` with thread-safe registration, namespace filtering)
+3. ~~Replace `Execute func(...)` with `ToolExecutor` interface~~ Done — `ExecutionContext` carries `workDir` at call time
+4. ~~Middleware type defined~~ Done — `type Middleware func(next ToolExecutor) ToolExecutor` available but not yet wired
+5. ~~Backend adapters~~ Done — `AnthropicAdapter`, `OpenAIAdapter`, `BedrockAdapter` in `pkg/tools/adapters.go`; backends use Workshop directly for serialization
+6. ~~Namespaced tools~~ Partial — `Namespace` field on `Tool` struct, `Workshop.Namespace()` method works; tool names use underscores (`read_file`) for OpenAI compatibility instead of colons
 
-1. Delete `StandardTools()` and the current `[]Tool` slice approach entirely
-2. Implement `ToolRegistry` as the foundation with namespace support from day one
-3. Replace `Execute func(...)` fields with the `ToolExecutor` interface
-4. Wrap all executors in the middleware stack (logging, timing, validation, permissions)
-5. Create backend-specific adapters and remove all inline serialization from backend packages
-6. Use namespaced tool names (`file:read`, `git:commit`, etc.) as the primary addressing scheme
-
-This gives a cleaner final architecture without technical debt from compatibility shims. Breaking change acceptable for v0.x engine versions.
-
-**Benefits of unified refactoring:**
-- No half-migrated state where some tools use Registry and others use the old slice
-- Middleware applied uniformly to all tools from the start (Observatory timing works everywhere)
-- Backend adapters eliminate serialization duplication immediately
-- Agent permission models (Scout read-only, Wave read-write) work via namespace filtering from launch
+**Remaining (future):**
+- Wire middleware stack (logging, timing for Observatory, validation, permissions)
+- Scout read-only tool set via namespace filtering
+- Custom tool registration at runtime (plugin support)
 
 ---
 
