@@ -237,6 +237,74 @@ The `/saw` skill consists of several specialized prompts, all installed to `~/.c
 
 All files are symlinked from `implementations/claude-code/prompts/` (the single source of truth). The skill references them via `${CLAUDE_SKILL_DIR}` for portability.
 
+## Configuration
+
+### Agent Model Selection
+
+Agent definitions do not hardcode a model — they inherit the parent session's model by default. This keeps agent definitions platform-agnostic and conformant with the agent-skills standard (the agent describes *what it does*, not *what powers it*).
+
+Model can be overridden at three levels (highest precedence first):
+
+| Level | Scope | How |
+|-------|-------|-----|
+| **Skill argument** | Per-invocation | `/saw scout --model sonnet "feature"` |
+| **Config file** | Per-project or global | `saw.config.json` (see lookup order below) |
+| **Parent model** | Session default | Inherited automatically (no config needed) |
+
+### `saw.config.json`
+
+The skill looks for this file in two locations (first match wins):
+
+1. **`<project-root>/saw.config.json`** — per-project config (same file the web app uses)
+2. **`~/.claude/saw.config.json`** — global default for all projects
+
+Per-project config overrides global. Use global for your default model preferences, per-project to override for specific repos.
+
+**Install the global config (optional):**
+
+```bash
+ln -sf ~/code/scout-and-wave/config/saw.config.json ~/.claude/saw.config.json
+```
+
+Edit `config/saw.config.json` in the repo to set your defaults. Changes are version-controlled and propagate via `git pull`.
+
+```json
+{
+  "agent": {
+    "scout_model": "claude-sonnet-4-5",
+    "wave_model": "claude-sonnet-4-5",
+    "chat_model": "claude-sonnet-4-5"
+  },
+  "quality": {
+    "require_tests": false,
+    "require_lint": false,
+    "block_on_failure": false
+  }
+}
+```
+
+**`agent` fields:**
+
+| Field | Used by | Default |
+|-------|---------|---------|
+| `scout_model` | `/saw scout`, `/saw bootstrap` | Parent session model |
+| `wave_model` | `/saw wave` (all wave agents) | Parent session model |
+| `chat_model` | Web app chat panel | Parent session model |
+
+**`quality` fields:**
+
+| Field | Effect |
+|-------|--------|
+| `require_tests` | Wave agents must write tests |
+| `require_lint` | Lint gate is enforced |
+| `block_on_failure` | Block merge on quality gate failure |
+
+If the file doesn't exist, all values fall back to defaults. The CLI skill reads `scout_model` for `/saw scout` and `wave_model` for `/saw wave`.
+
+### Rate-Limit Fallback
+
+If an agent hits a rate limit (returns immediately with 0 tool uses), the orchestrator automatically retries once using `subagent_type: general-purpose`, which inherits the parent session's model. This handles cases where the configured model is rate-limited but the parent model has available capacity.
+
 ## Agent Architecture: Dual-Structure Design
 
 SAW uses a dual-structure architecture that supports both custom agent types and graceful fallback to general-purpose agents:

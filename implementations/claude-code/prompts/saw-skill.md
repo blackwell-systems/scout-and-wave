@@ -5,18 +5,18 @@ description: |
   features that can be decomposed into multiple independent work units with clear
   interfaces. Suitable for: multi-package architectures, parallel refactors,
   coordinated feature additions across modules.
-argument-hint: "[bootstrap <project-name> | scout <feature> | wave [--auto] | status]"
+argument-hint: "[bootstrap <project-name> | scout [--model <m>] <feature> | wave [--auto] [--model <m>] | status]"
 disable-model-invocation: true
 user-invocable: true
 allowed-tools: |
   Read, Write, Glob, Grep, Bash(git *), Bash(cd *), Bash(mkdir *),
   Agent(subagent_type=scout), Agent(subagent_type=scaffold-agent),
-  Agent(subagent_type=wave-agent)
+  Agent(subagent_type=wave-agent), Agent(subagent_type=general-purpose)
 license: MIT OR Apache-2.0
 compatibility: Requires Claude Code (Skills API). Git 2.20+ required for worktree support.
 metadata:
   author: blackwell-systems
-  version: "0.7.3"
+  version: "0.8.0"
 ---
 
 # Scout-and-Wave: Parallel Agent Coordination
@@ -42,6 +42,30 @@ for cross-referencing and audit.*
 
 **Agent type preference:** Use custom `subagent_type` values (`scout`, `scaffold-agent`, `wave-agent`) when launching agents. These provide tool-level enforcement (scout cannot Edit source, wave-agent cannot spawn sub-agents) and carry behavioral instructions in the type definition. If a custom type fails to load, fall back to `subagent_type: general-purpose` with the full prompt from the prompts directory.
 
+**Agent model selection:** Agent definitions no longer hardcode a model — they inherit the parent session's model by default. Model can be overridden at three levels (highest precedence first):
+
+1. **Skill argument** — `/saw scout --model sonnet "feature"` or `/saw wave --model haiku`. Parse `--model <value>` from args before the subcommand payload.
+2. **Config file** — Read `saw.config.json` using a two-level lookup (project-local then global):
+   1. `<project-root>/saw.config.json` (per-project, same file the web app uses)
+   2. `~/.claude/saw.config.json` (global default for all projects)
+
+   The config uses per-role model fields:
+   ```json
+   {
+     "agent": {
+       "scout_model": "claude-sonnet-4-5",
+       "wave_model": "claude-sonnet-4-5",
+       "chat_model": "claude-sonnet-4-5"
+     }
+   }
+   ```
+   For `/saw scout`, read `agent.scout_model`. For `/saw wave`, read `agent.wave_model`. Empty string or missing field means "inherit parent model." If neither config file exists, fall through to level 3.
+3. **Parent model** — If neither arg nor config specifies a model, agents inherit the parent session's model (no `model:` in frontmatter = inherit).
+
+**Implementation:** The Agent tool does not expose a model parameter, so model override works indirectly. Agent definitions no longer set `model:` in their frontmatter, so custom `subagent_type` values (`scout`, `wave-agent`, `scaffold-agent`) inherit the parent session's model. When `--model` is specified explicitly and the custom subagent_type's inherited model doesn't match (e.g., parent is Opus but `--model sonnet` requested), fall back to `subagent_type: general-purpose` with the full agent prompt from the prompts directory.
+
+**Rate-limit fallback:** If an agent returns immediately with 0 tool uses and a rate-limit error message, retry once using `subagent_type: general-purpose` with the full agent prompt. Log the fallback to the user: "Agent hit rate limit on [model], retrying with parent model."
+
 ## Supporting Files
 
 All supporting files are symlinked into the skill directory during installation.
@@ -64,8 +88,10 @@ Read the agent template at `${CLAUDE_SKILL_DIR}/agent-template.md` for the 9-fie
 |---------|---------|
 | `/saw bootstrap <name>` | Design new project from scratch |
 | `/saw scout <feature>` | Analyze codebase and plan feature |
+| `/saw scout --model <m> <feature>` | Scout with explicit model override |
 | `/saw wave` | Execute next wave with review |
 | `/saw wave --auto` | Execute all waves automatically |
+| `/saw wave --model <m>` | Wave agents with explicit model override |
 | `/saw status` | Show current progress |
 
 ## Protocol SDK CLI Commands
