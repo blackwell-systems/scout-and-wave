@@ -1,696 +1,645 @@
-# IMPL doc: /Users/dayna.blackwell/code/scout-and-wave/docs/IMPL/IMPL-yaml-mode-cli.yaml
-title: "YAML-Mode CLI Commands"
-feature_slug: "yaml-mode-cli"
-verdict: "SUITABLE"
-test_command: "go test ./..."
-lint_command: "go vet ./..."
-state: "SCOUT_PENDING"
-
-# Suitability Assessment
-#
-# Verdict: SUITABLE
-#
-# 1. File decomposition: 9 new CLI command files in cmd/saw/ (one per command), plus
-#    one new pkg/protocol function (ExtractAgentContextFromManifest for YAML mode),
-#    plus one main.go modification. All cmd/saw/ files are new; main.go is orchestrator-owned
-#    (append-only AddCommand registrations). Fully disjoint.
-#
-# 2. Investigation-first: No root cause analysis needed. All backing SDK functions
-#    already exist in pkg/protocol/. This is pure CLI wiring.
-#
-# 3. Interface discoverability: All interfaces are defined — each command calls one
-#    existing SDK function with well-known signatures.
-#
-# 4. Pre-implementation scan:
-#    Total items: 9 commands
-#    Already implemented (SDK layer): 9 functions (validate, extract, set-completion,
-#      mark-complete, run-gates, check-conflicts, validate-scaffolds, freeze-check,
-#      update-agent-prompt) — all backing functions exist.
-#    CLI wrappers missing: 9 commands (100% of work remaining is cobra wrappers).
-#    Special case: extract-context — existing ExtractAgentContext in extract.go
-#      works on markdown IMPL docs (text-section parsing). YAML manifests require
-#      a new function ExtractAgentContextFromManifest that reads the parsed struct
-#      directly. Agent B owns this new pkg/protocol function.
-#    Agent adjustments: None changed to "verify + add tests" — all are new wrappers.
-#
-# 5. Parallelization value: High. All 9 commands are independent (no cross-command
-#    dependencies). Build cycle is go build + go test, moderate length. Single wave,
-#    maximum parallelism. Only main.go is shared and is orchestrator-owned.
-#
-# Estimated times:
-# - Scout phase: ~15 min (dependency mapping, reading source, writing IMPL doc)
-# - Agent execution: ~25 min (4 agents x ~8 min avg, fully parallel)
-# - Merge & verification: ~5 min
-# Total SAW time: ~45 min
-# Sequential baseline: ~60 min (9 commands x ~7 min each)
-# Time savings: ~15 min (25% faster). Clear speedup.
-
-quality_gates:
-  level: "standard"
-  gates:
-    - type: "build"
-      command: "go build ./..."
-      required: true
-    - type: "lint"
-      command: "go vet ./..."
-      required: false
-    - type: "test"
-      command: "go test ./..."
-      required: true
-
-# No scaffolds needed — agents have independent file ownership.
-# The only shared file is cmd/saw/main.go (AddCommand registrations),
-# which is orchestrator-owned and applied post-merge.
-
-interface_contracts:
-  - name: "Validate"
-    description: "Runs all I1-I6 invariant checks on an IMPLManifest. Returns slice of ValidationError (empty if valid)."
-    definition: |
-      func Validate(m *IMPLManifest) []ValidationError
-    location: "pkg/protocol/validation.go"
-
-  - name: "ValidateIMPLDoc"
-    description: "E16 typed-block validation on a markdown IMPL doc at path. Returns nil if valid or no typed blocks."
-    definition: |
-      func ValidateIMPLDoc(path string) ([]types.ValidationError, error)
-    location: "pkg/protocol/validator.go"
-
-  - name: "ExtractAgentContextFromManifest"
-    description: |
-      New YAML-mode function. Reads a parsed IMPLManifest and returns the per-agent
-      context payload for the given agentID. Extracts agent task, file ownership entries
-      for that agent, all interface contracts, all scaffolds, and quality gates.
-      Returns ErrAgentNotFound if agentID is not in any wave.
-      This is the YAML equivalent of ExtractAgentContext (markdown) in extract.go.
-    definition: |
-      func ExtractAgentContextFromManifest(m *IMPLManifest, agentID string) (*AgentContextPayload, error)
-    location: "pkg/protocol/extract.go"
-
-  - name: "AgentContextPayload (JSON output schema)"
-    description: |
-      The JSON object written to stdout by 'saw extract-context'. All fields are strings.
-      impl_doc_path: absolute path to the manifest file
-      agent_id: the agent letter (e.g. "A")
-      agent_task: the agent's full task field from the manifest
-      file_ownership: JSON array of FileOwnership entries for this agent
-      interface_contracts: JSON array of all InterfaceContract entries
-      scaffolds: JSON array of all ScaffoldFile entries
-      quality_gates: JSON object of QualityGates (or null)
-    definition: |
-      type AgentContextJSONPayload struct {
-          IMPLDocPath        string             `json:"impl_doc_path"`
-          AgentID            string             `json:"agent_id"`
-          AgentTask          string             `json:"agent_task"`
-          FileOwnership      []FileOwnership    `json:"file_ownership"`
-          InterfaceContracts []InterfaceContract `json:"interface_contracts"`
-          Scaffolds          []ScaffoldFile      `json:"scaffolds"`
-          QualityGates       *QualityGates       `json:"quality_gates"`
-      }
-    location: "pkg/protocol/extract.go"
-
-  - name: "SetCompletionReport"
-    description: "Registers a CompletionReport for an agent. Returns ErrAgentNotFound if agent ID is not in any wave."
-    definition: |
-      func SetCompletionReport(m *IMPLManifest, agentID string, report CompletionReport) error
-    location: "pkg/protocol/manifest.go"
-
-  - name: "WriteCompletionMarker"
-    description: "Writes SAW:COMPLETE marker with date. For YAML files sets completion_date field."
-    definition: |
-      func WriteCompletionMarker(implDocPath string, date string) error
-    location: "pkg/protocol/marker.go"
-
-  - name: "RunGates"
-    description: "Executes quality gates for a wave from the manifest. Returns GateResult slice."
-    definition: |
-      func RunGates(manifest *IMPLManifest, waveNumber int, repoDir string) ([]GateResult, error)
-    location: "pkg/protocol/gates.go"
-
-  - name: "DetectOwnershipConflicts"
-    description: "Cross-references completion reports to find files modified by multiple agents in the same wave."
-    definition: |
-      func DetectOwnershipConflicts(manifest *IMPLManifest, reports map[string]CompletionReport) []OwnershipConflict
-    location: "pkg/protocol/conflict.go"
-
-  - name: "ValidateScaffolds"
-    description: "Checks that all scaffold files have status 'committed'. Returns ScaffoldStatus per scaffold."
-    definition: |
-      func ValidateScaffolds(m *IMPLManifest) []ScaffoldStatus
-    location: "pkg/protocol/scaffold_validation.go"
-
-  - name: "CheckFreeze"
-    description: "Checks if interface contracts or scaffolds were modified after worktree creation. Returns FreezeViolation slice."
-    definition: |
-      func CheckFreeze(manifest *IMPLManifest) ([]FreezeViolation, error)
-    location: "pkg/protocol/freeze.go"
-
-  - name: "UpdateAgentPrompt"
-    description: "Updates the task field for a specific agent in a manifest. Returns ErrAgentNotFound if not found."
-    definition: |
-      func UpdateAgentPrompt(m *IMPLManifest, agentID string, newPrompt string) error
-    location: "pkg/protocol/updater.go"
-
-  - name: "Load / Save"
-    description: "Load reads a YAML IMPL manifest from path. Save writes an IMPLManifest to path as YAML."
-    definition: |
-      func Load(path string) (*IMPLManifest, error)
-      func Save(m *IMPLManifest, path string) error
-    location: "pkg/protocol/manifest.go"
-
+completion_date: "2026-03-10"
+completion_reports:
+    A:
+        branch: wave1-agent-A
+        commit: 7caf679
+        files_created:
+            - cmd/saw/validate_cmd.go
+        status: complete
+    B:
+        branch: wave1-agent-B
+        commit: 74d9c0a635c266c947f94a98a8f8e230040af505
+        files_changed:
+            - pkg/protocol/extract.go
+        files_created:
+            - cmd/saw/extract_context_cmd.go
+            - pkg/protocol/extract_yaml_test.go
+        status: complete
+    C:
+        branch: wave1-agent-C
+        commit: 69ad695485229f0efad5094a0e501f7cfb28296d
+        files_created:
+            - cmd/saw/set_completion_cmd.go
+            - cmd/saw/mark_complete_cmd.go
+        status: complete
+    D:
+        branch: wave1-agent-D
+        commit: 5eb0739
+        files_created:
+            - cmd/saw/run_gates_cmd.go
+            - cmd/saw/check_conflicts_cmd.go
+            - cmd/saw/validate_scaffolds_cmd.go
+            - cmd/saw/freeze_check_cmd.go
+            - cmd/saw/update_agent_prompt_cmd.go
+        status: complete
+feature_slug: yaml-mode-cli
 file_ownership:
-  # Wave 1 — all new files, fully independent
-  - file: "cmd/saw/validate_cmd.go"
-    agent: "A"
-    wave: 1
-    action: "new"
-  - file: "cmd/saw/extract_context_cmd.go"
-    agent: "B"
-    wave: 1
-    action: "new"
-  - file: "cmd/saw/set_completion_cmd.go"
-    agent: "C"
-    wave: 1
-    action: "new"
-  - file: "cmd/saw/mark_complete_cmd.go"
-    agent: "C"
-    wave: 1
-    action: "new"
-  - file: "cmd/saw/run_gates_cmd.go"
-    agent: "D"
-    wave: 1
-    action: "new"
-  - file: "cmd/saw/check_conflicts_cmd.go"
-    agent: "D"
-    wave: 1
-    action: "new"
-  - file: "cmd/saw/validate_scaffolds_cmd.go"
-    agent: "D"
-    wave: 1
-    action: "new"
-  - file: "cmd/saw/freeze_check_cmd.go"
-    agent: "D"
-    wave: 1
-    action: "new"
-  - file: "cmd/saw/update_agent_prompt_cmd.go"
-    agent: "D"
-    wave: 1
-    action: "new"
-  # New pkg/protocol function for YAML-mode extract
-  - file: "pkg/protocol/extract.go"
-    agent: "B"
-    wave: 1
-    action: "modify"
-  # main.go is orchestrator-owned — AddCommand registrations applied post-merge
-  # cmd/saw/main.go is NOT in any agent's scope
-
-waves:
-  - number: 1
-    agents:
-      - id: "A"
-        files:
-          - "cmd/saw/validate_cmd.go"
-        task: |
-          ## What to Implement
-
-          Implement the `saw validate` CLI command in `cmd/saw/validate_cmd.go`.
-
-          This command validates a YAML IMPL manifest. It runs two complementary checks:
-          1. `protocol.Validate(m)` — struct-level invariant checks (I1-I6, agent IDs,
-             gate types, state machine, etc.) on the parsed IMPLManifest.
-          2. `protocol.ValidateIMPLDoc(path)` — E16 typed-block validation (only applicable
-             to markdown IMPL docs; for YAML files this will return nil with no errors,
-             which is acceptable — YAML manifests do not have typed blocks).
-
-          The command prints a JSON summary to stdout. Exit code 0 if valid, exit code 1
-          if any errors are found.
-
-          ## Command Signature
-
-          ```
-          saw validate <manifest-path>
-          ```
-
-          No flags beyond the inherited `--repo-dir`.
-
-          ## Interfaces to Call
-
-          ```go
-          // Load the manifest
-          m, err := protocol.Load(manifestPath)
-
-          // Run struct-level validation
-          structErrs := protocol.Validate(m)
-
-          // Run E16 typed-block validation (markdown only; returns nil for YAML)
-          // Import: "github.com/blackwell-systems/scout-and-wave-go/pkg/types"
-          docErrs, err := protocol.ValidateIMPLDoc(manifestPath)
-          ```
-
-          Note: `ValidateIMPLDoc` returns `[]types.ValidationError` (from `pkg/types`),
-          while `Validate` returns `[]protocol.ValidationError`. Both types have a
-          `Message` string field. Merge them into a unified output slice.
-
-          ## Output Format
-
-          Print a JSON object to stdout:
-          ```json
-          {
-            "valid": true,
-            "error_count": 0,
-            "errors": []
-          }
-          ```
-
-          When invalid:
-          ```json
-          {
-            "valid": false,
-            "error_count": 2,
-            "errors": [
-              {"code": "I1_VIOLATION", "message": "...", "field": "file_ownership"},
-              {"code": "e16a", "message": "missing required block: impl-file-ownership", "line": 0}
-            ]
-          }
-          ```
-
-          Errors from `Validate()` include `code`, `message`, `field`.
-          Errors from `ValidateIMPLDoc()` include `block_type` (as `code`), `line_number`
-          (as `line`), `message`. Normalize these into a unified error object with at least
-          `code` and `message` populated.
-
-          ## File to Create
-
-          `cmd/saw/validate_cmd.go` — package main, cobra pattern matching
-          `cmd/saw/verify_build.go` as the style template.
-
-          ## Tests to Write
-
-          No test file required for this agent — the underlying `protocol.Validate` and
-          `protocol.ValidateIMPLDoc` functions already have tests. Write a brief inline
-          smoke test if you want, but it is optional.
-
-          ## Verification Gate
-
-          ```bash
-          cd /Users/dayna.blackwell/code/scout-and-wave-go
-          go build ./cmd/saw/...
-          go vet ./cmd/saw/...
-          go test ./cmd/saw/... -run TestValidate -timeout 60s
-          ```
-
-          If no TestValidate exists yet, `go test ./cmd/saw/... -timeout 60s` is fine
-          (will report "no test files" or pass existing tests).
-
-          ## Constraints
-
-          - Do NOT modify `cmd/saw/main.go`. The orchestrator adds
-            `newValidateCmd()` to `main.go` post-merge.
-          - The exported constructor must be named `newValidateCmd()`.
-          - If `protocol.Load` fails (bad YAML), surface that as an error, not a
-            validation failure. Return the error from `RunE`.
-          - Exit code 1 when `valid == false`. Use `os.Exit(1)` after printing,
-            matching the pattern in `verify_build.go`.
-
-      - id: "B"
-        files:
-          - "cmd/saw/extract_context_cmd.go"
-          - "pkg/protocol/extract.go"
-        task: |
-          ## What to Implement
-
-          Two tasks in this agent:
-
-          ### Task 1 — Add ExtractAgentContextFromManifest to pkg/protocol/extract.go
-
-          The existing `ExtractAgentContext` in `extract.go` works on **markdown** IMPL
-          docs by parsing text sections with a line scanner. YAML manifests are structured
-          data; they need a different approach that reads the parsed struct directly.
-
-          Add a new function `ExtractAgentContextFromManifest` to `pkg/protocol/extract.go`:
-
-          ```go
-          // ExtractAgentContextFromManifest builds a per-agent context payload from a
-          // parsed IMPLManifest. It is the YAML-mode equivalent of ExtractAgentContext.
-          // Returns ErrAgentNotFound (wrapped) if agentID is not in any wave.
-          func ExtractAgentContextFromManifest(m *IMPLManifest, agentID string) (*AgentContextJSONPayload, error)
-          ```
-
-          Also add the output struct:
-
-          ```go
-          // AgentContextJSONPayload is the structured JSON output of 'saw extract-context'
-          // for YAML-mode manifests (E23).
-          type AgentContextJSONPayload struct {
-              IMPLDocPath        string              `json:"impl_doc_path"`
-              AgentID            string              `json:"agent_id"`
-              AgentTask          string              `json:"agent_task"`
-              FileOwnership      []FileOwnership     `json:"file_ownership"`
-              InterfaceContracts []InterfaceContract `json:"interface_contracts"`
-              Scaffolds          []ScaffoldFile      `json:"scaffolds"`
-              QualityGates       *QualityGates       `json:"quality_gates"`
-          }
-          ```
-
-          Implementation of `ExtractAgentContextFromManifest`:
-          - Search all waves for the agent with ID == agentID.
-          - If not found, return `fmt.Errorf("%w: %s", ErrAgentNotFound, agentID)`.
-          - Collect FileOwnership entries where `fo.Agent == agentID`.
-          - Use ALL interface contracts from `m.InterfaceContracts` (all agents need them).
-          - Use ALL scaffolds from `m.Scaffolds`.
-          - Include `m.QualityGates` as-is (pointer, may be nil).
-          - Set `AgentTask` from `agent.Task`.
-
-          ### Task 2 — Implement saw extract-context CLI command
-
-          File: `cmd/saw/extract_context_cmd.go`
-
-          ```
-          saw extract-context <manifest-path> --agent <ID>
-          ```
-
-          The command:
-          1. Calls `protocol.Load(manifestPath)` to parse the YAML manifest.
-          2. Calls `protocol.ExtractAgentContextFromManifest(m, agentID)`.
-          3. Prints the `AgentContextJSONPayload` as JSON to stdout (indented).
-          4. Exits 0 on success, returns error from RunE on failure.
-
-          This is the HIGHEST PRIORITY command — the orchestrator calls it every wave
-          to build agent prompts. Get the output schema correct.
-
-          ## Interfaces to Call
-
-          ```go
-          m, err := protocol.Load(manifestPath)
-          payload, err := protocol.ExtractAgentContextFromManifest(m, agentID)
-          out, _ := json.MarshalIndent(payload, "", "  ")
-          fmt.Println(string(out))
-          ```
-
-          ## Tests to Write
-
-          Add to `pkg/protocol/extract_test.go` (or a new `extract_yaml_test.go`):
-
-          1. `TestExtractAgentContextFromManifest_Found` — build a minimal IMPLManifest
-             with 2 agents, call for agent "A", verify AgentTask, FileOwnership (only A's
-             files), InterfaceContracts (all), and QualityGates populated correctly.
-          2. `TestExtractAgentContextFromManifest_NotFound` — call for agent "Z", verify
-             ErrAgentNotFound is returned (use `errors.Is`).
-          3. `TestExtractAgentContextFromManifest_FiltersByAgent` — verify agent "B"'s
-             FileOwnership does not include agent "A"'s files.
-
-          ## Verification Gate
-
-          ```bash
-          cd /Users/dayna.blackwell/code/scout-and-wave-go
-          go build ./...
-          go vet ./...
-          go test ./pkg/protocol/... -run TestExtractAgentContext -timeout 60s
-          ```
-
-          ## Constraints
-
-          - Do NOT modify `cmd/saw/main.go`. Orchestrator registers post-merge.
-          - The exported constructor must be named `newExtractContextCmd()`.
-          - `--agent` flag is required (use `MarkFlagRequired`).
-          - Do NOT modify or break the existing `ExtractAgentContext` markdown function
-            or its tests. The new function is additive.
-          - `AgentContextJSONPayload` must be defined in `pkg/protocol/extract.go`
-            (not in cmd/saw/) so it is importable by the web server if needed.
-
-      - id: "C"
-        files:
-          - "cmd/saw/set_completion_cmd.go"
-          - "cmd/saw/mark_complete_cmd.go"
-        task: |
-          ## What to Implement
-
-          Two CLI commands that mutate the YAML manifest and write it back to disk.
-
-          ### Command 1: saw set-completion
-
-          File: `cmd/saw/set_completion_cmd.go`
-
-          ```
-          saw set-completion <manifest-path> \
-            --agent <ID> \
-            --status <complete|partial|blocked> \
-            --commit <sha> \
-            --worktree <path> \
-            --branch <name>
-          ```
-
-          Steps:
-          1. `protocol.Load(manifestPath)` to parse the manifest.
-          2. Build a `protocol.CompletionReport` from the flags.
-          3. `protocol.SetCompletionReport(m, agentID, report)` — returns
-             `protocol.ErrAgentNotFound` if agent not in manifest.
-          4. `protocol.Save(m, manifestPath)` to write back.
-          5. Print success JSON to stdout: `{"agent": "A", "status": "complete", "saved": true}`.
-
-          Required flags: `--agent`, `--status`, `--commit`.
-          Optional flags: `--worktree`, `--branch`.
-
-          Additional optional flags for richer reports (all optional):
-          `--files-changed` (comma-separated), `--files-created` (comma-separated),
-          `--tests-added` (comma-separated), `--verification` (string).
-
-          ### Command 2: saw mark-complete
-
-          File: `cmd/saw/mark_complete_cmd.go`
-
-          ```
-          saw mark-complete <manifest-path> [--date YYYY-MM-DD]
-          ```
-
-          Steps:
-          1. If `--date` not provided, use `time.Now().Format("2006-01-02")`.
-          2. Call `protocol.WriteCompletionMarker(manifestPath, date)`.
-          3. Print JSON: `{"marked": true, "date": "2026-03-09", "path": "..."}`.
-
-          No required flags. `--date` is optional.
-
-          ## Interfaces to Call
-
-          ```go
-          // set-completion
-          m, err := protocol.Load(manifestPath)
-          report := protocol.CompletionReport{
-              Status:   status,
-              Commit:   commit,
-              Worktree: worktree,
-              Branch:   branch,
-              FilesChanged: splitCSV(filesChanged),   // helper: strings.Split + trim
-              FilesCreated: splitCSV(filesCreated),
-              TestsAdded:   splitCSV(testsAdded),
-              Verification: verification,
-          }
-          err = protocol.SetCompletionReport(m, agentID, report)
-          err = protocol.Save(m, manifestPath)
-
-          // mark-complete
-          err = protocol.WriteCompletionMarker(manifestPath, date)
-          ```
-
-          ## Tests to Write
-
-          No test file required — `SetCompletionReport`, `WriteCompletionMarker`,
-          `Load`, and `Save` all have existing tests. The CLI wrappers are thin.
-
-          ## Verification Gate
-
-          ```bash
-          cd /Users/dayna.blackwell/code/scout-and-wave-go
-          go build ./cmd/saw/...
-          go vet ./cmd/saw/...
-          go test ./cmd/saw/... -timeout 60s
-          ```
-
-          ## Constraints
-
-          - Do NOT modify `cmd/saw/main.go`.
-          - Constructors named `newSetCompletionCmd()` and `newMarkCompleteCmd()`.
-          - For `set-completion`: validate that `--status` is one of
-            `complete`, `partial`, `blocked` before calling SetCompletionReport.
-            Return a cobra error (not os.Exit) if invalid.
-          - For comma-separated flags (files-changed, etc.): use a private helper
-            `splitCSV(s string) []string` that splits on comma, trims whitespace,
-            and drops empty strings. Place it in the same file.
-          - If `SetCompletionReport` returns `ErrAgentNotFound`, surface it as a
-            clear error message (not a panic).
-
-      - id: "D"
-        files:
-          - "cmd/saw/run_gates_cmd.go"
-          - "cmd/saw/check_conflicts_cmd.go"
-          - "cmd/saw/validate_scaffolds_cmd.go"
-          - "cmd/saw/freeze_check_cmd.go"
-          - "cmd/saw/update_agent_prompt_cmd.go"
-        task: |
-          ## What to Implement
-
-          Five CLI commands — all read-only manifest queries or simple mutations.
-          Each follows the cobra pattern in `cmd/saw/verify_build.go` and
-          `cmd/saw/update_status.go`.
-
-          ### Command 1: saw run-gates
-
-          File: `cmd/saw/run_gates_cmd.go`
-
-          ```
-          saw run-gates <manifest-path> [--wave <N>] [--repo-dir <path>]
-          ```
-
-          Steps:
-          1. `protocol.Load(manifestPath)`.
-          2. `protocol.RunGates(m, waveNum, repoDir)` — `repoDir` comes from the
-             inherited `--repo-dir` persistent flag (package-level `repoDir` var).
-             Default `--wave 0` means "use gates as-is" (RunGates ignores waveNumber
-             in its current implementation — it runs all gates).
-          3. Print JSON array of `GateResult` objects.
-          4. Exit 1 if any required gate failed (`!result.Passed && result.Required`).
-
-          ### Command 2: saw check-conflicts
-
-          File: `cmd/saw/check_conflicts_cmd.go`
-
-          ```
-          saw check-conflicts <manifest-path>
-          ```
-
-          Steps:
-          1. `protocol.Load(manifestPath)`.
-          2. `protocol.DetectOwnershipConflicts(m, m.CompletionReports)`.
-          3. Print JSON: `{"conflict_count": N, "conflicts": [...]}`.
-          4. Exit 1 if `conflict_count > 0`.
-
-          ### Command 3: saw validate-scaffolds
-
-          File: `cmd/saw/validate_scaffolds_cmd.go`
-
-          ```
-          saw validate-scaffolds <manifest-path>
-          ```
-
-          Steps:
-          1. `protocol.Load(manifestPath)`.
-          2. `protocol.ValidateScaffolds(m)` — returns `[]protocol.ScaffoldStatus`.
-          3. `protocol.AllScaffoldsCommitted(m)` — boolean convenience.
-          4. Print JSON: `{"all_committed": true, "scaffold_count": N, "statuses": [...]}`.
-          5. Exit 1 if `!all_committed`.
-
-          ### Command 4: saw freeze-check
-
-          File: `cmd/saw/freeze_check_cmd.go`
-
-          ```
-          saw freeze-check <manifest-path>
-          ```
-
-          Steps:
-          1. `protocol.Load(manifestPath)`.
-          2. `protocol.CheckFreeze(m)` — returns `([]protocol.FreezeViolation, error)`.
-          3. Print JSON: `{"frozen": true, "violation_count": N, "violations": [...]}`.
-             Set `"frozen": true` if `m.WorktreesCreatedAt != nil`.
-             Set `"frozen": false` and `"violation_count": 0` if no freeze timestamp.
-          4. Exit 1 if `violation_count > 0`.
-
-          ### Command 5: saw update-agent-prompt
-
-          File: `cmd/saw/update_agent_prompt_cmd.go`
-
-          ```
-          saw update-agent-prompt <manifest-path> --agent <ID> --prompt <text>
-          ```
-
-          Steps:
-          1. `protocol.Load(manifestPath)`.
-          2. `protocol.UpdateAgentPrompt(m, agentID, newPrompt)`.
-          3. `protocol.Save(m, manifestPath)`.
-          4. Print JSON: `{"agent": "A", "updated": true}`.
-
-          Both `--agent` and `--prompt` are required flags.
-
-          ## Interfaces to Call
-
-          ```go
-          // run-gates
-          results, err := protocol.RunGates(m, waveNum, repoDir)
-
-          // check-conflicts
-          conflicts := protocol.DetectOwnershipConflicts(m, m.CompletionReports)
-
-          // validate-scaffolds
-          statuses := protocol.ValidateScaffolds(m)
-          allOK := protocol.AllScaffoldsCommitted(m)
-
-          // freeze-check
-          violations, err := protocol.CheckFreeze(m)
-
-          // update-agent-prompt
-          err = protocol.UpdateAgentPrompt(m, agentID, newPrompt)
-          err = protocol.Save(m, manifestPath)
-          ```
-
-          ## Tests to Write
-
-          No test files required for these thin CLI wrappers.
-
-          ## Verification Gate
-
-          ```bash
-          cd /Users/dayna.blackwell/code/scout-and-wave-go
-          go build ./cmd/saw/...
-          go vet ./cmd/saw/...
-          go test ./cmd/saw/... -timeout 60s
-          ```
-
-          ## Constraints
-
-          - Do NOT modify `cmd/saw/main.go`. Orchestrator registers all 5 constructors
-            post-merge.
-          - Constructor names: `newRunGatesCmd()`, `newCheckConflictsCmd()`,
-            `newValidateScaffoldsCmd()`, `newFreezeCheckCmd()`,
-            `newUpdateAgentPromptCmd()`.
-          - For `run-gates`: the `--repo-dir` flag is already inherited as the
-            package-level `repoDir` variable — use it directly, do not redeclare.
-          - For `freeze-check`: if `CheckFreeze` returns an error (hash computation
-            failure), return that error from RunE rather than treating it as a violation.
-          - For `update-agent-prompt`: if the prompt text is long or contains newlines,
-            cobra flag parsing handles it — document in the Short description that
-            users can pass multi-line prompts via `$'...'` or a file redirect if needed.
-          - Exit codes: 0 = success/clean, 1 = violations/failures found, non-zero
-            returned from RunE = system/parse error.
-
-# Post-merge orchestrator step (NOT an agent task):
-# After all Wave 1 agents complete and their branches are merged, add all 9
-# new constructor calls to cmd/saw/main.go:
-#   newValidateCmd()
-#   newExtractContextCmd()
-#   newSetCompletionCmd()
-#   newMarkCompleteCmd()
-#   newRunGatesCmd()
-#   newCheckConflictsCmd()
-#   newValidateScaffoldsCmd()
-#   newFreezeCheckCmd()
-#   newUpdateAgentPromptCmd()
-# Then run: go build ./... && go vet ./... && go test ./...
-
+    - action: new
+      agent: A
+      file: cmd/saw/validate_cmd.go
+      wave: 1
+    - action: new
+      agent: B
+      file: cmd/saw/extract_context_cmd.go
+      wave: 1
+    - action: new
+      agent: C
+      file: cmd/saw/set_completion_cmd.go
+      wave: 1
+    - action: new
+      agent: C
+      file: cmd/saw/mark_complete_cmd.go
+      wave: 1
+    - action: new
+      agent: D
+      file: cmd/saw/run_gates_cmd.go
+      wave: 1
+    - action: new
+      agent: D
+      file: cmd/saw/check_conflicts_cmd.go
+      wave: 1
+    - action: new
+      agent: D
+      file: cmd/saw/validate_scaffolds_cmd.go
+      wave: 1
+    - action: new
+      agent: D
+      file: cmd/saw/freeze_check_cmd.go
+      wave: 1
+    - action: new
+      agent: D
+      file: cmd/saw/update_agent_prompt_cmd.go
+      wave: 1
+    - action: modify
+      agent: B
+      file: pkg/protocol/extract.go
+      wave: 1
+interface_contracts:
+    - definition: |
+        func Validate(m *IMPLManifest) []ValidationError
+      description: Runs all I1-I6 invariant checks on an IMPLManifest. Returns slice of ValidationError (empty if valid).
+      location: pkg/protocol/validation.go
+      name: Validate
+    - definition: |
+        func ValidateIMPLDoc(path string) ([]types.ValidationError, error)
+      description: E16 typed-block validation on a markdown IMPL doc at path. Returns nil if valid or no typed blocks.
+      location: pkg/protocol/validator.go
+      name: ValidateIMPLDoc
+    - definition: |
+        func ExtractAgentContextFromManifest(m *IMPLManifest, agentID string) (*AgentContextPayload, error)
+      description: |
+        New YAML-mode function. Reads a parsed IMPLManifest and returns the per-agent
+        context payload for the given agentID. Extracts agent task, file ownership entries
+        for that agent, all interface contracts, all scaffolds, and quality gates.
+        Returns ErrAgentNotFound if agentID is not in any wave.
+        This is the YAML equivalent of ExtractAgentContext (markdown) in extract.go.
+      location: pkg/protocol/extract.go
+      name: ExtractAgentContextFromManifest
+    - definition: |
+        type AgentContextJSONPayload struct {
+            IMPLDocPath        string             `json:"impl_doc_path"`
+            AgentID            string             `json:"agent_id"`
+            AgentTask          string             `json:"agent_task"`
+            FileOwnership      []FileOwnership    `json:"file_ownership"`
+            InterfaceContracts []InterfaceContract `json:"interface_contracts"`
+            Scaffolds          []ScaffoldFile      `json:"scaffolds"`
+            QualityGates       *QualityGates       `json:"quality_gates"`
+        }
+      description: |
+        The JSON object written to stdout by 'saw extract-context'. All fields are strings.
+        impl_doc_path: absolute path to the manifest file
+        agent_id: the agent letter (e.g. "A")
+        agent_task: the agent's full task field from the manifest
+        file_ownership: JSON array of FileOwnership entries for this agent
+        interface_contracts: JSON array of all InterfaceContract entries
+        scaffolds: JSON array of all ScaffoldFile entries
+        quality_gates: JSON object of QualityGates (or null)
+      location: pkg/protocol/extract.go
+      name: AgentContextPayload (JSON output schema)
+    - definition: |
+        func SetCompletionReport(m *IMPLManifest, agentID string, report CompletionReport) error
+      description: Registers a CompletionReport for an agent. Returns ErrAgentNotFound if agent ID is not in any wave.
+      location: pkg/protocol/manifest.go
+      name: SetCompletionReport
+    - definition: |
+        func WriteCompletionMarker(implDocPath string, date string) error
+      description: Writes SAW:COMPLETE marker with date. For YAML files sets completion_date field.
+      location: pkg/protocol/marker.go
+      name: WriteCompletionMarker
+    - definition: |
+        func RunGates(manifest *IMPLManifest, waveNumber int, repoDir string) ([]GateResult, error)
+      description: Executes quality gates for a wave from the manifest. Returns GateResult slice.
+      location: pkg/protocol/gates.go
+      name: RunGates
+    - definition: |
+        func DetectOwnershipConflicts(manifest *IMPLManifest, reports map[string]CompletionReport) []OwnershipConflict
+      description: Cross-references completion reports to find files modified by multiple agents in the same wave.
+      location: pkg/protocol/conflict.go
+      name: DetectOwnershipConflicts
+    - definition: |
+        func ValidateScaffolds(m *IMPLManifest) []ScaffoldStatus
+      description: Checks that all scaffold files have status 'committed'. Returns ScaffoldStatus per scaffold.
+      location: pkg/protocol/scaffold_validation.go
+      name: ValidateScaffolds
+    - definition: |
+        func CheckFreeze(manifest *IMPLManifest) ([]FreezeViolation, error)
+      description: Checks if interface contracts or scaffolds were modified after worktree creation. Returns FreezeViolation slice.
+      location: pkg/protocol/freeze.go
+      name: CheckFreeze
+    - definition: |
+        func UpdateAgentPrompt(m *IMPLManifest, agentID string, newPrompt string) error
+      description: Updates the task field for a specific agent in a manifest. Returns ErrAgentNotFound if not found.
+      location: pkg/protocol/updater.go
+      name: UpdateAgentPrompt
+    - definition: |
+        func Load(path string) (*IMPLManifest, error)
+        func Save(m *IMPLManifest, path string) error
+      description: Load reads a YAML IMPL manifest from path. Save writes an IMPLManifest to path as YAML.
+      location: pkg/protocol/manifest.go
+      name: Load / Save
+lint_command: go vet ./...
 pre_mortem:
-  overall_risk: "low"
-  rows:
-    - scenario: "Agent B modifies pkg/protocol/extract.go; if the existing markdown ExtractAgentContext tests break, the build fails."
-      likelihood: "low"
-      impact: "medium"
-      mitigation: "Agent B must run the full extract test suite, not just the new tests. The constraint explicitly says do not modify the existing function. If tests break, they were broken by the new code and must be fixed before completion."
+    overall_risk: low
+    rows:
+        - impact: medium
+          likelihood: low
+          mitigation: Agent B must run the full extract test suite, not just the new tests. The constraint explicitly says do not modify the existing function. If tests break, they were broken by the new code and must be fixed before completion.
+          scenario: Agent B modifies pkg/protocol/extract.go; if the existing markdown ExtractAgentContext tests break, the build fails.
+        - impact: low
+          likelihood: medium
+          mitigation: Orchestrator post-merge checklist explicitly includes adding all 9 AddCommand calls. Running 'saw --help' after rebuild confirms registration.
+          scenario: main.go wiring step missed post-merge — commands built but not registered.
+        - impact: low
+          likelihood: low
+          mitigation: set-completion and update-agent-prompt are the only commands that call Save. Existing Save tests cover round-trip fidelity. Agents C and D should run go test ./pkg/protocol/... as part of their verification.
+          scenario: YAML round-trip via Load/Save reorders or reformats fields, breaking idempotency tests elsewhere.
+quality_gates:
+    gates:
+        - command: go build ./...
+          required: true
+          type: build
+        - command: go vet ./...
+          required: false
+          type: lint
+        - command: go test ./...
+          required: true
+          type: test
+    level: standard
+state: SCOUT_PENDING
+test_command: go test ./...
+title: YAML-Mode CLI Commands
+verdict: SUITABLE
+waves:
+    - agents:
+        - files:
+            - cmd/saw/validate_cmd.go
+          id: A
+          task: |
+            ## What to Implement
 
-    - scenario: "main.go wiring step missed post-merge — commands built but not registered."
-      likelihood: "medium"
-      impact: "low"
-      mitigation: "Orchestrator post-merge checklist explicitly includes adding all 9 AddCommand calls. Running 'saw --help' after rebuild confirms registration."
+            Implement the `saw validate` CLI command in `cmd/saw/validate_cmd.go`.
 
-    - scenario: "YAML round-trip via Load/Save reorders or reformats fields, breaking idempotency tests elsewhere."
-      likelihood: "low"
-      impact: "low"
-      mitigation: "set-completion and update-agent-prompt are the only commands that call Save. Existing Save tests cover round-trip fidelity. Agents C and D should run go test ./pkg/protocol/... as part of their verification."
+            This command validates a YAML IMPL manifest. It runs two complementary checks:
+            1. `protocol.Validate(m)` — struct-level invariant checks (I1-I6, agent IDs,
+               gate types, state machine, etc.) on the parsed IMPLManifest.
+            2. `protocol.ValidateIMPLDoc(path)` — E16 typed-block validation (only applicable
+               to markdown IMPL docs; for YAML files this will return nil with no errors,
+               which is acceptable — YAML manifests do not have typed blocks).
 
-completion_reports: {}
+            The command prints a JSON summary to stdout. Exit code 0 if valid, exit code 1
+            if any errors are found.
+
+            ## Command Signature
+
+            ```
+            saw validate <manifest-path>
+            ```
+
+            No flags beyond the inherited `--repo-dir`.
+
+            ## Interfaces to Call
+
+            ```go
+            // Load the manifest
+            m, err := protocol.Load(manifestPath)
+
+            // Run struct-level validation
+            structErrs := protocol.Validate(m)
+
+            // Run E16 typed-block validation (markdown only; returns nil for YAML)
+            // Import: "github.com/blackwell-systems/scout-and-wave-go/pkg/types"
+            docErrs, err := protocol.ValidateIMPLDoc(manifestPath)
+            ```
+
+            Note: `ValidateIMPLDoc` returns `[]types.ValidationError` (from `pkg/types`),
+            while `Validate` returns `[]protocol.ValidationError`. Both types have a
+            `Message` string field. Merge them into a unified output slice.
+
+            ## Output Format
+
+            Print a JSON object to stdout:
+            ```json
+            {
+              "valid": true,
+              "error_count": 0,
+              "errors": []
+            }
+            ```
+
+            When invalid:
+            ```json
+            {
+              "valid": false,
+              "error_count": 2,
+              "errors": [
+                {"code": "I1_VIOLATION", "message": "...", "field": "file_ownership"},
+                {"code": "e16a", "message": "missing required block: impl-file-ownership", "line": 0}
+              ]
+            }
+            ```
+
+            Errors from `Validate()` include `code`, `message`, `field`.
+            Errors from `ValidateIMPLDoc()` include `block_type` (as `code`), `line_number`
+            (as `line`), `message`. Normalize these into a unified error object with at least
+            `code` and `message` populated.
+
+            ## File to Create
+
+            `cmd/saw/validate_cmd.go` — package main, cobra pattern matching
+            `cmd/saw/verify_build.go` as the style template.
+
+            ## Tests to Write
+
+            No test file required for this agent — the underlying `protocol.Validate` and
+            `protocol.ValidateIMPLDoc` functions already have tests. Write a brief inline
+            smoke test if you want, but it is optional.
+
+            ## Verification Gate
+
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go
+            go build ./cmd/saw/...
+            go vet ./cmd/saw/...
+            go test ./cmd/saw/... -run TestValidate -timeout 60s
+            ```
+
+            If no TestValidate exists yet, `go test ./cmd/saw/... -timeout 60s` is fine
+            (will report "no test files" or pass existing tests).
+
+            ## Constraints
+
+            - Do NOT modify `cmd/saw/main.go`. The orchestrator adds
+              `newValidateCmd()` to `main.go` post-merge.
+            - The exported constructor must be named `newValidateCmd()`.
+            - If `protocol.Load` fails (bad YAML), surface that as an error, not a
+              validation failure. Return the error from `RunE`.
+            - Exit code 1 when `valid == false`. Use `os.Exit(1)` after printing,
+              matching the pattern in `verify_build.go`.
+        - files:
+            - cmd/saw/extract_context_cmd.go
+            - pkg/protocol/extract.go
+          id: B
+          task: |
+            ## What to Implement
+
+            Two tasks in this agent:
+
+            ### Task 1 — Add ExtractAgentContextFromManifest to pkg/protocol/extract.go
+
+            The existing `ExtractAgentContext` in `extract.go` works on **markdown** IMPL
+            docs by parsing text sections with a line scanner. YAML manifests are structured
+            data; they need a different approach that reads the parsed struct directly.
+
+            Add a new function `ExtractAgentContextFromManifest` to `pkg/protocol/extract.go`:
+
+            ```go
+            // ExtractAgentContextFromManifest builds a per-agent context payload from a
+            // parsed IMPLManifest. It is the YAML-mode equivalent of ExtractAgentContext.
+            // Returns ErrAgentNotFound (wrapped) if agentID is not in any wave.
+            func ExtractAgentContextFromManifest(m *IMPLManifest, agentID string) (*AgentContextJSONPayload, error)
+            ```
+
+            Also add the output struct:
+
+            ```go
+            // AgentContextJSONPayload is the structured JSON output of 'saw extract-context'
+            // for YAML-mode manifests (E23).
+            type AgentContextJSONPayload struct {
+                IMPLDocPath        string              `json:"impl_doc_path"`
+                AgentID            string              `json:"agent_id"`
+                AgentTask          string              `json:"agent_task"`
+                FileOwnership      []FileOwnership     `json:"file_ownership"`
+                InterfaceContracts []InterfaceContract `json:"interface_contracts"`
+                Scaffolds          []ScaffoldFile      `json:"scaffolds"`
+                QualityGates       *QualityGates       `json:"quality_gates"`
+            }
+            ```
+
+            Implementation of `ExtractAgentContextFromManifest`:
+            - Search all waves for the agent with ID == agentID.
+            - If not found, return `fmt.Errorf("%w: %s", ErrAgentNotFound, agentID)`.
+            - Collect FileOwnership entries where `fo.Agent == agentID`.
+            - Use ALL interface contracts from `m.InterfaceContracts` (all agents need them).
+            - Use ALL scaffolds from `m.Scaffolds`.
+            - Include `m.QualityGates` as-is (pointer, may be nil).
+            - Set `AgentTask` from `agent.Task`.
+
+            ### Task 2 — Implement saw extract-context CLI command
+
+            File: `cmd/saw/extract_context_cmd.go`
+
+            ```
+            saw extract-context <manifest-path> --agent <ID>
+            ```
+
+            The command:
+            1. Calls `protocol.Load(manifestPath)` to parse the YAML manifest.
+            2. Calls `protocol.ExtractAgentContextFromManifest(m, agentID)`.
+            3. Prints the `AgentContextJSONPayload` as JSON to stdout (indented).
+            4. Exits 0 on success, returns error from RunE on failure.
+
+            This is the HIGHEST PRIORITY command — the orchestrator calls it every wave
+            to build agent prompts. Get the output schema correct.
+
+            ## Interfaces to Call
+
+            ```go
+            m, err := protocol.Load(manifestPath)
+            payload, err := protocol.ExtractAgentContextFromManifest(m, agentID)
+            out, _ := json.MarshalIndent(payload, "", "  ")
+            fmt.Println(string(out))
+            ```
+
+            ## Tests to Write
+
+            Add to `pkg/protocol/extract_test.go` (or a new `extract_yaml_test.go`):
+
+            1. `TestExtractAgentContextFromManifest_Found` — build a minimal IMPLManifest
+               with 2 agents, call for agent "A", verify AgentTask, FileOwnership (only A's
+               files), InterfaceContracts (all), and QualityGates populated correctly.
+            2. `TestExtractAgentContextFromManifest_NotFound` — call for agent "Z", verify
+               ErrAgentNotFound is returned (use `errors.Is`).
+            3. `TestExtractAgentContextFromManifest_FiltersByAgent` — verify agent "B"'s
+               FileOwnership does not include agent "A"'s files.
+
+            ## Verification Gate
+
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go
+            go build ./...
+            go vet ./...
+            go test ./pkg/protocol/... -run TestExtractAgentContext -timeout 60s
+            ```
+
+            ## Constraints
+
+            - Do NOT modify `cmd/saw/main.go`. Orchestrator registers post-merge.
+            - The exported constructor must be named `newExtractContextCmd()`.
+            - `--agent` flag is required (use `MarkFlagRequired`).
+            - Do NOT modify or break the existing `ExtractAgentContext` markdown function
+              or its tests. The new function is additive.
+            - `AgentContextJSONPayload` must be defined in `pkg/protocol/extract.go`
+              (not in cmd/saw/) so it is importable by the web server if needed.
+        - files:
+            - cmd/saw/set_completion_cmd.go
+            - cmd/saw/mark_complete_cmd.go
+          id: C
+          task: |
+            ## What to Implement
+
+            Two CLI commands that mutate the YAML manifest and write it back to disk.
+
+            ### Command 1: saw set-completion
+
+            File: `cmd/saw/set_completion_cmd.go`
+
+            ```
+            saw set-completion <manifest-path> \
+              --agent <ID> \
+              --status <complete|partial|blocked> \
+              --commit <sha> \
+              --worktree <path> \
+              --branch <name>
+            ```
+
+            Steps:
+            1. `protocol.Load(manifestPath)` to parse the manifest.
+            2. Build a `protocol.CompletionReport` from the flags.
+            3. `protocol.SetCompletionReport(m, agentID, report)` — returns
+               `protocol.ErrAgentNotFound` if agent not in manifest.
+            4. `protocol.Save(m, manifestPath)` to write back.
+            5. Print success JSON to stdout: `{"agent": "A", "status": "complete", "saved": true}`.
+
+            Required flags: `--agent`, `--status`, `--commit`.
+            Optional flags: `--worktree`, `--branch`.
+
+            Additional optional flags for richer reports (all optional):
+            `--files-changed` (comma-separated), `--files-created` (comma-separated),
+            `--tests-added` (comma-separated), `--verification` (string).
+
+            ### Command 2: saw mark-complete
+
+            File: `cmd/saw/mark_complete_cmd.go`
+
+            ```
+            saw mark-complete <manifest-path> [--date YYYY-MM-DD]
+            ```
+
+            Steps:
+            1. If `--date` not provided, use `time.Now().Format("2006-01-02")`.
+            2. Call `protocol.WriteCompletionMarker(manifestPath, date)`.
+            3. Print JSON: `{"marked": true, "date": "2026-03-09", "path": "..."}`.
+
+            No required flags. `--date` is optional.
+
+            ## Interfaces to Call
+
+            ```go
+            // set-completion
+            m, err := protocol.Load(manifestPath)
+            report := protocol.CompletionReport{
+                Status:   status,
+                Commit:   commit,
+                Worktree: worktree,
+                Branch:   branch,
+                FilesChanged: splitCSV(filesChanged),   // helper: strings.Split + trim
+                FilesCreated: splitCSV(filesCreated),
+                TestsAdded:   splitCSV(testsAdded),
+                Verification: verification,
+            }
+            err = protocol.SetCompletionReport(m, agentID, report)
+            err = protocol.Save(m, manifestPath)
+
+            // mark-complete
+            err = protocol.WriteCompletionMarker(manifestPath, date)
+            ```
+
+            ## Tests to Write
+
+            No test file required — `SetCompletionReport`, `WriteCompletionMarker`,
+            `Load`, and `Save` all have existing tests. The CLI wrappers are thin.
+
+            ## Verification Gate
+
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go
+            go build ./cmd/saw/...
+            go vet ./cmd/saw/...
+            go test ./cmd/saw/... -timeout 60s
+            ```
+
+            ## Constraints
+
+            - Do NOT modify `cmd/saw/main.go`.
+            - Constructors named `newSetCompletionCmd()` and `newMarkCompleteCmd()`.
+            - For `set-completion`: validate that `--status` is one of
+              `complete`, `partial`, `blocked` before calling SetCompletionReport.
+              Return a cobra error (not os.Exit) if invalid.
+            - For comma-separated flags (files-changed, etc.): use a private helper
+              `splitCSV(s string) []string` that splits on comma, trims whitespace,
+              and drops empty strings. Place it in the same file.
+            - If `SetCompletionReport` returns `ErrAgentNotFound`, surface it as a
+              clear error message (not a panic).
+        - files:
+            - cmd/saw/run_gates_cmd.go
+            - cmd/saw/check_conflicts_cmd.go
+            - cmd/saw/validate_scaffolds_cmd.go
+            - cmd/saw/freeze_check_cmd.go
+            - cmd/saw/update_agent_prompt_cmd.go
+          id: D
+          task: |
+            ## What to Implement
+
+            Five CLI commands — all read-only manifest queries or simple mutations.
+            Each follows the cobra pattern in `cmd/saw/verify_build.go` and
+            `cmd/saw/update_status.go`.
+
+            ### Command 1: saw run-gates
+
+            File: `cmd/saw/run_gates_cmd.go`
+
+            ```
+            saw run-gates <manifest-path> [--wave <N>] [--repo-dir <path>]
+            ```
+
+            Steps:
+            1. `protocol.Load(manifestPath)`.
+            2. `protocol.RunGates(m, waveNum, repoDir)` — `repoDir` comes from the
+               inherited `--repo-dir` persistent flag (package-level `repoDir` var).
+               Default `--wave 0` means "use gates as-is" (RunGates ignores waveNumber
+               in its current implementation — it runs all gates).
+            3. Print JSON array of `GateResult` objects.
+            4. Exit 1 if any required gate failed (`!result.Passed && result.Required`).
+
+            ### Command 2: saw check-conflicts
+
+            File: `cmd/saw/check_conflicts_cmd.go`
+
+            ```
+            saw check-conflicts <manifest-path>
+            ```
+
+            Steps:
+            1. `protocol.Load(manifestPath)`.
+            2. `protocol.DetectOwnershipConflicts(m, m.CompletionReports)`.
+            3. Print JSON: `{"conflict_count": N, "conflicts": [...]}`.
+            4. Exit 1 if `conflict_count > 0`.
+
+            ### Command 3: saw validate-scaffolds
+
+            File: `cmd/saw/validate_scaffolds_cmd.go`
+
+            ```
+            saw validate-scaffolds <manifest-path>
+            ```
+
+            Steps:
+            1. `protocol.Load(manifestPath)`.
+            2. `protocol.ValidateScaffolds(m)` — returns `[]protocol.ScaffoldStatus`.
+            3. `protocol.AllScaffoldsCommitted(m)` — boolean convenience.
+            4. Print JSON: `{"all_committed": true, "scaffold_count": N, "statuses": [...]}`.
+            5. Exit 1 if `!all_committed`.
+
+            ### Command 4: saw freeze-check
+
+            File: `cmd/saw/freeze_check_cmd.go`
+
+            ```
+            saw freeze-check <manifest-path>
+            ```
+
+            Steps:
+            1. `protocol.Load(manifestPath)`.
+            2. `protocol.CheckFreeze(m)` — returns `([]protocol.FreezeViolation, error)`.
+            3. Print JSON: `{"frozen": true, "violation_count": N, "violations": [...]}`.
+               Set `"frozen": true` if `m.WorktreesCreatedAt != nil`.
+               Set `"frozen": false` and `"violation_count": 0` if no freeze timestamp.
+            4. Exit 1 if `violation_count > 0`.
+
+            ### Command 5: saw update-agent-prompt
+
+            File: `cmd/saw/update_agent_prompt_cmd.go`
+
+            ```
+            saw update-agent-prompt <manifest-path> --agent <ID> --prompt <text>
+            ```
+
+            Steps:
+            1. `protocol.Load(manifestPath)`.
+            2. `protocol.UpdateAgentPrompt(m, agentID, newPrompt)`.
+            3. `protocol.Save(m, manifestPath)`.
+            4. Print JSON: `{"agent": "A", "updated": true}`.
+
+            Both `--agent` and `--prompt` are required flags.
+
+            ## Interfaces to Call
+
+            ```go
+            // run-gates
+            results, err := protocol.RunGates(m, waveNum, repoDir)
+
+            // check-conflicts
+            conflicts := protocol.DetectOwnershipConflicts(m, m.CompletionReports)
+
+            // validate-scaffolds
+            statuses := protocol.ValidateScaffolds(m)
+            allOK := protocol.AllScaffoldsCommitted(m)
+
+            // freeze-check
+            violations, err := protocol.CheckFreeze(m)
+
+            // update-agent-prompt
+            err = protocol.UpdateAgentPrompt(m, agentID, newPrompt)
+            err = protocol.Save(m, manifestPath)
+            ```
+
+            ## Tests to Write
+
+            No test files required for these thin CLI wrappers.
+
+            ## Verification Gate
+
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go
+            go build ./cmd/saw/...
+            go vet ./cmd/saw/...
+            go test ./cmd/saw/... -timeout 60s
+            ```
+
+            ## Constraints
+
+            - Do NOT modify `cmd/saw/main.go`. Orchestrator registers all 5 constructors
+              post-merge.
+            - Constructor names: `newRunGatesCmd()`, `newCheckConflictsCmd()`,
+              `newValidateScaffoldsCmd()`, `newFreezeCheckCmd()`,
+              `newUpdateAgentPromptCmd()`.
+            - For `run-gates`: the `--repo-dir` flag is already inherited as the
+              package-level `repoDir` variable — use it directly, do not redeclare.
+            - For `freeze-check`: if `CheckFreeze` returns an error (hash computation
+              failure), return that error from RunE rather than treating it as a violation.
+            - For `update-agent-prompt`: if the prompt text is long or contains newlines,
+              cobra flag parsing handles it — document in the Short description that
+              users can pass multi-line prompts via `$'...'` or a file redirect if needed.
+            - Exit codes: 0 = success/clean, 1 = violations/failures found, non-zero
+              returned from RunE = system/parse error.
+      number: 1
