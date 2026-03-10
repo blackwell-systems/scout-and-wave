@@ -1,4 +1,4 @@
-<!-- saw-merge v0.6.1 -->
+<!-- saw-merge v0.6.2 -->
 # SAW Merge Procedure
 
 Merge agent worktrees back into the main branch after a wave completes.
@@ -83,7 +83,7 @@ files that either:
 - Belong to a different agent in the same wave (I1 violation)
 - Are not in the ownership table at all (undeclared modification)
 
-**Exception:** The IMPL doc itself (`docs/IMPL/IMPL-*.yaml` or `IMPL-*.md`) is
+**Exception:** The IMPL doc itself (`docs/IMPL/IMPL-*.yaml`) is
 expected to be modified by all agents (completion reports) and is ignored in
 this check.
 
@@ -109,26 +109,16 @@ The scanner exits with code 0 always (informational only). If stubs are detected
 
 ## Step 1.95: E21 Quality Gates
 
-**YAML mode:** Run `sawtools run-gates "<manifest-path>" --wave <N> --repo-dir "<repo-path>"`. The CLI loads the manifest, executes each gate command, and outputs a JSON array of `GateResult` objects with pass/fail, stdout, stderr, and exit code. Exit code 1 means at least one required gate failed — **stop immediately**, do not merge, report gate failure to user.
-
-**Markdown mode:** If the IMPL doc contains a `## Quality Gates` section, parse it and execute each gate:
-
-1. Read `level:` (quick | standard | full) — this determines timeout and failure handling
-2. For each gate in the `gates:` list:
-   - Run the `command:` with a 5-minute timeout
-   - If `required: true` and the gate fails, **stop immediately** — do not merge, report gate failure to user
-   - If `required: false` and the gate fails, log a warning but continue
+Run `sawtools run-gates "<manifest-path>" --wave <N> --repo-dir "<repo-path>"`. The CLI executes each gate command and outputs a JSON array of `GateResult` objects with pass/fail, stdout, stderr, and exit code. Exit code 1 means at least one required gate failed — **stop immediately**, do not merge, report gate failure to user.
 
 Quality gates run unscoped (not inside any worktree) — they verify the full project state after all agents complete.
 
-If no Quality Gates section exists, skip this step.
+If the manifest has no quality gates, skip this step.
 
 
 ## Step 2: Conflict Prediction
 
-**YAML mode:** Run `sawtools check-conflicts "<manifest-path>"`. The CLI detects same-wave file conflicts and undeclared modifications, outputting a JSON array of `OwnershipConflict` objects. Exit code 1 means conflicts were found — do not proceed until resolved.
-
-**Markdown mode:** Cross-reference all agents' `files_changed` and `files_created` lists manually.
+Run `sawtools check-conflicts "<manifest-path>"`. The CLI detects same-wave file conflicts and undeclared modifications, outputting a JSON array of `OwnershipConflict` objects. Exit code 1 means conflicts were found — do not proceed until resolved.
 
 If any file appears in more than one agent's list:
 
