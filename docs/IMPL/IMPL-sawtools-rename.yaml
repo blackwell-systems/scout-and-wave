@@ -1,0 +1,637 @@
+# IMPL: sawtools-rename
+title: "Rename scout-and-wave-go CLI binary from `saw` to `sawtools`"
+feature_slug: "sawtools-rename"
+verdict: "SUITABLE"
+test_command: "go build ./... && go test ./..."
+lint_command: "go vet ./..."
+state: "SCOUT_PENDING"
+
+# Suitability Assessment
+# ---------------------------------------------------------------------------
+# Verdict: SUITABLE
+#
+# 1. File decomposition: Three repos, all with disjoint file ownership.
+#    Agent A owns scout-and-wave-go (root.go, README.md, CHANGELOG.md, docs/).
+#    Agent B owns scout-and-wave sdk branch (saw-skill.md, saw-merge.md, saw-worktree.md).
+#    Agent C owns the ~/.local/bin/ install symlink (shell script / manual step).
+#    No two agents touch the same file.
+#
+# 2. Investigation-first: None needed. The rename target is explicit and
+#    the impact surface is exhaustively discoverable by search.
+#
+# 3. Interface discoverability: No cross-agent interfaces. Each agent does
+#    independent text substitution. Agent B's changes don't depend on Agent A's.
+#
+# 4. Pre-implementation scan:
+#    - Total items: 3 scopes (go binary rename, skill file updates, install symlink)
+#    - Already implemented: 0
+#    - To-do: 3 (all)
+#    All agents proceed as planned.
+#
+# 5. Parallelization value: Three fully independent agents in a single wave.
+#    Go build/test cycle is ~15s. Moderate per-agent file counts (2-5 files).
+#    Clear speedup over sequential.
+#
+# Estimated times:
+# - Scout phase: ~15 min (multi-repo discovery, cross-repo search)
+# - Agent execution: ~20 min (3 agents × ~7 min avg, running in parallel)
+# - Merge & verification: ~5 min
+# Total SAW time: ~40 min
+#
+# Sequential baseline: ~25 min (3 × 8 min sequential)
+# Time savings: marginal on speed but high on coordination clarity.
+#
+# Recommendation: Clear win. The three repos would otherwise require sequential
+# context switches; parallel execution eliminates that.
+# ---------------------------------------------------------------------------
+
+# Quality Gates
+quality_gates:
+  level: "standard"
+  gates:
+    - type: "build"
+      command: "go build ./..."
+      required: true
+    - type: "test"
+      command: "go test ./..."
+      required: true
+    - type: "lint"
+      command: "go vet ./..."
+      required: false
+
+# Scaffolds
+# No scaffolds needed — agents have independent type ownership.
+# This is a rename/text-substitution feature with no new shared types.
+
+# Interface Contracts
+# No cross-agent interfaces. All agents work independently on text substitutions.
+interface_contracts: []
+
+# File Ownership
+file_ownership:
+  # Agent A — scout-and-wave-go binary rename
+  - file: "cmd/saw/root.go"
+    agent: "A"
+    wave: 1
+    action: "modify"
+    repo: "scout-and-wave-go"
+    note: "Update Use field from 'saw' to 'sawtools' in newRootCmd()"
+  - file: "README.md"
+    agent: "A"
+    wave: 1
+    action: "modify"
+    repo: "scout-and-wave-go"
+    note: "Update all `saw <command>` references to `sawtools <command>` in CLI Commands section and examples"
+  - file: "CHANGELOG.md"
+    agent: "A"
+    wave: 1
+    action: "modify"
+    repo: "scout-and-wave-go"
+    note: "Add v0.15.0 entry documenting the binary rename"
+  - file: "docs/CONTEXT.md"
+    agent: "A"
+    wave: 1
+    action: "modify"
+    repo: "scout-and-wave-go"
+    note: "Update cmd/saw/ references to note binary is now named sawtools; update v0.7.0 entry CLI command list"
+  - file: "docs/architecture.md"
+    agent: "A"
+    wave: 1
+    action: "modify"
+    repo: "scout-and-wave-go"
+    note: "Update any CLI Binary row or saw binary references to sawtools"
+  - file: "docs/blog/dogfooding-protocol-sdk.md"
+    agent: "A"
+    wave: 1
+    action: "modify"
+    repo: "scout-and-wave-go"
+    note: "Update all `saw <subcommand>` references (saw create-worktrees, saw merge-agents, etc.) to `sawtools <subcommand>`"
+
+  # Agent B — scout-and-wave sdk branch skill file updates
+  - file: "implementations/claude-code/prompts/saw-skill.md"
+    agent: "B"
+    wave: 1
+    action: "modify"
+    repo: "scout-and-wave"
+    branch: "sdk"
+    note: "Update all SDK CLI command references: saw create-worktrees -> sawtools create-worktrees, etc. See constraint list."
+  - file: "implementations/claude-code/prompts/saw-merge.md"
+    agent: "B"
+    wave: 1
+    action: "modify"
+    repo: "scout-and-wave"
+    branch: "sdk"
+    note: "Update all sawtools CLI command references in merge procedure steps"
+  - file: "implementations/claude-code/prompts/saw-worktree.md"
+    agent: "B"
+    wave: 1
+    action: "modify"
+    repo: "scout-and-wave"
+    branch: "sdk"
+    note: "Update all sawtools CLI command references in worktree creation/cleanup steps"
+
+  # Agent C — install symlink update
+  - file: "~/.local/bin/saw"
+    agent: "C"
+    wave: 1
+    action: "modify"
+    repo: "system"
+    note: "Remove old saw symlink, create sawtools symlink pointing to scout-and-wave-go binary"
+
+# Waves
+waves:
+  - number: 1
+    agents:
+      - id: "A"
+        task: |
+          ## What to Implement
+
+          Rename the `scout-and-wave-go` CLI binary from `saw` to `sawtools` within
+          the scout-and-wave-go repository. This is a text substitution across source
+          code, documentation, and changelog files.
+
+          **Repository:** /Users/dayna.blackwell/code/scout-and-wave-go
+          **Current branch:** develop
+
+          ## Files to Modify
+
+          ### 1. cmd/saw/root.go
+          Change the `Use` field in `newRootCmd()` from `"saw"` to `"sawtools"`:
+          ```go
+          cmd := &cobra.Command{
+              Use:   "sawtools",
+              Short: "SAW Protocol SDK CLI (toolkit)",
+          }
+          ```
+          Also update the `Short` description to clarify this is the toolkit binary,
+          not the orchestration binary.
+
+          ### 2. README.md
+          In the "CLI Commands" section (around line 129), update the header prose and
+          all command examples:
+          - `The \`saw\` binary wraps SDK operations...` → `The \`sawtools\` binary wraps SDK operations...`
+          - All `| \`saw validate ...` table rows → `| \`sawtools validate ...`
+          - All `| \`saw extract-context ...` → `| \`sawtools extract-context ...`
+          - And so on for all 7 commands in the table.
+          - In the Quick Start section (line 94): `### Using the \`saw\` server` note:
+            leave this line unchanged — it refers to the `saw serve` command in
+            scout-and-wave-web, not the toolkit binary.
+
+          ### 3. CHANGELOG.md
+          Add a new version entry at the top of the Version History table and as a
+          new `## [0.15.0]` section:
+
+          Version History table row:
+          ```
+          | [0.15.0] | 2026-03-09 | Binary rename — `sawtools` replaces `saw` as the protocol toolkit CLI name |
+          ```
+
+          New section (insert before the existing `## [0.14.0]` section):
+          ```markdown
+          ## [0.15.0] - 2026-03-09
+
+          ### Changed
+
+          - **Binary renamed from `saw` to `sawtools`** — clarifies the architectural
+            split between `sawtools` (scout-and-wave-go: protocol toolkit, git/manifest
+            operations, no agent execution) and `saw` (scout-and-wave-web: orchestration
+            loop, runs agents, drives the full protocol lifecycle). All CLI subcommand
+            names are unchanged; only the top-level binary name changes.
+            Install: `go build -o sawtools ./cmd/saw` and copy to PATH.
+          ```
+
+          ### 4. docs/CONTEXT.md
+          Update the v0.7.0 entry:
+          - Change `10 CLI commands in \`cmd/saw/\`` to note the binary output is now
+            named `sawtools` (the directory `cmd/saw/` remains unchanged).
+          - Add a new entry under Completed Features for v0.15.0:
+            ```
+            ### v0.15.0 — Binary rename to sawtools (2026-03-09)
+            - Binary output renamed from `saw` to `sawtools`
+            - `cmd/saw/root.go`: Use field updated to `"sawtools"`, Short updated
+            - Clarifies split: `sawtools` = toolkit (this repo), `saw` = orchestrator (scout-and-wave-web)
+            ```
+
+          ### 5. docs/architecture.md
+          Search for any occurrence of the `saw` CLI binary name (not the saw-web binary)
+          and update to `sawtools`. The architecture.md file currently has:
+          - Line ~170: "Web UI, HTTP server, `saw` CLI" — this refers to the web binary,
+            leave unchanged.
+          - Any reference to `saw validate`, `saw extract-context`, etc. → update to
+            `sawtools validate`, `sawtools extract-context`.
+
+          ### 6. docs/blog/dogfooding-protocol-sdk.md
+          This file contains numerous `saw <subcommand>` references in code blocks and
+          prose. Update all occurrences where they refer to the toolkit CLI:
+          - `saw create-worktrees` → `sawtools create-worktrees`
+          - `saw verify-commits` → `sawtools verify-commits`
+          - `saw scan-stubs` → `sawtools scan-stubs`
+          - `saw merge-agents` → `sawtools merge-agents`
+          - `saw cleanup` → `sawtools cleanup`
+          - `saw verify-build` → `sawtools verify-build`
+          - `saw update-status` → `sawtools update-status`
+          - `saw update-context` → `sawtools update-context`
+          - `saw list-impls` → `sawtools list-impls`
+          - `saw run-wave` → `sawtools run-wave`
+          - `saw validate` → `sawtools validate`
+          - `saw extract-context` → `sawtools extract-context`
+          - `saw set-completion` → `sawtools set-completion`
+          - `saw mark-complete` → `sawtools mark-complete`
+          - `saw run-gates` → `sawtools run-gates`
+          - `saw check-conflicts` → `sawtools check-conflicts`
+          - `saw validate-scaffolds` → `sawtools validate-scaffolds`
+          - `saw freeze-check` → `sawtools freeze-check`
+          - `saw update-agent-prompt` → `sawtools update-agent-prompt`
+          - `saw verify-isolation` → `sawtools verify-isolation`
+          Do NOT rename occurrences of `/saw wave`, `/saw scout`, `/saw bootstrap` —
+          these are the Claude Code skill invocation commands, not the binary.
+
+          ## Interfaces to Implement
+          No new interfaces. This is a rename/text-substitution task only.
+
+          ## Interfaces to Call
+          None. All changes are self-contained within this repo's documentation
+          and one Go source string literal.
+
+          ## Tests to Write
+          No new tests needed. The cobra.Command `Use` field change will be verified
+          by `go build ./...` succeeding. Run the existing test suite to confirm
+          nothing is broken.
+
+          However, if `cmd/saw/root_test.go` exists (check with Glob), update any
+          test that asserts the binary name string `"saw"` to assert `"sawtools"`.
+
+          ## Verification Gate
+
+          Working directory: /Users/dayna.blackwell/code/scout-and-wave-go
+
+          ```bash
+          go build -o sawtools ./cmd/saw
+          go vet ./...
+          go test ./cmd/... -v
+          go test ./... 2>&1 | tail -20
+          ```
+
+          Confirm the built binary reports the correct name:
+          ```bash
+          ./sawtools --help | head -3
+          # Should show: "sawtools [command]" not "saw [command]"
+          ```
+
+          After verification, remove the test binary:
+          ```bash
+          rm -f sawtools
+          ```
+
+          ## Constraints
+
+          - Do NOT rename the `cmd/saw/` directory — this is the Go package path and
+            renaming it is out of scope (requires go.mod/import path changes).
+          - Do NOT modify any `.go` files other than `cmd/saw/root.go`.
+          - The `saw.config.json` in scout-and-wave-web and the `saw` binary in
+            scout-and-wave-web are NOT in scope — those belong to the orchestration binary.
+          - Natural language uses of "saw" in prose (e.g. "we saw that", "I saw") must
+            not be changed.
+          - The `/saw` skill command (e.g. `/saw wave`, `/saw scout`) must not be changed —
+            those invoke the Claude Code skill, not the binary.
+          - Commit all changes to the `develop` branch with message:
+            `feat: rename CLI binary from saw to sawtools (v0.15.0)`
+        files:
+          - "scout-and-wave-go/cmd/saw/root.go"
+          - "scout-and-wave-go/README.md"
+          - "scout-and-wave-go/CHANGELOG.md"
+          - "scout-and-wave-go/docs/CONTEXT.md"
+          - "scout-and-wave-go/docs/architecture.md"
+          - "scout-and-wave-go/docs/blog/dogfooding-protocol-sdk.md"
+
+      - id: "B"
+        task: |
+          ## What to Implement
+
+          Update all SDK CLI command references in the scout-and-wave protocol/prompts
+          repository (sdk branch) to use `sawtools` instead of `saw` for toolkit
+          commands. The three affected files are the core skill files that orchestrators
+          read when driving the SAW protocol.
+
+          **Repository:** /Users/dayna.blackwell/code/scout-and-wave
+          **Branch:** sdk (IMPORTANT: you must be on the sdk branch)
+
+          First, confirm you are on the sdk branch:
+          ```bash
+          git -C /Users/dayna.blackwell/code/scout-and-wave branch --show-current
+          # Must output: sdk
+          ```
+
+          If not on sdk, check it out:
+          ```bash
+          git -C /Users/dayna.blackwell/code/scout-and-wave checkout sdk
+          ```
+
+          ## Files to Modify
+
+          ### 1. implementations/claude-code/prompts/saw-skill.md
+
+          This file contains two groups of `saw` references:
+          a) **Toolkit CLI commands** (from the sawtools binary) — MUST be renamed
+          b) **Orchestration CLI commands** (from the saw binary in scout-and-wave-web) — must NOT be renamed
+          c) **Skill invocations** (`/saw wave`, `/saw scout`) — must NOT be renamed
+
+          **RENAME these toolkit commands (sawtools binary — scout-and-wave-go):**
+          Lines ~76-96 and all usage sites in the wave execution loop:
+          - `saw create-worktrees` → `sawtools create-worktrees`
+          - `saw verify-commits` → `sawtools verify-commits`
+          - `saw scan-stubs` → `sawtools scan-stubs`
+          - `saw merge-agents` → `sawtools merge-agents`
+          - `saw cleanup` → `sawtools cleanup`
+          - `saw verify-build` → `sawtools verify-build`
+          - `saw update-status` → `sawtools update-status`
+          - `saw update-context` → `sawtools update-context`
+          - `saw list-impls` → `sawtools list-impls`
+          - `saw run-wave` → `sawtools run-wave`
+          - `saw verify-isolation` → `sawtools verify-isolation`
+
+          **RENAME these SDK-only commands (also sawtools binary):**
+          - `saw validate` → `sawtools validate`
+          - `saw extract-context` → `sawtools extract-context`
+          - `saw set-completion` → `sawtools set-completion`
+          - `saw mark-complete` → `sawtools mark-complete`
+          - `saw run-gates` → `sawtools run-gates`
+          - `saw check-conflicts` → `sawtools check-conflicts`
+          - `saw validate-scaffolds` → `sawtools validate-scaffolds`
+          - `saw freeze-check` → `sawtools freeze-check`
+          - `saw update-agent-prompt` → `sawtools update-agent-prompt`
+
+          **DO NOT RENAME:**
+          - `/saw bootstrap`, `/saw scout`, `/saw wave`, `/saw wave --auto`, `/saw status`
+            — these are Claude Code skill invocations, not binary commands
+          - Any prose description of "the skill" or "the saw skill"
+          - `SAW_CLI_BINARY` env var name — this is an environment variable, not a command
+
+          After renaming, update the "Dual-Mode Operation" section header and any
+          descriptive prose that says "the `saw` binary" or "SDK CLI" to say
+          "the `sawtools` binary" where it refers to the toolkit.
+
+          Also update the IMPL discovery line (~line 104):
+          `Use \`saw list-impls\`` → `Use \`sawtools list-impls\``
+
+          ### 2. implementations/claude-code/prompts/saw-merge.md
+
+          Rename all toolkit CLI commands in this file:
+          - `saw verify-commits` → `sawtools verify-commits`
+          - `saw check-conflicts` → `sawtools check-conflicts`
+          - `saw scan-stubs` → `sawtools scan-stubs`
+          - `saw run-gates` → `sawtools run-gates`
+          - `saw merge-agents` → `sawtools merge-agents`
+          - `saw cleanup` → `sawtools cleanup`
+          - `saw verify-build` → `sawtools verify-build`
+          - `saw validate-scaffolds` → `sawtools validate-scaffolds`
+
+          Natural language: the sentence "surface issues none of them saw individually"
+          on line ~239 must NOT be changed.
+
+          ### 3. implementations/claude-code/prompts/saw-worktree.md
+
+          Rename all toolkit CLI commands in this file:
+          - `saw create-worktrees` → `sawtools create-worktrees`
+          - `saw merge-agents` → `sawtools merge-agents`
+          - `saw cleanup` → `sawtools cleanup`
+          - `saw validate-scaffolds` → `sawtools validate-scaffolds`
+          - `saw freeze-check` → `sawtools freeze-check`
+          - `saw check-conflicts` → `sawtools check-conflicts`
+
+          The line "Re-running `/saw wave` at this point is safe" (~line 181) must NOT
+          be changed — `/saw wave` is the skill invocation.
+
+          The description "The `saw create-worktrees` command performs this check..." and
+          similar prose descriptions should be updated to say `sawtools create-worktrees`.
+
+          ## Interfaces to Implement
+          No new interfaces. This is a text-substitution task.
+
+          ## Interfaces to Call
+          None.
+
+          ## Tests to Write
+          No automated tests for documentation files. Verify correctness by:
+          1. Searching for any remaining bare `saw ` (saw-space) that precede a known
+             subcommand name — these would be missed substitutions.
+          2. Confirming `/saw ` (with leading slash) patterns are untouched.
+
+          Verification search (run after edits):
+          ```bash
+          # Should return zero results (all toolkit commands renamed):
+          grep -n "^saw \|[\`\`]saw \| saw create-worktrees\| saw merge-agents\| saw verify-commits\| saw cleanup\| saw validate\b" \
+            /Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/prompts/saw-skill.md \
+            /Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/prompts/saw-merge.md \
+            /Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/prompts/saw-worktree.md
+
+          # Should still exist (skill invocations — must NOT have been renamed):
+          grep -n "/saw wave\|/saw scout\|/saw bootstrap\|/saw status" \
+            /Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/prompts/saw-skill.md
+          ```
+
+          ## Verification Gate
+
+          Working directory: /Users/dayna.blackwell/code/scout-and-wave
+
+          ```bash
+          # Confirm branch
+          git branch --show-current
+          # Must be: sdk
+
+          # Verify no toolkit command references remain with old name
+          grep -rn "saw create-worktrees\|saw merge-agents\|saw verify-commits\|saw cleanup\|saw run-wave\|saw verify-build\|saw update-status\|saw update-context\|saw list-impls\|saw scan-stubs\|saw verify-isolation" \
+            implementations/claude-code/prompts/saw-skill.md \
+            implementations/claude-code/prompts/saw-merge.md \
+            implementations/claude-code/prompts/saw-worktree.md
+          # Expected: no matches
+
+          # Verify skill invocations preserved
+          grep -c "/saw wave\|/saw scout\|/saw bootstrap" implementations/claude-code/prompts/saw-skill.md
+          # Expected: >0
+
+          # Verify sawtools references present
+          grep -c "sawtools" implementations/claude-code/prompts/saw-skill.md
+          # Expected: >20
+          ```
+
+          ## Constraints
+
+          - Work on the `sdk` branch only. Do not commit to main or develop.
+          - Do not modify any file outside of `implementations/claude-code/prompts/`.
+          - Do not rename the skill itself (saw-skill.md filename stays as-is).
+          - The version metadata in saw-skill.md (`version: "0.7.0"`) should be
+            incremented to `"0.7.1"` to reflect this update, since the CLI command
+            names changed.
+          - Similarly, increment saw-merge.md version to `"0.6.1"` and
+            saw-worktree.md version to `"0.6.1"` if version metadata is present
+            in those files.
+          - Commit all changes to the `sdk` branch with message:
+            `feat: rename toolkit CLI from saw to sawtools in skill files (v0.7.1)`
+        files:
+          - "scout-and-wave/implementations/claude-code/prompts/saw-skill.md"
+          - "scout-and-wave/implementations/claude-code/prompts/saw-merge.md"
+          - "scout-and-wave/implementations/claude-code/prompts/saw-worktree.md"
+
+      - id: "C"
+        task: |
+          ## What to Implement
+
+          Update the installed binary symlink in `~/.local/bin/` so that `sawtools`
+          is available on PATH, replacing the existing `saw` symlink that points to
+          the scout-and-wave-go binary.
+
+          This agent handles the system-level install step only. It does NOT touch
+          any source files.
+
+          ## Steps
+
+          ### 1. Rebuild the binary with the new name
+
+          Build the scout-and-wave-go binary with the new output name:
+          ```bash
+          cd /Users/dayna.blackwell/code/scout-and-wave-go
+          go build -o sawtools ./cmd/saw
+          ```
+
+          Wait for Agent A to complete before doing this step — Agent A updates
+          `cmd/saw/root.go` to use `Use: "sawtools"`, which affects the binary's
+          help output. However, since the Go source change is just a string in
+          root.go, the binary functionality is unchanged if you build before A
+          completes; you may proceed in parallel but should rebuild after A merges
+          if you want the help text to be correct.
+
+          ### 2. Install the new binary
+
+          ```bash
+          # Copy the new binary to ~/.local/bin/
+          cp /Users/dayna.blackwell/code/scout-and-wave-go/sawtools ~/.local/bin/sawtools
+          chmod +x ~/.local/bin/sawtools
+          ```
+
+          ### 3. Verify the new binary works
+
+          ```bash
+          sawtools --help
+          # Should show: sawtools [command]
+          # Should list: create-worktrees, verify-commits, scan-stubs, merge-agents,
+          #              cleanup, verify-build, update-status, update-context,
+          #              list-impls, run-wave, verify-isolation
+
+          sawtools validate --help
+          # Should show validate command usage
+          ```
+
+          ### 4. Handle the old `saw` symlink
+
+          Check what the existing `~/.local/bin/saw` binary is:
+          ```bash
+          ls -la ~/.local/bin/saw
+          file ~/.local/bin/saw
+          ```
+
+          If it is the scout-and-wave-go toolkit binary (size ~10MB, Mach-O arm64):
+          - Rename it as a backup: `mv ~/.local/bin/saw ~/.local/bin/saw.bak`
+          - This preserves the old binary in case rollback is needed.
+          - Do NOT delete it until the sawtools binary is confirmed working.
+
+          If it is the scout-and-wave-web orchestration binary (or you are unsure):
+          - Leave it in place. The orchestration `saw` binary should remain on PATH.
+          - In that case, the ~/.local/bin/saw is already the correct binary and
+            only the new `sawtools` entry needs to be added.
+
+          Note: After the full rename is complete, the scout-and-wave-web `saw` binary
+          should remain at `~/.local/bin/saw`. Only the toolkit binary changes name.
+
+          ### 5. Clean up build artifact
+
+          ```bash
+          rm -f /Users/dayna.blackwell/code/scout-and-wave-go/sawtools
+          ```
+
+          ## Interfaces to Implement
+          No code interfaces. This is a binary installation task.
+
+          ## Interfaces to Call
+          None.
+
+          ## Tests to Write
+          Verify installation by running:
+          ```bash
+          which sawtools
+          sawtools --version 2>/dev/null || sawtools --help | head -1
+          sawtools validate --help 2>&1 | head -3
+          ```
+
+          ## Verification Gate
+
+          ```bash
+          # Confirm sawtools is on PATH
+          which sawtools
+          # Expected: ~/.local/bin/sawtools or /Users/dayna.blackwell/.local/bin/sawtools
+
+          # Confirm it responds correctly
+          sawtools --help | head -5
+
+          # Confirm old saw binary situation is clean
+          ls -la ~/.local/bin/saw* 2>/dev/null
+          ```
+
+          ## Constraints
+
+          - Do NOT delete `~/.local/bin/saw` if it is the scout-and-wave-web
+            orchestration binary — that binary must remain accessible.
+          - The binary at `~/.local/bin/saw` as of the scout time is the toolkit binary
+            (10.6MB Mach-O arm64, built 2026-03-09). This is the one being superseded.
+          - If Agent A has not merged yet when you run this, build from the current
+            `develop` branch HEAD. The string change in root.go is the only difference;
+            the binary works correctly either way.
+          - No commit is needed for this agent — it is a system install step.
+          - Document the before/after state of ~/.local/bin/saw* in your completion report.
+        files:
+          - "~/.local/bin/sawtools"
+
+# Pre-Mortem
+pre_mortem:
+  overall_risk: "low"
+  rows:
+    - scenario: "Agent B renames `/saw wave` skill invocations in addition to binary commands"
+      likelihood: "medium"
+      impact: "high"
+      mitigation: "Agent B's constraints and verification gate explicitly check that /saw wave, /saw scout, /saw bootstrap remain unchanged. The verification grep for '/saw wave' must return >0 results."
+
+    - scenario: "The existing ~/.local/bin/saw is the orchestration binary (saw serve), not the toolkit binary"
+      likelihood: "low"
+      impact: "medium"
+      mitigation: "Agent C checks file size and checks whether binary responds to `saw serve` before moving. If it is the web binary, only add sawtools; do not touch the saw symlink."
+
+    - scenario: "Natural language 'saw' in blog/docs prose gets renamed (e.g. 'I saw', 'we saw')"
+      likelihood: "low"
+      impact: "low"
+      mitigation: "Agents are instructed to search for `saw <subcommand>` patterns (with a known subcommand following), not bare 'saw'. Verification search confirms no false positives."
+
+    - scenario: "Agent A renames cmd/saw/ directory, breaking Go package imports"
+      likelihood: "low"
+      impact: "high"
+      mitigation: "Constraints explicitly state: do NOT rename the cmd/saw/ directory. Only root.go's Use field and documentation change."
+
+    - scenario: "Scout-and-wave-web cmd/saw commands (set-completion, validate, etc.) get renamed by Agent B"
+      likelihood: "low"
+      impact: "medium"
+      mitigation: "The web repo's cmd/saw is out of scope for all agents. Agent B only touches the scout-and-wave repo's prompt files. The web repo has its own saw binary that is unaffected."
+
+# Cascade Candidates (files that reference the old name but are NOT in any agent's scope)
+# These will only be caught at post-merge verification:
+#
+# - scout-and-wave-go/docs/proposals/protocol-sdk-migration-v2.md (historical doc)
+# - scout-and-wave-go/docs/orchestration.md (may have saw CLI examples)
+# - scout-and-wave-go/docs/backends.md (may have CLI invocation examples)
+# - scout-and-wave-web/docs/proposals/protocol-sdk-migration-v2.md (has saw CLI examples)
+# - scout-and-wave/CHANGELOG.md (may reference saw commands in past tense)
+# - scout-and-wave/docs/ECOSYSTEM.md (architecture overview with CLI names)
+# These are historical documentation; leaving them as-is is acceptable.
+# Post-merge verification should confirm the binary builds and installs correctly;
+# old docs referencing the prior name are low-priority follow-ups.
+
+# Completion Reports (empty at scout time)
+completion_reports: {}
