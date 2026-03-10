@@ -223,7 +223,7 @@ Agents MUST NOT report `status: complete` if their functions are BUILD STUBs. Th
 
 ---
 
-### Short IMPL-Referencing Prompts for Wave Agent Launches
+### ✅ Short IMPL-Referencing Prompts for Wave Agent Launches — SHIPPED (saw-skill v0.7.2)
 
 **Current state:** The orchestrator copy-pastes the full agent brief (file ownership table, interface contracts, verification gate, completion report format) into each `Agent` tool call's `prompt` parameter. Each prompt is 800–1200 tokens, generated token-by-token before any tool calls fire.
 
