@@ -38,7 +38,9 @@ The IMPL doc is a markdown file with the following sections in order:
 
     ## Quality Gates
 
-    {Optional — see ## Quality Gates Section Format. Omit if no build toolchain is known or gates are not configured.}
+    ```yaml type=impl-quality-gates
+    {quality gates — see Typed Metadata Blocks below. Optional — omit if no build toolchain is known or gates are not configured.}
+    ```
 
     ---
 
@@ -57,7 +59,17 @@ The IMPL doc is a markdown file with the following sections in order:
 
     ## Known Issues
 
-    {Known issues list, or "None identified."}
+    ```yaml type=impl-known-issues
+    {known issues — see Typed Metadata Blocks below}
+    ```
+
+    ---
+
+    ## Post-Merge Checklist
+
+    ```yaml type=impl-post-merge-checklist
+    {post-merge checklist — see Typed Metadata Blocks below. Optional — omit if no post-merge steps needed beyond quality gates.}
+    ```
 
     ---
 
@@ -157,7 +169,7 @@ Certain sections of the IMPL doc are machine-parsed by the orchestrator and the 
 - Precise validation: validator errors reference the block type (e.g., "`impl-file-ownership` block: missing Agent column") instead of "line 47"
 - Stability: sections can be reordered or have prose added around them without breaking parsers
 
-**Prose sections remain free-form.** The following sections do NOT use typed blocks and are excluded from validator scope: Suitability Assessment, Quality Gates, Pre-Mortem, Scaffolds, Known Issues, Interface Contracts, Wave Execution Loop, Orchestrator Post-Merge Checklist, Status table, and all agent prompt sections.
+**Prose sections remain free-form.** The following sections do NOT use typed blocks and are excluded from validator scope: Suitability Assessment, Pre-Mortem, Scaffolds, Interface Contracts, Wave Execution Loop, Stub Report, Status table, and all agent prompt sections.
 
 ### Block Types
 
@@ -228,6 +240,42 @@ out_of_scope_deps: []
 tests_added: []
 verification: PASS | FAIL ({command})
 ```
+
+**`impl-quality-gates` — Quality Gates:**
+
+```yaml type=impl-quality-gates
+level: quick | standard | full
+gates:
+  - type: build | test | lint | custom
+    command: {exact shell command}
+    required: true | false
+    description: {optional human-readable description}
+```
+
+Written by Scout between Suitability Assessment and Scaffolds. Defines verification commands that run after wave completion (E21).
+
+**`impl-post-merge-checklist` — Post-Merge Checklist:**
+
+```yaml type=impl-post-merge-checklist
+groups:
+  - title: {group name}
+    items:
+      - description: {verification step}
+        command: {optional shell command}
+```
+
+Written by Scout between Known Issues and Dependency Graph. Optional orchestrator-facing verification steps that run after all agents merge.
+
+**`impl-known-issues` — Known Issues:**
+
+```yaml type=impl-known-issues
+- title: {short title}
+  description: {detailed description}
+  status: {pre-existing | unrelated | blocking | etc.}
+  workaround: {optional workaround or skip instruction}
+```
+
+Written by Scout between Pre-Mortem and Dependency Graph. Lists pre-existing issues discovered during suitability assessment. Use `[]` for empty list or omit section entirely.
 
 ---
 
@@ -533,27 +581,77 @@ Stubs found at the review checkpoint are surfaced to the human reviewer. They do
 
 ---
 
+## Post-Merge Checklist Section Format
+
+Written by the Scout into the IMPL doc between Known Issues and Dependency Graph. Optional — omit if no post-merge verification steps are needed beyond quality gates.
+
+Schema:
+
+```yaml type=impl-post-merge-checklist
+groups:
+  - title: {group name}
+    items:
+      - description: {verification step}
+        command: {optional shell command}
+```
+
+Example:
+
+```yaml type=impl-post-merge-checklist
+groups:
+  - title: "Build Verification"
+    items:
+      - description: "Full workspace build passes"
+        command: "go build ./..."
+      - description: "No new compiler warnings"
+        command: "go vet ./..."
+  - title: "Integration Tests"
+    items:
+      - description: "End-to-end test suite passes"
+        command: "npm run test:e2e"
+```
+
+The section is human-editable at review time. Checklist items are orchestrator-facing post-merge verification steps that run after all agents complete and are merged.
+
+---
+
 ## Quality Gates Section Format
 
 Written by the Scout into the IMPL doc between Suitability Assessment and Scaffolds (E21). Optional — omit if no build toolchain is known or gates are not configured.
 
 Schema:
-```yaml
-## Quality Gates
 
+```yaml type=impl-quality-gates
 level: quick | standard | full
-
 gates:
-  - type: typecheck | test | lint | custom
+  - type: build | test | lint | custom
     command: {exact shell command}
     required: true | false
+    description: {optional human-readable description}
+```
+
+Example:
+
+```yaml type=impl-quality-gates
+level: standard
+gates:
+  - type: build
+    command: go build ./...
+    required: true
+  - type: test
+    command: go test ./...
+    required: true
+  - type: lint
+    command: go vet ./...
+    required: false
+    description: "Check for common Go mistakes"
 ```
 
 Auto-detection from project marker files:
-- `go.mod` → `go build ./...` (typecheck), `go test ./...` (test), `go vet ./...` (lint)
-- `package.json` → `tsc --noEmit` (typecheck), `npm test` (test), `eslint .` (lint)
-- `Cargo.toml` → `cargo build` (typecheck), `cargo test` (test), `cargo clippy` (lint)
-- `pyproject.toml` → `mypy .` (typecheck), `pytest` (test), `ruff check .` (lint)
+- `go.mod` → `go build ./...` (build), `go test ./...` (test), `go vet ./...` (lint)
+- `package.json` → `tsc --noEmit` (build), `npm test` (test), `eslint .` (lint)
+- `Cargo.toml` → `cargo build` (build), `cargo test` (test), `cargo clippy` (lint)
+- `pyproject.toml` → `mypy .` (build), `pytest` (test), `ruff check .` (lint)
 
 The section is human-editable at review time. Gate commands should use the same toolchain already identified for the IMPL doc `test_command` field — no new tool discovery needed.
 
@@ -661,6 +759,40 @@ The Pre-Mortem section uses a markdown table in free-form prose. It is human-fac
 - **Likelihood:** `low`, `medium`, or `high`. How probable is this failure?
 - **Impact:** `low`, `medium`, or `high`. How bad is the outcome if it occurs?
 - **Mitigation:** Concrete action that prevents the failure or reduces its impact. Not "be careful" — a specific protocol step, check, or constraint.
+
+---
+
+## Known Issues Section Format
+
+Written by the Scout into the IMPL doc between Pre-Mortem and Dependency Graph. Contains pre-existing issues discovered during suitability assessment.
+
+Schema:
+
+```yaml type=impl-known-issues
+- title: {short title}
+  description: {detailed description}
+  status: {pre-existing | unrelated | blocking | etc.}
+  workaround: {optional workaround or skip instruction}
+```
+
+Example:
+
+```yaml type=impl-known-issues
+- title: "Flaky test in auth module"
+  description: "TestAuthHandler_SessionTimeout fails intermittently on CI"
+  status: "Pre-existing, unrelated to this work"
+  workaround: "Skip with -skip TestAuthHandler_SessionTimeout"
+- title: "Missing error handling in legacy parser"
+  description: "pkg/legacy/parser.go line 42 missing error check"
+  status: "Blocking — must fix before wave launch"
+  workaround: "None"
+```
+
+If no known issues exist, omit the section entirely or write:
+
+```yaml type=impl-known-issues
+[]
+```
 
 ---
 
