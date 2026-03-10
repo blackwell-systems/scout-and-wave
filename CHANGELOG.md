@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.15.1] | 2026-03-09 | Scout YAML migration — all Scout prompts now generate YAML manifests (.yaml) instead of markdown IMPL docs |
 | [0.15.0] | 2026-03-09 | Protocol SDK conformance — 44-gap audit, 3-wave remediation (12 agents), skill prompts v0.6.0 with CLI command integration |
 | [0.14.9] | 2026-03-09 | Agent Observatory — real-time tool call stream per wave agent |
 | [0.14.8] | 2026-03-08 | E16D: Column order validation hardening — validator now enforces File\|Agent\|Wave column order to prevent silent data corruption at runtime. |
@@ -68,6 +69,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.3.0] | 2026-02-28 | Bootstrap mode for new projects; Wave 0 pattern |
 | [0.2.0] | 2026-02-28 | Decomposed skill prompt; complexity-based suitability heuristic |
 | [0.1.0] | 2026-02-27 | Initial release |
+
+---
+
+## [0.15.1] - 2026-03-09
+
+### Changed
+
+- **agents/scout.md** v0.5.0 → v0.6.0 — Output Format section replaced: markdown IMPL doc template → YAML manifest template matching `pkg/protocol/types.go` schema. Agent `task` field now contains Fields 2-7 only; orchestrator wraps with 9-field template via `saw extract-context`. Fixed corrupted duplicate lines in Your Task section. NOT_SUITABLE verdict now writes minimal `.yaml` manifest.
+- **scout.md** (fallback) — synced to agents/scout.md v0.6.0 body (minus YAML frontmatter). Was v0.5.0, now matches v0.6.0 canonical content.
+- **saw-bootstrap.md** v0.3.4 → v0.4.0 — Output Format section replaced: markdown template → YAML manifest template with bootstrap-specific `project` metadata (language, type, concerns, package_structure). All `IMPL-bootstrap.md` references → `.yaml`. Rules section updated for manifest terminology.
+- **scaffold-agent.md** + **agents/scaffold-agent.md** — IMPL doc path examples updated from `.md` to `.yaml`
+- **saw-merge.md** — IMPL doc exception glob updated to dual-mode (`.yaml` or `.md`)
+- **saw-skill.md** — Scout verdict path updated from `.md` to `.yaml`
+- **README.md** — bootstrap entry updated: version v0.4.0, description reflects YAML manifest output
+
+### Summary
+
+This completes the Scout YAML migration: the last piece needed to activate the full SDK CLI pipeline. With scouts generating `.yaml` manifests, the entire flow — `saw validate` → `saw extract-context` → `saw set-completion` → `saw mark-complete` — works end-to-end without any markdown parsing fallbacks.
 
 ---
 
