@@ -7,7 +7,7 @@ participant role or procedure defined in the [protocol/](../protocol/) specifica
 
 | File | Version | Purpose |
 |------|---------|---------|
-| [`saw-skill.md`](saw-skill.md) | v0.5.0 | The `/saw` skill router. Install to `~/.claude/skills/saw/SKILL.md`. Routes `bootstrap`, `scout`, `wave`, `wave --auto`, and `status` commands. Drives all protocol state transitions as the Orchestrator. |
+| [`saw-skill.md`](saw-skill.md) | v0.6.0 | The `/saw` skill router. Install to `~/.claude/skills/saw/SKILL.md`. Routes `bootstrap`, `scout`, `wave`, `wave --auto`, and `status` commands. Drives all protocol state transitions as the Orchestrator. YAML mode uses SDK CLI commands (`saw run-gates`, `saw mark-complete`, `saw check-conflicts`, `saw validate-scaffolds`, `saw freeze-check`, `saw update-agent-prompt`). |
 
 ## Participant Prompts
 
@@ -28,8 +28,8 @@ instructions in them directly.
 
 | File | Version | When read | Purpose |
 |------|---------|-----------|---------|
-| [`saw-worktree.md`](saw-worktree.md) | v0.4.5 | Before wave launch | Worktree lifecycle: preflight working tree check, pre-launch ownership verification, interface freeze (including scaffold commit verification), pre-creation, creation verification, failure diagnosis, and post-wave cleanup. |
-| [`saw-merge.md`](saw-merge.md) | v0.4.6 | After wave completes | Merge procedure: parse completion reports, conflict prediction, interface deviation review, per-agent merge, worktree cleanup, post-merge verification (linter auto-fix pass + scaffold integrity check), IMPL doc updates, and crash recovery. |
+| [`saw-worktree.md`](saw-worktree.md) | v0.5.1 | Before wave launch | Worktree lifecycle: preflight working tree check, pre-launch ownership verification, interface freeze (including scaffold commit verification via `saw validate-scaffolds` and `saw freeze-check`), pre-creation, creation verification, failure diagnosis, and post-wave cleanup. |
+| [`saw-merge.md`](saw-merge.md) | v0.5.0 | After wave completes | Merge procedure: parse completion reports, conflict prediction (via `saw check-conflicts`), interface deviation review, quality gates (via `saw run-gates`), per-agent merge, worktree cleanup, post-merge verification (linter auto-fix pass + scaffold integrity check via `saw validate-scaffolds`), IMPL doc updates, and crash recovery. |
 
 ## Variant Prompts
 

@@ -1,4 +1,4 @@
-<!-- saw-merge v0.4.6 -->
+<!-- saw-merge v0.5.0 -->
 # SAW Merge Procedure
 
 Merge agent worktrees back into the main branch after a wave completes.
@@ -116,7 +116,9 @@ The scanner exits with code 0 always (informational only). If stubs are detected
 
 ## Step 1.95: E21 Quality Gates
 
-If the IMPL doc contains a `## Quality Gates` section, parse it and execute each gate:
+**YAML mode:** Run `saw run-gates "<manifest-path>" --wave <N> --repo-dir "<repo-path>"`. The CLI loads the manifest, executes each gate command, and outputs a JSON array of `GateResult` objects with pass/fail, stdout, stderr, and exit code. Exit code 1 means at least one required gate failed — **stop immediately**, do not merge, report gate failure to user.
+
+**Markdown mode:** If the IMPL doc contains a `## Quality Gates` section, parse it and execute each gate:
 
 1. Read `level:` (quick | standard | full) — this determines timeout and failure handling
 2. For each gate in the `gates:` list:
@@ -131,8 +133,11 @@ If no Quality Gates section exists, skip this step.
 
 ## Step 2: Conflict Prediction
 
-Before touching the working tree, cross-reference all agents' `files_changed`
-and `files_created` lists. If any file appears in more than one agent's list:
+**YAML mode:** Run `saw check-conflicts "<manifest-path>"`. The CLI detects same-wave file conflicts and undeclared modifications, outputting a JSON array of `OwnershipConflict` objects. Exit code 1 means conflicts were found — do not proceed until resolved.
+
+**Markdown mode:** Cross-reference all agents' `files_changed` and `files_created` lists manually.
+
+If any file appears in more than one agent's list:
 
 1. Flag the conflict explicitly: show which agents both modified the file
 2. Do not proceed until resolved (decide which version wins or merge manually)
@@ -305,10 +310,13 @@ Pay particular attention to cascade candidates listed in the IMPL doc: files
 outside agent scope that reference changed interfaces.
 
 **Scaffold files:** If the Scaffold Agent produced type scaffold files for this wave,
-verify they are present and unchanged in the merged result. Scaffold files are
-committed to HEAD before worktrees branch; agents implement against them but do
-not own them. If a scaffold file is missing or was modified by an agent, this
-is a protocol deviation — investigate before proceeding.
+verify they are present and unchanged in the merged result. **YAML mode:** Run
+`saw validate-scaffolds "<manifest-path>"` — exit 0 confirms all scaffolds intact;
+exit 1 means a scaffold file is missing or was modified. **Markdown mode:** Manually
+check that scaffold files listed in the Scaffolds section are present and unchanged.
+Scaffold files are committed to HEAD before worktrees branch; agents implement
+against them but do not own them. If a scaffold file is missing or was modified
+by an agent, this is a protocol deviation — investigate before proceeding.
 
 If verification fails, fix before proceeding. Do not launch the next wave
 with a broken build.

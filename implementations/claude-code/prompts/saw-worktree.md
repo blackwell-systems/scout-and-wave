@@ -1,4 +1,4 @@
-<!-- saw-worktree v0.5.0 -->
+<!-- saw-worktree v0.5.1 -->
 # SAW Worktree Lifecycle
 
 Manage git worktree creation, verification, and cleanup for wave agents.
@@ -160,6 +160,20 @@ Checklist before creating worktrees:
 - All type signatures in the IMPL doc interface contracts are final
 - All multi-parameter function signatures and complex return types are agreed on
 - Any Scaffold Agent scaffold files are committed to HEAD
+
+**YAML mode verification (recommended):** Run these CLI checks before creating worktrees:
+```bash
+# Verify all scaffolds are committed (exit 1 = not ready)
+saw validate-scaffolds "<manifest-path>"
+
+# Verify no freeze violations (exit 1 = contracts changed after freeze)
+saw freeze-check "<manifest-path>"
+
+# Verify no file ownership conflicts (exit 1 = I1 violation in IMPL doc)
+saw check-conflicts "<manifest-path>"
+```
+All three must exit 0 before proceeding. These replace manual inspection of
+the Scaffolds section and file ownership table for YAML manifests.
 
 **If worktrees already exist from a previous session**, verify their HEAD
 matches the current HEAD of main before launching agents:
