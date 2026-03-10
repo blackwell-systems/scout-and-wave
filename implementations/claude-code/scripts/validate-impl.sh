@@ -248,20 +248,28 @@ plain_block_start=0
 plain_block_buf=""
 plain_lineno=0
 
+e16c_in_typed_block=false
+
 while IFS= read -r line; do
   plain_lineno=$((plain_lineno + 1))
 
-  if [[ "$line" =~ ^\`\`\`[a-zA-Z]*$ ]] && [[ ! "$line" =~ type= ]]; then
-    # Opening plain fence (no type= annotation)
-    in_plain_block=true
-    plain_block_start=$plain_lineno
-    plain_block_buf=""
+  # Track typed blocks so we skip their contents entirely
+  if [[ "$e16c_in_typed_block" == "true" ]]; then
+    if [[ "$line" =~ ^\`\`\`[[:space:]]*$ ]]; then
+      e16c_in_typed_block=false
+    fi
+    continue
+  fi
+
+  if [[ "$line" =~ ^\`\`\`yaml[[:space:]]type=impl- ]]; then
+    # Start of a typed block — skip until its closing fence
+    e16c_in_typed_block=true
     continue
   fi
 
   if [[ "$in_plain_block" == "true" ]]; then
     if [[ "$line" =~ ^\`\`\`[[:space:]]*$ ]]; then
-      # Closing fence — check accumulated content
+      # Closing fence of plain block — check accumulated content
       if echo "$plain_block_buf" | grep -qE "\[[A-Z][2-9]?\]" && echo "$plain_block_buf" | grep -q "Wave"; then
         echo "WARNING: possible dep-graph content found outside typed block at line $plain_block_start — use \`\`\`yaml type=impl-dep-graph\`\`\`"
       fi
@@ -271,6 +279,11 @@ while IFS= read -r line; do
       plain_block_buf="$plain_block_buf
 $line"
     fi
+  elif [[ "$line" =~ ^\`\`\`[a-zA-Z]*$ ]]; then
+    # Opening plain fence (no type= annotation) — only when not inside any block
+    in_plain_block=true
+    plain_block_start=$plain_lineno
+    plain_block_buf=""
   fi
 done < "$impl_doc"
 
