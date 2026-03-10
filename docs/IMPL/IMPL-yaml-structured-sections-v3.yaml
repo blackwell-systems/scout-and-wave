@@ -1,0 +1,1538 @@
+# IMPL: yaml-structured-sections-v3
+title: "Migrate Quality Gates, Post-Merge Checklist, and Known Issues to YAML Structured Format"
+feature_slug: "yaml-structured-sections-v3"
+verdict: "SUITABLE"
+test_command: "cd /Users/dayna.blackwell/code/scout-and-wave-go && go test ./pkg/protocol/... && cd /Users/dayna.blackwell/code/scout-and-wave-web && go test ./pkg/api/... && cd web && command npm test"
+lint_command: "go vet ./..."
+state: "SCOUT_PENDING"
+
+suitability_assessment: |
+  **Verdict:** SUITABLE
+
+  This work is suitable for SAW parallelization. It removes the Stub Report from scope (shell script complexity blocker identified in audit v2), leaving 3 Scout-generated sections with clean parser integration points. Hard cutover approach eliminates backward compatibility complexity. File ownership is disjoint across 3 repos with clear boundaries.
+
+  **Scope reduction from v2:**
+  - Stub Report migration REMOVED (shell script + orchestrator coordination complexity)
+  - Agent count reduced from 10 to 8 (removed agents C for scan-stubs.sh changes)
+  - Focus on Scout-generated sections only: Quality Gates, Post-Merge Checklist, Known Issues
+
+  **Estimated times:**
+  - Scout phase: ~8 min (dependency mapping, interface contracts, IMPL doc)
+  - Wave 1 execution: ~20 min (4 agents in parallel: protocol schemas, Scout prompt, Go types, parser changes)
+  - Wave 2 execution: ~15 min (2 agents in parallel: IMPLManifest field integration, API routes)
+  - Wave 3 execution: ~12 min (3 agents in parallel: UI panel updates for TypeScript YAML parsing)
+  - Merge & verification: ~5 min per wave (15 min total)
+  - Total (SAW): ~70 min
+
+  **Sequential baseline:** ~120 min (8 agents × 15 min avg sequential time)
+  **Time savings:** ~50 min (42% faster)
+
+  **Recommendation:** Proceed. Hard cutover simplifies implementation and testing. Stub Report remains in markdown format (acceptable — it's orchestrator-generated, not Scout-generated).
+
+quality_gates:
+  level: standard
+  gates:
+  - type: build
+    command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./...
+    required: true
+  - type: test
+    command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go test ./pkg/protocol/...
+    required: true
+  - type: lint
+    command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go vet ./...
+    required: false
+  - type: build
+    command: cd /Users/dayna.blackwell/code/scout-and-wave-web && go build ./...
+    required: true
+  - type: test
+    command: cd /Users/dayna.blackwell/code/scout-and-wave-web && go test ./pkg/api/...
+    required: true
+  - type: test
+    command: cd /Users/dayna.blackwell/code/scout-and-wave-web/web && command npm test
+    required: true
+
+---
+
+scaffolds:
+  - file: /Users/dayna.blackwell/code/scout-and-wave-go/pkg/protocol/types_sections.go
+    contents: PostMergeChecklist, ChecklistGroup, ChecklistItem structs
+    import_path: github.com/blackwell-systems/scout-and-wave-go/pkg/protocol
+    status: pending
+    scaffold_contents: |
+      package protocol
+
+      // PostMergeChecklist represents the structured post-merge verification checklist.
+      // Scout outputs this as a typed YAML block; parser unmarshals into this struct.
+      type PostMergeChecklist struct {
+      	Groups []ChecklistGroup `yaml:"groups" json:"groups"`
+      }
+
+      // ChecklistGroup is a logical grouping of related checklist items.
+      type ChecklistGroup struct {
+      	Title string          `yaml:"title" json:"title"`
+      	Items []ChecklistItem `yaml:"items" json:"items"`
+      }
+
+      // ChecklistItem is a single verification step in the post-merge checklist.
+      type ChecklistItem struct {
+      	Description string `yaml:"description" json:"description"`
+      	Command     string `yaml:"command,omitempty" json:"command,omitempty"`
+      }
+
+---
+
+pre_mortem:
+  overall_risk: medium
+  failure_modes:
+    - scenario: Agent E deletes parseQualityGatesSection but forgets to wire yaml.Unmarshal, causing nil pointer dereference
+      likelihood: medium
+      impact: high
+      mitigation: Agent E task explicitly states DELETE old parser, REPLACE with typed-block extraction + unmarshal, TEST with existing IMPL doc
+    - scenario: Agent B outputs typed-block syntax that doesn't validate against schema Agent A defined
+      likelihood: low
+      impact: high
+      mitigation: Agent B must read message-formats.md Quality Gates/Post-Merge Checklist/Known Issues schemas in full before editing scout.md
+    - scenario: UI panels (Agents F/G/H) parse YAML before stripping fence markers, causing js-yaml parse failure
+      likelihood: medium
+      impact: medium
+      mitigation: "Agent task explicitly states: strip fence markers FIRST with `.replace(/^```yaml.*\\n\\|```$/gm, '')`, THEN parse with js-yaml"
+    - scenario: Agent I adds PostMergeChecklist field but doesn't import types_sections.go, causing build failure
+      likelihood: low
+      impact: medium
+      mitigation: Agent I verification gate includes `go build ./...` which will catch missing import
+    - scenario: Hard cutover breaks existing markdown IMPL docs in flight
+      likelihood: low
+      impact: low
+      mitigation: Acceptable — IMPL docs are ephemeral; v3 is the new baseline; old docs can be manually migrated if needed
+
+---
+
+known_issues: []
+
+known_issues_notes: |
+  None identified. Stub Report complexity (identified in v2 audit) has been removed from scope.
+
+---
+
+```yaml type=impl-dep-graph
+Wave 1 (4 parallel agents — foundation):
+    [A] protocol/message-formats.md (scout-and-wave repo)
+         Defines YAML schemas for Quality Gates, Post-Merge Checklist, Known Issues typed blocks.
+         ✓ root (no dependencies on other agents)
+
+    [B] implementations/claude-code/prompts/agents/scout.md (scout-and-wave repo)
+         Updates Scout prompt to output 3 sections as typed YAML blocks.
+         depends on: [A] (must read schemas before generating output examples)
+
+    [D] pkg/protocol/types_sections.go (scout-and-wave-go repo)
+         Creates NEW FILE with PostMergeChecklist types. Adds Title field to existing KnownIssue struct in types.go.
+         ✓ root (scaffold file, no dependencies on other agents)
+
+    [E] pkg/protocol/parser.go (scout-and-wave-go repo)
+         DELETES parseQualityGatesSection (lines 1088-1163). Extracts typed blocks for Quality Gates, Post-Merge Checklist, Known Issues. Creates extractTypedBlock helper.
+         depends on: [D] (imports PostMergeChecklist types)
+
+Wave 2 (2 parallel agents — integration):
+    [I] pkg/protocol/types.go (scout-and-wave-go repo)
+         Adds PostMergeChecklist *PostMergeChecklist field to IMPLManifest struct. Adds Title field to KnownIssue struct.
+         depends on: [D] [E] (imports types_sections.go, parser must handle new field)
+
+    [J] pkg/api/impl.go + pkg/api/types.go (scout-and-wave-web repo)
+         Updates API routes to serialize QualityGates, PostMergeChecklist, KnownIssue as structured JSON.
+         depends on: [I] (API response types use IMPLManifest fields)
+
+Wave 3 (3 parallel agents — UI):
+    [F] web/src/components/review/QualityGatesPanel.tsx (scout-and-wave-web repo)
+         Strips fence markers before parsing YAML. Replaces parseGates regex with js-yaml parse. Adds TypeScript interfaces.
+         depends on: [J] (API serves structured quality_gates object)
+
+    [G] web/src/components/review/PostMergeChecklistPanel.tsx (scout-and-wave-web repo)
+         Creates NEW FILE. Parses YAML typed block with js-yaml. Adds TypeScript interfaces. Updates types.ts.
+         depends on: [J] (API serves structured post_merge_checklist object)
+
+    [H] web/src/components/review/KnownIssuesPanel.tsx (scout-and-wave-web repo)
+         Parses YAML typed block with js-yaml. Updates KnownIssue interface to include title field.
+         depends on: [J] (API serves structured known_issues array)
+```
+
+---
+
+# Interface Contracts
+
+## PostMergeChecklist Types (Agent D scaffold)
+
+**Location:** `/Users/dayna.blackwell/code/scout-and-wave-go/pkg/protocol/types_sections.go` (new file)
+
+```go
+package protocol
+
+// PostMergeChecklist represents the structured post-merge verification checklist.
+type PostMergeChecklist struct {
+	Groups []ChecklistGroup `yaml:"groups" json:"groups"`
+}
+
+// ChecklistGroup is a logical grouping of related checklist items.
+type ChecklistGroup struct {
+	Title string          `yaml:"title" json:"title"`
+	Items []ChecklistItem `yaml:"items" json:"items"`
+}
+
+// ChecklistItem is a single verification step in the post-merge checklist.
+type ChecklistItem struct {
+	Description string `yaml:"description" json:"description"`
+	Command     string `yaml:"command,omitempty" json:"command,omitempty"`
+}
+```
+
+**Consumers:** Agent E (parser imports this), Agent I (IMPLManifest field uses this), Agent J (API serializes this)
+
+---
+
+## KnownIssue.Title Field (Agent D → Agent I)
+
+**Agent D adds to types.go:**
+
+```go
+type KnownIssue struct {
+	Title       string `yaml:"title,omitempty" json:"title,omitempty"`       // NEW FIELD
+	Description string `yaml:"description" json:"description"`
+	Status      string `yaml:"status,omitempty" json:"status,omitempty"`
+	Workaround  string `yaml:"workaround,omitempty" json:"workaround,omitempty"`
+}
+```
+
+**Agent I already has this field wired** — Agent D is only adding Title field to existing struct, not creating new struct.
+
+---
+
+## Typed-Block Extraction Helper (Agent E)
+
+**Agent E creates in parser.go:**
+
+```go
+// extractTypedBlock reads lines from scanner until closing fence.
+// Returns (blockLines, found). blockLines excludes fence markers.
+// Scanner is positioned after closing fence on return.
+func extractTypedBlock(scanner *bufio.Scanner, blockType string) ([]string, bool) {
+	var lines []string
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(strings.TrimSpace(line), "```") {
+			return lines, true
+		}
+		lines = append(lines, line)
+	}
+	return lines, false // EOF without closing fence
+}
+```
+
+**Usage in parseQualityGatesSection replacement:**
+
+```go
+// Find typed block: ```yaml type=impl-quality-gates
+if strings.Contains(trimmed, "type=impl-quality-gates") {
+	blockLines, found := extractTypedBlock(scanner, "impl-quality-gates")
+	if !found {
+		return nil // malformed block
+	}
+	yamlBytes := []byte(strings.Join(blockLines, "\n"))
+	var gates QualityGates
+	if err := yaml.Unmarshal(yamlBytes, &gates); err != nil {
+		return nil // invalid YAML
+	}
+	return &gates
+}
+```
+
+**Consumers:** parseQualityGatesSection replacement, parsePostMergeChecklistSection (new), parseKnownIssuesSection (replacement)
+
+---
+
+## API Response Types (Agent J)
+
+**Agent J updates pkg/api/types.go:**
+
+```go
+type IMPLDocResponse struct {
+	// ... existing fields ...
+	QualityGates       *QualityGates       `json:"quality_gates,omitempty"`
+	PostMergeChecklist *PostMergeChecklist `json:"post_merge_checklist,omitempty"`
+	KnownIssues        []KnownIssue        `json:"known_issues,omitempty"`
+}
+
+type QualityGates struct {
+	Level string        `json:"level"`
+	Gates []QualityGate `json:"gates"`
+}
+
+type QualityGate struct {
+	Type        string `json:"type"`
+	Command     string `json:"command"`
+	Required    bool   `json:"required"`
+	Description string `json:"description,omitempty"`
+}
+
+type PostMergeChecklist struct {
+	Groups []ChecklistGroup `json:"groups"`
+}
+
+type ChecklistGroup struct {
+	Title string          `json:"title"`
+	Items []ChecklistItem `json:"items"`
+}
+
+type ChecklistItem struct {
+	Description string `json:"description"`
+	Command     string `json:"command,omitempty"`
+}
+
+type KnownIssue struct {
+	Title       string `json:"title,omitempty"`
+	Description string `json:"description"`
+	Status      string `json:"status,omitempty"`
+	Workaround  string `json:"workaround,omitempty"`
+}
+```
+
+**Consumers:** Agents F/G/H (UI panels parse these JSON structures)
+
+---
+
+# File Ownership
+
+```yaml type=impl-file-ownership
+| File | Agent | Wave | Depends On | Repo |
+|------|-------|------|------------|------|
+| protocol/message-formats.md | A | 1 | — | scout-and-wave |
+| implementations/claude-code/prompts/agents/scout.md | B | 1 | A | scout-and-wave |
+| pkg/protocol/types_sections.go | D | 1 | — | scout-and-wave-go |
+| pkg/protocol/parser.go | E | 1 | D | scout-and-wave-go |
+| pkg/protocol/types.go | I | 2 | D, E | scout-and-wave-go |
+| pkg/api/impl.go | J | 2 | I | scout-and-wave-web |
+| pkg/api/types.go | J | 2 | I | scout-and-wave-web |
+| web/src/components/review/QualityGatesPanel.tsx | F | 3 | J | scout-and-wave-web |
+| web/src/components/review/PostMergeChecklistPanel.tsx | G | 3 | J | scout-and-wave-web |
+| web/src/components/review/KnownIssuesPanel.tsx | H | 3 | J | scout-and-wave-web |
+| web/src/types.ts | G | 3 | J | scout-and-wave-web |
+```
+
+---
+
+# Wave Structure
+
+```yaml type=impl-wave-structure
+Wave 1: [A] [B] [D] [E]           <- 4 parallel agents (foundation + parser)
+              | (A+B+D+E complete)
+Wave 2: [I] [J]                    <- 2 parallel agents (integration)
+              | (I+J complete)
+Wave 3: [F] [G] [H]                <- 3 parallel agents (UI)
+```
+
+---
+
+# Wave 1
+
+Foundation layer: protocol schemas, Scout prompt updates, Go type definitions, and parser changes. These agents establish the contract for typed-block output and consumption.
+
+## Agent A - Protocol Schema Definitions
+
+### File Ownership
+
+- `protocol/message-formats.md` (scout-and-wave repo)
+
+### Interfaces to Implement
+
+**Quality Gates Schema** (add to message-formats.md after existing Quality Gates Section Format):
+
+```yaml
+```yaml type=impl-quality-gates
+level: quick | standard | full
+gates:
+  - type: build | test | lint | custom
+    command: {exact shell command}
+    required: true | false
+    description: {optional human-readable description}
+```
+```
+
+**Post-Merge Checklist Schema** (new section after Stub Report Section Format):
+
+```yaml
+## Post-Merge Checklist Section Format
+
+Written by the Scout into the IMPL doc between Known Issues and Dependency Graph. Optional — omit if no post-merge verification steps are needed beyond quality gates.
+
+Schema:
+
+```yaml type=impl-post-merge-checklist
+groups:
+  - title: {group name}
+    items:
+      - description: {verification step}
+        command: {optional shell command}
+```
+
+Example:
+
+```yaml type=impl-post-merge-checklist
+groups:
+  - title: "Build Verification"
+    items:
+      - description: "Full workspace build passes"
+        command: "go build ./..."
+      - description: "No new compiler warnings"
+        command: "go vet ./..."
+  - title: "Integration Tests"
+    items:
+      - description: "End-to-end test suite passes"
+        command: "npm run test:e2e"
+```
+
+The section is human-editable at review time. Checklist items are orchestrator-facing post-merge verification steps that run after all agents complete and are merged.
+```
+
+**Known Issues Schema** (replace existing Known Issues prose description with typed-block schema):
+
+```yaml
+## Known Issues Section Format
+
+Written by the Scout into the IMPL doc between Pre-Mortem and Dependency Graph. Contains pre-existing issues discovered during suitability assessment.
+
+Schema:
+
+```yaml type=impl-known-issues
+- title: {short title}
+  description: {detailed description}
+  status: {pre-existing | unrelated | blocking | etc.}
+  workaround: {optional workaround or skip instruction}
+```
+
+Example:
+
+```yaml type=impl-known-issues
+- title: "Flaky test in auth module"
+  description: "TestAuthHandler_SessionTimeout fails intermittently on CI"
+  status: "Pre-existing, unrelated to this work"
+  workaround: "Skip with -skip TestAuthHandler_SessionTimeout"
+- title: "Missing error handling in legacy parser"
+  description: "pkg/legacy/parser.go line 42 missing error check"
+  status: "Blocking — must fix before wave launch"
+  workaround: "None"
+```
+
+If no known issues exist, omit the section entirely or write:
+
+```yaml type=impl-known-issues
+[]
+```
+```
+
+### Interfaces to Call
+
+None — Agent A is a root agent defining the schema contract.
+
+### What to Implement
+
+1. Add typed-block schema for Quality Gates (replace unfenced YAML description with typed-block format)
+2. Add new Post-Merge Checklist section with typed-block schema
+3. Replace Known Issues prose description with typed-block schema
+4. Update Typed Metadata Blocks section to list new block types: `impl-quality-gates`, `impl-post-merge-checklist`, `impl-known-issues`
+5. Add block type descriptions to the Block Types subsection
+
+**DO NOT** change Stub Report section — it remains markdown table format (removed from scope).
+
+**DO NOT** edit execution-rules.md — only message-formats.md is in scope.
+
+### Tests to Write
+
+No automated tests — this is documentation. Manual verification:
+1. All three new typed-block schemas are parseable YAML (valid syntax)
+2. Field names match Go struct tags in types_sections.go scaffold
+3. Examples are realistic and match the schema structure
+
+### Verification Gate
+
+```bash
+cd /Users/dayna.blackwell/code/scout-and-wave
+# No build/test commands — verify manually:
+# 1. Read message-formats.md Quality Gates/Post-Merge Checklist/Known Issues sections
+# 2. Confirm typed-block fence syntax is correct: ```yaml type=impl-{block-type}
+# 3. Confirm field names match scaffold (groups, items, title, description, command)
+```
+
+### Constraints
+
+1. **Exact fence syntax:** Opening fence MUST be `` ```yaml type=impl-{block-type} `` (not `` ```type=impl-* `` or `` ```yaml\ntype=* ``)
+2. **Field name consistency:** YAML field names must match Go struct tags exactly (e.g., `groups` not `Groups`, `required` not `Required`)
+3. **Stub Report untouched:** Do NOT add typed-block schema for Stub Report — it stays as markdown table
+4. **No E20/E21 edits:** Do NOT change execution-rules.md (E20/E21 are format-agnostic)
+
+---
+
+## Agent B - Scout Prompt Updates
+
+### File Ownership
+
+- `implementations/claude-code/prompts/agents/scout.md` (scout-and-wave repo)
+
+### Interfaces to Implement
+
+**Quality Gates typed-block output** (replace unfenced YAML with typed block in Output Format section):
+
+```yaml
+## Quality Gates (omit entirely if no build toolchain detected)
+
+```yaml type=impl-quality-gates
+level: standard
+gates:
+  - type: build
+    command: go build ./...
+    required: true
+  - type: test
+    command: go test ./...
+    required: true
+  - type: lint
+    command: go vet ./...
+    required: false
+```
+```
+
+**Post-Merge Checklist typed-block output** (new section in Output Format after Quality Gates):
+
+```yaml
+## Post-Merge Checklist (omit if no orchestrator verification steps needed)
+
+```yaml type=impl-post-merge-checklist
+groups:
+  - title: "Build Verification"
+    items:
+      - description: "Full workspace build passes"
+        command: "go build ./..."
+  - title: "Integration Tests"
+    items:
+      - description: "End-to-end tests pass"
+        command: "npm run test:e2e"
+```
+```
+
+**Known Issues typed-block output** (replace prose with typed block):
+
+```yaml
+## Known Issues (omit if none)
+
+```yaml type=impl-known-issues
+- title: "Flaky test in auth module"
+  description: "TestAuthHandler_SessionTimeout fails intermittently"
+  status: "Pre-existing, unrelated to this work"
+  workaround: "Skip with -skip TestAuthHandler_SessionTimeout"
+```
+
+Or if no issues:
+
+```yaml type=impl-known-issues
+[]
+```
+```
+
+### Interfaces to Call
+
+**Agent A schemas** — Agent B must read message-formats.md Quality Gates/Post-Merge Checklist/Known Issues schemas before writing output examples.
+
+### What to Implement
+
+1. Update step 11 (Emit quality gates) to output typed-block fence instead of unfenced YAML
+2. Add new instruction after step 11: emit Post-Merge Checklist as typed block (orchestrator verification steps: post-merge build, integration tests, cross-repo checks)
+3. Update Known Issues section (currently prose-only) to output typed-block YAML
+4. Update Output Format section with typed-block examples for all 3 sections
+5. Add instruction: omit Post-Merge Checklist section entirely if no orchestrator-level verification steps are needed (don't output empty typed block)
+
+**DO NOT** change Stub Report output — it remains markdown table format.
+
+### Tests to Write
+
+No automated tests — this is documentation. Manual verification:
+1. All typed-block examples use correct fence syntax (`` ```yaml type=impl-{block-type} ``)
+2. Field names in examples match message-formats.md schemas
+3. Examples are realistic and actionable
+
+### Verification Gate
+
+```bash
+cd /Users/dayna.blackwell/code/scout-and-wave
+# No build/test commands — verify manually:
+# 1. Read scout.md Output Format section
+# 2. Confirm typed-block fences for Quality Gates, Post-Merge Checklist, Known Issues
+# 3. Confirm Stub Report section unchanged (markdown table format)
+```
+
+### Constraints
+
+1. **Read Agent A schemas first:** Before editing scout.md, read message-formats.md Quality Gates/Post-Merge Checklist/Known Issues sections to ensure output examples match schema
+2. **Exact fence syntax:** `` ```yaml type=impl-quality-gates `` not `` ```yaml\ntype=impl-quality-gates ``
+3. **Omit empty Post-Merge Checklist:** If no orchestrator verification steps, omit section entirely (don't write `` ```yaml type=impl-post-merge-checklist\n[]\n``` ``)
+4. **Stub Report untouched:** Do NOT change Stub Report output format
+
+---
+
+## Agent D - Go Type Definitions
+
+### File Ownership
+
+- `pkg/protocol/types_sections.go` (scout-and-wave-go repo) — NEW FILE (scaffold)
+- `pkg/protocol/types.go` (scout-and-wave-go repo) — add Title field to KnownIssue struct
+
+### Interfaces to Implement
+
+**PostMergeChecklist types** (scaffold contents):
+
+```go
+package protocol
+
+// PostMergeChecklist represents the structured post-merge verification checklist.
+// Scout outputs this as a typed YAML block; parser unmarshals into this struct.
+type PostMergeChecklist struct {
+	Groups []ChecklistGroup `yaml:"groups" json:"groups"`
+}
+
+// ChecklistGroup is a logical grouping of related checklist items.
+type ChecklistGroup struct {
+	Title string          `yaml:"title" json:"title"`
+	Items []ChecklistItem `yaml:"items" json:"items"`
+}
+
+// ChecklistItem is a single verification step in the post-merge checklist.
+type ChecklistItem struct {
+	Description string `yaml:"description" json:"description"`
+	Command     string `yaml:"command,omitempty" json:"command,omitempty"`
+}
+```
+
+**KnownIssue.Title field** (add to existing struct in types.go):
+
+```go
+type KnownIssue struct {
+	Title       string `yaml:"title,omitempty" json:"title,omitempty"`       // NEW FIELD
+	Description string `yaml:"description" json:"description"`
+	Status      string `yaml:"status,omitempty" json:"status,omitempty"`
+	Workaround  string `yaml:"workaround,omitempty" json:"workaround,omitempty"`
+}
+```
+
+### Interfaces to Call
+
+None — Agent D is a root agent (scaffold file creation).
+
+### What to Implement
+
+1. Create new file `pkg/protocol/types_sections.go` with PostMergeChecklist types (exact scaffold contents above)
+2. Add Title field to KnownIssue struct in `pkg/protocol/types.go` (line ~144, after Description field)
+3. Ensure YAML and JSON struct tags are correct (`yaml:"title,omitempty" json:"title,omitempty"`)
+
+**DO NOT** create StubReport types — Stub Report removed from scope.
+
+### Tests to Write
+
+1. TestPostMergeChecklistUnmarshal — verify YAML unmarshals into PostMergeChecklist struct
+2. TestKnownIssueTitleField — verify KnownIssue with title field unmarshals correctly
+
+Add to `pkg/protocol/types_test.go`:
+
+```go
+func TestPostMergeChecklistUnmarshal(t *testing.T) {
+	yamlData := `
+groups:
+  - title: "Build Verification"
+    items:
+      - description: "Full build passes"
+        command: "go build ./..."
+`
+	var pmc PostMergeChecklist
+	if err := yaml.Unmarshal([]byte(yamlData), &pmc); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+	if len(pmc.Groups) != 1 {
+		t.Errorf("Expected 1 group, got %d", len(pmc.Groups))
+	}
+	if pmc.Groups[0].Title != "Build Verification" {
+		t.Errorf("Expected group title 'Build Verification', got %q", pmc.Groups[0].Title)
+	}
+}
+
+func TestKnownIssueTitleField(t *testing.T) {
+	yamlData := `
+title: "Flaky test"
+description: "Test fails intermittently"
+status: "Pre-existing"
+`
+	var ki KnownIssue
+	if err := yaml.Unmarshal([]byte(yamlData), &ki); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+	if ki.Title != "Flaky test" {
+		t.Errorf("Expected title 'Flaky test', got %q", ki.Title)
+	}
+}
+```
+
+### Verification Gate
+
+```bash
+cd /Users/dayna.blackwell/code/scout-and-wave-go
+go build ./pkg/protocol/...
+go test ./pkg/protocol/... -run TestPostMergeChecklistUnmarshal
+go test ./pkg/protocol/... -run TestKnownIssueTitleField
+go vet ./pkg/protocol/...
+```
+
+### Constraints
+
+1. **Package name:** types_sections.go MUST use `package protocol` (not `package types` or `package sections`)
+2. **Struct tags:** YAML tags MUST be lowercase (yaml:"groups" not yaml:"Groups")
+3. **Import in types_sections.go:** No imports needed (pure struct definitions)
+4. **KnownIssue placement:** Add Title field AFTER Description field, BEFORE Status field (maintain field order)
+
+### Agent D - Completion Report
+
+```yaml type=impl-completion-report
+status: complete
+repo: /Users/dayna.blackwell/code/scout-and-wave-go
+branch: wave1-agent-D
+commit: eebbd22
+files_changed:
+  - pkg/protocol/types.go
+files_created:
+  - pkg/protocol/types_sections.go
+  - pkg/protocol/types_test.go
+interface_deviations: []
+out_of_scope_deps: []
+tests_added:
+  - TestPostMergeChecklistUnmarshal
+  - TestKnownIssueTitleField
+verification: PASS (go build, go test, go vet)
+```
+
+Implementation complete. Created types_sections.go with PostMergeChecklist, ChecklistGroup, and ChecklistItem structs exactly per scaffold spec. Added Title field to KnownIssue struct in correct position (after Description, before Status). All struct tags use correct yaml/json conventions with omitempty for optional fields. Tests verify YAML unmarshaling works correctly for both PostMergeChecklist and KnownIssue.Title. All verification gates pass.
+
+---
+
+## Agent E - Parser Changes (Hard Cutover)
+
+### File Ownership
+
+- `pkg/protocol/parser.go` (scout-and-wave-go repo)
+
+### Interfaces to Implement
+
+**extractTypedBlock helper:**
+
+```go
+// extractTypedBlock reads lines from scanner until closing fence.
+// Returns (blockLines, found). blockLines excludes fence markers.
+// Scanner is positioned after closing fence on return.
+func extractTypedBlock(scanner *bufio.Scanner) ([]string, bool) {
+	var lines []string
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(strings.TrimSpace(line), "```") {
+			return lines, true
+		}
+		lines = append(lines, line)
+	}
+	return lines, false // EOF without closing fence
+}
+```
+
+**parseQualityGatesSection replacement** (delete lines 1088-1163, replace with typed-block extraction):
+
+```go
+// parseQualityGatesSection extracts ```yaml type=impl-quality-gates block.
+// HARD CUTOVER: no fallback to unfenced YAML. Returns nil if typed block not found.
+func parseQualityGatesSection(scanner *bufio.Scanner) *types.QualityGates {
+	for scanner.Scan() {
+		line := scanner.Text()
+		trimmed := strings.TrimSpace(line)
+
+		// Stop at next heading
+		if strings.HasPrefix(trimmed, "## ") || strings.HasPrefix(trimmed, "### ") {
+			break
+		}
+
+		// Find typed block
+		if strings.Contains(trimmed, "type=impl-quality-gates") {
+			blockLines, found := extractTypedBlock(scanner)
+			if !found {
+				return nil
+			}
+			yamlBytes := []byte(strings.Join(blockLines, "\n"))
+			var gates types.QualityGates
+			if err := yaml.Unmarshal(yamlBytes, &gates); err != nil {
+				return nil
+			}
+			return &gates
+		}
+	}
+	return nil
+}
+```
+
+**parsePostMergeChecklistSection** (new function):
+
+```go
+// parsePostMergeChecklistSection extracts ```yaml type=impl-post-merge-checklist block.
+func parsePostMergeChecklistSection(scanner *bufio.Scanner) *types.PostMergeChecklist {
+	for scanner.Scan() {
+		line := scanner.Text()
+		trimmed := strings.TrimSpace(line)
+
+		if strings.HasPrefix(trimmed, "## ") || strings.HasPrefix(trimmed, "### ") {
+			break
+		}
+
+		if strings.Contains(trimmed, "type=impl-post-merge-checklist") {
+			blockLines, found := extractTypedBlock(scanner)
+			if !found {
+				return nil
+			}
+			yamlBytes := []byte(strings.Join(blockLines, "\n"))
+			var pmc types.PostMergeChecklist
+			if err := yaml.Unmarshal(yamlBytes, &pmc); err != nil {
+				return nil
+			}
+			return &pmc
+		}
+	}
+	return nil
+}
+```
+
+**parseKnownIssuesSection replacement** (delete lines 541-591, replace with typed-block extraction):
+
+```go
+// parseKnownIssuesSection extracts ```yaml type=impl-known-issues block.
+// HARD CUTOVER: no fallback to prose parsing. Returns nil if typed block not found.
+func parseKnownIssuesSection(scanner *bufio.Scanner) []types.KnownIssue {
+	for scanner.Scan() {
+		line := scanner.Text()
+		trimmed := strings.TrimSpace(line)
+
+		if strings.HasPrefix(trimmed, "## ") || strings.HasPrefix(trimmed, "### ") {
+			break
+		}
+
+		if strings.Contains(trimmed, "type=impl-known-issues") {
+			blockLines, found := extractTypedBlock(scanner)
+			if !found {
+				return nil
+			}
+			yamlBytes := []byte(strings.Join(blockLines, "\n"))
+			var issues []types.KnownIssue
+			if err := yaml.Unmarshal(yamlBytes, &issues); err != nil {
+				return nil
+			}
+			return issues
+		}
+	}
+	return nil
+}
+```
+
+**Wire new parser in ParseIMPLDoc main loop** (find Quality Gates/Known Issues section headers, call new parsers):
+
+```go
+// Around line 200 in parser.go, add Post-Merge Checklist case:
+case strings.HasPrefix(trimmed, "## Post-Merge Checklist"):
+	doc.PostMergeChecklist = parsePostMergeChecklistSection(scanner)
+	continue
+```
+
+### Interfaces to Call
+
+**Agent D types:**
+- `types.PostMergeChecklist`
+- `types.ChecklistGroup`
+- `types.ChecklistItem`
+- `types.KnownIssue.Title` field
+
+### What to Implement
+
+1. **Extract inline typed-block logic** (lines 91-122) into `extractTypedBlock(scanner *bufio.Scanner) ([]string, bool)` helper
+2. **DELETE parseQualityGatesSection function** (lines 1088-1163) entirely
+3. **REPLACE with new parseQualityGatesSection** that uses extractTypedBlock + yaml.Unmarshal
+4. **CREATE parsePostMergeChecklistSection** (new function, follows same pattern)
+5. **DELETE old parseKnownIssuesSection** (lines 541-591)
+6. **REPLACE with new parseKnownIssuesSection** that uses extractTypedBlock + yaml.Unmarshal
+7. **Wire Post-Merge Checklist parser** in ParseIMPLDoc main loop (add case for `## Post-Merge Checklist` heading)
+
+**HARD CUTOVER:** No fallback logic. If typed block not found, return nil. Old markdown IMPL docs will fail to parse (acceptable).
+
+### Tests to Write
+
+1. TestExtractTypedBlock — verify helper reads until closing fence
+2. TestParseQualityGatesTypedBlock — verify typed-block extraction + unmarshal
+3. TestParsePostMergeChecklistTypedBlock — verify new parser
+4. TestParseKnownIssuesTypedBlock — verify typed-block extraction + unmarshal
+
+Add to `pkg/protocol/parser_test.go`:
+
+```go
+func TestExtractTypedBlock(t *testing.T) {
+	input := "```yaml type=impl-test\nline1\nline2\n```\n"
+	scanner := bufio.NewScanner(strings.NewReader(input))
+	scanner.Scan() // consume opening fence
+	lines, found := extractTypedBlock(scanner)
+	if !found {
+		t.Fatal("Expected block to be found")
+	}
+	if len(lines) != 2 {
+		t.Errorf("Expected 2 lines, got %d", len(lines))
+	}
+}
+
+func TestParseQualityGatesTypedBlock(t *testing.T) {
+	input := `## Quality Gates
+
+` + "```yaml type=impl-quality-gates\nlevel: standard\ngates:\n  - type: build\n    command: go build\n    required: true\n```\n"
+	scanner := bufio.NewScanner(strings.NewReader(input))
+	scanner.Scan() // skip header
+	gates := parseQualityGatesSection(scanner)
+	if gates == nil {
+		t.Fatal("Expected gates to be parsed")
+	}
+	if gates.Level != "standard" {
+		t.Errorf("Expected level 'standard', got %q", gates.Level)
+	}
+}
+```
+
+### Verification Gate
+
+```bash
+cd /Users/dayna.blackwell/code/scout-and-wave-go
+go build ./pkg/protocol/...
+go test ./pkg/protocol/... -run TestExtractTypedBlock
+go test ./pkg/protocol/... -run TestParseQualityGatesTypedBlock
+go test ./pkg/protocol/... -run TestParsePostMergeChecklistTypedBlock
+go test ./pkg/protocol/... -run TestParseKnownIssuesTypedBlock
+go vet ./pkg/protocol/...
+```
+
+### Constraints
+
+1. **DELETE before REPLACE:** Delete old parseQualityGatesSection (lines 1088-1163) completely, then write new one — do NOT try to edit in place
+2. **No fallback logic:** If typed block not found, return nil — do NOT fall back to unfenced YAML parsing
+3. **extractTypedBlock signature:** `func extractTypedBlock(scanner *bufio.Scanner) ([]string, bool)` — no blockType parameter needed
+4. **Wire Post-Merge Checklist:** Add case in ParseIMPLDoc main loop around line 200 (near Quality Gates case)
+5. **Import types_sections.go:** Add `"github.com/blackwell-systems/scout-and-wave-go/pkg/protocol"` if not already present (types are in same package, no import needed)
+
+---
+
+# Wave 2
+
+Integration layer: IMPLManifest field integration and API route updates. These agents wire the new types into the SDK and web app.
+
+## Agent I - IMPLManifest Field Integration
+
+### File Ownership
+
+- `pkg/protocol/types.go` (scout-and-wave-go repo)
+
+### Interfaces to Implement
+
+**IMPLManifest.PostMergeChecklist field:**
+
+```go
+type IMPLManifest struct {
+	// ... existing fields ...
+	PostMergeChecklist *PostMergeChecklist `yaml:"post_merge_checklist,omitempty" json:"post_merge_checklist,omitempty"`
+	// ... rest of fields ...
+}
+```
+
+Place after QualityGates field (line ~24).
+
+### Interfaces to Call
+
+**Agent D types:**
+- `PostMergeChecklist` struct (from types_sections.go)
+- `KnownIssue.Title` field (already in types.go)
+
+**Agent E parser:**
+- `parsePostMergeChecklistSection` populates this field
+- `parseKnownIssuesSection` now unmarshals Title field
+
+### What to Implement
+
+1. Add `PostMergeChecklist *PostMergeChecklist` field to IMPLManifest struct (after QualityGates field, line ~24)
+2. Verify KnownIssue struct already has Title field (Agent D added it)
+3. Update parser integration: in `ParseIMPLDoc` main loop, assign parsed PostMergeChecklist to manifest:
+   ```go
+   case strings.HasPrefix(trimmed, "## Post-Merge Checklist"):
+       manifest.PostMergeChecklist = parsePostMergeChecklistSection(scanner)
+   ```
+
+**DO NOT** change StubReports field — Stub Report format unchanged.
+
+### Tests to Write
+
+1. TestIMPLManifestPostMergeChecklistField — verify field unmarshals from YAML
+2. TestKnownIssueTitleFieldInManifest — verify Title field in KnownIssue array
+
+Add to `pkg/protocol/types_test.go`:
+
+```go
+func TestIMPLManifestPostMergeChecklistField(t *testing.T) {
+	yamlData := `
+title: "test"
+feature_slug: "test"
+post_merge_checklist:
+  groups:
+    - title: "Build"
+      items:
+        - description: "Full build"
+          command: "go build"
+`
+	var manifest IMPLManifest
+	if err := yaml.Unmarshal([]byte(yamlData), &manifest); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+	if manifest.PostMergeChecklist == nil {
+		t.Fatal("Expected PostMergeChecklist to be populated")
+	}
+	if len(manifest.PostMergeChecklist.Groups) != 1 {
+		t.Errorf("Expected 1 group, got %d", len(manifest.PostMergeChecklist.Groups))
+	}
+}
+```
+
+### Verification Gate
+
+```bash
+cd /Users/dayna.blackwell/code/scout-and-wave-go
+go build ./pkg/protocol/...
+go test ./pkg/protocol/... -run TestIMPLManifestPostMergeChecklistField
+go test ./pkg/protocol/... -run TestKnownIssueTitleFieldInManifest
+go vet ./pkg/protocol/...
+```
+
+### Constraints
+
+1. **Field placement:** PostMergeChecklist field goes AFTER QualityGates field, BEFORE Scaffolds field
+2. **Pointer type:** Use `*PostMergeChecklist` (pointer) not `PostMergeChecklist` (value) — matches QualityGates pattern
+3. **Wire in parser:** Ensure ParseIMPLDoc main loop assigns `manifest.PostMergeChecklist = parsePostMergeChecklistSection(scanner)`
+4. **No StubReports changes:** Do NOT modify StubReports field
+
+---
+
+## Agent J - API Route Updates
+
+### File Ownership
+
+- `pkg/api/impl.go` (scout-and-wave-web repo)
+- `pkg/api/types.go` (scout-and-wave-web repo)
+
+### Interfaces to Implement
+
+**API response types** (add to types.go):
+
+```go
+type QualityGates struct {
+	Level string        `json:"level"`
+	Gates []QualityGate `json:"gates"`
+}
+
+type QualityGate struct {
+	Type        string `json:"type"`
+	Command     string `json:"command"`
+	Required    bool   `json:"required"`
+	Description string `json:"description,omitempty"`
+}
+
+type PostMergeChecklist struct {
+	Groups []ChecklistGroup `json:"groups"`
+}
+
+type ChecklistGroup struct {
+	Title string          `json:"title"`
+	Items []ChecklistItem `json:"items"`
+}
+
+type ChecklistItem struct {
+	Description string `json:"description"`
+	Command     string `json:"command,omitempty"`
+}
+
+type KnownIssue struct {
+	Title       string `json:"title,omitempty"`
+	Description string `json:"description"`
+	Status      string `json:"status,omitempty"`
+	Workaround  string `json:"workaround,omitempty"`
+}
+```
+
+**IMPLDocResponse updates** (add fields):
+
+```go
+type IMPLDocResponse struct {
+	// ... existing fields ...
+	QualityGates       *QualityGates       `json:"quality_gates,omitempty"`
+	PostMergeChecklist *PostMergeChecklist `json:"post_merge_checklist,omitempty"`
+	KnownIssues        []KnownIssue        `json:"known_issues,omitempty"`
+	// ... existing fields ...
+}
+```
+
+**Serialization in impl.go handleGetImpl:**
+
+```go
+resp := IMPLDocResponse{
+	// ... existing fields ...
+	QualityGates:       convertQualityGates(manifest.QualityGates),
+	PostMergeChecklist: convertPostMergeChecklist(manifest.PostMergeChecklist),
+	KnownIssues:        convertKnownIssues(manifest.KnownIssues),
+	// ... existing fields ...
+}
+```
+
+### Interfaces to Call
+
+**Agent I IMPLManifest fields:**
+- `manifest.PostMergeChecklist` (new field)
+- `manifest.QualityGates` (existing field)
+- `manifest.KnownIssues` (existing field, now has Title)
+
+### What to Implement
+
+1. Add API response types to `pkg/api/types.go`: QualityGates, QualityGate, PostMergeChecklist, ChecklistGroup, ChecklistItem, KnownIssue
+2. Add fields to IMPLDocResponse: quality_gates, post_merge_checklist, known_issues
+3. Update `handleGetImpl` in `pkg/api/impl.go` to populate new fields from manifest
+4. Write converter functions:
+   ```go
+   func convertQualityGates(gates *protocol.QualityGates) *QualityGates { ... }
+   func convertPostMergeChecklist(pmc *protocol.PostMergeChecklist) *PostMergeChecklist { ... }
+   func convertKnownIssues(issues []protocol.KnownIssue) []KnownIssue { ... }
+   ```
+
+**DO NOT** change stub_report_text field — Stub Report removed from scope.
+
+### Tests to Write
+
+1. TestConvertQualityGates — verify protocol.QualityGates → api.QualityGates
+2. TestConvertPostMergeChecklist — verify protocol.PostMergeChecklist → api.PostMergeChecklist
+3. TestConvertKnownIssues — verify protocol.KnownIssue array → api.KnownIssue array (with Title field)
+
+Add to `pkg/api/impl_test.go`:
+
+```go
+func TestConvertPostMergeChecklist(t *testing.T) {
+	input := &protocol.PostMergeChecklist{
+		Groups: []protocol.ChecklistGroup{
+			{
+				Title: "Build",
+				Items: []protocol.ChecklistItem{
+					{Description: "Full build", Command: "go build"},
+				},
+			},
+		},
+	}
+	result := convertPostMergeChecklist(input)
+	if result == nil {
+		t.Fatal("Expected non-nil result")
+	}
+	if len(result.Groups) != 1 {
+		t.Errorf("Expected 1 group, got %d", len(result.Groups))
+	}
+}
+```
+
+### Verification Gate
+
+```bash
+cd /Users/dayna.blackwell/code/scout-and-wave-web
+go build ./pkg/api/...
+go test ./pkg/api/... -run TestConvertQualityGates
+go test ./pkg/api/... -run TestConvertPostMergeChecklist
+go test ./pkg/api/... -run TestConvertKnownIssues
+go vet ./pkg/api/...
+```
+
+### Constraints
+
+1. **Converter functions:** Write separate converter functions (convertQualityGates, convertPostMergeChecklist, convertKnownIssues) — do NOT inline conversion in handleGetImpl
+2. **Nil safety:** Check for nil before converting (e.g., `if manifest.PostMergeChecklist != nil { ... }`)
+3. **JSON tags lowercase:** All JSON struct tags must be lowercase (json:"groups" not json:"Groups")
+4. **No stub_report_text changes:** Do NOT modify stub_report_text field in IMPLDocResponse
+
+---
+
+# Wave 3
+
+UI layer: Update React panels to parse YAML typed blocks with js-yaml instead of regex. All three panels follow the same pattern: strip fence markers, parse YAML, render structured data.
+
+## Agent F - QualityGatesPanel YAML Parsing
+
+### File Ownership
+
+- `web/src/components/review/QualityGatesPanel.tsx` (scout-and-wave-web repo)
+
+### Interfaces to Implement
+
+**TypeScript interfaces:**
+
+```typescript
+interface QualityGates {
+  level: string
+  gates: QualityGate[]
+}
+
+interface QualityGate {
+  type: string
+  command: string
+  required: boolean
+  description?: string
+}
+```
+
+**YAML parsing logic:**
+
+```typescript
+import * as yaml from 'js-yaml'
+
+function parseQualityGates(text: string): QualityGates | null {
+  // Strip fence markers
+  const stripped = text.replace(/^```yaml.*\n|```$/gm, '')
+
+  try {
+    const parsed = yaml.load(stripped) as QualityGates
+    return parsed
+  } catch (e) {
+    console.error('Failed to parse quality gates YAML:', e)
+    return null
+  }
+}
+```
+
+### Interfaces to Call
+
+**Agent J API response:**
+- `quality_gates` field in IMPLDocResponse (already structured JSON, not markdown blob)
+
+### What to Implement
+
+1. Import js-yaml: `import * as yaml from 'js-yaml'`
+2. Add TypeScript interfaces: QualityGates, QualityGate
+3. **DELETE parseGates regex function** (lines 9-39) entirely
+4. **REPLACE with parseQualityGates** that strips fence markers THEN parses YAML
+5. Update component to use parseQualityGates(gatesText) instead of parseGates(gatesText)
+6. Handle parse errors gracefully (return null, show "Invalid quality gates format" message)
+
+**API already serves structured quality_gates** — if API response has quality_gates object, use it directly; if gatesText prop is passed (markdown string), parse it.
+
+### Tests to Write
+
+1. QualityGatesPanel.test.tsx — verify YAML parsing with typed block
+2. QualityGatesPanel.test.tsx — verify fallback on parse error
+
+Add to `web/src/components/review/QualityGatesPanel.test.tsx`:
+
+```typescript
+import { render, screen } from '@testing-library/react'
+import QualityGatesPanel from './QualityGatesPanel'
+
+test('parses typed YAML block', () => {
+  const input = `\`\`\`yaml type=impl-quality-gates
+level: standard
+gates:
+  - type: build
+    command: go build
+    required: true
+\`\`\``
+
+  render(<QualityGatesPanel gatesText={input} />)
+  expect(screen.getByText(/go build/)).toBeInTheDocument()
+})
+```
+
+### Verification Gate
+
+```bash
+cd /Users/dayna.blackwell/code/scout-and-wave-web/web
+command npm install js-yaml
+command npm test -- QualityGatesPanel.test.tsx
+```
+
+### Constraints
+
+1. **Strip fences BEFORE parsing:** `text.replace(/^```yaml.*\n|```$/gm, '')` THEN `yaml.load(stripped)`
+2. **DELETE old parseGates:** Do NOT keep old regex parser — hard cutover to YAML parsing
+3. **Error handling:** Wrap yaml.load in try-catch, log error, return null
+4. **Import js-yaml:** Use `import * as yaml from 'js-yaml'` (not `import yaml from 'js-yaml'`)
+
+---
+
+## Agent G - PostMergeChecklistPanel Creation
+
+### File Ownership
+
+- `web/src/components/review/PostMergeChecklistPanel.tsx` (scout-and-wave-web repo) — NEW FILE
+- `web/src/types.ts` (scout-and-wave-web repo) — add PostMergeChecklist interfaces
+
+### Interfaces to Implement
+
+**TypeScript interfaces** (add to types.ts):
+
+```typescript
+export interface PostMergeChecklist {
+  groups: ChecklistGroup[]
+}
+
+export interface ChecklistGroup {
+  title: string
+  items: ChecklistItem[]
+}
+
+export interface ChecklistItem {
+  description: string
+  command?: string
+}
+```
+
+**PostMergeChecklistPanel component:**
+
+```tsx
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
+import * as yaml from 'js-yaml'
+import type { PostMergeChecklist } from '@/types'
+
+function parsePostMergeChecklist(text: string): PostMergeChecklist | null {
+  const stripped = text.replace(/^```yaml.*\n|```$/gm, '')
+  try {
+    return yaml.load(stripped) as PostMergeChecklist
+  } catch (e) {
+    console.error('Failed to parse post-merge checklist YAML:', e)
+    return null
+  }
+}
+
+export default function PostMergeChecklistPanel({ checklistText }: { checklistText?: string }): JSX.Element {
+  if (!checklistText || checklistText.trim() === '') {
+    return (
+      <Card>
+        <CardHeader><CardTitle>Post-Merge Checklist</CardTitle></CardHeader>
+        <CardContent><p className="text-sm text-muted-foreground">No checklist defined</p></CardContent>
+      </Card>
+    )
+  }
+
+  const checklist = parsePostMergeChecklist(checklistText)
+  if (!checklist) {
+    return (
+      <Card>
+        <CardHeader><CardTitle>Post-Merge Checklist</CardTitle></CardHeader>
+        <CardContent><p className="text-sm text-destructive">Invalid checklist format</p></CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <Card>
+      <CardHeader><CardTitle>Post-Merge Checklist</CardTitle></CardHeader>
+      <CardContent>
+        {checklist.groups.map((group, idx) => (
+          <div key={idx} className="mb-4">
+            <h4 className="font-semibold mb-2">{group.title}</h4>
+            <ul className="list-disc list-inside space-y-1">
+              {group.items.map((item, itemIdx) => (
+                <li key={itemIdx} className="text-sm">
+                  {item.description}
+                  {item.command && <code className="ml-2 text-xs bg-muted px-1 rounded">{item.command}</code>}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  )
+}
+```
+
+### Interfaces to Call
+
+**Agent J API response:**
+- `post_merge_checklist` field in IMPLDocResponse
+
+### What to Implement
+
+1. Create new file `web/src/components/review/PostMergeChecklistPanel.tsx`
+2. Add PostMergeChecklist/ChecklistGroup/ChecklistItem interfaces to `web/src/types.ts`
+3. Implement parsePostMergeChecklist (strip fences → parse YAML)
+4. Render groups with titles, items with descriptions + optional commands
+5. Handle missing/invalid checklist gracefully
+
+### Tests to Write
+
+1. PostMergeChecklistPanel.test.tsx — verify YAML parsing with typed block
+2. PostMergeChecklistPanel.test.tsx — verify rendering of groups and items
+
+Add to `web/src/components/review/PostMergeChecklistPanel.test.tsx`:
+
+```typescript
+import { render, screen } from '@testing-library/react'
+import PostMergeChecklistPanel from './PostMergeChecklistPanel'
+
+test('parses and renders typed YAML block', () => {
+  const input = `\`\`\`yaml type=impl-post-merge-checklist
+groups:
+  - title: "Build Verification"
+    items:
+      - description: "Full build passes"
+        command: "go build"
+\`\`\``
+
+  render(<PostMergeChecklistPanel checklistText={input} />)
+  expect(screen.getByText(/Build Verification/)).toBeInTheDocument()
+  expect(screen.getByText(/Full build passes/)).toBeInTheDocument()
+})
+```
+
+### Verification Gate
+
+```bash
+cd /Users/dayna.blackwell/code/scout-and-wave-web/web
+command npm test -- PostMergeChecklistPanel.test.tsx
+```
+
+### Constraints
+
+1. **New file:** PostMergeChecklistPanel.tsx does not exist — create from scratch
+2. **types.ts placement:** Add interfaces to existing `web/src/types.ts` (do NOT create new types file)
+3. **Strip fences BEFORE parsing:** Same pattern as QualityGatesPanel
+4. **Optional command field:** Check `item.command` exists before rendering code block
+
+---
+
+## Agent H - KnownIssuesPanel YAML Parsing
+
+### File Ownership
+
+- `web/src/components/review/KnownIssuesPanel.tsx` (scout-and-wave-web repo)
+
+### Interfaces to Implement
+
+**TypeScript interface update:**
+
+```typescript
+interface KnownIssue {
+  title?: string        // NEW FIELD
+  description: string
+  status?: string
+  workaround?: string
+}
+```
+
+**YAML parsing logic:**
+
+```typescript
+import * as yaml from 'js-yaml'
+
+function parseKnownIssues(text: string): KnownIssue[] | null {
+  const stripped = text.replace(/^```yaml.*\n|```$/gm, '')
+  try {
+    return yaml.load(stripped) as KnownIssue[]
+  } catch (e) {
+    console.error('Failed to parse known issues YAML:', e)
+    return null
+  }
+}
+```
+
+### Interfaces to Call
+
+**Agent J API response:**
+- `known_issues` field in IMPLDocResponse (array with Title field)
+
+### What to Implement
+
+1. Import js-yaml: `import * as yaml from 'js-yaml'`
+2. Add title field to KnownIssue interface (optional string)
+3. **REPLACE prose parsing** with parseKnownIssues (strip fences → parse YAML)
+4. Update rendering to show title as heading if present, description below
+5. Handle empty array (no issues) gracefully
+
+**Current KnownIssuesPanel may parse prose** — replace entire parsing logic with YAML parsing (hard cutover).
+
+### Tests to Write
+
+1. KnownIssuesPanel.test.tsx — verify YAML parsing with typed block
+2. KnownIssuesPanel.test.tsx — verify title field rendering
+
+Add to `web/src/components/review/KnownIssuesPanel.test.tsx`:
+
+```typescript
+import { render, screen } from '@testing-library/react'
+import KnownIssuesPanel from './KnownIssuesPanel'
+
+test('parses typed YAML block with title field', () => {
+  const input = `\`\`\`yaml type=impl-known-issues
+- title: "Flaky test"
+  description: "Test fails intermittently"
+  status: "Pre-existing"
+\`\`\``
+
+  render(<KnownIssuesPanel issuesText={input} />)
+  expect(screen.getByText(/Flaky test/)).toBeInTheDocument()
+  expect(screen.getByText(/Test fails intermittently/)).toBeInTheDocument()
+})
+```
+
+### Verification Gate
+
+```bash
+cd /Users/dayna.blackwell/code/scout-and-wave-web/web
+command npm test -- KnownIssuesPanel.test.tsx
+```
+
+### Constraints
+
+1. **Strip fences BEFORE parsing:** Same pattern as QualityGatesPanel and PostMergeChecklistPanel
+2. **Title field optional:** Check `issue.title` exists before rendering heading
+3. **Empty array handling:** If parsed array is empty, show "No known issues"
+4. **Hard cutover:** DELETE old prose parsing logic entirely
+
+---
+
+# Completion Reports
+
+(Empty at scout time — agents populate via `saw set-completion`)
+
+completion_reports: {}
+
+---
+
+### Agent A - Completion Report
+
+```yaml type=impl-completion-report
+status: complete
+repo: /Users/dayna.blackwell/code/scout-and-wave
+worktree: N/A
+branch: wave1-agent-A
+commit: 1f7c453
+files_changed:
+  - protocol/message-formats.md
+files_created: []
+interface_deviations: []
+out_of_scope_deps: []
+tests_added: []
+verification: PASS (manual verification complete)
+```
+
+All three typed-block schemas added successfully:
+- Quality Gates: replaced prose description with `impl-quality-gates` typed block
+- Post-Merge Checklist: added new section with `impl-post-merge-checklist` typed block
+- Known Issues: replaced prose with `impl-known-issues` typed block
+
+Field names match Go struct tags exactly (groups/title/items/description/command for PostMergeChecklist, title/description/status/workaround for KnownIssue, level/gates/type/command/required/description for QualityGates).
+
+Updated Typed Metadata Blocks section: removed Quality Gates and Known Issues from prose exclusion list, added three new block types to Block Types subsection with descriptions.
+
+Updated IMPL doc structure section to show typed blocks for all three sections.
