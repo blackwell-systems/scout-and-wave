@@ -74,30 +74,6 @@ The verdict badge on the review screen changes color (red/amber/green) but the r
 
 ---
 
-## Per-Agent Context Slicing for Large IMPL Docs
-
-> **Implemented — 2026-03-08:** E23 (`ExtractAgentContext` / `FormatAgentContextPayload`) shipped in `scout-and-wave-go` v0.2.0, wired into `launchAgent` before `ExecuteStreaming`. UI: `AgentContextToggle` + `AgentContextPanel` in `scout-and-wave-web` v0.18.0 expose the per-agent payload for inspection in ReviewScreen.
-
-**Current state:** When an IMPL doc contains many agents (10+), every Wave agent receives the full IMPL doc as context. Agent A reads all 13 other agents' full prompts, dep graph prose, pre-mortem, and known issues — sections it has no use for.
-
-**Problem:** Context waste scales with team size. A 14-agent IMPL doc is ~3× larger than a 5-agent one. Each extra agent prompt consumed by every other agent compounds: N agents × N prompts = O(N²) token waste for context that belongs to no one agent. This isn't just cost — it erodes the signal-to-noise ratio in the agent's working context for the duration of its run.
-
-**Proposed: Per-agent context extraction.** The orchestrator constructs a trimmed payload for each agent before launch, containing only:
-1. That agent's 9-field prompt section
-2. Interface contracts (every agent needs these)
-3. File ownership table (needed for I1 invariant verification)
-4. Scaffolds section (needed to know what's pre-built)
-5. Quality gates (needed for verification gate)
-
-Other agents' prompts, the full dep graph prose, pre-mortem, and known issues are omitted. The full IMPL doc stays on disk as source of truth (I4 unchanged) — agents still write completion reports to it. The per-agent payload is a read-only extract for consumption at launch time only.
-
-**Protocol changes required:**
-- `saw-skill.md` — orchestrator constructs per-agent payload before launching each Wave agent rather than passing the raw full doc
-- `agent-template.md` — Field 0 updated: agents receive a trimmed context object, not necessarily the full IMPL doc
-- `message-formats.md` — define Per-Agent Context Payload schema: sections always included vs. elided
-
----
-
 ## Structured Output Parsing
 
 ### Schema-Validated Scout Output (API Backend)
@@ -587,6 +563,92 @@ This gives a cleaner final architecture without technical debt from compatibilit
 - Middleware applied uniformly to all tools from the start (Observatory timing works everywhere)
 - Backend adapters eliminate serialization duplication immediately
 - Agent permission models (Scout read-only, Wave read-write) work via namespace filtering from launch
+
+---
+
+## Formally Executable IMPL Docs (Coordination as a Program)
+
+**Insight:** Every E-rule and invariant in the protocol is a retroactive constraint — built after an agent produced something malformed and we caught it post-hoc. Structured output parsing is the first time we push a constraint *before* generation. The next phase extends this: the IMPL doc stops being a document that *describes* coordination and becomes a program that *is* coordination.
+
+**Phase 1 — Constraint-solving validator (immediate next step after structured outputs):**
+
+Right now `sawtools validate` checks rules one at a time. Replace it with a constraint solver: model the manifest as a CSP — agents, files, and dependencies as variables and constraints — and *prove* the execution plan is correct rather than checking it's not-wrong. Topological sort over the dep graph catches I2 violations today; extending it to prove optimal wave grouping is a small step. The validator stops being a linter and becomes a proof system.
+
+This also means Scout stops making scheduling decisions. Scout declares *what* agents need (file dependencies, interface dependencies). The solver derives *when* they run — which wave, which agents are parallel. The `wave:` numbers in `file_ownership` are computed, not guessed. I2_WAVE_ORDER errors become impossible because wave assignment is never hand-written.
+
+**Phase 2 — Interface contracts as compiled types:**
+
+The Scaffold Agent already proto-implements this — it materializes contracts as stub Go files. The missing piece: after scaffolds are written, compile a verification program that proves the stubs implement the contracts. A mismatched interface contract is caught before any Wave agent sees it, not after merge when tests fail.
+
+**Phase 3 — Pre-execution simulation:**
+
+Model each agent as a transaction over its owned files. Before worktrees are created, simulate the execution: prove that no two transactions conflict, that all interface consumers have exactly one producer, that every agent's dependencies are satisfied before it runs. This is database isolation theory (serializable transaction isolation) applied to agent coordination.
+
+The full vision: Scout is a dependency mapper, not a scheduler. The scheduler is a deterministic program derived from the dependency graph. The validator is a proof system. Agents execute transactions. The IMPL doc is a formal specification that can be run, simulated, and verified before any real work happens.
+
+**Protocol changes required:**
+- `sawtools validate` → constraint solver (replaces rule-by-rule checking with CSP proof)
+- `message-formats.md` — `wave:` numbers in file_ownership become optional (solver derives them)
+- `agents/scout.md` — Scout emits dependency graph only; does not assign wave numbers
+- New `protocol/solver.md` — documents the wave-derivation algorithm and constraint model
+
+---
+
+## SDK Branch as Generated Build Artifact
+
+**Current state:** The `scout-and-wave` repo has two long-lived branches:
+- `main` — natural language only. Refers to the `saw` CLI throughout (e.g., `saw validate`, `saw create-worktrees`).
+- `sdk` — SDK-coupled. All `saw` references replaced with `sawtools` (the Go toolkit binary). This branch is hand-maintained: every commit to `main` that touches an NL reference must be ported to `sdk` manually.
+
+**Problem:** The `main` → `sdk` substitutions are entirely mechanical. Every `saw ` becomes `sawtools `, every "run `saw`" becomes "run `sawtools`", with occasional CLI flag and path adjustments. There is no semantic difference — it is a textual transformation. Hand-maintaining two branches for a mechanical transformation means:
+- Every PR requires a parallel `sdk` version
+- Merge discipline must be enforced by convention, not tooling
+- Contributors must know about the split and remember to port changes
+
+**Proposed:** Treat the `sdk` branch as a **generated build artifact**, not a hand-edited branch. Define a substitution manifest (e.g., `sdk-substitutions.yaml`) that specifies:
+
+```yaml
+substitutions:
+  - pattern: "run `saw "
+    replace: "run `sawtools "
+  - pattern: "exec saw "
+    replace: "exec sawtools "
+  - pattern: "`saw "
+    replace: "`sawtools "
+  # ... other mechanical substitutions
+
+file_includes:
+  - "implementations/claude-code/**/*.md"
+  - "implementations/claude-code/**/*.sh"
+
+# Optionally: files that need non-mechanical edits (override substitution for specific files)
+overrides:
+  - file: "implementations/claude-code/scripts/install.sh"
+    manual: true   # This file is maintained manually in both branches
+```
+
+A CI step (GitHub Actions) generates the `sdk` branch on every push to `main`:
+1. Checkout `main`
+2. Apply all substitutions to all included files
+3. Apply any manual overrides
+4. Force-push the result to `sdk`
+
+The `sdk` branch becomes a read-only generated artifact — never committed to directly. PRs target `main` only. The substitution manifest is the diff between `main` and `sdk`.
+
+**Benefits:**
+- `main` is the only branch contributors touch
+- `sdk` is always up-to-date (generated on every push, not manually ported)
+- Substitution rules are explicit and auditable (the manifest makes the transformation inspectable)
+- Adding new binary-split variants in the future (e.g., a different package manager name) requires only a new manifest entry, not a new hand-maintained branch
+
+**Long-term extension:** If the binary split ever deepens (e.g., different config file paths, different env vars), the manifest grows but the workflow is unchanged. Multiple "flavor" branches (sdk, sdk-docker, sdk-ci) could each have their own manifest.
+
+**Implementation scope:** CI/CD only (`scout-and-wave` repo). No protocol changes required — the protocol content is unchanged; only the tooling that generates the SDK-coupled distribution changes.
+
+**Protocol changes required:** None for the protocol itself. New files:
+- `scripts/generate-sdk-branch.sh` — applies the substitution manifest and commits to `sdk`
+- `.github/workflows/generate-sdk.yml` — triggers on push to `main`
+- `sdk-substitutions.yaml` — the substitution manifest
 
 ---
 

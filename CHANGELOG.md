@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.19.0] | 2026-03-10 | saw-skill.md fixes — correct `extract-context` and `set-completion` CLI syntax; remove stale "Scout does not yet generate YAML" text; ROADMAP updates |
 | [0.18.0] | 2026-03-10 | fix: validate-impl.sh delegates to `sawtools validate` — unblocks E16 YAML manifest validation |
 | [0.17.0] | 2026-03-10 | sawtools rename in skill files — saw-skill v0.7.1, saw-merge v0.6.1, saw-worktree v0.6.2 |
 | [0.16.0] | 2026-03-09 | Worktree isolation design doc + saw-worktree v0.6.1 — documents why native agent-definition isolation: worktree doesn't replace SAW orchestration |
@@ -72,6 +73,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.3.0] | 2026-02-28 | Bootstrap mode for new projects; Wave 0 pattern |
 | [0.2.0] | 2026-02-28 | Decomposed skill prompt; complexity-based suitability heuristic |
 | [0.1.0] | 2026-02-27 | Initial release |
+
+---
+
+## [0.19.0] - 2026-03-10
+
+### Fixed
+
+- **`saw-skill.md` — `extract-context` syntax** — was `--impl "<path>" --agent "<id>"` (wrong); correct form is positional arg `"<path>" --agent "<id>"`
+- **`saw-skill.md` — `set-completion` syntax** — was heredoc pipe to stdin (not supported); correct form uses individual flags `--agent`, `--status`, `--commit`
+- **`saw-skill.md` — stale dual-mode text** — removed "Scout does not yet generate YAML manifests; YAML mode is present for forward compatibility" (Scout has generated YAML since v0.6.0)
+
+### Changed
+
+- **ROADMAP.md** — removed completed "Per-Agent Context Slicing" section; added "Formally Executable IMPL Docs" (constraint-solving validator, auto-derived wave structure, compiled contracts, pre-execution simulation); added "SDK Branch as Generated Build Artifact" (generate `sdk` branch from `main` + substitutions manifest via CI)
 
 ---
 
