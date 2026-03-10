@@ -32,8 +32,8 @@ fi
 # If input is a YAML manifest, delegate to SDK CLI (Wave 4 dual-mode migration)
 
 if [[ "$impl_doc" == *.yaml ]] || [[ "$impl_doc" == *.yml ]]; then
-  echo "Detected YAML manifest — delegating to 'saw validate'" >&2
-  exec saw validate "$impl_doc"
+  echo "Detected YAML manifest — delegating to 'sawtools validate'" >&2
+  exec sawtools validate "$impl_doc"
 fi
 
 echo "Validating: $impl_doc" >&2
