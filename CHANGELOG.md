@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.20.0] | 2026-03-10 | E16A/B/C enforcement — E16C bash validator bug fixed, execution-rules.md sub-rules documented, saw-skill.md E16A note added |
 | [0.19.0] | 2026-03-10 | saw-skill.md fixes — correct `extract-context` and `set-completion` CLI syntax; remove stale "Scout does not yet generate YAML" text; ROADMAP updates |
 | [0.18.0] | 2026-03-10 | fix: validate-impl.sh delegates to `sawtools validate` — unblocks E16 YAML manifest validation |
 | [0.17.0] | 2026-03-10 | sawtools rename in skill files — saw-skill v0.7.1, saw-merge v0.6.1, saw-worktree v0.6.2 |
@@ -73,6 +74,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.3.0] | 2026-02-28 | Bootstrap mode for new projects; Wave 0 pattern |
 | [0.2.0] | 2026-02-28 | Decomposed skill prompt; complexity-based suitability heuristic |
 | [0.1.0] | 2026-02-27 | Initial release |
+
+---
+
+## [0.20.0] - 2026-03-10
+
+### Fixed
+
+- **`validate-impl.sh` E16C bug** — plain-block scanner was incorrectly treating typed block closing fences as plain block openers, causing false positives (typed block content accumulated as plain block). Fixed by tracking `e16c_in_typed_block` state and restructuring fence detection order.
+
+### Added
+
+- **`execution-rules.md` E16A/B/C sub-rules** — replaced inline bold markers with proper `###` sub-headings; documented E16A (required block presence with trigger condition, error format, backward-compat exception), E16B (canonical dep graph grammar with formal spec and example), E16C (out-of-band detection criteria, warning format, rationale, E16A interaction)
+- **`saw-skill.md` E16A note** — one-sentence note inserted after "If exit code is 0, proceed to human review" informing orchestrators that validation now enforces required-block presence
 
 ---
 
