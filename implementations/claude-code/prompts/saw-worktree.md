@@ -1,4 +1,4 @@
-<!-- saw-worktree v0.6.0 -->
+<!-- saw-worktree v0.6.1 -->
 # SAW Worktree Lifecycle
 
 Manage git worktree creation, verification, and cleanup for wave agents.
@@ -239,6 +239,9 @@ complementary, not redundant:
 Do not rely solely on `isolation: "worktree"`. It may fail silently. The merge
 procedure's trip wire (Step 1.5 in saw-merge.md) is the final safety net that
 catches all isolation failures before any incorrect merge occurs.
+
+Do not add `isolation: worktree` frontmatter to wave-agent definitions as a
+replacement for this step. See `docs/saw-ops/worktree-isolation-design.md`.
 
 ## Verify Creation
 
