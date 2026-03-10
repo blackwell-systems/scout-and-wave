@@ -1,4 +1,4 @@
-<!-- saw-merge v0.6.0 -->
+<!-- saw-merge v0.6.1 -->
 # SAW Merge Procedure
 
 Merge agent worktrees back into the main branch after a wave completes.
@@ -36,7 +36,7 @@ the Task tool, Field 0, or prompt instructions failed.
 Run the CLI verification command:
 
 ```bash
-saw verify-commits "<manifest-path>" --wave <N> --repo-dir "<repo-path>"
+sawtools verify-commits "<manifest-path>" --wave <N> --repo-dir "<repo-path>"
 ```
 
 The command checks that each agent with `status: complete` has at least one
@@ -71,10 +71,10 @@ Path 1 costs compute time. Path 3 costs trust in the result.
 Before merging, verify each agent only touched files in its ownership table.
 This catches ownership violations whether agents committed to branches or main.
 
-Use `saw check-conflicts` to verify file ownership:
+Use `sawtools check-conflicts` to verify file ownership:
 
 ```bash
-saw check-conflicts "<manifest-path>"
+sawtools check-conflicts "<manifest-path>"
 ```
 
 The command cross-references each agent's actual changed files (from git or
@@ -102,14 +102,14 @@ After parsing all completion reports and verifying file ownership, collect the u
 
 Run the stub scanner:
 ```bash
-saw scan-stubs {file1} {file2} ...
+sawtools scan-stubs {file1} {file2} ...
 ```
 
 The scanner exits with code 0 always (informational only). If stubs are detected, append the output to the IMPL doc under `## Stub Report — Wave {N}` (after the last agent completion report). Surface stubs at the review checkpoint before merge — the human decides whether to accept or request fixes.
 
 ## Step 1.95: E21 Quality Gates
 
-**YAML mode:** Run `saw run-gates "<manifest-path>" --wave <N> --repo-dir "<repo-path>"`. The CLI loads the manifest, executes each gate command, and outputs a JSON array of `GateResult` objects with pass/fail, stdout, stderr, and exit code. Exit code 1 means at least one required gate failed — **stop immediately**, do not merge, report gate failure to user.
+**YAML mode:** Run `sawtools run-gates "<manifest-path>" --wave <N> --repo-dir "<repo-path>"`. The CLI loads the manifest, executes each gate command, and outputs a JSON array of `GateResult` objects with pass/fail, stdout, stderr, and exit code. Exit code 1 means at least one required gate failed — **stop immediately**, do not merge, report gate failure to user.
 
 **Markdown mode:** If the IMPL doc contains a `## Quality Gates` section, parse it and execute each gate:
 
@@ -126,7 +126,7 @@ If no Quality Gates section exists, skip this step.
 
 ## Step 2: Conflict Prediction
 
-**YAML mode:** Run `saw check-conflicts "<manifest-path>"`. The CLI detects same-wave file conflicts and undeclared modifications, outputting a JSON array of `OwnershipConflict` objects. Exit code 1 means conflicts were found — do not proceed until resolved.
+**YAML mode:** Run `sawtools check-conflicts "<manifest-path>"`. The CLI detects same-wave file conflicts and undeclared modifications, outputting a JSON array of `OwnershipConflict` objects. Exit code 1 means conflicts were found — do not proceed until resolved.
 
 **Markdown mode:** Cross-reference all agents' `files_changed` and `files_created` lists manually.
 
@@ -206,7 +206,7 @@ which propagates to the next wave without halting the current one.
 For each agent with `status: complete`, merge their worktree branch into main:
 
 ```bash
-saw merge-agents "<manifest-path>" --wave <N> --repo-dir "<repo-path>"
+sawtools merge-agents "<manifest-path>" --wave <N> --repo-dir "<repo-path>"
 ```
 
 The CLI iterates over all agents with `status: complete` and merges them in
@@ -225,7 +225,7 @@ understanding — the CLI handles it automatically.
 After merging all agents, clean up worktrees and branches:
 
 ```bash
-saw cleanup "<manifest-path>" --wave <N> --repo-dir "<repo-path>"
+sawtools cleanup "<manifest-path>" --wave <N> --repo-dir "<repo-path>"
 ```
 
 The CLI removes each agent's worktree and deletes its branch. Cleanup runs
@@ -280,7 +280,7 @@ the exact auto-fix command in their individual verification gates.
 **Run tests and build:**
 
 ```bash
-saw verify-build "<manifest-path>" --repo-dir "<repo-path>"
+sawtools verify-build "<manifest-path>" --repo-dir "<repo-path>"
 ```
 
 The CLI runs the `test_command` from the IMPL doc without package scoping,
@@ -296,7 +296,7 @@ outside agent scope that reference changed interfaces.
 **Scaffold files:**
 
 ```bash
-saw validate-scaffolds "<manifest-path>"
+sawtools validate-scaffolds "<manifest-path>"
 ```
 
 The CLI verifies that all scaffold files listed in the IMPL doc are present

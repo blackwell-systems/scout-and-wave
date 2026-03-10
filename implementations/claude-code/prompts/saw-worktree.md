@@ -1,4 +1,4 @@
-<!-- saw-worktree v0.6.1 -->
+<!-- saw-worktree v0.6.2 -->
 # SAW Worktree Lifecycle
 
 Manage git worktree creation, verification, and cleanup for wave agents.
@@ -28,11 +28,11 @@ each repo's worktrees exist before launching agents.
 **CLI cross-repo support:**
 
 All CLI commands accept a `--repo-dir` parameter for cross-repo scenarios.
-Run `saw create-worktrees` once per repository:
+Run `sawtools create-worktrees` once per repository:
 
 ```bash
-saw create-worktrees "<manifest-path>" --wave <N> --repo-dir "~/code/saw-engine"
-saw create-worktrees "<manifest-path>" --wave <N> --repo-dir "~/code/saw-web"
+sawtools create-worktrees "<manifest-path>" --wave <N> --repo-dir "~/code/saw-engine"
+sawtools create-worktrees "<manifest-path>" --wave <N> --repo-dir "~/code/saw-web"
 ```
 
 The CLI handles preflight checks, worktree creation, and hook installation
@@ -43,8 +43,8 @@ for each repo independently.
 Run the merge procedure separately in each repo:
 
 ```bash
-saw merge-agents "<manifest-path>" --wave <N> --repo-dir "~/code/saw-engine"
-saw merge-agents "<manifest-path>" --wave <N> --repo-dir "~/code/saw-web"
+sawtools merge-agents "<manifest-path>" --wave <N> --repo-dir "~/code/saw-engine"
+sawtools merge-agents "<manifest-path>" --wave <N> --repo-dir "~/code/saw-web"
 ```
 
 The Orchestrator merges each repo's agent branches into that repo's main
@@ -54,8 +54,8 @@ merge unit.
 **Cleanup:**
 
 ```bash
-saw cleanup "<manifest-path>" --wave <N> --repo-dir "~/code/saw-engine"
-saw cleanup "<manifest-path>" --wave <N> --repo-dir "~/code/saw-web"
+sawtools cleanup "<manifest-path>" --wave <N> --repo-dir "~/code/saw-engine"
+sawtools cleanup "<manifest-path>" --wave <N> --repo-dir "~/code/saw-web"
 ```
 
 **Key constraint:** An agent that owns files in multiple repos must be given
@@ -72,7 +72,7 @@ stay clean.
 **Run this before anything else** — before ownership verification, before
 creating worktrees.
 
-The `saw create-worktrees` command performs this check automatically, ensuring
+The `sawtools create-worktrees` command performs this check automatically, ensuring
 the working tree is clean before creating any worktrees. If the tree is dirty,
 the CLI will exit with an error and guidance.
 
@@ -150,13 +150,13 @@ Checklist before creating worktrees:
 **YAML mode verification (recommended):** Run these CLI checks before creating worktrees:
 ```bash
 # Verify all scaffolds are committed (exit 1 = not ready)
-saw validate-scaffolds "<manifest-path>"
+sawtools validate-scaffolds "<manifest-path>"
 
 # Verify no freeze violations (exit 1 = contracts changed after freeze)
-saw freeze-check "<manifest-path>"
+sawtools freeze-check "<manifest-path>"
 
 # Verify no file ownership conflicts (exit 1 = I1 violation in IMPL doc)
-saw check-conflicts "<manifest-path>"
+sawtools check-conflicts "<manifest-path>"
 ```
 All three must exit 0 before proceeding. These replace manual inspection of
 the Scaffolds section and file ownership table for YAML manifests.
@@ -183,7 +183,7 @@ Re-running `/saw wave` at this point is safe; WAVE_PENDING is re-entrant.
 Before launching any agents in a multi-agent wave, create worktrees:
 
 ```bash
-saw create-worktrees "<manifest-path>" --wave <N> --repo-dir "<repo-path>"
+sawtools create-worktrees "<manifest-path>" --wave <N> --repo-dir "<repo-path>"
 ```
 
 The CLI creates a worktree for each agent in the wave, handling:
@@ -198,7 +198,7 @@ proceeds to verification. Do not duplicate worktrees.
 
 ### Fail-Fast Hook Installation
 
-The `saw create-worktrees` command automatically installs a git pre-commit
+The `sawtools create-worktrees` command automatically installs a git pre-commit
 hook that blocks agent commits to main. This is Layer 0: infrastructure
 enforcement that prevents isolation violations before they occur.
 
@@ -245,7 +245,7 @@ replacement for this step. See `docs/saw-ops/worktree-isolation-design.md`.
 
 ## Verify Creation
 
-The `saw create-worktrees` command verifies creation automatically, checking
+The `sawtools create-worktrees` command verifies creation automatically, checking
 that each expected worktree exists and is on the correct branch.
 
 Manual verification (if not using CLI):
@@ -321,7 +321,7 @@ wire (Step 1.5) catches all failures before any merge occurs (Layer 4).
 After merging a wave, remove all worktrees and branches:
 
 ```bash
-saw cleanup "<manifest-path>" --wave <N> --repo-dir "<repo-path>"
+sawtools cleanup "<manifest-path>" --wave <N> --repo-dir "<repo-path>"
 ```
 
 The CLI removes each agent's worktree, deletes its branch, and restores the
