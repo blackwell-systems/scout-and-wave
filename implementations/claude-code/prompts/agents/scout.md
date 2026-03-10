@@ -362,7 +362,7 @@ Record the verdict and its rationale in the IMPL doc under a
    # Rust: cargo build && cargo clippy -- -D warnings && cargo test
    ```
 
-11. **Emit quality gates (optional).** If the project has a known build toolchain, add a `## Quality Gates` section to the IMPL doc between Suitability Assessment and Scaffolds:
+11. **Emit quality gates (optional).** If the project has a known build toolchain, add a `## Quality Gates` section to the IMPL doc between Suitability Assessment and Scaffolds. Use typed-block fence syntax ```` ```yaml type=impl-quality-gates ````:
 
     Auto-detect from marker files:
     - `go.mod` → Go gates (`go build ./...`, `go test ./...`, `go vet ./...`)
@@ -374,7 +374,17 @@ Record the verdict and its rationale in the IMPL doc under a
 
     Omit this section entirely if no build toolchain is detected or the project is markdown/documentation only.
 
-12. **Expect validation feedback (E16).** After you write the IMPL doc, the orchestrator
+12. **Emit post-merge checklist (optional).** After Known Issues and before Dependency Graph, add a `## Post-Merge Checklist` section using typed-block fence syntax ```` ```yaml type=impl-post-merge-checklist ```` if orchestrator-level verification steps are needed beyond quality gates:
+
+    Include orchestrator-facing post-merge verification steps: full workspace builds after merge, cross-package integration tests, end-to-end tests spanning multiple agents' work, cross-repo dependency checks.
+
+    Omit this section entirely if no orchestrator verification steps are needed beyond quality gates. Do not output an empty typed block.
+
+13. **Emit known issues as typed block.** In the Known Issues section, use typed-block fence syntax ```` ```yaml type=impl-known-issues ````. Document pre-existing issues discovered during suitability assessment.
+
+    If no known issues are discovered, omit the section entirely.
+
+14. **Expect validation feedback (E16).** After you write the IMPL doc, the orchestrator
     runs a validator on all `type=impl-*` blocks (E16). If the validator reports errors,
     you will receive a correction prompt listing specific failures by section name and
     block type. Rewrite only the failing sections — do not regenerate the entire document.
@@ -413,19 +423,24 @@ test_command: "<full test suite command>"
 lint_command: "<check-mode lint command or 'none'>"
 state: "SCOUT_PENDING"
 
-# Quality Gates (omit entirely if no build toolchain detected)
-quality_gates:
-  level: "standard"  # quick | standard | full
-  gates:
-    - type: "build"
-      command: "<e.g. go build ./...>"
-      required: true
-    - type: "test"
-      command: "<e.g. go test ./...>"
-      required: true
-    - type: "lint"
-      command: "<e.g. go vet ./...>"
-      required: false
+## Quality Gates (omit entirely if no build toolchain detected)
+
+```yaml type=impl-quality-gates
+level: standard
+gates:
+  - type: build
+    command: go build ./...
+    required: true
+  - type: test
+    command: go test ./...
+    required: true
+  - type: lint
+    command: go vet ./...
+    required: false
+    description: "Check for common Go mistakes"
+```
+
+---
 
 # Scaffolds (omit if no cross-agent types needed)
 scaffolds:
@@ -509,11 +524,32 @@ pre_mortem:
       impact: "medium"
       mitigation: "Concrete action to prevent or recover"
 
-# Known Issues (omit if none)
-known_issues:
-  - description: "Pre-existing test failure or known bug"
-    status: "Pre-existing, unrelated to this work"
-    workaround: "Skip with -skip flag"
+## Known Issues (omit if none)
+
+```yaml type=impl-known-issues
+- title: "Flaky test in auth module"
+  description: "TestAuthHandler_SessionTimeout fails intermittently on CI"
+  status: "Pre-existing, unrelated to this work"
+  workaround: "Skip with -skip TestAuthHandler_SessionTimeout"
+```
+
+---
+
+## Post-Merge Checklist (omit if no orchestrator verification steps needed)
+
+```yaml type=impl-post-merge-checklist
+groups:
+  - title: "Build Verification"
+    items:
+      - description: "Full workspace build passes"
+        command: "go build ./..."
+  - title: "Integration Tests"
+    items:
+      - description: "End-to-end test suite passes"
+        command: "npm run test:e2e"
+```
+
+---
 
 # Completion Reports (empty at scout time — agents populate via saw set-completion)
 completion_reports: {}
