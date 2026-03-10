@@ -7,7 +7,7 @@ participant role or procedure defined in the [protocol/](../protocol/) specifica
 
 | File | Version | Purpose |
 |------|---------|---------|
-| [`saw-skill.md`](saw-skill.md) | v0.6.0 | The `/saw` skill router. Install to `~/.claude/skills/saw/SKILL.md`. Routes `bootstrap`, `scout`, `wave`, `wave --auto`, and `status` commands. Drives all protocol state transitions as the Orchestrator. YAML mode uses SDK CLI commands (`saw run-gates`, `saw mark-complete`, `saw check-conflicts`, `saw validate-scaffolds`, `saw freeze-check`, `saw update-agent-prompt`). |
+| [`saw-skill.md`](saw-skill.md) | v0.7.0 | The `/saw` skill router. Install to `~/.claude/skills/saw/SKILL.md`. Routes `bootstrap`, `scout`, `wave`, `wave --auto`, and `status` commands. Drives all protocol state transitions as the Orchestrator. Uses Protocol SDK CLI commands for all orchestration operations (`saw create-worktrees`, `saw merge-agents`, `saw verify-build`, `saw run-wave`, etc.). |
 
 ## Participant Prompts
 
@@ -18,7 +18,7 @@ uses their text as the prompt when launching an asynchronous agent.
 |------|---------|-------------|---------|
 | [`scout.md`](scout.md) | v0.4.0 | Scout | Suitability gate (5 questions) + IMPL doc production. Analyzes the codebase, assigns file ownership, defines interface contracts, specifies scaffold file contents in the IMPL doc Scaffolds section, structures waves, and stamps per-agent prompts. Never modifies source files. |
 | [`scaffold-agent.md`](scaffold-agent.md) | v0.1.2 | Scaffold Agent | Materializes approved interface contracts as type scaffold source files after human review of the IMPL doc. Runs between Scout and Wave 1. Creates only the files listed in the IMPL doc Scaffolds section, verifies they compile, commits, and updates scaffold status. |
-| [`agent-template.md`](agent-template.md) | v0.3.8 | Wave Agent | 9-field prompt template stamped per-agent by the Scout into the IMPL doc. Field 0: isolation verification (mandatory pre-flight). Fields 1–8: file ownership, interfaces, implementation spec, tests, verification gate, constraints, completion report. |
+| [`agent-template.md`](agent-template.md) | v0.3.9 | Wave Agent | 9-field prompt template stamped per-agent by the Scout into the IMPL doc. Field 0: isolation verification (mandatory pre-flight). Fields 1–8: file ownership, interfaces, implementation spec, tests, verification gate, constraints, completion report. |
 
 ## Procedure Prompts
 
