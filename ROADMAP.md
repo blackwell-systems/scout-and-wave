@@ -525,14 +525,13 @@ allTools := registry.All()                 // Everything
 1. ~~Delete `StandardTools()`~~ Done — old `pkg/agent/tools.go`, `pkg/agent/backend/api/tools.go`, `pkg/agent/backend/openai/tools.go` deleted
 2. ~~Implement `ToolRegistry`~~ Done — `pkg/tools/workshop.go` (`DefaultWorkshop` with thread-safe registration, namespace filtering)
 3. ~~Replace `Execute func(...)` with `ToolExecutor` interface~~ Done — `ExecutionContext` carries `workDir` at call time
-4. ~~Middleware type defined~~ Done — `type Middleware func(next ToolExecutor) ToolExecutor` available but not yet wired
+4. ~~Middleware wired~~ Done (v0.20.0) — `TimingMiddleware` feeds Observatory via `backend.Config.OnToolCall`; `PermissionMiddleware` + `ReadOnlyTools()` enforce Scout read-only mode via `backend.Config.ReadOnly`
 5. ~~Backend adapters~~ Done — `AnthropicAdapter`, `OpenAIAdapter`, `BedrockAdapter` in `pkg/tools/adapters.go`; backends use Workshop directly for serialization
 6. ~~Namespaced tools~~ Partial — `Namespace` field on `Tool` struct, `Workshop.Namespace()` method works; tool names use underscores (`read_file`) for OpenAI compatibility instead of colons
 
 **Remaining (future):**
-- Wire middleware stack (logging, timing for Observatory, validation, permissions)
-- Scout read-only tool set via namespace filtering
 - Custom tool registration at runtime (plugin support)
+- Validation middleware (JSON Schema input checks before execution)
 
 ---
 
