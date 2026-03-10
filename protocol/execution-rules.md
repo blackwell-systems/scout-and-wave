@@ -342,38 +342,8 @@ If validation fails, the specific errors are fed back to Scout as a correction p
 Scout rewrites only the failing sections. This loops until the doc passes or a retry limit
 (default: 3) is reached.
 
-**Validator scope:** Typed-block sections (`type=impl-*` blocks) plus document-level presence checks. Prose sections are excluded from content validation.
-
-**E16A — Required block presence:** An IMPL doc that contains any typed blocks must include all three of the following, or validation fails:
-- `type=impl-file-ownership`
-- `type=impl-dep-graph`
-- `type=impl-wave-structure`
-
-Error format: `missing required block: impl-dep-graph`
-
-Trigger condition: E16A fires only when `block_count > 0`. Docs with no typed blocks (pre-v0.10.0 format) skip this check and receive the existing "no typed blocks found" warning instead.
-
-**E16B — Dep graph grammar:** When an `impl-dep-graph` block is present, its contents must conform to the canonical grammar. This check already exists in both the bash and Go validators; this rule documents it authoritatively.
-
-Canonical dep graph grammar:
-```
-Wave N (label):          # one or more Wave sections; N is a digit
-    [X] path/to/file     # one or more agent entries per wave; X is an agent ID matching [A-Z][2-9]?
-        ✓ root           # root agents declare ✓ root
-    [Y] path/to/file
-        depends on: X    # dependent agents declare depends on: <agent IDs>
-```
-
-Rules:
-- At least one `Wave N` line (where N is one or more digits) must appear.
-- At least one `[X]` agent entry must appear. `X` is an agent ID matching `[A-Z][2-9]?` (e.g., `A`, `B2`, `C3`).
-- Each agent entry must be followed (before the next agent entry) by either `✓ root` or `depends on:` on an indented line.
-
-**E16C — Out-of-band dep graph detection (warn only):** If a plain fenced block (no `type=` annotation) contains both a `[A-Z][2-9]?` agent reference pattern and the word `Wave`, the validator emits a warning to stdout but does not fail. This catches dep graphs written as ASCII art outside typed blocks.
-
-Warning format: `WARNING: possible dep-graph content found outside typed block at line N — use \`\`\`yaml type=impl-dep-graph\`\`\``
-
-E16C warnings appear in the correction prompt fed back to Scout but do not trigger a retry on their own. They are informational — the Scout should move the content into a typed block.
+**Validator scope:** Only typed-block sections (IC-1: `type=impl-*` blocks). Prose sections
+are excluded from validation.
 
 **Correction prompt format:** The orchestrator's correction prompt to Scout must list each error with the section name, the specific failure (e.g., "impl-dep-graph block: Wave 2 missing `depends on:` line for agent [C]"), and the line number or block identifier where the error occurred. This gives Scout precise targets for correction without requiring it to re-read the whole doc.
 
@@ -385,6 +355,83 @@ to human. Do not enter REVIEWED.
 **On validation pass:** Proceed to REVIEWED normally.
 
 **Relationship to structured outputs:** For API-backend runs using structured output enforcement, the validator always passes on first attempt (the output was already schema-validated). E16's correction loop is effectively a no-op in that path but must still be present in the protocol for CLI-backend and hand-edited docs.
+
+### E16A: Required Block Presence
+
+**Trigger:** Document contains at least one typed block (`block_count > 0`)
+
+**Required blocks:** Every IMPL doc that uses typed blocks must contain all three of the following:
+- `impl-file-ownership`
+- `impl-dep-graph`
+- `impl-wave-structure`
+
+**Error format:** One error per missing block:
+```
+missing required block: impl-dep-graph
+missing required block: impl-file-ownership
+missing required block: impl-wave-structure
+```
+(only the missing ones are emitted)
+
+**Exception:** If the document contains no typed blocks at all (`block_count == 0`), E16A does not fire. The existing "no typed blocks found" warning already handles this case. E16A is forward-looking: it enforces completeness on docs that have adopted the typed-block format, without breaking backward compatibility with pre-typed-block docs.
+
+### E16B: Dep Graph Grammar
+
+**Trigger:** An `impl-dep-graph` typed block exists in the document
+
+**Required Action:** Validate the block against the canonical dep graph grammar:
+
+**Canonical dep graph grammar:**
+
+A valid `impl-dep-graph` block is a sequence of Wave sections, each containing agent entries with explicit root or dependency declarations. Formally:
+
+1. **Wave header:** At least one line matching `^Wave [0-9]+` (e.g., `Wave 1 (parallel):`, `Wave 2:`). The header may include a parenthetical descriptor after the number.
+
+2. **Agent entry:** At least one line matching `\[[A-Z]\]` (bracket-enclosed uppercase letter, with leading whitespace). The canonical form is:
+   ```
+       [A] path/to/file
+   ```
+   where leading whitespace (4 spaces or 1 tab) precedes the agent letter.
+
+3. **Root or dependency declaration:** Each agent entry must be followed, before the next agent entry, by a line containing either:
+   - `✓ root` — agent has no dependencies on other agents in this plan
+   - `depends on:` — followed by agent letters (e.g., `depends on: [A] [B]`)
+
+   An agent entry that has neither is an error:
+   ```
+   impl-dep-graph block (line N): agent [X] has neither '✓ root' nor 'depends on:' — one is required
+   ```
+
+**Example of a valid dep graph block:**
+```yaml type=impl-dep-graph
+Wave 1 (2 parallel agents — foundation):
+    [A] pkg/foo/validator.go
+        ✓ root
+    [B] pkg/bar/handler.go
+        ✓ root
+
+Wave 2 (1 agent — consumer):
+    [C] pkg/baz/service.go
+        depends on: [A] [B]
+```
+
+### E16C: Out-of-Band Dep Graph Detection (Warn Only)
+
+**Trigger:** Document contains a plain fenced block (no `type=impl-` annotation) that appears to contain dep graph content.
+
+**Detection criteria:** A plain fenced block whose content contains both:
+- At least one line matching the agent pattern `\[[A-Z]\]`
+- At least one line containing the word `Wave` (case-sensitive)
+
+**Action:** Emit a warning (not a failure). The document is not rejected. The warning is surfaced to Scout in the correction prompt alongside any errors:
+```
+WARNING: possible dep-graph content found outside typed block at line N — use `yaml type=impl-dep-graph`
+```
+where `N` is the 1-based line number of the opening fence of the suspect block.
+
+**Rationale:** Scouts sometimes write dep graph content in plain fenced blocks (e.g., copied from an old template) rather than the required `impl-dep-graph` typed block. E16C catches this pattern early, before E16A would fail on a "missing required block: impl-dep-graph" error, giving Scout a more actionable diagnostic.
+
+**Warning does not cause E16A to fire:** If E16C fires (a plain block looks like a dep graph), the `impl-dep-graph` typed block is still considered missing for E16A purposes. Both E16A and E16C will appear in the correction prompt.
 
 ---
 
