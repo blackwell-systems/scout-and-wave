@@ -403,6 +403,8 @@ the rationale in comments or a separate markdown section if needed.
 
 ## Output Format
 
+<!-- Source of truth: github.com/blackwell-systems/scout-and-wave-go/pkg/protocol/types.go -->
+
 Write a YAML manifest to `docs/IMPL/IMPL-<feature-slug>.yaml`. The manifest follows
 the `IMPLManifest` schema from `github.com/blackwell-systems/scout-and-wave-go/pkg/protocol`.
 
@@ -486,7 +488,6 @@ interface_contracts:
         DoThing(ctx context.Context) error
       }
     location: "pkg/foo/types.go"  # Where this interface is defined
-    language: "go"  # Optional metadata
 
 # Scaffolds (shared types created before Wave 1)
 scaffolds:
