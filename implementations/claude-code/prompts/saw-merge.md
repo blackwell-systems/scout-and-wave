@@ -1,4 +1,4 @@
-<!-- saw-merge v0.5.0 -->
+<!-- saw-merge v0.6.0 -->
 # SAW Merge Procedure
 
 Merge agent worktrees back into the main branch after a wave completes.
@@ -33,24 +33,18 @@ Before attempting any merges, verify each agent produced commits to its
 worktree branch. This catches all isolation failures — regardless of whether
 the Task tool, Field 0, or prompt instructions failed.
 
-Record the base commit (HEAD before merge begins):
+Run the CLI verification command:
 
 ```bash
-base_commit=$(git rev-parse HEAD)
+saw verify-commits "<manifest-path>" --wave <N> --repo-dir "<repo-path>"
 ```
 
-For each agent with `status: complete`:
+The command checks that each agent with `status: complete` has at least one
+commit on its worktree branch. Exit code 0 means all agents committed
+properly. Exit code 1 means an isolation failure was detected.
 
-```bash
-branch="wave{N}-agent-{ID}"
-commit_count=$(git rev-list ${base_commit}..${branch} --count)
-```
-
-If `commit_count` is 0 for ANY agent: **STOP immediately.** This is a protocol
-violation — the agent did not commit to its worktree branch. Do not proceed to
-the next agent. Do not commit uncommitted changes found on main.
-
-Present the isolation failure and recovery options to the user:
+If verification fails, the CLI outputs the offending agent ID(s) and presents
+the isolation failure message with recovery options:
 
 ```
 ISOLATION FAILURE: Agent {ID} branch wave{N}-agent-{ID} has 0 commits.
@@ -77,31 +71,30 @@ Path 1 costs compute time. Path 3 costs trust in the result.
 Before merging, verify each agent only touched files in its ownership table.
 This catches ownership violations whether agents committed to branches or main.
 
-For each agent, compare its actual changed files against the IMPL doc's File
-Ownership table:
+Use `saw check-conflicts` to verify file ownership:
 
 ```bash
-# If agent committed to a branch:
-branch="wave{N}-agent-{ID}"
-actual_files=$(git diff --name-only ${base_commit}..${branch})
-
-# If agents committed directly to main (isolation failure):
-# Use the completion report's files_changed + files_created lists instead.
+saw check-conflicts "<manifest-path>"
 ```
 
-For each file in `actual_files`, check it appears in the agent's ownership row.
-Flag any file that either:
-- Belongs to a different agent in the same wave (I1 violation)
-- Is not in the ownership table at all (undeclared modification)
+The command cross-references each agent's actual changed files (from git or
+completion reports) against the IMPL doc's File Ownership table. It flags
+files that either:
+- Belong to a different agent in the same wave (I1 violation)
+- Are not in the ownership table at all (undeclared modification)
 
-**Exceptions:** The IMPL doc itself (`docs/IMPL/IMPL-*.yaml` or `IMPL-*.md`) is expected to be
-modified by all agents (completion reports). Ignore it in this check.
+**Exception:** The IMPL doc itself (`docs/IMPL/IMPL-*.yaml` or `IMPL-*.md`) is
+expected to be modified by all agents (completion reports) and is ignored in
+this check.
 
-If violations are found, **stop and report before merging.** Show which agent
-touched which unexpected file. The orchestrator decides whether to accept
-(if the change is harmless, e.g. a go.sum update) or re-run the agent.
+Exit code 0 means no violations. Exit code 1 means conflicts were found — the
+CLI outputs which agent touched which unexpected file.
 
-If no violations, proceed to Step 2.
+If violations are found, **stop and report before merging.** The orchestrator
+decides whether to accept (if the change is harmless, e.g. a go.sum update)
+or re-run the agent.
+
+If no violations, proceed to Step 1.9.
 
 ## Step 1.9: E20 Stub Detection
 
@@ -109,7 +102,7 @@ After parsing all completion reports and verifying file ownership, collect the u
 
 Run the stub scanner:
 ```bash
-bash "${CLAUDE_SKILL_DIR}/scripts/scan-stubs.sh" {file1} {file2} ...
+saw scan-stubs {file1} {file2} ...
 ```
 
 The scanner exits with code 0 always (informational only). If stubs are detected, append the output to the IMPL doc under `## Stub Report — Wave {N}` (after the last agent completion report). Surface stubs at the review checkpoint before merge — the human decides whether to accept or request fixes.
@@ -210,37 +203,33 @@ which propagates to the next wave without halting the current one.
 
 ## Step 4: Merge Each Agent
 
-For each agent with `status: complete`, in any order (order is safe when file
-ownership is disjoint):
+For each agent with `status: complete`, merge their worktree branch into main:
 
 ```bash
-worktree=".claude/worktrees/wave{N}-agent-{ID}"
-branch="wave{N}-agent-{ID}"
-commit="{sha from completion report}"
-
-if [ "$commit" != "uncommitted" ]; then
-  # Agent committed - use git merge
-  git merge --no-ff "$branch" -m "Merge wave{N}-agent-{ID}: {short description}"
-else
-  # Agent left uncommitted changes - copy files manually
-  for file in {files_changed} {files_created}; do
-    cp "$worktree/$file" "./$file"
-    git add "./$file"
-  done
-  SAW_ALLOW_MAIN_COMMIT=1 git commit -m "Apply agent {ID} changes from worktree"
-fi
+saw merge-agents "<manifest-path>" --wave <N> --repo-dir "<repo-path>"
 ```
+
+The CLI iterates over all agents with `status: complete` and merges them in
+any order (order is safe when file ownership is disjoint). For each agent:
+
+- If the agent committed to their branch: runs `git merge --no-ff` with a
+  descriptive message
+- If the agent left uncommitted changes (`commit: "uncommitted"`): copies
+  files manually from the worktree and commits with `SAW_ALLOW_MAIN_COMMIT=1`
+
+The SAW_ALLOW_MAIN_COMMIT fallback is documented here for protocol
+understanding — the CLI handles it automatically.
 
 ## Step 5: Worktree Cleanup
 
-After merging each agent:
+After merging all agents, clean up worktrees and branches:
 
 ```bash
-git worktree remove "$worktree" 2>/dev/null || rm -rf "$worktree"
-git branch -d "$branch" 2>/dev/null || true
+saw cleanup "<manifest-path>" --wave <N> --repo-dir "<repo-path>"
 ```
 
-Clean up even if agents failed; stale worktrees interfere with future waves.
+The CLI removes each agent's worktree and deletes its branch. Cleanup runs
+even if agents failed; stale worktrees interfere with future waves.
 
 ## Step 6: Post-Merge Verification
 
@@ -288,35 +277,34 @@ This is the correct place for auto-fix: one centralized pass on the merged
 result is cleaner and more reliable than requiring every agent to know and run
 the exact auto-fix command in their individual verification gates.
 
-**Run tests unscoped using `test_command` from the IMPL doc.** Agents naturally
-scope their own verification to the packages they own. The orchestrator's
-post-merge gate must run without package scoping so cross-package cascade
-failures are caught. Use the `test_command` field from the IMPL doc's
-Suitability Assessment — the Scout derived it from the project's build system:
+**Run tests and build:**
 
 ```bash
-# Correct - catches cross-crate failures:
-cargo test
-
-# Insufficient - only catches failures within that crate:
-cargo test -p commitmux-store
+saw verify-build "<manifest-path>" --repo-dir "<repo-path>"
 ```
 
-A common failure mode: an agent adds a field to a shared type, scoped tests
-pass in the agent's worktree, but unscoped tests fail because a test in a
+The CLI runs the `test_command` from the IMPL doc without package scoping,
+catching cross-package cascade failures. Agents naturally scope their own
+verification to the packages they own; the orchestrator's post-merge gate
+must run unscoped. Example: an agent adds a field to a shared type, scoped
+tests pass in the worktree, but unscoped tests fail because a test in a
 different crate constructs the type without the new field.
 
 Pay particular attention to cascade candidates listed in the IMPL doc: files
 outside agent scope that reference changed interfaces.
 
-**Scaffold files:** If the Scaffold Agent produced type scaffold files for this wave,
-verify they are present and unchanged in the merged result. **YAML mode:** Run
-`saw validate-scaffolds "<manifest-path>"` — exit 0 confirms all scaffolds intact;
-exit 1 means a scaffold file is missing or was modified. **Markdown mode:** Manually
-check that scaffold files listed in the Scaffolds section are present and unchanged.
-Scaffold files are committed to HEAD before worktrees branch; agents implement
-against them but do not own them. If a scaffold file is missing or was modified
-by an agent, this is a protocol deviation — investigate before proceeding.
+**Scaffold files:**
+
+```bash
+saw validate-scaffolds "<manifest-path>"
+```
+
+The CLI verifies that all scaffold files listed in the IMPL doc are present
+and unchanged in the merged result. Exit 0 confirms all scaffolds intact; exit
+1 means a scaffold file is missing or was modified. Scaffold files are
+committed to HEAD before worktrees branch; agents implement against them but
+do not own them. If a scaffold file is missing or was modified by an agent,
+this is a protocol deviation — investigate before proceeding.
 
 If verification fails, fix before proceeding. Do not launch the next wave
 with a broken build.

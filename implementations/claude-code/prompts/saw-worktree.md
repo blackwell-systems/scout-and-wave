@@ -1,4 +1,4 @@
-<!-- saw-worktree v0.5.1 -->
+<!-- saw-worktree v0.6.0 -->
 # SAW Worktree Lifecycle
 
 Manage git worktree creation, verification, and cleanup for wave agents.
@@ -25,57 +25,37 @@ Agents use Field 0 (`cd /absolute/path/to/repo/.claude/worktrees/...`) to
 navigate to their repo+worktree. The Orchestrator is responsible for ensuring
 each repo's worktrees exist before launching agents.
 
-**Preflight across all repos:**
+**CLI cross-repo support:**
+
+All CLI commands accept a `--repo-dir` parameter for cross-repo scenarios.
+Run `saw create-worktrees` once per repository:
 
 ```bash
-# Run in each repo
-for repo in ~/code/saw-engine ~/code/saw-web; do
-  echo "=== $repo ==="
-  git -C "$repo" status --porcelain
-done
+saw create-worktrees "<manifest-path>" --wave <N> --repo-dir "~/code/saw-engine"
+saw create-worktrees "<manifest-path>" --wave <N> --repo-dir "~/code/saw-web"
 ```
 
-All repos must be clean before proceeding.
-
-**Worktree creation across all repos:**
-
-```bash
-# Create worktrees in each repo for the agents that own files there
-# saw-engine: Agent A
-mkdir -p ~/code/saw-engine/.claude/worktrees
-git -C ~/code/saw-engine worktree add \
-  ".claude/worktrees/wave1-agent-A" -b "wave1-agent-A"
-
-# saw-web: Agent B
-mkdir -p ~/code/saw-web/.claude/worktrees
-git -C ~/code/saw-web worktree add \
-  ".claude/worktrees/wave1-agent-B" -b "wave1-agent-B"
-```
-
-If an agent owns files in multiple repos, create a worktree for that agent
-in each repo it touches.
-
-**Hook installation across all repos:**
-
-Install the pre-commit guard in each repo's `.git/hooks/` independently.
-Each repo enforces its own isolation boundary.
+The CLI handles preflight checks, worktree creation, and hook installation
+for each repo independently.
 
 **Merge step:**
 
-Run the merge procedure separately in each repo. The Orchestrator merges
-each repo's agent branches into that repo's main branch. There is no
-cross-repo merge operation — each repo is an independent merge unit.
-
-**Cleanup across all repos:**
+Run the merge procedure separately in each repo:
 
 ```bash
-for repo in ~/code/saw-engine ~/code/saw-web; do
-  for agent in A B; do
-    git -C "$repo" worktree remove \
-      ".claude/worktrees/wave1-agent-${agent}" --force 2>/dev/null || true
-    git -C "$repo" branch -d "wave1-agent-${agent}" 2>/dev/null || true
-  done
-done
+saw merge-agents "<manifest-path>" --wave <N> --repo-dir "~/code/saw-engine"
+saw merge-agents "<manifest-path>" --wave <N> --repo-dir "~/code/saw-web"
+```
+
+The Orchestrator merges each repo's agent branches into that repo's main
+branch. There is no cross-repo merge operation — each repo is an independent
+merge unit.
+
+**Cleanup:**
+
+```bash
+saw cleanup "<manifest-path>" --wave <N> --repo-dir "~/code/saw-engine"
+saw cleanup "<manifest-path>" --wave <N> --repo-dir "~/code/saw-web"
 ```
 
 **Key constraint:** An agent that owns files in multiple repos must be given
@@ -91,6 +71,12 @@ stay clean.
 
 **Run this before anything else** — before ownership verification, before
 creating worktrees.
+
+The `saw create-worktrees` command performs this check automatically, ensuring
+the working tree is clean before creating any worktrees. If the tree is dirty,
+the CLI will exit with an error and guidance.
+
+Manual preflight check (if not using CLI):
 
 ```bash
 git status --porcelain
@@ -190,36 +176,40 @@ Stale worktrees from a previous session will cause agents to implement
 against outdated interfaces, producing merge-time conflicts that are expensive
 to untangle.
 
-## Pre-Create Worktrees
+## Create Worktrees
 
 Re-running `/saw wave` at this point is safe; WAVE_PENDING is re-entrant.
-Before creating worktrees, check whether they already exist from a previous
-run:
+
+Before launching any agents in a multi-agent wave, create worktrees:
 
 ```bash
-git worktree list
+saw create-worktrees "<manifest-path>" --wave <N> --repo-dir "<repo-path>"
 ```
 
-If the expected worktrees are already present and their HEAD matches the
-current HEAD of main, skip creation and proceed to launch. Do not duplicate
-worktrees.
+The CLI creates a worktree for each agent in the wave, handling:
+- Directory creation (`.claude/worktrees/`)
+- Worktree branching from current HEAD
+- Pre-commit hook installation (see below)
+- Verification that worktrees exist and match current HEAD
 
-Before launching any agents in a multi-agent wave, create a worktree for each
-agent manually. This is the primary isolation mechanism.
+If worktrees already exist from a previous run and their HEAD matches the
+current HEAD of main, the command is idempotent — it skips creation and
+proceeds to verification. Do not duplicate worktrees.
 
-```bash
-mkdir -p .claude/worktrees
+### Fail-Fast Hook Installation
 
-for agent in A B C; do
-  git worktree add ".claude/worktrees/wave{N}-agent-${agent}" -b "wave{N}-agent-${agent}"
-done
-```
+The `saw create-worktrees` command automatically installs a git pre-commit
+hook that blocks agent commits to main. This is Layer 0: infrastructure
+enforcement that prevents isolation violations before they occur.
 
-### Install Fail-Fast Hook
+The hook (`hooks/pre-commit-guard.sh` in the SAW repository) checks: if
+branch is `main` AND SAW worktrees exist AND `SAW_ALLOW_MAIN_COMMIT` is
+not set, block the commit with an instructive error listing available
+worktrees. The Orchestrator sets `SAW_ALLOW_MAIN_COMMIT=1` before its own
+legitimate commits to main (scaffold commits, post-merge commits, lint fix
+commits).
 
-After creating worktrees, install a git pre-commit hook that blocks agent
-commits to main. This is Layer 0: infrastructure enforcement that prevents
-isolation violations before they occur.
+Manual hook installation (if not using CLI):
 
 ```bash
 # Back up existing pre-commit hook if present
@@ -232,23 +222,17 @@ cp "${CLAUDE_SKILL_DIR}/hooks/pre-commit-guard.sh" .git/hooks/pre-commit
 chmod +x .git/hooks/pre-commit
 ```
 
-The hook (`hooks/pre-commit-guard.sh` in the SAW repository) checks: if
-branch is `main` AND SAW worktrees exist AND `SAW_ALLOW_MAIN_COMMIT` is
-not set, block the commit with an instructive error listing available
-worktrees. The Orchestrator sets `SAW_ALLOW_MAIN_COMMIT=1` before its own
-legitimate commits to main (scaffold commits, post-merge commits, lint fix
-commits).
+### Why Pre-Creation Alongside isolation: "worktree"
 
-### Why Manual Pre-Creation Alongside isolation: "worktree"
+Always pre-create worktrees (via CLI or manually) even when using
+`isolation: "worktree"` on the Agent tool. The two mechanisms are
+complementary, not redundant:
 
-Always pre-create worktrees manually even when using `isolation: "worktree"`
-on the Agent tool. The two mechanisms are complementary, not redundant:
-
-1. Manual creation provides a fallback when the Task tool's isolation fails
+1. Pre-creation provides a fallback when the Task tool's isolation fails
    silently — agents can still navigate to the pre-created worktree via Field 0
 2. Enables Field 0 agent self-verification (the worktree must exist for the
    agent to cd into it and verify)
-3. Costs one bash loop (negligible overhead)
+3. Negligible overhead
 4. Harmless if the Task tool also creates worktrees — git will not duplicate
    a worktree that already exists at the expected path
 
@@ -258,7 +242,10 @@ catches all isolation failures before any incorrect merge occurs.
 
 ## Verify Creation
 
-After creating worktrees, verify they exist:
+The `saw create-worktrees` command verifies creation automatically, checking
+that each expected worktree exists and is on the correct branch.
+
+Manual verification (if not using CLI):
 
 ```bash
 git worktree list
@@ -331,19 +318,25 @@ wire (Step 1.5) catches all failures before any merge occurs (Layer 4).
 After merging a wave, remove all worktrees and branches:
 
 ```bash
+saw cleanup "<manifest-path>" --wave <N> --repo-dir "<repo-path>"
+```
+
+The CLI removes each agent's worktree, deletes its branch, and restores the
+original pre-commit hook (if one existed before SAW installation).
+
+Clean up even if agents failed; stale worktrees and branches will interfere
+with future waves.
+
+Manual cleanup (if not using CLI):
+
+```bash
 for agent in A B C; do
   git worktree remove ".claude/worktrees/wave{N}-agent-${agent}" 2>/dev/null || \
     rm -rf ".claude/worktrees/wave{N}-agent-${agent}"
   git branch -d "wave{N}-agent-${agent}" 2>/dev/null || true
 done
-```
 
-Clean up even if agents failed; stale worktrees and branches will interfere
-with future waves.
-
-After removing worktrees, restore the original pre-commit hook:
-
-```bash
+# Restore original pre-commit hook
 if [ -f .git/hooks/pre-commit.saw-backup ]; then
   mv .git/hooks/pre-commit.saw-backup .git/hooks/pre-commit
 else
