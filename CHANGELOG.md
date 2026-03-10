@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.16.0] | 2026-03-09 | Worktree isolation design doc + saw-worktree v0.6.1 — documents why native agent-definition isolation: worktree doesn't replace SAW orchestration |
 | [0.15.1] | 2026-03-09 | Scout YAML migration — all Scout prompts now generate YAML manifests (.yaml) instead of markdown IMPL docs |
 | [0.15.0] | 2026-03-09 | Protocol SDK conformance — 44-gap audit, 3-wave remediation (12 agents), skill prompts v0.6.0 with CLI command integration |
 | [0.14.9] | 2026-03-09 | Agent Observatory — real-time tool call stream per wave agent |
@@ -71,6 +72,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.1.0] | 2026-02-27 | Initial release |
 
 ---
+
+## [0.16.0] - 2026-03-09
+
+### Added
+
+- **`docs/saw-ops/worktree-isolation-design.md`** — design rationale document explaining why SAW uses explicit `saw create-worktrees` orchestration rather than Claude Code's native `isolation: worktree` agent frontmatter. Covers four reasons: branch naming is load-bearing, pre-validation before parallel work, I1 enforcement at creation time, and protocol chain integrity.
+- **`saw-worktree v0.6.1`** — adds one-liner reference to `worktree-isolation-design.md` in the "Why Pre-Creation" section, pointing operators to the full rationale without cluttering the agent prompt.
 
 ## [0.15.1] - 2026-03-09
 
