@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.18.0] | 2026-03-10 | fix: validate-impl.sh delegates to `sawtools validate` — unblocks E16 YAML manifest validation |
+| [0.17.0] | 2026-03-10 | sawtools rename in skill files — saw-skill v0.7.1, saw-merge v0.6.1, saw-worktree v0.6.2 |
 | [0.16.0] | 2026-03-09 | Worktree isolation design doc + saw-worktree v0.6.1 — documents why native agent-definition isolation: worktree doesn't replace SAW orchestration |
 | [0.15.1] | 2026-03-09 | Scout YAML migration — all Scout prompts now generate YAML manifests (.yaml) instead of markdown IMPL docs |
 | [0.15.0] | 2026-03-09 | Protocol SDK conformance — 44-gap audit, 3-wave remediation (12 agents), skill prompts v0.6.0 with CLI command integration |
