@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.23.0] | 2026-03-10 | Wave 1 merged (sdk branch): protocol schema typed blocks + Scout prompt YAML output; parser wave structure extraction |
 | [0.22.0] | 2026-03-10 | saw-skill v0.7.3, saw-worktree v0.6.3, saw-merge v0.6.2 — strip markdown dual-mode language; IMPL docs are YAML-only |
 | [0.21.0] | 2026-03-10 | saw-skill v0.7.2 — short IMPL-referencing prompts: wave agents receive ~60-token stub instead of copy-pasted brief; 10–15× faster parallel wave launch |
 | [0.20.0] | 2026-03-10 | E16A/B/C enforcement — E16C bash validator bug fixed, execution-rules.md sub-rules documented, saw-skill.md E16A note added |
@@ -76,6 +77,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.3.0] | 2026-02-28 | Bootstrap mode for new projects; Wave 0 pattern |
 | [0.2.0] | 2026-02-28 | Decomposed skill prompt; complexity-based suitability heuristic |
 | [0.1.0] | 2026-02-27 | Initial release |
+
+---
+
+## [0.23.0] - 2026-03-10
+
+### Added
+
+- **Typed-block schemas for structured sections** (`protocol/message-formats.md`) — Added YAML schemas for `impl-quality-gates`, `impl-post-merge-checklist`, and `impl-known-issues` typed blocks. Replaced prose descriptions with machine-parseable structure while maintaining human readability in IMPL docs.
+- **Scout YAML output** (`implementations/claude-code/prompts/agents/scout.md`) — Updated Scout prompt to output Quality Gates, Post-Merge Checklist, and Known Issues as typed YAML blocks with exact fence syntax matching protocol schemas.
+
+### Changed
+
+- **IMPL doc structure documentation** (`protocol/message-formats.md`) — Updated to reflect hybrid markdown/YAML format with typed blocks for machine-readable sections and markdown for human-readable agent prompts.
+
+---
+
+## [0.22.0] - 2026-03-10
+
+### Changed
+
+- **Markdown dual-mode language removed** (saw-skill v0.7.3, saw-worktree v0.6.3, saw-merge v0.6.2) — Stripped references to "YAML or markdown" format. IMPL docs now documented as hybrid markdown/YAML with typed blocks.
 
 ---
 
