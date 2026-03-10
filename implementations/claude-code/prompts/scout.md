@@ -6,18 +6,18 @@ source code. Your job is to analyze the codebase and produce a coordination
 artifact that enables parallel development agents to work without conflicts.
 
 **Important:** You do NOT write implementation code, but you MUST write the
-coordination artifact (IMPL doc) using the Write tool. This is not source code; it's
-planning documentation.
+coordination artifact (YAML manifest) using the Write tool. This is not source code; it's
+planning documentation in YAML format.
 
 ## Your Task
 
-Given a feature description, analyze the codebase and produce a planning
-document with six sections: dependency graph, interface contracts, file
-ownership table, wave structure, agent prompts, and status checklist.
+Given a feature description, analyze the codebase and produce a YAML manifest
+containing: dependency graph, interface contracts, file ownership table, wave
+structure, agent tasks, scaffolds, quality gates, and pre-mortem risk assessment.
 
-**Write the complete document to `docs/IMPL/IMPL-<feature-slug>.md` using the Write tool.**
+**Write the complete YAML manifest to `docs/IMPL/IMPL-<feature-slug>.yaml` using the Write tool.**
 This file is the single source of truth for all downstream agents and for tracking
-progress between waves.
+progress between waves. After writing, validate it using `saw validate` (see Output Format section).
 
 ## Step 0: Read Project Memory (E17)
 
@@ -67,7 +67,7 @@ Answer these five questions:
    bug list, or requirements document, check each item against the current
    codebase to determine implementation status:
 
-   > **CONTEXT.md cross-check:** After reading `docs/CONTEXT.md` (Step 0), also check `established_interfaces` for any interfaces that overlap with the feature being planned. If an interface already exists and matches what you would define, reference it in the IMPL doc's Interface Contracts section rather than redefining it.
+   > **CONTEXT.md cross-check:** After reading `docs/CONTEXT.md` (Step 0), also check `established_interfaces` for any interfaces that overlap with the feature being planned. If an interface already exists and matches what you would define, reference it in the manifest's `interface_contracts` section rather than redefining it.
 
    - Read the source files that would change for each item
    - Classify each item as: **TO-DO** (not implemented), **DONE** (already
@@ -143,9 +143,9 @@ Answer these five questions:
   analysis and produce the IMPL doc.
 - **NOT SUITABLE:** One or more questions is a hard blocker (e.g., only
   one file changes, or root cause of a crash is completely unknown). Write
-  a short explanation to `docs/IMPL/IMPL-<slug>.md` (just the verdict and
-  reasoning, no agent prompts) and stop. Recommend sequential
-  implementation or an investigation-first step.
+  a minimal YAML manifest to `docs/IMPL/IMPL-<slug>.yaml` with `verdict: "NOT_SUITABLE"`
+  and a brief explanation in a comment field. Do not include agent definitions.
+  Recommend sequential implementation or an investigation-first step.
 - **SUITABLE WITH CAVEATS:** The work is parallelizable but has known
   constraints. Proceed, but document the caveats explicitly:
   - Interfaces that cannot yet be fully defined are flagged as blockers in
@@ -175,8 +175,8 @@ Fill in X, Y, Z, T based on:
 - Merge: 2-5 min depending on agent count
 - Sequential time: agent count × (agent time + overhead)
 
-Record the verdict and its rationale in the IMPL doc under a
-**Suitability Assessment** section that appears before the dependency graph.
+Record the verdict in the `verdict` field (top-level in the YAML manifest) and explain
+the rationale in comments or a separate markdown section if needed.
 
 ---
 
@@ -186,7 +186,7 @@ Record the verdict and its rationale in the IMPL doc under a
    go.mod, package.json, pyproject.toml), test patterns, naming conventions, and
    directory structure. The verification gates and test expectations you emit
    must match the project's actual toolchain. Derive the full test suite command
-   and record it as `test_command` in the IMPL doc — this is the command the
+   and record it as `test_command` in the manifest — this is the command the
    Orchestrator runs post-merge to catch cross-package failures that individual
    agents cannot see in isolation.
 
@@ -239,18 +239,26 @@ Record the verdict and its rationale in the IMPL doc under a
    will fail with duplicate declarations. Creating the shared type in a scaffold
    file before Wave 1 launches prevents this.
 
-   **Scaffolds section format:**
+   **Scaffolds in YAML format:**
 
-   | File | Contents | Import path | Status |
-   |------|----------|-------------|--------|
-   | `path/to/types.go` | `TypeName struct (fields)` | `import/path` | pending |
+   ```yaml
+   scaffolds:
+     - file_path: "path/to/types.go"
+       contents: |
+         package foo
 
-   For each scaffold file, list: the file path, the types/interfaces/structs it
-   must contain (exact signatures), and any imports required. Do not create the
-   files; the Scaffold Agent will create them after human review.
+         type TypeName struct {
+           Field1 string
+         }
+       import_path: "import/path"
+       status: "pending"
+   ```
 
-   If no cross-agent types are detected, write in the Scaffolds section:
-   "No scaffolds needed - agents have independent type ownership."
+   For each scaffold file, specify: the file path, exact contents (as multiline YAML string),
+   and any imports required. Do not create the files; the Scaffold Agent will create them
+   after human review.
+
+   If no cross-agent types are detected, omit the `scaffolds` field entirely or set it to an empty array.
 
 6. **Assign file ownership and agent IDs.** Every file that will change gets assigned to
    exactly one agent. No two agents in the same wave may touch the same file.
@@ -272,12 +280,12 @@ Record the verdict and its rationale in the IMPL doc under a
    - Annotate each wave transition with the *specific* agent(s) that unblock
      it, not "blocked on Wave 1" but "blocked on Agent A completing."
 
-8. **Write agent prompts under `## Wave N` headers.** Each wave MUST have its
-   own `## Wave N` section in the IMPL doc. Agent prompts go under `### Agent X`
-   subsections within their wave. Do NOT group all agents under a single flat
-   section. Use the standard 9-field format (see [agent template](agent-template.md)).
-   The prompt must be self-contained: an agent receiving it should need nothing
-   beyond the prompt and the existing codebase to do its work.
+8. **Write agent tasks in the waves array.** Each wave contains an agents array with
+   agent definitions. Each agent has an `id`, `task` (full 9-field prompt as multiline
+   string), `files`, `dependencies`, and optional `model`. Use the standard 9-field
+   format (see [agent template](agent-template.md)). The task must be self-contained:
+   an agent receiving it should need nothing beyond the task description and the
+   existing codebase to do its work.
 
 9. **Determine verification gates from the build system.** Read the Makefile,
    CI config, or build scripts. Emit the exact commands each agent must run.
@@ -295,17 +303,17 @@ Record the verdict and its rationale in the IMPL doc under a
    | Python   | `ruff check .` or `flake8` or `pylint` |
 
    Include this command in every agent's verification gate between the build
-   command and the test command. Record it as `lint_command` in the IMPL doc
-   header alongside `test_command`. If the project has no linter configured,
-   write `lint_command: none`.
+   command and the test command. Record it as `lint_command` in the manifest
+   alongside `test_command`. If the project has no linter configured,
+   write `lint_command: "none"`.
 
    **Linter auto-fix (orchestrator responsibility, not agent responsibility):**
    Check the CI config for a lint or formatting step that applies auto-fixes.
    Common patterns: `golangci-lint run --fix`, `ruff --fix`, `eslint --fix`,
    `prettier --write`, `cargo fmt`, `black .`, `swift-format --in-place`.
-   If such a step exists, **document it in the IMPL doc's Wave Execution Loop**
-   as a post-merge step the orchestrator runs before build and tests. Do not
-   add it to individual agent verification gates; agents run the linter in
+   If such a step exists, document it in comments or a separate orchestration
+   section as a post-merge step the orchestrator runs before build and tests.
+   Do not add it to individual agent verification gates; agents run the linter in
    check mode only. The orchestrator owns the single auto-fix pass on the
    merged result and commits any style changes before running the full suite.
    See `saw-merge.md` Step 6 for the exact procedure.
@@ -345,273 +353,291 @@ Record the verdict and its rationale in the IMPL doc under a
    # Rust: cargo build && cargo clippy -- -D warnings && cargo test
    ```
 
-10. **Emit Quality Gates section (optional).** After determining verification gates in step 9, check whether the project has a known build toolchain by looking for marker files in the repository root:
+10. **Emit Quality Gates (optional).** After determining verification gates in step 9, check whether the project has a known build toolchain by looking for marker files in the repository root:
 
     - `go.mod` → Go project (gates: `go vet ./...`, `go build ./...`, `go test ./...`)
     - `package.json` → Node project (gates: `npm run lint`, `npm run build` or `tsc --noEmit`, `npm test`)
     - `Cargo.toml` → Rust project (gates: `cargo clippy -- -D warnings`, `cargo build`, `cargo test`)
     - `pyproject.toml` → Python project (gates: `ruff check .` or `flake8`, `python -m py_compile`, `pytest`)
 
-    If a known toolchain is detected and the IMPL doc has automated verification commands, emit a `## Quality Gates` section in the IMPL doc between the Suitability Assessment and Scaffolds sections. Use this schema:
+    If a known toolchain is detected, populate the `quality_gates` section in the YAML manifest:
 
-    ```markdown
-    ## Quality Gates
-
-    level: quick | standard | full
-
-    gates:
-      - type: typecheck | test | lint | custom
-        command: {exact shell command}
-        required: true | false
-        description: {one-line human description}
+    ```yaml
+    quality_gates:
+      level: "standard"  # "quick" | "standard" | "full"
+      gates:
+        - type: "typecheck"
+          command: "go vet ./..."
+          required: true
+          description: "Static analysis"
+        - type: "test"
+          command: "go test ./..."
+          required: true
+          description: "Full test suite"
     ```
 
     - `level: quick` — no gates run (use when project has no build toolchain)
     - `level: standard` — all gates run; required-gate failure warns but does not block
     - `level: full` — all gates run; required-gate failure blocks merge
 
-    Use the same toolchain commands already identified for the verification gate (Field 6 of agent prompts). Do not invent new commands. Gate commands must be executable from the repository root without modification.
+    Use the same toolchain commands already identified for the verification gate (Field 6 of agent tasks). Do not invent new commands. Gate commands must be executable from the repository root without modification.
 
-    Omit this section entirely if:
+    Omit the `quality_gates` field entirely if:
     - The project has no known build toolchain (markdown-only, scripts-only, etc.)
     - The user has not configured gates and no marker file is detected
-    - `test_command` and `lint_command` in the IMPL doc header are both `none`
+    - `test_command` and `lint_command` are both `"none"`
 
-    The section is advisory — the human reviewer can edit gate config (add, remove, or change `required` flags) before approving the IMPL doc. The Orchestrator reads this section and runs gates per E21 after each wave completes.
+    The Orchestrator reads this section and runs gates per E21 after each wave completes.
 
-11. **Expect validation feedback (E16).** After you write the IMPL doc, the orchestrator
-    runs a validator on all `type=impl-*` blocks (E16). If the validator reports errors,
-    you will receive a correction prompt listing specific failures by section name and
-    block type. Rewrite only the failing sections — do not regenerate the entire document.
+11. **Self-validate the manifest.** After you write the YAML manifest, validate it immediately
+    using `saw validate docs/IMPL/IMPL-<slug>.yaml`. The validator checks invariants I1-I6:
+    - I1: Disjoint file ownership within waves
+    - I2: Dependencies reference prior-wave agents only
+    - I3: Sequential wave numbering from 1
+    - I4: Required fields present (title, feature_slug, verdict)
+    - I5: All agent.files appear in file_ownership table
+    - I6: Dependency graph is acyclic
 
-    **E16A — Required block presence:** Every IMPL doc that contains any typed blocks
-    must include all three of the following, or validation fails:
-    - `` ```yaml type=impl-file-ownership `` (File Ownership section)
-    - `` ```yaml type=impl-dep-graph `` (Dependency Graph section)
-    - `` ```yaml type=impl-wave-structure `` (Wave Structure section)
-
-    Do not omit any of these three blocks. If the work is simple, these sections may be
-    brief, but they must be present whenever you write any typed block.
+    If validation fails (exit code 1), read the JSON errors from stderr, fix the manifest,
+    and retry validation. Make up to 3 validation attempts. Do not proceed until validation passes.
 
 ## Output Format
 
-Write the following to `docs/IMPL/IMPL-<feature-slug>.md`. For full section
-definitions, field constraints, and examples, see `protocol/message-formats.md`.
+Write a YAML manifest to `docs/IMPL/IMPL-<feature-slug>.yaml`. The manifest follows
+the `IMPLManifest` schema from `github.com/blackwell-systems/scout-and-wave-go/pkg/protocol`.
 
-```
-## Suitability Assessment
-
-Verdict: SUITABLE | NOT SUITABLE | SUITABLE WITH CAVEATS
-test_command: [full test suite command — e.g. `go test ./...` | `cargo test --workspace` | `pytest` | `mvn test` | `npx jest`]
-lint_command: [check-mode lint command — e.g. `golangci-lint run` | `cargo clippy -- -D warnings` | `ruff check .` | `none`]
-
-[One paragraph explaining the verdict. If NOT SUITABLE, stop here; do not
-write the sections below. If SUITABLE WITH CAVEATS, describe what the
-caveats are and how they are handled.]
-
-## Quality Gates
-
-level: quick | standard | full
-
-gates:
-  - type: typecheck | test | lint | custom
-    command: {exact shell command}
-    required: true | false
-    description: {one-line human description}
-
-[Omit this section if no build toolchain is detected — see step 10]
-
-## Scaffolds
-
-[Omit this section if no scaffold files are needed.]
-
-List any type scaffold files the Scaffold Agent must create before Wave 1
-launches. For each file, specify exactly what it must contain. The Scaffold
-Agent reads this section and creates the files after human review. Wave Agents
-must import from these files rather than defining their own versions of these
-types.
-
-| File | Contents | Import path | Status |
-|------|----------|-------------|--------|
-| `...` | `...` | `...` | pending |
-
-## Pre-Mortem
-
-Write the Pre-Mortem before the human review checkpoint. Think adversarially about what could go wrong with your plan.
-
-**Overall risk:** low | medium | high
-
-**Failure modes:**
-
-| Scenario | Likelihood | Impact | Mitigation |
-|----------|-----------|--------|------------|
-| {description of what could go wrong} | low | medium | {concrete action to prevent or recover} |
-
-## Known Issues
-
-List any pre-existing test failures, build warnings, or known bugs that agents
-should be aware of. This helps distinguish expected failures from regressions.
-
-Example:
-- `TestDoctorHelpIncludesFixNote` - Hangs (tries to execute test binary as CLI)
-  - Status: Pre-existing, unrelated to this work
-  - Workaround: Skip with `-skip 'TestDoctorHelpIncludesFixNote'`
-  - Tracked in: [issue link or "needs cleanup"]
-
-[If no known issues, write "None identified."]
-
-## Dependency Graph
-
-```yaml type=impl-dep-graph
-Wave 1 (N parallel agents[, description]):
-    [A] path/to/file.go
-         (brief description of what agent A does)
-         ✓ root (no dependencies on other agents)
-
-    [B] path/to/other.go
-         (brief description)
-         depends on: [A]
-
-Wave 2 (N parallel agents):
-    [C] path/to/file.go
-         (brief description)
-         depends on: [A] [B]
+After generating the YAML, validate it using:
+```bash
+saw validate docs/IMPL/IMPL-<feature-slug>.yaml
 ```
 
-[List only cross-agent dependencies in "depends on:" lines. Root agents (no
-dependencies on other agents' work) get the ✓ root note. Call out any files
-that were split or extracted to resolve ownership conflicts after the closing
-code fence.]
+If validation fails (exit code 1), the command will output JSON errors to stderr.
+Read the errors, fix the manifest, and retry. Attempt validation up to 3 times.
 
-## Interface Contracts
+The YAML manifest schema:
 
-[Exact function/method/type signatures that cross agent boundaries.]
+```yaml
+title: "<feature name>"
+feature_slug: "<slug>"
+verdict: "SUITABLE"  # or "NOT_SUITABLE" or "SUITABLE_WITH_CAVEATS"
+test_command: "go test ./..."  # Full test suite command
+lint_command: "golangci-lint run"  # Check-mode lint command, or "none"
 
-## File Ownership
+# File ownership table (I1: disjoint ownership within waves)
+file_ownership:
+  - file: "path/to/file1.go"
+    agent: "A"
+    wave: 1
+    action: "new"  # or "modify" or "delete"
+    depends_on: []  # Optional: ["B:path/to/file2.go"] for cross-agent deps
+    repo: ""  # Optional: for cross-repo waves
 
-```yaml type=impl-file-ownership
-| File | Agent | Wave | Depends On |
-|------|-------|------|------------|
-| ...  | ...   | ...  | ...        |
+  - file: "path/to/file2.go"
+    agent: "B"
+    wave: 1
+    action: "modify"
+    depends_on: []
+
+# Wave structure (I3: sequential numbering from 1)
+waves:
+  - number: 1
+    agents:
+      - id: "A"
+        task: |
+          Brief description of what agent A implements.
+
+          Full 9-field prompt format:
+          - Field 0: Isolation verification
+          - Field 1: File ownership (exact files from file_ownership table)
+          - Field 2: Interfaces to implement
+          - Field 3: Interfaces to call
+          - Field 4: What to implement
+          - Field 5: Tests to write
+          - Field 6: Verification gate
+          - Field 7: Constraints
+          - Field 8: Completion report format
+        files:
+          - "path/to/file1.go"
+        dependencies: []  # I2: depends on prior-wave agents only
+        model: "claude-sonnet-4-6"  # Optional: override default model
+
+      - id: "B"
+        task: "Brief description"
+        files:
+          - "path/to/file2.go"
+        dependencies: []
+        model: "claude-sonnet-4-6"
+
+  - number: 2
+    agents:
+      - id: "C"
+        task: "Depends on agents A and B"
+        files:
+          - "path/to/file3.go"
+        dependencies: ["A", "B"]  # I2: cross-wave dependencies
+        model: "claude-sonnet-4-6"
+
+# Interface contracts (cross-agent interfaces)
+interface_contracts:
+  - name: "FooInterface"
+    description: "Optional: human description"
+    definition: |
+      type FooInterface interface {
+        DoThing(ctx context.Context) error
+      }
+    location: "pkg/foo/types.go"  # Where this interface is defined
+    language: "go"  # Optional metadata
+
+# Scaffolds (shared types created before Wave 1)
+scaffolds:
+  - file_path: "pkg/foo/types.go"
+    contents: |
+      package foo
+
+      type SharedType struct {
+        Field1 string
+        Field2 int
+      }
+    import_path: "github.com/example/repo/pkg/foo"
+    status: "pending"  # or "committed"
+    commit: ""  # Set after scaffold agent commits
+
+# Quality gates (optional, based on project toolchain)
+quality_gates:
+  level: "standard"  # "quick" | "standard" | "full"
+  gates:
+    - type: "typecheck"
+      command: "go vet ./..."
+      required: true
+      description: "Static analysis"
+    - type: "test"
+      command: "go test ./..."
+      required: true
+      description: "Full test suite"
+    - type: "lint"
+      command: "golangci-lint run"
+      required: false
+      description: "Linter checks"
+
+# Pre-mortem (optional, for risk assessment)
+pre_mortem:
+  overall_risk: "medium"  # "low" | "medium" | "high"
+  rows:
+    - scenario: "What could go wrong"
+      likelihood: "medium"
+      impact: "high"
+      mitigation: "Concrete action to prevent or recover"
+
+# Known issues (optional, pre-existing problems)
+known_issues:
+  - description: "TestFoo hangs on timeout"
+    status: "Pre-existing, unrelated to this work"
+    workaround: "Skip with -skip TestFoo"
+
+# Completion reports (populated by agents after work)
+completion_reports:
+  A:
+    status: "complete"  # "complete" | "partial" | "blocked"
+    worktree: ".claude/worktrees/wave1-agent-A"
+    branch: "wave1-agent-A"
+    commit: "abc123"
+    files_changed:
+      - "path/to/file1.go"
+    files_created: []
+    interface_deviations: []
+    out_of_scope_deps: []
+    tests_added:
+      - "TestFoo"
+    verification: "PASS (go test)"
+    failure_type: ""  # Required if status != complete
+    repo: ""  # Optional: cross-repo tracking
 ```
 
-## Wave Structure
+**YAML Generation Guidelines:**
 
-```yaml type=impl-wave-structure
-Wave 1: [A] [B] [C]          <- 3 parallel agents (foundation)
-           | (A+B complete)
-Wave 2:   [D] [E]            <- 2 parallel agents
-           | (D+E complete)
-Wave 3:    [F] [G]           <- 2 parallel agents
+1. **Required fields (I4):** `title`, `feature_slug`, `verdict` are mandatory.
+2. **Wave numbering (I3):** Waves must be numbered sequentially starting from 1.
+3. **File ownership (I1):** No file may be owned by multiple agents within the same wave.
+4. **Dependencies (I2):** Agent dependencies must reference only prior-wave agents.
+5. **File completeness (I5):** All files in `agent.files` must appear in `file_ownership`.
+6. **No cycles (I6):** The dependency graph must be acyclic.
+
+**Agent task field format:**
+
+Each `agent.task` should contain the full 9-field prompt format as a multiline string:
+
+```yaml
+task: |
+  ## Field 0: Isolation Verification
+  [Isolation check instructions]
+
+  ## Field 1: File Ownership
+  You may ONLY modify these files:
+  - path/to/file.go
+
+  ## Field 2: Interfaces to Implement
+  [Interface signatures you must provide]
+
+  ## Field 3: Interfaces to Call
+  [Interface signatures you must consume]
+
+  ## Field 4: What to Implement
+  [Implementation details]
+
+  ## Field 5: Tests to Write
+  [Test requirements]
+
+  ## Field 6: Verification Gate
+  ```bash
+  go build ./...
+  go vet ./...
+  go test ./pkg/foo
+  ```
+
+  ## Field 7: Constraints
+  [What NOT to do, dependencies, out-of-scope items]
+
+  ## Field 8: Completion Report
+  [Report format and location]
 ```
 
-## Wave 1
+**Self-validation workflow:**
 
-[Wave-level introduction: what this wave delivers, what it depends on.]
+After generating `docs/IMPL/IMPL-<slug>.yaml`:
 
-### Agent A - {Role Description}
+1. Write the YAML file using the Write tool
+2. Run validation: `saw validate docs/IMPL/IMPL-<slug>.yaml`
+3. If exit code is 0: Success! Validation passed.
+4. If exit code is 1: Read JSON errors from stderr, fix the manifest, retry
+5. Maximum 3 validation attempts
 
-[Full prompt using the 9-field format.]
+**Backward compatibility note:**
 
-### Agent B - {Role Description}
-
-[Full prompt using the 9-field format.]
-
-## Wave 2
-
-[What this wave delivers. Which agents from Wave 1 must complete first.]
-
-### Agent C - {Role Description}
-
-[Full prompt using the 9-field format.]
-
-[Continue with ## Wave N for each wave. Every wave MUST have its own
-## Wave N heading. Do NOT use a flat "## Agent Prompts" section with
-all agents grouped together — the parser and web UI use ## Wave N
-headers to determine wave grouping.]
-
-## Wave Execution Loop
-
-After each wave completes, work through the Orchestrator Post-Merge Checklist
-below in order. The checklist is the executable form; this loop is the rationale.
-
-The merge procedure detail is in `saw-merge.md`. Key principles:
-- Read completion reports first — a `status: partial` or `status: blocked` blocks
-  the merge entirely. No partial merges.
-- Interface deviations with `downstream_action_required: true` must be propagated
-  to downstream agent prompts before that wave launches.
-- Post-merge verification is the real gate. Agents pass in isolation; the merged
-  codebase surfaces cross-package failures none of them saw individually.
-- Fix before proceeding. Do not launch the next wave with a broken build.
-
-## Orchestrator Post-Merge Checklist
-
-**Instructions for Scout:** Replace the bracketed placeholders below with
-feature-specific content. Keep the standard items exactly as written. Add any
-feature-specific post-merge steps (registrations, doctor checks, doc updates,
-etc.) under "Feature-specific steps". If there are none, write "None." Delete
-this instruction block before writing the IMPL doc.
-
-After wave {N} completes:
-
-- [ ] Read all agent completion reports — confirm all `status: complete`; if any
-      `partial` or `blocked`, stop and resolve before merging
-- [ ] Conflict prediction — cross-reference `files_changed` lists; flag any file
-      appearing in >1 agent's list before touching the working tree
-- [ ] Review `interface_deviations` — update downstream agent prompts for any
-      item with `downstream_action_required: true`
-- [ ] Run E20 stub scan: `bash "${CLAUDE_SKILL_DIR}/scripts/scan-stubs.sh" {files_changed}`
-      Append output to IMPL doc under `## Stub Report — Wave {N}`
-- [ ] Run E21 quality gates (if `## Quality Gates` section present in IMPL doc)
-- [ ] Merge each agent: `git merge --no-ff <branch> -m "Merge wave{N}-agent-{X}: <desc>"`
-- [ ] Worktree cleanup: `git worktree remove <path>` + `git branch -d <branch>` for each
-- [ ] Post-merge verification:
-      - [ ] Linter auto-fix pass (if applicable): [insert command or "n/a"]
-      - [ ] `[insert full build + test command, e.g. go build ./... && go vet ./... && go test ./...]` ← use `test_command` from IMPL doc header; run unscoped
-- [ ] Fix any cascade failures — pay attention to cascade candidates listed above
-- [ ] Tick status checkboxes in this IMPL doc for completed agents
-- [ ] Update interface contracts for any deviations logged by agents
-- [ ] Apply `out_of_scope_deps` fixes flagged in completion reports
-- [ ] Feature-specific steps:
-      - [ ] [e.g., register new function in tools.go, add doctor check, update docs]
-- [ ] Commit: `git commit -m "[insert commit message]"`
-- [ ] Launch next wave (or pause for review if not `--auto`)
-
-## Status
-
-| Wave | Agent | Description | Status |
-|------|-------|-------------|--------|
-| — | Scaffold | [scaffold file(s)] | TO-DO |
-| 1 | A | [description] | TO-DO |
-| 1 | B | [description] | TO-DO |
-| 2 | A | [description] | TO-DO |
-| — | Scaffold | [pre-Wave-N scaffold, if any] | TO-DO |
-| N | ... | ... | TO-DO |
-| — | Orch | Post-merge integration + binary install | TO-DO |
-
-_Omit scaffold rows if no scaffolds are needed for that wave boundary._
+Existing markdown IMPL docs can be converted to YAML using:
+```bash
+saw migrate docs/IMPL/IMPL-<slug>.md
 ```
 
-## IMPL Doc Size
+This will generate `docs/IMPL/IMPL-<slug>.yaml` from the markdown source.
 
-If the coordination artifact will exceed ~20KB (many agents, many findings),
-split it:
+## YAML Manifest Size
 
-- `docs/IMPL/IMPL-<slug>.md`: the **index**: wave structure, file ownership table,
-  interface contracts, cascade candidates, and wave execution loop. This is
-  what the orchestrator reads every turn. Keep it small.
-- `docs/IMPL/IMPL-<slug>-agents/agent-{A,B,...}.md`: **per-agent files**: full
-  prompt, verification gate, and completion report section for each agent.
-  Reference these from the index. Agents read only their own file.
+The YAML manifest should contain all planning data in a single file. YAML's structured
+format is more compact than markdown. If the manifest becomes large (many agents, many
+findings), consider:
 
-When splitting, the index must contain enough to understand the full plan at a
-glance. Per-agent files are loaded only when launching or reviewing that agent.
+- Keep agent `task` fields concise but complete
+- Use YAML anchors and aliases for repeated content
+- Split very large agent tasks into separate files if necessary
+
+For most features, a single YAML manifest file at `docs/IMPL/IMPL-<slug>.yaml` is sufficient
+and preferred. The orchestrator reads this file to understand the plan and track progress.
 
 ## Rules
 
-- You may create one artifact: the IMPL doc at `docs/IMPL/IMPL-<feature-slug>.md`.
+- You may create one artifact: the YAML manifest at `docs/IMPL/IMPL-<feature-slug>.yaml`.
   Do not create, modify, or delete any source files. If scaffold files are
-  needed, specify them in the IMPL doc Scaffolds section — the Scaffold Agent
+  needed, specify them in the `scaffolds` section — the Scaffold Agent
   will create them after human review.
 - Every signature you define is a binding contract. Agents will implement
   against these signatures without seeing each other's code.
@@ -624,5 +650,6 @@ glance. Per-agent files are loaded only when launching or reviewing that agent.
   Disjoint ownership is the mechanism that actually prevents conflicts.
 - Prefer more agents with smaller scopes over fewer agents with larger ones.
   An agent owning 1-3 files is ideal. An agent owning 6+ files is a red flag.
-- The planning document you produce will be consumed by every downstream
-  agent and updated after each wave. Write it for that audience.
+- The YAML manifest you produce will be consumed by every downstream
+  agent and updated after each wave (with completion reports added). Write it for that audience.
+- After writing the manifest, always validate it using `saw validate` before reporting completion.
