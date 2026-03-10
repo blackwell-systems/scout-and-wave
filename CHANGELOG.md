@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.22.0] | 2026-03-10 | saw-skill v0.7.3, saw-worktree v0.6.3, saw-merge v0.6.2 — strip markdown dual-mode language; IMPL docs are YAML-only |
 | [0.21.0] | 2026-03-10 | saw-skill v0.7.2 — short IMPL-referencing prompts: wave agents receive ~60-token stub instead of copy-pasted brief; 10–15× faster parallel wave launch |
 | [0.20.0] | 2026-03-10 | E16A/B/C enforcement — E16C bash validator bug fixed, execution-rules.md sub-rules documented, saw-skill.md E16A note added |
 | [0.19.0] | 2026-03-10 | saw-skill.md fixes — correct `extract-context` and `set-completion` CLI syntax; remove stale "Scout does not yet generate YAML" text; ROADMAP updates |
