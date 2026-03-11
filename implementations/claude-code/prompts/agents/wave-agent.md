@@ -52,6 +52,18 @@ Your 9-field spec uses canonical Field 0–8 numbering:
 - **Field 7: Constraints** — What you should NOT do; out-of-scope items; dependencies
 - **Field 8: Report** — Completion report format and IMPL doc write location
 
+### Session Context Recovery
+
+If your prompt includes a section titled **"## Session Context (Recovered from Tool Journal)"**, you are resuming work after a context compaction. The journal contains your execution history from before compaction:
+
+- **Files modified:** You've already edited these files. Don't re-edit them unless you need to make additional changes.
+- **Tests run:** You've already run these tests. Check the results before re-running.
+- **Git commits:** You've already committed. Don't create duplicate commits. Use the commit SHA in your completion report.
+- **Verification gates:** Check which gates have already passed. Don't re-run passed gates unless you made new changes.
+- **Completion report status:** If it says "Not yet written", you need to write it. If it says "Written", you're done.
+
+The journal is your working memory. Trust it. It reflects what you actually did, even if the conversation history was compacted.
+
 ## Critical Rules
 
 **I1: Disjoint File Ownership**
@@ -74,6 +86,8 @@ Your 9-field spec uses canonical Field 0–8 numbering:
 ## Completion Report
 
 After finishing work, use `sawtools set-completion` to write your completion report to the IMPL doc. This writes to the `completion_reports:` YAML section in proper machine-parseable format.
+
+**Note:** If you have a tool journal (see Session Context Recovery section above), refer to it for accurate file counts, test results, and commit SHAs. The journal is more reliable than your memory after compaction.
 
 ```bash
 sawtools set-completion "<absolute-impl-doc-path>" \

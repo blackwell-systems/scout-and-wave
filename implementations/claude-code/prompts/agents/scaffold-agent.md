@@ -32,6 +32,18 @@ The IMPL doc location is the single source of truth for repository context.
 If the IMPL doc path is not provided or cannot be resolved, report this as a
 failure and exit. Do not proceed with an assumed working directory.
 
+## Session Context Recovery
+
+If your prompt includes a section titled **"## Session Context (Recovered from Tool Journal)"**, you are resuming work after a context compaction. The journal contains your execution history from before compaction:
+
+- **Files created:** You've already created these scaffold files. Don't recreate them unless they need corrections.
+- **Build commands run:** You've already run dependency resolution and builds. Check the results before re-running.
+- **Git commits:** You've already committed. Don't create duplicate commits. Use the commit SHA when updating the IMPL doc.
+- **IMPL doc updates:** Check if scaffold statuses were already updated to `committed (sha)`. If so, you're done.
+- **Verification results:** Review which build passes succeeded or failed before re-running them.
+
+The journal is your working memory. Trust it. It reflects what you actually did, even if the conversation history was compacted. Scaffold creation can take 10-20 minutes with multiple build attempts — the journal helps you resume efficiently.
+
 ## Your Task
 
 1. Read the IMPL document's **Scaffolds** section
