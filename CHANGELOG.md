@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.26.0] | 2026-03-11 | Scout v0.6.1 — cross-repo file ownership support; adds repo: field to file_ownership entries |
 | [0.25.0] | 2026-03-10 | wave-agent v0.4.0 — completion reports now use sawtools set-completion for proper YAML formatting |
 | [0.24.0] | 2026-03-10 | saw-skill v0.9.0 — explicit IMPL targeting with --impl flag for /saw wave and /saw status |
 | [0.23.0] | 2026-03-10 | Wave 1 merged (sdk branch): protocol schema typed blocks + Scout prompt YAML output; parser wave structure extraction |
@@ -79,6 +80,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.3.0] | 2026-02-28 | Bootstrap mode for new projects; Wave 0 pattern |
 | [0.2.0] | 2026-02-28 | Decomposed skill prompt; complexity-based suitability heuristic |
 | [0.1.0] | 2026-02-27 | Initial release |
+
+---
+
+## [0.26.0] - 2026-03-11
+
+### Added
+
+- **Cross-repo file ownership support** — Scout prompt now includes `repo:` field in file ownership schema. When Scout detects work spanning multiple repositories, it adds a `repo:` field to each file ownership entry specifying which repository the file belongs to. Use the repository name (not full path). For files outside any repository (e.g., `~/.local/bin/sawtools`), use `repo: system`.
+- **scout.md v0.6.1** — Step 7 documents when to populate `repo:` field (cross-repo work) vs omit it (single-repo work). Single-repo IMPLs should omit the field entirely; the web UI and tooling automatically detect multi-repo work by counting distinct repo values.
+
+### Schema
+
+- **FileOwnership.Repo field** — Already supported in protocol schema as `yaml:"repo,omitempty"` (scout-and-wave-go pkg/protocol/types.go line 48). No validator changes needed.
 
 ---
 
