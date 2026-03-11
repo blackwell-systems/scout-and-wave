@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.24.0] | 2026-03-10 | saw-skill v0.9.0 — explicit IMPL targeting with --impl flag for /saw wave and /saw status |
 | [0.23.0] | 2026-03-10 | Wave 1 merged (sdk branch): protocol schema typed blocks + Scout prompt YAML output; parser wave structure extraction |
 | [0.22.0] | 2026-03-10 | saw-skill v0.7.3, saw-worktree v0.6.3, saw-merge v0.6.2 — strip markdown dual-mode language; IMPL docs are YAML-only |
 | [0.21.0] | 2026-03-10 | saw-skill v0.7.2 — short IMPL-referencing prompts: wave agents receive ~60-token stub instead of copy-pasted brief; 10–15× faster parallel wave launch |
@@ -77,6 +78,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.3.0] | 2026-02-28 | Bootstrap mode for new projects; Wave 0 pattern |
 | [0.2.0] | 2026-02-28 | Decomposed skill prompt; complexity-based suitability heuristic |
 | [0.1.0] | 2026-02-27 | Initial release |
+
+---
+
+## [0.24.0] - 2026-03-10
+
+### Added
+
+- **Explicit IMPL targeting** (saw-skill v0.9.0) — Added `--impl <id>` flag to `/saw wave` and `/saw status` commands for explicit IMPL doc selection. Supports three resolution formats: by slug (`--impl tool-journaling`), by filename (`--impl IMPL-tool-journaling.yaml`), or by full path. Resolves via `sawtools list-impls` for slug→path lookup.
+- **Auto-selection fallback** — When `--impl` is omitted, automatically selects IMPL if exactly 1 pending doc exists. If multiple pending IMPLs found, prompts user to specify. If none found, reports "No pending IMPL docs."
+- **Argument hint updated** — Updated skill `argument-hint` to reflect new flag: `wave [--impl <id>] [--auto] [--model <m>]`
+
+### Changed
+
+- **Invocation modes table expanded** — Added rows for `/saw wave --impl <id>`, `/saw wave --impl <id> --auto`, and `/saw status --impl <id>` to document new explicit targeting syntax.
+- **Execution Logic section** — Added "IMPL targeting" subsection describing flag parsing order, resolution logic, and fallback behavior for ambiguous cases.
 
 ---
 
