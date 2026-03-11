@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.26.0] | 2026-03-10 | saw-skill v0.10.0 — sawtools run-wave as primary wave execution method; ROADMAP updates (E24 verification loop, persistent memory system) |
 | [0.25.0] | 2026-03-10 | wave-agent v0.4.0 — completion reports now use sawtools set-completion for proper YAML formatting |
 | [0.24.0] | 2026-03-10 | saw-skill v0.9.0 — explicit IMPL targeting with --impl flag for /saw wave and /saw status |
 | [0.23.0] | 2026-03-10 | Wave 1 merged (sdk branch): protocol schema typed blocks + Scout prompt YAML output; parser wave structure extraction |

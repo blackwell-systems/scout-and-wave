@@ -80,6 +80,79 @@ Schema-validated Scout output via `output_config.format`. Scout runs through API
 
 ---
 
+## E24: Verification Loop with Self-Healing
+
+**Status:** Proposed (engine implementation planned for v0.30.0)
+
+**Problem:** Quality gates (E21) report failures but don't trigger recovery. When tests fail or builds break after wave merge, the orchestrator surfaces the error and stops. The human must debug, identify root cause, and either manually fix or re-run the wave.
+
+**Insight:** Verification failures are protocol events that should trigger automatic recovery paths, not dead ends.
+
+**Proposed:** Add E24 execution rule defining a verification loop:
+
+1. After wave merge, run quality gates via E21
+2. On failure:
+   - Create retry IMPL doc: `{feature-slug}-fix-wave{N}.yaml`
+   - Include: failure output, blocked tasks, safe point SHA (for rollback reference)
+   - Single wave with 1 agent assigned to failed files
+   - Retry limit: 2 attempts; 3rd failure → transition to `blocked` state + human escalation
+3. Retry agents receive full failure context in their prompt
+4. Retry IMPL docs track parent chain: `parent_wave_sha`, `retry_count`
+
+**Protocol changes required:**
+- `protocol/execution-rules.md` — new E24 rule with retry semantics
+- `protocol/message-formats.md` — retry IMPL doc schema (add `RetryMetadata` section)
+- `agents/wave-agent.md` — retry agent variant instructions (context = failure + fix scope)
+
+**Success criteria:**
+- 80% of quality gate failures recover automatically within 2 retries
+- Human intervention only required for logic errors, not build/test flakes
+
+---
+
+## Persistent Memory System
+
+**Status:** Proposed (engine implementation planned for v0.33.0)
+
+**Problem:** Agents repeat mistakes across waves (e.g., forgetting cross-repo dependencies, missing common pitfalls). Each Scout/Wave agent starts with zero learned context beyond what's in `docs/CONTEXT.md` (which is static and manually curated).
+
+**Insight:** Completion reports contain learnings — patterns that worked, pitfalls encountered, preferences discovered. This should feed forward into future Scout/Wave agents.
+
+**Proposed:** Add `docs/MEMORY.md` as a structured learning log:
+
+1. After wave completes, run reflection agent:
+   - Analyzes completion reports from Wave N
+   - Extracts: patterns (successful approaches), pitfalls (errors to avoid), preferences (style/tooling choices)
+   - Outputs YAML entries with: `type`, `content`, `relevance_tags` (file paths, keywords), `source_wave`
+2. Append entries to `docs/MEMORY.md` (chronological order, no pruning)
+3. Before Scout runs, score memories by tag overlap with feature description
+4. Prepend top-5 relevant memories to Scout prompt as `## Past Experience` section
+5. Wave agents receive memories scored by file ownership overlap
+
+**Memory Entry Schema:**
+```yaml
+- type: pattern | pitfall | preference
+  content: "When implementing journal sync, always check Claude Code session directory permissions first"
+  relevance_tags:
+    - "journal"
+    - "pkg/journal"
+    - "session-logs"
+  source_wave: "tool-journaling / Wave 2"
+  created: "2026-03-10"
+```
+
+**Protocol changes required:**
+- `protocol/message-formats.md` — memory entry schema, relevance scoring algorithm
+- `agents/scout.md` — prepend `## Past Experience` section when relevant memories exist
+- `agents/wave-agent.md` — same memory injection for Wave agents
+- New `agents/reflector.md` — agent type for post-wave learning extraction
+
+**Success criteria:**
+- Zero repeated mistakes across sequential features touching similar files
+- Memory system learns project-specific patterns (e.g., "always run `go mod tidy` after adding imports")
+
+---
+
 ## Tool Journaling for Compaction Safety
 
 **Status:** Critical for production reliability. Uses external log observer pattern (tails Claude Code session logs).
