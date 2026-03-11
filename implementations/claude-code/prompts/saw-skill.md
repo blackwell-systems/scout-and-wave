@@ -5,7 +5,7 @@ description: |
   features that can be decomposed into multiple independent work units with clear
   interfaces. Suitable for: multi-package architectures, parallel refactors,
   coordinated feature additions across modules.
-argument-hint: "[bootstrap <project-name> | scout [--model <m>] <feature> | wave [--auto] [--model <m>] | status]"
+argument-hint: "[bootstrap <project-name> | scout [--model <m>] <feature> | wave [--impl <id>] [--auto] [--model <m>] | status [--impl <id>]]"
 disable-model-invocation: true
 user-invocable: true
 allowed-tools: |
@@ -89,10 +89,13 @@ Read the agent template at `${CLAUDE_SKILL_DIR}/agent-template.md` for the 9-fie
 | `/saw bootstrap <name>` | Design new project from scratch |
 | `/saw scout <feature>` | Analyze codebase and plan feature |
 | `/saw scout --model <m> <feature>` | Scout with explicit model override |
-| `/saw wave` | Execute next wave with review |
+| `/saw wave` | Execute next wave (auto-selects IMPL if only 1 pending) |
+| `/saw wave --impl <id>` | Execute next wave of specific IMPL |
 | `/saw wave --auto` | Execute all waves automatically |
+| `/saw wave --impl <id> --auto` | Execute all waves of specific IMPL |
 | `/saw wave --model <m>` | Wave agents with explicit model override |
-| `/saw status` | Show current progress |
+| `/saw status` | Show progress (auto-selects IMPL if only 1 pending) |
+| `/saw status --impl <id>` | Show progress of specific IMPL |
 
 ## Protocol SDK CLI Commands
 
@@ -121,6 +124,19 @@ All operations use the `sawtools` CLI. IMPL docs are YAML manifests (`.yaml`) �
 ## Execution Logic
 
 **IMPL discovery:** Use `sawtools list-impls --dir "<repo-path>/docs/IMPL"` to discover existing IMPL docs in the repository. This returns a JSON array of IMPL doc metadata (path, slug, title, status). Use this for status reporting and IMPL doc selection.
+
+**IMPL targeting:** For `wave` and `status` commands, parse `--impl <value>` from arguments if present. The `<value>` can be:
+1. **Slug**: `--impl tool-journaling` → resolve via `sawtools list-impls` to find matching slug
+2. **Filename**: `--impl IMPL-tool-journaling.yaml` → resolve to `docs/IMPL/IMPL-tool-journaling.yaml`
+3. **Path**: `--impl docs/IMPL/IMPL-tool-journaling.yaml` → use directly
+
+When `--impl` is omitted:
+1. Run `sawtools list-impls --dir "<repo-path>/docs/IMPL"` and filter to IMPLs with `state` not containing "COMPLETE"
+2. If exactly 1 pending IMPL found, use it automatically
+3. If multiple pending IMPLs, list them and ask the user: "Multiple pending IMPLs found. Please specify which one with --impl: <list of slugs>"
+4. If no pending IMPLs, report "No pending IMPL docs found. Use `/saw scout <feature>` to create one."
+
+Parse `--impl` before processing other flags. Example argument parsing order: `/saw wave --impl tool-journaling --auto` → parse `--impl tool-journaling` first, then `--auto`, then execute wave logic with resolved IMPL path.
 
 If the argument is `bootstrap <project-description>`:
 1. **Requirements intake (Orchestrator duty).** Before launching any agent, gather requirements and write `docs/REQUIREMENTS.md` in the target project directory. This is Orchestrator work, not Scout work — it captures decisions already made by the user. Use this template:
