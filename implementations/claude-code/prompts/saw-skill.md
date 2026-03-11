@@ -196,35 +196,20 @@ If no `docs/IMPL/IMPL-*.yaml` file exists for the current feature:
 
 If a `docs/IMPL/IMPL-*.yaml` file already exists:
 1. Read it and identify the current wave (the first wave with unchecked status items). Also check the Scaffolds section: if any scaffold file has `Status: pending`, the Scaffold Agent has not yet run — spawn it now (see step 5 of the Scout flow above) before creating any worktrees. If any file shows `Status: FAILED`, stop and report the failure to the user before proceeding.
-2. **Execute wave using automated runner (PRIMARY METHOD):**
-   ```bash
-   sawtools run-wave "<manifest-path>" --wave <N> --repo-dir "<repo-path>"
-   ```
-   This handles the complete wave lifecycle: worktree creation, journal initialization, agent launch, completion verification, and status updates. The orchestrator's job is to call this command and handle the result — not to manually execute each step. **Use this for all wave execution** unless you need to inspect state between steps for debugging.
-
-   **Solo agent optimization:** For waves with exactly 1 agent, `run-wave` automatically skips worktree creation and launches the agent directly on the main branch. The solo agent still operates in the Wave Agent role — executing solo wave work inline violates I6 regardless of wave size.
-
-   **Journal integration:** `run-wave` automatically initializes journal observers (`.saw-state/journals/wave<N>/agent-<ID>/`), syncs from Claude Code session logs, generates execution context, and prepends `## Prior Work` sections to agent prompts. This preserves agent memory across context compaction events. If journal configuration is disabled (`journal.enabled: false` in `saw.config.json`), these operations are skipped automatically.
-
-   After `run-wave` completes, proceed to step 3 (read completion reports).
-
-3. **Manual wave execution (FALLBACK FOR DEBUGGING):** If you need to inspect state between steps (e.g., review worktrees before launching agents, debug journal context, examine agent prompts before execution), use the manual flow:
-
-   a. **Worktree setup:**
+2. **Solo agent check:** If the current wave has exactly 1 agent, skip worktree creation. Launch the agent directly via the Agent tool with `subagent_type: wave-agent` and `run_in_background: true` on the main branch. After the agent completes, proceed to step 4. The solo wave agent must still operate in the Wave Agent role — executing solo wave work inline violates I6 regardless of wave size.
+3. **Worktree setup:** Create worktrees using the Protocol SDK CLI:
    ```bash
    sawtools create-worktrees "<manifest-path>" --wave <N> --repo-dir "<repo-path>"
    ```
-   Creates a worktree for each agent, verifies scaffold commit status, enforces interface freeze. Exit code 1 indicates failure (uncommitted scaffolds, freeze violations, or worktree creation errors) — do not proceed until resolved. **Interface freeze checkpoint:** interface contracts become immutable when worktrees are created. This is the last moment to revise type signatures, add fields, or restructure APIs. After this point, any interface change requires removing and recreating all worktrees for the wave. For reference documentation on the worktree protocol, see `${CLAUDE_SKILL_DIR}/saw-worktree.md`.
-
-   b. **Journal initialization (if enabled):**
+   This command creates a worktree for each agent in the specified wave, verifies scaffold commit status, and enforces interface freeze. Exit code 1 indicates failure (uncommitted scaffolds, freeze violations, or worktree creation errors) — do not proceed until resolved. **Interface freeze checkpoint:** interface contracts become immutable when worktrees are created. This is the last moment to revise type signatures, add fields, or restructure APIs. After this point, any interface change requires removing and recreating all worktrees for the wave. For reference documentation on the worktree protocol, see `${CLAUDE_SKILL_DIR}/saw-worktree.md`.
+4. **Journal initialization and context loading:** Before launching agents, initialize the journal observer for each agent and generate execution context:
    ```bash
    # For each agent in the wave:
    sawtools journal-init "<manifest-path>" --wave <N> --agent <ID> --repo-dir "<repo-path>"
    sawtools journal-context "<manifest-path>" --wave <N> --agent <ID> --repo-dir "<repo-path>"
    ```
-   The `journal-init` command creates the journal directory structure. The `journal-context` command syncs from Claude Code session logs and generates `context.md` with execution history (files modified, test results, git commits). See [docs/tool-journaling.md](../../docs/tool-journaling.md) for architecture details.
-
-   c. **Agent launch:** For each agent in the current wave, launch a parallel **Wave agent** using the Agent tool with `subagent_type: wave-agent`, `run_in_background: true`, and the per-agent context payload (E23) as the prompt parameter. **Journal context prepending:** Before passing the prompt to the Agent tool, prepend the content of `.saw-state/journals/wave<N>/agent-<ID>/context.md` (if it exists and is non-empty) to the agent's prompt as a `## Prior Work` section. **Use short IMPL-referencing prompts — do not copy-paste agent briefs.** Pass a ~60-token stub containing the IMPL doc path, wave number, and agent ID. The agent reads its own full brief on its first tool call via its Read tool or `sawtools extract-context`. This is 10–15× faster to generate than copy-pasting the full context, and no information is lost — the IMPL doc is already the single source of truth (I4).
+   The `journal-init` command creates the journal directory structure (`.saw-state/journals/wave<N>/agent-<ID>/`) and initializes the cursor. The `journal-context` command syncs from the Claude Code session log, extracts tool execution history, and generates `context.md` with a summary of prior work (files modified, test results, git commits, recent activity). If journal configuration is disabled (`journal.enabled: false` in `saw.config.json`), these commands are no-ops. **Context injection:** The generated `context.md` is prepended to each agent's prompt as a `## Prior Work` section before launch. This preserves agent memory across Claude Code's context compaction events — when the conversation history is compacted (typically after 30-45 minutes), the journal-generated context remains in the prompt. Agents can reference prior work without relying on conversation history. **Periodic sync:** The journal observer syncs automatically every 30 seconds during agent execution (configurable via `journal.sync_interval_seconds`). No manual intervention required. See [docs/tool-journaling.md](../../docs/tool-journaling.md) for architecture details.
+5. For each agent in the current wave, launch a parallel **Wave agent** using the Agent tool with `subagent_type: wave-agent`, `run_in_background: true`, and the per-agent context payload (E23) as the prompt parameter. **Journal context prepending:** Before passing the prompt to the Agent tool, prepend the content of `.saw-state/journals/wave<N>/agent-<ID>/context.md` (if it exists and is non-empty) to the agent's prompt as a `## Prior Work` section. This ensures the agent has visibility into its own execution history even after context compaction. **Fully automated execution:** Alternatively, use `sawtools run-wave "<manifest-path>" --wave <N> --repo-dir "<repo-path>"` to execute the entire wave automatically (worktree creation, journal initialization, agent launch, completion verification, and status updates). This is useful for `--auto` mode or when executing waves in CI/CD pipelines. **Use short IMPL-referencing prompts — do not copy-paste agent briefs.** Pass a ~60-token stub containing the IMPL doc path, wave number, and agent ID. The agent reads its own full brief on its first tool call via its Read tool or `sawtools extract-context`. This is 10–15× faster to generate than copy-pasting the full context, and no information is lost — the IMPL doc is already the single source of truth (I4).
 
 For **YAML manifests** (`.yaml`/`.yml`):
 ```

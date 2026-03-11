@@ -1,0 +1,631 @@
+# IMPL: yaml-structured-sections
+title: "Migrate Stub Reports, Quality Gates, Post-Merge Checklists, and Known Issues to YAML"
+feature_slug: "yaml-structured-sections"
+verdict: "SUITABLE"
+test_command: "go test ./... && cd /Users/dayna.blackwell/code/scout-and-wave-web && go test ./... && cd web && command npm test"
+lint_command: "go vet ./... && cd /Users/dayna.blackwell/code/scout-and-wave-web && go vet ./..."
+state: "SCOUT_PENDING"
+
+suitability_assessment: |
+  **Verdict:** SUITABLE
+
+  This work meets all suitability preconditions:
+
+  1. **File decomposition:** Clear separation across 3 repos with disjoint file ownership. Protocol spec updates (scout-and-wave), parser/orchestrator changes (scout-and-wave-go), and UI panel updates (scout-and-wave-web) are independent.
+
+  2. **No investigation required:** All current formats are known (markdown tables/prose). Target formats are specified. No unknowns to investigate.
+
+  3. **Interface discoverability:** YAML schemas are defined upfront. Go struct types mirror TypeScript interfaces. Parser extraction functions have known signatures.
+
+  4. **Pre-implementation status:** All 4 sections currently exist as markdown prose/tables parsed by fragile regex. No prior YAML implementation exists for these sections.
+
+  5. **Parallelization value:**
+     - Build/test cycles: Go ~15-20s (go test ./...), TypeScript ~10-15s (npm test)
+     - 8 agents across 3 repos, 2 waves
+     - Wave 1 (foundation): 5 parallel agents defining schemas, types, and parser changes
+     - Wave 2 (consumers): 3 parallel agents updating UI panels
+     - Sequential time: ~120 min (8 agents × 15 min avg)
+     - SAW time: ~50 min (Wave 1: 20 min parallel + Wave 2: 20 min parallel + 10 min merge)
+     - Time savings: ~70 min (58% faster)
+
+  **Estimated times:**
+  - Scout phase: ~8 min (3-repo analysis, 4 schema definitions, dependency mapping)
+  - Wave 1 execution: ~20 min (5 agents in parallel)
+  - Wave 2 execution: ~20 min (3 agents in parallel)
+  - Merge & verify: ~10 min (2 waves, cross-repo verification)
+  - Total (SAW): ~58 min
+  - Sequential baseline: ~120 min
+  - Time savings: ~62 min (52% faster)
+
+  **Recommendation:** Proceed
+
+# Quality Gates
+quality_gates:
+  level: "standard"
+  gates:
+    - type: "build"
+      command: "cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./..."
+      required: true
+      description: "Build scout-and-wave-go"
+    - type: "test"
+      command: "cd /Users/dayna.blackwell/code/scout-and-wave-go && go test ./pkg/protocol/... ./pkg/orchestrator/..."
+      required: true
+      description: "Test parser and orchestrator packages"
+    - type: "lint"
+      command: "cd /Users/dayna.blackwell/code/scout-and-wave-go && go vet ./..."
+      required: true
+      description: "Lint scout-and-wave-go"
+    - type: "build"
+      command: "cd /Users/dayna.blackwell/code/scout-and-wave-web && go build ./..."
+      required: true
+      description: "Build scout-and-wave-web"
+    - type: "test"
+      command: "cd /Users/dayna.blackwell/code/scout-and-wave-web/web && command npm test"
+      required: false
+      description: "Test web UI components"
+
+# Scaffolds
+scaffolds:
+  - file_path: "/Users/dayna.blackwell/code/scout-and-wave-go/pkg/protocol/types_sections.go"
+    contents: |
+      package protocol
+
+      // StubReport represents the structured stub detection report for a wave.
+      type StubReport struct {
+          Status       string     `yaml:"status" json:"status"` // "stubs_detected" | "clean"
+          ScannedFiles int        `yaml:"scanned_files" json:"scanned_files"`
+          Stubs        []StubHit  `yaml:"stubs" json:"stubs"`
+      }
+
+      // StubHit represents a single detected stub pattern.
+      type StubHit struct {
+          File    string `yaml:"file" json:"file"`
+          Line    int    `yaml:"line" json:"line"`
+          Pattern string `yaml:"pattern" json:"pattern"`
+          Context string `yaml:"context" json:"context"`
+      }
+
+      // PostMergeChecklist represents the structured post-merge checklist.
+      type PostMergeChecklist struct {
+          Groups []ChecklistGroup `yaml:"groups" json:"groups"`
+      }
+
+      // ChecklistGroup represents a named group of checklist items.
+      type ChecklistGroup struct {
+          Heading string          `yaml:"heading" json:"heading"`
+          Items   []ChecklistItem `yaml:"items" json:"items"`
+      }
+
+      // ChecklistItem represents a single checklist item with checked state.
+      type ChecklistItem struct {
+          Text    string `yaml:"text" json:"text"`
+          Checked bool   `yaml:"checked" json:"checked"`
+      }
+    import_path: "github.com/blackwell-systems/scout-and-wave-go/pkg/protocol"
+    status: "pending"
+
+# Interface Contracts
+
+## StubReport YAML Schema
+Scout and stubs.go will output:
+```yaml
+## Stub Report — Wave N
+
+```yaml type=impl-stub-report
+status: stubs_detected  # or: clean
+scanned_files: 14
+stubs:
+  - file: pkg/api/handler.go
+    line: 42
+    pattern: TODO
+    context: "// TODO: implement error handling"
+  - file: pkg/models/user.go
+    line: 89
+    pattern: panic
+    context: "panic(\"not implemented\")"
+```
+```
+
+Parser extracts via `extractTypedBlock(scanner, "impl-stub-report")` and unmarshals into `StubReport`.
+
+## QualityGates YAML Schema (already exists in types.go)
+No new types needed — `QualityGates` and `QualityGate` structs already exist.
+Scout outputs as:
+```yaml
+## Quality Gates
+
+```yaml type=impl-quality-gates
+level: standard  # quick, standard, full
+gates:
+  - type: build
+    command: go test ./...
+    required: true
+    description: Run all tests
+  - type: lint
+    command: golangci-lint run
+    required: false
+    description: Lint check
+```
+```
+
+Parser already extracts `QualityGates` — Wave 1 agents update Scout prompt to output typed block instead of prose.
+
+## PostMergeChecklist YAML Schema
+Scout outputs:
+```yaml
+## Post-Merge Checklist
+
+```yaml type=impl-post-merge-checklist
+groups:
+  - heading: Verification
+    items:
+      - text: Run integration tests
+        checked: false
+      - text: Check monitoring dashboards
+        checked: false
+  - heading: Deployment
+    items:
+      - text: Update changelog
+        checked: false
+      - text: Tag release
+        checked: true
+```
+```
+
+Parser extracts via `extractTypedBlock` and unmarshals into `PostMergeChecklist`.
+
+## KnownIssues YAML Schema (already exists in types.go)
+No new types needed — `KnownIssue` struct already exists.
+Scout outputs as:
+```yaml
+## Known Issues
+
+```yaml type=impl-known-issues
+issues:
+  - title: Package import fails on Windows
+    status: pre-existing  # new, pre-existing, resolved, mitigated
+    description: The import path resolution breaks on Windows due to path separators
+    workaround: Use forward slashes in import paths
+```
+```
+
+Parser extracts as `[]KnownIssue` (existing type already has fields).
+
+# File Ownership
+
+file_ownership:
+  - file: "protocol/execution-rules.md"
+    agent: "A"
+    wave: 1
+    action: "modify"
+    depends_on: []
+    repo: "scout-and-wave"
+  - file: "protocol/message-formats.md"
+    agent: "A"
+    wave: 1
+    action: "modify"
+    depends_on: []
+    repo: "scout-and-wave"
+  - file: "agents/scout.md"
+    agent: "B"
+    wave: 1
+    action: "modify"
+    depends_on: ["A"]
+    repo: "scout-and-wave"
+  - file: "implementations/claude-code/scripts/scan-stubs.sh"
+    agent: "C"
+    wave: 1
+    action: "modify"
+    depends_on: ["A"]
+    repo: "scout-and-wave"
+  - file: "pkg/protocol/types_sections.go"
+    agent: "D"
+    wave: 1
+    action: "new"
+    depends_on: []
+    repo: "scout-and-wave-go"
+  - file: "pkg/protocol/parser.go"
+    agent: "E"
+    wave: 1
+    action: "modify"
+    depends_on: ["D"]
+    repo: "scout-and-wave-go"
+  - file: "pkg/orchestrator/stubs.go"
+    agent: "E"
+    wave: 1
+    action: "modify"
+    depends_on: ["D"]
+    repo: "scout-and-wave-go"
+  - file: "web/src/types.ts"
+    agent: "F"
+    wave: 2
+    action: "modify"
+    depends_on: ["D", "E"]
+    repo: "scout-and-wave-web"
+  - file: "web/src/components/review/StubReportPanel.tsx"
+    agent: "F"
+    wave: 2
+    action: "modify"
+    depends_on: ["D", "E"]
+    repo: "scout-and-wave-web"
+  - file: "web/src/components/review/QualityGatesPanel.tsx"
+    agent: "G"
+    wave: 2
+    action: "modify"
+    depends_on: ["D", "E"]
+    repo: "scout-and-wave-web"
+  - file: "web/src/components/review/PostMergeChecklistPanel.tsx"
+    agent: "H"
+    wave: 2
+    action: "modify"
+    depends_on: ["D", "E"]
+    repo: "scout-and-wave-web"
+  - file: "web/src/components/review/KnownIssuesPanel.tsx"
+    agent: "H"
+    wave: 2
+    action: "modify"
+    depends_on: ["D", "E"]
+    repo: "scout-and-wave-web"
+
+# Waves
+
+waves:
+  - number: 1
+    agents:
+      - id: "A"
+        task: |
+          ## What to Implement
+          Update protocol documentation to specify YAML typed-block format for 4 sections that are currently markdown prose/tables: Stub Report, Quality Gates, Post-Merge Checklist, and Known Issues.
+
+          ## Interfaces to Implement
+          None (documentation only).
+
+          ## Interfaces to Call
+          None.
+
+          ## Tests to Write
+          None (documentation changes verified by human review).
+
+          ## Verification Gate
+          ```bash
+          cd /Users/dayna.blackwell/code/scout-and-wave
+          # No build/test for markdown — verify by reading files
+          cat protocol/execution-rules.md | grep -A 20 "E20:"
+          cat protocol/execution-rules.md | grep -A 20 "E21:"
+          cat protocol/message-formats.md | grep -A 30 "Stub Report Section Format"
+          cat protocol/message-formats.md | grep -A 30 "Quality Gates Section Format"
+          ```
+
+          ## Constraints
+          - E20 (stub detection) and E21 (quality gates) already exist in execution-rules.md — update their descriptions to reference typed blocks instead of markdown tables
+          - Add new sections to message-formats.md: "Stub Report Section Format" and "Post-Merge Checklist Section Format"
+          - Update existing "Quality Gates Section Format" and "Known Issues" sections to show YAML typed-block syntax
+          - All 4 schemas must use `type=impl-*` annotation on opening fence
+          - Schema field names must match Go struct field names (yaml tags) from types_sections.go scaffold
+          - Document that these sections are machine-parsed (validator scope includes them)
+
+        files:
+          - "protocol/execution-rules.md"
+          - "protocol/message-formats.md"
+        dependencies: []
+
+      - id: "B"
+        task: |
+          ## What to Implement
+          Update Scout prompt (agents/scout.md) to output 4 sections as YAML typed blocks instead of markdown prose/tables: Stub Report (when Scout writes it directly), Quality Gates, Post-Merge Checklist, Known Issues.
+
+          ## Interfaces to Implement
+          None (prompt changes).
+
+          ## Interfaces to Call
+          YAML schemas from protocol/message-formats.md (defined by Agent A).
+
+          ## Tests to Write
+          None (prompt changes verified by generating a test IMPL doc).
+
+          ## Verification Gate
+          ```bash
+          cd /Users/dayna.blackwell/code/scout-and-wave
+          # Verify Scout prompt includes YAML schemas for all 4 sections
+          grep -A 10 "type=impl-stub-report" agents/scout.md
+          grep -A 10 "type=impl-quality-gates" agents/scout.md
+          grep -A 10 "type=impl-post-merge-checklist" agents/scout.md
+          grep -A 10 "type=impl-known-issues" agents/scout.md
+          ```
+
+          ## Constraints
+          - Scout already outputs Quality Gates as markdown bullets — change to YAML typed block
+          - Known Issues currently output as markdown with **bold** headings — change to YAML typed block with title/status/description/workaround fields
+          - Post-Merge Checklist is optional (Scout may omit it) — when present, output as YAML typed block
+          - Stub Report is written by Orchestrator via stubs.go, not Scout — Scout prompt should document the format but not generate it
+          - All 4 typed blocks must match schemas from message-formats.md exactly
+
+        files:
+          - "agents/scout.md"
+        dependencies:
+          - "A"
+
+      - id: "C"
+        task: |
+          ## What to Implement
+          Update scan-stubs.sh to output YAML typed block instead of markdown table.
+
+          ## Interfaces to Implement
+          None (script output format change).
+
+          ## Interfaces to Call
+          StubReport YAML schema from protocol/message-formats.md (defined by Agent A).
+
+          ## Tests to Write
+          None (shell script — verify by running manually).
+
+          ## Verification Gate
+          ```bash
+          cd /Users/dayna.blackwell/code/scout-and-wave
+          # Test with sample file containing a TODO
+          echo "# TODO: test" > /tmp/test-stub.sh
+          bash implementations/claude-code/scripts/scan-stubs.sh /tmp/test-stub.sh
+          # Verify output includes:
+          #   status: stubs_detected
+          #   scanned_files: 1
+          #   stubs:
+          #     - file: /tmp/test-stub.sh
+          rm /tmp/test-stub.sh
+          ```
+
+          ## Constraints
+          - Script currently outputs markdown table: `| File | Line | Pattern | Context |`
+          - Change to YAML typed block with fields: status, scanned_files, stubs[]
+          - When no stubs found: `status: clean, scanned_files: N, stubs: []`
+          - When stubs found: `status: stubs_detected, scanned_files: N, stubs: [...]`
+          - Exit code remains 0 always (E20: informational only)
+          - Output must be valid YAML — escape special characters in context field
+          - Do NOT wrap output in fence markers — stubs.go wraps it
+
+        files:
+          - "implementations/claude-code/scripts/scan-stubs.sh"
+        dependencies:
+          - "A"
+
+      - id: "D"
+        task: |
+          ## What to Implement
+          Create new file pkg/protocol/types_sections.go with Go struct types for StubReport, PostMergeChecklist, and their sub-types. Quality gates and known issues types already exist in types.go.
+
+          ## Interfaces to Implement
+          Types specified in scaffold (StubReport, StubHit, PostMergeChecklist, ChecklistGroup, ChecklistItem).
+
+          ## Interfaces to Call
+          None (new types file).
+
+          ## Tests to Write
+          None (types only — parser tests in Agent E verify correctness).
+
+          ## Verification Gate
+          ```bash
+          cd /Users/dayna.blackwell/code/scout-and-wave-go
+          go build ./pkg/protocol/...
+          go vet ./pkg/protocol/...
+          # Verify types are importable
+          grep "type StubReport struct" pkg/protocol/types_sections.go
+          grep "type PostMergeChecklist struct" pkg/protocol/types_sections.go
+          ```
+
+          ## Constraints
+          - File must be in package protocol (same package as types.go)
+          - YAML tags must match field names in snake_case (e.g., `yaml:"scanned_files"`)
+          - JSON tags must match YAML tags for API serialization
+          - All string fields for status/likelihood/impact should be string type, not enums (parser flexibility)
+          - StubHit.Line is int, not string
+          - ChecklistItem.Checked is bool
+
+        files:
+          - "pkg/protocol/types_sections.go"
+        dependencies: []
+
+      - id: "E"
+        task: |
+          ## What to Implement
+          Update parser.go to extract 4 new typed blocks (impl-stub-report, impl-quality-gates, impl-post-merge-checklist, impl-known-issues) and populate corresponding fields in IMPLManifest. Update stubs.go to wrap scan-stubs.sh output in typed block fence.
+
+          ## Interfaces to Implement
+          Parser functions for new typed blocks (extracted via extractTypedBlock, unmarshaled into StubReport, PostMergeChecklist).
+
+          ## Interfaces to Call
+          - Types from pkg/protocol/types_sections.go (StubReport, PostMergeChecklist — defined by Agent D)
+          - Existing types from pkg/protocol/types.go (QualityGates, KnownIssue)
+
+          ## Tests to Write
+          1. TestParseStubReport — verify typed block extraction and unmarshal
+          2. TestParsePostMergeChecklist — verify groups/items extraction
+          3. TestParseQualityGatesTyped — verify typed block extraction (migration from prose)
+          4. TestParseKnownIssuesTyped — verify typed block extraction (migration from prose)
+          5. TestRunStubScanYAML — verify stubs.go wraps output correctly
+
+          ## Verification Gate
+          ```bash
+          cd /Users/dayna.blackwell/code/scout-and-wave-go
+          go build ./pkg/protocol/... ./pkg/orchestrator/...
+          go test ./pkg/protocol/... -run TestParse
+          go test ./pkg/orchestrator/... -run TestRunStubScan
+          go vet ./pkg/protocol/... ./pkg/orchestrator/...
+          ```
+
+          ## Constraints
+          - Parser already uses extractTypedBlock for impl-dep-graph, impl-file-ownership, etc. — reuse same pattern
+          - In parser.go main loop: detect `## Stub Report — Wave N` heading, extract next typed block, unmarshal into StubReport, store in doc.StubReports[waveKey]
+          - Quality Gates: change from parseQualityGatesSection (prose parser) to extractTypedBlock + unmarshal into QualityGates
+          - Known Issues: change from markdown parsing to extractTypedBlock + unmarshal into []KnownIssue
+          - Post-Merge Checklist: add new case for `## Post-Merge Checklist`, extract typed block, unmarshal into PostMergeChecklist
+          - In stubs.go: wrap script output with fence markers before appending: ```yaml type=impl-stub-report\n{output}\n```
+          - Backward compatibility: if typed block missing, fall back to markdown parsing (for existing IMPL docs)
+
+        files:
+          - "pkg/protocol/parser.go"
+          - "pkg/orchestrator/stubs.go"
+        dependencies:
+          - "D"
+
+  - number: 2
+    agents:
+      - id: "F"
+        task: |
+          ## What to Implement
+          Update StubReportPanel.tsx to parse YAML typed block instead of rendering raw markdown. Update web/src/types.ts to add TypeScript interfaces mirroring Go types for StubReport.
+
+          ## Interfaces to Implement
+          TypeScript interfaces: StubReport, StubHit (mirror Go types from types_sections.go).
+
+          ## Interfaces to Call
+          - IMPLDocResponse type from types.ts (contains stub_report_text field)
+          - StubReport YAML schema (defined by Agent A, implemented by Agent D/E)
+
+          ## Tests to Write
+          None (UI component — verify visually in browser).
+
+          ## Verification Gate
+          ```bash
+          cd /Users/dayna.blackwell/code/scout-and-wave-web/web
+          command npm run build
+          # Verify TypeScript compiles
+          grep "interface StubReport" src/types.ts
+          grep "interface StubHit" src/types.ts
+          ```
+
+          ## Constraints
+          - StubReportPanel currently renders stubReportText via MarkdownContent component
+          - Change to: parse stubReportText as YAML, extract StubReport object, render as interactive table
+          - Table columns: File (link to file), Line, Pattern (badge), Context (code snippet)
+          - Status badge at top: "clean" (green) if status === "clean", "stubs detected" (amber) if status === "stubs_detected"
+          - Empty state: "No stub report — scan has not run yet." (when stubReportText is empty)
+          - TypeScript interfaces must match Go struct field names (JSON tags): scanned_files, not scannedFiles
+          - Use yaml parser: `import yaml from 'js-yaml'; const report = yaml.load(stubReportText) as StubReport;`
+
+        files:
+          - "web/src/types.ts"
+          - "web/src/components/review/StubReportPanel.tsx"
+        dependencies:
+          - "D"
+          - "E"
+
+      - id: "G"
+        task: |
+          ## What to Implement
+          Update QualityGatesPanel.tsx to parse YAML typed block instead of markdown bullets. Parser currently uses regex on prose — change to YAML parsing.
+
+          ## Interfaces to Implement
+          None (TypeScript interfaces already exist: QualityGates, QualityGate — used in manifest.ts).
+
+          ## Interfaces to Call
+          - QualityGates YAML schema (defined by Agent A, implemented by Agent E)
+          - Existing QualityGate interface from types.ts or manifest.ts
+
+          ## Tests to Write
+          None (UI component — verify visually in browser).
+
+          ## Verification Gate
+          ```bash
+          cd /Users/dayna.blackwell/code/scout-and-wave-web/web
+          command npm run build
+          # Verify no TypeScript errors
+          grep "parseGates" src/components/review/QualityGatesPanel.tsx
+          # Old parseGates function should be replaced with YAML parsing
+          ```
+
+          ## Constraints
+          - QualityGatesPanel currently has parseGates() function (lines 9-39) that parses markdown bullets with [required]/[optional] tags
+          - Replace parseGates with YAML parsing: `const gates = yaml.load(gatesText) as QualityGates;`
+          - Render gates.gates array directly (no regex parsing needed)
+          - Badge rendering unchanged: required (red) vs optional (gray)
+          - Empty state unchanged: "No quality gates defined"
+          - TypeScript QualityGate interface must have: type, command, required (boolean), description
+
+        files:
+          - "web/src/components/review/QualityGatesPanel.tsx"
+        dependencies:
+          - "D"
+          - "E"
+
+      - id: "H"
+        task: |
+          ## What to Implement
+          Update PostMergeChecklistPanel.tsx and KnownIssuesPanel.tsx to parse YAML typed blocks instead of markdown prose. Both currently use regex-based parsers.
+
+          ## Interfaces to Implement
+          TypeScript interfaces for PostMergeChecklist, ChecklistGroup, ChecklistItem (mirror Go types from types_sections.go).
+
+          ## Interfaces to Call
+          - PostMergeChecklist and KnownIssue YAML schemas (defined by Agent A, implemented by Agent D/E)
+          - IMPLDocResponse.known_issues already exists (array of KnownIssue)
+
+          ## Tests to Write
+          None (UI components — verify visually in browser).
+
+          ## Verification Gate
+          ```bash
+          cd /Users/dayna.blackwell/code/scout-and-wave-web/web
+          command npm run build
+          # Verify TypeScript compiles and new interfaces exist
+          grep "interface PostMergeChecklist" src/types.ts
+          grep "interface ChecklistGroup" src/types.ts
+          grep "interface ChecklistItem" src/types.ts
+          ```
+
+          ## Constraints
+          - PostMergeChecklistPanel.tsx currently has parseChecklist() function (lines 13-31) that parses **headings** and `- [ ]` checkboxes
+          - Replace parseChecklist with YAML parsing: `const checklist = yaml.load(checklistText) as PostMergeChecklist;`
+          - Render checklist.groups array directly
+          - Checkbox rendering unchanged: ChecklistItem component already renders checked state
+          - KnownIssuesPanel.tsx currently has parseIssueBlob() function (lines 21-40) that parses **bold headings** and `- Status:`/`- Description:`/`- Workaround:` fields
+          - Replace parseIssueBlob with YAML parsing: `const issues = yaml.load(issuesText) as KnownIssue[];` (note: Known Issues is an array at root)
+          - Update types.ts: KnownIssue interface must have title (string), status (string), description (string), workaround (string, optional)
+          - Status badge colors unchanged: pre-existing (amber), new (red), resolved (green), mitigated (blue)
+
+        files:
+          - "web/src/components/review/PostMergeChecklistPanel.tsx"
+          - "web/src/components/review/KnownIssuesPanel.tsx"
+          - "web/src/types.ts"
+        dependencies:
+          - "D"
+          - "E"
+
+# Pre-Mortem
+
+pre_mortem:
+  overall_risk: "medium"
+  rows:
+    - scenario: "Scout outputs YAML schema in one format, parser expects different field names"
+      likelihood: "medium"
+      impact: "high"
+      mitigation: "Agent A defines canonical schemas in message-formats.md. Agent D creates Go types with exact yaml tags. Agent B copies schemas from message-formats.md into Scout prompt verbatim. Agent E's parser tests verify round-trip."
+    - scenario: "scan-stubs.sh outputs YAML with unescaped special characters in context field, breaking parser"
+      likelihood: "medium"
+      impact: "medium"
+      mitigation: "Agent C must properly escape YAML special characters (quotes, colons, newlines) in context field. Agent E's test includes stub with special chars."
+    - scenario: "TypeScript YAML parsing fails on typed block fence markers (```yaml type=...)"
+      likelihood: "low"
+      impact: "medium"
+      mitigation: "Agent F/G/H must strip fence markers before parsing: `const yamlText = stubReportText.replace(/^```yaml.*\\n|```$/gm, '').trim();`"
+    - scenario: "Backward compatibility breaks existing IMPL docs that use markdown format"
+      likelihood: "low"
+      impact: "high"
+      mitigation: "Agent E adds fallback logic in parser: try extractTypedBlock first, if missing fall back to old markdown parsing functions. Existing docs continue to work."
+    - scenario: "Cross-repo wave coordination fails — Agent B updates Scout prompt before Agent A documents schemas"
+      likelihood: "low"
+      impact: "medium"
+      mitigation: "Wave structure enforces dependency: Agent B depends on Agent A. Agent B reads protocol/message-formats.md to extract schemas."
+    - scenario: "UI panels parse YAML but API still serves markdown blobs"
+      likelihood: "low"
+      impact: "high"
+      mitigation: "Agent E updates parser.go which feeds the API. Wave 2 agents (F/G/H) depend on Agent E completing. Test by running web UI against live API."
+
+# Known Issues
+
+known_issues:
+  - title: "js-yaml not installed in scout-and-wave-web"
+    status: "new"
+    description: "Wave 2 agents need js-yaml to parse YAML in TypeScript. Currently not in package.json."
+    workaround: "Agent F/G/H should check package.json and add js-yaml if missing: `cd web && command npm install js-yaml @types/js-yaml`"
+
+# Completion Reports (populated by agents)
+completion_reports: {}
