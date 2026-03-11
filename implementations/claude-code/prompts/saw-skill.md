@@ -146,25 +146,31 @@ Scout-and-Wave supports two fundamentally different execution models. **Do not c
 
 **When to use:** All interactive `/saw wave` invocations, local development, human-in-the-loop workflows.
 
-### Programmatic Orchestration (API / CI/CD)
+### Programmatic Orchestration (Non-CLI)
 
-**Not available in CLI context.** This execution model is for the web app backend and CI/CD pipelines.
+**Not available in CLI context.** This execution model is for the web app backend, CI/CD pipelines, or local automation scripts.
 
 **How agents launch:**
-- Via Anthropic API calls with service account API keys
-- Agents run as isolated API sessions (no Claude Code, no MCP, no Agent tool)
+- Via agent backend abstraction layer (configured in `saw.config.json`)
+- Supports multiple backends:
+  - Anthropic API (requires API key)
+  - OpenAI API (requires API key)
+  - Bedrock API (requires AWS credentials)
+  - Local LLMs (Ollama, LM Studio, etc. - no keys required)
+  - Any OpenAI-compatible API endpoint
+- Agents run as isolated sessions (no Claude Code, no MCP, no Agent tool)
 
 **Wave execution flow (AUTOMATED):**
 - Single command: `sawtools run-wave "<manifest-path>" --wave <N> --repo-dir "<repo-path>"`
-- This handles worktree creation, agent launch (via API), completion verification, and merge
+- This handles worktree creation, agent launch (via configured backend), completion verification, and merge
 - Fully automated — no human interaction required
 
-**When to use:** Web app "Run Wave" button, CI/CD automation, headless execution.
+**When to use:** Web app "Run Wave" button, CI/CD automation, headless execution, local automation with Ollama/LM Studio.
 
 **Why the distinction matters:**
-- Max plan credits and Bedrock credentials are NOT API keys — they only work through the Agent tool
-- `run-wave` requires Anthropic API keys (service accounts, not personal Max plan)
-- The CLI orchestrator (you) has no API keys, so `run-wave` is not an option
+- Max plan credits and Bedrock credentials are Claude Code session credentials — they only work through the Agent tool
+- `run-wave` uses the agent backend (API or local LLM), not Claude Code's Agent tool
+- The CLI orchestrator (you) cannot use `run-wave` because you're inside a Claude Code session — you must use the Agent tool to spawn sub-agents
 - The manual flow (create-worktrees → Agent tool → merge) is mandatory for CLI orchestration
 
 ## Execution Logic
