@@ -16,7 +16,7 @@ license: MIT OR Apache-2.0
 compatibility: Requires Claude Code (Skills API). Git 2.20+ required for worktree support.
 metadata:
   author: blackwell-systems
-  version: "0.8.0"
+  version: "0.9.0"
 ---
 
 # Scout-and-Wave: Parallel Agent Coordination
