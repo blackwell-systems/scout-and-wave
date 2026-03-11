@@ -1395,94 +1395,81 @@ completion_reports:
       - Created stub JournalObserver struct to satisfy interface contract (Agent A owns full implementation)
       - Parses wave/agent from journal directory path for archive naming
       - All 13 tests pass, covering success paths, edge cases, and error conditions
-      - Build and vet gates pass cleanly
-
-  ### Agent C - Completion Report
-
-  ```yaml type=impl-completion-report
-  status: complete
-  repo: /Users/dayna.blackwell/code/scout-and-wave-go
-  worktree: .claude/worktrees/wave1-agent-C
-  branch: wave1-agent-C
-  commit: decf400
-  files_changed: []
-  files_created:
-    - pkg/journal/checkpoint.go
-    - pkg/journal/checkpoint_test.go
-    - pkg/journal/observer.go
-  interface_deviations: []
-  out_of_scope_deps: []
-  tests_added:
-    - TestCheckpoint_CreatesSnapshot
-    - TestCheckpoint_SavesMetadata
-    - TestListCheckpoints_ReturnsAll
-    - TestRestoreCheckpoint_RollsBackIndex
-    - TestRestoreCheckpoint_RollsBackCursor
-    - TestRestoreCheckpoint_PreservesCheckpoints
-    - TestDeleteCheckpoint_RemovesFiles
-    - TestCheckpoint_DuplicateName
-    - TestRestoreCheckpoint_NonexistentName
-    - TestCheckpoint_CountsEntries
-    - TestCheckpoint_EmptyJournal
-    - TestCheckpoint_InvalidNames
-  verification: PASS (go build && go vet && go test)
-  ```
-
-  **Implementation summary:**
-  Checkpoint system successfully implemented with full snapshot/restore functionality. All 12 tests pass.
-
-  **Key features:**
-  - `Checkpoint(name)` creates immutable snapshots of index.jsonl, cursor.json, recent.json
-  - `ListCheckpoints()` returns sorted list by timestamp (oldest first)
-  - `RestoreCheckpoint(name)` rolls back journal state, preserves checkpoint files
-  - `DeleteCheckpoint(name)` removes snapshot and metadata
-  - Handles empty journal state gracefully (no files yet is valid)
-  - Validates checkpoint names for filesystem safety (no slashes/spaces)
-  - Entry counting accurate via efficient JSONL line scanning
-
-  **File structure:**
-  - Metadata: `checkpoints/{name}.json`
-  - Snapshots: `checkpoints/{name}-index.jsonl`, `{name}-cursor.json`, `{name}-recent.json`
-  - ListCheckpoints filters out snapshot files correctly (was parsing them as metadata initially, fixed)
-
-  **Stub creation:**
-  Created minimal `observer.go` stub with JournalObserver struct definition to allow checkpoint.go to compile independently. Agent A owns the full observer implementation - this stub will be replaced during merge.
-
-  **Test coverage:**
-  All 10 required tests implemented plus 2 additional edge cases (empty journal, invalid names). Tests use t.TempDir() for isolation. Verification gates pass cleanly.
-
-# Agent Completion Reports
-
-## Agent A - Completion Report
-
-```yaml type=impl-completion-report
-status: complete
-repo: /Users/dayna.blackwell/code/scout-and-wave-go
-worktree: .claude/worktrees/wave1-agent-A
-branch: wave1-agent-A
-commit: 3dbd5bb
-files_changed:
-  - pkg/journal/observer.go
-  - pkg/journal/observer_test.go
-  - pkg/journal/doc.go
-files_created:
-  - pkg/journal/observer.go
-  - pkg/journal/observer_test.go
-  - pkg/journal/doc.go
-interface_deviations: []
-out_of_scope_deps: []
-tests_added:
-  - TestNewObserver_CreatesDirectories
-  - TestSync_FirstRun
-  - TestSync_Incremental
-  - TestSync_SessionFileChanged
-  - TestFindLatestSessionFile_SelectsMostRecent
-  - TestAppendToIndex_PreservesExisting
-  - TestUpdateRecent_MaintainsLast30
-  - TestSync_ExtractsToolBlocks
-  - TestSync_SavesFullOutputToFiles
-verification: PASS
-```
-
-Implementation complete. Core journal observer successfully implemented with all 9 tests passing and verification gates satisfied.
-
+  A:
+    status: "complete"
+    repo: "/Users/dayna.blackwell/code/scout-and-wave-go"
+    worktree: ".claude/worktrees/wave1-agent-A"
+    branch: "wave1-agent-A"
+    commit: "3dbd5bb"
+    files_changed:
+      - "pkg/journal/observer.go"
+      - "pkg/journal/observer_test.go"
+      - "pkg/journal/doc.go"
+    files_created:
+      - "pkg/journal/observer.go"
+      - "pkg/journal/observer_test.go"
+      - "pkg/journal/doc.go"
+    interface_deviations: []
+    out_of_scope_deps: []
+    tests_added:
+      - "TestNewObserver_CreatesDirectories"
+      - "TestSync_FirstRun"
+      - "TestSync_Incremental"
+      - "TestSync_SessionFileChanged"
+      - "TestFindLatestSessionFile_SelectsMostRecent"
+      - "TestAppendToIndex_PreservesExisting"
+      - "TestUpdateRecent_MaintainsLast30"
+      - "TestSync_ExtractsToolBlocks"
+      - "TestSync_SavesFullOutputToFiles"
+    verification: "PASS"
+    notes: "Core observer complete. All 9 tests passing."
+  B:
+    status: "complete"
+    repo: "/Users/dayna.blackwell/code/scout-and-wave-go"
+    worktree: ".claude/worktrees/wave1-agent-B"
+    branch: "wave1-agent-B"
+    commit: "cf490f4"
+    files_changed:
+      - "pkg/journal/context.go"
+      - "pkg/journal/context_test.go"
+    files_created:
+      - "pkg/journal/context.go"
+      - "pkg/journal/context_test.go"
+    interface_deviations: []
+    out_of_scope_deps: []
+    tests_added:
+      - "TestGenerateContext_Complete"
+      - "TestExtractFilesModified"
+      - "TestExtractTestResults"
+      - "TestExtractGitCommits"
+      - "TestExtractScaffoldImports"
+      - "TestExtractVerificationGates"
+    verification: "PASS"
+    notes: "Context generator complete. All 19 tests passing."
+  C:
+    status: "complete"
+    repo: "/Users/dayna.blackwell/code/scout-and-wave-go"
+    worktree: ".claude/worktrees/wave1-agent-C"
+    branch: "wave1-agent-C"
+    commit: "decf400"
+    files_changed: []
+    files_created:
+      - "pkg/journal/checkpoint.go"
+      - "pkg/journal/checkpoint_test.go"
+    interface_deviations: []
+    out_of_scope_deps: []
+    tests_added:
+      - "TestCheckpoint_CreatesSnapshot"
+      - "TestCheckpoint_SavesMetadata"
+      - "TestListCheckpoints_ReturnsAll"
+      - "TestRestoreCheckpoint_RollsBackIndex"
+      - "TestRestoreCheckpoint_RollsBackCursor"
+      - "TestRestoreCheckpoint_PreservesCheckpoints"
+      - "TestDeleteCheckpoint_RemovesFiles"
+      - "TestCheckpoint_DuplicateName"
+      - "TestRestoreCheckpoint_NonexistentName"
+      - "TestCheckpoint_CountsEntries"
+      - "TestCheckpoint_EmptyJournal"
+      - "TestCheckpoint_InvalidNames"
+    verification: "PASS"
+    notes: "Checkpoint system complete. All 12 tests passing."
