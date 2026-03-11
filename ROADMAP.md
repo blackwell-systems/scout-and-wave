@@ -791,6 +791,33 @@ scout-and-wave/skills/
 
 Add a Claude chat panel to `saw serve`. Read-only diagnostic mode first (why did agent B fail?), then write tools (retry, skip), then proactive SSE monitoring. No protocol changes required.
 
+### Explicit IMPL Targeting in `/saw` Skill
+
+**Current state:** `/saw wave` and `/saw status` have no way to specify which IMPL doc to operate on. The skill instructions say to "read it and identify the current wave" but don't specify which IMPL to read when multiple exist in `docs/IMPL/`.
+
+**Problem:** As projects accumulate multiple IMPLs over time, the orchestrator must guess which one the user wants. This is fragile and error-prone. CLI tools should avoid hidden state.
+
+**Proposed:** Add `--impl` flag to all wave-related skill invocations:
+
+```
+/saw wave --impl tool-journaling
+/saw wave --auto --impl tool-journaling
+/saw status --impl tool-journaling
+```
+
+Accepts three formats:
+1. **By slug**: `--impl tool-journaling` (resolved via `sawtools list-impls`)
+2. **By filename**: `--impl IMPL-tool-journaling.yaml`
+3. **By path**: `--impl docs/IMPL/IMPL-tool-journaling.yaml`
+
+**Fallback when `--impl` omitted:**
+- List all IMPLs with pending waves (via `sawtools list-impls`)
+- If exactly 1, use it automatically
+- If multiple, prompt user to specify
+- If none, report "no pending IMPLs"
+
+**Implementation location:** Skill argument parsing in `saw-skill.md` "Execution Logic" section. Parse `--impl <value>` before the subcommand payload. No protocol changes required — this is orchestrator UX only.
+
 ---
 
 ## Multi-Generation Agent IDs
