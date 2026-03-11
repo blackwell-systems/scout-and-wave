@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.25.0] | 2026-03-10 | wave-agent v0.4.0 — completion reports now use sawtools set-completion for proper YAML formatting |
 | [0.24.0] | 2026-03-10 | saw-skill v0.9.0 — explicit IMPL targeting with --impl flag for /saw wave and /saw status |
 | [0.23.0] | 2026-03-10 | Wave 1 merged (sdk branch): protocol schema typed blocks + Scout prompt YAML output; parser wave structure extraction |
 | [0.22.0] | 2026-03-10 | saw-skill v0.7.3, saw-worktree v0.6.3, saw-merge v0.6.2 — strip markdown dual-mode language; IMPL docs are YAML-only |
@@ -78,6 +79,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.3.0] | 2026-02-28 | Bootstrap mode for new projects; Wave 0 pattern |
 | [0.2.0] | 2026-02-28 | Decomposed skill prompt; complexity-based suitability heuristic |
 | [0.1.0] | 2026-02-27 | Initial release |
+
+---
+
+## [0.25.0] - 2026-03-10
+
+### Changed
+
+- **wave-agent v0.4.0 completion report format** — Wave agents now use `sawtools set-completion` CLI command instead of manually writing markdown-style typed blocks. This writes completion reports to the `completion_reports:` YAML section in proper machine-parseable format, preventing YAML parsing errors when orchestrator tools read IMPL docs.
+- **Completion Report section rewritten** — Replaced markdown template with `sawtools set-completion` command syntax and examples for complete, partial, and blocked agents. Includes all flags: `--status`, `--commit`, `--branch`, `--files-changed`, `--files-created`, `--verification`, `--failure-type`, `--notes`.
+
+### Fixed
+
+- **YAML parsing errors from hybrid markdown/YAML format** — Previous approach (markdown-style typed blocks appended after YAML sections) broke YAML parsers. SDK approach writes to proper `completion_reports:` key structure.
 
 ---
 
