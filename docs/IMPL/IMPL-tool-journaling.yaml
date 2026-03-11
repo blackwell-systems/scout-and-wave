@@ -1,3 +1,4 @@
+completion_date: "2026-03-10"
 title: Tool Journaling for Compaction Safety
 feature_slug: tool-journaling
 verdict: SUITABLE
@@ -1407,6 +1408,8 @@ completion_reports:
         notes: |
             Journal API endpoints complete. All 11 tests passing. Implemented 4 HTTP handlers for journal browsing, context summary, checkpoint listing, and checkpoint restoration. All endpoints handle errors gracefully with appropriate HTTP status codes (404 for not found, 400 for bad requests, 500 for server errors). Response formats match specification exactly. Routes registered in server.go after manifest routes section.
         repo: /Users/dayna.blackwell/code/scout-and-wave-web
+    H:
+        status: complete
     I:
         status: complete
         branch: wave3-agent-I
@@ -1414,6 +1417,16 @@ completion_reports:
         files_changed:
             - implementations/claude-code/prompts/agents/wave-agent.md
             - implementations/claude-code/prompts/agents/scaffold-agent.md
+        verification: PASS
+    J:
+        status: complete
+        branch: wave3-agent-J
+        commit: 81f6c41
+        files_changed:
+            - implementations/claude-code/prompts/saw-skill.md
+        files_created:
+            - docs/tool-journaling.md
+            - docs/architecture.md
         verification: PASS
 pre_mortem:
     overall_risk: medium
@@ -1443,21 +1456,3 @@ pre_mortem:
           impact: low
           mitigation: Paginate journal API responses (default 100 entries, offset parameter). Summary endpoint always fast (uses recent.json cache). Full journal endpoint includes pagination metadata.
 state: WAVE2_COMPLETE
-
-agent_h_completion:
-    status: complete
-    repo: /Users/dayna.blackwell/code/scout-and-wave
-    worktree: N/A (worked on sdk branch directly, documentation-only)
-    branch: sdk
-    commit: bb6dcd578ca55eadf214137e85ae57253114a4c1
-    files_changed:
-        - protocol/execution-rules.md
-        - protocol/invariants.md
-        - protocol/message-formats.md
-    files_created: []
-    interface_deviations: []
-    out_of_scope_deps: []
-    tests_added: []
-    verification: PASS
-    notes: |
-        Protocol documentation updates complete. Added E23A execution rule for journal recovery procedure (after E23 as specified). Updated I4 invariant to clarify IMPL doc/journal duality without violating single-source-of-truth constraint. Added Journal Entry Format section to message-formats.md with complete ToolEntry struct schema matching pkg/journal/types.go exactly. All cross-references added (E23A ↔ I4, E23A ↔ E19, Journal Entry Format ↔ E23A). Verification commands all pass. Documentation is ready for SDK implementation in scout-and-wave-go.
