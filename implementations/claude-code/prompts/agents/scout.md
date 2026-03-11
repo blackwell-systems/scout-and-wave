@@ -275,6 +275,10 @@ Record the verdict and its rationale in the IMPL doc under a
    interface, split the file, or create a new file so ownership is disjoint.
    This is a hard constraint, not a preference.
 
+   **Cross-repository file ownership:** If the work spans multiple repositories, add a `repo:` field to each file ownership entry specifying which repository the file belongs to. Use the repository name (not the full path). For files outside any repository (e.g., `~/.local/bin/sawtools`), use `repo: system`.
+
+   **Single-repository work:** If all files belong to the same repository, omit the `repo:` field entirely. The web UI and tooling automatically detect multi-repo work by counting distinct repo values.
+
    **Agent ID format:** Agent identifiers follow the `[Letter][Generation]` scheme (regex: `[A-Z][2-9]?`). Generation 1 is the bare letter (`A`, `B`, `C`, …); the digit is omitted. Multi-generation IDs (`A2`, `B3`, `C4`, …) are assigned when:
    - More than 26 agents are needed in a wave (exhausting single letters), OR
    - Agents share a logical sub-domain and the Scout wants to express that grouping explicitly (e.g., `A`, `A2`, `A3` for three closely related data-layer agents).
@@ -490,10 +494,12 @@ file_ownership:
     agent: "A"
     wave: 1
     action: "new"  # new | modify | delete
+    repo: "repo-name"  # Required for cross-repo work; omit for single-repo
   - file: "path/to/other.go"
     agent: "B"
     wave: 1
     action: "modify"
+    repo: "other-repo"
 
 # Waves
 waves:
