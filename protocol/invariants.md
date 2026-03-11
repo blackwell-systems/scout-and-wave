@@ -65,7 +65,15 @@ To audit consistency, search implementation files for `I{N}` and verify the embe
 
 **Rationale:** The IMPL doc is a git-tracked file visible to all agents across waves. Chat output exists only in one agent's session and cannot be read by the orchestrator or other agents. Completion reports written to chat only are protocol violations.
 
-**Related Rules:** See E14 (IMPL doc write discipline)
+**IMPL Doc and Journal Duality:** The tool journal (E23A) complements the IMPL doc without violating I4's single-source-of-truth constraint:
+
+- **IMPL doc** = source of truth for *planning*: What work should be done (agent prompts, interface contracts, file ownership, wave structure, quality gates)
+- **Tool journal** = source of truth for *execution history*: What work has been done (tools called, files modified, commands executed, tests run, commits made)
+- **Completion reports** = synthesis of both: Agents read their task from the IMPL doc, execute it (recorded in journal), then write results back to the IMPL doc referencing work captured in the journal
+
+The journal is agent-private working memory. It is not distributed to other agents. Only the completion report (written to the IMPL doc) becomes visible cross-agent. The IMPL doc remains the coordination point; the journal is the execution trace that enables agent recovery and context reconstruction across sessions.
+
+**Related Rules:** See E14 (IMPL doc write discipline), E23A (tool journal recovery)
 
 ---
 

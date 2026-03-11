@@ -648,6 +648,43 @@ This assembled payload is passed as the `prompt` parameter when launching the ag
 
 ---
 
+## E23A: Tool Journal Recovery
+
+**Trigger:** Before launching a Wave agent, the Orchestrator checks for an existing tool journal at `.saw-state/wave{N}/agent-{ID}/index.jsonl`.
+
+**Required Action:** If found:
+
+1. **Load the journal:** Read all JSONL entries from the index file.
+
+2. **Generate context.md:** Analyze the last 50 entries (or all entries if <50) to produce a summary containing:
+   - **Files modified/created:** Extracted from Edit/Write tool entries, with line counts where available
+   - **Commands run:** Extracted from Bash tool entries, with exit codes
+   - **Tests executed:** Extracted from Bash tool entries matching test patterns (e.g., `go test`, `npm test`, `pytest`), with pass/fail counts
+   - **Git commits made:** Extracted from Bash tool entries matching `git commit` commands, with SHAs and branch names
+   - **Scaffold files imported:** Extracted from Read tool entries matching scaffold paths from the IMPL doc
+   - **Verification gate status:** Extracted from Bash tool entries matching Field 6 verification commands
+   - **Completion report status:** Whether the agent has written its completion report to the IMPL doc yet
+
+3. **Prepend to agent prompt:** Insert the generated `context.md` under a `## Session Context (Recovered from Tool Journal)` heading at the beginning of the agent's prompt (before Field 0).
+
+The journal becomes the agent's working memory across context compactions. It is append-only; entries are never deleted during execution.
+
+**Interaction with I4 (IMPL doc as single source of truth):**
+
+- The **IMPL doc** remains the source of truth for *planning*: agent prompts, interface contracts, file ownership, wave structure
+- The **tool journal** is the source of truth for *execution history*: what the agent has actually done (tools called, files modified, commands run, tests executed)
+- **Completion reports synthesize both**: "I modified these files (from journal), they implement these interfaces (from IMPL doc), tests pass (from journal), here's the commit SHA (from journal)"
+
+This duality does not violate I4. The IMPL doc defines *what should be done*. The journal records *what was done*. Agents consult the IMPL doc for their task specification and write results back to it; they consult the journal to avoid repeating work they've already attempted.
+
+**Failure recovery:** If an agent fails with `failure_type: transient` or `failure_type: fixable` (E19), the Orchestrator relaunches the agent. The journal is preserved across retries — the agent sees what it tried before and can avoid repeating failed operations. For example, if an agent tried a build command that failed due to a transient network error, on retry it sees the failed attempt in its recovered context and can proceed differently (or retry with awareness of the prior failure).
+
+**Related Invariants:** See I4 (IMPL doc and journal duality)
+
+**Related Rules:** See E19 (failure type decision tree), E6 (agent prompt propagation)
+
+---
+
 ## Cross-References
 
 - See `preconditions.md` for conditions that must hold before execution begins

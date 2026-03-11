@@ -508,6 +508,57 @@ verification: PASS | FAIL ({command} - N/N tests)
 
 ---
 
+## Journal Entry Format
+
+The tool journal is a sequence of JSONL entries written to `.saw-state/wave{N}/agent-{ID}/index.jsonl` during agent execution. Each line is a JSON object representing a single tool invocation or tool result. The journal is append-only and never modified after writing.
+
+**Purpose:** The journal captures execution history for agent recovery (E23A). When an agent is relaunched (after failure, timeout, or context compaction), the Orchestrator loads the journal, generates a summary, and prepends it to the agent's prompt. This gives the agent working memory of what it has already attempted.
+
+**Entry schema:** Each JSONL line conforms to the `ToolEntry` struct:
+
+```go
+type ToolEntry struct {
+    Timestamp   time.Time              `json:"ts"`
+    Kind        string                 `json:"kind"` // "tool_use" or "tool_result"
+    ToolName    string                 `json:"tool_name,omitempty"`
+    ToolUseID   string                 `json:"tool_use_id"`
+    Input       map[string]interface{} `json:"input,omitempty"`
+    ContentFile string                 `json:"content_file,omitempty"` // Path to full output
+    Preview     string                 `json:"preview,omitempty"`      // First 800 chars
+    Truncated   bool                   `json:"truncated,omitempty"`
+}
+```
+
+**Field definitions:**
+
+- **ts:** ISO 8601 timestamp when the tool was invoked or result received.
+- **kind:** Either `"tool_use"` (agent invoked a tool) or `"tool_result"` (tool returned output).
+- **tool_name:** Name of the tool invoked (e.g., `"Read"`, `"Write"`, `"Edit"`, `"Bash"`). Present only for `tool_use` entries.
+- **tool_use_id:** Unique identifier correlating a `tool_use` with its corresponding `tool_result`.
+- **input:** Tool parameters as a JSON object. Keys match tool parameter names. Present only for `tool_use` entries.
+- **content_file:** Relative path to a file containing the full tool result (used when output exceeds preview size). Present only for `tool_result` entries.
+- **preview:** First 800 characters of the tool result. Present only for `tool_result` entries. If output is ≤800 chars, `preview` contains the full output and `truncated` is false.
+- **truncated:** Boolean indicating whether the full output was written to `content_file`. Present only for `tool_result` entries.
+
+**Example JSONL entries:**
+
+```jsonl
+{"ts":"2025-01-15T14:32:10Z","kind":"tool_use","tool_name":"Read","tool_use_id":"toolu_01A2B3","input":{"file_path":"/repo/pkg/types.go"}}
+{"ts":"2025-01-15T14:32:10Z","kind":"tool_result","tool_use_id":"toolu_01A2B3","preview":"package types\n\ntype Config struct {\n\tName string\n}\n","truncated":false}
+{"ts":"2025-01-15T14:33:45Z","kind":"tool_use","tool_name":"Bash","tool_use_id":"toolu_02C4D5","input":{"command":"go build ./...","description":"Build all packages"}}
+{"ts":"2025-01-15T14:33:47Z","kind":"tool_result","tool_use_id":"toolu_02C4D5","content_file":"results/toolu_02C4D5.txt","preview":"# github.com/example/pkg/api\npkg/api/handler.go:42:2: undefined: middleware\n","truncated":true}
+{"ts":"2025-01-15T14:35:20Z","kind":"tool_use","tool_name":"Edit","tool_use_id":"toolu_03E6F7","input":{"file_path":"/repo/pkg/api/handler.go","old_string":"func HandleRequest(w http.ResponseWriter, r *http.Request) {","new_string":"func HandleRequest(w http.ResponseWriter, r *http.Request) {\n\tmiddleware.Authenticate(r)"}}
+{"ts":"2025-01-15T14:35:20Z","kind":"tool_result","tool_use_id":"toolu_03E6F7","preview":"The file /repo/pkg/api/handler.go has been updated successfully.","truncated":false}
+```
+
+**Journal persistence across retries:** If an agent fails with `failure_type: transient` or `failure_type: fixable` (E19), the Orchestrator relaunches it. The journal is preserved — entries from the failed attempt remain in `index.jsonl`. On relaunch, the agent sees what it tried before via the recovered context (E23A). This prevents retry loops where the agent repeats the same failing operation without learning from it.
+
+**Journal cleanup:** Journals are archived after wave merge (per agent completion). Archived journals are compressed and moved to `.saw-state/archives/wave{N}-agent-{ID}.tar.gz` for post-mortem debugging but are not loaded during normal execution. Only active agent journals (for in-progress waves) are read by E23A recovery.
+
+**Related Rules:** See E23A (tool journal recovery), E19 (failure type decision tree), I4 (IMPL doc and journal duality).
+
+---
+
 ## Scaffolds Section Format
 
 Written by the Scout into the IMPL doc to specify type scaffold files. Read and materialized by the Scaffold Agent after human review.
