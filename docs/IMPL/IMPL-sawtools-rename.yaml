@@ -564,4 +564,6 @@ pre_mortem:
           likelihood: low
           impact: medium
           mitigation: The web repo's cmd/saw is out of scope for all agents. Agent B only touches the scout-and-wave repo's prompt files. The web repo has its own saw binary that is unaffected.
-state: SCOUT_PENDING
+# SAW:COMPLETE 2026-03-10
+state: COMPLETE
+completion_date: "2026-03-10"
