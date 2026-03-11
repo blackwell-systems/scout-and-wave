@@ -80,6 +80,672 @@ Schema-validated Scout output via `output_config.format`. Scout runs through API
 
 ---
 
+## Tool Journaling for Compaction Safety
+
+**Status:** Critical for production reliability. Uses external log observer pattern (tails Claude Code session logs).
+
+### The Problem
+
+Long-running waves (14+ agents, 2-4 hours) inevitably hit context limits. When Claude Code compacts the conversation mid-execution, wave agents lose their execution history:
+
+- **Files already modified** — Agent might re-edit the same file, causing duplicate work or conflicts
+- **Test results from 30 minutes ago** — Agent might re-run expensive test suites unnecessarily
+- **Git commits created** — Agent can't reference commit SHAs in completion report (I5 violation)
+- **Scaffold imports discovered** — Agent might re-discover which interfaces to import, wasting time
+- **Verification gates already passed** — Agent forgets which gates passed and might skip reporting them
+- **Blockers already hit** — Agent retries operations that already failed, entering error loops
+
+**Protocol deviation risk:** Without execution history, agents can inadvertently violate core invariants:
+- **I4 violation** — Forget to write completion report (or write incomplete report missing commit SHA)
+- **I5 violation** — Report `commit: "uncommitted"` after actually committing 30 minutes ago
+- **E14 violation** — Lose draft completion report and fail to append it to IMPL doc
+
+### The Solution: External Log Observer
+
+**Architecture:** Tail Claude Code's session logs (`~/.claude/projects/<project>/*.jsonl`) and extract tool execution history externally, rather than instrumenting tool middleware. This provides:
+- **Zero backend modifications** — Works with any agent implementation (Anthropic API, CLI, OpenAI) without changes
+- **Crash resilience** — Session logs persist even if agent crashes mid-execution
+- **Complete capture** — Gets everything Claude Code logs, not just what we instrument
+- **Future-proof** — New backends automatically get journaling for free
+
+**File structure:**
+```
+.saw-state/wave1/agent-A/
+├── cursor.json              # Tracks read position in Claude Code session log
+├── index.jsonl              # Tool use + result metadata (append-only)
+├── recent.json              # Last 30 events (JSON array for fast access)
+├── context.md               # Human-readable summary (generated from index)
+└── tool-results/
+    ├── toolu_abc123.txt     # Full output for tool use abc123 (separate file)
+    └── toolu_def456.txt     # Full output for tool use def456
+```
+
+**Index entry schema (JSONL):**
+```json
+{"ts":"2026-03-10T14:23:45Z","kind":"tool_use","tool_name":"edit_file","tool_use_id":"toolu_abc123","input":{"file":"pkg/api/routes.go","operation":"insert"},"session_id":"sess_xyz"}
+{"ts":"2026-03-10T14:25:12Z","kind":"tool_result","tool_use_id":"toolu_abc123","content_file":".saw-state/wave1/agent-A/tool-results/toolu_abc123.txt","preview":"✓ Inserted 12 lines","truncated":false}
+{"ts":"2026-03-10T14:26:03Z","kind":"tool_use","tool_name":"bash","tool_use_id":"toolu_def456","input":{"command":"go test ./pkg/api"},"session_id":"sess_xyz"}
+```
+
+**Context markdown (generated from journal, injected into agent on resume):**
+```markdown
+## Session Context (Recovered from Tool Journal)
+
+**Last activity:** 2026-03-10 14:35:22 (12 minutes ago)
+**Total tool calls:** 47
+**Session duration:** 1h 23m
+
+### Files Modified (4)
+- `pkg/api/routes.go` (added 3 endpoints, 45 lines) — last edited 14:23
+- `pkg/api/handlers.go` (fixed type error, 3 lines) — last edited 14:24
+- `pkg/api/routes_test.go` (added tests, 78 lines) — last edited 14:25
+- `go.mod` (updated dependency) — last edited 14:22
+
+### Tests Run
+- `go test ./pkg/api` → 12 passed, 2 failed (cache_test timeout) — 14:25
+- Fixed timeout in cache_test.go, retried — 14:28
+- `go test ./pkg/api` → 14 passed ✓ — 14:29
+
+### Git Commits
+- **abc123d** "feat: add REST endpoints for user API"
+  (committed 14:26, branch: wave1-agent-A, 4 files changed, 126 insertions)
+
+### Scaffold Files Imported
+- `pkg/types/user.go` (User, UserRequest, UserResponse types)
+  Imported at line 8 of routes.go — 14:23
+- `pkg/types/response.go` (APIResponse, ErrorResponse types)
+  Imported at line 9 of routes.go — 14:23
+
+### Verification Status (Field 6 Gates)
+- ✓ Build: `go build ./pkg/api` — PASS (14:30)
+- ✓ Tests: `go test ./pkg/api` — PASS, 14 tests (14:29)
+- ⏳ Lint: `go vet ./pkg/api` — Not yet run
+
+### Completion Report Status
+- ⏳ Not yet written (next step after lint gate passes)
+
+**What's next:** Run lint gate (`go vet ./pkg/api`), then write completion report to IMPL doc.
+```
+
+### Implementation Spec
+
+**New package: `pkg/journal/` - External Log Observer**
+
+```go
+// pkg/journal/observer.go
+package journal
+
+import (
+    "bufio"
+    "encoding/json"
+    "io"
+    "os"
+    "path/filepath"
+    "time"
+)
+
+// SessionCursor tracks read position in Claude Code session log
+type SessionCursor struct {
+    SessionFile string `json:"session_file"` // e.g., "1a2b3c4d.jsonl"
+    Offset      int64  `json:"offset"`       // Byte offset in file
+}
+
+// JournalObserver tails Claude Code session logs and extracts tool history
+type JournalObserver struct {
+    ProjectRoot Path
+    JournalDir  Path
+    AgentID     string
+
+    cursorPath  Path
+    indexPath   Path
+    recentPath  Path
+    resultsDir  Path
+}
+
+// NewObserver creates a journal observer for an agent
+func NewObserver(projectRoot Path, agentID string) (*JournalObserver, error) {
+    journalDir := projectRoot.Join(".saw-state", agentID)
+    if err := os.MkdirAll(journalDir, 0755); err != nil {
+        return nil, err
+    }
+
+    return &JournalObserver{
+        ProjectRoot: projectRoot,
+        JournalDir:  journalDir,
+        AgentID:     agentID,
+        cursorPath:  journalDir.Join("cursor.json"),
+        indexPath:   journalDir.Join("index.jsonl"),
+        recentPath:  journalDir.Join("recent.json"),
+        resultsDir:  journalDir.Join("tool-results"),
+    }, nil
+}
+
+// Sync incrementally reads from Claude Code session log and updates journal
+func (o *JournalObserver) Sync() (*SyncResult, error) {
+    // 1. Find latest session log: ~/.claude/projects/<project-id>/*.jsonl
+    sessionFile, err := o.findLatestSessionFile()
+    if err != nil {
+        return nil, err
+    }
+
+    // 2. Load cursor (tracks where we last read)
+    cursor, err := o.loadCursor()
+    if err != nil {
+        cursor = &SessionCursor{SessionFile: sessionFile.Name(), Offset: 0}
+    }
+
+    // 3. If session file changed (new Claude Code session), reset cursor
+    if cursor.SessionFile != sessionFile.Name() {
+        cursor.SessionFile = sessionFile.Name()
+        cursor.Offset = 0
+    }
+
+    // 4. Open session log and seek to cursor position
+    f, err := os.Open(sessionFile)
+    if err != nil {
+        return nil, err
+    }
+    defer f.Close()
+
+    if _, err := f.Seek(cursor.Offset, io.SeekStart); err != nil {
+        return nil, err
+    }
+
+    // 5. Read new lines and extract tool_use + tool_result entries
+    scanner := bufio.NewScanner(f)
+    newEvents := []Event{}
+
+    for scanner.Scan() {
+        line := scanner.Bytes()
+        cursor.Offset, _ = f.Seek(0, io.SeekCurrent) // Update cursor
+
+        var entry map[string]interface{}
+        if err := json.Unmarshal(line, &entry); err != nil {
+            continue // Skip malformed lines
+        }
+
+        // Extract tool_use blocks
+        for _, toolUse := range extractToolUses(entry) {
+            newEvents = append(newEvents, Event{
+                Kind:      "tool_use",
+                Timestamp: entry["timestamp"].(string),
+                ToolName:  toolUse["name"].(string),
+                ToolUseID: toolUse["id"].(string),
+                Input:     truncateDeep(toolUse["input"], maxDepth),
+            })
+        }
+
+        // Extract tool_result blocks
+        for _, toolResult := range extractToolResults(entry) {
+            toolUseID := toolResult["tool_use_id"].(string)
+            content := toolResult["content"].(string)
+
+            // Save full output to separate file
+            resultFile := o.resultsDir.Join(toolUseID + ".txt")
+            os.WriteFile(resultFile, []byte(content), 0644)
+
+            newEvents = append(newEvents, Event{
+                Kind:        "tool_result",
+                Timestamp:   entry["timestamp"].(string),
+                ToolUseID:   toolUseID,
+                ContentFile: resultFile.String(),
+                Preview:     truncate(content, 800),
+            })
+        }
+    }
+
+    // 6. Append new events to index.jsonl
+    if err := o.appendToIndex(newEvents); err != nil {
+        return nil, err
+    }
+
+    // 7. Update recent.json (last 30 events, fast access cache)
+    if err := o.updateRecent(newEvents); err != nil {
+        return nil, err
+    }
+
+    // 8. Save cursor
+    if err := o.saveCursor(cursor); err != nil {
+        return nil, err
+    }
+
+    return &SyncResult{
+        NewToolUses:    countToolUses(newEvents),
+        NewToolResults: countToolResults(newEvents),
+        NewBytes:       cursor.Offset,
+    }, nil
+}
+
+// GenerateContext creates markdown summary from journal
+func (o *JournalObserver) GenerateContext() (string, error) {
+    // Read recent events from recent.json (fast)
+    events, err := o.readRecent(30)
+    if err != nil {
+        return "", err
+    }
+
+    // Analyze events to extract:
+    // - Files modified (from edit_file/write_file tool_use)
+    // - Commands run (from bash tool_use)
+    // - Test results (parse bash tool_result for test output)
+    // - Git commits (parse bash tool_result for commit SHAs)
+    // - Scaffold imports (from read_file tool_use matching scaffold paths)
+
+    return buildContextMarkdown(events), nil
+}
+
+func (o *JournalObserver) findLatestSessionFile() (Path, error) {
+    // ~/.claude/projects/<project-hash>/
+    claudeDir := os.UserHomeDir() + "/.claude/projects"
+
+    // Find directory matching project root hash
+    projectHash := hashPath(o.ProjectRoot)
+    sessionDir := filepath.Join(claudeDir, projectHash)
+
+    // Find latest *.jsonl file by mtime
+    files, _ := filepath.Glob(filepath.Join(sessionDir, "*.jsonl"))
+    if len(files) == 0 {
+        return "", errors.New("no session file found")
+    }
+
+    // Return most recent
+    latest := files[0]
+    latestMtime := time.Unix(0, 0)
+    for _, f := range files {
+        info, _ := os.Stat(f)
+        if info.ModTime().After(latestMtime) {
+            latest = f
+            latestMtime = info.ModTime()
+        }
+    }
+
+    return Path(latest), nil
+}
+```
+
+**Integration points:**
+
+1. **Before agent launch** (in `pkg/engine/runner.go`):
+```go
+func (r *Runner) launchWaveAgent(wave int, agentID string, prompt string) error {
+    // Create journal observer for this agent
+    observer, err := journal.NewObserver(r.repoPath, fmt.Sprintf("wave%d/agent-%s", wave, agentID))
+    if err != nil {
+        return err
+    }
+
+    // Sync from Claude Code session logs (incremental tail)
+    result, err := observer.Sync()
+    if err != nil {
+        r.logger.Warn("Failed to sync journal", "error", err)
+        // Non-fatal: continue without journal recovery
+    }
+
+    // If journal has events, generate context and prepend to prompt
+    if result != nil && result.NewToolUses > 0 {
+        contextMd, err := observer.GenerateContext()
+        if err == nil {
+            prompt = contextMd + "\n\n---\n\n" + prompt
+            r.logger.Info("Recovered session context",
+                "agent", agentID,
+                "tool_calls", result.NewToolUses,
+            )
+        }
+    }
+
+    // Launch agent with enriched prompt (no context needed in agent - observer runs externally)
+    return r.agentBackend.Execute(prompt)
+}
+```
+
+2. **Periodic sync during execution** (background goroutine):
+```go
+// In runner.go, after launching agent
+go func() {
+    ticker := time.NewTicker(30 * time.Second)
+    defer ticker.Stop()
+
+    for {
+        select {
+        case <-ticker.C:
+            // Sync journal from Claude Code session logs
+            observer.Sync()
+        case <-ctx.Done():
+            return
+        }
+    }
+}()
+```
+
+3. **No middleware needed** - Tool calls are captured by Claude Code's native session logging, not by our middleware. This makes the journal:
+   - ✓ Backend-agnostic (works with Anthropic API, CLI, OpenAI without changes)
+   - ✓ Crash-resilient (session logs survive agent crashes)
+   - ✓ Complete (captures everything Claude Code logs)
+   - ✓ Zero instrumentation cost (no middleware overhead)
+
+### Retention Policy
+
+**During wave execution:**
+- Keep full journal in `.saw-state/wave{N}/agent-{ID}/tools.jsonl`
+- Checkpoints accumulate in `checkpoints/` subdirectory
+
+**After wave merges:**
+- Archive journal: `tar -czf .saw-state/archive/wave1-agent-A-tools.jsonl.gz .saw-state/wave1/agent-A/`
+- Original journal remains for debugging (archived journals are compressed ~10:1)
+
+**After IMPL doc gets SAW:COMPLETE marker:**
+- Optionally delete non-archived journals: `rm -rf .saw-state/wave*/`
+- Keep archives: `.saw-state/archive/*.tar.gz` (typically <1MB per agent)
+- Configurable via `sawtools config set journal.retention <days>` (default: 30 days after completion)
+
+### Protocol Changes Required
+
+**New execution rule: E23A (Tool Journal Recovery)**
+
+Add to `protocol/execution-rules.md`:
+
+```markdown
+## E23A: Tool Journal Recovery
+
+Before launching a Wave agent, the Orchestrator checks for an existing tool journal at `.saw-state/wave{N}/agent-{ID}/tools.jsonl`.
+
+If found:
+1. Load the journal (all JSONL entries)
+2. Generate `context.md` by analyzing the last 50 entries (or all entries if <50):
+   - Files modified/created (from Edit/Write tools) with line counts
+   - Commands run (from Bash tool) with exit codes
+   - Tests executed (from Bash tool matching `test` pattern) with pass/fail counts
+   - Git commits made (from Bash tool matching `git commit`) with SHAs and branch names
+   - Scaffold files imported (from Read tool matching scaffold paths)
+   - Verification gate status (from Bash tool matching Field 6 commands)
+   - Completion report status (whether written yet)
+3. Prepend `context.md` to the agent's prompt under `## Session Context (Recovered from Tool Journal)`
+
+The journal becomes the agent's working memory across context compactions. It is append-only; entries are never deleted during execution.
+
+**Interaction with I4 (IMPL doc as single source of truth):**
+- The IMPL doc remains the source of truth for *planning* (agent prompts, interface contracts, file ownership)
+- The tool journal is the source of truth for *execution history* (what the agent has actually done)
+- Completion reports synthesize both: "I modified these files (from journal), they implement these interfaces (from IMPL doc), tests pass (from journal), here's the commit SHA (from journal)"
+
+**Failure recovery:** If an agent fails with `failure_type: transient` or `failure_type: fixable` (E19), the Orchestrator relaunches the agent. The journal is preserved across retries — the agent sees what it tried before and can avoid repeating failed operations.
+```
+
+**Update to I4 (IMPL Doc as Single Source of Truth):**
+
+Extend `protocol/invariants.md` I4 to clarify duality:
+
+```markdown
+## I4: IMPL Doc as Single Source of Truth
+
+The IMPL doc is the canonical source of truth for **planning**:
+- Agent prompts (Fields 0-8)
+- Interface contracts (what agents must implement)
+- File ownership (which agent owns which files)
+- Wave structure (dependency graph, execution order)
+- Completion reports (agent outcomes, written after execution)
+
+The **tool journal** (`.saw-state/wave{N}/agent-{ID}/tools.jsonl`) is the canonical source of truth for **execution history**:
+- Which files the agent has actually modified
+- Which commands the agent has run
+- Which tests have passed/failed
+- Which git commits the agent has made
+- How long operations took
+
+Completion reports synthesize both: agents read their plan from the IMPL doc, execute it while journaling every action, then write a report to the IMPL doc that references the journal (commit SHAs, file counts, test results).
+
+Chat output is not the record for either planning or execution. Observers (humans, UIs, monitoring tools) read from the IMPL doc and tool journals, not from the conversation transcript.
+```
+
+### CLI Tooling
+
+**New command: `sawtools debug-journal`**
+
+Inspect journal contents for debugging failed agents:
+
+```bash
+# Dump full journal (JSONL to stdout)
+sawtools debug-journal wave1/agent-A
+
+# Show human-readable summary
+sawtools debug-journal wave1/agent-A --summary
+
+# Show only failed tool calls
+sawtools debug-journal wave1/agent-A --failures-only
+
+# Show last N entries
+sawtools debug-journal wave1/agent-A --last 20
+
+# Export to HTML timeline (visual debugging)
+sawtools debug-journal wave1/agent-A --export timeline.html
+```
+
+**Example output (summary mode):**
+```
+Journal: wave1/agent-A
+Duration: 1h 23m (14:02:15 - 15:25:38)
+Total tool calls: 47
+
+Files modified: 4
+  pkg/api/routes.go      (45 lines added)
+  pkg/api/handlers.go    (3 lines added)
+  pkg/api/routes_test.go (78 lines added)
+  go.mod                 (1 line added)
+
+Commands run: 12
+  go test ./pkg/api      (2 runs: 1 failed, 1 passed)
+  go build ./pkg/api     (1 run: passed)
+  go vet ./pkg/api       (1 run: passed)
+  git add ...            (1 run: passed)
+  git commit ...         (1 run: passed)
+
+Commits: 1
+  abc123d "feat: add REST endpoints" (wave1-agent-A)
+
+Verification gates:
+  ✓ Build (14:30)
+  ✓ Tests (14:29, 14 passed)
+  ✓ Lint  (14:31)
+
+Completion report: ✓ Written (15:25)
+```
+
+### Deliverables
+
+- [ ] **Core journal implementation** — `pkg/journal/journal.go` (ToolJournal, ToolEntry, JSONL persistence)
+- [ ] **Context generator** — `pkg/journal/context.go` (analyze entries, generate markdown summary)
+- [ ] **Checkpoint system** — `pkg/journal/checkpoint.go` (named snapshots at key milestones)
+- [ ] **Workshop integration** — `pkg/tools/workshop.go` (JournalingMiddleware, inject journal into context)
+- [ ] **Runner integration** — `pkg/engine/runner.go` (load journal before launch, inject context into prompt)
+- [ ] **CLI tooling** — `cmd/sawtools/debug_journal.go` (inspect, summarize, export journals)
+- [ ] **Archive policy** — `pkg/journal/archive.go` (compress after merge, cleanup after completion)
+- [ ] **Protocol documentation** — E23A in `protocol/execution-rules.md`, I4 clarification in `protocol/invariants.md`
+- [ ] **Tests** — `pkg/journal/journal_test.go` (append, load, checkpoint, context generation)
+
+### Integration & Downstream Work
+
+After the core journal system is implemented, significant integration work is required across the entire stack:
+
+#### 1. Backend Integration (All Backends Must Journal)
+
+**Anthropic API backend** (`pkg/agent/backend/api/`)
+- [ ] Hook `JournalingMiddleware` into tool execution pipeline
+- [ ] Pass journal context from runner to backend via `backend.Config`
+- [ ] Ensure streaming responses don't bypass journaling
+
+**CLI backend** (`pkg/agent/backend/cli/`)
+- [ ] Wrap subprocess tool calls with journal logging
+- [ ] Capture stdin/stdout for Bash tool entries
+- [ ] Handle cases where CLI agent spawns its own subagents
+
+**OpenAI backend** (`pkg/agent/backend/openai/`)
+- [ ] Adapt tool call format differences (OpenAI uses `function` objects)
+- [ ] Journal both single-turn and multi-turn tool calls
+- [ ] Handle parallel tool calls (log each independently)
+
+**Challenge:** Each backend has different tool call/response shapes. Journal must normalize these to a common schema.
+
+#### 2. Orchestrator Integration (`pkg/engine/`)
+
+**Wave launch** (`pkg/engine/runner.go`)
+- [ ] Load journal before constructing agent prompt
+- [ ] Inject `context.md` as preamble if journal exists
+- [ ] Create journal instance per agent (keyed by `wave{N}/agent-{ID}`)
+- [ ] Pass journal to backend via context
+
+**Checkpoint triggers**
+- [ ] After Field 0 verification passes → `journal.Checkpoint("001-isolation")`
+- [ ] After first Edit/Write succeeds → `journal.Checkpoint("002-first-edit")`
+- [ ] After first test run → `journal.Checkpoint("003-tests")`
+- [ ] Before completion report write → `journal.Checkpoint("004-pre-report")`
+
+**Failure recovery** (E19 integration)
+- [ ] Preserve journal when retrying `transient` failures
+- [ ] Include journal summary in retry prompt ("You tried X before, it failed with Y")
+- [ ] Detect retry loops (same tool failing >3 times) from journal
+
+**Merge procedure** (`saw-merge.md`)
+- [ ] Archive journals to `.saw-state/archive/wave{N}-agent-{ID}.tar.gz` after merge
+- [ ] Optionally delete uncompressed journals after archival
+- [ ] Keep archives for N days (configurable retention policy)
+
+#### 3. Agent Prompt Updates
+
+**Scout** (`agents/scout.md`)
+- [ ] Scout agents typically don't journal (read-only, no long-running operations)
+- [ ] Exception: if Scout runs >30min, journal should be enabled
+- [ ] Document when Scout should/shouldn't journal
+
+**Wave Agent** (`agents/wave-agent.md`)
+- [ ] Add section explaining journal recovery in Field 0 preamble
+- [ ] "If you see '## Session Context (Recovered from Tool Journal)', this is your execution history from a prior session. You've already performed these operations — don't repeat them."
+- [ ] Update Field 8 (completion report) to reference journal for file counts/commit SHAs
+
+**Scaffold Agent** (`agents/scaffold-agent.md`)
+- [ ] Enable journaling (scaffold creation can take 10-20min)
+- [ ] Journal helps debug why scaffold compilation failed
+- [ ] Completion report can reference journal for build command outputs
+
+#### 4. Web UI Integration (`scout-and-wave-web`)
+
+**Observatory panel** (`web/src/components/Observatory.tsx`)
+- [ ] Display real-time journal entries as they append
+- [ ] Show tool call history alongside SSE events
+- [ ] Visual timeline: dots for each tool call, colored by success/failure
+
+**Agent detail view** (new component)
+- [ ] Tab: "Tool History" — renders `context.md` from journal
+- [ ] Tab: "Raw Journal" — paginated JSONL viewer
+- [ ] Tab: "Checkpoints" — list named snapshots with restore option
+
+**Failed agent debugging** (new panel)
+- [ ] When agent status is `blocked` or `partial`, show journal summary
+- [ ] Highlight failed tool calls in red
+- [ ] "View full context" expands to complete journal
+
+**API endpoints** (new routes)
+```go
+GET  /api/journal/:wave/:agent          // Get full journal (JSONL)
+GET  /api/journal/:wave/:agent/summary  // Get context.md
+GET  /api/journal/:wave/:agent/checkpoints // List checkpoints
+POST /api/journal/:wave/:agent/restore  // Restore from checkpoint
+```
+
+#### 5. Testing Strategy
+
+**Unit tests** (`pkg/journal/journal_test.go`)
+- [ ] Append entry, verify JSONL persistence
+- [ ] Load existing journal, verify entries restored
+- [ ] Checkpoint creation, verify snapshot saved
+- [ ] Context generation from diverse tool calls
+
+**Integration tests** (`test/integration/journal_test.go`)
+- [ ] Simulate wave execution with journaling enabled
+- [ ] Trigger artificial context compaction mid-wave
+- [ ] Verify agent recovers context after compaction
+- [ ] Verify completion report includes data from journal (commit SHA, file counts)
+
+**E2E tests** (`test/e2e/compaction_test.go`)
+- [ ] Real wave with intentionally small context window
+- [ ] Force compaction after N tool calls
+- [ ] Agent must complete successfully despite compaction
+- [ ] Completion report must reference pre-compaction work
+
+#### 6. Migration & Compatibility
+
+**Existing waves in progress**
+- [ ] Gracefully handle agents with no journal (first execution)
+- [ ] Don't break if `.saw-state/` doesn't exist
+- [ ] Backward compatibility: old completion reports without journal references
+
+**Version detection**
+- [ ] Journal format version field (v1 initially)
+- [ ] Future schema changes handled via version check
+- [ ] Loader rejects unsupported versions with clear error
+
+**Opt-out mechanism**
+- [ ] Config flag: `sawtools config set journal.enabled false`
+- [ ] Useful for debugging journal itself
+- [ ] Documented reason: "Disable only for testing; breaks long-running waves"
+
+#### 7. Documentation Updates
+
+**User-facing** (`docs/`)
+- [ ] New doc: `docs/tool-journaling.md` — what it is, why it exists, how to debug with it
+- [ ] Update `docs/architecture.md` — add journal subsystem to diagram
+- [ ] Update `docs/troubleshooting.md` — "If agent lost context, check journal"
+
+**Protocol** (`protocol/`)
+- [ ] E23A in `execution-rules.md` (already specified above)
+- [ ] I4 clarification in `invariants.md` (already specified above)
+- [ ] New section in `message-formats.md`: Journal Entry Format
+
+**Implementation guide** (`implementations/claude-code/`)
+- [ ] Update `saw-skill.md` — orchestrator must load journals before launch
+- [ ] Update `saw-worktree.md` — journals persist across worktree operations
+- [ ] Update `saw-merge.md` — archive journals after merge
+
+#### 8. Monitoring & Observability
+
+**Metrics to track**
+- [ ] Journal file sizes (alert if >5MB per agent)
+- [ ] Journal append latency (p50, p99)
+- [ ] Context recovery rate (% of agents that loaded prior journal)
+- [ ] Compaction survival rate (agents that completed after compaction)
+
+**Logging**
+- [ ] Log when journal is created (wave{N}/agent-{ID}, first tool call)
+- [ ] Log when journal is loaded (wave{N}/agent-{ID}, N entries recovered)
+- [ ] Log checkpoint creation (checkpoint name, entry count at snapshot)
+- [ ] Log archive operations (compressed size, retention days remaining)
+
+**Alerts**
+- [ ] Journal append failures (disk full, permission denied)
+- [ ] Corrupt journal files (malformed JSONL)
+- [ ] Missing journals on retry (E19 retry without journal = suspicious)
+
+### Dependencies
+
+**External:** None (self-contained implementation)
+
+**Internal:**
+- Tool System Refactoring (v0.19.0) — `pkg/tools/` Workshop with middleware support ✓ shipped
+- Middleware wiring (v0.20.0) — `OnToolCall` hook for timing/logging ✓ shipped
+
+### Impact
+
+**Reliability:** Eliminates execution history loss during compaction. Agents can resume mid-task without rediscovering prior work.
+
+**Debuggability:** Full tool history persisted to disk. Failed agents leave complete audit trails.
+
+**Protocol compliance:** Reduces I4/I5 violations by preserving completion report drafts and commit SHAs across compactions.
+
+**Critical for production:** Long-running waves (>2 hours) will compact at least once. Without journaling, agents in hour 3 lose all context from hours 1-2.
+
+**Performance:** Append-only JSONL writes are <1ms each. Minimal overhead. Journal files typically <500KB per agent (50-100 tool calls @ ~5KB/entry).
+
+---
+
 ## Framework Skills Content
 
 ### Framework-Specific Guidance Documents
