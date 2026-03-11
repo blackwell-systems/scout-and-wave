@@ -121,6 +121,52 @@ All operations use the `sawtools` CLI. IMPL docs are YAML manifests (`.yaml`) �
 - `sawtools freeze-check` — I2 interface contract freeze enforcement
 - `sawtools update-agent-prompt` — E8 downstream prompt updates
 
+## Execution Models: LLM vs Programmatic Orchestration
+
+Scout-and-Wave supports two fundamentally different execution models. **Do not conflate them** — they use different tooling and have different capabilities.
+
+### LLM Orchestration (CLI / Interactive)
+
+**You are here.** This is the execution model for `/saw` skill invocations in Claude Code CLI.
+
+**How agents launch:**
+- Via the **Agent tool** with `subagent_type: wave-agent` and `run_in_background: true`
+- This is the ONLY way to use Max plan credits or Bedrock credentials
+- Agents run in Claude Code's agent framework with full MCP access
+
+**Wave execution flow (MANDATORY):**
+1. `sawtools create-worktrees` — create isolated branches
+2. Launch agents via Agent tool (one per agent, in parallel)
+3. Wait for all agents to complete
+4. `sawtools verify-commits` → `merge-agents` → `verify-build` → `cleanup`
+
+**What does NOT work:**
+- ❌ `sawtools run-wave` — this command requires Anthropic API keys and cannot access the Agent tool
+- ❌ Automated agent launch via SDK — no access to Claude Code's agent framework
+
+**When to use:** All interactive `/saw wave` invocations, local development, human-in-the-loop workflows.
+
+### Programmatic Orchestration (API / CI/CD)
+
+**Not available in CLI context.** This execution model is for the web app backend and CI/CD pipelines.
+
+**How agents launch:**
+- Via Anthropic API calls with service account API keys
+- Agents run as isolated API sessions (no Claude Code, no MCP, no Agent tool)
+
+**Wave execution flow (AUTOMATED):**
+- Single command: `sawtools run-wave "<manifest-path>" --wave <N> --repo-dir "<repo-path>"`
+- This handles worktree creation, agent launch (via API), completion verification, and merge
+- Fully automated — no human interaction required
+
+**When to use:** Web app "Run Wave" button, CI/CD automation, headless execution.
+
+**Why the distinction matters:**
+- Max plan credits and Bedrock credentials are NOT API keys — they only work through the Agent tool
+- `run-wave` requires Anthropic API keys (service accounts, not personal Max plan)
+- The CLI orchestrator (you) has no API keys, so `run-wave` is not an option
+- The manual flow (create-worktrees → Agent tool → merge) is mandatory for CLI orchestration
+
 ## Execution Logic
 
 **IMPL discovery:** Use `sawtools list-impls --dir "<repo-path>/docs/IMPL"` to discover existing IMPL docs in the repository. This returns a JSON array of IMPL doc metadata (path, slug, title, status). Use this for status reporting and IMPL doc selection.
@@ -209,7 +255,7 @@ If a `docs/IMPL/IMPL-*.yaml` file already exists:
    sawtools journal-context "<manifest-path>" --wave <N> --agent <ID> --repo-dir "<repo-path>"
    ```
    The `journal-init` command creates the journal directory structure (`.saw-state/journals/wave<N>/agent-<ID>/`) and initializes the cursor. The `journal-context` command syncs from the Claude Code session log, extracts tool execution history, and generates `context.md` with a summary of prior work (files modified, test results, git commits, recent activity). If journal configuration is disabled (`journal.enabled: false` in `saw.config.json`), these commands are no-ops. **Context injection:** The generated `context.md` is prepended to each agent's prompt as a `## Prior Work` section before launch. This preserves agent memory across Claude Code's context compaction events — when the conversation history is compacted (typically after 30-45 minutes), the journal-generated context remains in the prompt. Agents can reference prior work without relying on conversation history. **Periodic sync:** The journal observer syncs automatically every 30 seconds during agent execution (configurable via `journal.sync_interval_seconds`). No manual intervention required. See [docs/tool-journaling.md](../../docs/tool-journaling.md) for architecture details.
-5. For each agent in the current wave, launch a parallel **Wave agent** using the Agent tool with `subagent_type: wave-agent`, `run_in_background: true`, and the per-agent context payload (E23) as the prompt parameter. **Journal context prepending:** Before passing the prompt to the Agent tool, prepend the content of `.saw-state/journals/wave<N>/agent-<ID>/context.md` (if it exists and is non-empty) to the agent's prompt as a `## Prior Work` section. This ensures the agent has visibility into its own execution history even after context compaction. **Fully automated execution:** Alternatively, use `sawtools run-wave "<manifest-path>" --wave <N> --repo-dir "<repo-path>"` to execute the entire wave automatically (worktree creation, journal initialization, agent launch, completion verification, and status updates). This is useful for `--auto` mode or when executing waves in CI/CD pipelines. **Use short IMPL-referencing prompts — do not copy-paste agent briefs.** Pass a ~60-token stub containing the IMPL doc path, wave number, and agent ID. The agent reads its own full brief on its first tool call via its Read tool or `sawtools extract-context`. This is 10–15× faster to generate than copy-pasting the full context, and no information is lost — the IMPL doc is already the single source of truth (I4).
+5. For each agent in the current wave, launch a parallel **Wave agent** using the Agent tool with `subagent_type: wave-agent`, `run_in_background: true`, and the per-agent context payload (E23) as the prompt parameter. **Journal context prepending:** Before passing the prompt to the Agent tool, prepend the content of `.saw-state/journals/wave<N>/agent-<ID>/context.md` (if it exists and is non-empty) to the agent's prompt as a `## Prior Work` section. This ensures the agent has visibility into its own execution history even after context compaction. **Use short IMPL-referencing prompts — do not copy-paste agent briefs.** Pass a ~60-token stub containing the IMPL doc path, wave number, and agent ID. The agent reads its own full brief on its first tool call via its Read tool or `sawtools extract-context`. This is 10–15× faster to generate than copy-pasting the full context, and no information is lost — the IMPL doc is already the single source of truth (I4).
 
 For **YAML manifests** (`.yaml`/`.yml`):
 ```
