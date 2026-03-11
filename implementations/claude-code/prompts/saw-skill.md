@@ -42,7 +42,7 @@ for cross-referencing and audit.*
 
 **Agent type preference:** Use custom `subagent_type` values (`scout`, `scaffold-agent`, `wave-agent`) when launching agents. These provide tool-level enforcement (scout cannot Edit source, wave-agent cannot spawn sub-agents) and carry behavioral instructions in the type definition. If a custom type fails to load, fall back to `subagent_type: general-purpose` with the full prompt from the prompts directory.
 
-**Agent model selection:** Agent definitions no longer hardcode a model — they inherit the parent session's model by default. Model can be overridden at three levels (highest precedence first):
+**Agent model selection:** Agents inherit the parent session's model by default. Model can be overridden at three levels (highest precedence first):
 
 1. **Skill argument** — `/saw scout --model sonnet "feature"` or `/saw wave --model haiku`. Parse `--model <value>` from args before the subcommand payload.
 2. **Config file** — Read `saw.config.json` using a two-level lookup (project-local then global):
@@ -62,7 +62,7 @@ for cross-referencing and audit.*
    For `/saw scout`, read `agent.scout_model`. For `/saw wave`, read `agent.wave_model`. Empty string or missing field means "inherit parent model." If neither config file exists, fall through to level 3.
 3. **Parent model** — If neither arg nor config specifies a model, agents inherit the parent session's model (no `model:` in frontmatter = inherit).
 
-**Implementation:** The Agent tool does not expose a model parameter, so model override works indirectly. Agent definitions no longer set `model:` in their frontmatter, so custom `subagent_type` values (`scout`, `wave-agent`, `scaffold-agent`) inherit the parent session's model. When `--model` is specified explicitly and the custom subagent_type's inherited model doesn't match (e.g., parent is Opus but `--model sonnet` requested), fall back to `subagent_type: general-purpose` with the full agent prompt from the prompts directory.
+**Implementation:** The Agent tool does not expose a model parameter, so model override works indirectly. Custom `subagent_type` values (`scout`, `wave-agent`, `scaffold-agent`) inherit the parent session's model. When `--model` is specified explicitly and the custom subagent_type's inherited model doesn't match (e.g., parent is Opus but `--model sonnet` requested), fall back to `subagent_type: general-purpose` with the full agent prompt from the prompts directory.
 
 **Rate-limit fallback:** If an agent returns immediately with 0 tool uses and a rate-limit error message, retry once using `subagent_type: general-purpose` with the full agent prompt. Log the fallback to the user: "Agent hit rate limit on [model], retrying with parent model."
 
@@ -99,7 +99,7 @@ Read the agent template at `${CLAUDE_SKILL_DIR}/agent-template.md` for the 9-fie
 
 ## Protocol SDK CLI Commands
 
-All operations use the `sawtools` CLI. IMPL docs are YAML manifests (`.yaml`) — Scout v0.6.0+ generates these by default.
+All operations use the `sawtools` CLI. IMPL docs are YAML manifests (`.yaml`).
 
 - `sawtools create-worktrees` — worktree setup for a wave
 - `sawtools verify-commits` — commit verification before merge

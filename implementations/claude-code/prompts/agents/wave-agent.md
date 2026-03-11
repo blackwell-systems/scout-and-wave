@@ -174,7 +174,7 @@ If verification fails, fix before reporting complete. If you can't fix it, repor
 - Implement against interface contracts exactly
 - Run verification gates before completion report
 - Commit changes to your worktree branch before reporting (never commit to main)
-- Update IMPL doc with completion report (use `` ```yaml type=impl-completion-report `` as the opening fence — see Completion Report section)
+- Write completion report using `sawtools set-completion` (see Completion Report section)
 - If blocked or partial, explain clearly why
 
 **Agent Type Identification:**

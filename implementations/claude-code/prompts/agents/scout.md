@@ -414,6 +414,8 @@ in the task field — only the implementation-specific content (Fields 2-7).
 
 Write the following to `docs/IMPL/IMPL-<feature-slug>.yaml`:
 
+**IMPORTANT: Use pure YAML format throughout. NO markdown headers (`##`). NO fenced code blocks (` ```yaml`). Use YAML comments (`#`) for explanatory text and YAML fields for all structure.**
+
 ```yaml
 # IMPL: <feature-slug>
 title: "<Feature Title>"
@@ -423,36 +425,61 @@ test_command: "<full test suite command>"
 lint_command: "<check-mode lint command or 'none'>"
 state: "SCOUT_PENDING"
 
-## Quality Gates (omit entirely if no build toolchain detected)
+# Suitability Assessment
+# ----------------------
+# Verdict: SUITABLE
+#
+# 1. File decomposition: YES/NO — <explanation>
+# 2. Investigation-first: NO — <explanation>
+# 3. Interface discoverability: YES — <explanation>
+# 4. Pre-implementation status check:
+#    Total items: X
+#    Already implemented (DONE): Y
+#    Partially implemented (PARTIAL): Z
+#    Not implemented (TO-DO): N
+# 5. Parallelization value: HIGH/MARGINAL/LOW — <explanation>
+#
+# Estimated times:
+# - Scout phase: ~X min
+# - Agent execution: ~Y min (N agents × M min avg, parallel)
+# - Merge & verification: ~Z min
+# Total SAW time: ~T min
+#
+# Sequential baseline: ~B min
+# Time savings: ~D min (~P% faster)
+# Recommendation: <proceed or not>
 
-```yaml type=impl-quality-gates
-level: standard
-gates:
-  - type: build
-    command: go build ./...
-    required: true
-  - type: test
-    command: go test ./...
-    required: true
-  - type: lint
-    command: go vet ./...
-    required: false
-    description: "Check for common Go mistakes"
-```
+# Quality Gates
+quality_gates:
+  level: "standard"
+  gates:
+    - type: "build"
+      command: "go build ./..."
+      required: true
+    - type: "test"
+      command: "go test ./..."
+      required: true
+    - type: "lint"
+      command: "go vet ./..."
+      required: false
+      description: "Check for common Go mistakes"
 
----
-
-# Scaffolds (omit if no cross-agent types needed)
+# Scaffolds
+# (Omit this section entirely if no cross-agent types needed)
 scaffolds:
   - file_path: "path/to/types.go"
-    contents: "type Name struct { ... }"
+    contents: |
+      type Name struct {
+        Field string
+      }
     import_path: "import/path"
     status: "pending"
 
 # Interface Contracts
 interface_contracts:
   - name: "FunctionOrTypeName"
-    description: "What it does"
+    description: |
+      What it does and why agents need it.
     definition: |
       func FunctionName(param Type) (ReturnType, error)
     location: "path/to/file.go"
@@ -467,8 +494,6 @@ file_ownership:
     agent: "B"
     wave: 1
     action: "modify"
-    depends_on:
-      - "A"
 
 # Waves
 waves:
@@ -490,7 +515,9 @@ waves:
           2. TestFunctionName_EdgeCase - what it verifies
 
           ## Verification Gate
+          ```bash
           <Exact build/lint/test commands to run.>
+          ```
 
           ## Constraints
           <Hard rules, edge cases, things to avoid.>
@@ -515,7 +542,8 @@ waves:
           - "A"
           - "B"
 
-# Pre-Mortem (omit if low risk)
+# Pre-Mortem
+# (Omit this section entirely if low risk)
 pre_mortem:
   overall_risk: "medium"  # low | medium | high
   rows:
@@ -524,29 +552,17 @@ pre_mortem:
       impact: "medium"
       mitigation: "Concrete action to prevent or recover"
 
-## Known Issues (omit if none)
+# Known Issues
+# (Omit this section entirely if none)
+known_issues:
+  - title: "Flaky test in auth module"
+    description: "TestAuthHandler_SessionTimeout fails intermittently on CI"
+    status: "Pre-existing, unrelated to this work"
+    workaround: "Skip with -skip TestAuthHandler_SessionTimeout"
 
-```yaml type=impl-known-issues
-- title: "Flaky test in auth module"
-  description: "TestAuthHandler_SessionTimeout fails intermittently on CI"
-  status: "Pre-existing, unrelated to this work"
-  workaround: "Skip with -skip TestAuthHandler_SessionTimeout"
-```
-
----
-
-## Post-Merge Checklist (omit if no orchestrator verification steps needed)
-
-```yaml type=impl-post-merge-checklist
-groups:
-  - title: "Build Verification"
-    items:
-      - description: "Full workspace build passes"
-        command: "go build ./..."
-  - title: "Integration Tests"
-    items:
-      - description: "End-to-end test suite passes"
-        command: "npm run test:e2e"
+# Completion Reports
+# (Empty at scout time — agents populate via sawtools set-completion)
+completion_reports: {}
 ```
 
 ---
@@ -566,11 +582,7 @@ populate waves, agents, or file ownership.
 
 ## IMPL Manifest Size
 
-YAML manifests are more compact than markdown IMPL docs. If the manifest
-exceeds ~15KB (many agents with long task descriptions), keep task descriptions
-focused — the orchestrator wraps them with the 9-field template at launch time,
-so you don't need isolation verification, file ownership tables, or completion
-report templates in each agent's task field.
+If the manifest exceeds ~15KB (many agents with long task descriptions), keep task descriptions focused — the orchestrator wraps them with the 9-field template at launch time, so you don't need isolation verification, file ownership tables, or completion report templates in each agent's task field.
 
 ## Rules
 

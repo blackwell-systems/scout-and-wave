@@ -523,11 +523,7 @@ populate waves, agents, or file ownership.
 
 ## IMPL Manifest Size
 
-YAML manifests are more compact than markdown IMPL docs. If the manifest
-exceeds ~15KB (many agents with long task descriptions), keep task descriptions
-focused — the orchestrator wraps them with the 9-field template at launch time,
-so you don't need isolation verification, file ownership tables, or completion
-report templates in each agent's task field.
+If the manifest exceeds ~15KB (many agents with long task descriptions), keep task descriptions focused — the orchestrator wraps them with the 9-field template at launch time, so you don't need isolation verification, file ownership tables, or completion report templates in each agent's task field.
 
 ## Rules
 
