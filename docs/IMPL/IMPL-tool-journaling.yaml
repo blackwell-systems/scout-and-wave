@@ -4,7 +4,7 @@ feature_slug: "tool-journaling"
 verdict: "SUITABLE"
 test_command: "cd /Users/dayna.blackwell/code/scout-and-wave-go && go test ./pkg/journal/... ./pkg/engine/... ./pkg/agent/..."
 lint_command: "cd /Users/dayna.blackwell/code/scout-and-wave-go && go vet ./..."
-state: "SCOUT_PENDING"
+state: "WAVE1_COMPLETE"
 
 # Quality Gates
 quality_gates:
@@ -502,6 +502,52 @@ waves:
         files:
           - "pkg/journal/context.go"
           - "pkg/journal/context_test.go"
+        completion_report:
+          status: "complete"
+          worktree: ".claude/worktrees/wave1-agent-B"
+          branch: "wave1-agent-B"
+          commit: "cf490f4"
+          files_changed:
+            - "pkg/journal/context.go"
+            - "pkg/journal/context_test.go"
+          files_created:
+            - "pkg/journal/context.go"
+            - "pkg/journal/context_test.go"
+          interface_deviations: []
+          out_of_scope_deps: []
+          tests_added:
+            - "TestGenerateContext_EmptyJournal"
+            - "TestExtractFilesModified_EditTool"
+            - "TestExtractFilesModified_WriteTool"
+            - "TestExtractFilesModified_MultipleEdits"
+            - "TestExtractTestResults_GoTest"
+            - "TestExtractTestResults_GoTestWithFailures"
+            - "TestExtractTestResults_MultipleRuns"
+            - "TestExtractGitCommits_ParseSHA"
+            - "TestExtractGitCommits_ParseStats"
+            - "TestExtractScaffoldImports_DetectsReadOfScaffoldPaths"
+            - "TestExtractVerificationGates_DetectsGateCommands"
+            - "TestExtractVerificationGates_DetectsFailures"
+            - "TestExtractCompletionReportStatus_DetectsReport"
+            - "TestExtractCompletionReportStatus_NoReport"
+            - "TestGenerateContext_FullIntegration"
+            - "TestGenerateContext_MaxEntriesLimit"
+            - "TestFormatRelativeTime"
+            - "TestFormatDuration"
+            - "TestFormatFileChange"
+          verification: "PASS (go build ./pkg/journal/..., go test ./pkg/journal/..., go vet ./pkg/journal/...)"
+          notes: |
+            Successfully implemented context generator with all required extraction functions. All 19 tests pass covering empty journals, file modifications (Edit/Write tools), test results parsing (Go test output), git commit extraction (SHA, branch, stats), scaffold import detection, verification gate tracking, and completion report detection.
+
+            Key implementation details:
+            - Regex patterns handle multiple test frameworks (Go, npm, cargo, pytest)
+            - Git commit stats regex accounts for insertion(+)/deletion(-) markers in git output
+            - File modification tracking aggregates multiple edits to same file
+            - Verification gates track most recent execution and detect PASS/FAIL/PENDING status
+            - Completion report detection searches for both legacy and new YAML block formats
+            - Formatting helpers provide human-readable relative timestamps and duration strings
+
+            No interface deviations. All signatures match specification exactly. Implementation is ready for integration with JournalObserver (Agent A).
 
       - id: "C"
         task: |
@@ -1285,4 +1331,158 @@ pre_mortem:
 known_issues: []
 
 # Completion Reports
-completion_reports: {}
+completion_reports:
+  D:
+    status: "complete"
+    repo: "/Users/dayna.blackwell/code/scout-and-wave-go"
+    worktree: ".claude/worktrees/wave1-agent-D"
+    branch: "wave1-agent-D"
+    commit: "a0cafd7"
+    files_changed: []
+    files_created:
+      - "pkg/journal/archive.go"
+      - "pkg/journal/archive_test.go"
+    interface_deviations: []
+    out_of_scope_deps: []
+    tests_added:
+      - "TestArchive_CreatesTarGz"
+      - "TestArchive_SavesMetadata"
+      - "TestArchive_CalculatesCompressionRatio"
+      - "TestListArchives_ReturnsAll"
+      - "TestExtract_DecompressesArchive"
+      - "TestCleanupExpired_DeletesOldArchives"
+      - "TestCleanupExpired_PreservesRecent"
+      - "TestArchive_CountsEntries"
+      - "TestArchive_IncludesCheckpoints"
+      - "TestArchive_ExcludesToolResults"
+      - "TestArchive_ReturnsErrorIfExists"
+      - "TestCleanupExpired_Idempotent"
+      - "TestListArchives_EmptyDirectory"
+    verification: "PASS"
+    notes: |
+      Archive policy implementation complete with all required functionality:
+
+      **Archive creation:**
+      - Compresses journal directories to .tar.gz with gzip compression
+      - Achieves >5:1 compression ratio on typical journal content (10:1 with repeated text)
+      - Automatically excludes tool-results/ directory to keep archive size manageable
+      - Includes checkpoints/ subdirectory for milestone preservation
+      - Preserves complete directory structure for inspection after extraction
+
+      **Metadata tracking:**
+      - Captures wave number, agent ID, timestamp, entry count, and compression metrics
+      - Atomic writes using temp file + rename pattern for reliability
+      - Entry count derived from index.jsonl line count
+      - Stores metadata as .json alongside .tar.gz archive
+
+      **Retention management:**
+      - CleanupExpired() deletes both .tar.gz and .json files for expired archives
+      - Idempotent design - safe to run multiple times
+      - Retention period counted from archived_at timestamp
+      - ListArchives() returns sorted list (oldest first) for cleanup ordering
+
+      **Archive extraction:**
+      - Full decompression with directory structure preservation
+      - Path traversal protection (validates extracted paths stay within destPath)
+      - Handles both files and directories correctly
+
+      **Error handling:**
+      - Returns error if archive already exists (prevents accidental overwrites)
+      - Cleans up archive file if metadata write fails
+      - Proper error context at each step for debugging
+
+      **Implementation notes:**
+      - Created stub JournalObserver struct to satisfy interface contract (Agent A owns full implementation)
+      - Parses wave/agent from journal directory path for archive naming
+      - All 13 tests pass, covering success paths, edge cases, and error conditions
+      - Build and vet gates pass cleanly
+
+  ### Agent C - Completion Report
+
+  ```yaml type=impl-completion-report
+  status: complete
+  repo: /Users/dayna.blackwell/code/scout-and-wave-go
+  worktree: .claude/worktrees/wave1-agent-C
+  branch: wave1-agent-C
+  commit: decf400
+  files_changed: []
+  files_created:
+    - pkg/journal/checkpoint.go
+    - pkg/journal/checkpoint_test.go
+    - pkg/journal/observer.go
+  interface_deviations: []
+  out_of_scope_deps: []
+  tests_added:
+    - TestCheckpoint_CreatesSnapshot
+    - TestCheckpoint_SavesMetadata
+    - TestListCheckpoints_ReturnsAll
+    - TestRestoreCheckpoint_RollsBackIndex
+    - TestRestoreCheckpoint_RollsBackCursor
+    - TestRestoreCheckpoint_PreservesCheckpoints
+    - TestDeleteCheckpoint_RemovesFiles
+    - TestCheckpoint_DuplicateName
+    - TestRestoreCheckpoint_NonexistentName
+    - TestCheckpoint_CountsEntries
+    - TestCheckpoint_EmptyJournal
+    - TestCheckpoint_InvalidNames
+  verification: PASS (go build && go vet && go test)
+  ```
+
+  **Implementation summary:**
+  Checkpoint system successfully implemented with full snapshot/restore functionality. All 12 tests pass.
+
+  **Key features:**
+  - `Checkpoint(name)` creates immutable snapshots of index.jsonl, cursor.json, recent.json
+  - `ListCheckpoints()` returns sorted list by timestamp (oldest first)
+  - `RestoreCheckpoint(name)` rolls back journal state, preserves checkpoint files
+  - `DeleteCheckpoint(name)` removes snapshot and metadata
+  - Handles empty journal state gracefully (no files yet is valid)
+  - Validates checkpoint names for filesystem safety (no slashes/spaces)
+  - Entry counting accurate via efficient JSONL line scanning
+
+  **File structure:**
+  - Metadata: `checkpoints/{name}.json`
+  - Snapshots: `checkpoints/{name}-index.jsonl`, `{name}-cursor.json`, `{name}-recent.json`
+  - ListCheckpoints filters out snapshot files correctly (was parsing them as metadata initially, fixed)
+
+  **Stub creation:**
+  Created minimal `observer.go` stub with JournalObserver struct definition to allow checkpoint.go to compile independently. Agent A owns the full observer implementation - this stub will be replaced during merge.
+
+  **Test coverage:**
+  All 10 required tests implemented plus 2 additional edge cases (empty journal, invalid names). Tests use t.TempDir() for isolation. Verification gates pass cleanly.
+
+# Agent Completion Reports
+
+## Agent A - Completion Report
+
+```yaml type=impl-completion-report
+status: complete
+repo: /Users/dayna.blackwell/code/scout-and-wave-go
+worktree: .claude/worktrees/wave1-agent-A
+branch: wave1-agent-A
+commit: 3dbd5bb
+files_changed:
+  - pkg/journal/observer.go
+  - pkg/journal/observer_test.go
+  - pkg/journal/doc.go
+files_created:
+  - pkg/journal/observer.go
+  - pkg/journal/observer_test.go
+  - pkg/journal/doc.go
+interface_deviations: []
+out_of_scope_deps: []
+tests_added:
+  - TestNewObserver_CreatesDirectories
+  - TestSync_FirstRun
+  - TestSync_Incremental
+  - TestSync_SessionFileChanged
+  - TestFindLatestSessionFile_SelectsMostRecent
+  - TestAppendToIndex_PreservesExisting
+  - TestUpdateRecent_MaintainsLast30
+  - TestSync_ExtractsToolBlocks
+  - TestSync_SavesFullOutputToFiles
+verification: PASS
+```
+
+Implementation complete. Core journal observer successfully implemented with all 9 tests passing and verification gates satisfied.
+
