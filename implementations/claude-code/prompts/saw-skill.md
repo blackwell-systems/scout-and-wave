@@ -121,57 +121,11 @@ All operations use the `sawtools` CLI. IMPL docs are YAML manifests (`.yaml`) �
 - `sawtools freeze-check` — I2 interface contract freeze enforcement
 - `sawtools update-agent-prompt` — E8 downstream prompt updates
 
-## Execution Models: LLM vs Programmatic Orchestration
+## Execution Models
 
-Scout-and-Wave supports two fundamentally different execution models. **Do not conflate them** — they use different tooling and have different capabilities.
+**CLI orchestration (you are here):** Must use Agent tool to launch agents. Manual flow: `create-worktrees` → launch via Agent tool → `merge-agents`. This is the only way to access Max plan/Bedrock/MCP.
 
-### LLM Orchestration (CLI / Interactive)
-
-**You are here.** This is the execution model for `/saw` skill invocations in Claude Code CLI.
-
-**How agents launch:**
-- Via the **Agent tool** with `subagent_type: wave-agent` and `run_in_background: true`
-- This is the ONLY way to use Max plan credits or Bedrock credentials
-- Agents run in Claude Code's agent framework with full MCP access
-
-**Wave execution flow (MANDATORY):**
-1. `sawtools create-worktrees` — create isolated branches
-2. Launch agents via Agent tool (one per agent, in parallel)
-3. Wait for all agents to complete
-4. `sawtools verify-commits` → `merge-agents` → `verify-build` → `cleanup`
-
-**What does NOT work:**
-- ❌ `sawtools run-wave` — this command requires Anthropic API keys and cannot access the Agent tool
-- ❌ Automated agent launch via SDK — no access to Claude Code's agent framework
-
-**When to use:** All interactive `/saw wave` invocations, local development, human-in-the-loop workflows.
-
-### Programmatic Orchestration (Non-CLI)
-
-**Not available in CLI context.** This execution model is for the web app backend, CI/CD pipelines, or local automation scripts.
-
-**How agents launch:**
-- Via agent backend abstraction layer (configured in `saw.config.json`)
-- Supports multiple backends:
-  - Anthropic API (requires API key)
-  - OpenAI API (requires API key)
-  - Bedrock API (requires AWS credentials)
-  - Local LLMs (Ollama, LM Studio, etc. - no keys required)
-  - Any OpenAI-compatible API endpoint
-- Agents run as isolated sessions (no Claude Code, no MCP, no Agent tool)
-
-**Wave execution flow (AUTOMATED):**
-- Single command: `sawtools run-wave "<manifest-path>" --wave <N> --repo-dir "<repo-path>"`
-- This handles worktree creation, agent launch (via configured backend), completion verification, and merge
-- Fully automated — no human interaction required
-
-**When to use:** Web app "Run Wave" button, CI/CD automation, headless execution, local automation with Ollama/LM Studio.
-
-**Why the distinction matters:**
-- Max plan credits and Bedrock credentials are Claude Code session credentials — they only work through the Agent tool
-- `run-wave` uses the agent backend (API or local LLM), not Claude Code's Agent tool
-- The CLI orchestrator (you) cannot use `run-wave` because you're inside a Claude Code session — you must use the Agent tool to spawn sub-agents
-- The manual flow (create-worktrees → Agent tool → merge) is mandatory for CLI orchestration
+**Programmatic orchestration (not CLI):** Use `sawtools run-wave` for fully automated execution. Works with any backend (API or local LLM). Not available in CLI because you're inside a Claude Code session.
 
 ## Execution Logic
 
