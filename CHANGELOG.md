@@ -8,7 +8,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.30.0] | 2026-03-12 | Scout v0.8.0 — analyze-deps now PRIMARY METHOD for Go dependency mapping (determinism improvement H3) |
 | [0.29.0] | 2026-03-11 | mark-complete simplification — removed --archive flag from all docs, always archives to complete/ |
+
+---
+
+## [0.30.0] - 2026-03-12
+
+### Changed
+
+- **Scout v0.8.0** — Dependency mapping workflow now uses `sawtools analyze-deps` as PRIMARY METHOD for Go projects
+  - Step 3: Simplified to just list files (dependency analysis delegated to step 4)
+  - Step 4: Reorganized to prioritize automated tool over manual tracing
+  - Manual fallback only for non-Go projects (Rust/JS/TS/Python) or tool failures
+  - Type rename cascade check moved after automated analysis
+  - AST-based static analysis replaces manual import tracing for Go
+
+### Impact
+
+- **Time savings:** Eliminates 10-15 minutes of manual dependency tracing per Scout run
+- **Determinism:** Identical codebases produce identical dependency graphs (no judgment variance)
+- **Accuracy:** Topological sort computes wave assignments automatically (no manual DAG drawing)
+- **Cascade detection:** Files importing modified code detected automatically
+
+### Rationale
+
+First determinism improvement from determinism-roadmap.md Phase 1 (H3: Automated Dependency Graph Generation) now wired into production Scout prompt. Scout no longer manually traces imports for Go projects; `analyze-deps` provides AST-verified dependency edges, wave candidates, and cascade candidates.
 
 ---
 
