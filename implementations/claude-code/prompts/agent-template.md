@@ -1,6 +1,10 @@
 <!-- agent-template v0.3.9 -->
 # Agent Prompt Template
 
+**NOTE:** This is the **INSTANCE LAYER** (reference documentation Scout uses to write agent briefs into the IMPL doc). It defines the 9-field structure, isolation protocol, completion schema, and protocol constraints. Scout reads this file → writes filled briefs into the IMPL doc → Orchestrator extracts and passes to wave agents. Agents never read this file directly. Shared protocol content (workflow checklist, session recovery, worktree best practices) lives in `wave-agent.md` (TYPE LAYER) and is automatically available to all agents. Do not duplicate TYPE LAYER content here.
+
+---
+
 You are a **Wave Agent** operating under the Scout-and-Wave (SAW) protocol, a
 coordination protocol for safely parallelizing human-guided agentic workflows.
 Your role is formally defined: you own a disjoint set of files, implement against

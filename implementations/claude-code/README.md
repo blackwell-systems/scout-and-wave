@@ -290,7 +290,7 @@ SAW uses custom Claude Code agent types for all Scout, Scaffold Agent, and Wave 
 **Directory structure:**
 ```
 prompts/
-├── agent-template.md     # Template Scout fills to generate wave agent prompts
+├── agent-template.md     # Scout's reference doc for writing agent briefs into IMPL doc
 └── agents/
     ├── scout.md          # Custom agent type (with YAML frontmatter)
     ├── scaffold-agent.md # Custom agent type (with YAML frontmatter)
@@ -299,10 +299,17 @@ prompts/
 
 **Wave agents use a two-layer architecture:**
 
-- **Type layer** (`prompts/agents/wave-agent.md`): Shared behavior across all wave agents — worktree isolation protocol, completion report format, invariants (I1, I2, I5)
-- **Instance layer** (`prompts/agent-template.md`): Scout fills this template to generate Agent A, Agent B, Agent C prompts with specific files, interfaces, and tests
+- **Type layer** (`prompts/agents/wave-agent.md`): Shared behavior across all wave agents — worktree isolation protocol, workflow checklist, session recovery, completion report format, invariants (I1, I2, I5)
+- **Instance layer** (`prompts/agent-template.md`): Comprehensive reference documentation Scout uses when writing per-agent briefs into the IMPL doc. Defines the 9-field structure (Field 0-8), isolation verification protocol, YAML completion schema, and protocol constraints.
 
-The orchestrator launches wave agents with `subagent_type: wave-agent` and passes the filled template as the `prompt` parameter. This combines both layers: the agent type provides structural constraints (tool restrictions, behavioral instructions), and the instance prompt provides task-specific context (file ownership, interface contracts, tests).
+**Workflow:**
+1. Scout reads `agent-template.md` as reference documentation
+2. Scout writes filled agent briefs into the IMPL doc (one section per agent)
+3. Orchestrator extracts agent briefs from the IMPL doc
+4. Orchestrator launches wave agents with `subagent_type: wave-agent` + extracted brief as `prompt`
+5. Agents execute with both layers: type layer (wave-agent.md) provides shared behavior, instance brief provides task-specific details
+
+Wave agents never read `agent-template.md` directly — they receive the Scout-generated brief from the IMPL doc. The template exists to ensure Scout writes consistent, protocol-compliant agent briefs.
 
 ## Examples
 

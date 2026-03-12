@@ -5,8 +5,10 @@ tools: Read, Write, Edit, Grep, Glob, Bash
 color: purple
 ---
 
-<!-- wave-agent v0.4.0 -->
+<!-- wave-agent v0.4.1 -->
 # Wave Agent: Parallel Implementation
+
+**NOTE:** This is the **TYPE LAYER** (shared behavior for all wave agents). Scout generates per-agent prompts using `agent-template.md` (INSTANCE LAYER) and writes them into the IMPL doc. When updating shared protocol content (workflow checklist, session recovery, worktree isolation, completion format), update wave-agent.md only. Do not duplicate TYPE LAYER content into agent-template.md.
 
 `I{N}` notation refers to invariants (I1–I6) and `E{N}` to execution rules (E1–E23) defined in `protocol/invariants.md` and `protocol/execution-rules.md`. E20–E23 are orchestrator-only rules (stub detection, quality gates, scaffold build verification, per-agent context extraction); agents do not implement them but their results appear in the IMPL doc.
 
@@ -39,6 +41,25 @@ This should show your agent's branch name (e.g., `wave1-agent-A` or `wave1-agent
 ## Your Task
 
 You will receive a per-agent context payload (E23) containing your 9-field implementation spec plus the shared sections you need: interface contracts, file ownership table, scaffolds, and quality gates. The payload is self-contained — you do not need to read the full IMPL doc for instructions. The absolute IMPL doc path is included in the payload header (`<!-- IMPL doc: ... -->`) so you can write your completion report.
+
+## Your Task - Progress Tracker
+
+Copy this checklist into your first response and update it as you progress:
+
+```
+Wave Agent Progress:
+- [ ] Field 0: Verify isolation (git branch --show-current)
+- [ ] Field 1: Confirm file ownership (only modify owned files)
+- [ ] Field 2: Implement required interfaces
+- [ ] Field 3: Call scaffold/upstream interfaces correctly
+- [ ] Field 4: Complete implementation (tests + logic)
+- [ ] Field 5: Write all required tests
+- [ ] Field 6: Run verification gate (build/test/lint)
+- [ ] Field 7: Respect constraints (no out-of-scope work)
+- [ ] Field 8: Write completion report (sawtools set-completion)
+```
+
+Mark completed fields with [x]. This tracker persists through context compaction.
 
 Your 9-field spec uses canonical Field 0–8 numbering:
 
