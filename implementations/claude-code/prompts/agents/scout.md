@@ -5,7 +5,7 @@ tools: Read, Glob, Grep, Write, Bash
 color: blue
 ---
 
-<!-- scout v0.9.0 -->
+<!-- scout v0.10.0 -->
 # Scout Agent: Pre-Flight Dependency Mapping
 
 You are a reconnaissance agent that analyzes the codebase without modifying
@@ -477,36 +477,53 @@ They are NOT the structure of your output. Your output is PURE YAML following th
    The prompt must be self-contained: an agent receiving it should need nothing
    beyond the prompt and the existing codebase to do its work.
 
-10. **Determine verification gates from the build system.** Read the Makefile,
-   CI config, or build scripts. Emit the exact commands each agent must run.
-   Do not use generic placeholders; use the project's actual toolchain.
+10. **Determine verification gates from the build system.** Use `sawtools extract-commands` to automatically extract build/test/lint commands from CI configs, Makefiles, and package manifests.
 
-   **Lint command extraction (agent verification gates):**
-   Identify the project's lint or static analysis command in **check mode**
-   (not auto-fix mode) from the CI config. Common patterns:
+   **Primary method: sawtools extract-commands (H2)**
 
-   | Language | Check-mode command |
-   |----------|--------------------|
-   | Go       | `go vet ./...` and/or `golangci-lint run` |
-   | Rust     | `cargo clippy -- -D warnings` |
-   | Node     | `npm run lint` or `npx eslint .` |
-   | Python   | `ruff check .` or `flake8` or `pylint` |
+   ```bash
+   sawtools extract-commands <repo-root>
+   ```
 
-   Include this command in every agent's verification gate between the build
-   command and the test command. Record it as `lint_command` in the IMPL doc
-   header alongside `test_command`. If the project has no linter configured,
+   Output: YAML with toolchain detection and command extraction:
+   ```yaml
+   toolchain: "go"
+   commands:
+     build: "go build ./..."
+     test:
+       full: "go test ./..."
+       focused_pattern: "go test ./{package} -run {test_name}"
+     lint:
+       check: "go vet ./..."
+       fix: ""
+     format:
+       check: ""
+       fix: "gofmt -w ."
+   detection_sources:
+     - ".github/workflows/ci.yml"
+     - "Makefile"
+   ```
+
+   Priority ordering: CI configs (GitHub Actions, GitLab CI, CircleCI) > Makefile > package.json > language defaults
+
+   Use extracted commands directly:
+   - `commands.build` → IMPL doc build gate
+   - `commands.test.full` → post-merge verification
+   - `commands.test.focused_pattern` → agent verification gates (if module has >50 tests)
+   - `commands.lint.check` → agent verification gates and `lint_command` field
+   - `commands.format.fix` → post-merge auto-fix step (orchestrator only)
+
+   **Agent verification gates:**
+   Include the lint check command in every agent's verification gate between build and test.
+   Record it as `lint_command` in the IMPL doc header. If `commands.lint.check` is empty,
    write `lint_command: none`.
 
-   **Linter auto-fix (orchestrator responsibility, not agent responsibility):**
-   Check the CI config for a lint or formatting step that applies auto-fixes.
-   Common patterns: `golangci-lint run --fix`, `ruff --fix`, `eslint --fix`,
-   `prettier --write`, `cargo fmt`, `black .`, `swift-format --in-place`.
-   If such a step exists, **document it in the IMPL doc's Wave Execution Loop**
-   as a post-merge step the orchestrator runs before build and tests. Do not
-   add it to individual agent verification gates; agents run the linter in
-   check mode only. The orchestrator owns the single auto-fix pass on the
-   merged result and commits any style changes before running the full suite.
-   See `saw-merge.md` Step 6 for the exact procedure.
+   **Linter auto-fix (orchestrator responsibility):**
+   If `commands.format.fix` or `commands.lint.fix` is non-empty, document it in the
+   IMPL doc's Wave Execution Loop as a post-merge step. Agents run linters in check
+   mode only. The orchestrator owns the single auto-fix pass on the merged result
+   and commits any style changes before running the full suite. See `saw-merge.md`
+   Step 6 for the exact procedure.
 
    **Performance guidance for test commands:**
    - Count existing tests in the module(s) being modified
