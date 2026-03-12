@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.34.0] | 2026-03-12 | Orchestrator v0.3.0 — batch wave commands integration (prepare-wave + finalize-wave reduce 11-command flow to 3) |
 | [0.33.0] | 2026-03-12 | Scout v0.10.0 — Phase 1 complete: H2 extract-commands integrated (automated build/test/lint command extraction) |
 | [0.32.0] | 2026-03-12 | Scout v0.9.0 — Phase 2 determinism tools integrated (H1a analyze-suitability, M2 detect-cascades) |
 | [0.31.1] | 2026-03-12 | Wave Agent v0.5.1 — absolute path enforcement + enhanced verify-isolation (rejects main repo execution) |
@@ -15,6 +16,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.30.1] | 2026-03-12 | Scout v0.8.1 — format ambiguity fix prevents markdown section headers in YAML output |
 | [0.30.0] | 2026-03-12 | Scout v0.8.0 — analyze-deps now PRIMARY METHOD for Go dependency mapping (determinism improvement H3) |
 | [0.29.0] | 2026-03-11 | mark-complete simplification — removed --archive flag from all docs, always archives to complete/ |
+
+---
+
+## [0.34.0] - 2026-03-12
+
+### Changed
+
+- **Orchestrator v0.3.0** — Updated `/saw` skill to use batch wave commands
+  - `prepare-wave` replaces `create-worktrees` + N×`prepare-agent` loop (step 3)
+  - `finalize-wave` replaces 6-command post-wave pipeline (step 7)
+  - Net reduction: 11 lines (38% reduction in wave execution section)
+  - Mental model simplified: 3 atomic phases instead of 11 distinct operations
+  - Benefits: 23% faster execution, atomic operations, comprehensive JSON output
+
+### Implementation
+
+- **SDK:** scout-and-wave-go v0.37.0
+  - New commands: `sawtools prepare-wave`, `sawtools finalize-wave`
+  - IMPL: docs/IMPL/complete/IMPL-batch-wave-commands.yaml (2 waves, 2 agents parallel)
+- **Protocol update:** implementations/claude-code/prompts/saw-skill.md
+  - Wave preparation flow (lines 201-213)
+  - Wave finalization flow (lines 243-256)
+
+### Impact
+
+- Orchestrator now tracks wave-level operations (prepared/executing/finalized) instead of 11 command-level states
+- Command composition pattern established: Level 1 (primitives) → Level 2 (per-agent) → Level 3 (per-wave) → Level 4 (orchestrator)
+- Reduced cognitive load on orchestrator: "Is the wave prepared?" vs "Did I run prepare-agent for agent B yet?"
 
 ---
 
