@@ -74,7 +74,6 @@ in the `CLAUDE_SKILL_DIR` environment variable; if unset, fall back to `~/.claud
 
 - **agent-template.md** - 9-field agent prompt format. Load when constructing agent prompts.
 - **saw-bootstrap.md** - Bootstrap procedure for new projects. Load when `bootstrap` argument is provided.
-- **saw-worktree.md** - Worktree creation protocol. Load before launching wave agents.
 - **agents/scout.md** - Scout subagent definition (optional, for custom agent types).
 - **agents/wave-agent.md** - Wave subagent definition (optional, for custom agent types).
 - **agents/scaffold-agent.md** - Scaffold subagent definition (optional, for custom agent types).
@@ -206,7 +205,7 @@ If a `docs/IMPL/IMPL-*.yaml` file already exists:
    ```bash
    sawtools create-worktrees "<manifest-path>" --wave <N> --repo-dir "<repo-path>"
    ```
-   This command creates a worktree for each agent in the specified wave, verifies scaffold commit status, and enforces interface freeze. Exit code 1 indicates failure (uncommitted scaffolds, freeze violations, or worktree creation errors) — do not proceed until resolved. **Interface freeze checkpoint:** interface contracts become immutable when worktrees are created. This is the last moment to revise type signatures, add fields, or restructure APIs. After this point, any interface change requires removing and recreating all worktrees for the wave. For reference documentation on the worktree protocol, see `${CLAUDE_SKILL_DIR}/saw-worktree.md`.
+   This command creates a worktree for each agent in the specified wave, verifies scaffold commit status, and enforces interface freeze. Exit code 1 indicates failure (uncommitted scaffolds, freeze violations, or worktree creation errors) — do not proceed until resolved. **Interface freeze checkpoint:** interface contracts become immutable when worktrees are created. This is the last moment to revise type signatures, add fields, or restructure APIs. After this point, any interface change requires removing and recreating all worktrees for the wave.
 4. **Journal initialization and context loading:** Before launching agents, initialize the journal observer for each agent and generate execution context:
    ```bash
    # For each agent in the wave:

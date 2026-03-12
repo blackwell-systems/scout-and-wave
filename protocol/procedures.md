@@ -155,11 +155,52 @@ Scaffold files are committed to HEAD before worktrees are created. Once worktree
 
    **Cross-repo wave:** Agents work in two or more repositories simultaneously (e.g., engine extraction where Agent A works in `saw-engine/` and Agent B works in `saw-web/`). Cross-repo waves are supported with modified isolation procedure:
    - **Omit Layer 2** (`isolation: "worktree"` on the Agent tool) — it creates worktrees in the Orchestrator's repo, not the target repo. Omitting it is intentional, not a failure.
-   - **Apply Layer 1 in each repo** — Orchestrator manually creates worktrees in every repo that agents touch before launching any agents (see `saw-worktree.md` Cross-Repo Mode section).
+   - **Apply Layer 1 in each repo** — Orchestrator manually creates worktrees in every repo that agents touch before launching any agents (see Cross-Repo Mode details below).
    - **Layer 0 in each repo** — Install pre-commit guard in each repo's `.git/hooks/pre-commit`.
    - **Layer 3 applies unchanged** — Each agent's Field 0 navigates to its repo+worktree via absolute path.
    - **Layer 4 applies per-repo** — Merge-time trip wire runs independently in each repo.
    - The IMPL doc file ownership table must include a `Repo` column identifying which repository each file belongs to.
+
+   **Cross-Repo Mode Details:**
+
+   The single-repo procedure applies independently to each repository. Run every step (preflight, ownership verification, worktree creation, hook installation) in each repo before launching any agents.
+
+   **IMPL doc convention:** File ownership table includes a `Repo` column:
+   ```yaml
+   file_ownership:
+     - file: "pkg/engine/runner.go"
+       agent: "A"
+       wave: 1
+       action: "new"
+       repo: "saw-engine"
+     - file: "pkg/api/adapter.go"
+       agent: "B"
+       wave: 1
+       action: "modify"
+       repo: "saw-web"
+   ```
+
+   **CLI cross-repo support:** All sawtools commands accept `--repo-dir` parameter. Run once per repository:
+   ```bash
+   sawtools create-worktrees "<manifest-path>" --wave <N> --repo-dir "~/code/saw-engine"
+   sawtools create-worktrees "<manifest-path>" --wave <N> --repo-dir "~/code/saw-web"
+   ```
+
+   **Merge step:** Run merge procedure separately in each repo:
+   ```bash
+   sawtools merge-agents "<manifest-path>" --wave <N> --repo-dir "~/code/saw-engine"
+   sawtools merge-agents "<manifest-path>" --wave <N> --repo-dir "~/code/saw-web"
+   ```
+
+   Each repo's agent branches merge into that repo's main branch independently. There is no cross-repo merge operation.
+
+   **Cleanup:** Run cleanup per repository:
+   ```bash
+   sawtools cleanup "<manifest-path>" --wave <N> --repo-dir "~/code/saw-engine"
+   sawtools cleanup "<manifest-path>" --wave <N> --repo-dir "~/code/saw-web"
+   ```
+
+   **Key constraint:** Prefer agents that own files in exactly one repo. If an agent must own files in multiple repos, provide explicit absolute paths for each repo's worktree in Field 0. Keep cross-repo agent ownership minimal — single-repo agents have cleaner isolation boundaries.
 
 ### Phase 2: Worktree Creation
 
@@ -463,7 +504,7 @@ For each agent (in any order):
    git branch -D wave{N}-agent-{ID}
    ```
 
-3. **Re-create worktrees manually** in the correct target repos following the Cross-Repo Mode procedure in `saw-worktree.md`.
+3. **Re-create worktrees manually** in the correct target repos following the Cross-Repo Mode procedure documented above (Procedure 2, Phase 1, Cross-Repo Mode Details).
 
 4. **Re-launch agents** without `isolation: "worktree"` parameter.
 
