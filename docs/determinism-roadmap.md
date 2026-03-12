@@ -27,21 +27,23 @@ This roadmap identifies opportunities to eliminate judgment variance from Scout-
 
 ## Revised Roadmap
 
-### Phase 1: Foundation (GO — 30-40 hours, parallel work)
+### Phase 1: Foundation (GO — 30-40 hours, parallel work) — ✅ COMPLETE
 
-**H2: Automated Lint/Test Command Extraction** (10-15 hours)
+**H2: Automated Lint/Test Command Extraction** (10-15 hours) — ✅ SHIPPED (2026-03-12)
 - No dependencies
 - Highest error risk mitigation (wrong commands → cascade failures)
 - Covers 95% of projects (Go, Rust, Node, Python)
+- Delivered: `sawtools extract-commands <repo-root>`
 
-**H3: Automated Dependency Graph Generation** (20-25 hours)
+**H3: Automated Dependency Graph Generation** (20-25 hours) — ✅ SHIPPED (2026-03-11)
 - No dependencies
 - Largest Scout time sink (10-15 min per run)
 - Foundational for H1a, H4, M2
+- Delivered: `sawtools analyze-deps <repo-root> --files <file-list>`
 
 **Deliverables:**
-- `sawtools extract-commands <repo-root>`
-- `sawtools analyze-deps <repo-root> --files <file-list>`
+- ✅ `sawtools extract-commands <repo-root>` — **SHIPPED**
+- ✅ `sawtools analyze-deps <repo-root> --files <file-list>` — **SHIPPED**
 
 ---
 
@@ -239,7 +241,7 @@ sawtools analyze-suitability \
 
 ---
 
-### H2: Automated Lint/Test Command Extraction (HIGH, Phase 1)
+### H2: Automated Lint/Test Command Extraction (HIGH, Phase 1) ✅ SHIPPED
 
 **Current behavior:** Scout manually reads CI configs (`.github/workflows/*.yml`, `Makefile`, etc.) and pattern-matches to extract build/test/lint commands.
 
@@ -318,6 +320,25 @@ sawtools extract-commands . | \
 **Maintenance burden:** LOW-MEDIUM
 - GitHub Actions YAML schema is stable
 - Makefile patterns are ad-hoc but finite (20-30 common patterns cover 90% of projects)
+
+**Shipped:** 2026-03-12 (scout-and-wave-go v0.38.0)
+- **IMPL:** `docs/IMPL/complete/IMPL-h2-command-extraction.yaml`
+- **Command:** `sawtools extract-commands <repo-root>`
+- **Implementation:** 6 agents (A: core extractor, B: GitHub Actions parser, C: Makefile parser, D: package.json parser, E: language defaults, F: CLI integration), 2 waves, ~26 minutes
+- **Files:** `pkg/commands/extractor.go`, `github_actions.go`, `makefile.go`, `package_json.go`, `defaults.go`, `types.go`, `cmd/saw/extract_commands_cmd.go`
+- **Test coverage:** 42 tests (36 parser tests, 6 CLI tests) covering all CI systems, build systems, edge cases, and error handling
+- **Notes:**
+  - Priority resolution: CI parsers (100) > Makefile (50) > package.json (40) > language defaults (0)
+  - Supports Go, Rust, Node.js, Python toolchains
+  - Handles Makefile target chaining, CI matrix builds, monorepo workspaces
+  - Returns nil (not error) when configs don't exist, falls back to language defaults
+  - CLI outputs YAML or JSON format
+
+**Actual implementation vs spec:**
+- ✅ Matches spec exactly: priority ordering, CI/build system parsers, language defaults fallback
+- ✅ Edge cases handled: Makefile target chaining (dependency tree resolution), CI matrix builds (host platform detection), monorepo workspaces (focused test patterns)
+- ✅ All 4 proposed languages supported (Go, Rust, Node, Python)
+- ⚠️ Module map test counting not yet implemented (deferred - low priority for initial release)
 
 ---
 
