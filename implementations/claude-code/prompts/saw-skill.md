@@ -200,17 +200,13 @@ If no `docs/IMPL/IMPL-*.yaml` file exists for the current feature:
 
 If a `docs/IMPL/IMPL-*.yaml` file already exists:
 1. Read it and identify the current wave (the first wave with unchecked status items). Also check the Scaffolds section: if any scaffold file has `Status: pending`, the Scaffold Agent has not yet run — spawn it now (see step 5 of the Scout flow above) before creating any worktrees. If any file shows `Status: FAILED`, stop and report the failure to the user before proceeding.
-2. **Solo agent check:** If the current wave has exactly 1 agent, skip worktree creation. Run `sawtools prepare-agent "<manifest-path>" --wave <N> --agent <ID> --repo-dir "<repo-path>" --no-worktree` to extract brief and init journal, then launch the agent directly via the Agent tool with `subagent_type: wave-agent` and `run_in_background: true` on the main branch. After the agent completes, proceed to step 4. The solo wave agent must still operate in the Wave Agent role — executing solo wave work inline violates I6 regardless of wave size.3. **Worktree setup:** Create worktrees using the Protocol SDK CLI:
+2. **Solo agent check:** If the current wave has exactly 1 agent, skip worktree creation. Run `sawtools prepare-agent "<manifest-path>" --wave <N> --agent <ID> --repo-dir "<repo-path>" --no-worktree` to extract brief and init journal, then launch the agent directly via the Agent tool with `subagent_type: wave-agent` and `run_in_background: true` on the main branch. After the agent completes, proceed to step 6. The solo wave agent must still operate in the Wave Agent role — executing solo wave work inline violates I6 regardless of wave size.
+3. **Wave preparation (multi-agent):** For waves with 2+ agents, use the batch preparation command:
    ```bash
-   sawtools create-worktrees "<manifest-path>" --wave <N> --repo-dir "<repo-path>"
+   sawtools prepare-wave "<manifest-path>" --wave <N> --repo-dir "<repo-path>"
    ```
-   This command creates a worktree for each agent in the specified wave, verifies scaffold commit status, and enforces interface freeze. Exit code 1 indicates failure (uncommitted scaffolds, freeze violations, or worktree creation errors) — do not proceed until resolved. **Interface freeze checkpoint:** interface contracts become immutable when worktrees are created. This is the last moment to revise type signatures, add fields, or restructure APIs. After this point, any interface change requires removing and recreating all worktrees for the wave.
-4. **Agent preparation:** Before launching agents, prepare each agent's environment:
-   ```bash
-   # For each agent in the wave:
-   sawtools prepare-agent "<manifest-path>" --wave <N> --agent <ID> --repo-dir "<repo-path>"
-   ```
-   The `prepare-agent` command extracts the agent's brief from the IMPL doc to `.saw-agent-brief.md` (in the worktree root) and initializes the journal observer. This eliminates the ~10s latency of agents calling `extract-context` at startup. For solo agents (no worktree), add `--no-worktree` flag to write brief to `.saw-state/wave{N}/agent-{ID}/brief.md` instead.5. For each agent in the current wave, launch a parallel **Wave agent** using the Agent tool with `subagent_type: wave-agent`, `run_in_background: true`, and the per-agent context payload (E23) as the prompt parameter. **Journal context prepending:** Before passing the prompt to the Agent tool, prepend the content of `.saw-state/journals/wave<N>/agent-<ID>/context.md` (if it exists and is non-empty) to the agent's prompt as a `## Prior Work` section. This ensures the agent has visibility into its own execution history even after context compaction. **Use short IMPL-referencing prompts — do not copy-paste agent briefs.** Pass a ~60-token stub containing the IMPL doc path, wave number, and agent ID. The agent reads its own full brief on its first tool call via its Read tool or `sawtools extract-context`. This is 10–15× faster to generate than copy-pasting the full context, and no information is lost — the IMPL doc is already the single source of truth (I4).
+   This atomic operation combines worktree creation and per-agent preparation (brief extraction + journal initialization) into a single command. Exit code 1 indicates failure (uncommitted scaffolds, freeze violations, or worktree creation errors) — do not proceed until resolved. **Interface freeze checkpoint:** interface contracts become immutable when worktrees are created. This is the last moment to revise type signatures, add fields, or restructure APIs. Returns JSON with all worktree paths and agent brief metadata.
+4. For each agent in the current wave, launch a parallel **Wave agent** using the Agent tool with `subagent_type: wave-agent`, `run_in_background: true`, and the per-agent context payload (E23) as the prompt parameter. **Journal context prepending:** Before passing the prompt to the Agent tool, prepend the content of `.saw-state/journals/wave<N>/agent-<ID>/context.md` (if it exists and is non-empty) to the agent's prompt as a `## Prior Work` section. This ensures the agent has visibility into its own execution history even after context compaction. **Use short IMPL-referencing prompts — do not copy-paste agent briefs.** Pass a ~60-token stub containing the IMPL doc path, wave number, and agent ID. The agent reads its own full brief on its first tool call via its Read tool or `sawtools extract-context`. This is 10–15× faster to generate than copy-pasting the full context, and no information is lost — the IMPL doc is already the single source of truth (I4).
 
 For **YAML manifests** (`.yaml`/`.yml`):
 ```
@@ -240,20 +236,13 @@ Follow the brief exactly.Follow the extracted brief exactly.
    ```
    Append the output to the IMPL doc under `## Stub Report — Wave {N}` (after the last agent completion report for this wave). Exit code is always 0 — stub detection is informational. Surface stubs at the review checkpoint.
 
-   **E21: Quality gate verification.** If the manifest contains quality gates, run:
-   ```bash
-   sawtools run-gates "<manifest-path>" --wave <N> --repo-dir "<repo-path>"
-   ```
-   Exit code 1 means a required gate failed — do not merge, report to user. JSON output contains per-gate pass/fail details.
+   **E21: Quality gate verification.** Quality gates are run automatically by `finalize-wave` in the next step.
 
-7. **Merge and verify:** Use the Protocol SDK CLI for merge operations:
+7. **Wave finalization:** Use the batch finalization command to verify, merge, and cleanup:
    ```bash
-   sawtools verify-commits "<manifest-path>" --wave <N> --repo-dir "<repo-path>"
-   sawtools merge-agents "<manifest-path>" --wave <N> --repo-dir "<repo-path>"
-   sawtools verify-build "<manifest-path>" --repo-dir "<repo-path>"
-   sawtools cleanup "<manifest-path>" --wave <N> --repo-dir "<repo-path>"
+   sawtools finalize-wave "<manifest-path>" --wave <N> --repo-dir "<repo-path>"
    ```
-   The `verify-commits` command checks that all agents committed to their worktree branches. The `merge-agents` command performs conflict detection and merges each agent's worktree to main using `--no-ff`. The `verify-build` command runs post-merge build verification. The `cleanup` command removes worktrees and archives journals after successful merge.
+   This atomic operation combines the 6-step post-wave pipeline: (1) verify-commits (E7 check), (2) scan-stubs (E20), (3) run-gates (E21), (4) merge-agents, (5) verify-build, (6) cleanup. The command stops on first failure and returns comprehensive JSON with all verification results. Exit code 1 indicates failure at any step. Returns `Success: true` only if all steps pass. For solo agents (no worktrees), run the individual commands manually: `verify-build` to run tests, then proceed to step 8.
 8. **E15: IMPL doc completion marker.** If this was the final wave and post-merge verification passed, run:
    ```bash
    sawtools mark-complete "<impl-doc-path>" --date "YYYY-MM-DD"
