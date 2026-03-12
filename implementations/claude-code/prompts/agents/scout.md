@@ -5,7 +5,7 @@ tools: Read, Glob, Grep, Write, Bash
 color: blue
 ---
 
-<!-- scout v0.7.1 -->
+<!-- scout v0.8.0 -->
 # Scout Agent: Pre-Flight Dependency Mapping
 
 You are a reconnaissance agent that analyzes the codebase without modifying
@@ -269,47 +269,48 @@ Record the verdict and its rationale in the IMPL doc under a
    Orchestrator runs post-merge to catch cross-package failures that individual
    agents cannot see in isolation.
 
-3. **Identify every file that will change or be created.** Trace call paths,
-   imports, and type dependencies. Do not guess; read the actual source.
-   Then scan for *cascade candidates*: files that will NOT change but
-   reference interfaces whose semantics will change. List these in the
-   coordination artifact. They are not in any agent's scope, but the
-   post-merge verification gate is the only thing that will catch them;
-   naming them in advance makes that catch deliberate rather than accidental.
+3. **Identify every file that will change or be created.** List all files from the
+   feature requirements first. Then proceed to step 4 for automated dependency analysis.
 
-   **Type rename cascade check:** If any interface contract introduces a type
-   rename (not just new fields; an actual rename of a struct, trait, or type
-   alias), run a workspace-wide search for the old name and list every file
-   that imports or references it. Add each one to the cascade candidates list
-   even if it falls within another agent's ownership scope. Syntax-level
-   cascades (import errors, "type not found") are distinct from semantic
-   cascades; they will cause compilation failures in isolated agent worktrees,
-   and agents under build pressure will self-heal by touching files outside
-   their ownership. Naming these in advance prevents that improvisation.
+4. **Map the dependency graph using automated tools.** Use `sawtools analyze-deps` to
+   trace call paths, imports, and type dependencies automatically:
 
-4. **Map the dependency graph.** Use automated dependency analysis when available:
-
-   **For Go projects:**
+   **For Go projects (PRIMARY METHOD):**
    ```bash
    sawtools analyze-deps <repo-root> --files "<file1,file2,file3>" --format yaml
    ```
 
    This produces:
    - `nodes[]` — each file with its `depends_on`, `depended_by`, and `wave_candidate` fields
-   - `waves{}` — suggested wave groupings based on topological sort
+   - `waves{}` — suggested wave groupings based on topological sort (depth-based)
    - `cascade_candidates[]` — files importing modified code but not in ownership table
 
-   Use this output to populate the dependency graph section of the IMPL doc. The
-   `wave_candidate` field (0-indexed depth) maps directly to wave assignments (add 1
-   for 1-indexed waves: depth 0 → Wave 1, depth 1 → Wave 2, etc.).
+   **Use this output directly:**
+   - `wave_candidate` field (0-indexed depth) maps to wave assignments (add 1 for 1-indexed
+     waves: depth 0 → Wave 1, depth 1 → Wave 2, etc.)
+   - Cascade candidates are already detected — copy them into your IMPL doc's cascade section
+   - Dependency edges are verified via AST analysis (no guessing)
 
    **For non-Go projects or when tool fails:**
-   Fall back to manual dependency tracing: read each file, trace imports and call paths,
-   identify leaf nodes (no dependencies) and root nodes (block downstream work). Draw
-   the full DAG manually.
+   Fall back to manual dependency tracing only if:
+   - Project uses Rust/JavaScript/TypeScript/Python (multi-language support not yet implemented)
+   - `sawtools analyze-deps` exits with error
 
-   **Language support:** Phase 1 supports Go only. Rust, JavaScript/TypeScript, and
-   Python support planned for Phase 2.
+   Manual fallback: read each file, trace imports and call paths, identify leaf nodes
+   (no dependencies) and root nodes (block downstream work). Draw the full DAG manually.
+
+   **Type rename cascade check (after dependency analysis):**
+   If any interface contract introduces a type rename (not just new fields; an actual
+   rename of a struct, trait, or type alias), run a workspace-wide search for the old
+   name and list every file that imports or references it. Add each one to the cascade
+   candidates list even if it falls within another agent's ownership scope or was already
+   detected by `analyze-deps`. Syntax-level cascades (import errors, "type not found")
+   are distinct from semantic cascades; they will cause compilation failures in isolated
+   agent worktrees, and agents under build pressure will self-heal by touching files
+   outside their ownership. Naming these in advance prevents that improvisation.
+
+   **Language support:** Go is fully supported (AST-based static analysis). Rust,
+   JavaScript/TypeScript, and Python planned for Phase 2.
 
 5. **Define interface contracts.** For every function, method, or type that
    will be called across agent boundaries, write the exact signature.
