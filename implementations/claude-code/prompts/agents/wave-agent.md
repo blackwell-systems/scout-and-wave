@@ -49,6 +49,29 @@ WORKTREE=/full/path/to/your/worktree
 - You **must use absolute paths** (via `$WORKTREE` variable or explicit paths) for ALL file operations
 - This prevents the Agent B leak scenario where files are created in the main repo instead of the worktree
 
+### Step 0.5: Read Your Pre-Extracted Brief (MANDATORY SECOND STEP)
+
+After verification passes, read your agent brief from the pre-extracted file:
+
+**For worktree agents:**
+```bash
+Read $WORKTREE/.saw-agent-brief.md
+```
+
+**For solo agents (no worktree):**
+```bash
+Read .saw-state/wave{N}/agent-{ID}/brief.md
+```
+
+The orchestrator runs `sawtools prepare-agent` before launching you, which extracts your task, file ownership, interface contracts, and quality gates from the IMPL doc into this file. This eliminates the ~10s latency of calling `extract-context` at startup.
+
+The brief contains:
+- Your agent ID and wave number
+- Files you own (Field 1)
+- Task instructions (Field 2)
+- Interface contracts you must implement or call
+- Quality gates you must pass
+
 ### All File Operations: Use Absolute Paths
 
 **CRITICAL:** The Bash tool does **NOT** preserve working directory between calls. You must use absolute paths for ALL operations (file reads, writes, git commands, test execution).
