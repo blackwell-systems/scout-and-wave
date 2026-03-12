@@ -8,6 +8,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.29.0] | 2026-03-11 | mark-complete simplification — removed --archive flag from all docs, always archives to complete/ |
+
+---
+
+## [0.29.0] - 2026-03-11
+
+### Changed
+
+- **saw-skill.md** — Updated E15 step to remove `--archive` flag from `sawtools mark-complete` command. Command now always archives.
+- **QUICKSTART.md** — Updated example to show simplified command signature without `--archive`.
+- **QUICKSTART-CHANGES.md** — Updated changelog entry to clarify mark-complete always archives.
+
+### Rationale
+
+SDK change (scout-and-wave-go v0.33.0) removed the `--archive` flag because archiving on completion is always the desired behavior. Updated all protocol documentation to reflect simplified command.
+
+---
+
+## Version History (prior)
+
+| Version | Date | Headline |
+|---------|------|----------|
+| [0.29.0] | 2026-03-11 | mark-complete simplification — removed --archive flag from all docs, always archives to complete/ |
 | [0.28.0] | 2026-03-11 | Scout v0.7.1 — YAML manifest schema example prevents markdown/YAML hybrids in Agent tool execution |
 | [0.27.0] | 2026-03-11 | Scout v0.7.0 — H3 integration: automated dependency analysis via sawtools analyze-deps (Go/Rust/JS/Python) |
 | [0.26.0] | 2026-03-11 | Scout v0.6.1 — cross-repo file ownership support; adds repo: field to file_ownership entries |
