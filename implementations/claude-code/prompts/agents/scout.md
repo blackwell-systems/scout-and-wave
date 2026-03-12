@@ -5,7 +5,7 @@ tools: Read, Glob, Grep, Write, Bash
 color: blue
 ---
 
-<!-- scout v0.8.1 -->
+<!-- scout v0.9.0 -->
 # Scout Agent: Pre-Flight Dependency Mapping
 
 You are a reconnaissance agent that analyzes the codebase without modifying
@@ -148,9 +148,42 @@ Answer these five questions:
    codebase to determine implementation status:
 
    > **CONTEXT.md cross-check:** After reading `docs/CONTEXT.md` (Step 0 of Process), also check `established_interfaces` for any interfaces that overlap with the feature being planned. If an interface already exists and matches what you would define, reference it in the IMPL doc's Interface Contracts section rather than redefining it.
-   - Read the source files that would change for each item
-   - Classify each item as: **TO-DO** (not implemented), **DONE** (already
-     implemented), or **PARTIAL** (partially implemented)
+
+   **Primary method: sawtools analyze-suitability (H1a)**
+
+   ```bash
+   sawtools analyze-suitability <requirements-file> --repo-root <repo-path>
+   ```
+
+   Input: Requirements document (markdown or plain text format, each requirement on its own line or bullet)
+
+   Output: JSON with per-requirement status classification:
+   ```json
+   {
+     "pre_implementation": {
+       "total_items": 19,
+       "done": 3,
+       "partial": 2,
+       "todo": 14,
+       "item_status": [
+         {
+           "id": "F1",
+           "status": "DONE",
+           "file": "pkg/auth.go",
+           "test_coverage": "high",
+           "completeness": 1.0
+         }
+       ]
+     }
+   }
+   ```
+
+   Classification heuristics (regex-based, no AST):
+   - **DONE**: function exists + test file >100 lines + no TODO/FIXME
+   - **PARTIAL**: function exists + TODO/FIXME + test file 50-100 lines
+   - **TODO**: function doesn't exist + no test file
+
+   Use this data to adjust agent prompts:
    - For DONE items:
      - If tests exist and are comprehensive: skip the agent entirely, OR
      - If tests are missing/incomplete: change agent prompt to "verify existing
@@ -315,13 +348,48 @@ They are NOT the structure of your output. Your output is PURE YAML following th
 
    **Type rename cascade check (after dependency analysis):**
    If any interface contract introduces a type rename (not just new fields; an actual
-   rename of a struct, trait, or type alias), run a workspace-wide search for the old
-   name and list every file that imports or references it. Add each one to the cascade
-   candidates list even if it falls within another agent's ownership scope or was already
+   rename of a struct, trait, or type alias), detect cascade candidates using
+   `sawtools detect-cascades` (M2).
+
+   **Primary method: sawtools detect-cascades**
+
+   ```bash
+   sawtools detect-cascades --renames '[{"old":"AuthToken","new":"SessionToken","scope":"pkg/auth"}]'
+   ```
+
+   Output: YAML with cascade candidates classified by severity:
+   ```yaml
+   cascade_candidates:
+     - file: "cmd/server/main.go"
+       line: 42
+       match: "auth.AuthToken"
+       cascade_type: "syntax"
+       severity: "high"
+       reason: "Will cause compilation failure - agent must update import"
+     - file: "internal/middleware/session.go"
+       line: 67
+       match: "// Returns AuthToken for valid session"
+       cascade_type: "semantic"
+       severity: "low"
+       reason: "Comment only - does not affect compilation"
+   ```
+
+   AST-based classification:
+   - **syntax (high/medium)**: import statements, type declarations, variable/field declarations
+   - **semantic (low)**: comments, string literals
+
+   Add each cascade candidate to the IMPL doc's cascade section with its severity and
+   reason, even if it falls within another agent's ownership scope or was already
    detected by `analyze-deps`. Syntax-level cascades (import errors, "type not found")
-   are distinct from semantic cascades; they will cause compilation failures in isolated
-   agent worktrees, and agents under build pressure will self-heal by touching files
-   outside their ownership. Naming these in advance prevents that improvisation.
+   will cause compilation failures in isolated agent worktrees, and agents under build
+   pressure will self-heal by touching files outside their ownership. Naming these in
+   advance prevents that improvisation.
+
+   **For non-Go projects:** Fall back to manual search only if the project uses
+   Rust/JavaScript/TypeScript/Python (multi-language support not yet implemented).
+   Manual method: run workspace-wide search (grep/rg) for the old type name, list
+   every file that imports or references it, manually classify as syntax vs semantic
+   based on context (import line = syntax, comment = semantic).
 
    **Language support:** Go is fully supported (AST-based static analysis). Rust,
    JavaScript/TypeScript, and Python planned for Phase 2.
