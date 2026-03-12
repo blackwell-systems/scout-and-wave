@@ -16,6 +16,59 @@ SAW uses the IMPL doc (Implementation Document) as the single source of truth (I
 
 ---
 
+## Format Variants
+
+The SAW protocol supports two IMPL doc formats. Both contain the same logical structure and fields; they differ only in serialization:
+
+### YAML Manifests (Primary Format)
+
+**File extension:** `.yaml` or `.yml`
+
+**Used by:** SDK-based implementations (scout-and-wave-go CLI, scout-and-wave-web), agent types with structured output
+
+**Characteristics:**
+- Pure YAML structure matching `IMPLManifest` schema (see scout-and-wave-go/pkg/protocol/types.go)
+- Schema-validated via `sawtools validate`
+- Completion reports stored in `completion_reports:` map at root level (keyed by agent ID)
+- Typed blocks (quality gates, scaffolds, file ownership) as YAML fields with explicit types
+
+**Example:**
+```yaml
+title: "Feature Name"
+feature: "One-line description"
+repository: "/absolute/path/to/repo"
+suitability_assessment:
+  verdict: "SUITABLE"
+  reasoning: "..."
+scaffolds:
+  - file: "pkg/types/shared.go"
+    contents: "type Foo struct { ... }"
+    import_path: "module/pkg/types"
+    status: "committed"
+    commit: "abc1234"
+completion_reports:
+  A:
+    status: "complete"
+    commit: "def5678"
+    verification: "PASS"
+```
+
+### Markdown IMPL Docs (Legacy Format)
+
+**File extension:** `.md`
+
+**Used by:** Pure natural-language orchestrators, legacy implementations
+
+**Characteristics:**
+- Markdown structure with sections (`# IMPL:`, `## Suitability Assessment`, etc.)
+- Typed blocks use fenced code blocks with `type=impl-*` annotation
+- Completion reports written as `### Agent {ID} - Completion Report` sections with typed YAML blocks
+- Human-readable, optimized for chat-based workflows
+
+Both formats are parsed by the same protocol logic. Implementations MUST support reading both formats. Scout agents MAY generate either format depending on their capabilities (structured output → YAML, pure NL → markdown).
+
+---
+
 ## IMPL Doc Structure
 
 The IMPL doc is a markdown file with the following sections in order:
@@ -432,11 +485,42 @@ Generation-1 IDs (`A`, `B`, `C`, …) are valid wherever an agent ID appears. Mu
 
 ## Completion Report Format
 
-Structured YAML block written by each agent to the IMPL doc. Machine-readable. Orchestrator parses these before merging.
+Structured data written by each agent to the IMPL doc. Machine-readable. Orchestrator parses these before merging.
 
-**E14: Write discipline:** Agents append completion reports at the end of the IMPL doc under `### Agent {ID} - Completion Report`. Agents never edit earlier sections (interface contracts, ownership table, suitability verdict). Those sections are frozen at worktree creation (E2).
+**E14: Write discipline:** Agents append completion reports at the end of the IMPL doc. In markdown IMPL docs, use `### Agent {ID} - Completion Report` headings. In YAML manifests, completion reports go in the `completion_reports:` map at root level with agent ID as key. Agents never edit earlier sections (interface contracts, ownership table, suitability verdict). Those sections are frozen at worktree creation (E2).
 
-**Structure:**
+**Format differs by IMPL doc type:**
+
+**For YAML manifests** — completion reports stored in `completion_reports:` map:
+```yaml
+completion_reports:
+  A:
+    status: complete
+    commit: def5678
+    files_changed: [pkg/cache.go]
+    verification: PASS
+  B:
+    status: complete
+    commit: ghi9012
+    files_changed: [pkg/handler.go]
+    verification: PASS
+```
+
+**For markdown IMPL docs** — completion reports as typed YAML blocks:
+
+```markdown
+### Agent A - Completion Report
+
+\```yaml type=impl-completion-report
+status: complete
+commit: def5678
+files_changed:
+  - pkg/cache.go
+verification: PASS
+\```
+```
+
+**Shared field structure (applies to both formats):**
 
 ```yaml type=impl-completion-report
 status: complete | partial | blocked
@@ -586,8 +670,25 @@ Written by the Scout into the IMPL doc to specify type scaffold files. Read and 
 **Status lifecycle:**
 
 - `pending`: Scout wrote spec, Scaffold Agent not yet run
-- `committed (sha)`: Scaffold Agent created, compiled, and committed the file. SHA is the commit hash.
+- `committed`: Scaffold Agent created, compiled, and committed the file. For YAML manifests, the `commit:` field contains the SHA. For markdown tables, use `committed (sha)` format in the Status column.
 - `FAILED: {reason}`: Scaffold Agent could not compile. No file committed. Orchestrator surfaces failure to human.
+
+**YAML manifest format:**
+```yaml
+scaffolds:
+  - file: "pkg/types/shared.go"
+    contents: "type Foo struct { ... }"
+    import_path: "module/pkg/types"
+    status: "committed"
+    commit: "abc1234"
+```
+
+**Markdown table format:**
+```markdown
+| File | Contents | Import path | Status |
+|------|----------|-------------|--------|
+| `pkg/types/shared.go` | type Foo struct { ... } | `module/pkg/types` | committed (abc1234) |
+```
 
 **Orchestrator verification:** Before creating worktrees, Orchestrator verifies all scaffold files show `committed (sha)` status. A `FAILED` status is a protocol stop: surface the failure to the human, do not proceed to worktree creation.
 
