@@ -91,10 +91,6 @@ ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/saw-worktree.md
        ~/.claude/skills/saw/saw-worktree.md
 ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agent-template.md \
        ~/.claude/skills/saw/agent-template.md
-ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/scout.md \
-       ~/.claude/skills/saw/scout.md
-ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/scaffold-agent.md \
-       ~/.claude/skills/saw/scaffold-agent.md
 
 # If you cloned elsewhere, adjust all paths:
 # mkdir -p ~/.claude/skills/saw/agents
@@ -106,34 +102,22 @@ ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/scaffold-agent.
 
 **What changed in v0.5.0:** The skill now uses the Claude Code Skills API instead of the legacy commands API. Supporting files are co-located in the skill directory and referenced via `${CLAUDE_SKILL_DIR}`, eliminating hardcoded paths and environment variables.
 
-### Step 4: Install Custom Agent Types (Optional)
+### Step 4: Install Custom Agent Types (Required)
 
-SAW can use custom Claude Code agent types that provide structural tool restrictions (e.g., scout cannot edit source files, wave agents cannot spawn sub-agents). This is **optional** — the skill automatically falls back to `general-purpose` agents with full prompts if these are not installed.
+SAW uses custom Claude Code agent types that provide structural tool restrictions (e.g., scout cannot edit source files, wave agents cannot spawn sub-agents) and behavioral instructions. These must be installed for the skill to function.
 
-**As of v0.5.0, agent types can be symlinked into the skill directory or globally:**
+**Install agent types into the skill directory:**
 
 ```bash
-# Option A: Install agent types into the skill directory (recommended)
 ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agents/scout.md \
        ~/.claude/skills/saw/agents/scout.md
 ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agents/wave-agent.md \
        ~/.claude/skills/saw/agents/wave-agent.md
 ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agents/scaffold-agent.md \
        ~/.claude/skills/saw/agents/scaffold-agent.md
-
-# Option B: Install agent types globally (works for all skills that use them)
-mkdir -p ~/.claude/agents
-ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agents/scout.md \
-       ~/.claude/agents/scout.md
-ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agents/scaffold-agent.md \
-       ~/.claude/agents/scaffold-agent.md
-ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agents/wave-agent.md \
-       ~/.claude/agents/wave-agent.md
 ```
 
-**What you get:** When installed, the skill launches agents with their custom `subagent_type` (e.g., `subagent_type: scout`), which provides runtime-enforced tool restrictions and better observability. Without them, agents use `subagent_type: general-purpose` with the full prompt — functionally identical, but without structural tool enforcement.
-
-**Why two prompt directories?** `prompts/agents/` contains custom agent types (optional). `prompts/` contains fallback prompts used when custom types aren't installed. You'll use one or the other automatically—the skill detects what's available and adapts.
+**What you get:** Custom agent types provide runtime-enforced tool restrictions (scout cannot Edit source files, wave agents cannot spawn sub-agents) and better observability. Each agent type has YAML frontmatter that Claude Code uses to enforce behavioral constraints.
 
 ### Step 5: Verify Installation
 
@@ -230,10 +214,8 @@ The `/saw` skill consists of several specialized prompts, all installed to `~/.c
 - **`saw-merge.md`** - Merge procedure implementation
 - **`saw-worktree.md`** - Worktree lifecycle management
 - **`saw-bootstrap.md`** - Bootstrap mode for new projects
-- **`scout.md`** - Scout agent fallback prompt (used when custom types not installed)
-- **`scaffold-agent.md`** - Scaffold Agent fallback prompt
 - **`agent-template.md`** - Wave Agent template (Scout fills this to generate per-agent prompts)
-- **`agents/`** (optional) - Custom agent type definitions for enhanced tool restrictions
+- **`agents/`** - Custom agent type definitions (scout, wave-agent, scaffold-agent)
 
 All files are symlinked from `implementations/claude-code/prompts/` (the single source of truth). The skill references them via `${CLAUDE_SKILL_DIR}` for portability.
 
@@ -301,19 +283,13 @@ Edit `config/saw.config.json` in the repo to set your defaults. Changes are vers
 
 If the file doesn't exist, all values fall back to defaults. The CLI skill reads `scout_model` for `/saw scout` and `wave_model` for `/saw wave`.
 
-### Rate-Limit Fallback
+### Agent Architecture
 
-If an agent hits a rate limit (returns immediately with 0 tool uses), the orchestrator automatically retries once using `subagent_type: general-purpose`, which inherits the parent session's model. This handles cases where the configured model is rate-limited but the parent model has available capacity.
-
-## Agent Architecture: Dual-Structure Design
-
-SAW uses a dual-structure architecture that supports both custom agent types and graceful fallback to general-purpose agents:
+SAW uses custom Claude Code agent types for all Scout, Scaffold Agent, and Wave Agent launches:
 
 **Directory structure:**
 ```
 prompts/
-├── scout.md              # Fallback prompt (no YAML frontmatter)
-├── scaffold-agent.md     # Fallback prompt (no YAML frontmatter)
 ├── agent-template.md     # Template Scout fills to generate wave agent prompts
 └── agents/
     ├── scout.md          # Custom agent type (with YAML frontmatter)
@@ -321,29 +297,12 @@ prompts/
     └── wave-agent.md     # Custom agent type (with YAML frontmatter)
 ```
 
-**How fallback works:**
-
-1. **Error-based, not config-based:** The Orchestrator always tries custom types first (`subagent_type: scout`). Only when Claude Code returns an error ("subagent type 'scout' not found") does it fall back to `subagent_type: general-purpose` with the full prompt from `prompts/scout.md`.
-
-2. **Zero configuration required:** Users simply don't install custom agent types if they don't want them. The system automatically detects the absence and uses the fallback behavior.
-
-3. **Behavioral equivalence:** With or without custom types, agents produce the same results. Custom types add runtime tool enforcement (scout cannot Edit source files) and observability (claudewatch can track agent types separately), but don't change the logic.
-
-**Wave agents are special:**
-
-Wave agents use a **two-layer architecture**:
+**Wave agents use a two-layer architecture:**
 
 - **Type layer** (`prompts/agents/wave-agent.md`): Shared behavior across all wave agents — worktree isolation protocol, completion report format, invariants (I1, I2, I5)
 - **Instance layer** (`prompts/agent-template.md`): Scout fills this template to generate Agent A, Agent B, Agent C prompts with specific files, interfaces, and tests
 
-When custom types are installed, both layers combine. In fallback mode, the filled template already contains all necessary instructions (it's self-contained), so wave agents work identically.
-
-**Why root-level prompts exist:**
-
-The files in `prompts/` (without YAML frontmatter) serve two purposes:
-
-1. **Active fallback code paths:** When custom types aren't installed, these are the actual prompts passed to general-purpose agents
-2. **Historical preservation:** They document what the prompts looked like before the custom agent types refactoring (commit c43bd41), preserving the evolution from "everything runs through general-purpose agents" to "specialized agent types with focused prompts"
+The orchestrator launches wave agents with `subagent_type: wave-agent` and passes the filled template as the `prompt` parameter. This combines both layers: the agent type provides structural constraints (tool restrictions, behavioral instructions), and the instance prompt provides task-specific context (file ownership, interface contracts, tests).
 
 ## Examples
 
