@@ -8,10 +8,47 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.31.1] | 2026-03-12 | Wave Agent v0.5.1 — absolute path enforcement + enhanced verify-isolation (rejects main repo execution) |
 | [0.31.0] | 2026-03-12 | Wave Agent v0.5.0 — mandatory worktree isolation verification (Field 0 enforcement) prevents file leaks to main repo |
 | [0.30.1] | 2026-03-12 | Scout v0.8.1 — format ambiguity fix prevents markdown section headers in YAML output |
 | [0.30.0] | 2026-03-12 | Scout v0.8.0 — analyze-deps now PRIMARY METHOD for Go dependency mapping (determinism improvement H3) |
 | [0.29.0] | 2026-03-11 | mark-complete simplification — removed --archive flag from all docs, always archives to complete/ |
+
+---
+
+## [0.31.1] - 2026-03-12
+
+### Changed
+
+- **Wave Agent v0.5.1** — Absolute path enforcement for ALL file operations
+  - Step 0 now instructs agents to capture `$WORKTREE` environment variable after isolation verification
+  - New section: "All File Operations: Use Absolute Paths" with explicit patterns for Read/Write/Edit/git/test operations
+  - Emphasizes Bash tool does NOT preserve working directory between invocations
+  - Shows correct patterns using `$WORKTREE` variable or explicit absolute paths
+  - Shows incorrect patterns (relative paths, relying on `cd`)
+
+- **SDK: Enhanced `verify-isolation`** (scout-and-wave-go v0.36.0)
+  - Now resolves relative paths (`.`) to absolute paths before checking
+  - Adds explicit worktree path check: path must contain `.claude/worktrees/`
+  - If agent runs verification from main repo, fails with: `"not in a worktree: path does not contain '.claude/worktrees/'"`
+  - Catches Agent B scenario at verification stage (before any file operations)
+
+### Problem (Continued from v0.31.0)
+
+v0.31.0 added mandatory verification, but agents could still pass verification by running it from the worktree, then use relative paths in subsequent operations (which execute in main repo due to Bash tool not preserving `cwd`).
+
+### Solution
+
+**Layer 1 (SDK):** `verify-isolation` actively checks the path is in a worktree directory, not just the branch name
+**Layer 2 (Protocol):** Wave agent prompt provides $WORKTREE variable pattern and explicit guidance on absolute paths
+**Layer 3 (Education):** Shows correct/incorrect patterns to prevent accidental relative path usage
+
+### Impact
+
+- **Stronger verification:** Agent can't "verify then stray" — verification confirms they're in the right location at that moment, and absolute path guidance prevents drift
+- **Catches earlier:** Main repo execution fails at verification (not at merge time)
+- **Clear errors:** If agent passes "." or relative path to `verify-isolation`, it resolves to absolute path and checks if it's a worktree
+- **Pattern enforcement:** $WORKTREE variable makes absolute path usage ergonomic (not just correct)
 
 ---
 
