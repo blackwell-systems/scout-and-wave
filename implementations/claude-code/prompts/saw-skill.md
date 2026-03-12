@@ -112,7 +112,7 @@ All operations use the `sawtools` CLI. IMPL docs are YAML manifests (`.yaml`).
 - `sawtools validate` — E16 manifest validation
 - `sawtools extract-context` — E23 per-agent context extraction
 - `sawtools set-completion` — agent completion report registration
-- `sawtools mark-complete` — E15 SAW:COMPLETE marker and optional archive to `docs/IMPL/complete/`
+- `sawtools mark-complete` — E15 SAW:COMPLETE marker and archive to `docs/IMPL/complete/`
 - `sawtools run-gates` — E21 quality gate verification
 - `sawtools check-conflicts` — I1 file ownership conflict detection
 - `sawtools validate-scaffolds` — scaffold commit status verification
@@ -250,9 +250,9 @@ Follow the extracted brief exactly. Your worktree branch wave{N}-agent-{X} is al
    The `verify-commits` command checks that all agents committed to their worktree branches. The `merge-agents` command performs conflict detection and merges each agent's worktree to main using `--no-ff`. The `verify-build` command runs post-merge build verification. The `cleanup` command removes worktrees and archives journals after successful merge.
 8. **E15: IMPL doc completion marker.** If this was the final wave and post-merge verification passed, run:
    ```bash
-   sawtools mark-complete "<impl-doc-path>" --date "YYYY-MM-DD" --archive
+   sawtools mark-complete "<impl-doc-path>" --date "YYYY-MM-DD"
    ```
-   The `--archive` flag moves the IMPL doc from `docs/IMPL/` to `docs/IMPL/complete/` after marking it complete. This keeps the active directory focused on in-progress work. Then commit the IMPL doc update. This is the formal close of the IMPL lifecycle. Do not write the marker if more waves remain. **E18: Update project memory.** After writing the SAW:COMPLETE marker, update project context:
+   This writes the SAW:COMPLETE marker and moves the IMPL doc from `docs/IMPL/` to `docs/IMPL/complete/`, keeping the active directory focused on in-progress work. Then commit the archived IMPL doc. This is the formal close of the IMPL lifecycle. Do not write the marker if more waves remain. **E18: Update project memory.** After writing the SAW:COMPLETE marker, update project context:
    ```bash
    sawtools update-context "<manifest-path>" --project-root "<repo-path>"
    ```

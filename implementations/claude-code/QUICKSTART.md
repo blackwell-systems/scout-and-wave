@@ -347,7 +347,7 @@ Cleaning up worktrees:
   -> Removed .claude/worktrees/wave1-agent-B
   -> Removed wave1-agent-B branch
 
-Running: sawtools mark-complete docs/IMPL/IMPL-simple-cache.yaml --archive
+Running: sawtools mark-complete docs/IMPL/IMPL-simple-cache.yaml
 
   -> Writing SAW:COMPLETE marker to IMPL doc
   -> Archiving to docs/IMPL/complete/IMPL-simple-cache.yaml

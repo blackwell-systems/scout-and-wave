@@ -54,7 +54,7 @@
 
 ### Section: Cleanup and completion (Step 7)
 - **Issue:** Did not show E15 completion marker or E18 project memory update
-- **Fix:** Added `sawtools cleanup` and `sawtools mark-complete --archive` commands
+- **Fix:** Added `sawtools cleanup` and `sawtools mark-complete` commands (always archives to `complete/`)
 - **Impact:** Users see the full lifecycle including IMPL doc archival to `docs/IMPL/complete/`
 
 ### Section: Troubleshooting - Scaffold Agent
