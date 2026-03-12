@@ -8,8 +8,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.30.1] | 2026-03-12 | Scout v0.8.1 — format ambiguity fix prevents markdown section headers in YAML output |
 | [0.30.0] | 2026-03-12 | Scout v0.8.0 — analyze-deps now PRIMARY METHOD for Go dependency mapping (determinism improvement H3) |
 | [0.29.0] | 2026-03-11 | mark-complete simplification — removed --archive flag from all docs, always archives to complete/ |
+
+---
+
+## [0.30.1] - 2026-03-12
+
+### Fixed
+
+- **Scout v0.8.1** — Eliminated markdown/YAML format ambiguity in prompt
+  - Added "CRITICAL OUTPUT FORMAT REQUIREMENTS" section with 4 explicit rules
+  - Renamed "Process" to "Implementation Process (Instructions - NOT Output Format)"
+  - Added "INSTRUCTIONS BEGIN HERE" divider before procedural steps
+  - Changed step headers from `##` to `###` to de-emphasize them as output structure
+
+### Problem
+
+Scout agents were writing markdown section headers (`## Interface Contracts`, `## Suitability Assessment`) instead of YAML fields (`interface_contracts:`, `suitability_assessment: |`). Root cause: procedural instruction steps used markdown headers that could be misinterpreted as output format examples.
+
+### Impact
+
+Pure YAML manifests guaranteed - no more validation failures from mixed markdown/YAML structure.
 
 ---
 
