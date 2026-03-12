@@ -45,24 +45,25 @@ This roadmap identifies opportunities to eliminate judgment variance from Scout-
 
 ---
 
-### Phase 2: Scout Automation (35-45 hours, after H3)
+### Phase 2: Scout Automation (35-45 hours, after H3) — 1/3 COMPLETE
 
-**H1a: Pre-Implementation Status Scanning** (15-20 hours)
+**H1a: Pre-Implementation Status Scanning** (15-20 hours) — PENDING
 - Depends on H3 for file location mapping
 - Reduces duplicate implementation waste (40% miss rate currently)
 
-**H4: Automated Scaffold Detection** (12-15 hours)
+**H4: Automated Scaffold Detection** (12-15 hours) — ✅ SHIPPED (2026-03-12)
 - Depends on H3 for cross-boundary type detection
 - Prevents merge conflicts from duplicate type definitions
+- Delivered: `sawtools detect-scaffolds <impl-doc> --stage {pre-agent|post-agent}`
 
-**M2: Cascade Candidate Detection** (8-10 hours)
+**M2: Cascade Candidate Detection** (8-10 hours) — PENDING
 - Depends on H3 for type reference search
 - Catches cascading changes from type renames (15% of Scout runs)
 
 **Deliverables:**
-- `sawtools analyze-suitability <feature-desc> <codebase-root>` (partial — pre-impl scanning only)
-- `sawtools detect-scaffolds <impl-doc> --stage {pre-agent|post-agent}`
-- `sawtools detect-cascades <repo-root> --renames <json>`
+- ⏳ `sawtools analyze-suitability <feature-desc> <codebase-root>` (partial — pre-impl scanning only)
+- ✅ `sawtools detect-scaffolds <impl-doc> --stage {pre-agent|post-agent}` — **SHIPPED**
+- ⏳ `sawtools detect-cascades <repo-root> --renames <json>`
 
 ---
 
@@ -449,7 +450,7 @@ sawtools analyze-deps . --files "$(git diff --name-only main)" | \
 
 ---
 
-### H4: Automated Scaffold Detection (HIGH, Phase 2)
+### H4: Automated Scaffold Detection (HIGH, Phase 2) ✅ SHIPPED
 
 **Current behavior:** Scout manually scans interface contracts for types referenced by ≥2 agents, using heuristics like "Agent A's prompt says 'define type X' AND Agent B's prompt says 'consume type X'".
 
@@ -529,6 +530,26 @@ sawtools detect-scaffolds docs/IMPL/IMPL-X.yaml --stage post-agent
 **Maintenance burden:** MEDIUM (logic complexity, but no external dependencies)
 
 **Implementation confidence:** MEDIUM (depends on H3's accuracy)
+
+**Shipped:** 2026-03-12 (scout-and-wave-go v0.36.0)
+- **IMPL:** `docs/IMPL/complete/IMPL-scaffold-detection.yaml`
+- **Command:** `sawtools detect-scaffolds <impl-doc-path> --stage {pre-agent|post-agent}`
+- **Implementation:** 3 agents (A: pre-agent mode + CLI, B: post-agent mode, C: integration tests), 1 wave, 23 minutes
+- **Files:** `pkg/scaffold/pre_agent.go`, `post_agent.go`, `doc.go`, `integration_test.go`, `cmd/saw/detect_scaffolds_cmd.go`
+- **Test coverage:** 15 tests (7 pre-agent, 8 post-agent) covering all scenarios from spec
+- **Notes:**
+  - Pre-agent mode analyzes interface contracts from IMPL doc, detects types referenced by ≥2 agents
+  - Post-agent mode parses agent task fields, detects duplicate type definitions
+  - Supports Go, Rust, TypeScript, Python type syntax via regex patterns
+  - CLI returns JSON with `scaffolds_needed` or `conflicts` arrays
+  - Empty results return empty arrays (not errors), exit code 0
+  - Integration tests exercise both modes end-to-end via CLI
+
+**Actual implementation vs spec:**
+- ✅ Matches spec exactly: pre-agent mode, post-agent mode, JSON output format
+- ✅ Edge case handling: empty manifests, no duplicates, three-agent conflicts
+- ✅ Cross-language support: regex handles Go/Rust/TS/Python type definitions
+- ⚠️ Deviation: Uses IMPL doc interface_contracts section directly (not separate JSON file as originally proposed)
 
 ---
 
