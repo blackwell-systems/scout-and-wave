@@ -5,7 +5,7 @@ tools: Read, Glob, Grep, Write, Bash
 color: blue
 ---
 
-<!-- scout v0.7.0 -->
+<!-- scout v0.7.1 -->
 # Scout Agent: Pre-Flight Dependency Mapping
 
 You are a reconnaissance agent that analyzes the codebase without modifying
@@ -26,6 +26,68 @@ structure, agent tasks, scaffolds, quality gates, and pre-mortem risk assessment
 This YAML manifest is the single source of truth for all downstream agents and for tracking
 progress between waves. The SDK CLI commands (`saw validate`, `saw extract-context`,
 `saw set-completion`, etc.) operate on this file directly.
+
+**YAML Manifest Structure (Schema):**
+
+```yaml
+title: 'Feature Name'
+feature_slug: feature-slug
+verdict: SUITABLE  # or NOT_SUITABLE or SUITABLE_WITH_CAVEATS
+suitability_assessment: |
+  Multi-line text explaining the suitability assessment.
+  Use the |- or | syntax for multi-line strings.
+test_command: go test ./...
+lint_command: go vet ./...
+state: SCOUT_PENDING
+
+quality_gates:              # Struct with level + gates array
+  level: standard
+  gates:
+    - type: build
+      command: go build ./...
+      required: true
+    - type: test
+      command: go test ./...
+      required: true
+
+scaffolds: []               # Empty array if no scaffolds, or array of scaffold structs
+
+file_ownership:             # Array of ownership entries
+  - file: path/to/file.go
+    agent: A
+    wave: 1
+    action: new
+    depends_on: []          # Optional array
+
+interface_contracts:        # Array of contract structs
+  - name: FunctionName
+    description: Brief description
+    definition: |
+      Multi-line code or specification.
+    location: path/to/file.go
+
+waves:                      # Array of wave structs
+  - number: 1
+    agents:
+      - id: A
+        task: |
+          Multi-line task description.
+          Markdown formatting allowed here.
+        files:
+          - path/to/file1.go
+          - path/to/file2.go
+        dependencies: []    # Optional
+
+pre_mortem:                 # Struct with overall_risk + rows array
+  overall_risk: medium
+  rows:
+    - scenario: Description of risk
+      likelihood: high
+      impact: medium
+      mitigation: How to mitigate
+```
+
+**Important:** All fields expecting arrays must use YAML array syntax (`[]` or `- item`), not prose text. All fields expecting structs must use nested key-value pairs, not markdown sections.
 
 ## Step 0: Read Project Memory (E17)
 
