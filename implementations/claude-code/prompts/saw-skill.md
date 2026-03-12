@@ -218,8 +218,17 @@ If a `docs/IMPL/IMPL-*.yaml` file already exists:
 For **YAML manifests** (`.yaml`/`.yml`):
 ```
 <!-- IMPL doc: /abs/path/to/IMPL-feature.yaml | Wave N | Agent X -->
-Run: sawtools extract-context "/abs/path/to/IMPL-feature.yaml" --agent "X"
-Follow the extracted brief exactly. Your worktree branch wave{N}-agent-{X} is already checked out. Begin immediately.
+<!-- Worktree: /abs/path/to/.claude/worktrees/wave{N}-agent-{X} | Branch: wave{N}-agent-{X} -->
+
+MANDATORY FIRST STEP - Verify isolation before any work:
+1. cd /abs/path/to/.claude/worktrees/wave{N}-agent-{X}
+2. sawtools verify-isolation --branch wave{N}-agent-{X}
+3. If verification fails (exit code 1), STOP immediately and report status: blocked
+
+After verification passes, run:
+sawtools extract-context "/abs/path/to/IMPL-feature.yaml" --agent "X"
+
+Follow the extracted brief exactly.
 ```
 
 **Fallback (full context):** If the IMPL doc path is not accessible from the agent's working directory (e.g., cross-repo orchestration where the doc is in a different repo the agent cannot reach), construct the full payload by extracting: (1) the agent's 9-field prompt section, (2) Interface Contracts, (3) File Ownership table, (4) Scaffolds section, (5) Quality Gates section, (6) absolute IMPL doc path as a header comment. Use the full-context fallback only when the short stub approach is not viable. **Cross-repository orchestration:** If the orchestrator and target repository are the same, use `isolation: "worktree"` for each agent. If orchestrating repo B from repo A, do NOT use the `isolation` parameter (it creates worktrees in repo A's context, not repo B). Instead, rely on manual worktree creation (step 3) and Field 0 cd navigation (Layer 1 + Layer 3 defense-in-depth). If `subagent_type: wave-agent` fails, fall back to `subagent_type: general-purpose` with the same prompt. **Async execution:** All Scout, Scaffold Agent, and Wave agent launches MUST use `run_in_background: true` so the Orchestrator remains responsive while agents work. Launch all agents in the current wave in a single message, then immediately inform the user that agents are running. **I1: Disjoint File Ownership:** no two agents in the same wave own the same file; this is a hard constraint, not a preference, and is the mechanism that makes parallel execution safe. Worktree isolation does not substitute for it; the IMPL doc's file ownership table is the enforcement mechanism. **I2: Interface contracts precede parallel implementation.** The Scout defines all interfaces that cross agent boundaries in the IMPL doc. The Scaffold Agent implements them as type scaffold files committed to HEAD after human review, before any Wave Agent launches. Agents implement against the spec; they never coordinate directly. Verify scaffold files are committed (Scaffolds section status) before creating worktrees. **SAW tag requirement:** The `description` parameter of every Task tool call must be prefixed with a structured SAW tag in this exact format: `[SAW:wave{N}:agent-{ID}] {short description}`, where `{N}` is the 1-indexed wave number and `{ID}` is the full agent ID (matching `[A-Z][2-9]?` — a letter, or a letter plus digit 2–9). Examples: `[SAW:wave1:agent-A] implement cache layer`, `[SAW:wave2:agent-B] add MCP tools`, `[SAW:wave1:agent-A2] implement secondary cache`. This enables claudewatch to automatically parse wave timing and agent breakdown from session transcripts; structured observability with zero overhead. **Status tracking:** After each agent completes, update its status in the manifest:

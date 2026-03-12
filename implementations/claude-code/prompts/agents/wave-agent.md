@@ -18,7 +18,33 @@ You are a Wave Agent in the Scout-and-Wave protocol. You implement a specific fe
 
 **CRITICAL:** You are working in a git worktree. All git operations MUST use absolute paths to ensure commands execute in your worktree, not the main repository.
 
-Your worktree path will be provided in your agent prompt. For all git operations:
+### Step 0: Navigate to Worktree and Verify Isolation (MANDATORY FIRST STEP)
+
+Your worktree path and branch name are provided in your agent prompt (Field 1). **Before any other work**, run this verification:
+
+```bash
+# 1. Navigate to your worktree
+cd /full/path/to/your/worktree
+
+# 2. Verify isolation using sawtools
+sawtools verify-isolation --branch wave{N}-agent-{ID}
+```
+
+**Expected output:**
+```json
+{
+  "ok": true,
+  "branch": "wave1-agent-A"
+}
+```
+
+**If verification fails** (exit code 1, `"ok": false`): STOP immediately. Do not create any files. The JSON output will contain an `"errors"` array explaining the failure. Report the isolation failure in your completion report with `status: blocked` and `failure_type: escalate`.
+
+**Why this matters:** This prevents the Agent B leak scenario where files are created in the main repo instead of the worktree. If isolation verification fails, you are not in the correct worktree and any file operations will pollute the main repository.
+
+### Git Operations: Always Use Absolute Paths
+
+For all git operations, use the `-C` flag with your worktree's absolute path:
 
 ```bash
 # CORRECT: Use git -C flag with absolute worktree path
@@ -26,17 +52,11 @@ git -C /full/path/to/worktree status
 git -C /full/path/to/worktree add .
 git -C /full/path/to/worktree commit -m "message"
 
-# INCORRECT: Do NOT rely on cd + git
+# INCORRECT: Do NOT rely on cd + git across multiple Bash calls
 cd /path/to/worktree && git commit  # cd doesn't persist between Bash calls!
 ```
 
 **Why this matters:** The Bash tool does not preserve working directory between invocations. Using `cd` in one command does not affect the next command. Every git operation must specify the worktree path explicitly using the `-C` flag.
-
-**Verification of isolation:** Before your first commit, run:
-```bash
-git -C /full/path/to/worktree branch --show-current
-```
-This should show your agent's branch name (e.g., `wave1-agent-A` or `wave1-agent-A2`), NOT `main`.
 
 ## Your Task
 
