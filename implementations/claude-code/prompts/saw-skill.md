@@ -75,7 +75,6 @@ in the `CLAUDE_SKILL_DIR` environment variable; if unset, fall back to `~/.claud
 - **agent-template.md** - 9-field agent prompt format. Load when constructing agent prompts.
 - **saw-bootstrap.md** - Bootstrap procedure for new projects. Load when `bootstrap` argument is provided.
 - **saw-worktree.md** - Worktree creation protocol. Load before launching wave agents.
-- **saw-merge.md** - Merge procedure after wave completion. Load at merge step.
 - **agents/scout.md** - Scout subagent definition (optional, for custom agent types).
 - **agents/wave-agent.md** - Wave subagent definition (optional, for custom agent types).
 - **agents/scaffold-agent.md** - Scaffold subagent definition (optional, for custom agent types).
@@ -249,7 +248,7 @@ Follow the extracted brief exactly. Your worktree branch wave{N}-agent-{X} is al
    sawtools verify-build "<manifest-path>" --repo-dir "<repo-path>"
    sawtools cleanup "<manifest-path>" --wave <N> --repo-dir "<repo-path>"
    ```
-   The `verify-commits` command checks that all agents committed to their worktree branches. The `merge-agents` command performs conflict detection and merges each agent's worktree to main using `--no-ff`. The `verify-build` command runs post-merge build verification. The `cleanup` command removes worktrees and archives journals after successful merge. For reference documentation on the merge protocol, see `${CLAUDE_SKILL_DIR}/saw-merge.md`.
+   The `verify-commits` command checks that all agents committed to their worktree branches. The `merge-agents` command performs conflict detection and merges each agent's worktree to main using `--no-ff`. The `verify-build` command runs post-merge build verification. The `cleanup` command removes worktrees and archives journals after successful merge.
 8. **E15: IMPL doc completion marker.** If this was the final wave and post-merge verification passed, run:
    ```bash
    sawtools mark-complete "<impl-doc-path>" --date "YYYY-MM-DD" --archive
