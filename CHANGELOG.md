@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.28.0] | 2026-03-11 | Scout v0.7.1 — YAML manifest schema example prevents markdown/YAML hybrids in Agent tool execution |
+| [0.27.0] | 2026-03-11 | Scout v0.7.0 — H3 integration: automated dependency analysis via sawtools analyze-deps (Go/Rust/JS/Python) |
 | [0.26.0] | 2026-03-11 | Scout v0.6.1 — cross-repo file ownership support; adds repo: field to file_ownership entries |
 | [0.25.0] | 2026-03-10 | wave-agent v0.4.0 — completion reports now use sawtools set-completion for proper YAML formatting |
 | [0.24.0] | 2026-03-10 | saw-skill v0.9.0 — explicit IMPL targeting with --impl flag for /saw wave and /saw status |
@@ -48,6 +50,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.9.1] | 2026-03-06 | Open standard repositioning: Agent Skills badge, dual MIT/Apache-2.0 license, PROTOCOL.md removed |
 | [0.9.0] | 2026-03-06 | Claude Code implementation: Skills API migration with YAML frontmatter, portable paths, tool restrictions |
 | [0.8.0] | 2026-03-06 | Refactor: protocol extraction into protocol/ directory; implementations layer separation; manual orchestration guides |
+
+## [0.28.0] - 2026-03-11
+
+### Changed
+
+- **Scout v0.7.1** (`implementations/claude-code/prompts/agents/scout.md`) — Added YAML manifest schema example to prevent markdown/YAML hybrid output when structured output is not enabled.
+  - **Problem:** Agent tool Scout (no structured output) improvised with markdown sections in fields expecting arrays/structs
+  - **Solution:** Explicit schema shows correct structure: `quality_gates: {level, gates[]}`, `scaffolds: []`, `interface_contracts: [{name, description, definition, location}]`
+  - **Web app Scout:** Schema example redundant but harmless (structured output enforces schema via API)
+  - **Agent tool Scout:** Schema example required (no structured output, relies on prompt)
+
+## [0.27.0] - 2026-03-11
+
+### Changed
+
+- **Scout v0.7.0** (`implementations/claude-code/prompts/agents/scout.md`) — Integrated H3 automated dependency analysis via `sawtools analyze-deps`.
+  - **Step 4 (dependency graph):** For Go projects, runs `sawtools analyze-deps <repo-root> --files "<files>" --format yaml` and uses output instead of manual file tracing. Falls back to manual tracing for non-Go projects (Phase 1 limitation, Phase 2 shipped later same day).
+  - **Step 8 (wave assignment):** Uses `wave_candidate` field (0-indexed depth) from analyze-deps output for automated wave grouping. Files with `wave_candidate: 0` go to Wave 1, `wave_candidate: 1` go to Wave 2, etc.
+  - **Cascade detection:** Uses `cascade_candidates[]` from analyze-deps output to populate IMPL doc cascade section.
+  - **Language support:** Phase 1 supports Go only (via `go/parser` stdlib). Rust, JavaScript/TypeScript, Python support added in Phase 2 (later same session).
+  - **Time savings:** ~10-15 minutes per Scout run (manual file tracing → 30-60 sec automated AST parsing)
+
+### Documentation
+
+- **Determinism roadmap** (`docs/determinism-roadmap.md`) — Marked H3 Phase 1 and Phase 2 as SHIPPED, added implementation details for both phases.
 | [0.7.2] | 2026-03-06 | Protocol: mandatory worktree isolation (E4) and cross-repository orchestration limitation documented |
 | [0.7.1] | 2026-03-06 | Documentation: new-user onboarding gaps addressed; critical concepts defined on first mention |
 | [0.7.0] | 2026-03-06 | Bootstrap: Scaffold Agent + Wave 1 handoff steps added; bootstrap now fully continuous |
