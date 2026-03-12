@@ -214,9 +214,10 @@ Scaffold files are committed to HEAD before worktrees are created. Once worktree
    - Branch name: `wave{N}-agent-{ID}` (matches worktree name)
    - All worktrees branch from current HEAD (includes committed scaffolds from Scaffold Agent)
 
-2. **Install pre-commit hook (Layer 0 isolation):** Copy `hooks/pre-commit-guard.sh` to `.git/hooks/pre-commit`
+2. **Install pre-commit hook (Layer 0 isolation):** Installed automatically by `sawtools create-worktrees`
+   - Hook embedded in Go SDK (`pkg/worktree/manager.go`), written programmatically to each worktree
    - Blocks commits to main during active waves
-   - Provides instructive error with correct worktree path if agent attempts to commit to main
+   - Provides instructive error if agent attempts to commit to main
    - Orchestrator bypasses via `SAW_ALLOW_MAIN_COMMIT=1` for legitimate main commits
 
 ### Phase 3: Agent Launch (E1: Background Execution)
