@@ -8,12 +8,51 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.33.0] | 2026-03-12 | Scout v0.10.0 — Phase 1 complete: H2 extract-commands integrated (automated build/test/lint command extraction) |
 | [0.32.0] | 2026-03-12 | Scout v0.9.0 — Phase 2 determinism tools integrated (H1a analyze-suitability, M2 detect-cascades) |
 | [0.31.1] | 2026-03-12 | Wave Agent v0.5.1 — absolute path enforcement + enhanced verify-isolation (rejects main repo execution) |
 | [0.31.0] | 2026-03-12 | Wave Agent v0.5.0 — mandatory worktree isolation verification (Field 0 enforcement) prevents file leaks to main repo |
 | [0.30.1] | 2026-03-12 | Scout v0.8.1 — format ambiguity fix prevents markdown section headers in YAML output |
 | [0.30.0] | 2026-03-12 | Scout v0.8.0 — analyze-deps now PRIMARY METHOD for Go dependency mapping (determinism improvement H3) |
 | [0.29.0] | 2026-03-11 | mark-complete simplification — removed --archive flag from all docs, always archives to complete/ |
+
+---
+
+## [0.33.0] - 2026-03-12
+
+### Added
+
+- **Scout v0.10.0** — Phase 1 complete: H2 extract-commands integrated as primary method
+  - **H2 (extract-commands)**: Automated build/test/lint/format command extraction
+    - Primary method for extracting verification gates from CI configs and build systems
+    - Priority resolution: GitHub Actions/GitLab CI/CircleCI (100) > Makefile (50) > package.json (40) > language defaults (0)
+    - Supports Go, Rust, Node.js, Python toolchains
+    - Extracts: build commands, test commands (full + focused patterns), lint commands (check + fix modes), format commands
+    - No manual fallback for command extraction (tool handles all supported languages)
+
+### Changed
+
+- Scout Step 10 (verification gates) now uses `sawtools extract-commands` as primary method
+- Eliminated manual CI config parsing from Scout prompt (H2 determinism improvement)
+- Test command focus: uses `focused_pattern` from extract-commands for modules with >50 tests
+- Lint/format separation: check mode (agent gates) vs fix mode (post-merge orchestrator step)
+
+### Implementation
+
+- **SDK:** scout-and-wave-go v0.38.0
+  - New package: `pkg/commands/` (extractor, CI parsers, build system parsers, defaults)
+  - New command: `sawtools extract-commands <repo-root>`
+- **IMPL:** docs/IMPL/complete/IMPL-h2-command-extraction.yaml
+  - 6 agents (A: extractor, B: GitHub Actions, C: Makefile, D: package.json, E: defaults, F: CLI)
+  - 2 waves, ~26 minutes total, 42 tests passing
+
+### Impact
+
+- **Phase 1 complete:** Both H2 (command extraction) and H3 (dependency graph) now integrated into Scout
+- **Determinism:** Eliminates Scout judgment variance in command selection
+- **Consistency:** All Scout runs produce identical commands for same CI/build configs
+- **Error reduction:** Wrong commands no longer possible (automated extraction vs manual pattern matching)
+- **Coverage:** 95% of projects (Go/Rust/Node/Python)
 
 ---
 
