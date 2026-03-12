@@ -8,9 +8,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.31.0] | 2026-03-12 | Wave Agent v0.5.0 — mandatory worktree isolation verification (Field 0 enforcement) prevents file leaks to main repo |
 | [0.30.1] | 2026-03-12 | Scout v0.8.1 — format ambiguity fix prevents markdown section headers in YAML output |
 | [0.30.0] | 2026-03-12 | Scout v0.8.0 — analyze-deps now PRIMARY METHOD for Go dependency mapping (determinism improvement H3) |
 | [0.29.0] | 2026-03-11 | mark-complete simplification — removed --archive flag from all docs, always archives to complete/ |
+
+---
+
+## [0.31.0] - 2026-03-12
+
+### Changed
+
+- **Wave Agent v0.5.0** — Mandatory worktree isolation verification before any file operations
+  - New **Step 0** in Worktree Isolation Protocol: agents MUST run `sawtools verify-isolation --branch wave{N}-agent-{ID}` before any work
+  - If verification fails (exit code 1), agent must STOP and report `status: blocked` with `failure_type: escalate`
+  - Short agent prompts now include explicit worktree path and 3-step verification sequence
+  - Replaces soft "should verify" guidance with hard "must verify or stop" requirement
+
+### Problem
+
+During H4 (scaffold-detection) Wave 1, Agent B created files in both the main repository AND its worktree. Files leaked to main repo as untracked (`post_agent.go`, `post_agent_test.go`), blocking the merge with "untracked working tree files would be overwritten" error. Root cause: agent performed file operations before navigating to worktree, violating E9 (worktree isolation).
+
+### Solution
+
+**Defense in depth:**
+1. **Layer 1 (wave-agent.md):** Mandatory Step 0 verification section with explicit `cd` + `sawtools verify-isolation` + branch check sequence
+2. **Layer 2 (saw-skill.md):** Orchestrator includes worktree path and verification steps in short agent prompts
+3. **Layer 3 (sawtools CLI):** `verify-isolation` command checks current branch matches expected branch AND verifies worktree is registered (prevents accidental main branch operations)
+
+### Impact
+
+- **Prevention:** Agents cannot create files in main repo by accident — verification will fail if they're not in the correct worktree
+- **Early detection:** Isolation failures surface immediately (before any file operations) rather than at merge time
+- **Clear failure mode:** JSON output with errors array explains exactly what's wrong when verification fails
+- **Zero false positives:** Verification only fails on actual isolation violations (wrong branch, not in worktree)
 
 ---
 
