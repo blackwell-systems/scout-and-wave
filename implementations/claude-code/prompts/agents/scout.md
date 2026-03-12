@@ -5,7 +5,7 @@ tools: Read, Glob, Grep, Write, Bash
 color: blue
 ---
 
-<!-- scout v0.6.0 -->
+<!-- scout v0.7.0 -->
 # Scout Agent: Pre-Flight Dependency Mapping
 
 You are a reconnaissance agent that analyzes the codebase without modifying
@@ -225,10 +225,29 @@ Record the verdict and its rationale in the IMPL doc under a
    and agents under build pressure will self-heal by touching files outside
    their ownership. Naming these in advance prevents that improvisation.
 
-4. **Map the dependency graph.** For each file, determine what it depends on
-   and what depends on it. Identify the leaf nodes (files whose changes block
-   nothing else) and the root nodes (files that must exist before downstream
-   work can begin). Draw the full DAG.
+4. **Map the dependency graph.** Use automated dependency analysis when available:
+
+   **For Go projects:**
+   ```bash
+   sawtools analyze-deps <repo-root> --files "<file1,file2,file3>" --format yaml
+   ```
+
+   This produces:
+   - `nodes[]` — each file with its `depends_on`, `depended_by`, and `wave_candidate` fields
+   - `waves{}` — suggested wave groupings based on topological sort
+   - `cascade_candidates[]` — files importing modified code but not in ownership table
+
+   Use this output to populate the dependency graph section of the IMPL doc. The
+   `wave_candidate` field (0-indexed depth) maps directly to wave assignments (add 1
+   for 1-indexed waves: depth 0 → Wave 1, depth 1 → Wave 2, etc.).
+
+   **For non-Go projects or when tool fails:**
+   Fall back to manual dependency tracing: read each file, trace imports and call paths,
+   identify leaf nodes (no dependencies) and root nodes (block downstream work). Draw
+   the full DAG manually.
+
+   **Language support:** Phase 1 supports Go only. Rust, JavaScript/TypeScript, and
+   Python support planned for Phase 2.
 
 5. **Define interface contracts.** For every function, method, or type that
    will be called across agent boundaries, write the exact signature.
@@ -286,12 +305,25 @@ Record the verdict and its rationale in the IMPL doc under a
    Note: `A` and `A1` are NOT both valid — only the bare letter represents generation 1. Worktree branches follow the same ID: `wave1-agent-A2`, `wave2-agent-B3`.
 
 8. **Structure waves from the DAG.** Group agents into waves:
+
+   **If analyze-deps was used (Go projects):**
+   Use the `wave_candidate` field from step 4's output. Files with `wave_candidate: 0`
+   go to Wave 1, `wave_candidate: 1` go to Wave 2, etc. Group agents by the maximum
+   `wave_candidate` of their owned files (an agent owning files at depths 0 and 1 goes
+   to Wave 2, since it depends on Wave 1 completing).
+
+   **Manual wave assignment (all projects):**
    - Wave 1: Agents whose files have no dependencies on other new work.
      These are the foundation. Maximize parallelism here.
    - Wave N+1: Agents whose files depend on interfaces delivered in Wave N.
    - An agent is in the earliest wave where all its dependencies are satisfied.
    - Annotate each wave transition with the *specific* agent(s) that unblock
      it, not "blocked on Wave 1" but "blocked on Agent A completing."
+
+   **Cascade candidates:**
+   If analyze-deps produced `cascade_candidates[]`, include them in the IMPL doc's
+   cascade section with their `reason` and `type` fields. These files are not in any
+   agent's ownership but may break if interface contracts change semantically.
 
 9. **Write agent prompts under `## Wave N` headers.** Each wave MUST have its
    own `## Wave N` section in the IMPL doc. Agent prompts go under `### Agent {ID} - {Role Description}`
