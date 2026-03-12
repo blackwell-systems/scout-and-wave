@@ -8,11 +8,52 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.32.0] | 2026-03-12 | Scout v0.9.0 — Phase 2 determinism tools integrated (H1a analyze-suitability, M2 detect-cascades) |
 | [0.31.1] | 2026-03-12 | Wave Agent v0.5.1 — absolute path enforcement + enhanced verify-isolation (rejects main repo execution) |
 | [0.31.0] | 2026-03-12 | Wave Agent v0.5.0 — mandatory worktree isolation verification (Field 0 enforcement) prevents file leaks to main repo |
 | [0.30.1] | 2026-03-12 | Scout v0.8.1 — format ambiguity fix prevents markdown section headers in YAML output |
 | [0.30.0] | 2026-03-12 | Scout v0.8.0 — analyze-deps now PRIMARY METHOD for Go dependency mapping (determinism improvement H3) |
 | [0.29.0] | 2026-03-11 | mark-complete simplification — removed --archive flag from all docs, always archives to complete/ |
+
+---
+
+## [0.32.0] - 2026-03-12
+
+### Added
+
+- **Scout v0.9.0** — Phase 2 determinism tools integrated as primary methods
+  - **H1a (analyze-suitability)**: Automated pre-implementation status scanning
+    - Primary method for classifying requirements as DONE/PARTIAL/TODO
+    - Regex-based heuristics: function existence + test file size + TODO/FIXME presence
+    - No manual fallback (language-agnostic tool, failures indicate bugs not limitations)
+  - **M2 (detect-cascades)**: Automated type rename cascade detection
+    - Primary method for detecting cascading changes from interface contract renames
+    - AST-based classification: syntax (high/medium) vs semantic (low) cascades
+    - Language-specific fallback: Go fully supported, manual grep for other languages
+  - Both tools follow determinism principle: manual methods only for technical limitations (language support), not general escape hatches
+
+### Changed
+
+- Scout Step 4 (pre-implementation check) now uses `sawtools analyze-suitability` as primary method
+- Scout Step 3 (dependency mapping) type rename cascade check now uses `sawtools detect-cascades` as primary method
+- Removed generic "if tool unavailable" fallbacks that would undermine determinism goals
+- Aligned fallback strategy with H3 pattern (language-specific only)
+
+### Implementation
+
+- **SDK:** scout-and-wave-go v0.37.0
+  - New packages: `pkg/suitability/`, `pkg/analyzer/`
+  - New commands: `sawtools analyze-suitability`, `sawtools detect-cascades`
+- **IMPL:** docs/IMPL/complete/IMPL-phase2-determinism-final.yaml
+  - 4 agents (A: suitability, B: CLI for H1a, C: analyzer, D: CLI for M2)
+  - 1 wave, fully parallel execution, ~7.5 minutes total
+
+### Impact
+
+- **Determinism:** Eliminates Scout judgment variance in pre-implementation scanning and cascade detection
+- **Consistency:** All Scout runs now produce identical classifications for same inputs
+- **Efficiency:** Automated tools faster than manual file reading (3-5 min vs seconds)
+- **Reliability:** AST-based cascade detection catches cases manual grep would miss
 
 ---
 
