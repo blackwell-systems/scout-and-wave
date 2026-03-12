@@ -114,7 +114,7 @@ This roadmap identifies opportunities to eliminate judgment variance from Scout-
 
 ### Phase 4: Polish (19-31 hours)
 
-**M1: Automated Agent ID Assignment** (3-5 hours)
+**M1: Automated Agent ID Assignment** (3-5 hours) — ✅ SHIPPED (2026-03-12)
 **M3: Repository Context Derivation** (3-5 hours)
 **M4: Verification Gate Template Generation** (5-8 hours) — depends on H2
 **H5: Pre-Implementation Reporting** (3-5 hours) — depends on H1a (formatting only)
@@ -122,12 +122,46 @@ This roadmap identifies opportunities to eliminate judgment variance from Scout-
 **L3: Commit Message Template Generation** (2-3 hours)
 
 **Deliverables:**
-- `sawtools assign-agent-ids --count <N> [--grouping <json>]`
+- ✅ `sawtools assign-agent-ids --count <N> [--grouping <json>]` — **SHIPPED**
 - `sawtools resolve-repo <impl-doc-path>`
 - `sawtools generate-verification-gate --toolchain <lang> --focused-test <pattern>`
 - `sawtools format-preimpl-report <impl-doc>`
 - `sawtools estimate-manifest-size --agents <N> --avg-task-length <bytes>`
 - `sawtools generate-commit-message --type scaffold --file <path> --agents <list>`
+
+---
+
+### Phase 5: Tool Integration (5-8 hours, NEW) — PROPOSED
+
+**I1: Integrate H7 into finalize-wave** (2-3 hours) — PROPOSED
+- Auto-diagnose build failures during wave finalization
+- When `verify-build` fails, automatically run `diagnose-build-failure` and append diagnosis to output
+- Returns structured diagnosis (pattern, confidence, fix, rationale) with failure report
+- Eliminates manual root-cause investigation for 80% of common build errors
+
+**I2: Integrate M1 into validate** (1-2 hours) — PROPOSED
+- Validate agent IDs during IMPL doc validation (E16)
+- Check all agent IDs match `^[A-Z][2-9]?$` regex
+- Suggest correction: "Run: sawtools assign-agent-ids --count <N>"
+- Catches ID errors at validation time, not wave execution time
+
+**I3: Create run-scout automation** (2-3 hours) — PROPOSED
+- New command: `sawtools run-scout <feature> --repo-dir <path>`
+- Fully automated flow: launch Scout → wait for IMPL doc → validate → auto-correct IDs if needed
+- Returns validated, ready-to-execute IMPL doc
+- Reduces Scout friction from 8 minutes to single command invocation
+
+**Deliverables:**
+- Enhanced `sawtools finalize-wave` with auto-diagnosis
+- Enhanced `sawtools validate` with agent ID checking
+- New `sawtools run-scout` command
+
+**Rationale:** Phase 3-4 tools (H7, M1) shipped but not integrated into orchestration layer. Integration eliminates manual steps (diagnosis, ID assignment) and makes determinism tools zero-friction.
+
+**Implementation Priority:**
+1. **I1 (finalize-wave)** - highest impact, catches failures at merge time
+2. **I2 (validate)** - low effort, prevents bad IMPL docs from reaching wave execution
+3. **I3 (run-scout)** - nice-to-have automation, reduces Scout invocation friction
 
 ---
 
