@@ -78,7 +78,7 @@ This roadmap identifies opportunities to eliminate judgment variance from Scout-
 - Prevents agents wasting 5-10 min on dependency thrashing
 - Applies to ~40% of waves
 
-**H7: Build Failure Diagnosis** (12-15 hours) — PENDING
+**H7: Build Failure Diagnosis** (12-15 hours) — ✅ SHIPPED (2026-03-12)
 - Standalone (pattern-matches error logs)
 - Applies to ~30% of agents with build failures
 - Provides structured fix recommendations
