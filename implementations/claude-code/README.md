@@ -85,10 +85,6 @@ ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/saw-skill.md \
 # Symlink supporting files
 ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/saw-bootstrap.md \
        ~/.claude/skills/saw/saw-bootstrap.md
-ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/saw-merge.md \
-       ~/.claude/skills/saw/saw-merge.md
-ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/saw-worktree.md \
-       ~/.claude/skills/saw/saw-worktree.md
 ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agent-template.md \
        ~/.claude/skills/saw/agent-template.md
 
@@ -211,11 +207,11 @@ This implementation uses Claude Code's tool suite:
 The `/saw` skill consists of several specialized prompts, all installed to `~/.claude/skills/saw/`:
 
 - **`SKILL.md`** (from `implementations/claude-code/prompts/saw-skill.md`) - Main orchestrator with YAML frontmatter
-- **`saw-merge.md`** - Merge procedure implementation
-- **`saw-worktree.md`** - Worktree lifecycle management
 - **`saw-bootstrap.md`** - Bootstrap mode for new projects
 - **`agent-template.md`** - Wave Agent template (Scout fills this to generate per-agent prompts)
 - **`agents/`** - Custom agent type definitions (scout, wave-agent, scaffold-agent)
+
+All orchestration operations (worktree management, merge procedures, validation, stub scanning) are handled by the `sawtools` CLI from the scout-and-wave-go SDK.
 
 All files are symlinked from `implementations/claude-code/prompts/` (the single source of truth). The skill references them via `${CLAUDE_SKILL_DIR}` for portability.
 
@@ -343,7 +339,7 @@ If the work doesn't decompose cleanly, the Scout says so. It runs a suitability 
 
 **Worktree isolation failures:**
 - See [worktree defense layers](../../protocol/invariants.md#i1-disjoint-file-ownership) in protocol docs
-- Check pre-commit hook is active: `cat .git/hooks/pre-commit`
+- Pre-commit hook is installed automatically by `sawtools create-worktrees`
 
 **For more help:**
 - Read the [protocol specification](../../protocol/README.md)
