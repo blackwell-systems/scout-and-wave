@@ -91,9 +91,24 @@ This roadmap identifies opportunities to eliminate judgment variance from Scout-
 - Delivered: `sawtools validate-scaffold <scaffold-file> --impl-doc <path>`
 
 **Deliverables:**
-- ⏳ `sawtools check-deps <impl-doc> --wave <N>`
-- ⏳ `sawtools diagnose-build-failure <error-log> --language <lang>`
+- ✅ `sawtools check-deps <impl-doc> --wave <N>` — **SHIPPED**
+- ✅ `sawtools diagnose-build-failure <error-log> --language <lang>` — **SHIPPED**
 - ✅ `sawtools validate-scaffold <scaffold-file> --impl-doc <path>` — **SHIPPED**
+
+---
+
+### Phase 3b: Wave Failure Diagnosis (8-12 hours, NEW) — PROPOSED
+
+**H9: Wave Failure Diagnosis** (8-12 hours) — PROPOSED
+- Extends H7 pattern-matching to SAW's own wave failures
+- Diagnoses post-merge test failures, missing dependencies, interface mismatches, commit violations
+- Auto-runs on `verify-build` failure
+- Estimated to catch 80% of common wave failure patterns
+
+**Deliverables:**
+- `sawtools diagnose-wave-failure <impl-doc> --wave <N>`
+
+**Rationale:** H7 test isolation bug (catalog state mutation) required manual diagnosis. The protocol caught the failure (post-merge verification), but root cause analysis was manual. Automated failure diagnosis with pattern matching would have immediately identified the global state mutation and suggested the defer-based fix.
 
 ---
 
@@ -855,6 +870,98 @@ fi
 - ✅ Auto-fix suggestions included in validation results
 - ⚠️ Type reference validation simplified (pass-through in v1, can be enhanced later)
 - ⚠️ Build validation skips when no build command found (graceful degradation)
+
+---
+
+### H9: Wave Failure Diagnosis (HIGH, Phase 3b — NEW) — PROPOSED
+
+**Current behavior:**
+- Post-merge `verify-build` fails with cryptic error messages
+- Root cause analysis is manual (e.g., H7 test isolation bug required human diagnosis)
+- No structured catalog of "common wave failure patterns"
+
+**Determinism gap:**
+- Wave failures caught by protocol (verify-build) but diagnosis is manual
+- Same failure modes repeat across different features (test isolation, missing deps, interface mismatches)
+- No guidance on how to fix common wave failures
+
+**Proposed solution:** `sawtools diagnose-wave-failure <impl-doc> --wave <N>`
+
+Extends H7 pattern-matching to SAW's own wave failures. Auto-runs on `verify-build` failure.
+
+**Common Failure Patterns:**
+
+1. **Test Isolation Failure** (what we hit with H7):
+   - Individual agent tests passed, post-merge suite fails
+   - Root cause: Global state mutation without cleanup
+   - Fix: Add defer-based cleanup pattern
+
+2. **Missing Cross-Package Dependencies**:
+   - Wave agents built locally, post-merge fails with "undefined: Type"
+   - Root cause: Missing `go mod tidy` or uncommitted agent work
+   - Fix: Verify all agents committed (I5), run `go mod tidy`
+
+3. **Interface Contract Mismatch**:
+   - Wave agents passed, post-merge fails with type errors
+   - Root cause: Agent worked from stale IMPL doc or misread contract
+   - Fix: Re-extract interface contracts, update agent implementation
+
+4. **No Commits (I5 violation)**:
+   - Agent completion report present, worktree branch has 0 commits
+   - Root cause: Agent wrote report without committing work
+   - Fix: Check working directory for uncommitted changes
+
+**Usage:**
+```bash
+# Manual invocation:
+sawtools diagnose-wave-failure docs/IMPL/IMPL-feature.yaml --wave 2
+
+# Auto-runs on verify-build failure:
+sawtools verify-build docs/IMPL/IMPL-feature.yaml --repo-dir .
+# If exit code 1, automatically runs:
+# sawtools diagnose-wave-failure docs/IMPL/IMPL-feature.yaml --wave 2
+```
+
+**Output schema:**
+```yaml
+pattern: TEST_ISOLATION_FAILURE
+confidence: 0.95
+evidence:
+  - Wave agents passed local tests
+  - Post-merge suite failed with 21 errors
+  - All failures in test files from multiple agents
+root_cause: |
+  Global state mutation without cleanup. Test functions modify
+  shared variables (e.g., `catalogs` map) without restoring
+  original state after test completes.
+fix: |
+  Add defer-based cleanup pattern to test functions:
+
+  originalState := globalVar
+  defer func() { globalVar = originalState }()
+  globalVar = make(...)
+auto_fixable: false
+suggested_files:
+  - pkg/builddiag/diagnose_test.go:10
+  - pkg/builddiag/diagnose_test.go:41
+  - pkg/builddiag/diagnose_test.go:82
+```
+
+**Impact:**
+- **Frequency:** ~20% of waves (post-merge verification failures)
+- **Error risk:** HIGH — blocks wave merge, requires manual debugging
+- **Time savings:** ~15-30 minutes per failure (root cause identification)
+- **Reliability:** Estimated to catch 80% of common wave failure patterns
+
+**Implementation notes:**
+- Reuses H7 infrastructure (pattern matching, confidence scoring, fix suggestions)
+- Covers test isolation, missing deps, interface mismatches, commit violations
+- Progressive disclosure: high-confidence patterns suggest fixes, low-confidence reports evidence
+- Integration: `verify-build` auto-runs diagnostics on failure
+
+**Effort estimate:** 8-12 hours (similar to H7, reuses catalog pattern)
+
+**Rationale:** Would have immediately caught H7 test isolation bug and suggested the defer fix. Makes wave failure recovery smoother by automating the most common debugging patterns.
 
 ---
 
