@@ -71,9 +71,9 @@ This roadmap identifies opportunities to eliminate judgment variance from Scout-
 
 ---
 
-### Phase 3: Wave/Scaffold Agent Automation (30-37 hours, NEW) — 1/3 COMPLETE
+### Phase 3: Wave/Scaffold Agent Automation (30-37 hours, NEW) — ✅ COMPLETE
 
-**H6: Dependency Conflict Detection** (10-12 hours) — PENDING
+**H6: Dependency Conflict Detection** (10-12 hours) — ✅ SHIPPED (2026-03-12)
 - Standalone (reads lock files, no tool dependencies)
 - Prevents agents wasting 5-10 min on dependency thrashing
 - Applies to ~40% of waves
