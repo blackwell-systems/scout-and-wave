@@ -4,6 +4,24 @@ Items are grouped by theme, not priority. Nothing here is committed or scheduled
 
 ---
 
+## Completed & Shipped
+
+### ✅ Tool Journaling for Compaction Safety (SHIPPED 2026-03-10)
+
+**Status:** Complete. IMPL-tool-journaling.yaml finished, external log observer pattern implemented in scout-and-wave-go v0.27.0, E23A integration across backends ongoing.
+
+**What shipped:**
+- External log observer pattern (tails Claude Code session logs)
+- Journal structure: cursor tracking, index.jsonl, recent.json, tool-results/
+- Context markdown generation from journal entries
+- Checkpoint system for milestone snapshots
+- Archive policy with 10:1 compression
+- CLI commands: `sawtools journal-init`, `sawtools journal-context`
+
+**Moved to:** Production use. See scout-and-wave-go CHANGELOG v0.27.0+ for implementation details.
+
+---
+
 ## Protocol Enhancements
 
 ### Contract Builder Phase
@@ -46,9 +64,9 @@ Contracts are injected into agent prompts as binding requirements. The reviewer 
 
 ---
 
-### Full Research Output on NOT SUITABLE Verdicts
+### Full Research Output on NOT SUITABLE Verdicts (Protocol changes pending, UI shipped)
 
-> **UI implemented — 2026-03-08 (v0.17.0):** `NotSuitableResearchPanel` renders the full research output (verdict banner, rationale, blockers callout, serial implementation notes, Archive button). Protocol changes (scout.md, message-formats.md) to require scouts to always write full research sections regardless of verdict are still pending.
+> **UI SHIPPED — 2026-03-08 (scout-and-wave-web v0.17.0):** `NotSuitableResearchPanel` renders the full research output. Protocol spec updates to scout.md and message-formats.md still needed to require full research regardless of verdict.
 
 **Current state:** When Scout returns NOT SUITABLE, it writes a short verdict with a brief rationale and stops. The IMPL doc is minimal — just the verdict and a sentence or two explaining why.
 
@@ -74,13 +92,11 @@ The verdict badge on the review screen changes color (red/amber/green) but the r
 
 ---
 
-## Tool Journaling for Compaction Safety
+## In Progress
 
-**Status:** ✅ SHIPPED (IMPL-tool-journaling.yaml complete 2026-03-10). Uses external log observer pattern (tails Claude Code session logs).
+### E23A: Tool Journal Recovery Integration
 
-### The Problem
-
-Long-running waves (14+ agents, 2-4 hours) inevitably hit context limits. When Claude Code compacts the conversation mid-execution, wave agents lose their execution history:
+**Status:** Implementation complete (v0.27.0), integration across all backends ongoing.
 
 - **Files already modified** — Agent might re-edit the same file, causing duplicate work or conflicts
 - **Test results from 30 minutes ago** — Agent might re-run expensive test suites unnecessarily
