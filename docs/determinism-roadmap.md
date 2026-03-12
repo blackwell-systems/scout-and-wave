@@ -45,25 +45,27 @@ This roadmap identifies opportunities to eliminate judgment variance from Scout-
 
 ---
 
-### Phase 2: Scout Automation (35-45 hours, after H3) — 1/3 COMPLETE
+### Phase 2: Scout Automation (35-45 hours, after H3) — ✅ COMPLETE
 
-**H1a: Pre-Implementation Status Scanning** (15-20 hours) — PENDING
+**H1a: Pre-Implementation Status Scanning** (15-20 hours) — ✅ SHIPPED (2026-03-12)
 - Depends on H3 for file location mapping
 - Reduces duplicate implementation waste (40% miss rate currently)
+- Delivered: `sawtools analyze-suitability <requirements-file> --repo-root <path>`
 
 **H4: Automated Scaffold Detection** (12-15 hours) — ✅ SHIPPED (2026-03-12)
 - Depends on H3 for cross-boundary type detection
 - Prevents merge conflicts from duplicate type definitions
 - Delivered: `sawtools detect-scaffolds <impl-doc> --stage {pre-agent|post-agent}`
 
-**M2: Cascade Candidate Detection** (8-10 hours) — PENDING
+**M2: Cascade Candidate Detection** (8-10 hours) — ✅ SHIPPED (2026-03-12)
 - Depends on H3 for type reference search
 - Catches cascading changes from type renames (15% of Scout runs)
+- Delivered: `sawtools detect-cascades --renames <json>`
 
 **Deliverables:**
-- ⏳ `sawtools analyze-suitability <feature-desc> <codebase-root>` (partial — pre-impl scanning only)
+- ✅ `sawtools analyze-suitability <requirements-file> --repo-root <path>` — **SHIPPED**
 - ✅ `sawtools detect-scaffolds <impl-doc> --stage {pre-agent|post-agent}` — **SHIPPED**
-- ⏳ `sawtools detect-cascades <repo-root> --renames <json>`
+- ✅ `sawtools detect-cascades --renames <json>` — **SHIPPED**
 
 ---
 
@@ -117,7 +119,7 @@ This roadmap identifies opportunities to eliminate judgment variance from Scout-
 
 **SPLIT INTO 4 COMPONENTS** (original analysis treated as single tool):
 
-#### H1a: Pre-Implementation Status Scanning (HIGH, Phase 2)
+#### H1a: Pre-Implementation Status Scanning (HIGH, Phase 2) ✅ SHIPPED
 
 **Current behavior:** Scout manually reads every file mentioned in requirements/audit reports to classify as DONE/PARTIAL/TODO.
 
@@ -180,6 +182,20 @@ sawtools analyze-suitability \
 - Depends on H3 for file location mapping (without it, must grep entire repo)
 - File classification heuristics are fuzzy (MEDIUM confidence)
 - Must parse file content, not just paths (30-60 seconds per 50 files)
+
+**Shipped:** 2026-03-12 (scout-and-wave-go v0.37.0)
+- **IMPL:** `docs/IMPL/IMPL-phase2-determinism-final.yaml`
+- **Command:** `sawtools analyze-suitability <requirements-file> --repo-root <path>`
+- **Implementation:** Agents A+B (pkg/suitability + CLI), Wave 1, parallel execution with M2
+- **Files:** `pkg/suitability/scanner.go`, `types.go`, `scanner_test.go`, `cmd/saw/analyze_suitability_cmd.go`
+- **Test coverage:** 9 tests covering DONE/PARTIAL/TODO classification, regex-based heuristics
+- **Notes:**
+  - Uses regex patterns (no AST parsing) per constraint: function exists + test file size → status
+  - DONE: function exists + test file >100 lines + no TODO/FIXME
+  - PARTIAL: function exists + TODO/FIXME + test file 50-100 lines
+  - TODO: function doesn't exist + no test file
+  - CLI accepts markdown or plain text requirements format
+  - Outputs JSON with per-requirement status classification
 
 ---
 
@@ -834,7 +850,7 @@ sawtools assign-agent-ids --count 9 \
 
 ---
 
-### M2: Cascade Candidate Detection (MEDIUM, Phase 2)
+### M2: Cascade Candidate Detection (MEDIUM, Phase 2) ✅ SHIPPED
 
 **Current behavior:** Scout manually runs workspace-wide searches for old type names when interface contracts include type renames.
 
@@ -877,6 +893,20 @@ cascade_candidates:
 **Implementation notes:**
 - Depends on H3 (uses import graph to identify candidate files to search)
 - Without H3, must scan entire codebase (slow)
+
+**Shipped:** 2026-03-12 (scout-and-wave-go v0.37.0)
+- **IMPL:** `docs/IMPL/IMPL-phase2-determinism-final.yaml`
+- **Command:** `sawtools detect-cascades --renames <json>`
+- **Implementation:** Agents C+D (pkg/analyzer + CLI), Wave 1, parallel execution with H1a
+- **Files:** `pkg/analyzer/cascade.go`, `cascade_test.go`, `cmd/saw/detect_cascades_cmd.go`
+- **Test coverage:** 12 tests covering AST-based detection, severity classification, all Go syntax constructs
+- **Notes:**
+  - AST-based classification: syntax (high/medium) vs semantic (low)
+  - Detects: import statements, type declarations, variable/field declarations, comments, string literals
+  - Severity scoring: import = high, type decl = high, var decl = medium, comment/string = low
+  - CLI accepts JSON array of renames via `--renames` flag
+  - Outputs YAML with cascade candidates array
+  - Empty results return empty array (not errors), exit code 0
 
 ---
 
