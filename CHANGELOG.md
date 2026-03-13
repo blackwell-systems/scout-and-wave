@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.35.0] | 2026-03-13 | I6 enforcement — Scout role separation (prevents Scout from writing source code) |
 | [0.34.0] | 2026-03-12 | Orchestrator v0.3.0 — batch wave commands integration (prepare-wave + finalize-wave reduce 11-command flow to 3) |
 | [0.33.0] | 2026-03-12 | Scout v0.10.0 — Phase 1 complete: H2 extract-commands integrated (automated build/test/lint command extraction) |
 | [0.32.0] | 2026-03-12 | Scout v0.9.0 — Phase 2 determinism tools integrated (H1a analyze-suitability, M2 detect-cascades) |
@@ -26,6 +27,55 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Orchestrator v0.3.0** — Updated `/saw` skill to use batch wave commands
   - `prepare-wave` replaces `create-worktrees` + N×`prepare-agent` loop (step 3)
   - `finalize-wave` replaces 6-command post-wave pipeline (step 7)
+
+## [0.35.0] - 2026-03-13
+
+### Added
+
+- **I6 enforcement** — Scout role separation now enforced at runtime
+  - **Path A (Go SDK)**: Post-execution validator for programmatic orchestration
+    - `pkg/hooks/scout_boundaries.go`: Timestamp-based file modification detection
+    - `ValidateScoutWrites()`: Validates Scout only wrote to `docs/IMPL/IMPL-*.yaml`
+    - Integrated into `engine.RunScout()` after agent execution
+    - 13 tests covering valid/invalid paths and timestamp filtering
+  - **Path B (CLI)**: PreToolUse hook for CLI orchestration
+    - `implementations/claude-code/hooks/check_scout_boundaries`: Bash script blocks Write/Edit before execution
+    - Receives JSON on stdin, validates file_path against `docs/IMPL/IMPL-*.yaml` pattern
+    - Agent type check: only enforces on `agent_type: scout`
+    - Tool type check: only enforces on Write/Edit tools
+  - **Installation**: Automated installer (`hooks/install.sh`)
+    - Creates symlink: `~/.local/bin/check_scout_boundaries` → repo script
+    - Merges PreToolUse hook config into `~/.claude/settings.json` using jq
+    - Backs up settings.json before modification
+    - Verifies installation with test cases
+    - Idempotent (safe to run multiple times)
+
+### Changed
+
+- **Scout prompt** (`implementations/claude-code/prompts/saw-skill.md`)
+  - Removed fake Python enforcement code (was documentation, not executable)
+  - Added brief I6 reference pointing to Phase 5 roadmap
+
+### Implementation
+
+- **SDK:** scout-and-wave-go (hooks package)
+  - Files: `pkg/hooks/scout_boundaries.go`, `pkg/hooks/scout_boundaries_test.go`
+  - Integration: `pkg/engine/runner.go` (RunScout function)
+- **CLI hook:** scout-and-wave/implementations/claude-code/hooks/
+  - Files: `check_scout_boundaries`, `install.sh`, `README.md`
+- **Config backup:** Backed up `~/.claude/settings.json` to `~/code/configs/claude-settings.json`
+
+### Impact
+
+- **Enforcement architecture**: Two-path approach covers both execution contexts
+  - Programmatic (web app, native app, API): Post-execution validation
+  - CLI (Agent tool, Max plan, Bedrock): Pre-execution blocking
+- **Safety**: Scout agents cannot accidentally write source code
+- **Developer experience**: CLI users see immediate blocking with clear error messages
+- **Observability**: Path A logs violations, Path B prevents them upfront
+- **Version control**: Hook script lives in repo (git tracks, reviewable, updatable via git pull)
+
+---
   - Net reduction: 11 lines (38% reduction in wave execution section)
   - Mental model simplified: 3 atomic phases instead of 11 distinct operations
   - Benefits: 23% faster execution, atomic operations, comprehensive JSON output
