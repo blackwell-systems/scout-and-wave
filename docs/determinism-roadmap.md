@@ -159,15 +159,16 @@ This roadmap identifies opportunities to eliminate judgment variance from Scout-
   - Integrated into `pkg/engine/runner.go` (RunScout function)
   - Enforces I6 in scout-and-wave-web, native app, CI/CD (production safety)
 - **Path B (CLI, 1-2h actual: 1.5h):** PreToolUse hook script
-  - `/Users/dayna.blackwell/.local/bin/check_scout_boundaries` (bash + jq)
+  - `implementations/claude-code/hooks/check_scout_boundaries` (bash + jq)
   - Blocks Write/Edit operations before execution in CLI workflows
+  - Symlinked to `~/.local/bin/` for PATH access, updates via git pull
   - README.md with installation instructions and test cases
 - **Delivered:**
   - ✅ `pkg/hooks/scout_boundaries.go` (ValidateScoutWrites, IsValidScoutPath)
   - ✅ `pkg/hooks/scout_boundaries_test.go` (13 tests, all passing)
   - ✅ `pkg/engine/runner.go` integration (post-Scout validation)
-  - ✅ `~/.local/bin/check_scout_boundaries` CLI hook script
-  - ✅ `~/.local/bin/check_scout_boundaries.README.md` installation guide
+  - ✅ `implementations/claude-code/hooks/check_scout_boundaries` (version controlled)
+  - ✅ `implementations/claude-code/hooks/README.md` (installation guide)
   - ✅ Updated `implementations/claude-code/prompts/saw-skill.md` (removed fake Python code, added I6 reference)
 
 **Deliverables (I1-I3):**
