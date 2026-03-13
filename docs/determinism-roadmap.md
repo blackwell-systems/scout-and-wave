@@ -131,37 +131,55 @@ This roadmap identifies opportunities to eliminate judgment variance from Scout-
 
 ---
 
-### Phase 5: Tool Integration (5-8 hours, NEW) — PROPOSED
+### Phase 5: Tool Integration (8-12 hours) — ✅ SHIPPED (I1-I3), PROPOSED (I4)
 
-**I1: Integrate H7 into finalize-wave** (2-3 hours) — PROPOSED
+**I1: Integrate H7 into finalize-wave** (2-3 hours) — ✅ SHIPPED (2026-03-12)
 - Auto-diagnose build failures during wave finalization
 - When `verify-build` fails, automatically run `diagnose-build-failure` and append diagnosis to output
 - Returns structured diagnosis (pattern, confidence, fix, rationale) with failure report
 - Eliminates manual root-cause investigation for 80% of common build errors
 
-**I2: Integrate M1 into validate** (1-2 hours) — PROPOSED
+**I2: Integrate M1 into validate** (1-2 hours) — ✅ SHIPPED (2026-03-12)
 - Validate agent IDs during IMPL doc validation (E16)
 - Check all agent IDs match `^[A-Z][2-9]?$` regex
 - Suggest correction: "Run: sawtools assign-agent-ids --count <N>"
 - Catches ID errors at validation time, not wave execution time
 
-**I3: Create run-scout automation** (2-3 hours) — PROPOSED
+**I3: Create run-scout automation** (2-3 hours) — ✅ SHIPPED (2026-03-12)
 - New command: `sawtools run-scout <feature> --repo-dir <path>`
 - Fully automated flow: launch Scout → wait for IMPL doc → validate → auto-correct IDs if needed
 - Returns validated, ready-to-execute IMPL doc
 - Reduces Scout friction from 8 minutes to single command invocation
 
-**Deliverables:**
-- Enhanced `sawtools finalize-wave` with auto-diagnosis
-- Enhanced `sawtools validate` with agent ID checking
-- New `sawtools run-scout` command
+**I4: Enforce I6 (Scout role separation)** (3-5 hours) — PROPOSED
+- **Problem:** Scout can violate I6 by writing source code instead of IMPL docs (Phase 5 implementation had this violation)
+- **Solution:** PreToolUse hook blocks Scout Write/Edit operations outside `docs/IMPL/IMPL-*.yaml`
+- **Path A (programmatic, 2-3h):** Go hook in `pkg/hooks/scout_boundaries.go`, integrated into `pkg/engine/scout.go`
+  - Enforces I6 in scout-and-wave-web, native app, CI/CD
+  - Production safety (highest priority)
+- **Path B (CLI, 1-2h):** Bash hook script + `~/.claude/settings.json` configuration
+  - Enforces I6 in `/saw scout` CLI workflows (development safety)
+  - Lower priority (human review already catches violations in CLI context)
+- **Deliverables:**
+  - `pkg/hooks/scout_boundaries.go` with test coverage
+  - Updated `pkg/engine/scout.go` to apply hook
+  - Optional: `~/.local/bin/check_scout_boundaries` script for CLI
+  - Updated `implementations/claude-code/prompts/saw-skill.md` (documentation complete)
 
-**Rationale:** Phase 3-4 tools (H7, M1) shipped but not integrated into orchestration layer. Integration eliminates manual steps (diagnosis, ID assignment) and makes determinism tools zero-friction.
+**Deliverables (I1-I3):**
+- ✅ Enhanced `sawtools finalize-wave` with auto-diagnosis
+- ✅ Enhanced `sawtools validate` with agent ID checking
+- ✅ New `sawtools run-scout` command
+- ✅ IMPL doc archived: `docs/IMPL/complete/IMPL-phase5-tool-integration.yaml`
+- ✅ All tests passing (31/31)
+
+**Rationale:** Phase 3-4 tools (H7, M1) shipped but not integrated into orchestration layer. Integration eliminates manual steps (diagnosis, ID assignment) and makes determinism tools zero-friction. I4 adds runtime enforcement for protocol invariant I6.
 
 **Implementation Priority:**
-1. **I1 (finalize-wave)** - highest impact, catches failures at merge time
-2. **I2 (validate)** - low effort, prevents bad IMPL docs from reaching wave execution
-3. **I3 (run-scout)** - nice-to-have automation, reduces Scout invocation friction
+1. ✅ **I1 (finalize-wave)** - highest impact, catches failures at merge time
+2. ✅ **I2 (validate)** - low effort, prevents bad IMPL docs from reaching wave execution
+3. ✅ **I3 (run-scout)** - nice-to-have automation, reduces Scout invocation friction
+4. **I4 (I6 enforcement)** - protocol safety, prevents role separation violations
 
 ---
 

@@ -66,6 +66,55 @@ for cross-referencing and audit.*
 
 **Rate-limit fallback:** If an agent returns immediately with 0 tool uses and a rate-limit error message, retry once using `subagent_type: general-purpose` with the full agent prompt. Log the fallback to the user: "Agent hit rate limit on [model], retrying with parent model."
 
+**I6 Enforcement via PreToolUse Hook:** Scout agents are restricted to writing only IMPL planning documents. This is enforced at the tool level via a PreToolUse hook that blocks Write/Edit operations outside `docs/IMPL/IMPL-*.yaml`. The hook is automatically applied to all Scout agent launches.
+
+Scout boundary enforcement function (Python pseudocode for clarity):
+```python
+import os
+
+async def enforce_scout_boundaries(input_data, tool_use_id, context):
+    """Block Scout from writing outside docs/IMPL/ (I6 enforcement)"""
+    tool_name = input_data.get('tool_name')
+    agent_type = context.get('agent_type', 'unknown')
+
+    # Only apply to Scout agents
+    if agent_type != 'scout' or tool_name not in ['Write', 'Edit']:
+        return {}
+
+    file_path = input_data.get('tool_input', {}).get('file_path', '')
+    normalized = os.path.normpath(file_path)
+    dir_name = os.path.dirname(normalized)
+    file_name = os.path.basename(normalized)
+
+    # Allow only docs/IMPL/IMPL-*.yaml (not subdirectories)
+    if (dir_name == 'docs/IMPL' and
+        file_name.startswith('IMPL-') and
+        file_name.endswith('.yaml')):
+        return {}
+
+    # Block everything else
+    return {
+        "blocked": True,
+        "reason": f"""I6 VIOLATION: Scout agents create IMPL planning documents only.
+
+Attempted: {file_path}
+Allowed: docs/IMPL/IMPL-<feature-slug>.yaml
+
+Scout's role is reconnaissance (analyze, plan, document).
+- Orchestrator writes docs/REQUIREMENTS.md (bootstrap)
+- Wave agents write source code
+- Tools (sawtools) manage CONTEXT.md and archiving
+
+If you need to create source code, write agent prompts in the IMPL doc
+that instruct Wave agents to create those files."""
+    }
+```
+
+When launching Scout agents, include this hook configuration:
+```
+hooks={"PreToolUse": [{"matcher": "Write|Edit", "hooks": [enforce_scout_boundaries]}]}
+```
+
 ## Supporting Files
 
 All supporting files are symlinked into the skill directory during installation.
@@ -179,14 +228,14 @@ If the argument is `bootstrap <project-description>`:
 
    Ask the user to confirm the requirements before proceeding. If requirements were already discussed in conversation, fill in what you know and ask the user to confirm or adjust.
 
-2. Read `${CLAUDE_SKILL_DIR}/saw-bootstrap.md` from the scout-and-wave repository. Launch a **Scout agent** using the Agent tool with `subagent_type: scout` and `run_in_background: true`. The prompt must reference `docs/REQUIREMENTS.md` in the target project and include the path to `${CLAUDE_SKILL_DIR}/saw-bootstrap.md` as the procedure to follow. If `subagent_type: scout` fails, fall back to `subagent_type: general-purpose` with the contents of `${CLAUDE_SKILL_DIR}/saw-bootstrap.md` as its prompt. Inform the user the Scout is running.
+2. Read `${CLAUDE_SKILL_DIR}/saw-bootstrap.md` from the scout-and-wave repository. Launch a **Scout agent** using the Agent tool with `subagent_type: scout` and `run_in_background: true`. **I6 Enforcement:** Configure the PreToolUse hook to restrict Scout's Write/Edit operations to `docs/IMPL/IMPL-*.yaml` only (see "I6 Enforcement via PreToolUse Hook" section above for the enforcement function). This makes I6 violations impossible — Scout physically cannot write outside its permitted path. The prompt must reference `docs/REQUIREMENTS.md` in the target project and include the path to `${CLAUDE_SKILL_DIR}/saw-bootstrap.md` as the procedure to follow. If `subagent_type: scout` fails, fall back to `subagent_type: general-purpose` with the contents of `${CLAUDE_SKILL_DIR}/saw-bootstrap.md` as its prompt. Inform the user the Scout is running.
 3. When the Scout completes, read `docs/IMPL/IMPL-bootstrap.yaml`.
 5. Report the architecture design and wave structure. Ask the user to review before proceeding.
 6. **Scaffold Agent (conditional):** If the IMPL doc Scaffolds section is non-empty and any scaffold file has `Status: pending`, launch a **Scaffold Agent** using the Agent tool with `subagent_type: scaffold-agent` and `run_in_background: true`. The prompt parameter is the path to the IMPL doc and the feature slug. If `subagent_type: scaffold-agent` fails, fall back to `subagent_type: general-purpose` with the contents of `${CLAUDE_SKILL_DIR}/agents/scaffold-agent.md` as its prompt. Use `[SAW:scaffold:bootstrap]` as the description prefix. Wait for it to complete. If any scaffold file shows `Status: FAILED`, stop — report the failure and do not create worktrees. If all files show `Status: committed`, proceed.
 7. **Wave 1:** Create worktrees and launch Wave 1 agents exactly as in the IMPL-exists flow (step 2 onward of that branch). The bootstrap IMPL doc is now the single source of truth; all wave execution follows the standard wave loop from this point.
 
 If no `docs/IMPL/IMPL-*.yaml` file exists for the current feature:
-1. Launch a **Scout agent** using the Agent tool with `subagent_type: scout` and `run_in_background: true`. The prompt parameter is the feature description (the type definition carries the full behavioral instructions). If `subagent_type: scout` fails, fall back to `subagent_type: general-purpose` with the contents of `${CLAUDE_SKILL_DIR}/agents/scout.md` as its prompt and the feature description as context. The Scout analyzes the codebase, runs the suitability gate, and writes the IMPL doc; the Orchestrator does not perform this analysis itself. Inform the user that the Scout is running.
+1. Launch a **Scout agent** using the Agent tool with `subagent_type: scout` and `run_in_background: true`. **I6 Enforcement:** Configure the PreToolUse hook to restrict Scout's Write/Edit operations to `docs/IMPL/IMPL-*.yaml` only (see "I6 Enforcement via PreToolUse Hook" section above for the enforcement function). This makes I6 violations impossible — Scout physically cannot write outside its permitted path. The prompt parameter is the feature description (the type definition carries the full behavioral instructions). If `subagent_type: scout` fails, fall back to `subagent_type: general-purpose` with the contents of `${CLAUDE_SKILL_DIR}/agents/scout.md` as its prompt and the feature description as context. The Scout analyzes the codebase, runs the suitability gate, and writes the IMPL doc; the Orchestrator does not perform this analysis itself. Inform the user that the Scout is running.
 2. When the Scout completes, read the resulting `docs/IMPL/IMPL-<feature-slug>.yaml`.
 3. **E16: Validate IMPL doc before review.** After Scout writes the IMPL doc, run:
    ```bash
