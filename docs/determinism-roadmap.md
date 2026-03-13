@@ -151,20 +151,24 @@ This roadmap identifies opportunities to eliminate judgment variance from Scout-
 - Returns validated, ready-to-execute IMPL doc
 - Reduces Scout friction from 8 minutes to single command invocation
 
-**I4: Enforce I6 (Scout role separation)** (3-5 hours) — PROPOSED
+**I4: Enforce I6 (Scout role separation)** (3-5 hours actual: 3.5h) — ✅ SHIPPED 2026-03-12
 - **Problem:** Scout can violate I6 by writing source code instead of IMPL docs (Phase 5 implementation had this violation)
-- **Solution:** PreToolUse hook blocks Scout Write/Edit operations outside `docs/IMPL/IMPL-*.yaml`
-- **Path A (programmatic, 2-3h):** Go hook in `pkg/hooks/scout_boundaries.go`, integrated into `pkg/engine/scout.go`
-  - Enforces I6 in scout-and-wave-web, native app, CI/CD
-  - Production safety (highest priority)
-- **Path B (CLI, 1-2h):** Bash hook script + `~/.claude/settings.json` configuration
-  - Enforces I6 in `/saw scout` CLI workflows (development safety)
-  - Lower priority (human review already catches violations in CLI context)
-- **Deliverables:**
-  - `pkg/hooks/scout_boundaries.go` with test coverage
-  - Updated `pkg/engine/scout.go` to apply hook
-  - Optional: `~/.local/bin/check_scout_boundaries` script for CLI
-  - Updated `implementations/claude-code/prompts/saw-skill.md` (documentation complete)
+- **Solution:** Two-tier enforcement (programmatic post-execution + CLI pre-execution)
+- **Path A (programmatic, 2-3h actual: 2h):** Post-execution validator in `pkg/hooks/scout_boundaries.go`
+  - `ValidateScoutWrites()` checks file mtimes after Scout completes
+  - Integrated into `pkg/engine/runner.go` (RunScout function)
+  - Enforces I6 in scout-and-wave-web, native app, CI/CD (production safety)
+- **Path B (CLI, 1-2h actual: 1.5h):** PreToolUse hook script
+  - `/Users/dayna.blackwell/.local/bin/check_scout_boundaries` (bash + jq)
+  - Blocks Write/Edit operations before execution in CLI workflows
+  - README.md with installation instructions and test cases
+- **Delivered:**
+  - ✅ `pkg/hooks/scout_boundaries.go` (ValidateScoutWrites, IsValidScoutPath)
+  - ✅ `pkg/hooks/scout_boundaries_test.go` (13 tests, all passing)
+  - ✅ `pkg/engine/runner.go` integration (post-Scout validation)
+  - ✅ `~/.local/bin/check_scout_boundaries` CLI hook script
+  - ✅ `~/.local/bin/check_scout_boundaries.README.md` installation guide
+  - ✅ Updated `implementations/claude-code/prompts/saw-skill.md` (removed fake Python code, added I6 reference)
 
 **Deliverables (I1-I3):**
 - ✅ Enhanced `sawtools finalize-wave` with auto-diagnosis
