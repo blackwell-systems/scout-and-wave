@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# Path B: I6 enforcement for CLI Scout agents (Claude Code Agent tool)
+# PreToolUse hook that blocks Scout Write/Edit operations outside docs/IMPL/IMPL-*.yaml
+
+set -euo pipefail
+
+# Hook receives JSON input on stdin with fields:
+# - tool_name: string
+# - tool_input: object (contains file_path for Write/Edit)
+# - agent_type: string (scout, wave-agent, scaffold-agent, general-purpose)
+
+input=$(cat)
+
+# Extract fields from JSON
+tool_name=$(echo "$input" | jq -r '.tool_name // empty')
+agent_type=$(echo "$input" | jq -r '.agent_type // empty')
+file_path=$(echo "$input" | jq -r '.tool_input.file_path // empty')
+
+# Only enforce on Scout agents
+if [[ "$agent_type" != "scout" ]]; then
+  exit 0  # Allow (not a Scout)
+fi
+
+# Only enforce on Write/Edit tools
+if [[ "$tool_name" != "Write" && "$tool_name" != "Edit" ]]; then
+  exit 0  # Allow (not a write operation)
+fi
+
+# Allow if no file path (will fail downstream)
+if [[ -z "$file_path" ]]; then
+  exit 0
+fi
+
+# Normalize path (remove ./, ../, trailing slashes)
+normalized=$(realpath -m "$file_path" 2>/dev/null || echo "$file_path")
+dir=$(dirname "$normalized")
+base=$(basename "$normalized")
+
+# Allow only docs/IMPL/IMPL-*.yaml (not subdirectories)
+if [[ "$dir" == "docs/IMPL" && "$base" == IMPL-*.yaml ]]; then
+  exit 0  # Allow
+fi
+
+# Block everything else
+echo "I6 VIOLATION: Scout agents create IMPL planning documents only.
+
+Attempted: $file_path
+Allowed: docs/IMPL/IMPL-<feature-slug>.yaml
+
+Scout's role is reconnaissance (analyze, plan, document).
+- Orchestrator writes docs/REQUIREMENTS.md (bootstrap)
+- Wave agents write source code
+- Tools (sawtools) manage CONTEXT.md and archiving
+
+If you need to create source code, write agent prompts in the IMPL doc
+that instruct Wave agents to create those files." >&2
+
+exit 1  # Block
