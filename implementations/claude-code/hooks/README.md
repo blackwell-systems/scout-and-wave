@@ -4,19 +4,38 @@
 
 ## Installation
 
+### Automated (Recommended)
+
+```bash
+cd ~/code/scout-and-wave/implementations/claude-code/hooks
+./install.sh
+```
+
+The installer:
+- Creates symlink: `~/.local/bin/check_scout_boundaries` → script in repo
+- Merges PreToolUse hook config into `~/.claude/settings.json` (preserves existing hooks)
+- Verifies installation
+
+### Manual
+
 1. Symlink the hook script to your PATH:
    ```bash
    ln -sf ~/code/scout-and-wave/implementations/claude-code/hooks/check_scout_boundaries ~/.local/bin/check_scout_boundaries
    ```
 
-2. Configure Claude Code to use the hook. Add to `~/.claude/settings.json`:
+2. Add this to `~/.claude/settings.json` (merge with existing `hooks` section if present):
    ```json
    {
      "hooks": {
        "PreToolUse": [
          {
            "matcher": "Write|Edit",
-           "script": "$HOME/.local/bin/check_scout_boundaries"
+           "hooks": [
+             {
+               "type": "command",
+               "command": "/Users/$USER/.local/bin/check_scout_boundaries"
+             }
+           ]
          }
        ]
      }
