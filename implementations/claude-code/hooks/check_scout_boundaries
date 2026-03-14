@@ -9,7 +9,7 @@ set -euo pipefail
 # - tool_input: object (contains file_path for Write/Edit)
 # - agent_type: string (scout, wave-agent, scaffold-agent, general-purpose)
 
-input=$(command cat)
+input=$(cat)
 
 # Extract fields from JSON
 tool_name=$(echo "$input" | jq -r '.tool_name // empty')
