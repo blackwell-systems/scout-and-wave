@@ -241,7 +241,7 @@ sawtools check-deps docs/IMPL/IMPL-X.yaml --wave 1
 
 ---
 
-### H7: Build Failure Diagnosis (HIGH, Phase 3 — NEW)
+### H7: Build Failure Diagnosis — ✅ COMPLETE (v0.38.0 + v0.39.0 integration)
 
 **Current behavior (from `wave-agent.md` Field 6):**
 - Agents run verification gates (build + lint + test)
@@ -290,6 +290,12 @@ auto_fixable: true
 **Python:**
 - `ModuleNotFoundError: No module named 'X'` → `pip install X`
 - `NameError: name 'X' is not defined` → check imports
+
+**Status: COMPLETE (2026-03-14)**
+- v0.38.0: CLI command + pattern engine (27 patterns across 4 languages)
+- v0.39.0: Wave agent integration (wave-agent.md + agent-template.md)
+- Integration: Agents auto-call diagnose-build-failure on verification gate failures
+- Confidence threshold: ≥0.85 for auto-fix, <0.85 for manual review
 
 **Impact:**
 - **Frequency:** ~30% of agents (agents with build failures)
