@@ -1,17 +1,40 @@
 # Scout-and-Wave Determinism Roadmap
 
 **Date:** 2026-03-11
-**Status:** Phase 1 Ready
+**Status:** Phase 1 + Phase 2 COMPLETE | Phase 3 Ready
+**Updated:** 2026-03-14
 **Sources:** determinism-analysis.md + determinism-analysis-AUDIT.md (merged)
 
 ---
+
+## Phase 1 + 2 Completion (2026-03-14)
+
+**All foundational Scout automation tools are now COMPLETE and integrated:**
+
+- ✅ **H2** (extract-commands) — CI config scanner with 8 parsers (GitHub Actions, CircleCI, Travis, Jenkins, GitLab, Makefile, package.json, justfile)
+- ✅ **H3** (analyze-deps) — Multi-language dependency analyzer (Go/Rust/JS/Python) with wave candidate suggestions
+- ✅ **H1a** (analyze-suitability) — Pre-implementation status scanner with DONE/PARTIAL/TODO classification
+- ✅ **H4** (detect-scaffolds) — Interface scaffold detection from type contracts
+- ✅ **M2** (detect-cascades) — AST-based rename cascade analyzer
+
+**Integration (v0.36.0):**
+- SDK: `pkg/engine/runner.go` calls H2→H1a→H3 before Scout launch
+- CLI: `/saw` skill runs `sawtools` automation commands via Bash
+- Results injected into Scout prompts as "Automation Analysis Results" section
+
+**Measured impact:**
+- Build/test commands auto-detected (eliminates manual guessing)
+- Requirements status classified automatically (DONE/PARTIAL/TODO)
+- Dependency-aware wave structures (H3 wave_candidate field)
+- Zero Scout runtime overhead (runs in orchestrator layer)
+
 
 ## Executive Summary
 
 This roadmap identifies opportunities to eliminate judgment variance from Scout-and-Wave agent prompts through automation. The highest-impact work involves:
 
-1. **Automated dependency graph generation** (H3) — largest Scout time sink, foundational for 4 downstream tools
-2. **Automated lint/test command extraction** (H2) — highest error risk (wrong commands break verification gates)
+1. ✅ **Automated dependency graph generation** (H3) — largest Scout time sink, foundational for 4 downstream tools
+2. ✅ **Automated lint/test command extraction** (H2) — highest error risk (wrong commands break verification gates)
 3. **Wave/Scaffold agent automation** (H6, H7, H8) — applies to every wave execution, not just planning phase
 
 **Realistic ROI:** 50-65% Scout time reduction (25 min → 8-12 min) after Phase 1+2 completion, accounting for tool execution overhead and error handling. The original 80% projection was overly optimistic.
