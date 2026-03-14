@@ -312,27 +312,46 @@ sawtools resolve-repo /Users/user/code/myrepo/docs/IMPL/IMPL-X.yaml
 - Inconsistent formatting between agents
 - Relies on Scout discretion (non-deterministic)
 
-**Proposed solution:** `sawtools populate-verification-gates <impl-doc>`
+**Proposed solution:** `sawtools finalize-impl <impl-doc>` (batching command)
 
-**Design principle:** Orchestrator post-processor (not Scout tool). Scout focuses on architecture decisions (file ownership, interface contracts), orchestrator handles mechanical formatting. This eliminates reliance on Scout discretion.
+**Design principle:** Orchestrator post-processor (not Scout tool). Scout focuses on architecture decisions (file ownership, interface contracts), orchestrator handles mechanical formatting. This eliminates reliance on Scout discretion. Follows batching command pattern (like `prepare-wave`, `finalize-wave`).
 
 **Usage:**
 ```bash
 # Orchestrator workflow after Scout completes IMPL doc:
-sawtools validate IMPL-X.yaml                    # E16: Check structure
-sawtools populate-verification-gates IMPL-X.yaml # M4: Generate gate blocks
-sawtools validate IMPL-X.yaml                    # Verify gates valid
+sawtools finalize-impl IMPL-X.yaml
 ```
 
+**Atomic operation combines:**
+1. `validate` (E16 structure check)
+2. `populate-verification-gates` (M4 gate generation)
+3. `validate` (confirm gates valid)
+
 **How it works:**
-1. Read IMPL doc to extract per-agent file ownership
-2. For each agent:
+1. Initial validation: Check IMPL doc structure (E16)
+2. Extract per-agent file ownership from IMPL doc
+3. For each agent:
    - Determine focused test pattern from owned files (e.g., `pkg/auth/*.go` → `go test ./pkg/auth`)
    - Use H2 toolchain data to format full verification block
    - Update agent's verification section in IMPL doc
-3. Save updated IMPL doc
+4. Save updated IMPL doc (transactional - rollback on failure)
+5. Final validation: Confirm gates are valid
 
-**Output (writes to IMPL doc):**
+**Output format:**
+```json
+{
+  "success": true,
+  "validation": {"passed": true, "errors": []},
+  "gate_population": {
+    "agents_updated": 12,
+    "toolchain": "go",
+    "h2_data_available": true
+  },
+  "final_validation": {"passed": true, "errors": []}
+}
+```
+
+**IMPL doc changes (writes verification blocks):**
 ```yaml
 ## Wave 1
 
@@ -350,14 +369,15 @@ Verification:
 
 **CLI Orchestration (`/saw` skill):**
 - After Scout completes, Orchestrator runs:
-  1. `sawtools validate IMPL-X.yaml` (E16)
-  2. `sawtools populate-verification-gates IMPL-X.yaml` (M4)
-  3. `sawtools validate IMPL-X.yaml` (confirm gates valid)
-  4. Present IMPL doc to user for review
+  ```bash
+  sawtools finalize-impl "<absolute-path-to-impl-doc>"
+  ```
+- Single command replaces 3-step workflow
+- If exit code 1, surface errors to human review
 
 **SDK/Webapp Orchestration (`pkg/engine/`):**
-- Add `PopulateVerificationGates(implPath string)` to engine after Scout phase
-- Call automatically before presenting IMPL for human review
+- Add `FinalizeIMPL(implPath string) (*FinalizeResult, error)` to engine
+- Call automatically after Scout phase, before human review
 - No Scout prompt changes needed (orchestrator-driven, not agent-driven)
 
 **Impact:**
@@ -370,8 +390,10 @@ Verification:
 **Implementation notes:**
 - Depends on H2 (formats commands extracted by H2)
 - Cannot exist without H2
-- Validation remains read-only (no side effects)
-- Optional enhancement: `sawtools validate --fix-gates` shortcut (calls populate internally)
+- Transactional: rollback IMPL doc if gate population fails midway
+- Validation remains read-only (no side effects in `validate` command itself)
+- Internal command: `populate-verification-gates` (called by `finalize-impl`, not exposed to orchestrator)
+- Follows batching pattern: `prepare-wave` (setup), `finalize-wave` (teardown), `finalize-impl` (IMPL post-processing)
 
 ---
 
@@ -591,7 +613,7 @@ Phase 4 (Polish):                 │
 6. `sawtools assign-agent-ids` (M1)
 7. `sawtools detect-cascades` (M2)
 8. `sawtools resolve-repo` (M3)
-9. `sawtools populate-verification-gates` (M4)
+9. `sawtools finalize-impl` (M4 — batching command: validate + populate gates + validate)
 10. `sawtools estimate-manifest-size` (M5)
 11. `sawtools generate-commit-message` (L3)
 12. `sawtools check-deps` (H6 — NEW)
