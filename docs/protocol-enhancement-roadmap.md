@@ -149,34 +149,24 @@ Message-formats.md states "Markdown format deprecated... Scout v0.7.1+ generates
 **Implementation Plan:**
 1. **Decision Point:** Set deprecation timeline
    - **Recommendation:** Remove markdown support in v1.0.0 (breaking change appropriate for major version)
-2. Implement `sawtools migrate-impl` command:
-   ```bash
-   sawtools migrate-impl "<markdown-impl-path>" [--output "<yaml-path>"]
-   ```
-   - Reads markdown IMPL doc
-   - Converts to YAML manifest format
-   - Preserves all fields (waves, agents, completion reports, etc.)
-   - Writes to `docs/IMPL/IMPL-<slug>.yaml` (or specified output path)
-3. Add deprecation warnings in current version:
+   - **Rationale:** Scout v0.7.1+ only generates YAML; legacy markdown docs are historical artifacts that can remain readable until removal
+2. Add deprecation warnings in current version:
    - Parser emits warning when reading markdown format
-   - Warning includes: "Markdown format deprecated, will be removed in v1.0.0. Run `sawtools migrate-impl` to convert."
-4. Update documentation:
-   - message-formats.md: Add removal version and migration instructions
+   - Warning includes: "Markdown format deprecated, will be removed in v1.0.0. No action required - Scout generates YAML exclusively."
+3. Update documentation:
+   - message-formats.md: Add removal version (v1.0.0) and rationale
    - CHANGELOG.md: Add deprecation notice in next release
-   - README.md: Document migration command
 
 **Success Criteria:**
 - Users have clear timeline (e.g., "markdown removed in v1.0.0, released Q2 2026")
-- Migration tool exists and is documented
 - Deprecation warnings appear in CLI output for markdown users
 - v1.0.0 parser rejects markdown format with actionable error message
+- No migration burden—Scout already generates YAML exclusively
 
 **Files to Update:**
-- `scout-and-wave-go/cmd/saw/migrate_impl.go` - New command
 - `scout-and-wave-go/pkg/protocol/parser.go` - Add deprecation warning
 - `protocol/message-formats.md` - Document removal timeline
 - `CHANGELOG.md` - Add deprecation notice
-- `README.md` - Document migration procedure
 
 ---
 
