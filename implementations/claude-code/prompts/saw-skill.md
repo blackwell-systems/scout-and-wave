@@ -188,16 +188,100 @@ If the argument is `bootstrap <project-description>`:
 7. **Wave 1:** Create worktrees and launch Wave 1 agents exactly as in the IMPL-exists flow (step 2 onward of that branch). The bootstrap IMPL doc is now the single source of truth; all wave execution follows the standard wave loop from this point.
 
 If no `docs/IMPL/IMPL-*.yaml` file exists for the current feature:
-1. Launch a **Scout agent** using the Agent tool with `subagent_type: scout` and `run_in_background: true`. The prompt parameter is the feature description (the type definition carries the full behavioral instructions). If `subagent_type: scout` fails, fall back to `subagent_type: general-purpose` with the contents of `${CLAUDE_SKILL_DIR}/agents/scout.md` as its prompt and the feature description as context. The Scout analyzes the codebase, runs the suitability gate, and writes the IMPL doc; the Orchestrator does not perform this analysis itself. Inform the user that the Scout is running.
-2. When the Scout completes, read the resulting `docs/IMPL/IMPL-<feature-slug>.yaml`.
-3. **E16: Validate IMPL doc before review.** After Scout writes the IMPL doc, run:
+1. **Run automation tools (best-effort).** Before launching Scout, gather automated analysis to prepend to Scout's context. Run these commands in sequence, capturing output but not blocking on failures:
+
+   ```bash
+   # Determine repo path (current working directory)
+   REPO_PATH=$(pwd)
+
+   # H2: Extract build/test/lint commands
+   H2_OUTPUT=$(sawtools extract-commands "$REPO_PATH" 2>&1)
+   H2_EXIT=$?
+
+   # H1a: Analyze suitability (only if feature is a file path)
+   H1A_OUTPUT=""
+   H1A_EXIT=0
+   if [[ "$FEATURE_DESC" == *.md ]] || [[ "$FEATURE_DESC" == *.txt ]]; then
+     H1A_OUTPUT=$(sawtools analyze-suitability "$FEATURE_DESC" --repo-root "$REPO_PATH" 2>&1)
+     H1A_EXIT=$?
+   fi
+
+   # H3: Analyze dependencies
+   H3_OUTPUT=""
+   H3_EXIT=0
+   if [ $H1A_EXIT -eq 0 ] && [ -n "$H1A_OUTPUT" ]; then
+     # Extract files from H1a output if present
+     FILES=$(echo "$H1A_OUTPUT" | grep -oE 'file: [^ ]+' | cut -d' ' -f2 | tr '\n' ',' | sed 's/,$//')
+     if [ -n "$FILES" ]; then
+       H3_OUTPUT=$(sawtools analyze-deps "$REPO_PATH" --files "$FILES" 2>&1)
+     else
+       H3_OUTPUT=$(sawtools analyze-deps "$REPO_PATH" 2>&1)
+     fi
+     H3_EXIT=$?
+   else
+     H3_OUTPUT=$(sawtools analyze-deps "$REPO_PATH" 2>&1)
+     H3_EXIT=$?
+   fi
+
+   # Create automation results file
+   cat > /tmp/scout-automation-$$.md << 'EOF'
+## Automation Analysis Results
+
+### Build/Test Commands (H2)
+EOF
+
+   if [ $H2_EXIT -eq 0 ]; then
+     echo "$H2_OUTPUT" >> /tmp/scout-automation-$$.md
+   else
+     echo "Not detected" >> /tmp/scout-automation-$$.md
+   fi
+
+   cat >> /tmp/scout-automation-$$.md << 'EOF'
+
+### Pre-Implementation Status (H1a)
+EOF
+
+   if [ -n "$H1A_OUTPUT" ] && [ $H1A_EXIT -eq 0 ]; then
+     echo "$H1A_OUTPUT" >> /tmp/scout-automation-$$.md
+   elif [[ "$FEATURE_DESC" == *.md ]] || [[ "$FEATURE_DESC" == *.txt ]]; then
+     echo "Analysis failed: $H1A_OUTPUT" >> /tmp/scout-automation-$$.md
+   else
+     echo "Skipped - no requirements file" >> /tmp/scout-automation-$$.md
+   fi
+
+   cat >> /tmp/scout-automation-$$.md << 'EOF'
+
+### Dependency Analysis (H3)
+EOF
+
+   if [ $H3_EXIT -eq 0 ]; then
+     echo "$H3_OUTPUT" >> /tmp/scout-automation-$$.md
+   else
+     echo "Analysis failed: $H3_OUTPUT" >> /tmp/scout-automation-$$.md
+   fi
+
+   cat >> /tmp/scout-automation-$$.md << 'EOF'
+
+Use these results to:
+- Populate quality_gates and test_command from H2 output
+- Adjust agent prompts based on H1a DONE/PARTIAL/TODO status
+- Use H3 wave_candidate field to assign wave numbers
+- Document pre-implementation findings in suitability assessment
+EOF
+   ```
+
+   After creating `/tmp/scout-automation-$$.md`, prepend it to the Scout agent prompt (AFTER any existing CONTEXT.md prepending if present, BEFORE scout.md contents). All failures are logged but do not block Scout launch.
+
+2. Launch a **Scout agent** using the Agent tool with `subagent_type: scout` and `run_in_background: true`. The prompt parameter is the feature description (the type definition carries the full behavioral instructions). If `subagent_type: scout` fails, fall back to `subagent_type: general-purpose` with the contents of `${CLAUDE_SKILL_DIR}/agents/scout.md` as its prompt and the feature description as context. The Scout analyzes the codebase, runs the suitability gate, and writes the IMPL doc; the Orchestrator does not perform this analysis itself. Inform the user that the Scout is running.
+3. When the Scout completes, read the resulting `docs/IMPL/IMPL-<feature-slug>.yaml`.
+4. **E16: Validate IMPL doc before review.** After Scout writes the IMPL doc, run:
    ```bash
    sawtools validate "<absolute-path-to-impl-doc>"
    ```
    If exit code is 0, proceed to human review. If exit code is 1, the stdout contains a plain-text error list — send it to Scout as a correction prompt: "Your IMPL doc failed validation. Fix only these sections:\n{errors}". Retry up to 3 attempts. On retry limit exhaustion, enter BLOCKED and surface the validation errors to the human. Do not present the doc for human review until validation passes.
 
    **E16A note:** The validator enforces required block presence — an IMPL doc missing `impl-file-ownership`, `impl-dep-graph`, or `impl-wave-structure` typed blocks will fail even if all present blocks are internally valid. E16C warnings (out-of-band dep graph content) appear in stdout but do not cause exit 1; include them in the correction prompt anyway so Scout moves the content into a typed block.
-4. Report the suitability verdict to the user, and if suitable: the wave structure, file ownership table, interface contracts, and Scaffolds section. Ask the user to review before proceeding.
+5. Report the suitability verdict to the user, and if suitable: the wave structure, file ownership table, interface contracts, and Scaffolds section. Ask the user to review before proceeding.
 6. **Scaffold Agent (conditional):** If the IMPL doc Scaffolds section is non-empty and any scaffold file has `Status: pending`, launch a **Scaffold Agent** using the Agent tool with `subagent_type: scaffold-agent` and `run_in_background: true`. The prompt parameter is the path to the IMPL doc and the feature slug. If `subagent_type: scaffold-agent` fails, fall back to `subagent_type: general-purpose` with the contents of `${CLAUDE_SKILL_DIR}/agents/scaffold-agent.md` as its prompt. Use `[SAW:scaffold:<feature-slug>]` as the description prefix so claudewatch can identify the run. The Scaffold Agent reads the approved contracts and creates the scaffold source files. Inform the user the Scaffold Agent is running. Wait for it to complete, then read the Scaffolds section: if any file shows `Status: FAILED`, stop immediately — report the failure reason to the user and do not create worktrees. The user must revise the interface contracts in the IMPL doc and re-run the Scaffold Agent. If all files show `Status: committed`, proceed.
 
 If a `docs/IMPL/IMPL-*.yaml` file already exists:
