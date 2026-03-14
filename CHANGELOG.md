@@ -56,6 +56,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - Removed fake Python enforcement code (was documentation, not executable)
   - Added brief I6 reference pointing to Phase 5 roadmap
 
+
+### Fixed
+
+- **CLI hook non-functional** — Path B enforcement was silently broken
+  - Root cause: brewprune-shim intercepted `cat` command in hook script
+  - Script had `set -euo pipefail`, so `cat` failure caused immediate exit
+  - Hook was configured but never actually blocked Scout writes
+  - Fix: brewprune-shim issue resolved, hook now functional
+  - Verification: tested blocking `src/main.go`, allowing `docs/IMPL/IMPL-*.yaml`
+
 ### Implementation
 
 - **SDK:** scout-and-wave-go (hooks package)
