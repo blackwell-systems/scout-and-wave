@@ -1,0 +1,519 @@
+completion_date: "2026-03-14"
+title: 'M4: Verification Gate Auto-Population'
+feature_slug: m4-finalize-impl
+verdict: SUITABLE
+suitability_assessment: |
+    Verdict: SUITABLE
+
+    1. File decomposition: YES — 3 agents with disjoint file ownership:
+       - Agent A: pkg/protocol/gate_populator.go + tests (new verification gate population logic)
+       - Agent B: cmd/saw/finalize_impl_cmd.go + tests (CLI command wrapper)
+       - Agent C: Integration with pkg/engine/ for webapp automation (if needed)
+
+       Each agent owns 2-3 files, clear separation of concerns.
+
+    2. Investigation-first: NO — Requirements are fully specified in determinism-roadmap.md
+       lines 305-396. Implementation is straightforward: read IMPL doc, extract H2 data,
+       determine focused test patterns from file ownership, write verification blocks to
+       agent task fields.
+
+    3. Interface discoverability: YES — All interfaces can be defined now:
+       - PopulateVerificationGates(manifest, commandSet) signature is deterministic
+       - FinalizeIMPL(implPath) follows finalize-wave pattern (already implemented)
+       - Integration with existing protocol.Load/Save, commands.Extract APIs
+
+    4. Pre-implementation status check:
+       Total items: 1 feature (batching command with 3 sub-components)
+       Already implemented:
+         - H2 command extraction (pkg/commands/extractor.go exists)
+         - E16 validation (pkg/protocol/validator.go exists)
+         - finalize-wave pattern (cmd/saw/finalize_wave.go exists as reference)
+       Not implemented:
+         - Gate population logic (new)
+         - finalize-impl command (new)
+         - Engine integration (new, optional for Wave 1)
+
+    5. Parallelization value: MEDIUM — 2-3 agents with independent file ownership.
+       Build/test cycle for Go SDK is ~8-12 seconds (go build + go test ./pkg/...).
+       Agents A and B are independent (Wave 1), Agent C depends on A (Wave 2).
+       Moderate parallelization benefit, clear coordination value (interface contracts,
+       progress tracking).
+
+    Estimated times:
+    - Scout phase: ~8 min (dependency analysis, interface contracts, gate examples)
+    - Agent execution: ~18 min (3 agents × 6 min avg, 2 waves)
+    - Merge & verification: ~4 min
+    Total SAW time: ~30 min
+
+    Sequential baseline: ~24 min (3 agents × 8 min sequential)
+    Time savings: -6 min (~25% slower)
+
+    Recommendation: Proceed for coordination value, not speed. The IMPL doc provides:
+    - Interface contracts for gate population algorithm
+    - Verification of transactional semantics (rollback on failure)
+    - Integration testing across 3 components (protocol, CLI, engine)
+    Sequential implementation would be faster, but SAW ensures correctness via isolation
+    and explicit contracts.
+test_command: go test ./pkg/protocol/... ./pkg/commands/... ./cmd/saw/...
+lint_command: go vet ./pkg/protocol/... ./pkg/commands/... ./cmd/saw/...
+file_ownership:
+    - file: pkg/protocol/gate_populator.go
+      agent: A
+      wave: 1
+      action: new
+    - file: pkg/protocol/gate_populator_test.go
+      agent: A
+      wave: 1
+      action: new
+    - file: cmd/saw/finalize_impl_cmd.go
+      agent: B
+      wave: 1
+      action: new
+    - file: cmd/saw/finalize_impl_cmd_test.go
+      agent: B
+      wave: 1
+      action: new
+    - file: cmd/saw/main.go
+      agent: B
+      wave: 1
+      action: modify
+    - file: pkg/engine/finalize_impl.go
+      agent: C
+      wave: 2
+      action: new
+    - file: pkg/engine/finalize_impl_test.go
+      agent: C
+      wave: 2
+      action: new
+interface_contracts:
+    - name: PopulateVerificationGates
+      description: |
+        Core gate population logic. Takes an IMPL manifest and H2 CommandSet,
+        determines focused test patterns from file ownership, and writes verification
+        blocks to each agent's task field. Returns updated manifest or error.
+        Transactional: does not modify input manifest; returns new copy.
+      definition: |
+        func PopulateVerificationGates(m *IMPLManifest, commandSet *commands.CommandSet) (*IMPLManifest, error)
+      location: pkg/protocol/gate_populator.go
+    - name: DetermineFocusedTestPattern
+      description: |
+        Helper function that takes an agent's file list and the full CommandSet,
+        infers the package/module path from file ownership, and returns a focused
+        test command string. For Go: "go test ./pkg/auth -run TestAuth". For Rust:
+        "cargo test auth". Returns empty string if focused pattern cannot be determined.
+      definition: |
+        func DetermineFocusedTestPattern(files []string, commandSet *commands.CommandSet) string
+      location: pkg/protocol/gate_populator.go
+    - name: FormatVerificationBlock
+      description: |
+        Formats build/lint/test commands into a markdown verification block string
+        that will be appended to an agent's task field. Uses standard format:
+        "## Verification Gate\n```bash\n<commands>\n```"
+      definition: |
+        func FormatVerificationBlock(buildCmd, lintCmd, testCmd string) string
+      location: pkg/protocol/gate_populator.go
+    - name: FinalizeIMPL
+      description: |
+        Batching command that combines: (1) validate (E16 structure check),
+        (2) populate-verification-gates (M4 gate generation), (3) validate again
+        (confirm gates valid). Atomic operation with rollback on failure.
+        Returns FinalizeIMPLResult with validation errors and population stats.
+      definition: |
+        type FinalizeIMPLResult struct {
+          Success           bool                `json:"success"`
+          Validation        ValidateResult      `json:"validation"`
+          GatePopulation    GatePopulationStats `json:"gate_population"`
+          FinalValidation   ValidateResult      `json:"final_validation"`
+        }
+
+        type ValidateResult struct {
+          Passed bool              `json:"passed"`
+          Errors []ValidationError `json:"errors"`
+        }
+
+        type GatePopulationStats struct {
+          AgentsUpdated     int    `json:"agents_updated"`
+          Toolchain         string `json:"toolchain"`
+          H2DataAvailable   bool   `json:"h2_data_available"`
+        }
+
+        func FinalizeIMPL(implPath, repoRoot string) (*FinalizeIMPLResult, error)
+      location: pkg/protocol/gate_populator.go
+    - name: newFinalizeImplCmd (CLI wrapper)
+      description: |
+        Cobra command wrapper for finalize-impl. Reads implPath and optional --repo-root
+        flag, calls FinalizeIMPL from pkg/protocol, marshals result to JSON, and exits
+        with code 1 if Success=false.
+      definition: |
+        func newFinalizeImplCmd() *cobra.Command
+      location: cmd/saw/finalize_impl_cmd.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            Implement the core verification gate population logic in pkg/protocol/gate_populator.go.
+
+            ## What to Implement
+
+            Create PopulateVerificationGates function that:
+            1. Takes IMPLManifest and commands.CommandSet as input
+            2. For each wave, for each agent:
+               - Extract agent's file list from agent.Files
+               - Call DetermineFocusedTestPattern(files, commandSet) to get focused test command
+               - Call FormatVerificationBlock(build, lint, focusedTest) to create markdown block
+               - Append verification block to agent.Task field (preserve existing content)
+            3. Return updated manifest copy (do not modify input)
+            4. Handle edge cases:
+               - Agent already has "## Verification Gate" section: skip population (idempotent)
+               - CommandSet is nil: return error "H2 data unavailable - run extract-commands first"
+               - Empty file list: use full test suite command (no focused pattern)
+
+            DetermineFocusedTestPattern algorithm:
+            - Extract package path from file list (e.g., ["pkg/auth/handler.go", "pkg/auth/handler_test.go"] → "pkg/auth")
+            - Use CommandSet.Commands.Test.FocusedPattern template:
+              - Go: "go test ./{package} -run {TestPrefix}" where TestPrefix is inferred from package name
+              - Rust: "cargo test {module_name}"
+              - JavaScript: "npm test -- --grep \"{module}\""
+              - Python: "pytest {path}/test_*.py"
+            - If multiple packages in file list, use full suite command (cannot focus)
+            - If FocusedPattern is empty, use Commands.Test.Full
+
+            FormatVerificationBlock format:
+            ```
+            ## Verification Gate
+
+            Run these commands to verify your implementation:
+
+            ```bash
+            {buildCmd}
+            {lintCmd}
+            {testCmd}
+            ```
+            ```
+
+            (Note: literal backtick fence inside the markdown block, not YAML triple-quote)
+
+            ## Interfaces to Implement
+
+            - PopulateVerificationGates(m *IMPLManifest, commandSet *commands.CommandSet) (*IMPLManifest, error)
+            - DetermineFocusedTestPattern(files []string, commandSet *commands.CommandSet) string
+            - FormatVerificationBlock(buildCmd, lintCmd, testCmd string) string
+            - FinalizeIMPL(implPath, repoRoot string) (*FinalizeIMPLResult, error)
+
+            ## Interfaces to Call
+
+            - protocol.Load(path string) (*IMPLManifest, error) — load IMPL manifest
+            - protocol.Save(m *IMPLManifest, path string) error — save manifest (use for rollback tracking)
+            - protocol.Validate(m *IMPLManifest) []ValidationError — E16 validation
+            - commands.New() *Extractor — create H2 extractor
+            - extractor.Extract(repoRoot string) (*CommandSet, error) — get H2 data
+
+            ## Tests to Write
+
+            1. TestPopulateVerificationGates_GoProject — full integration test with Go project
+               - Input: manifest with 2 agents, CommandSet with Go commands
+               - Verify: both agents have verification blocks appended to Task field
+               - Verify: focused test patterns use correct package paths
+
+            2. TestPopulateVerificationGates_Idempotent — verify no double-population
+               - Input: manifest where one agent already has "## Verification Gate"
+               - Verify: that agent's Task field unchanged, others populated
+
+            3. TestPopulateVerificationGates_MissingH2Data — error handling
+               - Input: manifest with agents, nil CommandSet
+               - Verify: returns error "H2 data unavailable"
+
+            4. TestDetermineFocusedTestPattern_SinglePackage
+               - Input: ["pkg/auth/handler.go", "pkg/auth/handler_test.go"], Go CommandSet
+               - Verify: returns "go test ./pkg/auth -run TestAuth"
+
+            5. TestDetermineFocusedTestPattern_MultiplePackages
+               - Input: ["pkg/auth/handler.go", "pkg/db/store.go"], Go CommandSet
+               - Verify: returns full suite command (cannot focus across packages)
+
+            6. TestFormatVerificationBlock
+               - Input: "go build ./...", "go vet ./...", "go test ./pkg/auth"
+               - Verify: returns properly formatted markdown block with bash fence
+
+            7. TestFinalizeIMPL_Success — full atomic workflow
+               - Setup: create temp IMPL file with 2 agents, no verification blocks
+               - Run: FinalizeIMPL(path, repoRoot)
+               - Verify: Success=true, GatePopulation.AgentsUpdated=2, file updated with gates
+
+            8. TestFinalizeIMPL_ValidationFailure — rollback on initial validation error
+               - Setup: create IMPL file with I1 violation (duplicate file ownership)
+               - Run: FinalizeIMPL(path, repoRoot)
+               - Verify: Success=false, Validation.Passed=false, file unchanged (rollback)
+
+            9. TestFinalizeIMPL_PopulationFailure — rollback on gate population error
+               - Setup: create IMPL file with no H2 data available (mock Extract to return nil)
+               - Run: FinalizeIMPL(path, repoRoot)
+               - Verify: Success=false, GatePopulation not populated, file unchanged
+
+            ## Verification Gate
+
+            ```bash
+            go build ./pkg/protocol/...
+            go vet ./pkg/protocol/...
+            go test ./pkg/protocol -run TestPopulateVerificationGates -run TestDetermineFocusedTestPattern -run TestFormatVerificationBlock -run TestFinalizeIMPL
+            ```
+
+            ## Constraints
+
+            - MUST be transactional: if any step fails (validation, population, final validation),
+              the IMPL file must be unchanged. Use atomic write pattern: write to temp file,
+              validate, then rename.
+            - MUST be idempotent: running finalize-impl twice produces same result (no duplicate
+              verification blocks).
+            - MUST preserve existing agent Task content: append verification block, do not replace.
+            - MUST handle missing H2 data gracefully: if extract-commands fails, return structured
+              error (not panic).
+            - Test coverage: ≥85% of gate_populator.go (critical path for determinism).
+          files:
+            - pkg/protocol/gate_populator.go
+            - pkg/protocol/gate_populator_test.go
+        - id: B
+          task: |
+            Implement the finalize-impl CLI command wrapper in cmd/saw/finalize_impl_cmd.go.
+
+            ## What to Implement
+
+            Create Cobra command that:
+            1. Accepts <manifest-path> as required positional argument
+            2. Accepts optional --repo-root flag (defaults to "." current directory)
+            3. Calls protocol.FinalizeIMPL(manifestPath, repoRoot)
+            4. Marshals FinalizeIMPLResult to JSON (pretty-printed)
+            5. Prints JSON to stdout
+            6. Exits with code 1 if result.Success == false
+            7. Registers command in cmd/saw/main.go rootCmd
+
+            Command help text:
+            ```
+            Use:   "finalize-impl <manifest-path>"
+            Short: "Finalize IMPL doc: validate, populate verification gates, validate again"
+            Long:  `Atomic batching command that combines:
+            1. Initial validation (E16 structure check)
+            2. Extract build/test/lint commands from project (H2)
+            3. Populate verification gate blocks for all agents
+            4. Final validation (confirm gates are valid)
+
+            Transactional: rolls back manifest on failure (no partial writes).
+            Idempotent: safe to run multiple times.
+
+            Typical usage (orchestrator workflow after Scout completes):
+              sawtools finalize-impl docs/IMPL/IMPL-feature-x.yaml
+
+            Output: JSON with validation results and gate population stats.`
+            ```
+
+            ## Interfaces to Implement
+
+            - newFinalizeImplCmd() *cobra.Command
+
+            ## Interfaces to Call
+
+            - protocol.FinalizeIMPL(implPath, repoRoot string) (*FinalizeIMPLResult, error)
+            - json.MarshalIndent(result, "", "  ") — pretty JSON output
+            - cmd.OutOrStdout() — write to stdout (testable)
+            - os.Exit(1) — exit code on failure
+
+            ## Tests to Write
+
+            1. TestFinalizeImplCmd_Success — full integration test
+               - Setup: create temp IMPL file with valid structure, 2 agents, no gates
+               - Setup: create temp repo with go.mod (for H2 detection)
+               - Run: cobra command with manifest path and repo root
+               - Verify: exit code 0, JSON output has Success=true, AgentsUpdated=2
+               - Verify: IMPL file updated with verification blocks
+
+            2. TestFinalizeImplCmd_ValidationFailure
+               - Setup: create IMPL file with I1 violation
+               - Run: command
+               - Verify: exit code 1, JSON has Success=false, Validation.Passed=false
+
+            3. TestFinalizeImplCmd_MissingRepoRoot
+               - Setup: valid IMPL file
+               - Run: command without --repo-root flag (should default to ".")
+               - Verify: command runs (does not fail on missing flag)
+
+            4. TestFinalizeImplCmd_InvalidManifestPath
+               - Run: command with non-existent manifest path
+               - Verify: exit code 1, error message "failed to load manifest"
+
+            5. TestFinalizeImplCmd_Registration
+               - Verify: newFinalizeImplCmd() is registered in main.go rootCmd
+               - Verify: "sawtools finalize-impl --help" works
+
+            ## Verification Gate
+
+            ```bash
+            go build ./cmd/saw/...
+            go vet ./cmd/saw/...
+            go test ./cmd/saw -run TestFinalizeImplCmd
+            ```
+
+            ## Constraints
+
+            - MUST register command in main.go (add to rootCmd.AddCommand list)
+            - MUST output valid JSON (always, even on errors) for structured parsing by orchestrator
+            - MUST use cmd.OutOrStdout() not fmt.Println for testability
+            - MUST exit code 1 on any failure (validation, population, or final validation)
+            - Follow existing finalize-wave.go pattern for result struct and JSON marshaling
+          files:
+            - cmd/saw/finalize_impl_cmd.go
+            - cmd/saw/finalize_impl_cmd_test.go
+            - cmd/saw/main.go
+      base_commit: 91a1176a93d5352920d9ba608653a2f12a9f8876
+    - number: 2
+      agents:
+        - id: C
+          task: |
+            Integrate finalize-impl into pkg/engine/ for webapp automation.
+
+            ## What to Implement
+
+            Create engine wrapper that web app can call after Scout agent completes:
+            1. Add FinalizeIMPLEngine function to pkg/engine/finalize_impl.go
+            2. Function signature matches engine conventions (context, manifest path, options)
+            3. Calls protocol.FinalizeIMPL internally
+            4. Logs progress via engine's logging interface
+            5. Returns result struct compatible with SSE streaming
+
+            This enables the web app (scout-and-wave-web) to call finalize-impl automatically
+            after Scout phase without shelling out to sawtools binary.
+
+            ## Interfaces to Implement
+
+            - FinalizeIMPLEngine(ctx context.Context, implPath, repoRoot string) (*FinalizeIMPLResult, error)
+
+            ## Interfaces to Call
+
+            - protocol.FinalizeIMPL(implPath, repoRoot string) (*FinalizeIMPLResult, error) — from Agent A
+
+            ## Tests to Write
+
+            1. TestFinalizeIMPLEngine_Success — engine integration test
+               - Setup: create temp IMPL file, temp repo with go.mod
+               - Run: FinalizeIMPLEngine with context
+               - Verify: result matches protocol.FinalizeIMPL output
+               - Verify: context cancellation stops operation
+
+            2. TestFinalizeIMPLEngine_ContextCancellation
+               - Setup: create IMPL file
+               - Run: FinalizeIMPLEngine with pre-cancelled context
+               - Verify: returns context.Canceled error
+
+            ## Verification Gate
+
+            ```bash
+            go build ./pkg/engine/...
+            go vet ./pkg/engine/...
+            go test ./pkg/engine -run TestFinalizeIMPLEngine
+            ```
+
+            ## Constraints
+
+            - MUST respect context cancellation (web app may cancel during Scout review)
+            - MUST return errors compatible with engine's error handling conventions
+            - MUST NOT import cmd/saw packages (circular dependency risk)
+            - If pkg/engine/ does not exist in scout-and-wave-go yet, defer this agent to
+              scout-and-wave-web implementation (different repo)
+          files:
+            - pkg/engine/finalize_impl.go
+            - pkg/engine/finalize_impl_test.go
+          dependencies:
+            - A
+      base_commit: bcc07ed64e4c82b9b9d4d525cb2a4bc5f5943aec
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./pkg/protocol/... ./pkg/commands/... ./cmd/saw/... ./pkg/engine/...
+          required: true
+        - type: test
+          command: go test ./pkg/protocol/... ./pkg/commands/... ./cmd/saw/...
+          required: true
+        - type: lint
+          command: go vet ./pkg/protocol/... ./pkg/commands/... ./cmd/saw/...
+          required: false
+          description: Check for common Go mistakes
+completion_reports:
+    A:
+        status: complete
+        branch: wave1-agent-A
+        commit: c8fbd8d
+        files_changed:
+            - pkg/protocol/gate_populator.go
+            - pkg/protocol/gate_populator_test.go
+        files_created:
+            - pkg/protocol/gate_populator.go
+            - pkg/protocol/gate_populator_test.go
+        tests_added:
+            - TestPopulateVerificationGates_GoProject
+            - TestPopulateVerificationGates_Idempotent
+            - TestPopulateVerificationGates_MissingH2Data
+            - TestDetermineFocusedTestPattern_SinglePackage
+            - TestDetermineFocusedTestPattern_MultiplePackages
+            - TestDetermineFocusedTestPattern_EmptyFiles
+            - TestDetermineFocusedTestPattern_NoFocusedPattern
+            - TestDetermineFocusedTestPattern_Rust
+            - TestDetermineFocusedTestPattern_JavaScript
+            - TestDetermineFocusedTestPattern_Python
+            - TestFormatVerificationBlock
+            - TestFinalizeIMPL_Success
+            - TestFinalizeIMPL_ValidationFailure
+            - TestFinalizeIMPL_PopulationFailure
+        verification: PASS
+    B:
+        status: complete
+        branch: wave1-agent-B
+        commit: "4987851"
+        files_changed:
+            - cmd/saw/main.go
+        files_created:
+            - cmd/saw/finalize_impl_cmd.go
+            - cmd/saw/finalize_impl_cmd_test.go
+        tests_added:
+            - TestFinalizeImplCmd_Success
+            - TestFinalizeImplCmd_ValidationFailure
+            - TestFinalizeImplCmd_MissingRepoRoot
+            - TestFinalizeImplCmd_InvalidManifestPath
+            - TestFinalizeImplCmd_Registration
+        verification: Build pending Agent A implementation of protocol.FinalizeIMPL. CLI wrapper complete, follows finalize-wave.go pattern, 5 tests written. Once Agent A completes pkg/protocol/finalize_impl.go, build will succeed.
+    C:
+        status: complete
+        branch: wave2-agent-C
+        commit: 97b02fe
+        files_changed:
+            - pkg/engine/finalize_impl.go
+            - pkg/engine/finalize_impl_test.go
+        files_created:
+            - pkg/engine/finalize_impl.go
+            - pkg/engine/finalize_impl_test.go
+        tests_added:
+            - TestFinalizeIMPLEngine_Success
+            - TestFinalizeIMPLEngine_ContextCancellation
+            - TestFinalizeIMPLEngine_ContextCancellationDuringExecution
+            - TestFinalizeIMPLEngine_ValidationParameters
+        verification: PASS
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: Gate population writes malformed markdown that breaks agent task parsing
+          likelihood: low
+          impact: high
+          mitigation: TestFormatVerificationBlock explicitly validates markdown structure. Include end-to-end test (TestFinalizeIMPL_Success) that loads manifest after population and verifies agent.Task field parses correctly.
+        - scenario: Focused test pattern inference fails for non-Go languages
+          likelihood: medium
+          impact: low
+          mitigation: DetermineFocusedTestPattern gracefully falls back to full suite command when pattern inference fails. Explicitly test Rust/JavaScript/Python in TestDetermineFocusedTestPattern suite.
+        - scenario: Transactional rollback fails, leaving IMPL doc in partial state
+          likelihood: low
+          impact: high
+          mitigation: Use atomic write pattern (write to temp file, validate, rename). TestFinalizeIMPL_PopulationFailure explicitly verifies file is unchanged after failure.
+        - scenario: Agent C discovers pkg/engine/ does not exist in scout-and-wave-go yet
+          likelihood: high
+          impact: low
+          mitigation: If pkg/engine/ missing, defer Agent C to scout-and-wave-web repo (separate feature). Agents A and B are self-contained and deliver core value.
+state: "COMPLETE"
