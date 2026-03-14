@@ -149,105 +149,12 @@ Answer these five questions:
 
    > **CONTEXT.md cross-check:** After reading `docs/CONTEXT.md` (Step 0 of Process), also check `established_interfaces` for any interfaces that overlap with the feature being planned. If an interface already exists and matches what you would define, reference it in the IMPL doc's Interface Contracts section rather than redefining it.
 
-   **Primary method: sawtools analyze-suitability (H1a)**
+   **Pre-implementation status:** If your prompt includes H1a automation results under "## Automation Analysis Results", use them to:
+   - Adjust agent prompts: DONE items → "verify + add tests", PARTIAL → "complete implementation", TODO → "implement from scratch"
+   - Document in suitability assessment: "X of Y items already implemented"
+   - Skip agents entirely if work is complete with adequate test coverage
 
-   ```bash
-   sawtools analyze-suitability <requirements-file> --repo-root <repo-path>
-   ```
-
-   Input: Requirements document (markdown or plain text format, each requirement on its own line or bullet)
-
-   Output: JSON with per-requirement status classification:
-   ```json
-   {
-     "pre_implementation": {
-       "total_items": 19,
-       "done": 3,
-       "partial": 2,
-       "todo": 14,
-       "item_status": [
-         {
-           "id": "F1",
-           "status": "DONE",
-           "file": "pkg/auth.go",
-           "test_coverage": "high",
-           "completeness": 1.0
-         }
-       ]
-     }
-   }
-   ```
-
-   Classification heuristics (regex-based, no AST):
-   - **DONE**: function exists + test file >100 lines + no TODO/FIXME
-   - **PARTIAL**: function exists + TODO/FIXME + test file 50-100 lines
-   - **TODO**: function doesn't exist + no test file
-
-   Use this data to adjust agent prompts:
-   - For DONE items:
-     - If tests exist and are comprehensive: skip the agent entirely, OR
-     - If tests are missing/incomplete: change agent prompt to "verify existing
-       implementation and add test coverage" rather than "implement"
-   - For PARTIAL items: agent prompt should say "complete the implementation"
-     and describe what's missing
-
-   Document pre-implementation status in the Suitability Assessment section
-   (e.g., "3 of 19 findings already implemented; agents F, G, H adjusted to
-   add test coverage only").
-
-   **Pre-implementation check output format:**
-
-   When step 4 finds DONE/PARTIAL items, document prominently:
-
-   ```
-   Pre-implementation scan results:
-   - Total items: X findings/requirements
-   - Already implemented: Y items (Z% of work)
-   - Partially implemented: P items
-   - To-do: T items
-
-   Agent adjustments:
-   - Agents [letters] changed to "verify + add tests" (already implemented)
-   - Agents [letters] changed to "complete implementation" (partial)
-   - Agents [letters] proceed as planned (to-do)
-
-   Estimated time saved: ~M minutes (avoided duplicate implementations)
-   ```
-
-   This makes the value of pre-implementation checking visible and quantifies
-   waste prevention.
-
-5. **Parallelization value check.** Estimate whether SAW saves time over
-   sequential implementation. Raw agent count is not a reliable indicator;
-   2 agents with complex build/test cycles benefit more from parallelization
-   than 4 agents doing simple documentation edits. Evaluate these factors:
-
-   - **Build/test cycle length:** If the full build + test cycle takes >30
-     seconds (e.g., `cargo test`, `go build && go test`, `npm test`), each
-     parallel agent runs that independently. Longer cycles amplify
-     parallelization benefit.
-   - **Files per agent:** More files per agent means more implementation time,
-     which means more to parallelize. Agents touching 3+ files each are
-     good candidates.
-   - **Agent independence:** Fully independent agents (single wave) get maximum
-     parallelization. Multi-wave chains reduce the benefit since waves run
-     sequentially.
-   - **Task complexity:** Code changes with logic, tests, and edge cases
-     benefit from parallelization. Simple find-and-replace or documentation
-     edits have low per-agent time, so SAW overhead dominates.
-
-   Apply this guidance:
-
-   - **High parallelization value:** Agents are independent AND (build/test
-     cycle >30s OR avg files per agent ≥3 OR tasks involve non-trivial logic).
-     Proceed as SUITABLE.
-   - **Low parallelization value:** Tasks are simple edits, documentation-only,
-     or trivially fast to implement sequentially. Recommend sequential
-     implementation (SAW overhead exceeds parallelization benefit for this work).
-   - **Coordination value independent of speed:** Even when parallelization
-     savings are marginal, the IMPL doc provides value as an audit trail,
-     interface spec, or progress tracker. Flag as SUITABLE WITH CAVEATS and
-     note that the value is coordination, not speed.
+   If H1a results are missing or show "Skipped", proceed with manual analysis of existing implementations.
 
 **Emit a verdict before proceeding:**
 
@@ -319,32 +226,13 @@ They are NOT the structure of your output. Your output is PURE YAML following th
 3. **Identify every file that will change or be created.** List all files from the
    feature requirements first. Then proceed to step 4 for automated dependency analysis.
 
-4. **Map the dependency graph using automated tools.** Use `sawtools analyze-deps` to
-   trace call paths, imports, and type dependencies automatically:
+4. **Map the dependency graph.** If your prompt includes H3 automation results under "## Automation Analysis Results", use them to structure waves:
+   - Check `wave_candidate` field for each file (suggests wave number based on call graph analysis)
+   - Files with `wave_candidate=1` have no dependencies → Wave 1
+   - Files with `wave_candidate=2` depend on Wave 1 files → Wave 2
+   - Adjust wave assignments based on logical grouping and parallelization opportunities
 
-   **For Go projects (PRIMARY METHOD):**
-   ```bash
-   sawtools analyze-deps <repo-root> --files "<file1,file2,file3>" --format yaml
-   ```
-
-   This produces:
-   - `nodes[]` — each file with its `depends_on`, `depended_by`, and `wave_candidate` fields
-   - `waves{}` — suggested wave groupings based on topological sort (depth-based)
-   - `cascade_candidates[]` — files importing modified code but not in ownership table
-
-   **Use this output directly:**
-   - `wave_candidate` field (0-indexed depth) maps to wave assignments (add 1 for 1-indexed
-     waves: depth 0 → Wave 1, depth 1 → Wave 2, etc.)
-   - Cascade candidates are already detected — copy them into your IMPL doc's cascade section
-   - Dependency edges are verified via AST analysis (no guessing)
-
-   **For non-Go projects or when tool fails:**
-   Fall back to manual dependency tracing only if:
-   - Project uses Rust/JavaScript/TypeScript/Python (multi-language support not yet implemented)
-   - `sawtools analyze-deps` exits with error
-
-   Manual fallback: read each file, trace imports and call paths, identify leaf nodes
-   (no dependencies) and root nodes (block downstream work). Draw the full DAG manually.
+   If H3 failed or is incomplete, manually trace import statements and function calls to determine dependencies.
 
    **Type rename cascade check (after dependency analysis):**
    If any interface contract introduces a type rename (not just new fields; an actual
@@ -477,68 +365,12 @@ They are NOT the structure of your output. Your output is PURE YAML following th
    The prompt must be self-contained: an agent receiving it should need nothing
    beyond the prompt and the existing codebase to do its work.
 
-10. **Determine verification gates from the build system.** Use `sawtools extract-commands` to automatically extract build/test/lint commands from CI configs, Makefiles, and package manifests.
+10. **Determine verification gates.** If your prompt includes H2 automation results under "## Automation Analysis Results", use them to populate quality_gates:
+   - Set `test_command` from detected test runner
+   - Set `lint_command` from detected linter
+   - Populate `quality_gates.gates[]` array from CI configuration commands
 
-   **Primary method: sawtools extract-commands (H2)**
-
-   ```bash
-   sawtools extract-commands <repo-root>
-   ```
-
-   Output: YAML with toolchain detection and command extraction:
-   ```yaml
-   toolchain: "go"
-   commands:
-     build: "go build ./..."
-     test:
-       full: "go test ./..."
-       focused_pattern: "go test ./{package} -run {test_name}"
-     lint:
-       check: "go vet ./..."
-       fix: ""
-     format:
-       check: ""
-       fix: "gofmt -w ."
-   detection_sources:
-     - ".github/workflows/ci.yml"
-     - "Makefile"
-   ```
-
-   Priority ordering: CI configs (GitHub Actions, GitLab CI, CircleCI) > Makefile > package.json > language defaults
-
-   Use extracted commands directly:
-   - `commands.build` → IMPL doc build gate
-   - `commands.test.full` → post-merge verification
-   - `commands.test.focused_pattern` → agent verification gates (if module has >50 tests)
-   - `commands.lint.check` → agent verification gates and `lint_command` field
-   - `commands.format.fix` → post-merge auto-fix step (orchestrator only)
-
-   **Agent verification gates:**
-   Include the lint check command in every agent's verification gate between build and test.
-   Record it as `lint_command` in the IMPL doc header. If `commands.lint.check` is empty,
-   write `lint_command: none`.
-
-   **Linter auto-fix (orchestrator responsibility):**
-   If `commands.format.fix` or `commands.lint.fix` is non-empty, document it in the
-   IMPL doc's Wave Execution Loop as a post-merge step. Agents run linters in check
-   mode only. The orchestrator owns the single auto-fix pass on the merged result
-   and commits any style changes before running the full suite. See `saw-merge.md`
-   Step 6 for the exact procedure.
-
-   **Performance guidance for test commands:**
-   - Count existing tests in the module(s) being modified
-   - If a module has >50 tests, use focused test commands during waves to keep
-     agent iteration fast, then run the full suite at post-merge verification:
-
-   | Language | Focused (agent gate) | Full (post-merge) |
-   |----------|---------------------|-------------------|
-   | Go       | `go test ./pkg -run TestFoo` | `go test ./...` |
-   | Rust     | `cargo test test_foo` | `cargo test` |
-   | Node     | `npm test -- --grep "foo"` | `npm test` |
-   | Python   | `pytest path/to/test_foo.py` | `pytest` |
-
-   - Add reasonable timeouts (2-5 minutes per module for agent gates)
-   - This keeps agent verification fast while preserving full coverage at merge
+   If H2 failed to detect commands, infer from project structure (go.mod → `go test ./...`, package.json → `npm test`, Cargo.toml → `cargo test`).
 
    Example for agent prompt (Go):
    ```bash
