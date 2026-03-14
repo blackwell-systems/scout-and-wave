@@ -364,8 +364,8 @@ When `check-conflicts` detects ownership conflicts, it returns raw conflict data
 ---
 
 ### H10: Pre-Commit Hook Verification
-**Status:** Not Implemented
-**Risk Level:** Low
+**Status:** ✅ Completed 2025-03-14
+**Risk Level:** Low (resolved)
 **Related:** E4 (Worktree Isolation Layer 0)
 
 **Problem:**
@@ -447,6 +447,32 @@ Worktree isolation Layer 0 (pre-commit hook) is installed during `create-worktre
 
 **Time to Complete:** ~4 hours (Scout 15min + Wave agents 3h20min + Merge/fix 25min)
 **Time Estimate:** 33 minutes (actual was longer due to test fix iteration)
+
+---
+
+### H10: Pre-Commit Hook Verification
+**Completed:** 2025-03-14
+**Implementation:** Direct implementation (no SAW wave execution)
+
+**Deliverables:**
+- `cmd/saw/verify_hook_installed.go` - New CLI command (156 lines)
+  - Verifies hook file exists in worktree git directory
+  - Handles both regular repos and worktrees (.git file vs directory)
+  - Checks hook is executable (mode & 0111)
+  - Validates hook contains SAW isolation logic markers
+  - Returns JSON with verification status
+- `cmd/saw/prepare_wave.go` - Integrated as Step 1.5
+  - Verifies all hooks after worktree creation, before agent launch
+  - Blocks wave execution if any hook missing/invalid
+  - Clear error messages for operators
+- Layer 0 enforcement of E4 worktree isolation
+
+**Verification:**
+- Command builds and runs successfully
+- Transparent to agents and orchestrator (no prompt updates needed)
+- Zero test overhead (verification runs once per wave in prepare-wave)
+
+**Time to Complete:** ~15 minutes (direct implementation)
 
 ---
 
