@@ -1,0 +1,369 @@
+completion_date: "2026-03-14"
+title: Remove Markdown IMPL Format Support
+feature_slug: remove-markdown-impl-support
+verdict: SUITABLE
+suitability_assessment: |
+    Verdict: SUITABLE
+
+    1. File decomposition: YES — Two repositories with completely disjoint file ownership.
+       - scout-and-wave-web: 10 files (5 production, 5 test)
+       - scout-and-wave-go: 3 test files only
+       No file is touched by both agents. Changes are independent.
+
+    2. Investigation-first: NO — All target files and lines are known. This is a
+       straightforward find-and-replace cleanup. No root cause analysis needed.
+
+    3. Interface discoverability: YES — No cross-agent interfaces. Each agent works
+       entirely within its own repository. No shared types or function signatures.
+
+    4. Pre-implementation status check: N/A — This is cleanup work removing deprecated
+       code paths, not feature implementation. The `.yaml` standard is already in place
+       (v0.7.1), and these are the last remnants of the old `.md` format.
+
+    5. Parallelization value: HIGH — Two independent repositories that can be modified
+       simultaneously. Build/test cycles for both projects are >30s each (Go compilation
+       + full test suite). Running agents in parallel saves ~10-15 minutes over sequential.
+
+    Estimated times:
+    - Scout phase: ~8 min (cross-repo analysis, file ownership, manifest)
+    - Agent execution: ~12 min (2 agents × 6 min avg, parallel execution)
+    - Merge & verification: ~6 min (two separate repos, tested independently)
+    Total SAW time: ~26 min
+
+    Sequential baseline: ~35 min (2 agents × 15 min avg sequential time + context switching)
+    Time savings: ~9 min (~26% faster)
+
+    Recommendation: Clear speedup. Proceed with two-agent parallel execution.
+test_command: go test ./...
+lint_command: go vet ./...
+file_ownership:
+    - file: pkg/api/chat_handler.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/api/impl_edit.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-web
+    - file: cmd/saw/commands.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/api/wave_runner.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/api/scaffold_handler.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/api/global_events.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/api/impl_edit_test.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-web
+    - file: cmd/saw/commands_test.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-web
+    - file: cmd/saw/wave_loop_test.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/api/wave_runner_test.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-web
+    - file: cmd/saw/merge_cmd_test.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/protocol/validator_test.go
+      agent: B
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/protocol/memory_test.go
+      agent: B
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+interface_contracts:
+    - name: No cross-agent interfaces
+      description: |
+        This work has no cross-agent dependencies. Both agents work independently
+        in separate repositories with no shared types or function calls.
+      definition: ""
+      location: N/A
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## What to Implement
+
+            Remove all Markdown (`.md`) IMPL doc support from scout-and-wave-web.
+
+            **Critical Bugs (Priority 1 - Broken Today):**
+
+            1. **pkg/api/chat_handler.go:94** — Hardcoded `.md` extension prevents chat from working with YAML docs
+               - Change: `implPath := filepath.Join(s.cfg.IMPLDir, "IMPL-"+slug+".md")`
+               - To: `implPath := filepath.Join(s.cfg.IMPLDir, "IMPL-"+slug+".yaml")`
+
+            2. **pkg/api/impl_edit.go:89,91,198** — Manual editor saves convert YAML→MD
+               - Line 89: Change `implPath := filepath.Join(s.cfg.IMPLDir, "IMPL-"+slug+".md")`
+               - Line 91: Change `tmpFile, err := os.CreateTemp(s.cfg.IMPLDir, "impl-edit-*.md.tmp")`
+               - Line 198: Change `implPath := filepath.Join(s.cfg.IMPLDir, "IMPL-"+slug+".md")`
+               - All three: Replace `.md` with `.yaml`
+
+            3. **cmd/saw/commands.go:456** — Scout command creates `.md` files instead of `.yaml`
+               - Change: `implOut = filepath.Join(repoRoot, "docs", "IMPL", fmt.Sprintf("IMPL-%s.md", slug))`
+               - To: `implOut = filepath.Join(repoRoot, "docs", "IMPL", fmt.Sprintf("IMPL-%s.yaml", slug))`
+
+            **Legacy Fallbacks (Priority 2 - Remove After Bug Fixes):**
+
+            4. **pkg/api/wave_runner.go:282-286** — Remove markdown fallback logic
+               - Delete lines 283-286 (the entire if-block that falls back to `.md`)
+               - Keep only the primary `.yaml` path at line 282
+
+            5. **pkg/api/scaffold_handler.go:29-32** — Remove markdown fallback logic
+               - Delete lines 30-32 (the entire if-block that falls back to `.md`)
+               - Keep only the primary `.yaml` path at line 29
+
+            6. **pkg/api/impl_edit.go:34** — Remove `.md` from extension search array
+               - Change: `for _, ext := range []string{".yaml", ".md"} {`
+               - To: `for _, ext := range []string{".yaml"} {`
+
+            7. **pkg/api/global_events.go:104** — Update outdated comment
+               - Change: `// "impl_list_updated" whenever a .md file is created or renamed into place.`
+               - To: `// "impl_list_updated" whenever a .yaml file is created or renamed into place.`
+
+            **Test Fixtures (Priority 3 - After Production Code):**
+
+            8. Update all test files to use `.yaml` extension:
+               - pkg/api/impl_edit_test.go:83
+               - cmd/saw/commands_test.go (multiple references)
+               - cmd/saw/wave_loop_test.go:32,64
+               - pkg/api/wave_runner_test.go:32,64
+               - cmd/saw/merge_cmd_test.go:20,33
+
+            ## Interfaces to Implement
+
+            None. This is cleanup work with no new interfaces.
+
+            ## Interfaces to Call
+
+            Existing Go standard library:
+            - `filepath.Join(dir, file string) string` — path construction
+            - `os.Stat(path string) (os.FileInfo, error)` — file existence check
+            - `os.CreateTemp(dir, pattern string) (*os.File, error)` — temp file creation
+
+            ## Tests to Write
+
+            No new tests required. Existing tests verify correct behavior:
+
+            1. **TestHandlePutImplRaw** — Verifies PUT /api/impl/{slug}/raw saves to `.yaml`
+            2. **TestRunScout_PromptIncludesFeature** — Verifies scout creates `.yaml` files
+            3. **TestRunWave_MissingImpl** — Verifies wave runner looks for `.yaml` first
+            4. **TestHandleScaffoldRerun** — Verifies scaffold agent resolves `.yaml` path
+
+            Run the full test suite after changes to ensure no regressions.
+
+            ## Verification Gate
+
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-web
+            go build ./...
+            go vet ./...
+            go test ./...
+            ```
+
+            All tests must pass. Pay special attention to:
+            - `pkg/api/impl_edit_test.go` — File path assertions
+            - `cmd/saw/commands_test.go` — Scout command output path
+            - `pkg/api/wave_runner_test.go` — IMPL doc resolution
+
+            ## Constraints
+
+            1. **No fallback logic** — `.yaml` is the only supported format. Do NOT add
+               "try .yaml, then try .md" logic. Remove all existing fallbacks.
+
+            2. **Atomic changes** — Each location is a simple string replacement. Do not
+               refactor surrounding code or add new abstractions.
+
+            3. **Comment accuracy** — The global_events.go comment update is required for
+               correctness. Outdated comments are tech debt.
+
+            4. **Test fixture consistency** — Every test file that references `.md` must
+               be updated. Inconsistent test fixtures cause confusion and false negatives.
+
+            5. **Repository boundary** — Agent A owns scout-and-wave-web ONLY. Do not
+               touch scout-and-wave-go. That repo is Agent B's responsibility.
+          files:
+            - pkg/api/chat_handler.go
+            - pkg/api/impl_edit.go
+            - cmd/saw/commands.go
+            - pkg/api/wave_runner.go
+            - pkg/api/scaffold_handler.go
+            - pkg/api/global_events.go
+            - pkg/api/impl_edit_test.go
+            - cmd/saw/commands_test.go
+            - cmd/saw/wave_loop_test.go
+            - pkg/api/wave_runner_test.go
+            - cmd/saw/merge_cmd_test.go
+        - id: B
+          task: |
+            ## What to Implement
+
+            Update test fixtures in scout-and-wave-go to use `.yaml` extension instead of `.md`.
+
+            **Test Files to Update:**
+
+            1. **pkg/protocol/validator_test.go:15**
+               - Change: `path := filepath.Join(dir, "test-impl.md")`
+               - To: `path := filepath.Join(dir, "test-impl.yaml")`
+
+            2. **pkg/protocol/memory_test.go** — Multiple struct literals with IMPLDoc field:
+               - Line 44: Change `IMPLDoc: "docs/IMPL/IMPL-protocol-parser.md"`
+               - Line 188: Change `IMPLDoc: "docs/IMPL/IMPL-user-auth.md"`
+               - Line 305: Change `IMPLDoc: "docs/IMPL/IMPL-feature-1.md"`
+               - Line 315: Change `IMPLDoc: "docs/IMPL/IMPL-feature-2.md"`
+               - All four: Replace `.md` with `.yaml`
+
+            These are test fixture paths used in CompletedFeature structs for project memory
+            tests. They don't reference actual files on disk — they're just string values
+            in test data structures. Changing them ensures test fixtures match the current
+            `.yaml` standard.
+
+            ## Interfaces to Implement
+
+            None. This is test fixture cleanup with no new interfaces.
+
+            ## Interfaces to Call
+
+            Existing Go standard library:
+            - `filepath.Join(dir, file string) string` — path construction in test setup
+
+            ## Tests to Write
+
+            No new tests required. Existing tests verify correct behavior:
+
+            1. **TestValidate_*** suite** — Validator tests use the test-impl path for temp files
+            2. **TestWriteMemory** — Memory persistence test uses IMPLDoc paths in assertions
+            3. **TestReadMemory_Legacy** — Legacy format reader test uses IMPLDoc paths for validation
+
+            Run the full test suite after changes to ensure no regressions.
+
+            ## Verification Gate
+
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go
+            go build ./...
+            go vet ./...
+            go test ./pkg/protocol/...
+            ```
+
+            All protocol package tests must pass. Pay special attention to:
+            - `TestValidate_*` — File path construction in temp dir
+            - `TestWriteMemory` — IMPLDoc field serialization
+            - `TestReadMemory_Legacy` — IMPLDoc field parsing from JSON
+
+            ## Constraints
+
+            1. **Test fixtures only** — These are in-memory test data structures, not real
+               file paths. No file I/O changes needed.
+
+            2. **Minimal scope** — Only update the three files identified. Do not search for
+               additional `.md` references in other test files unless they fail after your changes.
+
+            3. **String literal precision** — These are exact string replacements. Do not
+               refactor test setup logic or introduce helper functions.
+
+            4. **Repository boundary** — Agent B owns scout-and-wave-go ONLY. Do not touch
+               scout-and-wave-web. That repo is Agent A's responsibility.
+
+            5. **SDK stability** — scout-and-wave-go is imported by scout-and-wave-web via
+               `go.mod` replace directive. Do not change any exported APIs or types. These
+               are internal test files only.
+          files:
+            - pkg/protocol/validator_test.go
+            - pkg/protocol/memory_test.go
+      base_commit: 0668e04315967b270d3fba72dee5e2f4e5cfd2ae
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./...
+          required: true
+        - type: test
+          command: go test ./...
+          required: true
+        - type: lint
+          command: go vet ./...
+          required: false
+          description: Check for common Go mistakes
+completion_reports:
+    A:
+        status: complete
+        branch: wave1-agent-A
+        commit: 11b70a4
+        files_changed:
+            - pkg/api/chat_handler.go
+            - pkg/api/impl_edit.go
+            - cmd/saw/commands.go
+            - pkg/api/wave_runner.go
+            - pkg/api/scaffold_handler.go
+            - pkg/api/global_events.go
+            - pkg/api/impl_edit_test.go
+            - cmd/saw/commands_test.go
+            - cmd/saw/wave_loop_test.go
+            - pkg/api/wave_runner_test.go
+            - cmd/saw/merge_cmd_test.go
+        verification: 'PASS: go build, go vet, go test (cmd/saw 0.412s, pkg/api 0.960s)'
+    B:
+        status: complete
+        branch: wave1-agent-B
+        commit: 8ee5a95
+        files_changed:
+            - pkg/protocol/validator_test.go
+            - pkg/protocol/memory_test.go
+        verification: 'PASS: All 5 fixture paths updated correctly. Note: pre-existing build failure in gate_populator_test.go (out-of-scope file) prevents full package build.'
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: Agent A misses a `.md` reference in scout-and-wave-web, leaving a dormant bug
+          likelihood: low
+          impact: medium
+          mitigation: |
+            Grep verification at merge time: `rg '\.md["\)]' --type go` in scout-and-wave-web
+            should return zero matches in production code (excluding comments and docs).
+            The only valid `.md` references should be in documentation files themselves.
+        - scenario: Test fails with 'file not found' because test setup expects `.md` but agent changed to `.yaml`
+          likelihood: low
+          impact: low
+          mitigation: |
+            Verification gate runs full test suite (`go test ./...`) before commit. Any
+            path mismatches will cause immediate test failures. Agents must fix before
+            completing.
+        - scenario: scout-and-wave-web depends on scout-and-wave-go test fixtures (unlikely but possible)
+          likelihood: very-low
+          impact: medium
+          mitigation: |
+            Agents work in separate repos and only modify test files. Test files are not
+            imported across repo boundaries. The `go.mod` replace directive only affects
+            production code in `pkg/`, not test files.
+state: SCOUT_PENDING
