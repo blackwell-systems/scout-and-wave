@@ -342,38 +342,8 @@ If validation fails, the specific errors are fed back to Scout as a correction p
 Scout rewrites only the failing sections. This loops until the doc passes or a retry limit
 (default: 3) is reached.
 
-**Validator scope:** Typed-block sections (`type=impl-*` blocks) plus document-level presence checks. Prose sections are excluded from content validation.
-
-**E16A — Required block presence:** An IMPL doc that contains any typed blocks must include all three of the following, or validation fails:
-- `type=impl-file-ownership`
-- `type=impl-dep-graph`
-- `type=impl-wave-structure`
-
-Error format: `missing required block: impl-dep-graph`
-
-Trigger condition: E16A fires only when `block_count > 0`. Docs with no typed blocks (pre-v0.10.0 format) skip this check and receive the existing "no typed blocks found" warning instead.
-
-**E16B — Dep graph grammar:** When an `impl-dep-graph` block is present, its contents must conform to the canonical grammar. This check already exists in both the bash and Go validators; this rule documents it authoritatively.
-
-Canonical dep graph grammar:
-```
-Wave N (label):          # one or more Wave sections; N is a digit
-    [X] path/to/file     # one or more agent entries per wave; X is an agent ID matching [A-Z][2-9]?
-        ✓ root           # root agents declare ✓ root
-    [Y] path/to/file
-        depends on: X    # dependent agents declare depends on: <agent IDs>
-```
-
-Rules:
-- At least one `Wave N` line (where N is one or more digits) must appear.
-- At least one `[X]` agent entry must appear. `X` is an agent ID matching `[A-Z][2-9]?` (e.g., `A`, `B2`, `C3`).
-- Each agent entry must be followed (before the next agent entry) by either `✓ root` or `depends on:` on an indented line.
-
-**E16C — Out-of-band dep graph detection (warn only):** If a plain fenced block (no `type=` annotation) contains both a `[A-Z][2-9]?` agent reference pattern and the word `Wave`, the validator emits a warning to stdout but does not fail. This catches dep graphs written as ASCII art outside typed blocks.
-
-Warning format: `WARNING: possible dep-graph content found outside typed block at line N — use \`\`\`yaml type=impl-dep-graph\`\`\``
-
-E16C warnings appear in the correction prompt fed back to Scout but do not trigger a retry on their own. They are informational — the Scout should move the content into a typed block.
+**Validator scope:** Only typed-block sections (IC-1: `type=impl-*` blocks). Prose sections
+are excluded from validation.
 
 **Correction prompt format:** The orchestrator's correction prompt to Scout must list each error with the section name, the specific failure (e.g., "impl-dep-graph block: Wave 2 missing `depends on:` line for agent [C]"), and the line number or block identifier where the error occurred. This gives Scout precise targets for correction without requiring it to re-read the whole doc.
 
@@ -385,6 +355,83 @@ to human. Do not enter REVIEWED.
 **On validation pass:** Proceed to REVIEWED normally.
 
 **Relationship to structured outputs:** For API-backend runs using structured output enforcement, the validator always passes on first attempt (the output was already schema-validated). E16's correction loop is effectively a no-op in that path but must still be present in the protocol for CLI-backend and hand-edited docs.
+
+### E16A: Required Block Presence
+
+**Trigger:** Document contains at least one typed block (`block_count > 0`)
+
+**Required blocks:** Every IMPL doc that uses typed blocks must contain all three of the following:
+- `impl-file-ownership`
+- `impl-dep-graph`
+- `impl-wave-structure`
+
+**Error format:** One error per missing block:
+```
+missing required block: impl-dep-graph
+missing required block: impl-file-ownership
+missing required block: impl-wave-structure
+```
+(only the missing ones are emitted)
+
+**Exception:** If the document contains no typed blocks at all (`block_count == 0`), E16A does not fire. The existing "no typed blocks found" warning already handles this case. E16A is forward-looking: it enforces completeness on docs that have adopted the typed-block format, without breaking backward compatibility with pre-typed-block docs.
+
+### E16B: Dep Graph Grammar
+
+**Trigger:** An `impl-dep-graph` typed block exists in the document
+
+**Required Action:** Validate the block against the canonical dep graph grammar:
+
+**Canonical dep graph grammar:**
+
+A valid `impl-dep-graph` block is a sequence of Wave sections, each containing agent entries with explicit root or dependency declarations. Formally:
+
+1. **Wave header:** At least one line matching `^Wave [0-9]+` (e.g., `Wave 1 (parallel):`, `Wave 2:`). The header may include a parenthetical descriptor after the number.
+
+2. **Agent entry:** At least one line matching `\[[A-Z]\]` (bracket-enclosed uppercase letter, with leading whitespace). The canonical form is:
+   ```
+       [A] path/to/file
+   ```
+   where leading whitespace (4 spaces or 1 tab) precedes the agent letter.
+
+3. **Root or dependency declaration:** Each agent entry must be followed, before the next agent entry, by a line containing either:
+   - `✓ root` — agent has no dependencies on other agents in this plan
+   - `depends on:` — followed by agent letters (e.g., `depends on: [A] [B]`)
+
+   An agent entry that has neither is an error:
+   ```
+   impl-dep-graph block (line N): agent [X] has neither '✓ root' nor 'depends on:' — one is required
+   ```
+
+**Example of a valid dep graph block:**
+```yaml type=impl-dep-graph
+Wave 1 (2 parallel agents — foundation):
+    [A] pkg/foo/validator.go
+        ✓ root
+    [B] pkg/bar/handler.go
+        ✓ root
+
+Wave 2 (1 agent — consumer):
+    [C] pkg/baz/service.go
+        depends on: [A] [B]
+```
+
+### E16C: Out-of-Band Dep Graph Detection (Warn Only)
+
+**Trigger:** Document contains a plain fenced block (no `type=impl-` annotation) that appears to contain dep graph content.
+
+**Detection criteria:** A plain fenced block whose content contains both:
+- At least one line matching the agent pattern `\[[A-Z]\]`
+- At least one line containing the word `Wave` (case-sensitive)
+
+**Action:** Emit a warning (not a failure). The document is not rejected. The warning is surfaced to Scout in the correction prompt alongside any errors:
+```
+WARNING: possible dep-graph content found outside typed block at line N — use `yaml type=impl-dep-graph`
+```
+where `N` is the 1-based line number of the opening fence of the suspect block.
+
+**Rationale:** Scouts sometimes write dep graph content in plain fenced blocks (e.g., copied from an old template) rather than the required `impl-dep-graph` typed block. E16C catches this pattern early, before E16A would fail on a "missing required block: impl-dep-graph" error, giving Scout a more actionable diagnostic.
+
+**Warning does not cause E16A to fire:** If E16C fires (a plain block looks like a dep graph), the `impl-dep-graph` typed block is still considered missing for E16A purposes. Both E16A and E16C will appear in the correction prompt.
 
 ---
 
@@ -598,6 +645,43 @@ This assembled payload is passed as the `prompt` parameter when launching the ag
 **I4 interaction:** I4 (IMPL doc is source of truth) is unchanged. Agents write completion reports to the full IMPL doc via the absolute path included in the payload.
 
 **Related:** See Per-Agent Context Payload in `message-formats.md`.
+
+---
+
+## E23A: Tool Journal Recovery
+
+**Trigger:** Before launching a Wave agent, the Orchestrator checks for an existing tool journal at `.saw-state/wave{N}/agent-{ID}/index.jsonl`.
+
+**Required Action:** If found:
+
+1. **Load the journal:** Read all JSONL entries from the index file.
+
+2. **Generate context.md:** Analyze the last 50 entries (or all entries if <50) to produce a summary containing:
+   - **Files modified/created:** Extracted from Edit/Write tool entries, with line counts where available
+   - **Commands run:** Extracted from Bash tool entries, with exit codes
+   - **Tests executed:** Extracted from Bash tool entries matching test patterns (e.g., `go test`, `npm test`, `pytest`), with pass/fail counts
+   - **Git commits made:** Extracted from Bash tool entries matching `git commit` commands, with SHAs and branch names
+   - **Scaffold files imported:** Extracted from Read tool entries matching scaffold paths from the IMPL doc
+   - **Verification gate status:** Extracted from Bash tool entries matching Field 6 verification commands
+   - **Completion report status:** Whether the agent has written its completion report to the IMPL doc yet
+
+3. **Prepend to agent prompt:** Insert the generated `context.md` under a `## Session Context (Recovered from Tool Journal)` heading at the beginning of the agent's prompt (before Field 0).
+
+The journal becomes the agent's working memory across context compactions. It is append-only; entries are never deleted during execution.
+
+**Interaction with I4 (IMPL doc as single source of truth):**
+
+- The **IMPL doc** remains the source of truth for *planning*: agent prompts, interface contracts, file ownership, wave structure
+- The **tool journal** is the source of truth for *execution history*: what the agent has actually done (tools called, files modified, commands run, tests executed)
+- **Completion reports synthesize both**: "I modified these files (from journal), they implement these interfaces (from IMPL doc), tests pass (from journal), here's the commit SHA (from journal)"
+
+This duality does not violate I4. The IMPL doc defines *what should be done*. The journal records *what was done*. Agents consult the IMPL doc for their task specification and write results back to it; they consult the journal to avoid repeating work they've already attempted.
+
+**Failure recovery:** If an agent fails with `failure_type: transient` or `failure_type: fixable` (E19), the Orchestrator relaunches the agent. The journal is preserved across retries — the agent sees what it tried before and can avoid repeating failed operations. For example, if an agent tried a build command that failed due to a transient network error, on retry it sees the failed attempt in its recovered context and can proceed differently (or retry with awareness of the prior failure).
+
+**Related Invariants:** See I4 (IMPL doc and journal duality)
+
+**Related Rules:** See E19 (failure type decision tree), E6 (agent prompt propagation)
 
 ---
 

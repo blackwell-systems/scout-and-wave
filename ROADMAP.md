@@ -4,6 +4,24 @@ Items are grouped by theme, not priority. Nothing here is committed or scheduled
 
 ---
 
+## Completed & Shipped
+
+### ✅ Tool Journaling for Compaction Safety (SHIPPED 2026-03-10)
+
+**Status:** Complete. IMPL-tool-journaling.yaml finished, external log observer pattern implemented in scout-and-wave-go v0.27.0, E23A integration across backends ongoing.
+
+**What shipped:**
+- External log observer pattern (tails Claude Code session logs)
+- Journal structure: cursor tracking, index.jsonl, recent.json, tool-results/
+- Context markdown generation from journal entries
+- Checkpoint system for milestone snapshots
+- Archive policy with 10:1 compression
+- CLI commands: `sawtools journal-init`, `sawtools journal-context`
+
+**Moved to:** Production use. See scout-and-wave-go CHANGELOG v0.27.0+ for implementation details.
+
+---
+
 ## Protocol Enhancements
 
 ### Contract Builder Phase
@@ -46,9 +64,9 @@ Contracts are injected into agent prompts as binding requirements. The reviewer 
 
 ---
 
-### Full Research Output on NOT SUITABLE Verdicts
+### Full Research Output on NOT SUITABLE Verdicts (Protocol changes pending, UI shipped)
 
-> **UI implemented — 2026-03-08 (v0.17.0):** `NotSuitableResearchPanel` renders the full research output (verdict banner, rationale, blockers callout, serial implementation notes, Archive button). Protocol changes (scout.md, message-formats.md) to require scouts to always write full research sections regardless of verdict are still pending.
+> **UI SHIPPED — 2026-03-08 (scout-and-wave-web v0.17.0):** `NotSuitableResearchPanel` renders the full research output. Protocol spec updates to scout.md and message-formats.md still needed to require full research regardless of verdict.
 
 **Current state:** When Scout returns NOT SUITABLE, it writes a short verdict with a brief rationale and stops. The IMPL doc is minimal — just the verdict and a sentence or two explaining why.
 
@@ -74,63 +92,667 @@ The verdict badge on the review screen changes color (red/amber/green) but the r
 
 ---
 
-## Per-Agent Context Slicing for Large IMPL Docs
+## In Progress
 
-> **Implemented — 2026-03-08:** E23 (`ExtractAgentContext` / `FormatAgentContextPayload`) shipped in `scout-and-wave-go` v0.2.0, wired into `launchAgent` before `ExecuteStreaming`. UI: `AgentContextToggle` + `AgentContextPanel` in `scout-and-wave-web` v0.18.0 expose the per-agent payload for inspection in ReviewScreen.
+### E23A: Tool Journal Recovery Integration
 
-**Current state:** When an IMPL doc contains many agents (10+), every Wave agent receives the full IMPL doc as context. Agent A reads all 13 other agents' full prompts, dep graph prose, pre-mortem, and known issues — sections it has no use for.
+**Status:** Implementation complete (v0.27.0), integration across all backends ongoing.
 
-**Problem:** Context waste scales with team size. A 14-agent IMPL doc is ~3× larger than a 5-agent one. Each extra agent prompt consumed by every other agent compounds: N agents × N prompts = O(N²) token waste for context that belongs to no one agent. This isn't just cost — it erodes the signal-to-noise ratio in the agent's working context for the duration of its run.
+- **Files already modified** — Agent might re-edit the same file, causing duplicate work or conflicts
+- **Test results from 30 minutes ago** — Agent might re-run expensive test suites unnecessarily
+- **Git commits created** — Agent can't reference commit SHAs in completion report (I5 violation)
+- **Scaffold imports discovered** — Agent might re-discover which interfaces to import, wasting time
+- **Verification gates already passed** — Agent forgets which gates passed and might skip reporting them
+- **Blockers already hit** — Agent retries operations that already failed, entering error loops
 
-**Proposed: Per-agent context extraction.** The orchestrator constructs a trimmed payload for each agent before launch, containing only:
-1. That agent's 9-field prompt section
-2. Interface contracts (every agent needs these)
-3. File ownership table (needed for I1 invariant verification)
-4. Scaffolds section (needed to know what's pre-built)
-5. Quality gates (needed for verification gate)
+**Protocol deviation risk:** Without execution history, agents can inadvertently violate core invariants:
+- **I4 violation** — Forget to write completion report (or write incomplete report missing commit SHA)
+- **I5 violation** — Report `commit: "uncommitted"` after actually committing 30 minutes ago
+- **E14 violation** — Lose draft completion report and fail to append it to IMPL doc
 
-Other agents' prompts, the full dep graph prose, pre-mortem, and known issues are omitted. The full IMPL doc stays on disk as source of truth (I4 unchanged) — agents still write completion reports to it. The per-agent payload is a read-only extract for consumption at launch time only.
+### The Solution: External Log Observer
 
-**Protocol changes required:**
-- `saw-skill.md` — orchestrator constructs per-agent payload before launching each Wave agent rather than passing the raw full doc
-- `agent-template.md` — Field 0 updated: agents receive a trimmed context object, not necessarily the full IMPL doc
-- `message-formats.md` — define Per-Agent Context Payload schema: sections always included vs. elided
+**Architecture:** Tail Claude Code's session logs (`~/.claude/projects/<project>/*.jsonl`) and extract tool execution history externally, rather than instrumenting tool middleware. This provides:
+- **Zero backend modifications** — Works with any agent implementation (Anthropic API, CLI, OpenAI) without changes
+- **Crash resilience** — Session logs persist even if agent crashes mid-execution
+- **Complete capture** — Gets everything Claude Code logs, not just what we instrument
+- **Future-proof** — New backends automatically get journaling for free
 
----
-
-## Structured Output Parsing
-
-### Schema-Validated Scout Output (API Backend)
-
-**Current state:** The Scout writes a free-form markdown IMPL doc to disk. The Go engine parses it with a line-by-line state machine that is brittle — format deviations (wrong header levels, missing sections, non-standard dep graph notation) cause silent parse failures or fallback to raw text in the UI.
-
-**Problem:** The app's correctness depends entirely on the AI producing output that conforms to an implicit format. When it doesn't, the UI degrades unpredictably. Parser fixes are a treadmill — each new Scout-written doc can introduce new formatting variations.
-
-**Proposed:** When running Scout via the API backend, use Claude's structured outputs (`output_config.format`) to constrain the Scout's response to a JSON schema matching `types.IMPLDoc`. The orchestrator receives validated JSON, writes the IMPL doc markdown from it (keeping human-readable files on disk), and serves the parsed struct directly — bypassing the markdown parser entirely for this path.
-
-**Flow:**
-
+**File structure:**
 ```
-API backend:   Scout prompt → output_config schema → validated JSON → write markdown + serve struct
-CLI backend:   Scout prompt → free-form markdown → disk → markdown parser (fallback, as today)
+.saw-state/wave1/agent-A/
+├── cursor.json              # Tracks read position in Claude Code session log
+├── index.jsonl              # Tool use + result metadata (append-only)
+├── recent.json              # Last 30 events (JSON array for fast access)
+├── context.md               # Human-readable summary (generated from index)
+└── tool-results/
+    ├── toolu_abc123.txt     # Full output for tool use abc123 (separate file)
+    └── toolu_def456.txt     # Full output for tool use def456
 ```
 
-**Schema:** Based on the existing `types.IMPLDoc` Go struct — suitability verdict, file ownership table, wave/agent assignments, dependency graph (structured, not prose), interface contracts, scaffolds, known issues. The JSON schema is generated from the Go struct and passed as `output_config.format.json_schema`.
+**Index entry schema (JSONL):**
+```json
+{"ts":"2026-03-10T14:23:45Z","kind":"tool_use","tool_name":"edit_file","tool_use_id":"toolu_abc123","input":{"file":"pkg/api/routes.go","operation":"insert"},"session_id":"sess_xyz"}
+{"ts":"2026-03-10T14:25:12Z","kind":"tool_result","tool_use_id":"toolu_abc123","content_file":".saw-state/wave1/agent-A/tool-results/toolu_abc123.txt","preview":"✓ Inserted 12 lines","truncated":false}
+{"ts":"2026-03-10T14:26:03Z","kind":"tool_use","tool_name":"bash","tool_use_id":"toolu_def456","input":{"command":"go test ./pkg/api"},"session_id":"sess_xyz"}
+```
 
-**Benefits:**
-- Eliminates parse failures for API-backend users
-- Dep graph rendering, wave structure panel, file ownership table all guaranteed to populate
-- Completion reports (currently YAML blocks) can use the same approach — `types.CompletionReport` schema passed when running wave agents
-- Parser kept as fallback for CLI backend and hand-written/legacy docs
+**Context markdown (generated from journal, injected into agent on resume):**
+```markdown
+## Session Context (Recovered from Tool Journal)
 
-**Implementation path:**
-1. Define JSON schema from `types.IMPLDoc` and `types.CompletionReport`
-2. Pass schema via `output_config` when invoking Scout and Wave agents via API backend
-3. On response, unmarshal directly to struct — skip `protocol.ParseIMPLDoc`
-4. Write markdown IMPL doc from struct (so files remain human-readable/editable)
-5. Keep `protocol.ParseIMPLDoc` as fallback for CLI backend and existing docs
+**Last activity:** 2026-03-10 14:35:22 (12 minutes ago)
+**Total tool calls:** 47
+**Session duration:** 1h 23m
 
-**Implementation scope:** Engine only (`scout-and-wave-go`). No protocol changes — the protocol defines what the IMPL doc contains, not how it is generated.
+### Files Modified (4)
+- `pkg/api/routes.go` (added 3 endpoints, 45 lines) — last edited 14:23
+- `pkg/api/handlers.go` (fixed type error, 3 lines) — last edited 14:24
+- `pkg/api/routes_test.go` (added tests, 78 lines) — last edited 14:25
+- `go.mod` (updated dependency) — last edited 14:22
+
+### Tests Run
+- `go test ./pkg/api` → 12 passed, 2 failed (cache_test timeout) — 14:25
+- Fixed timeout in cache_test.go, retried — 14:28
+- `go test ./pkg/api` → 14 passed ✓ — 14:29
+
+### Git Commits
+- **abc123d** "feat: add REST endpoints for user API"
+  (committed 14:26, branch: wave1-agent-A, 4 files changed, 126 insertions)
+
+### Scaffold Files Imported
+- `pkg/types/user.go` (User, UserRequest, UserResponse types)
+  Imported at line 8 of routes.go — 14:23
+- `pkg/types/response.go` (APIResponse, ErrorResponse types)
+  Imported at line 9 of routes.go — 14:23
+
+### Verification Status (Field 6 Gates)
+- ✓ Build: `go build ./pkg/api` — PASS (14:30)
+- ✓ Tests: `go test ./pkg/api` — PASS, 14 tests (14:29)
+- ⏳ Lint: `go vet ./pkg/api` — Not yet run
+
+### Completion Report Status
+- ⏳ Not yet written (next step after lint gate passes)
+
+**What's next:** Run lint gate (`go vet ./pkg/api`), then write completion report to IMPL doc.
+```
+
+### Implementation Spec
+
+**New package: `pkg/journal/` - External Log Observer**
+
+```go
+// pkg/journal/observer.go
+package journal
+
+import (
+    "bufio"
+    "encoding/json"
+    "io"
+    "os"
+    "path/filepath"
+    "time"
+)
+
+// SessionCursor tracks read position in Claude Code session log
+type SessionCursor struct {
+    SessionFile string `json:"session_file"` // e.g., "1a2b3c4d.jsonl"
+    Offset      int64  `json:"offset"`       // Byte offset in file
+}
+
+// JournalObserver tails Claude Code session logs and extracts tool history
+type JournalObserver struct {
+    ProjectRoot Path
+    JournalDir  Path
+    AgentID     string
+
+    cursorPath  Path
+    indexPath   Path
+    recentPath  Path
+    resultsDir  Path
+}
+
+// NewObserver creates a journal observer for an agent
+func NewObserver(projectRoot Path, agentID string) (*JournalObserver, error) {
+    journalDir := projectRoot.Join(".saw-state", agentID)
+    if err := os.MkdirAll(journalDir, 0755); err != nil {
+        return nil, err
+    }
+
+    return &JournalObserver{
+        ProjectRoot: projectRoot,
+        JournalDir:  journalDir,
+        AgentID:     agentID,
+        cursorPath:  journalDir.Join("cursor.json"),
+        indexPath:   journalDir.Join("index.jsonl"),
+        recentPath:  journalDir.Join("recent.json"),
+        resultsDir:  journalDir.Join("tool-results"),
+    }, nil
+}
+
+// Sync incrementally reads from Claude Code session log and updates journal
+func (o *JournalObserver) Sync() (*SyncResult, error) {
+    // 1. Find latest session log: ~/.claude/projects/<project-id>/*.jsonl
+    sessionFile, err := o.findLatestSessionFile()
+    if err != nil {
+        return nil, err
+    }
+
+    // 2. Load cursor (tracks where we last read)
+    cursor, err := o.loadCursor()
+    if err != nil {
+        cursor = &SessionCursor{SessionFile: sessionFile.Name(), Offset: 0}
+    }
+
+    // 3. If session file changed (new Claude Code session), reset cursor
+    if cursor.SessionFile != sessionFile.Name() {
+        cursor.SessionFile = sessionFile.Name()
+        cursor.Offset = 0
+    }
+
+    // 4. Open session log and seek to cursor position
+    f, err := os.Open(sessionFile)
+    if err != nil {
+        return nil, err
+    }
+    defer f.Close()
+
+    if _, err := f.Seek(cursor.Offset, io.SeekStart); err != nil {
+        return nil, err
+    }
+
+    // 5. Read new lines and extract tool_use + tool_result entries
+    scanner := bufio.NewScanner(f)
+    newEvents := []Event{}
+
+    for scanner.Scan() {
+        line := scanner.Bytes()
+        cursor.Offset, _ = f.Seek(0, io.SeekCurrent) // Update cursor
+
+        var entry map[string]interface{}
+        if err := json.Unmarshal(line, &entry); err != nil {
+            continue // Skip malformed lines
+        }
+
+        // Extract tool_use blocks
+        for _, toolUse := range extractToolUses(entry) {
+            newEvents = append(newEvents, Event{
+                Kind:      "tool_use",
+                Timestamp: entry["timestamp"].(string),
+                ToolName:  toolUse["name"].(string),
+                ToolUseID: toolUse["id"].(string),
+                Input:     truncateDeep(toolUse["input"], maxDepth),
+            })
+        }
+
+        // Extract tool_result blocks
+        for _, toolResult := range extractToolResults(entry) {
+            toolUseID := toolResult["tool_use_id"].(string)
+            content := toolResult["content"].(string)
+
+            // Save full output to separate file
+            resultFile := o.resultsDir.Join(toolUseID + ".txt")
+            os.WriteFile(resultFile, []byte(content), 0644)
+
+            newEvents = append(newEvents, Event{
+                Kind:        "tool_result",
+                Timestamp:   entry["timestamp"].(string),
+                ToolUseID:   toolUseID,
+                ContentFile: resultFile.String(),
+                Preview:     truncate(content, 800),
+            })
+        }
+    }
+
+    // 6. Append new events to index.jsonl
+    if err := o.appendToIndex(newEvents); err != nil {
+        return nil, err
+    }
+
+    // 7. Update recent.json (last 30 events, fast access cache)
+    if err := o.updateRecent(newEvents); err != nil {
+        return nil, err
+    }
+
+    // 8. Save cursor
+    if err := o.saveCursor(cursor); err != nil {
+        return nil, err
+    }
+
+    return &SyncResult{
+        NewToolUses:    countToolUses(newEvents),
+        NewToolResults: countToolResults(newEvents),
+        NewBytes:       cursor.Offset,
+    }, nil
+}
+
+// GenerateContext creates markdown summary from journal
+func (o *JournalObserver) GenerateContext() (string, error) {
+    // Read recent events from recent.json (fast)
+    events, err := o.readRecent(30)
+    if err != nil {
+        return "", err
+    }
+
+    // Analyze events to extract:
+    // - Files modified (from edit_file/write_file tool_use)
+    // - Commands run (from bash tool_use)
+    // - Test results (parse bash tool_result for test output)
+    // - Git commits (parse bash tool_result for commit SHAs)
+    // - Scaffold imports (from read_file tool_use matching scaffold paths)
+
+    return buildContextMarkdown(events), nil
+}
+
+func (o *JournalObserver) findLatestSessionFile() (Path, error) {
+    // ~/.claude/projects/<project-hash>/
+    claudeDir := os.UserHomeDir() + "/.claude/projects"
+
+    // Find directory matching project root hash
+    projectHash := hashPath(o.ProjectRoot)
+    sessionDir := filepath.Join(claudeDir, projectHash)
+
+    // Find latest *.jsonl file by mtime
+    files, _ := filepath.Glob(filepath.Join(sessionDir, "*.jsonl"))
+    if len(files) == 0 {
+        return "", errors.New("no session file found")
+    }
+
+    // Return most recent
+    latest := files[0]
+    latestMtime := time.Unix(0, 0)
+    for _, f := range files {
+        info, _ := os.Stat(f)
+        if info.ModTime().After(latestMtime) {
+            latest = f
+            latestMtime = info.ModTime()
+        }
+    }
+
+    return Path(latest), nil
+}
+```
+
+**Integration points:**
+
+1. **Before agent launch** (in `pkg/engine/runner.go`):
+```go
+func (r *Runner) launchWaveAgent(wave int, agentID string, prompt string) error {
+    // Create journal observer for this agent
+    observer, err := journal.NewObserver(r.repoPath, fmt.Sprintf("wave%d/agent-%s", wave, agentID))
+    if err != nil {
+        return err
+    }
+
+    // Sync from Claude Code session logs (incremental tail)
+    result, err := observer.Sync()
+    if err != nil {
+        r.logger.Warn("Failed to sync journal", "error", err)
+        // Non-fatal: continue without journal recovery
+    }
+
+    // If journal has events, generate context and prepend to prompt
+    if result != nil && result.NewToolUses > 0 {
+        contextMd, err := observer.GenerateContext()
+        if err == nil {
+            prompt = contextMd + "\n\n---\n\n" + prompt
+            r.logger.Info("Recovered session context",
+                "agent", agentID,
+                "tool_calls", result.NewToolUses,
+            )
+        }
+    }
+
+    // Launch agent with enriched prompt (no context needed in agent - observer runs externally)
+    return r.agentBackend.Execute(prompt)
+}
+```
+
+2. **Periodic sync during execution** (background goroutine):
+```go
+// In runner.go, after launching agent
+go func() {
+    ticker := time.NewTicker(30 * time.Second)
+    defer ticker.Stop()
+
+    for {
+        select {
+        case <-ticker.C:
+            // Sync journal from Claude Code session logs
+            observer.Sync()
+        case <-ctx.Done():
+            return
+        }
+    }
+}()
+```
+
+3. **No middleware needed** - Tool calls are captured by Claude Code's native session logging, not by our middleware. This makes the journal:
+   - ✓ Backend-agnostic (works with Anthropic API, CLI, OpenAI without changes)
+   - ✓ Crash-resilient (session logs survive agent crashes)
+   - ✓ Complete (captures everything Claude Code logs)
+   - ✓ Zero instrumentation cost (no middleware overhead)
+
+### Retention Policy
+
+**During wave execution:**
+- Keep full journal in `.saw-state/wave{N}/agent-{ID}/tools.jsonl`
+- Checkpoints accumulate in `checkpoints/` subdirectory
+
+**After wave merges:**
+- Archive journal: `tar -czf .saw-state/archive/wave1-agent-A-tools.jsonl.gz .saw-state/wave1/agent-A/`
+- Original journal remains for debugging (archived journals are compressed ~10:1)
+
+**After IMPL doc gets SAW:COMPLETE marker:**
+- Optionally delete non-archived journals: `rm -rf .saw-state/wave*/`
+- Keep archives: `.saw-state/archive/*.tar.gz` (typically <1MB per agent)
+- Configurable via `sawtools config set journal.retention <days>` (default: 30 days after completion)
+
+### Protocol Changes Required
+
+**New execution rule: E23A (Tool Journal Recovery)**
+
+Add to `protocol/execution-rules.md`:
+
+```markdown
+## E23A: Tool Journal Recovery
+
+Before launching a Wave agent, the Orchestrator checks for an existing tool journal at `.saw-state/wave{N}/agent-{ID}/tools.jsonl`.
+
+If found:
+1. Load the journal (all JSONL entries)
+2. Generate `context.md` by analyzing the last 50 entries (or all entries if <50):
+   - Files modified/created (from Edit/Write tools) with line counts
+   - Commands run (from Bash tool) with exit codes
+   - Tests executed (from Bash tool matching `test` pattern) with pass/fail counts
+   - Git commits made (from Bash tool matching `git commit`) with SHAs and branch names
+   - Scaffold files imported (from Read tool matching scaffold paths)
+   - Verification gate status (from Bash tool matching Field 6 commands)
+   - Completion report status (whether written yet)
+3. Prepend `context.md` to the agent's prompt under `## Session Context (Recovered from Tool Journal)`
+
+The journal becomes the agent's working memory across context compactions. It is append-only; entries are never deleted during execution.
+
+**Interaction with I4 (IMPL doc as single source of truth):**
+- The IMPL doc remains the source of truth for *planning* (agent prompts, interface contracts, file ownership)
+- The tool journal is the source of truth for *execution history* (what the agent has actually done)
+- Completion reports synthesize both: "I modified these files (from journal), they implement these interfaces (from IMPL doc), tests pass (from journal), here's the commit SHA (from journal)"
+
+**Failure recovery:** If an agent fails with `failure_type: transient` or `failure_type: fixable` (E19), the Orchestrator relaunches the agent. The journal is preserved across retries — the agent sees what it tried before and can avoid repeating failed operations.
+```
+
+**Update to I4 (IMPL Doc as Single Source of Truth):**
+
+Extend `protocol/invariants.md` I4 to clarify duality:
+
+```markdown
+## I4: IMPL Doc as Single Source of Truth
+
+The IMPL doc is the canonical source of truth for **planning**:
+- Agent prompts (Fields 0-8)
+- Interface contracts (what agents must implement)
+- File ownership (which agent owns which files)
+- Wave structure (dependency graph, execution order)
+- Completion reports (agent outcomes, written after execution)
+
+The **tool journal** (`.saw-state/wave{N}/agent-{ID}/tools.jsonl`) is the canonical source of truth for **execution history**:
+- Which files the agent has actually modified
+- Which commands the agent has run
+- Which tests have passed/failed
+- Which git commits the agent has made
+- How long operations took
+
+Completion reports synthesize both: agents read their plan from the IMPL doc, execute it while journaling every action, then write a report to the IMPL doc that references the journal (commit SHAs, file counts, test results).
+
+Chat output is not the record for either planning or execution. Observers (humans, UIs, monitoring tools) read from the IMPL doc and tool journals, not from the conversation transcript.
+```
+
+### CLI Tooling
+
+**New command: `sawtools debug-journal`**
+
+Inspect journal contents for debugging failed agents:
+
+```bash
+# Dump full journal (JSONL to stdout)
+sawtools debug-journal wave1/agent-A
+
+# Show human-readable summary
+sawtools debug-journal wave1/agent-A --summary
+
+# Show only failed tool calls
+sawtools debug-journal wave1/agent-A --failures-only
+
+# Show last N entries
+sawtools debug-journal wave1/agent-A --last 20
+
+# Export to HTML timeline (visual debugging)
+sawtools debug-journal wave1/agent-A --export timeline.html
+```
+
+**Example output (summary mode):**
+```
+Journal: wave1/agent-A
+Duration: 1h 23m (14:02:15 - 15:25:38)
+Total tool calls: 47
+
+Files modified: 4
+  pkg/api/routes.go      (45 lines added)
+  pkg/api/handlers.go    (3 lines added)
+  pkg/api/routes_test.go (78 lines added)
+  go.mod                 (1 line added)
+
+Commands run: 12
+  go test ./pkg/api      (2 runs: 1 failed, 1 passed)
+  go build ./pkg/api     (1 run: passed)
+  go vet ./pkg/api       (1 run: passed)
+  git add ...            (1 run: passed)
+  git commit ...         (1 run: passed)
+
+Commits: 1
+  abc123d "feat: add REST endpoints" (wave1-agent-A)
+
+Verification gates:
+  ✓ Build (14:30)
+  ✓ Tests (14:29, 14 passed)
+  ✓ Lint  (14:31)
+
+Completion report: ✓ Written (15:25)
+```
+
+### Deliverables
+
+- [ ] **Core journal implementation** — `pkg/journal/journal.go` (ToolJournal, ToolEntry, JSONL persistence)
+- [ ] **Context generator** — `pkg/journal/context.go` (analyze entries, generate markdown summary)
+- [ ] **Checkpoint system** — `pkg/journal/checkpoint.go` (named snapshots at key milestones)
+- [ ] **Workshop integration** — `pkg/tools/workshop.go` (JournalingMiddleware, inject journal into context)
+- [ ] **Runner integration** — `pkg/engine/runner.go` (load journal before launch, inject context into prompt)
+- [ ] **CLI tooling** — `cmd/sawtools/debug_journal.go` (inspect, summarize, export journals)
+- [ ] **Archive policy** — `pkg/journal/archive.go` (compress after merge, cleanup after completion)
+- [ ] **Protocol documentation** — E23A in `protocol/execution-rules.md`, I4 clarification in `protocol/invariants.md`
+- [ ] **Tests** — `pkg/journal/journal_test.go` (append, load, checkpoint, context generation)
+
+### Integration & Downstream Work
+
+After the core journal system is implemented, significant integration work is required across the entire stack:
+
+#### 1. Backend Integration (All Backends Must Journal)
+
+**Anthropic API backend** (`pkg/agent/backend/api/`)
+- [ ] Hook `JournalingMiddleware` into tool execution pipeline
+- [ ] Pass journal context from runner to backend via `backend.Config`
+- [ ] Ensure streaming responses don't bypass journaling
+
+**CLI backend** (`pkg/agent/backend/cli/`)
+- [ ] Wrap subprocess tool calls with journal logging
+- [ ] Capture stdin/stdout for Bash tool entries
+- [ ] Handle cases where CLI agent spawns its own subagents
+
+**OpenAI backend** (`pkg/agent/backend/openai/`)
+- [ ] Adapt tool call format differences (OpenAI uses `function` objects)
+- [ ] Journal both single-turn and multi-turn tool calls
+- [ ] Handle parallel tool calls (log each independently)
+
+**Challenge:** Each backend has different tool call/response shapes. Journal must normalize these to a common schema.
+
+#### 2. Orchestrator Integration (`pkg/engine/`)
+
+**Wave launch** (`pkg/engine/runner.go`)
+- [ ] Load journal before constructing agent prompt
+- [ ] Inject `context.md` as preamble if journal exists
+- [ ] Create journal instance per agent (keyed by `wave{N}/agent-{ID}`)
+- [ ] Pass journal to backend via context
+
+**Checkpoint triggers**
+- [ ] After Field 0 verification passes → `journal.Checkpoint("001-isolation")`
+- [ ] After first Edit/Write succeeds → `journal.Checkpoint("002-first-edit")`
+- [ ] After first test run → `journal.Checkpoint("003-tests")`
+- [ ] Before completion report write → `journal.Checkpoint("004-pre-report")`
+
+**Failure recovery** (E19 integration)
+- [ ] Preserve journal when retrying `transient` failures
+- [ ] Include journal summary in retry prompt ("You tried X before, it failed with Y")
+- [ ] Detect retry loops (same tool failing >3 times) from journal
+
+**Merge procedure** (`saw-merge.md`)
+- [ ] Archive journals to `.saw-state/archive/wave{N}-agent-{ID}.tar.gz` after merge
+- [ ] Optionally delete uncompressed journals after archival
+- [ ] Keep archives for N days (configurable retention policy)
+
+#### 3. Agent Prompt Updates
+
+**Scout** (`agents/scout.md`)
+- [ ] Scout agents typically don't journal (read-only, no long-running operations)
+- [ ] Exception: if Scout runs >30min, journal should be enabled
+- [ ] Document when Scout should/shouldn't journal
+
+**Wave Agent** (`agents/wave-agent.md`)
+- [ ] Add section explaining journal recovery in Field 0 preamble
+- [ ] "If you see '## Session Context (Recovered from Tool Journal)', this is your execution history from a prior session. You've already performed these operations — don't repeat them."
+- [ ] Update Field 8 (completion report) to reference journal for file counts/commit SHAs
+
+**Scaffold Agent** (`agents/scaffold-agent.md`)
+- [ ] Enable journaling (scaffold creation can take 10-20min)
+- [ ] Journal helps debug why scaffold compilation failed
+- [ ] Completion report can reference journal for build command outputs
+
+#### 4. Web UI Integration (`scout-and-wave-web`)
+
+**Observatory panel** (`web/src/components/Observatory.tsx`)
+- [ ] Display real-time journal entries as they append
+- [ ] Show tool call history alongside SSE events
+- [ ] Visual timeline: dots for each tool call, colored by success/failure
+
+**Agent detail view** (new component)
+- [ ] Tab: "Tool History" — renders `context.md` from journal
+- [ ] Tab: "Raw Journal" — paginated JSONL viewer
+- [ ] Tab: "Checkpoints" — list named snapshots with restore option
+
+**Failed agent debugging** (new panel)
+- [ ] When agent status is `blocked` or `partial`, show journal summary
+- [ ] Highlight failed tool calls in red
+- [ ] "View full context" expands to complete journal
+
+**API endpoints** (new routes)
+```go
+GET  /api/journal/:wave/:agent          // Get full journal (JSONL)
+GET  /api/journal/:wave/:agent/summary  // Get context.md
+GET  /api/journal/:wave/:agent/checkpoints // List checkpoints
+POST /api/journal/:wave/:agent/restore  // Restore from checkpoint
+```
+
+#### 5. Testing Strategy
+
+**Unit tests** (`pkg/journal/journal_test.go`)
+- [ ] Append entry, verify JSONL persistence
+- [ ] Load existing journal, verify entries restored
+- [ ] Checkpoint creation, verify snapshot saved
+- [ ] Context generation from diverse tool calls
+
+**Integration tests** (`test/integration/journal_test.go`)
+- [ ] Simulate wave execution with journaling enabled
+- [ ] Trigger artificial context compaction mid-wave
+- [ ] Verify agent recovers context after compaction
+- [ ] Verify completion report includes data from journal (commit SHA, file counts)
+
+**E2E tests** (`test/e2e/compaction_test.go`)
+- [ ] Real wave with intentionally small context window
+- [ ] Force compaction after N tool calls
+- [ ] Agent must complete successfully despite compaction
+- [ ] Completion report must reference pre-compaction work
+
+#### 6. Migration & Compatibility
+
+**Existing waves in progress**
+- [ ] Gracefully handle agents with no journal (first execution)
+- [ ] Don't break if `.saw-state/` doesn't exist
+- [ ] Backward compatibility: old completion reports without journal references
+
+**Version detection**
+- [ ] Journal format version field (v1 initially)
+- [ ] Future schema changes handled via version check
+- [ ] Loader rejects unsupported versions with clear error
+
+**Opt-out mechanism**
+- [ ] Config flag: `sawtools config set journal.enabled false`
+- [ ] Useful for debugging journal itself
+- [ ] Documented reason: "Disable only for testing; breaks long-running waves"
+
+#### 7. Documentation Updates
+
+**User-facing** (`docs/`)
+- [ ] New doc: `docs/tool-journaling.md` — what it is, why it exists, how to debug with it
+- [ ] Update `docs/architecture.md` — add journal subsystem to diagram
+- [ ] Update `docs/troubleshooting.md` — "If agent lost context, check journal"
+
+**Protocol** (`protocol/`)
+- [ ] E23A in `execution-rules.md` (already specified above)
+- [ ] I4 clarification in `invariants.md` (already specified above)
+- [ ] New section in `message-formats.md`: Journal Entry Format
+
+**Implementation guide** (`implementations/claude-code/`)
+- [ ] Update `saw-skill.md` — orchestrator must load journals before launch
+- [ ] Update `saw-worktree.md` — journals persist across worktree operations
+- [ ] Update `saw-merge.md` — archive journals after merge
+
+#### 8. Monitoring & Observability
+
+**Metrics to track**
+- [ ] Journal file sizes (alert if >5MB per agent)
+- [ ] Journal append latency (p50, p99)
+- [ ] Context recovery rate (% of agents that loaded prior journal)
+- [ ] Compaction survival rate (agents that completed after compaction)
+
+**Logging**
+- [ ] Log when journal is created (wave{N}/agent-{ID}, first tool call)
+- [ ] Log when journal is loaded (wave{N}/agent-{ID}, N entries recovered)
+- [ ] Log checkpoint creation (checkpoint name, entry count at snapshot)
+- [ ] Log archive operations (compressed size, retention days remaining)
+
+**Alerts**
+- [ ] Journal append failures (disk full, permission denied)
+- [ ] Corrupt journal files (malformed JSONL)
+- [ ] Missing journals on retry (E19 retry without journal = suspicious)
+
+### Dependencies
+
+**External:** None (self-contained implementation)
+
+**Internal:**
+- Tool System Refactoring (v0.19.0) — `pkg/tools/` Workshop with middleware support ✓ shipped
+- Middleware wiring (v0.20.0) — `OnToolCall` hook for timing/logging ✓ shipped
+
+### Impact
+
+**Reliability:** Eliminates execution history loss during compaction. Agents can resume mid-task without rediscovering prior work.
+
+**Debuggability:** Full tool history persisted to disk. Failed agents leave complete audit trails.
+
+**Protocol compliance:** Reduces I4/I5 violations by preserving completion report drafts and commit SHAs across compactions.
+
+**Critical for production:** Long-running waves (>2 hours) will compact at least once. Without journaling, agents in hour 3 lose all context from hours 1-2.
+
+**Performance:** Append-only JSONL writes are <1ms each. Minimal overhead. Journal files typically <500KB per agent (50-100 tool calls @ ~5KB/entry).
 
 ---
 
@@ -178,6 +800,10 @@ scout-and-wave/skills/
 ### Claude Orchestrator Chat Panel
 
 Add a Claude chat panel to `saw serve`. Read-only diagnostic mode first (why did agent B fail?), then write tools (retry, skip), then proactive SSE monitoring. No protocol changes required.
+
+### ✅ Explicit IMPL Targeting in `/saw` Skill — SHIPPED (v0.24.0 / saw-skill v0.9.0)
+
+`--impl <id>` flag added to `/saw wave` and `/saw status` for explicit IMPL doc selection. Supports slug, filename, or path resolution. Auto-selects when exactly 1 pending IMPL exists.
 
 ---
 
@@ -247,7 +873,7 @@ Agents MUST NOT report `status: complete` if their functions are BUILD STUBs. Th
 
 ---
 
-### Short IMPL-Referencing Prompts for Wave Agent Launches
+### ✅ Short IMPL-Referencing Prompts for Wave Agent Launches — SHIPPED (saw-skill v0.7.2)
 
 **Current state:** The orchestrator copy-pastes the full agent brief (file ownership table, interface contracts, verification gate, completion report format) into each `Agent` tool call's `prompt` parameter. Each prompt is 800–1200 tokens, generated token-by-token before any tool calls fire.
 
@@ -372,221 +998,87 @@ With file-granular locking: IMPL-A runs first, locks those six files. IMPL-B wai
 
 ---
 
-## Tool System Refactoring
+**Insight:** Every E-rule and invariant in the protocol is a retroactive constraint — built after an agent produced something malformed and we caught it post-hoc. Structured output parsing is the first time we push a constraint *before* generation. The next phase extends this: the IMPL doc stops being a document that *describes* coordination and becomes a program that *is* coordination.
 
-**Current state:** `pkg/agent/tools.go` in `scout-and-wave-go` implements tools as a `[]Tool` slice where each `Tool` struct contains `Name`, `Description`, `InputSchema`, and an `Execute` function. Tools are constructed via factory functions (`readFileTool()`, `writeFileTool()`, etc.) that close over `workDir`. The `StandardTools(workDir)` function returns the hardcoded set of available tools. Backends serialize this slice into their native tool-call format (Anthropic Messages API `tools` array, OpenAI-compatible `tools` array, etc.) inline before each request.
+**Phase 1 — Constraint-solving validator (immediate next step after structured outputs):**
 
-**Problem:** The current implementation is functional but not extensible. Adding a new tool requires editing `StandardTools()`. Backend-specific serialization is scattered across each backend package (`api/client.go`, `openai/client.go`, `bedrock/client.go`). There's no hook system for logging, timing, or validation. Tool namespacing (e.g., `file:read` vs `git:commit`) is not supported. Custom tools for specific agent types require passing different tool sets through the entire call chain.
+Right now `sawtools validate` checks rules one at a time. Replace it with a constraint solver: model the manifest as a CSP — agents, files, and dependencies as variables and constraints — and *prove* the execution plan is correct rather than checking it's not-wrong. Topological sort over the dep graph catches I2 violations today; extending it to prove optimal wave grouping is a small step. The validator stops being a linter and becomes a proof system.
 
-**Proposed refactoring approaches** (can be combined):
+This also means Scout stops making scheduling decisions. Scout declares *what* agents need (file dependencies, interface dependencies). The solver derives *when* they run — which wave, which agents are parallel. The `wave:` numbers in `file_ownership` are computed, not guessed. I2_WAVE_ORDER errors become impossible because wave assignment is never hand-written.
 
-### 1. Tool Registry Pattern
+**Phase 2 — Interface contracts as compiled types:**
 
-Replace the hardcoded `StandardTools()` slice with a `ToolRegistry` that supports dynamic registration:
+The Scaffold Agent already proto-implements this — it materializes contracts as stub Go files. The missing piece: after scaffolds are written, compile a verification program that proves the stubs implement the contracts. A mismatched interface contract is caught before any Wave agent sees it, not after merge when tests fail.
 
-```go
-type ToolRegistry struct {
-    tools map[string]Tool
-}
+**Phase 3 — Pre-execution simulation:**
 
-func (r *ToolRegistry) Register(tool Tool) error
-func (r *ToolRegistry) Get(name string) (Tool, bool)
-func (r *ToolRegistry) All() []Tool
-func (r *ToolRegistry) Namespace(prefix string) []Tool
-```
+Model each agent as a transaction over its owned files. Before worktrees are created, simulate the execution: prove that no two transactions conflict, that all interface consumers have exactly one producer, that every agent's dependencies are satisfied before it runs. This is database isolation theory (serializable transaction isolation) applied to agent coordination.
 
-**Benefits:**
-- Plugins can register custom tools at runtime via `init()` or explicit calls
-- Test suites can register mock tools without editing production code
-- Agent-specific tool sets can be composed from the registry (e.g., Scout gets read-only tools; Wave agents get read+write+bash)
+The full vision: Scout is a dependency mapper, not a scheduler. The scheduler is a deterministic program derived from the dependency graph. The validator is a proof system. Agents execute transactions. The IMPL doc is a formal specification that can be run, simulated, and verified before any real work happens.
 
-**Example usage:**
-```go
-registry := tools.NewRegistry()
-registry.Register(tools.Read(workDir))
-registry.Register(tools.Write(workDir))
-registry.Register(tools.Bash(workDir))
-
-// Custom tool
-registry.Register(tools.Tool{
-    Name: "query_vector_db",
-    Execute: func(input map[string]interface{}, workDir string) (string, error) { ... },
-})
-
-agentTools := registry.Namespace("file:") // Only file:read, file:write, etc.
-```
-
-### 2. Interface-Based Tool Executor
-
-Replace raw `Execute` function fields with an interface:
-
-```go
-type ToolExecutor interface {
-    Execute(ctx context.Context, input map[string]interface{}) (string, error)
-}
-
-type Tool struct {
-    Name        string
-    Description string
-    InputSchema map[string]interface{}
-    Executor    ToolExecutor
-}
-```
-
-**Benefits:**
-- Executors can carry state (DB connections, API clients, workspace handles)
-- Easier to test (mock implementations of `ToolExecutor`)
-- Supports tool versioning (same tool name, different executor based on agent type)
-
-**Example:**
-```go
-type FileReadExecutor struct {
-    workDir string
-    fs      afero.Fs // Abstract filesystem for testing
-}
-
-func (e *FileReadExecutor) Execute(ctx context.Context, input map[string]interface{}) (string, error) {
-    path := input["path"].(string)
-    return e.fs.ReadFile(filepath.Join(e.workDir, path))
-}
-```
-
-### 3. Tool Middleware / Hook System
-
-Wrap tool execution in a middleware stack for cross-cutting concerns:
-
-```go
-type ToolMiddleware func(next ToolExecutor) ToolExecutor
-
-// Logging middleware
-func LoggingMiddleware(logger *log.Logger) ToolMiddleware {
-    return func(next ToolExecutor) ToolExecutor {
-        return ToolExecutorFunc(func(ctx context.Context, input map[string]interface{}) (string, error) {
-            start := time.Now()
-            logger.Printf("Tool call started: %v", input)
-            result, err := next.Execute(ctx, input)
-            logger.Printf("Tool call finished in %v: err=%v", time.Since(start), err)
-            return result, err
-        })
-    }
-}
-
-// Timing middleware (for Observatory SSE events)
-func TimingMiddleware(onDuration func(toolName string, dur time.Duration)) ToolMiddleware { ... }
-
-// Validation middleware (schema check before execution)
-func ValidationMiddleware(schema map[string]interface{}) ToolMiddleware { ... }
-
-// Permission middleware (enforce read-only mode for Scout agents)
-func PermissionMiddleware(allowedTools []string) ToolMiddleware { ... }
-```
-
-**Benefits:**
-- Agent Observatory timing events can be collected without editing each tool's `Execute` function
-- Unified logging for all tool calls (currently scattered or missing)
-- Input validation enforced before execution
-- Permission enforcement (e.g., Scout agents denied write access) without tool-specific checks
-
-### 4. Backend Adapter Pattern
-
-Extract tool serialization into backend-specific adapters:
-
-```go
-type ToolAdapter interface {
-    Serialize(tools []Tool) interface{}
-    Deserialize(response interface{}) (name string, input map[string]interface{}, error)
-}
-
-// Anthropic Messages API adapter
-type AnthropicToolAdapter struct{}
-
-func (a *AnthropicToolAdapter) Serialize(tools []Tool) interface{} {
-    anthropicTools := make([]map[string]interface{}, len(tools))
-    for i, t := range tools {
-        anthropicTools[i] = map[string]interface{}{
-            "name":         t.Name,
-            "description":  t.Description,
-            "input_schema": t.InputSchema,
-        }
-    }
-    return anthropicTools
-}
-
-// OpenAI-compatible adapter
-type OpenAIToolAdapter struct{}
-
-func (a *OpenAIToolAdapter) Serialize(tools []Tool) interface{} {
-    openaiTools := make([]map[string]interface{}, len(tools))
-    for i, t := range tools {
-        openaiTools[i] = map[string]interface{}{
-            "type": "function",
-            "function": map[string]interface{}{
-                "name":        t.Name,
-                "description": t.Description,
-                "parameters":  t.InputSchema,
-            },
-        }
-    }
-    return openaiTools
-}
-```
-
-**Benefits:**
-- Backend packages no longer contain serialization logic — cleaner separation of concerns
-- Adding a new backend (e.g., Groq, Cohere) requires only implementing a `ToolAdapter`
-- Tool schema changes (e.g., adding a `strict` field for OpenAI) affect only the adapter, not the core `Tool` struct
-
-### 5. Tool Namespaces / Categories
-
-Support namespaced tool names for better organization and filtering:
-
-```go
-// Tool names
-"file:read"
-"file:write"
-"file:list"
-"git:commit"
-"git:diff"
-"web:fetch"
-"claude:agent"  // Agent tool for spawning sub-agents
-```
-
-**Registry namespace filtering:**
-```go
-registry.Register(tools.Read(workDir).WithName("file:read"))
-registry.Register(tools.GitCommit(workDir).WithName("git:commit"))
-
-fileTools := registry.Namespace("file:")   // file:read, file:write, file:list
-gitTools := registry.Namespace("git:")     // git:commit, git:diff
-allTools := registry.All()                 // Everything
-```
-
-**Benefits:**
-- Scout agents can receive only `file:read`, `file:list` (read-only)
-- Wave agents receive `file:*`, `git:*`, `bash`, etc. (read-write)
-- Clearer tool documentation (category is embedded in the name)
-- Observatory SSE events can group tool calls by category
+**Protocol changes required:**
+- `sawtools validate` → constraint solver (replaces rule-by-rule checking with CSP proof)
+- `message-formats.md` — `wave:` numbers in file_ownership become optional (solver derives them)
+- `agents/scout.md` — Scout emits dependency graph only; does not assign wave numbers
+- New `protocol/solver.md` — documents the wave-derivation algorithm and constraint model
 
 ---
 
-**Implementation scope:** Engine only (`scout-and-wave-go`). No protocol changes required — the protocol defines what tools agents receive (Field 4 in `agent-template.md`), not how implementations structure their tool systems.
+## SDK Branch as Generated Build Artifact
 
-**Implementation approach:** Clean-slate refactoring. All five patterns should be implemented together as a cohesive architecture rather than staged incrementally:
+**Current state:** The `scout-and-wave` repo has two long-lived branches:
+- `main` — natural language only. Refers to the `saw` CLI throughout (e.g., `saw validate`, `saw create-worktrees`).
+- `sdk` — SDK-coupled. All `saw` references replaced with `sawtools` (the Go toolkit binary). This branch is hand-maintained: every commit to `main` that touches an NL reference must be ported to `sdk` manually.
 
-1. Delete `StandardTools()` and the current `[]Tool` slice approach entirely
-2. Implement `ToolRegistry` as the foundation with namespace support from day one
-3. Replace `Execute func(...)` fields with the `ToolExecutor` interface
-4. Wrap all executors in the middleware stack (logging, timing, validation, permissions)
-5. Create backend-specific adapters and remove all inline serialization from backend packages
-6. Use namespaced tool names (`file:read`, `git:commit`, etc.) as the primary addressing scheme
+**Problem:** The `main` → `sdk` substitutions are entirely mechanical. Every `saw ` becomes `sawtools `, every "run `saw`" becomes "run `sawtools`", with occasional CLI flag and path adjustments. There is no semantic difference — it is a textual transformation. Hand-maintaining two branches for a mechanical transformation means:
+- Every PR requires a parallel `sdk` version
+- Merge discipline must be enforced by convention, not tooling
+- Contributors must know about the split and remember to port changes
 
-This gives a cleaner final architecture without technical debt from compatibility shims. Breaking change acceptable for v0.x engine versions.
+**Proposed:** Treat the `sdk` branch as a **generated build artifact**, not a hand-edited branch. Define a substitution manifest (e.g., `sdk-substitutions.yaml`) that specifies:
 
-**Benefits of unified refactoring:**
-- No half-migrated state where some tools use Registry and others use the old slice
-- Middleware applied uniformly to all tools from the start (Observatory timing works everywhere)
-- Backend adapters eliminate serialization duplication immediately
-- Agent permission models (Scout read-only, Wave read-write) work via namespace filtering from launch
+```yaml
+substitutions:
+  - pattern: "run `saw "
+    replace: "run `sawtools "
+  - pattern: "exec saw "
+    replace: "exec sawtools "
+  - pattern: "`saw "
+    replace: "`sawtools "
+  # ... other mechanical substitutions
+
+file_includes:
+  - "implementations/claude-code/**/*.md"
+  - "implementations/claude-code/**/*.sh"
+
+# Optionally: files that need non-mechanical edits (override substitution for specific files)
+overrides:
+  - file: "implementations/claude-code/scripts/install.sh"
+    manual: true   # This file is maintained manually in both branches
+```
+
+A CI step (GitHub Actions) generates the `sdk` branch on every push to `main`:
+1. Checkout `main`
+2. Apply all substitutions to all included files
+3. Apply any manual overrides
+4. Force-push the result to `sdk`
+
+The `sdk` branch becomes a read-only generated artifact — never committed to directly. PRs target `main` only. The substitution manifest is the diff between `main` and `sdk`.
+
+**Benefits:**
+- `main` is the only branch contributors touch
+- `sdk` is always up-to-date (generated on every push, not manually ported)
+- Substitution rules are explicit and auditable (the manifest makes the transformation inspectable)
+- Adding new binary-split variants in the future (e.g., a different package manager name) requires only a new manifest entry, not a new hand-maintained branch
+
+**Long-term extension:** If the binary split ever deepens (e.g., different config file paths, different env vars), the manifest grows but the workflow is unchanged. Multiple "flavor" branches (sdk, sdk-docker, sdk-ci) could each have their own manifest.
+
+**Implementation scope:** CI/CD only (`scout-and-wave` repo). No protocol changes required — the protocol content is unchanged; only the tooling that generates the SDK-coupled distribution changes.
+
+**Protocol changes required:** None for the protocol itself. New files:
+- `scripts/generate-sdk-branch.sh` — applies the substitution manifest and commits to `sdk`
+- `.github/workflows/generate-sdk.yml` — triggers on push to `main`
+- `sdk-substitutions.yaml` — the substitution manifest
 
 ---
 

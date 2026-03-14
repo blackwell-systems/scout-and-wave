@@ -1,0 +1,18 @@
+{
+  "repo": {
+    "path": ""
+  },
+  "agent": {
+    "scout_model": "",
+    "wave_model": "",
+    "chat_model": ""
+  },
+  "quality": {
+    "require_tests": false,
+    "require_lint": false,
+    "block_on_failure": false
+  },
+  "appearance": {
+    "theme": "dark"
+  }
+}

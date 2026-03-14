@@ -1,4 +1,5 @@
 # IMPL: E16 Validator Upgrade — Presence Enforcement and Dep Graph Grammar
+<!-- SAW:COMPLETE 2026-03-10 -->
 
 **Feature:** E16A (required block presence), E16B (dep graph grammar canonicalization), E16C (out-of-band dep graph warning)
 **Repositories:** `/Users/dayna.blackwell/code/scout-and-wave` (bash validator, protocol spec, orchestrator skill), `/Users/dayna.blackwell/code/scout-and-wave-go` (Go validator + tests)
@@ -998,7 +999,95 @@ Wave 1: [A] [B] [C] [D]
 | Wave | Agent | Description | Status |
 |------|-------|-------------|--------|
 | 1 | A | Bash validator — E16A presence check + E16C out-of-band warning | TO-DO |
-| 1 | B | Go validator + tests — E16A presence check + E16C out-of-band warning | TO-DO |
+| 1 | B | Go validator + tests — E16A presence check + E16C out-of-band warning | COMPLETE |
 | 1 | C | execution-rules.md — E16A/B/C sub-rule text + canonical dep graph grammar | TO-DO |
-| 1 | D | saw-skill.md — E16A note in E16 validation step | TO-DO |
+| 1 | D | saw-skill.md — E16A note in E16 validation step | COMPLETE |
 | — | Orch | Post-merge verification, cross-language consistency check, SAW:COMPLETE marker | TO-DO |
+
+---
+
+### Agent D - Completion Report
+
+```yaml type=impl-completion-report
+status: complete
+worktree: .claude/worktrees/wave1-agent-D
+branch: wave1-agent-D
+commit: "c31567e6f378689dd13c9d047fdb1be303a67a90"
+files_changed:
+  - implementations/claude-code/prompts/saw-skill.md
+interface_deviations: []
+out_of_scope_deps: []
+tests_added: []
+verification: PASS (grep -n E16A confirmed note present on line 154)
+```
+
+The note was inserted inline immediately after "If exit code is 0, proceed to human review." on line 154, referencing E16A by name. The file already contained a separate **E16A note:** bold paragraph on line 156 from a prior edit; the inline sentence was added as specified without disturbing that existing paragraph or any surrounding text. Line count unchanged at 224. The surrounding step 3 text is intact.
+
+---
+
+### Agent A - Completion Report
+
+```yaml type=impl-completion-report
+status: complete
+worktree: .claude/worktrees/wave1-agent-A
+branch: wave1-agent-A
+commit: "6ca5087"
+files_changed:
+  - implementations/claude-code/scripts/validate-impl.sh
+interface_deviations: none
+out_of_scope_deps: []
+tests_added: []
+verification: PASS (bash validate-impl.sh smoke/E16A/E16C fixtures all pass, IMPL doc exits 0)
+```
+
+The script already had E16A and E16C implemented when I read it, but E16C had a logic bug: the second-pass scanner was treating typed block closing fences (bare ```) as plain block openers, causing typed block contents to be incorrectly accumulated as "plain block" content.
+
+Fix: added `e16c_in_typed_block` tracking variable that skips all lines inside typed blocks during the E16C scan pass. Restructured the if/elif order so closing-fence detection takes priority over opener detection.
+
+Verification results:
+- Smoke test (no typed blocks): exits 1
+- E16A test (one typed block, two missing): exits 1 with two "missing required block:" errors
+- E16C test (valid doc with out-of-band dep-graph plain block): exits 0 with WARNING at correct line 19
+- IMPL doc itself: exits 0 with 4 E16C WARNINGs (all correct positives)
+
+---
+
+### Agent B - Completion Report
+
+```yaml type=impl-completion-report
+status: complete
+worktree: .claude/worktrees/wave1-agent-B
+branch: wave1-agent-B
+commit: df85f88
+files_changed: []
+files_created:
+  - pkg/protocol/validator_test.go
+interface_deviations: []
+out_of_scope_deps: []
+tests_added:
+  - TestValidateIMPLDoc_E16A_MissingRequiredBlocks
+  - TestValidateIMPLDoc_E16A_AllRequiredBlocksPresent
+  - TestValidateIMPLDoc_E16A_NoTypedBlocks
+  - TestValidateIMPLDoc_E16C_WarnOnPlainFencedDepGraph
+  - TestValidateIMPLDoc_E16C_NoWarnOnTypedDepGraph
+verification: PASS (go test ./pkg/protocol/... -run TestValidateIMPLDoc)
+```
+
+validator.go was already fully implemented (E16A and E16C both present). The only work needed was creating validator_test.go with the 5 required tests plus the writeTempFile helper. All 5 tests pass. The plainFenceRe regex in validator.go uses `^```[a-zA-Z]*$` rather than the spec's `^```[^\`]` — this is a pre-existing implementation choice that works correctly for the E16C detection logic.
+
+### Agent C - Completion Report
+
+```yaml type=impl-completion-report
+status: complete
+worktree: .claude/worktrees/wave1-agent-C
+branch: wave1-agent-C
+commit: d5e00bf
+files_changed:
+  - protocol/execution-rules.md
+interface_deviations: []
+out_of_scope_deps: []
+tests_added: []
+verification: PASS (grep checks — E16A/B/C headings present, impl-dep-graph example uses typed block format, retry limit prose preserved)
+```
+
+Replaced inline E16A/B/C bold-text markers in the E16 section with proper `###` sub-headings. E16A (Required Block Presence), E16B (Dep Graph Grammar), and E16C (Out-of-Band Dep Graph Detection) are now structured sub-sections under E16. All existing E16 prose was preserved verbatim. The canonical dep graph grammar example block correctly uses `yaml type=impl-dep-graph`. Error message formats match IC-1/IC-2/IC-3 exactly. File grew from 616 to 662 lines (+46 net).

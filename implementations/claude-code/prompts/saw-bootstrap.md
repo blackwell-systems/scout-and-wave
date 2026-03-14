@@ -1,4 +1,4 @@
-<!-- saw-bootstrap v0.3.4 -->
+<!-- saw-bootstrap v0.4.0 -->
 # SAW Bootstrap: Design-First Project Architecture
 
 Use this mode when starting a new project from scratch with no existing codebase.
@@ -155,10 +155,10 @@ Design for disjoint ownership before writing a line of code:
 ## Scout Types Phase (Always Required)
 
 Bootstrap projects always require shared contracts before any agent starts.
-The Scout defines these contracts in the IMPL doc Scaffolds section. The
+The Scout defines these contracts in the manifest's `scaffolds` section. The
 Scaffold Agent creates the scaffold source files after human review.
 
-**Scout defines the types scaffold in the IMPL doc:**
+**Scout defines the types scaffold in the manifest:**
 - Specifies file location: Go: `internal/types/`, Rust: `crates/types/`,
   TS: `src/types/`, Python: `src/types.py`
 - Lists all interfaces/traits that cross module boundaries
@@ -166,7 +166,7 @@ Scaffold Agent creates the scaffold source files after human review.
 - No source files created at this stage — specification only
 
 **Scaffold Agent creates the types scaffold (after human review):**
-- Reads the approved Scaffolds section from `docs/IMPL/IMPL-bootstrap.md`
+- Reads the approved Scaffolds section from `docs/IMPL/IMPL-bootstrap.yaml`
 - Creates the scaffold source files with the specified types
 - No implementation — interfaces, traits, and types only
 - Verifies the scaffold compiles, then commits to HEAD
@@ -193,187 +193,166 @@ This is inherently integrative work and may have only one or two agents.
 
 ## Output Format
 
-Write `docs/IMPL/IMPL-bootstrap.md`:
+Write `docs/IMPL/IMPL-bootstrap.yaml`:
 
-```markdown
-## Project Architecture
+```yaml
+# IMPL: bootstrap
+title: "<Project Name> Bootstrap"
+feature_slug: "bootstrap"
+verdict: "SUITABLE"
+test_command: "<full test suite command>"
+lint_command: "<check-mode lint command or 'none'>"
+state: "SCOUT_PENDING"
 
-**Language:** [language]
-**Project type:** [CLI / API / library / worker]
-**Key concerns:** [comma-separated list]
+# Project Architecture (bootstrap-specific metadata)
+project:
+  language: "<language>"
+  type: "<CLI | API | library | worker | web app>"
+  concerns:
+    - "<concern 1>"
+    - "<concern 2>"
+    - "<concern 3>"
+  package_structure: |
+    cmd/             <- Entry point (CLI wiring)
+    internal/
+      types/         <- Shared interfaces and types (Scaffold Agent)
+      app/           <- Business logic
+      store/         <- Storage/persistence
 
-## Package Structure
+# Quality Gates
+quality_gates:
+  level: "standard"
+  gates:
+    - type: "build"
+      command: "<e.g. go build ./...>"
+      required: true
+    - type: "test"
+      command: "<e.g. go test ./...>"
+      required: true
+    - type: "lint"
+      command: "<e.g. go vet ./...>"
+      required: false
 
-[Directory tree with one-line description per package]
+# Scaffolds (bootstrap always has a types scaffold)
+scaffolds:
+  - file_path: "path/to/types.go"
+    contents: |
+      package types
 
-## Suitability Assessment
+      // Exact interfaces, structs, enums — binding contracts
+      type FooInterface interface {
+        DoThing() error
+      }
+    import_path: "module/path/types"
+    status: "pending"
 
-Verdict: SUITABLE
+# Interface Contracts
+interface_contracts:
+  - name: "FooInterface"
+    description: "Cross-package boundary contract"
+    definition: |
+      type FooInterface interface {
+        DoThing(ctx context.Context) error
+      }
+    location: "path/to/types.go"
 
-[One paragraph: N concerns identified, clean seams at [boundary descriptions].
-Scout specifies types scaffold in IMPL doc; Scaffold Agent creates source files after human review.]
+# File Ownership (I1: disjoint within waves)
+file_ownership:
+  - file: "internal/types/types.go"
+    agent: "scaffold"
+    wave: 0
+    action: "new"
+  - file: "internal/app/app.go"
+    agent: "B"
+    wave: 1
+    action: "new"
+  - file: "internal/store/store.go"
+    agent: "C"
+    wave: 1
+    action: "new"
+  - file: "cmd/main.go"
+    agent: "A"
+    wave: 2
+    action: "new"
+    depends_on: ["B", "C"]
 
-Estimated times:
-- Design phase: ~X min (this scout)
-- Wave 1 (parallel): ~Z min (N agents × M min, fully parallel)
-- Wave 2 (wiring): ~W min
-Total: ~T min
+# Waves
+waves:
+  - number: 1
+    agents:
+      - id: "B"
+        task: |
+          ## What to Implement
+          <Module description — implements against types scaffold>
 
-Sequential baseline: ~B min
-Time savings: ~D min (P% faster/slower)
+          ## Interfaces to Implement
+          <Exact signatures this agent delivers>
 
-## Quality Gates
+          ## Interfaces to Call
+          <Types from scaffold this agent depends on>
 
-level: standard
+          ## Tests to Write
+          1. TestFunctionName_Scenario - what it verifies
 
-gates:
-  - type: test
-    command: [e.g. go test ./... | npm test | cargo test | pytest]
-    required: true
-  - type: lint
-    command: [e.g. golangci-lint run | cargo clippy | ruff check .]
-    required: false
+          ## Verification Gate
+          go build ./internal/app && go test ./internal/app
 
-## Scaffolds
+          ## Constraints
+          <Hard rules, edge cases, things to avoid>
+        files:
+          - "internal/app/app.go"
+          - "internal/app/app_test.go"
+      - id: "C"
+        task: |
+          <Implementation spec for agent C — same structure as above>
+        files:
+          - "internal/store/store.go"
+          - "internal/store/store_test.go"
+  - number: 2
+    agents:
+      - id: "A"
+        task: |
+          <Entry point wiring — wire all packages together, integration test>
+        files:
+          - "cmd/main.go"
+        dependencies: ["B", "C"]
 
-| File | Contents | Import path | Status |
-|------|----------|-------------|--------|
-| `path/to/types.go` | [list exact types, interfaces, structs] | `module/path/types` | pending |
+# Pre-Mortem
+pre_mortem:
+  overall_risk: "low"
+  rows:
+    - scenario: "Scaffold compilation fails (wrong import path or missing dependency)"
+      likelihood: "low"
+      impact: "high"
+      mitigation: "Scaffold Agent runs go build before committing; fix reported before Wave 1 launches"
+    - scenario: "Wave 2 wiring agent has implicit dependency on Wave 1 internals not in interface contracts"
+      likelihood: "medium"
+      impact: "medium"
+      mitigation: "Add required internals to contracts during review; agents must not access unexported symbols"
 
-## Pre-Mortem
+# Known Issues (omit if none)
+known_issues: []
 
-**Overall risk:** low | medium | high
-
-**Failure modes:**
-
-| Scenario | Likelihood | Impact | Mitigation |
-|----------|-----------|--------|------------|
-| Scaffold compilation fails (wrong import path or missing dependency) | low | high | Scaffold Agent runs go build before committing; fix reported before Wave 1 launches |
-| Wave 2 wiring agent has implicit dependency on Wave 1 internals not in interface contracts | medium | medium | Add required internals to contracts during review; agents must not access unexported symbols |
-
-## Known Issues
-
-[Optional. Document any known risks or ambiguities discovered during analysis
-that do not rise to Pre-Mortem level but should be tracked. Format:
-`- {issue}: {mitigation or note}`. Omit if none.]
-
-## Dependency Graph
-
-```yaml type=impl-dep-graph
-Wave 1 (N parallel agents — package implementations):
-    [B] path/to/module
-         Implements [module] against types scaffold.
-         ✓ root (no dependencies on other agents)
-
-    [C] path/to/module
-         Implements [module] against types scaffold.
-         ✓ root (no dependencies on other agents)
-
-Wave 2 (1 agent — entry point wiring):
-    [A] cmd/main.go
-         Wires all packages together.
-         depends on: [B] [C] [D]
+# Completion Reports (empty at scout time — agents populate via saw set-completion)
+completion_reports: {}
 ```
 
-## Interface Contracts
+**Agent task field:** The `task` field per agent is a multi-line string containing
+the implementation specification (Fields 2-7). Include: what to implement, interfaces
+to implement and call, tests to write, verification gate commands, and constraints.
+The orchestrator wraps this with the 9-field agent template (isolation verification,
+file ownership, completion report format) at launch time via `saw extract-context`.
 
-[Exact, language-native, fully typed signatures for every cross-package boundary.
-No pseudocode. These are binding contracts.]
-
-## File Ownership
-
-```yaml type=impl-file-ownership
-| File | Agent | Wave | Depends On |
-|------|-------|------|------------|
-| path/to/file | B | 1 | — |
-```
-
-## Wave Structure
-
-```yaml type=impl-wave-structure
-Scaffold Agent: [Types scaffold]
-              | (types package compiles cleanly)
-Wave 1: [B] [C] [D]    <- N parallel agents (package implementations)
-              | (all packages build, unit tests pass)
-Wave 2: [A]            <- 1 agent (entry point wiring and integration)
-```
-
-## Wave 1
-
-[Wave-level introduction: what this wave delivers. Each Wave 1 agent implements one module/crate against the Scaffold Agent-produced type contracts. Stub internals are fine; signatures must match contracts.]
-
-### Agent B - {Module description}
-
-[Full 9-field prompt.]
-
-### Agent C - {Module description}
-
-[Full 9-field prompt.]
-
-### Agent D - {Module description}
-
-[Full 9-field prompt.]
-
-## Wave 2
-
-[What this wave delivers: entry point wiring and integration. Wire packages together, write integration test.]
-
-### Agent A - Entry point wiring
-
-[Full 9-field prompt.]
-
-## Verification Gates
-
-Scaffold Agent: [build types module only, e.g., `go build ./internal/types` or `cargo build -p types`]
-Wave 1: [build all modules] + [focused unit tests per module]
-Wave 2: [build full project] + [full test suite]
-
-## Status
-
-- [ ] Scaffold Agent: Types scaffold - [description]
-- [ ] Wave 1 Agent B - [package: description]
-- [ ] Wave 1 Agent C - [package: description]
-- [ ] Wave 1 Agent D - [package: description]
-- [ ] Wave 2 Agent A - [entry point wiring]
-
-## Wave Execution Loop
-
-After each wave completes, work through the Orchestrator Post-Merge Checklist
-below. The merge procedure detail is in `saw-merge.md`. Key principles:
-- Read completion reports first — a `status: partial` or `status: blocked` blocks
-  the merge entirely. No partial merges.
-- Post-merge verification is the real gate. Agents pass in isolation; the merged
-  codebase surfaces cross-package failures none of them saw individually.
-
-## Orchestrator Post-Merge Checklist
-
-After each wave completes:
-
-- [ ] Read all agent completion reports — confirm all `status: complete`; if any
-      `partial` or `blocked`, stop and resolve before merging
-- [ ] Conflict prediction — cross-reference `files_changed` lists
-- [ ] Review `interface_deviations` — update downstream agent prompts for any
-      item with `downstream_action_required: true`
-- [ ] Run E20 stub scan: `bash "${CLAUDE_SKILL_DIR}/scripts/scan-stubs.sh" {files}`
-      Append output to IMPL doc under `## Stub Report — Wave {N}`
-- [ ] Run E21 quality gates (if `## Quality Gates` section present)
-- [ ] Merge each agent: `git merge --no-ff <branch> -m "Merge wave{N}-agent-{ID}: <desc>"`
-- [ ] Worktree cleanup: `git worktree remove <path>` + `git branch -d <branch>` for each
-- [ ] Post-merge verification: `[build + test command from Verification Gates]`
-- [ ] Fix any cascade failures
-- [ ] Tick status checkboxes in this IMPL doc
-- [ ] Feature-specific steps:
-      - [ ] Register new crate in root `Cargo.toml` members (Rust only)
-- [ ] Commit: `git commit -m "[wave N merge message]"`
-- [ ] Launch next wave (or pause for review)
-```
+**Validation:** After writing the manifest, the orchestrator runs `saw validate`
+on it. If validation fails, you will receive a correction prompt listing specific
+errors. Fix only the failing fields — do not regenerate the entire manifest.
 
 ## Rules
 
-- You may create one artifact: the IMPL doc at `docs/IMPL/IMPL-bootstrap.md`. Do not create, modify, or delete any source files. Specify scaffold file contents in the IMPL doc Scaffolds section — the Scaffold Agent will create them after human review.
+- You may create one artifact: the IMPL manifest at `docs/IMPL/IMPL-bootstrap.yaml`. Do not create, modify, or delete any source files. Specify scaffold file contents in the manifest Scaffolds section — the Scaffold Agent will create them after human review.
 - Every interface you define is a binding contract. Wave 1 agents implement
   against these without seeing each other's code.
-- The Scout must specify a types scaffold in the IMPL doc Scaffolds section. Do not skip it even if
+- The Scout must specify a types scaffold in the manifest Scaffolds section. Do not skip it even if
   interfaces seem obvious; it creates the foundation all agents depend on. The Scaffold Agent will
   create the source files after human review.
 - Prefer more packages with smaller scopes over fewer with larger ones.
@@ -382,7 +361,6 @@ After each wave completes:
   A CLI tool with 3 concerns needs 3 packages, not 8.
 - If fewer than 3 concerns are identified, flag as NOT SUITABLE and recommend
   sequential implementation or a redesign that produces more separable concerns.
-- After writing the IMPL doc, expect validation feedback (E16). If the
-  orchestrator returns errors for typed-block sections (`impl-file-ownership`,
-  `impl-dep-graph`, `impl-wave-structure`), rewrite only the failing sections.
-  Do not regenerate the entire document.
+- After writing the manifest, expect validation feedback via `saw validate`. If the
+  orchestrator returns errors, fix only the failing fields — do not regenerate the
+  entire manifest.

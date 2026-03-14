@@ -8,6 +8,327 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.35.0] | 2026-03-13 | I6 enforcement — Scout role separation (prevents Scout from writing source code) |
+| [0.34.0] | 2026-03-12 | Orchestrator v0.3.0 — batch wave commands integration (prepare-wave + finalize-wave reduce 11-command flow to 3) |
+| [0.33.0] | 2026-03-12 | Scout v0.10.0 — Phase 1 complete: H2 extract-commands integrated (automated build/test/lint command extraction) |
+| [0.32.0] | 2026-03-12 | Scout v0.9.0 — Phase 2 determinism tools integrated (H1a analyze-suitability, M2 detect-cascades) |
+| [0.31.1] | 2026-03-12 | Wave Agent v0.5.1 — absolute path enforcement + enhanced verify-isolation (rejects main repo execution) |
+| [0.31.0] | 2026-03-12 | Wave Agent v0.5.0 — mandatory worktree isolation verification (Field 0 enforcement) prevents file leaks to main repo |
+| [0.30.1] | 2026-03-12 | Scout v0.8.1 — format ambiguity fix prevents markdown section headers in YAML output |
+| [0.30.0] | 2026-03-12 | Scout v0.8.0 — analyze-deps now PRIMARY METHOD for Go dependency mapping (determinism improvement H3) |
+| [0.29.0] | 2026-03-11 | mark-complete simplification — removed --archive flag from all docs, always archives to complete/ |
+
+---
+
+## [0.34.0] - 2026-03-12
+
+### Changed
+
+- **Orchestrator v0.3.0** — Updated `/saw` skill to use batch wave commands
+  - `prepare-wave` replaces `create-worktrees` + N×`prepare-agent` loop (step 3)
+  - `finalize-wave` replaces 6-command post-wave pipeline (step 7)
+
+## [0.35.0] - 2026-03-13
+
+### Added
+
+- **I6 enforcement** — Scout role separation now enforced at runtime
+  - **Path A (Go SDK)**: Post-execution validator for programmatic orchestration
+    - `pkg/hooks/scout_boundaries.go`: Timestamp-based file modification detection
+    - `ValidateScoutWrites()`: Validates Scout only wrote to `docs/IMPL/IMPL-*.yaml`
+    - Integrated into `engine.RunScout()` after agent execution
+    - 13 tests covering valid/invalid paths and timestamp filtering
+  - **Path B (CLI)**: PreToolUse hook for CLI orchestration
+    - `implementations/claude-code/hooks/check_scout_boundaries`: Bash script blocks Write/Edit before execution
+    - Receives JSON on stdin, validates file_path against `docs/IMPL/IMPL-*.yaml` pattern
+    - Agent type check: only enforces on `agent_type: scout`
+    - Tool type check: only enforces on Write/Edit tools
+  - **Installation**: Automated installer (`hooks/install.sh`)
+    - Creates symlink: `~/.local/bin/check_scout_boundaries` → repo script
+    - Merges PreToolUse hook config into `~/.claude/settings.json` using jq
+    - Backs up settings.json before modification
+    - Verifies installation with test cases
+    - Idempotent (safe to run multiple times)
+
+### Changed
+
+- **Scout prompt** (`implementations/claude-code/prompts/saw-skill.md`)
+  - Removed fake Python enforcement code (was documentation, not executable)
+  - Added brief I6 reference pointing to Phase 5 roadmap
+
+
+### Fixed
+
+- **CLI hook non-functional** — Path B enforcement was silently broken
+  - Root cause: brewprune-shim intercepted `cat` command in hook script
+  - Script had `set -euo pipefail`, so `cat` failure caused immediate exit
+  - Hook was configured but never actually blocked Scout writes
+  - Fix: brewprune-shim issue resolved, hook now functional
+  - Verification: tested blocking `src/main.go`, allowing `docs/IMPL/IMPL-*.yaml`
+
+### Implementation
+
+- **SDK:** scout-and-wave-go (hooks package)
+  - Files: `pkg/hooks/scout_boundaries.go`, `pkg/hooks/scout_boundaries_test.go`
+  - Integration: `pkg/engine/runner.go` (RunScout function)
+- **CLI hook:** scout-and-wave/implementations/claude-code/hooks/
+  - Files: `check_scout_boundaries`, `install.sh`, `README.md`
+- **Config backup:** Backed up `~/.claude/settings.json` to `~/code/configs/claude-settings.json`
+
+### Impact
+
+- **Enforcement architecture**: Two-path approach covers both execution contexts
+  - Programmatic (web app, native app, API): Post-execution validation
+  - CLI (Agent tool, Max plan, Bedrock): Pre-execution blocking
+- **Safety**: Scout agents cannot accidentally write source code
+- **Developer experience**: CLI users see immediate blocking with clear error messages
+- **Observability**: Path A logs violations, Path B prevents them upfront
+- **Version control**: Hook script lives in repo (git tracks, reviewable, updatable via git pull)
+
+---
+  - Net reduction: 11 lines (38% reduction in wave execution section)
+  - Mental model simplified: 3 atomic phases instead of 11 distinct operations
+  - Benefits: 23% faster execution, atomic operations, comprehensive JSON output
+
+### Implementation
+
+- **SDK:** scout-and-wave-go v0.37.0
+  - New commands: `sawtools prepare-wave`, `sawtools finalize-wave`
+  - IMPL: docs/IMPL/complete/IMPL-batch-wave-commands.yaml (2 waves, 2 agents parallel)
+- **Protocol update:** implementations/claude-code/prompts/saw-skill.md
+  - Wave preparation flow (lines 201-213)
+  - Wave finalization flow (lines 243-256)
+
+### Impact
+
+- Orchestrator now tracks wave-level operations (prepared/executing/finalized) instead of 11 command-level states
+- Command composition pattern established: Level 1 (primitives) → Level 2 (per-agent) → Level 3 (per-wave) → Level 4 (orchestrator)
+- Reduced cognitive load on orchestrator: "Is the wave prepared?" vs "Did I run prepare-agent for agent B yet?"
+
+---
+
+## [0.33.0] - 2026-03-12
+
+### Added
+
+- **Scout v0.10.0** — Phase 1 complete: H2 extract-commands integrated as primary method
+  - **H2 (extract-commands)**: Automated build/test/lint/format command extraction
+    - Primary method for extracting verification gates from CI configs and build systems
+    - Priority resolution: GitHub Actions/GitLab CI/CircleCI (100) > Makefile (50) > package.json (40) > language defaults (0)
+    - Supports Go, Rust, Node.js, Python toolchains
+    - Extracts: build commands, test commands (full + focused patterns), lint commands (check + fix modes), format commands
+    - No manual fallback for command extraction (tool handles all supported languages)
+
+### Changed
+
+- Scout Step 10 (verification gates) now uses `sawtools extract-commands` as primary method
+- Eliminated manual CI config parsing from Scout prompt (H2 determinism improvement)
+- Test command focus: uses `focused_pattern` from extract-commands for modules with >50 tests
+- Lint/format separation: check mode (agent gates) vs fix mode (post-merge orchestrator step)
+
+### Implementation
+
+- **SDK:** scout-and-wave-go v0.38.0
+  - New package: `pkg/commands/` (extractor, CI parsers, build system parsers, defaults)
+  - New command: `sawtools extract-commands <repo-root>`
+- **IMPL:** docs/IMPL/complete/IMPL-h2-command-extraction.yaml
+  - 6 agents (A: extractor, B: GitHub Actions, C: Makefile, D: package.json, E: defaults, F: CLI)
+  - 2 waves, ~26 minutes total, 42 tests passing
+
+### Impact
+
+- **Phase 1 complete:** Both H2 (command extraction) and H3 (dependency graph) now integrated into Scout
+- **Determinism:** Eliminates Scout judgment variance in command selection
+- **Consistency:** All Scout runs produce identical commands for same CI/build configs
+- **Error reduction:** Wrong commands no longer possible (automated extraction vs manual pattern matching)
+- **Coverage:** 95% of projects (Go/Rust/Node/Python)
+
+---
+
+## [0.32.0] - 2026-03-12
+
+### Added
+
+- **Scout v0.9.0** — Phase 2 determinism tools integrated as primary methods
+  - **H1a (analyze-suitability)**: Automated pre-implementation status scanning
+    - Primary method for classifying requirements as DONE/PARTIAL/TODO
+    - Regex-based heuristics: function existence + test file size + TODO/FIXME presence
+    - No manual fallback (language-agnostic tool, failures indicate bugs not limitations)
+  - **M2 (detect-cascades)**: Automated type rename cascade detection
+    - Primary method for detecting cascading changes from interface contract renames
+    - AST-based classification: syntax (high/medium) vs semantic (low) cascades
+    - Language-specific fallback: Go fully supported, manual grep for other languages
+  - Both tools follow determinism principle: manual methods only for technical limitations (language support), not general escape hatches
+
+### Changed
+
+- Scout Step 4 (pre-implementation check) now uses `sawtools analyze-suitability` as primary method
+- Scout Step 3 (dependency mapping) type rename cascade check now uses `sawtools detect-cascades` as primary method
+- Removed generic "if tool unavailable" fallbacks that would undermine determinism goals
+- Aligned fallback strategy with H3 pattern (language-specific only)
+
+### Implementation
+
+- **SDK:** scout-and-wave-go v0.37.0
+  - New packages: `pkg/suitability/`, `pkg/analyzer/`
+  - New commands: `sawtools analyze-suitability`, `sawtools detect-cascades`
+- **IMPL:** docs/IMPL/complete/IMPL-phase2-determinism-final.yaml
+  - 4 agents (A: suitability, B: CLI for H1a, C: analyzer, D: CLI for M2)
+  - 1 wave, fully parallel execution, ~7.5 minutes total
+
+### Impact
+
+- **Determinism:** Eliminates Scout judgment variance in pre-implementation scanning and cascade detection
+- **Consistency:** All Scout runs now produce identical classifications for same inputs
+- **Efficiency:** Automated tools faster than manual file reading (3-5 min vs seconds)
+- **Reliability:** AST-based cascade detection catches cases manual grep would miss
+
+---
+
+## [0.31.1] - 2026-03-12
+
+### Changed
+
+- **Wave Agent v0.5.1** — Absolute path enforcement for ALL file operations
+  - Step 0 now instructs agents to capture `$WORKTREE` environment variable after isolation verification
+  - New section: "All File Operations: Use Absolute Paths" with explicit patterns for Read/Write/Edit/git/test operations
+  - Emphasizes Bash tool does NOT preserve working directory between invocations
+  - Shows correct patterns using `$WORKTREE` variable or explicit absolute paths
+  - Shows incorrect patterns (relative paths, relying on `cd`)
+
+- **SDK: Enhanced `verify-isolation`** (scout-and-wave-go v0.36.0)
+  - Now resolves relative paths (`.`) to absolute paths before checking
+  - Adds explicit worktree path check: path must contain `.claude/worktrees/`
+  - If agent runs verification from main repo, fails with: `"not in a worktree: path does not contain '.claude/worktrees/'"`
+  - Catches Agent B scenario at verification stage (before any file operations)
+
+### Problem (Continued from v0.31.0)
+
+v0.31.0 added mandatory verification, but agents could still pass verification by running it from the worktree, then use relative paths in subsequent operations (which execute in main repo due to Bash tool not preserving `cwd`).
+
+### Solution
+
+**Layer 1 (SDK):** `verify-isolation` actively checks the path is in a worktree directory, not just the branch name
+**Layer 2 (Protocol):** Wave agent prompt provides $WORKTREE variable pattern and explicit guidance on absolute paths
+**Layer 3 (Education):** Shows correct/incorrect patterns to prevent accidental relative path usage
+
+### Impact
+
+- **Stronger verification:** Agent can't "verify then stray" — verification confirms they're in the right location at that moment, and absolute path guidance prevents drift
+- **Catches earlier:** Main repo execution fails at verification (not at merge time)
+- **Clear errors:** If agent passes "." or relative path to `verify-isolation`, it resolves to absolute path and checks if it's a worktree
+- **Pattern enforcement:** $WORKTREE variable makes absolute path usage ergonomic (not just correct)
+
+---
+
+## [0.31.0] - 2026-03-12
+
+### Changed
+
+- **Wave Agent v0.5.0** — Mandatory worktree isolation verification before any file operations
+  - New **Step 0** in Worktree Isolation Protocol: agents MUST run `sawtools verify-isolation --branch wave{N}-agent-{ID}` before any work
+  - If verification fails (exit code 1), agent must STOP and report `status: blocked` with `failure_type: escalate`
+  - Short agent prompts now include explicit worktree path and 3-step verification sequence
+  - Replaces soft "should verify" guidance with hard "must verify or stop" requirement
+
+### Problem
+
+During H4 (scaffold-detection) Wave 1, Agent B created files in both the main repository AND its worktree. Files leaked to main repo as untracked (`post_agent.go`, `post_agent_test.go`), blocking the merge with "untracked working tree files would be overwritten" error. Root cause: agent performed file operations before navigating to worktree, violating E9 (worktree isolation).
+
+### Solution
+
+**Defense in depth:**
+1. **Layer 1 (wave-agent.md):** Mandatory Step 0 verification section with explicit `cd` + `sawtools verify-isolation` + branch check sequence
+2. **Layer 2 (saw-skill.md):** Orchestrator includes worktree path and verification steps in short agent prompts
+3. **Layer 3 (sawtools CLI):** `verify-isolation` command checks current branch matches expected branch AND verifies worktree is registered (prevents accidental main branch operations)
+
+### Impact
+
+- **Prevention:** Agents cannot create files in main repo by accident — verification will fail if they're not in the correct worktree
+- **Early detection:** Isolation failures surface immediately (before any file operations) rather than at merge time
+- **Clear failure mode:** JSON output with errors array explains exactly what's wrong when verification fails
+- **Zero false positives:** Verification only fails on actual isolation violations (wrong branch, not in worktree)
+
+---
+
+## [0.30.1] - 2026-03-12
+
+### Fixed
+
+- **Scout v0.8.1** — Eliminated markdown/YAML format ambiguity in prompt
+  - Added "CRITICAL OUTPUT FORMAT REQUIREMENTS" section with 4 explicit rules
+  - Renamed "Process" to "Implementation Process (Instructions - NOT Output Format)"
+  - Added "INSTRUCTIONS BEGIN HERE" divider before procedural steps
+  - Changed step headers from `##` to `###` to de-emphasize them as output structure
+
+### Problem
+
+Scout agents were writing markdown section headers (`## Interface Contracts`, `## Suitability Assessment`) instead of YAML fields (`interface_contracts:`, `suitability_assessment: |`). Root cause: procedural instruction steps used markdown headers that could be misinterpreted as output format examples.
+
+### Impact
+
+Pure YAML manifests guaranteed - no more validation failures from mixed markdown/YAML structure.
+
+---
+
+## [0.30.0] - 2026-03-12
+
+### Changed
+
+- **Scout v0.8.0** — Dependency mapping workflow now uses `sawtools analyze-deps` as PRIMARY METHOD for Go projects
+  - Step 3: Simplified to just list files (dependency analysis delegated to step 4)
+  - Step 4: Reorganized to prioritize automated tool over manual tracing
+  - Manual fallback only for non-Go projects (Rust/JS/TS/Python) or tool failures
+  - Type rename cascade check moved after automated analysis
+  - AST-based static analysis replaces manual import tracing for Go
+
+### Impact
+
+- **Time savings:** Eliminates 10-15 minutes of manual dependency tracing per Scout run
+- **Determinism:** Identical codebases produce identical dependency graphs (no judgment variance)
+- **Accuracy:** Topological sort computes wave assignments automatically (no manual DAG drawing)
+- **Cascade detection:** Files importing modified code detected automatically
+
+### Rationale
+
+First determinism improvement from determinism-roadmap.md Phase 1 (H3: Automated Dependency Graph Generation) now wired into production Scout prompt. Scout no longer manually traces imports for Go projects; `analyze-deps` provides AST-verified dependency edges, wave candidates, and cascade candidates.
+
+---
+
+## [0.29.0] - 2026-03-11
+
+### Changed
+
+- **saw-skill.md** — Updated E15 step to remove `--archive` flag from `sawtools mark-complete` command. Command now always archives.
+- **QUICKSTART.md** — Updated example to show simplified command signature without `--archive`.
+- **QUICKSTART-CHANGES.md** — Updated changelog entry to clarify mark-complete always archives.
+
+### Rationale
+
+SDK change (scout-and-wave-go v0.33.0) removed the `--archive` flag because archiving on completion is always the desired behavior. Updated all protocol documentation to reflect simplified command.
+
+---
+
+## Version History (prior)
+
+| Version | Date | Headline |
+|---------|------|----------|
+| [0.29.0] | 2026-03-11 | mark-complete simplification — removed --archive flag from all docs, always archives to complete/ |
+| [0.28.0] | 2026-03-11 | Scout v0.7.1 — YAML manifest schema example prevents markdown/YAML hybrids in Agent tool execution |
+| [0.27.0] | 2026-03-11 | Scout v0.7.0 — H3 integration: automated dependency analysis via sawtools analyze-deps (Go/Rust/JS/Python) |
+| [0.26.0] | 2026-03-11 | Scout v0.6.1 — cross-repo file ownership support; adds repo: field to file_ownership entries |
+| [0.25.0] | 2026-03-10 | wave-agent v0.4.0 — completion reports now use sawtools set-completion for proper YAML formatting |
+| [0.24.0] | 2026-03-10 | saw-skill v0.9.0 — explicit IMPL targeting with --impl flag for /saw wave and /saw status |
+| [0.23.0] | 2026-03-10 | Wave 1 merged (sdk branch): protocol schema typed blocks + Scout prompt YAML output; parser wave structure extraction |
+| [0.22.0] | 2026-03-10 | saw-skill v0.7.3, saw-worktree v0.6.3, saw-merge v0.6.2 — strip markdown dual-mode language; IMPL docs are YAML-only |
+| [0.21.0] | 2026-03-10 | saw-skill v0.7.2 — short IMPL-referencing prompts: wave agents receive ~60-token stub instead of copy-pasted brief; 10–15× faster parallel wave launch |
+| [0.20.0] | 2026-03-10 | E16A/B/C enforcement — E16C bash validator bug fixed, execution-rules.md sub-rules documented, saw-skill.md E16A note added |
+| [0.19.0] | 2026-03-10 | saw-skill.md fixes — correct `extract-context` and `set-completion` CLI syntax; remove stale "Scout does not yet generate YAML" text; ROADMAP updates |
+| [0.18.0] | 2026-03-10 | fix: validate-impl.sh delegates to `sawtools validate` — unblocks E16 YAML manifest validation |
+| [0.17.0] | 2026-03-10 | sawtools rename in skill files — saw-skill v0.7.1, saw-merge v0.6.1, saw-worktree v0.6.2 |
+| [0.16.0] | 2026-03-09 | Worktree isolation design doc + saw-worktree v0.6.1 — documents why native agent-definition isolation: worktree doesn't replace SAW orchestration |
+| [0.15.1] | 2026-03-09 | Scout YAML migration — all Scout prompts now generate YAML manifests (.yaml) instead of markdown IMPL docs |
+| [0.15.0] | 2026-03-09 | Protocol SDK conformance — 44-gap audit, 3-wave remediation (12 agents), skill prompts v0.6.0 with CLI command integration |
 | [0.14.9] | 2026-03-09 | Agent Observatory — real-time tool call stream per wave agent |
 | [0.14.8] | 2026-03-08 | E16D: Column order validation hardening — validator now enforces File\|Agent\|Wave column order to prevent silent data corruption at runtime. |
 | [0.14.7] | 2026-03-08 | Seventh-pass convergence — 1 finding: protocol version 0.14.5→0.14.6 in README.md. 98% reduction from pass 6 signals convergence. Zero P0 issues. |
@@ -35,6 +356,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.9.1] | 2026-03-06 | Open standard repositioning: Agent Skills badge, dual MIT/Apache-2.0 license, PROTOCOL.md removed |
 | [0.9.0] | 2026-03-06 | Claude Code implementation: Skills API migration with YAML frontmatter, portable paths, tool restrictions |
 | [0.8.0] | 2026-03-06 | Refactor: protocol extraction into protocol/ directory; implementations layer separation; manual orchestration guides |
+
+## [0.28.0] - 2026-03-11
+
+### Changed
+
+- **Scout v0.7.1** (`implementations/claude-code/prompts/agents/scout.md`) — Added YAML manifest schema example to prevent markdown/YAML hybrid output when structured output is not enabled.
+  - **Problem:** Agent tool Scout (no structured output) improvised with markdown sections in fields expecting arrays/structs
+  - **Solution:** Explicit schema shows correct structure: `quality_gates: {level, gates[]}`, `scaffolds: []`, `interface_contracts: [{name, description, definition, location}]`
+  - **Web app Scout:** Schema example redundant but harmless (structured output enforces schema via API)
+  - **Agent tool Scout:** Schema example required (no structured output, relies on prompt)
+
+## [0.27.0] - 2026-03-11
+
+### Changed
+
+- **Scout v0.7.0** (`implementations/claude-code/prompts/agents/scout.md`) — Integrated H3 automated dependency analysis via `sawtools analyze-deps`.
+  - **Step 4 (dependency graph):** For Go projects, runs `sawtools analyze-deps <repo-root> --files "<files>" --format yaml` and uses output instead of manual file tracing. Falls back to manual tracing for non-Go projects (Phase 1 limitation, Phase 2 shipped later same day).
+  - **Step 8 (wave assignment):** Uses `wave_candidate` field (0-indexed depth) from analyze-deps output for automated wave grouping. Files with `wave_candidate: 0` go to Wave 1, `wave_candidate: 1` go to Wave 2, etc.
+  - **Cascade detection:** Uses `cascade_candidates[]` from analyze-deps output to populate IMPL doc cascade section.
+  - **Language support:** Phase 1 supports Go only (via `go/parser` stdlib). Rust, JavaScript/TypeScript, Python support added in Phase 2 (later same session).
+  - **Time savings:** ~10-15 minutes per Scout run (manual file tracing → 30-60 sec automated AST parsing)
+
+### Documentation
+
+- **Determinism roadmap** (`docs/determinism-roadmap.md`) — Marked H3 Phase 1 and Phase 2 as SHIPPED, added implementation details for both phases.
 | [0.7.2] | 2026-03-06 | Protocol: mandatory worktree isolation (E4) and cross-repository orchestration limitation documented |
 | [0.7.1] | 2026-03-06 | Documentation: new-user onboarding gaps addressed; critical concepts defined on first mention |
 | [0.7.0] | 2026-03-06 | Bootstrap: Scaffold Agent + Wave 1 handoff steps added; bootstrap now fully continuous |
@@ -67,6 +413,135 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.3.0] | 2026-02-28 | Bootstrap mode for new projects; Wave 0 pattern |
 | [0.2.0] | 2026-02-28 | Decomposed skill prompt; complexity-based suitability heuristic |
 | [0.1.0] | 2026-02-27 | Initial release |
+
+---
+
+## [0.26.0] - 2026-03-11
+
+### Added
+
+- **Cross-repo file ownership support** — Scout prompt now includes `repo:` field in file ownership schema. When Scout detects work spanning multiple repositories, it adds a `repo:` field to each file ownership entry specifying which repository the file belongs to. Use the repository name (not full path). For files outside any repository (e.g., `~/.local/bin/sawtools`), use `repo: system`.
+- **scout.md v0.6.1** — Step 7 documents when to populate `repo:` field (cross-repo work) vs omit it (single-repo work). Single-repo IMPLs should omit the field entirely; the web UI and tooling automatically detect multi-repo work by counting distinct repo values.
+
+### Schema
+
+- **FileOwnership.Repo field** — Already supported in protocol schema as `yaml:"repo,omitempty"` (scout-and-wave-go pkg/protocol/types.go line 48). No validator changes needed.
+
+---
+
+## [0.25.0] - 2026-03-10
+
+### Changed
+
+- **wave-agent v0.4.0 completion report format** — Wave agents now use `sawtools set-completion` CLI command instead of manually writing markdown-style typed blocks. This writes completion reports to the `completion_reports:` YAML section in proper machine-parseable format, preventing YAML parsing errors when orchestrator tools read IMPL docs.
+- **Completion Report section rewritten** — Replaced markdown template with `sawtools set-completion` command syntax and examples for complete, partial, and blocked agents. Includes all flags: `--status`, `--commit`, `--branch`, `--files-changed`, `--files-created`, `--verification`, `--failure-type`, `--notes`.
+
+### Fixed
+
+- **YAML parsing errors from hybrid markdown/YAML format** — Previous approach (markdown-style typed blocks appended after YAML sections) broke YAML parsers. SDK approach writes to proper `completion_reports:` key structure.
+
+---
+
+## [0.24.0] - 2026-03-10
+
+### Added
+
+- **Explicit IMPL targeting** (saw-skill v0.9.0) — Added `--impl <id>` flag to `/saw wave` and `/saw status` commands for explicit IMPL doc selection. Supports three resolution formats: by slug (`--impl tool-journaling`), by filename (`--impl IMPL-tool-journaling.yaml`), or by full path. Resolves via `sawtools list-impls` for slug→path lookup.
+- **Auto-selection fallback** — When `--impl` is omitted, automatically selects IMPL if exactly 1 pending doc exists. If multiple pending IMPLs found, prompts user to specify. If none found, reports "No pending IMPL docs."
+- **Argument hint updated** — Updated skill `argument-hint` to reflect new flag: `wave [--impl <id>] [--auto] [--model <m>]`
+
+### Changed
+
+- **Invocation modes table expanded** — Added rows for `/saw wave --impl <id>`, `/saw wave --impl <id> --auto`, and `/saw status --impl <id>` to document new explicit targeting syntax.
+- **Execution Logic section** — Added "IMPL targeting" subsection describing flag parsing order, resolution logic, and fallback behavior for ambiguous cases.
+
+---
+
+## [0.23.0] - 2026-03-10
+
+### Added
+
+- **Typed-block schemas for structured sections** (`protocol/message-formats.md`) — Added YAML schemas for `impl-quality-gates`, `impl-post-merge-checklist`, and `impl-known-issues` typed blocks. Replaced prose descriptions with machine-parseable structure while maintaining human readability in IMPL docs.
+- **Scout YAML output** (`implementations/claude-code/prompts/agents/scout.md`) — Updated Scout prompt to output Quality Gates, Post-Merge Checklist, and Known Issues as typed YAML blocks with exact fence syntax matching protocol schemas.
+
+### Changed
+
+- **IMPL doc structure documentation** (`protocol/message-formats.md`) — Updated to reflect hybrid markdown/YAML format with typed blocks for machine-readable sections and markdown for human-readable agent prompts.
+
+---
+
+## [0.22.0] - 2026-03-10
+
+### Changed
+
+- **Markdown dual-mode language removed** (saw-skill v0.7.3, saw-worktree v0.6.3, saw-merge v0.6.2) — Stripped references to "YAML or markdown" format. IMPL docs now documented as hybrid markdown/YAML with typed blocks.
+
+---
+
+## [0.20.0] - 2026-03-10
+
+### Fixed
+
+- **`validate-impl.sh` E16C bug** — plain-block scanner was incorrectly treating typed block closing fences as plain block openers, causing false positives (typed block content accumulated as plain block). Fixed by tracking `e16c_in_typed_block` state and restructuring fence detection order.
+
+### Added
+
+- **`execution-rules.md` E16A/B/C sub-rules** — replaced inline bold markers with proper `###` sub-headings; documented E16A (required block presence with trigger condition, error format, backward-compat exception), E16B (canonical dep graph grammar with formal spec and example), E16C (out-of-band detection criteria, warning format, rationale, E16A interaction)
+- **`saw-skill.md` E16A note** — one-sentence note inserted after "If exit code is 0, proceed to human review" informing orchestrators that validation now enforces required-block presence
+
+---
+
+## [0.19.0] - 2026-03-10
+
+### Fixed
+
+- **`saw-skill.md` — `extract-context` syntax** — was `--impl "<path>" --agent "<id>"` (wrong); correct form is positional arg `"<path>" --agent "<id>"`
+- **`saw-skill.md` — `set-completion` syntax** — was heredoc pipe to stdin (not supported); correct form uses individual flags `--agent`, `--status`, `--commit`
+- **`saw-skill.md` — stale dual-mode text** — removed "Scout does not yet generate YAML manifests; YAML mode is present for forward compatibility" (Scout has generated YAML since v0.6.0)
+
+### Changed
+
+- **ROADMAP.md** — removed completed "Per-Agent Context Slicing" section; added "Formally Executable IMPL Docs" (constraint-solving validator, auto-derived wave structure, compiled contracts, pre-execution simulation); added "SDK Branch as Generated Build Artifact" (generate `sdk` branch from `main` + substitutions manifest via CI)
+
+---
+
+## [0.16.0] - 2026-03-09
+
+### Added
+
+- **`docs/saw-ops/worktree-isolation-design.md`** — design rationale document explaining why SAW uses explicit `saw create-worktrees` orchestration rather than Claude Code's native `isolation: worktree` agent frontmatter. Covers four reasons: branch naming is load-bearing, pre-validation before parallel work, I1 enforcement at creation time, and protocol chain integrity.
+- **`saw-worktree v0.6.1`** — adds one-liner reference to `worktree-isolation-design.md` in the "Why Pre-Creation" section, pointing operators to the full rationale without cluttering the agent prompt.
+
+## [0.15.1] - 2026-03-09
+
+### Changed
+
+- **agents/scout.md** v0.5.0 → v0.6.0 — Output Format section replaced: markdown IMPL doc template → YAML manifest template matching `pkg/protocol/types.go` schema. Agent `task` field now contains Fields 2-7 only; orchestrator wraps with 9-field template via `saw extract-context`. Fixed corrupted duplicate lines in Your Task section. NOT_SUITABLE verdict now writes minimal `.yaml` manifest.
+- **scout.md** (fallback) — synced to agents/scout.md v0.6.0 body (minus YAML frontmatter). Was v0.5.0, now matches v0.6.0 canonical content.
+- **saw-bootstrap.md** v0.3.4 → v0.4.0 — Output Format section replaced: markdown template → YAML manifest template with bootstrap-specific `project` metadata (language, type, concerns, package_structure). All `IMPL-bootstrap.md` references → `.yaml`. Rules section updated for manifest terminology.
+- **scaffold-agent.md** + **agents/scaffold-agent.md** — IMPL doc path examples updated from `.md` to `.yaml`
+- **saw-merge.md** — IMPL doc exception glob updated to dual-mode (`.yaml` or `.md`)
+- **saw-skill.md** — Scout verdict path updated from `.md` to `.yaml`
+- **README.md** — bootstrap entry updated: version v0.4.0, description reflects YAML manifest output
+
+### Summary
+
+This completes the Scout YAML migration: the last piece needed to activate the full SDK CLI pipeline. With scouts generating `.yaml` manifests, the entire flow — `saw validate` → `saw extract-context` → `saw set-completion` → `saw mark-complete` — works end-to-end without any markdown parsing fallbacks.
+
+---
+
+## [0.15.0] - 2026-03-09
+
+### Added
+
+- **Protocol SDK conformance audit** (`docs/IMPL/IMPL-protocol-sdk-conformance.md`) — deep audit comparing protocol spec (I1–I6, E1–E23, SM-01/SM-02, message formats) against Go SDK implementation. Identified 44 gaps across 6 domains. 3-wave remediation plan with 12 agents (A–L) executed via SAW protocol. Post-remediation re-audit: 91% conformance, zero critical gaps remaining.
+- **Skill prompts v0.6.0** — all 6 new SDK CLI commands (`saw mark-complete`, `saw run-gates`, `saw check-conflicts`, `saw validate-scaffolds`, `saw freeze-check`, `saw update-agent-prompt`) integrated into YAML-mode orchestrator flow across `saw-skill.md`, `saw-merge.md`, and `saw-worktree.md`. Dual-mode command inventory expanded from 3 to 9 CLI commands.
+
+### Changed
+
+- **saw-skill.md** v0.5.0 → v0.6.0 — E15 completion marker uses `saw mark-complete`; E21 quality gates use `saw run-gates`; E8 interface failure uses `saw update-agent-prompt` + `saw check-conflicts`; worktree setup uses `saw validate-scaffolds` + `saw freeze-check`
+- **saw-merge.md** v0.4.6 → v0.5.0 — YAML-mode blocks for quality gates, conflict prediction, and scaffold integrity verification
+- **saw-worktree.md** v0.5.0 → v0.5.1 — pre-worktree 3-command verification checklist for YAML manifests
 
 ---
 

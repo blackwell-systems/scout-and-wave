@@ -6,8 +6,9 @@ This guide walks you through your first SAW session step-by-step, showing exactl
 
 Before starting, ensure you've completed the [installation steps](README.md#installation) in the main README:
 - [x] Permissions configured (`"Agent"` in allow list)
-- [x] Repository cloned
-- [x] Skill installed (`~/.claude/skills/saw/SKILL.md`)
+- [x] Repository cloned (scout-and-wave for protocol/skills)
+- [x] `sawtools` binary installed (`~/.local/bin/sawtools` from scout-and-wave-go)
+- [x] Skill installed (`~/.claude/skills/saw/saw-skill.md` symlinked)
 - [x] Installation verified (`/saw status` works)
 
 ## Your First SAW Run
@@ -74,7 +75,7 @@ Interface Contracts:
       Delete(key string)
   }
 
-IMPL doc written to: docs/IMPL/IMPL-simple-cache.md
+IMPL doc written to: docs/IMPL/IMPL-simple-cache.yaml
 
 Review the IMPL doc. This is your last chance to change interface signatures.
 Ready to proceed?
@@ -82,49 +83,42 @@ Ready to proceed?
 
 ### Step 3: Review the IMPL doc
 
-The IMPL doc is the coordination artifact. Key sections to check:
+The IMPL doc is the coordination artifact (now in YAML format). Key sections to check:
 
-**File Ownership Table:**
-| File | Agent | Wave | Depends On |
-|------|-------|------|------------|
-| src/cache/cache.go | A | 1 | - |
-| src/cache/memory.go | A | 1 | - |
-| src/client/client.go | B | 1 | A |
-| File | Agent | Wave | Depends On |
-|------|-------|------|------------|
-| src/cache/cache.go | A | 1 | - |
-| src/cache/memory.go | A | 1 | - |
-| src/client/client.go | B | 1 | A |
-| File | Agent | Wave | Depends On |
-|------|-------|------|------------|
-| src/cache/cache.go | A | 1 | - |
-| src/cache/memory.go | A | 1 | - |
-| src/client/client.go | B | 1 | A |
-| File | Agent | Wave | Depends On |
-|------|-------|------|------------|
-| src/cache/cache.go | A | 1 | - |
-| src/cache/memory.go | A | 1 | - |
-| src/client/client.go | B | 1 | A |
-| File | Agent | Wave | Depends On |
-|------|-------|------|------------|
-| src/cache/cache.go | A | 1 | - |
-| src/cache/memory.go | A | 1 | - |
-| src/client/client.go | B | 1 | A |
-| src/client/client.go | Agent B | modify |
+**File Ownership (YAML array):**
+```yaml
+file_ownership:
+  - file: "src/cache/cache.go"
+    agent: "A"
+    wave: 1
+    action: "new"
+  - file: "src/cache/memory.go"
+    agent: "A"
+    wave: 1
+    action: "new"
+  - file: "src/client/client.go"
+    agent: "B"
+    wave: 1
+    action: "modify"
+    depends_on: ["A"]
 ```
 
 Verify:
 - [x] No file appears in multiple agents' ownership (disjoint ownership)
 - [x] All files that need to change are assigned
 
-**Interface Contracts:**
-```go
-// Package cache provides caching interfaces and implementations.
-type CacheInterface interface {
-    Get(key string) ([]byte, bool)
-    Set(key string, value []byte)
-    Delete(key string)
-}
+**Interface Contracts (YAML array):**
+```yaml
+interface_contracts:
+  - name: "CacheInterface"
+    description: "Caching interface for HTTP responses"
+    definition: |
+      type CacheInterface interface {
+          Get(key string) ([]byte, bool)
+          Set(key string, value []byte)
+          Delete(key string)
+      }
+    location: "src/cache/types.go"
 ```
 
 Verify:
@@ -132,28 +126,33 @@ Verify:
 - [x] Types are complete (return values, parameters)
 - [x] No missing methods
 
-**Scaffolds Section:**
-```markdown
-## Scaffolds
-
-| File | Contents | Import path | Status |
-|------|----------|-------------|--------|
-| `src/cache/types.go` | `CacheInterface interface { Get, Set, Delete }` | `example/cache` | pending |
+**Scaffolds Section (YAML array):**
+```yaml
+scaffolds:
+  - file_path: "src/cache/types.go"
+    contents: |
+      type CacheInterface interface {
+          Get(key string) ([]byte, bool)
+          Set(key string, value []byte)
+          Delete(key string)
+      }
+    import_path: "example/cache"
+    status: "pending"
 ```
 
 If scaffolds are listed, the Scaffold Agent will create them automatically in the next step.
 
-**Agent Prompts:**
+**Agent Tasks:**
 
-Each agent has a detailed prompt in the IMPL doc. You can read these to understand what each agent will do.
+Each agent has a task specification in the `waves` array. The orchestrator wraps these with the 9-field agent template at launch time.
 
 **If you want to make changes:**
 
-You can edit the IMPL doc directly:
-- Adjust interface signatures
-- Reassign files between agents
-- Change wave structure
-- Modify agent prompts
+You can edit the IMPL doc directly (it's YAML):
+- Adjust interface signatures in `interface_contracts`
+- Reassign files in `file_ownership`
+- Change wave structure in `waves`
+- Modify agent task descriptions
 
 ```
 You: Can you update the CacheInterface to include a Clear() method?
@@ -238,6 +237,7 @@ Both agents work simultaneously in their worktrees:
 - Reading files (via Read, Glob, Grep)
 - Writing implementation (via Edit, Write)
 - Running tests (via Bash: `go test ./...`)
+- Writing completion reports (via `sawtools set-completion`)
 - Committing to their worktree branches
 
 You'll see periodic updates:
@@ -247,56 +247,63 @@ Agent A: Reading src/cache/types.go...
 Agent B: Writing src/client/client.go...
 Agent A: Running tests...
 Agent B: Running tests...
+Agent A: Writing completion report...
+Agent B: Writing completion report...
 ```
 
 #### 4d. Agents complete and report
 
-```
-Agent A completed:
-  Status: complete
-  Files changed:
-    - src/cache/cache.go (127 lines)
-    - src/cache/memory.go (84 lines)
-    - src/cache/cache_test.go (156 lines)
-  Verification:
-    OK go build ./src/cache
-    OK go test ./src/cache (8/8 tests passing)
-    OK go vet ./src/cache
-  Commits: 2 commits on wave1-agent-A
-  Interface deviations: none
-  Out-of-scope discoveries: none
+Completion reports are written to the IMPL doc's `completion_reports` section using `sawtools set-completion`:
 
-Agent B completed:
-  Status: complete
-  Files changed:
-    - src/client/client.go (+45 -3 lines)
-    - src/client/options.go (+12 -0 lines)
-    - src/client/client_test.go (+67 -2 lines)
-  Verification:
-    OK go build ./src/client
-    OK go test ./src/client (5/5 tests passing)
-    OK go vet ./src/client
-  Commits: 1 commit on wave1-agent-B
-  Interface deviations: none
-  Out-of-scope discoveries: none
+```yaml
+completion_reports:
+  A:
+    status: "complete"
+    commit: "abc123def"
+    branch: "wave1-agent-A"
+    files_changed:
+      - "src/cache/cache.go"
+      - "src/cache/memory.go"
+      - "src/cache/cache_test.go"
+    verification: "PASS"
+    tests_added:
+      - "TestCacheGet"
+      - "TestCacheSet"
+      - "TestCacheDelete"
+  B:
+    status: "complete"
+    commit: "def456ghi"
+    branch: "wave1-agent-B"
+    files_changed:
+      - "src/client/client.go"
+      - "src/client/options.go"
+      - "src/client/client_test.go"
+    verification: "PASS"
+    tests_added:
+      - "TestClientWithCache"
+      - "TestClientCacheMiss"
 ```
 
-Both agents report `Status: complete`. If either reported `Status: partial` or `Status: blocked`, the wave would not proceed to merge.
+Both agents report `status: complete`. If either reported `status: partial` or `status: blocked`, the wave would not proceed to merge.
 
 ### Step 5: Orchestrator merges
 
-The orchestrator verifies both agents succeeded, then merges sequentially:
+The orchestrator verifies both agents succeeded, then merges sequentially using `sawtools`:
 
 ```
 All agents completed successfully. Beginning merge...
 
-Merging wave1-agent-A...
-  -> git merge --no-ff wave1-agent-A
-  OK Merged (no conflicts)
+Running: sawtools verify-commits docs/IMPL/IMPL-simple-cache.yaml --wave 1
+  OK All agents have commits on their branches
 
-Merging wave1-agent-B...
-  -> git merge --no-ff wave1-agent-B
-  OK Merged (no conflicts)
+Running: sawtools merge-agents docs/IMPL/IMPL-simple-cache.yaml --wave 1
+  Merging wave1-agent-A...
+    -> git merge --no-ff wave1-agent-A
+    OK Merged (no conflicts)
+
+  Merging wave1-agent-B...
+    -> git merge --no-ff wave1-agent-B
+    OK Merged (no conflicts)
 ```
 
 **Why no conflicts?**
@@ -306,7 +313,7 @@ Disjoint file ownership guarantees conflict-free merges. Agent A and Agent B nev
 ### Step 6: Post-merge verification
 
 ```
-Running post-merge verification gate:
+Running: sawtools verify-build docs/IMPL/IMPL-simple-cache.yaml
 
 Linter auto-fix:
   -> go fmt ./...
@@ -332,11 +339,18 @@ Example: Agent B added a cache field to `Client` struct. If a test in a differen
 ### Step 7: Cleanup and completion
 
 ```
+Running: sawtools cleanup docs/IMPL/IMPL-simple-cache.yaml --wave 1
+
 Cleaning up worktrees:
   -> Removed .claude/worktrees/wave1-agent-A
   -> Removed wave1-agent-A branch
   -> Removed .claude/worktrees/wave1-agent-B
   -> Removed wave1-agent-B branch
+
+Running: sawtools mark-complete docs/IMPL/IMPL-simple-cache.yaml
+
+  -> Writing SAW:COMPLETE marker to IMPL doc
+  -> Archiving to docs/IMPL/complete/IMPL-simple-cache.yaml
 
 OK Wave 1 complete and merged to main
 
@@ -549,7 +563,7 @@ Solution: Add `"Agent"` to `~/.claude/settings.json` permissions allow list (see
 
 **Problem: Scaffold Agent says "Build failed"**
 
-Solution: Check the IMPL doc Scaffolds section for the error message. Fix the interface contracts and re-run `/saw wave`.
+Solution: Check the IMPL doc `scaffolds` section for the error message (status will show `FAILED: <reason>`). Fix the interface contracts and re-run `/saw wave`.
 
 **Problem: Merge conflicts**
 

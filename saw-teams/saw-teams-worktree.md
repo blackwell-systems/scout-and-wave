@@ -139,14 +139,13 @@ if [ -f .git/hooks/pre-commit ]; then
   cp .git/hooks/pre-commit .git/hooks/pre-commit.saw-backup
 fi
 
-# Install the SAW isolation guard from the repository
-cp "${CLAUDE_SKILL_DIR}/hooks/pre-commit-guard.sh" .git/hooks/pre-commit
-chmod +x .git/hooks/pre-commit
+# Install the SAW isolation guard (handled automatically by sawtools)
+# sawtools create-worktrees writes the hook programmatically
+# Hook embedded in scout-and-wave-go/pkg/worktree/manager.go
 ```
 
-The hook (`hooks/pre-commit-guard.sh` in the SAW repository) checks: if
-branch is `main` AND SAW worktrees exist AND `SAW_ALLOW_MAIN_COMMIT` is
-not set, block the commit with an instructive error listing available
+The hook (installed automatically) checks: if branch is `main` or `master` AND
+`SAW_ALLOW_MAIN_COMMIT` is not set, block the commit with an instructive error
 worktrees. The lead sets `SAW_ALLOW_MAIN_COMMIT=1` before its own
 legitimate commits to main (scaffold commits, post-merge commits, lint fix
 commits).

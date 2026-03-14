@@ -16,36 +16,78 @@ SAW uses the IMPL doc (Implementation Document) as the single source of truth (I
 
 ---
 
-## IMPL Doc Structure
+## IMPL Doc Format
 
-The IMPL doc is a markdown file with the following sections in order:
+**File extension:** `.yaml` or `.yml`
 
-    # IMPL: {Feature Name}
-    <!-- Present only when all waves are merged and verified. Omit entirely for active IMPL docs. -->
+The IMPL doc is a YAML manifest with structure matching the `IMPLManifest` schema (see scout-and-wave-go/pkg/protocol/types.go).
 
-    **Feature:** {One-line description}
-    **Repository:** {Absolute path to primary repository root}
-    **Repositories:** {Comma-separated list of absolute paths — omit for single-repo waves}
-    **Plan Reference:** {Path to original plan/audit/issue}
+**Characteristics:**
+- Pure YAML structure, schema-validated via `sawtools validate`
+- Completion reports stored in `completion_reports:` map at root level (keyed by agent ID)
+- Scaffolds, quality gates, and file ownership as explicit YAML fields
+- Machine-readable, optimized for SDK-based implementations
 
-    ---
+**Example:**
+```yaml
+title: "Feature Name"
+feature: "One-line description"
+repository: "/absolute/path/to/repo"
+suitability_assessment:
+  verdict: "SUITABLE"
+  reasoning: "..."
+scaffolds:
+  - file: "pkg/types/shared.go"
+    contents: "type Foo struct { ... }"
+    import_path: "module/pkg/types"
+    status: "committed"
+    commit: "abc1234"
+completion_reports:
+  A:
+    status: "complete"
+    commit: "def5678"
+    verification: "PASS"
+```
 
-    ## Suitability Assessment
+**Markdown format deprecated:** Prior to v0.7.0, Scout agents generated markdown IMPL docs (`.md` files with `# IMPL:` headers). This format is deprecated and will be removed in a future protocol version. Scout v0.7.1+ generates YAML manifests exclusively. The parser still reads markdown format temporarily for backward compatibility with existing IMPL docs, but all new work MUST use YAML manifests.
 
-    {Suitability verdict - see format below}
+---
 
-    ---
+## YAML Manifest Structure
 
-    ## Quality Gates
+The remainder of this document describes the YAML manifest structure. For historical markdown format, see git history prior to v0.15.0.
 
-    {Optional — see ## Quality Gates Section Format. Omit if no build toolchain is known or gates are not configured.}
+**Root-level YAML structure:**
 
-    ---
+```yaml
+title: "Feature Name"
+feature: "One-line description"
+repository: "/absolute/path/to/repo"  # single-repo waves
+repositories:  # multi-repo waves (omit if single-repo)
+  - "/absolute/path/to/repo1"
+  - "/absolute/path/to/repo2"
+plan_reference: "path/to/original/plan.md"  # optional
 
-    ## Scaffolds
+state: "WAVE_PENDING" | "WAVE_IN_PROGRESS" | "WAVE_BLOCKED" | "COMPLETE"
 
-    {Scaffold files table - see format below}
-    {Omit this section if no scaffold files needed}
+suitability_assessment:
+  verdict: "SUITABLE" | "NOT_SUITABLE" | "CONDITIONAL"
+  reasoning: "..."
+  # See Suitability Assessment section for full schema
+
+quality_gates:  # optional - omit if no build toolchain
+  level: "quick" | "standard" | "full"
+  commands:
+    build:
+      command: "go build ./..."
+    # See Quality Gates section for full schema
+
+scaffolds:  # optional - omit if no scaffold files needed
+  - file: "path/to/file"
+    contents: "..."
+    import_path: "..."
+    status: "pending" | "committed" | "FAILED"
+    # See Scaffolds section for full schema
 
     ---
 
@@ -57,7 +99,17 @@ The IMPL doc is a markdown file with the following sections in order:
 
     ## Known Issues
 
-    {Known issues list, or "None identified."}
+    ```yaml type=impl-known-issues
+    {known issues — see Typed Metadata Blocks below}
+    ```
+
+    ---
+
+    ## Post-Merge Checklist
+
+    ```yaml type=impl-post-merge-checklist
+    {post-merge checklist — see Typed Metadata Blocks below. Optional — omit if no post-merge steps needed beyond quality gates.}
+    ```
 
     ---
 
@@ -157,7 +209,7 @@ Certain sections of the IMPL doc are machine-parsed by the orchestrator and the 
 - Precise validation: validator errors reference the block type (e.g., "`impl-file-ownership` block: missing Agent column") instead of "line 47"
 - Stability: sections can be reordered or have prose added around them without breaking parsers
 
-**Prose sections remain free-form.** The following sections do NOT use typed blocks and are excluded from validator scope: Suitability Assessment, Quality Gates, Pre-Mortem, Scaffolds, Known Issues, Interface Contracts, Wave Execution Loop, Orchestrator Post-Merge Checklist, Status table, and all agent prompt sections.
+**Prose sections remain free-form.** The following sections do NOT use typed blocks and are excluded from validator scope: Suitability Assessment, Pre-Mortem, Scaffolds, Interface Contracts, Wave Execution Loop, Stub Report, Status table, and all agent prompt sections.
 
 ### Block Types
 
@@ -228,6 +280,42 @@ out_of_scope_deps: []
 tests_added: []
 verification: PASS | FAIL ({command})
 ```
+
+**`impl-quality-gates` — Quality Gates:**
+
+```yaml type=impl-quality-gates
+level: quick | standard | full
+gates:
+  - type: build | test | lint | custom
+    command: {exact shell command}
+    required: true | false
+    description: {optional human-readable description}
+```
+
+Written by Scout between Suitability Assessment and Scaffolds. Defines verification commands that run after wave completion (E21).
+
+**`impl-post-merge-checklist` — Post-Merge Checklist:**
+
+```yaml type=impl-post-merge-checklist
+groups:
+  - title: {group name}
+    items:
+      - description: {verification step}
+        command: {optional shell command}
+```
+
+Written by Scout between Known Issues and Dependency Graph. Optional orchestrator-facing verification steps that run after all agents merge.
+
+**`impl-known-issues` — Known Issues:**
+
+```yaml type=impl-known-issues
+- title: {short title}
+  description: {detailed description}
+  status: {pre-existing | unrelated | blocking | etc.}
+  workaround: {optional workaround or skip instruction}
+```
+
+Written by Scout between Pre-Mortem and Dependency Graph. Lists pre-existing issues discovered during suitability assessment. Use `[]` for empty list or omit section entirely.
 
 ---
 
@@ -384,11 +472,27 @@ Generation-1 IDs (`A`, `B`, `C`, …) are valid wherever an agent ID appears. Mu
 
 ## Completion Report Format
 
-Structured YAML block written by each agent to the IMPL doc. Machine-readable. Orchestrator parses these before merging.
+Structured data written by each agent to the IMPL doc. Machine-readable. Orchestrator parses these before merging.
 
-**E14: Write discipline:** Agents append completion reports at the end of the IMPL doc under `### Agent {ID} - Completion Report`. Agents never edit earlier sections (interface contracts, ownership table, suitability verdict). Those sections are frozen at worktree creation (E2).
+**E14: Write discipline:** Agents append completion reports to the IMPL doc's `completion_reports:` map at root level with agent ID as key. Agents never edit earlier sections (interface contracts, ownership table, suitability verdict). Those sections are frozen at worktree creation (E2).
 
-**Structure:**
+**Format:**
+
+```yaml
+completion_reports:
+  A:
+    status: complete
+    commit: def5678
+    files_changed: [pkg/cache.go]
+    verification: PASS
+  B:
+    status: complete
+    commit: ghi9012
+    files_changed: [pkg/handler.go]
+    verification: PASS
+```
+
+**Field definitions:**
 
 ```yaml type=impl-completion-report
 status: complete | partial | blocked
@@ -460,6 +564,57 @@ verification: PASS | FAIL ({command} - N/N tests)
 
 ---
 
+## Journal Entry Format
+
+The tool journal is a sequence of JSONL entries written to `.saw-state/wave{N}/agent-{ID}/index.jsonl` during agent execution. Each line is a JSON object representing a single tool invocation or tool result. The journal is append-only and never modified after writing.
+
+**Purpose:** The journal captures execution history for agent recovery (E23A). When an agent is relaunched (after failure, timeout, or context compaction), the Orchestrator loads the journal, generates a summary, and prepends it to the agent's prompt. This gives the agent working memory of what it has already attempted.
+
+**Entry schema:** Each JSONL line conforms to the `ToolEntry` struct:
+
+```go
+type ToolEntry struct {
+    Timestamp   time.Time              `json:"ts"`
+    Kind        string                 `json:"kind"` // "tool_use" or "tool_result"
+    ToolName    string                 `json:"tool_name,omitempty"`
+    ToolUseID   string                 `json:"tool_use_id"`
+    Input       map[string]interface{} `json:"input,omitempty"`
+    ContentFile string                 `json:"content_file,omitempty"` // Path to full output
+    Preview     string                 `json:"preview,omitempty"`      // First 800 chars
+    Truncated   bool                   `json:"truncated,omitempty"`
+}
+```
+
+**Field definitions:**
+
+- **ts:** ISO 8601 timestamp when the tool was invoked or result received.
+- **kind:** Either `"tool_use"` (agent invoked a tool) or `"tool_result"` (tool returned output).
+- **tool_name:** Name of the tool invoked (e.g., `"Read"`, `"Write"`, `"Edit"`, `"Bash"`). Present only for `tool_use` entries.
+- **tool_use_id:** Unique identifier correlating a `tool_use` with its corresponding `tool_result`.
+- **input:** Tool parameters as a JSON object. Keys match tool parameter names. Present only for `tool_use` entries.
+- **content_file:** Relative path to a file containing the full tool result (used when output exceeds preview size). Present only for `tool_result` entries.
+- **preview:** First 800 characters of the tool result. Present only for `tool_result` entries. If output is ≤800 chars, `preview` contains the full output and `truncated` is false.
+- **truncated:** Boolean indicating whether the full output was written to `content_file`. Present only for `tool_result` entries.
+
+**Example JSONL entries:**
+
+```jsonl
+{"ts":"2025-01-15T14:32:10Z","kind":"tool_use","tool_name":"Read","tool_use_id":"toolu_01A2B3","input":{"file_path":"/repo/pkg/types.go"}}
+{"ts":"2025-01-15T14:32:10Z","kind":"tool_result","tool_use_id":"toolu_01A2B3","preview":"package types\n\ntype Config struct {\n\tName string\n}\n","truncated":false}
+{"ts":"2025-01-15T14:33:45Z","kind":"tool_use","tool_name":"Bash","tool_use_id":"toolu_02C4D5","input":{"command":"go build ./...","description":"Build all packages"}}
+{"ts":"2025-01-15T14:33:47Z","kind":"tool_result","tool_use_id":"toolu_02C4D5","content_file":"results/toolu_02C4D5.txt","preview":"# github.com/example/pkg/api\npkg/api/handler.go:42:2: undefined: middleware\n","truncated":true}
+{"ts":"2025-01-15T14:35:20Z","kind":"tool_use","tool_name":"Edit","tool_use_id":"toolu_03E6F7","input":{"file_path":"/repo/pkg/api/handler.go","old_string":"func HandleRequest(w http.ResponseWriter, r *http.Request) {","new_string":"func HandleRequest(w http.ResponseWriter, r *http.Request) {\n\tmiddleware.Authenticate(r)"}}
+{"ts":"2025-01-15T14:35:20Z","kind":"tool_result","tool_use_id":"toolu_03E6F7","preview":"The file /repo/pkg/api/handler.go has been updated successfully.","truncated":false}
+```
+
+**Journal persistence across retries:** If an agent fails with `failure_type: transient` or `failure_type: fixable` (E19), the Orchestrator relaunches it. The journal is preserved — entries from the failed attempt remain in `index.jsonl`. On relaunch, the agent sees what it tried before via the recovered context (E23A). This prevents retry loops where the agent repeats the same failing operation without learning from it.
+
+**Journal cleanup:** Journals are archived after wave merge (per agent completion). Archived journals are compressed and moved to `.saw-state/archives/wave{N}-agent-{ID}.tar.gz` for post-mortem debugging but are not loaded during normal execution. Only active agent journals (for in-progress waves) are read by E23A recovery.
+
+**Related Rules:** See E23A (tool journal recovery), E19 (failure type decision tree), I4 (IMPL doc and journal duality).
+
+---
+
 ## Scaffolds Section Format
 
 Written by the Scout into the IMPL doc to specify type scaffold files. Read and materialized by the Scaffold Agent after human review.
@@ -487,8 +642,18 @@ Written by the Scout into the IMPL doc to specify type scaffold files. Read and 
 **Status lifecycle:**
 
 - `pending`: Scout wrote spec, Scaffold Agent not yet run
-- `committed (sha)`: Scaffold Agent created, compiled, and committed the file. SHA is the commit hash.
+- `committed`: Scaffold Agent created, compiled, and committed the file. The `commit:` field contains the commit SHA.
 - `FAILED: {reason}`: Scaffold Agent could not compile. No file committed. Orchestrator surfaces failure to human.
+
+**YAML format:**
+```yaml
+scaffolds:
+  - file: "pkg/types/shared.go"
+    contents: "type Foo struct { ... }"
+    import_path: "module/pkg/types"
+    status: "committed"
+    commit: "abc1234"
+```
 
 **Orchestrator verification:** Before creating worktrees, Orchestrator verifies all scaffold files show `committed (sha)` status. A `FAILED` status is a protocol stop: surface the failure to the human, do not proceed to worktree creation.
 
@@ -533,27 +698,77 @@ Stubs found at the review checkpoint are surfaced to the human reviewer. They do
 
 ---
 
+## Post-Merge Checklist Section Format
+
+Written by the Scout into the IMPL doc between Known Issues and Dependency Graph. Optional — omit if no post-merge verification steps are needed beyond quality gates.
+
+Schema:
+
+```yaml type=impl-post-merge-checklist
+groups:
+  - title: {group name}
+    items:
+      - description: {verification step}
+        command: {optional shell command}
+```
+
+Example:
+
+```yaml type=impl-post-merge-checklist
+groups:
+  - title: "Build Verification"
+    items:
+      - description: "Full workspace build passes"
+        command: "go build ./..."
+      - description: "No new compiler warnings"
+        command: "go vet ./..."
+  - title: "Integration Tests"
+    items:
+      - description: "End-to-end test suite passes"
+        command: "npm run test:e2e"
+```
+
+The section is human-editable at review time. Checklist items are orchestrator-facing post-merge verification steps that run after all agents complete and are merged.
+
+---
+
 ## Quality Gates Section Format
 
 Written by the Scout into the IMPL doc between Suitability Assessment and Scaffolds (E21). Optional — omit if no build toolchain is known or gates are not configured.
 
 Schema:
-```yaml
-## Quality Gates
 
+```yaml type=impl-quality-gates
 level: quick | standard | full
-
 gates:
-  - type: typecheck | test | lint | custom
+  - type: build | test | lint | custom
     command: {exact shell command}
     required: true | false
+    description: {optional human-readable description}
+```
+
+Example:
+
+```yaml type=impl-quality-gates
+level: standard
+gates:
+  - type: build
+    command: go build ./...
+    required: true
+  - type: test
+    command: go test ./...
+    required: true
+  - type: lint
+    command: go vet ./...
+    required: false
+    description: "Check for common Go mistakes"
 ```
 
 Auto-detection from project marker files:
-- `go.mod` → `go build ./...` (typecheck), `go test ./...` (test), `go vet ./...` (lint)
-- `package.json` → `tsc --noEmit` (typecheck), `npm test` (test), `eslint .` (lint)
-- `Cargo.toml` → `cargo build` (typecheck), `cargo test` (test), `cargo clippy` (lint)
-- `pyproject.toml` → `mypy .` (typecheck), `pytest` (test), `ruff check .` (lint)
+- `go.mod` → `go build ./...` (build), `go test ./...` (test), `go vet ./...` (lint)
+- `package.json` → `tsc --noEmit` (build), `npm test` (test), `eslint .` (lint)
+- `Cargo.toml` → `cargo build` (build), `cargo test` (test), `cargo clippy` (lint)
+- `pyproject.toml` → `mypy .` (build), `pytest` (test), `ruff check .` (lint)
 
 The section is human-editable at review time. Gate commands should use the same toolchain already identified for the IMPL doc `test_command` field — no new tool discovery needed.
 
@@ -661,6 +876,40 @@ The Pre-Mortem section uses a markdown table in free-form prose. It is human-fac
 - **Likelihood:** `low`, `medium`, or `high`. How probable is this failure?
 - **Impact:** `low`, `medium`, or `high`. How bad is the outcome if it occurs?
 - **Mitigation:** Concrete action that prevents the failure or reduces its impact. Not "be careful" — a specific protocol step, check, or constraint.
+
+---
+
+## Known Issues Section Format
+
+Written by the Scout into the IMPL doc between Pre-Mortem and Dependency Graph. Contains pre-existing issues discovered during suitability assessment.
+
+Schema:
+
+```yaml type=impl-known-issues
+- title: {short title}
+  description: {detailed description}
+  status: {pre-existing | unrelated | blocking | etc.}
+  workaround: {optional workaround or skip instruction}
+```
+
+Example:
+
+```yaml type=impl-known-issues
+- title: "Flaky test in auth module"
+  description: "TestAuthHandler_SessionTimeout fails intermittently on CI"
+  status: "Pre-existing, unrelated to this work"
+  workaround: "Skip with -skip TestAuthHandler_SessionTimeout"
+- title: "Missing error handling in legacy parser"
+  description: "pkg/legacy/parser.go line 42 missing error check"
+  status: "Blocking — must fix before wave launch"
+  workaround: "None"
+```
+
+If no known issues exist, omit the section entirely or write:
+
+```yaml type=impl-known-issues
+[]
+```
 
 ---
 

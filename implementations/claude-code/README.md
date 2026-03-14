@@ -85,16 +85,8 @@ ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/saw-skill.md \
 # Symlink supporting files
 ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/saw-bootstrap.md \
        ~/.claude/skills/saw/saw-bootstrap.md
-ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/saw-merge.md \
-       ~/.claude/skills/saw/saw-merge.md
-ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/saw-worktree.md \
-       ~/.claude/skills/saw/saw-worktree.md
 ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agent-template.md \
        ~/.claude/skills/saw/agent-template.md
-ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/scout.md \
-       ~/.claude/skills/saw/scout.md
-ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/scaffold-agent.md \
-       ~/.claude/skills/saw/scaffold-agent.md
 
 # If you cloned elsewhere, adjust all paths:
 # mkdir -p ~/.claude/skills/saw/agents
@@ -106,34 +98,22 @@ ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/scaffold-agent.
 
 **What changed in v0.5.0:** The skill now uses the Claude Code Skills API instead of the legacy commands API. Supporting files are co-located in the skill directory and referenced via `${CLAUDE_SKILL_DIR}`, eliminating hardcoded paths and environment variables.
 
-### Step 4: Install Custom Agent Types (Optional)
+### Step 4: Install Custom Agent Types (Required)
 
-SAW can use custom Claude Code agent types that provide structural tool restrictions (e.g., scout cannot edit source files, wave agents cannot spawn sub-agents). This is **optional** — the skill automatically falls back to `general-purpose` agents with full prompts if these are not installed.
+SAW uses custom Claude Code agent types that provide structural tool restrictions (e.g., scout cannot edit source files, wave agents cannot spawn sub-agents) and behavioral instructions. These must be installed for the skill to function.
 
-**As of v0.5.0, agent types can be symlinked into the skill directory or globally:**
+**Install agent types into the skill directory:**
 
 ```bash
-# Option A: Install agent types into the skill directory (recommended)
 ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agents/scout.md \
        ~/.claude/skills/saw/agents/scout.md
 ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agents/wave-agent.md \
        ~/.claude/skills/saw/agents/wave-agent.md
 ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agents/scaffold-agent.md \
        ~/.claude/skills/saw/agents/scaffold-agent.md
-
-# Option B: Install agent types globally (works for all skills that use them)
-mkdir -p ~/.claude/agents
-ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agents/scout.md \
-       ~/.claude/agents/scout.md
-ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agents/scaffold-agent.md \
-       ~/.claude/agents/scaffold-agent.md
-ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agents/wave-agent.md \
-       ~/.claude/agents/wave-agent.md
 ```
 
-**What you get:** When installed, the skill launches agents with their custom `subagent_type` (e.g., `subagent_type: scout`), which provides runtime-enforced tool restrictions and better observability. Without them, agents use `subagent_type: general-purpose` with the full prompt — functionally identical, but without structural tool enforcement.
-
-**Why two prompt directories?** `prompts/agents/` contains custom agent types (optional). `prompts/` contains fallback prompts used when custom types aren't installed. You'll use one or the other automatically—the skill detects what's available and adapts.
+**What you get:** Custom agent types provide runtime-enforced tool restrictions (scout cannot Edit source files, wave agents cannot spawn sub-agents) and better observability. Each agent type has YAML frontmatter that Claude Code uses to enforce behavioral constraints.
 
 ### Step 5: Verify Installation
 
@@ -227,55 +207,105 @@ This implementation uses Claude Code's tool suite:
 The `/saw` skill consists of several specialized prompts, all installed to `~/.claude/skills/saw/`:
 
 - **`SKILL.md`** (from `implementations/claude-code/prompts/saw-skill.md`) - Main orchestrator with YAML frontmatter
-- **`saw-merge.md`** - Merge procedure implementation
-- **`saw-worktree.md`** - Worktree lifecycle management
 - **`saw-bootstrap.md`** - Bootstrap mode for new projects
-- **`scout.md`** - Scout agent fallback prompt (used when custom types not installed)
-- **`scaffold-agent.md`** - Scaffold Agent fallback prompt
 - **`agent-template.md`** - Wave Agent template (Scout fills this to generate per-agent prompts)
-- **`agents/`** (optional) - Custom agent type definitions for enhanced tool restrictions
+- **`agents/`** - Custom agent type definitions (scout, wave-agent, scaffold-agent)
+
+All orchestration operations (worktree management, merge procedures, validation, stub scanning) are handled by the `sawtools` CLI from the scout-and-wave-go SDK.
 
 All files are symlinked from `implementations/claude-code/prompts/` (the single source of truth). The skill references them via `${CLAUDE_SKILL_DIR}` for portability.
 
-## Agent Architecture: Dual-Structure Design
+## Configuration
 
-SAW uses a dual-structure architecture that supports both custom agent types and graceful fallback to general-purpose agents:
+### Agent Model Selection
+
+Agent definitions do not hardcode a model — they inherit the parent session's model by default. This keeps agent definitions platform-agnostic and conformant with the agent-skills standard (the agent describes *what it does*, not *what powers it*).
+
+Model can be overridden at three levels (highest precedence first):
+
+| Level | Scope | How |
+|-------|-------|-----|
+| **Skill argument** | Per-invocation | `/saw scout --model sonnet "feature"` |
+| **Config file** | Per-project or global | `saw.config.json` (see lookup order below) |
+| **Parent model** | Session default | Inherited automatically (no config needed) |
+
+### `saw.config.json`
+
+The skill looks for this file in two locations (first match wins):
+
+1. **`<project-root>/saw.config.json`** — per-project config (same file the web app uses)
+2. **`~/.claude/saw.config.json`** — global default for all projects
+
+Per-project config overrides global. Use global for your default model preferences, per-project to override for specific repos.
+
+**Install the global config (optional):**
+
+```bash
+ln -sf ~/code/scout-and-wave/config/saw.config.json ~/.claude/saw.config.json
+```
+
+Edit `config/saw.config.json` in the repo to set your defaults. Changes are version-controlled and propagate via `git pull`.
+
+```json
+{
+  "agent": {
+    "scout_model": "claude-sonnet-4-5",
+    "wave_model": "claude-sonnet-4-5",
+    "chat_model": "claude-sonnet-4-5"
+  },
+  "quality": {
+    "require_tests": false,
+    "require_lint": false,
+    "block_on_failure": false
+  }
+}
+```
+
+**`agent` fields:**
+
+| Field | Used by | Default |
+|-------|---------|---------|
+| `scout_model` | `/saw scout`, `/saw bootstrap` | Parent session model |
+| `wave_model` | `/saw wave` (all wave agents) | Parent session model |
+| `chat_model` | Web app chat panel | Parent session model |
+
+**`quality` fields:**
+
+| Field | Effect |
+|-------|--------|
+| `require_tests` | Wave agents must write tests |
+| `require_lint` | Lint gate is enforced |
+| `block_on_failure` | Block merge on quality gate failure |
+
+If the file doesn't exist, all values fall back to defaults. The CLI skill reads `scout_model` for `/saw scout` and `wave_model` for `/saw wave`.
+
+### Agent Architecture
+
+SAW uses custom Claude Code agent types for all Scout, Scaffold Agent, and Wave Agent launches:
 
 **Directory structure:**
 ```
 prompts/
-├── scout.md              # Fallback prompt (no YAML frontmatter)
-├── scaffold-agent.md     # Fallback prompt (no YAML frontmatter)
-├── agent-template.md     # Template Scout fills to generate wave agent prompts
+├── agent-template.md     # Scout's reference doc for writing agent briefs into IMPL doc
 └── agents/
     ├── scout.md          # Custom agent type (with YAML frontmatter)
     ├── scaffold-agent.md # Custom agent type (with YAML frontmatter)
     └── wave-agent.md     # Custom agent type (with YAML frontmatter)
 ```
 
-**How fallback works:**
+**Wave agents use a two-layer architecture:**
 
-1. **Error-based, not config-based:** The Orchestrator always tries custom types first (`subagent_type: scout`). Only when Claude Code returns an error ("subagent type 'scout' not found") does it fall back to `subagent_type: general-purpose` with the full prompt from `prompts/scout.md`.
+- **Type layer** (`prompts/agents/wave-agent.md`): Shared behavior across all wave agents — worktree isolation protocol, workflow checklist, session recovery, completion report format, invariants (I1, I2, I5)
+- **Instance layer** (`prompts/agent-template.md`): Comprehensive reference documentation Scout uses when writing per-agent briefs into the IMPL doc. Defines the 9-field structure (Field 0-8), isolation verification protocol, YAML completion schema, and protocol constraints.
 
-2. **Zero configuration required:** Users simply don't install custom agent types if they don't want them. The system automatically detects the absence and uses the fallback behavior.
+**Workflow:**
+1. Scout reads `agent-template.md` as reference documentation
+2. Scout writes filled agent briefs into the IMPL doc (one section per agent)
+3. Orchestrator extracts agent briefs from the IMPL doc
+4. Orchestrator launches wave agents with `subagent_type: wave-agent` + extracted brief as `prompt`
+5. Agents execute with both layers: type layer (wave-agent.md) provides shared behavior, instance brief provides task-specific details
 
-3. **Behavioral equivalence:** With or without custom types, agents produce the same results. Custom types add runtime tool enforcement (scout cannot Edit source files) and observability (claudewatch can track agent types separately), but don't change the logic.
-
-**Wave agents are special:**
-
-Wave agents use a **two-layer architecture**:
-
-- **Type layer** (`prompts/agents/wave-agent.md`): Shared behavior across all wave agents — worktree isolation protocol, completion report format, invariants (I1, I2, I5)
-- **Instance layer** (`prompts/agent-template.md`): Scout fills this template to generate Agent A, Agent B, Agent C prompts with specific files, interfaces, and tests
-
-When custom types are installed, both layers combine. In fallback mode, the filled template already contains all necessary instructions (it's self-contained), so wave agents work identically.
-
-**Why root-level prompts exist:**
-
-The files in `prompts/` (without YAML frontmatter) serve two purposes:
-
-1. **Active fallback code paths:** When custom types aren't installed, these are the actual prompts passed to general-purpose agents
-2. **Historical preservation:** They document what the prompts looked like before the custom agent types refactoring (commit c43bd41), preserving the evolution from "everything runs through general-purpose agents" to "specialized agent types with focused prompts"
+Wave agents never read `agent-template.md` directly — they receive the Scout-generated brief from the IMPL doc. The template exists to ensure Scout writes consistent, protocol-compliant agent briefs.
 
 ## Examples
 
@@ -309,7 +339,7 @@ If the work doesn't decompose cleanly, the Scout says so. It runs a suitability 
 
 **Worktree isolation failures:**
 - See [worktree defense layers](../../protocol/invariants.md#i1-disjoint-file-ownership) in protocol docs
-- Check pre-commit hook is active: `cat .git/hooks/pre-commit`
+- Pre-commit hook is installed automatically by `sawtools create-worktrees`
 
 **For more help:**
 - Read the [protocol specification](../../protocol/README.md)
