@@ -18,12 +18,19 @@
 - ✅ **M2** (detect-cascades) — v0.36.0 — AST-based rename cascade analyzer
 - ✅ **H6** (check-deps) — v0.36.0 — Pre-flight dependency conflict detection
 - ✅ **H7** (diagnose-build-failure) — v0.38.0 + v0.39.0 — Build error pattern matching
+- ✅ **Workflow Robustness** — 2026-03-14 — prepare-wave infrastructure hardening (3 bugs fixed)
 
 **Integration:**
 - **Scout automation:** SDK and CLI run H2→H1a→H3 before Scout launch
 - **Wave automation:** H6 runs before worktree creation, H7 auto-called on verification gate failures
 
 **Impact:** 50-65% Scout time reduction + 8-15 min saved per wave with dependency conflicts (~40% of waves).
+
+**Workflow Robustness (2026-03-14):**
+- Fixed incomplete cleanup (orphaned branches after wave merge)
+- Fixed hook verification timing (hooks now installed during worktree creation)
+- Added automated hook installation (git.InstallHooks function)
+- Result: prepare-wave workflow now idempotent and self-healing
 
 See **"Completed Tools Archive"** section at end of document for implementation details.
 
