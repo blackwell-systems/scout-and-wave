@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.37.0] | 2026-03-14 | H7 wave agent integration + Scout prompt cleanup — build failure diagnosis integrated into wave agent workflow, 168 lines of obsolete automation instructions removed from Scout prompt |
 | [0.36.0] | 2026-03-14 | Scout automation integration — H1a-H4 tools integrated into SDK engine and CLI skill (automated suitability analysis + dependency mapping) |
 | [0.35.0] | 2026-03-13 | I6 enforcement — Scout role separation (prevents Scout from writing source code) |
 | [0.34.0] | 2026-03-12 | Orchestrator v0.3.0 — batch wave commands integration (prepare-wave + finalize-wave reduce 11-command flow to 3) |
@@ -18,6 +19,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.30.1] | 2026-03-12 | Scout v0.8.1 — format ambiguity fix prevents markdown section headers in YAML output |
 | [0.30.0] | 2026-03-12 | Scout v0.8.0 — analyze-deps now PRIMARY METHOD for Go dependency mapping (determinism improvement H3) |
 | [0.29.0] | 2026-03-11 | mark-complete simplification — removed --archive flag from all docs, always archives to complete/ |
+
+---
+## [0.37.0] - 2026-03-14
+
+### Added
+
+- **H7 build failure diagnosis — Wave agent integration** — Wave agents now automatically use H7 when verification gates fail
+  - **wave-agent.md** — Added "Build Failure Diagnosis (H7)" subsection (after line 259)
+    - 3-step workflow: capture error log → run `sawtools diagnose-build-failure` → apply fix if confidence ≥0.85
+    - Multi-language examples (Go, Rust, JS/TS, Python)
+    - Auto-fix when `confidence ≥ 0.85` and `auto_fixable: true`, otherwise escalate to completion report
+  - **agent-template.md** — Added H7 workflow to Field 6 (verification gates section, line 178)
+    - Placeholder syntax for Scout to fill in: `{ID}`, `<lang>`, `<build-cmd>`
+    - References Field 8 for completion report documentation
+  - **determinism-roadmap.md** — Marked H7 as ✅ COMPLETE
+    - v0.38.0: CLI command + pattern engine (27 patterns across 4 languages)
+    - v0.39.0: Wave agent integration (this release)
+
+### Changed
+
+- **Scout prompt cleanup** — Removed 168 lines of obsolete automation instructions (21% reduction: 805 → 637 lines)
+  - H1a section: 91 lines → 8 lines (removed manual `sawtools analyze-suitability` invocation, replaced with "read automation results")
+  - H3 section: 73 lines → 7 lines (removed manual `sawtools analyze-deps` invocation)
+  - H2 section: 41 lines → 6 lines (removed manual `sawtools extract-commands` invocation)
+  - Rationale: v0.36.0 automated these tools via `runScoutAutomation()` — Scout now reads pre-computed results instead of running tools
+
+### Fixed
+
+- **same-repo worktree creation** (`scout-and-wave-go/pkg/protocol/worktree.go`)
+  - `prepare-wave` now handles IMPL docs with unnecessary `repo:` fields for same-repo work
+  - Before: Failed with "cannot change to 'scout-and-wave'" when all files had `repo: scout-and-wave` and orchestrating from that repo
+  - After: Detects when all agents reference the same repo as current directory → uses absolute path directly instead of cross-repo resolution
+  - Resolves `repoDir` to absolute path before basename extraction (fixes relative path case where `filepath.Base(".")` != actual repo name)
 
 ---
 ## [0.36.0] - 2026-03-14

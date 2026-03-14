@@ -1,0 +1,294 @@
+completion_date: "2025-03-14"
+title: H7 Build Failure Diagnosis - Wave Agent Integration
+feature_slug: h7-wave-integration
+verdict: SUITABLE
+test_command: go test ./pkg/builddiag/... && cd /Users/dayna.blackwell/code/scout-and-wave && grep -q 'diagnose-build-failure' implementations/claude-code/prompts/agents/wave-agent.md
+lint_command: go vet ./pkg/builddiag/...
+file_ownership:
+    - file: implementations/claude-code/prompts/agents/wave-agent.md
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: implementations/claude-code/prompts/agent-template.md
+      agent: B
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: docs/determinism-roadmap.md
+      agent: C
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+interface_contracts:
+    - name: builddiag.DiagnoseError
+      description: |
+        Existing function in scout-and-wave-go/pkg/builddiag/diagnose.go.
+        Agents reference this in documentation but do not modify it.
+      definition: |
+        func DiagnoseError(errorLog string, language string) (*Diagnosis, error)
+      location: scout-and-wave-go/pkg/builddiag/diagnose.go
+    - name: sawtools diagnose-build-failure
+      description: |
+        Existing CLI command. Wave agents call this when build/test fails.
+      definition: |
+        sawtools diagnose-build-failure <error-log> --language <lang>
+
+        Output (YAML):
+          diagnosis: string       # Pattern name
+          confidence: float64     # 0.0-1.0
+          fix: string            # Recommended action
+          rationale: string      # Why this fix works
+          auto_fixable: bool     # Whether fix can be automated
+      location: scout-and-wave-go/cmd/saw/diagnose_build_failure_cmd.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## What to Implement
+
+            Update wave-agent.md to document H7 build failure diagnosis integration.
+            Add a new subsection after "## Verification Gates" (around line 251) that
+            explains how wave agents should use diagnose-build-failure when builds fail.
+
+            ## Interfaces to Call
+
+            Reference the existing CLI command:
+            - sawtools diagnose-build-failure <error-log> --language <lang>
+            - Output: YAML with diagnosis, confidence, fix, rationale, auto_fixable
+
+            ## What to Add
+
+            Add new subsection "### Build Failure Diagnosis (H7)" after line 259:
+
+            ```markdown
+            ### Build Failure Diagnosis (H7)
+
+            If verification gate build or test commands fail, use H7 build failure
+            diagnosis to get structured fix recommendations:
+
+            **Step 1: Capture error log**
+            ```bash
+            cd $WORKTREE
+            go build ./... 2>&1 | tee /tmp/build-error.log
+            # OR for other languages:
+            # cargo build 2>&1 | tee /tmp/build-error.log
+            # npm run build 2>&1 | tee /tmp/build-error.log
+            # pytest 2>&1 | tee /tmp/build-error.log
+            ```
+
+            **Step 2: Run diagnosis**
+            ```bash
+            sawtools diagnose-build-failure /tmp/build-error.log --language go
+            ```
+
+            **Step 3: Apply fix if confidence ≥ 0.85**
+
+            Output example:
+            ```yaml
+            diagnosis: missing_package
+            confidence: 0.95
+            fix: go mod tidy && go build ./...
+            rationale: go.sum is stale or missing dependency
+            auto_fixable: true
+            ```
+
+            If `auto_fixable: true` and `confidence ≥ 0.85`, apply the fix immediately.
+            If `auto_fixable: false` or `confidence < 0.85`, include diagnosis output
+            in your completion report under notes and mark `status: blocked` with
+            `failure_type: fixable`.
+
+            **Supported languages:** go, rust, javascript, typescript, python
+
+            **Pattern catalog:** 27 error patterns across 4 languages (6 Go, 5 Rust,
+            5 JS/TS, 11 Python). See scout-and-wave-go/pkg/builddiag for full catalog.
+            ```
+
+            ## Tests to Write
+
+            No automated tests needed (documentation only). Manually verify:
+            1. Grep for "diagnose-build-failure" in wave-agent.md after edit
+            2. Check markdown syntax renders correctly
+
+            ## Verification Gate
+
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave
+            # Verify the change exists
+            grep -A 20 "Build Failure Diagnosis" implementations/claude-code/prompts/agents/wave-agent.md
+            # Verify markdown syntax (no test command, manual review)
+            ```
+
+            ## Constraints
+
+            - Insert new section WITHOUT renumbering existing sections
+            - Do not modify "## Verification Gates" header or content before line 259
+            - Keep examples language-agnostic (show Go/Rust/JS/Python patterns)
+            - Reference H7 explicitly in section header for traceability
+          files:
+            - implementations/claude-code/prompts/agents/wave-agent.md
+        - id: B
+          task: |
+            ## What to Implement
+
+            Update agent-template.md Field 6 section to include H7 diagnosis workflow.
+            Add guidance BEFORE the verification commands list (around line 178).
+
+            ## Interfaces to Call
+
+            Reference the existing CLI command:
+            - sawtools diagnose-build-failure <error-log> --language <lang>
+
+            ## What to Add
+
+            Insert new paragraph after "Update related tests to expect the NEW behavior,
+            then run verification." (around line 178):
+
+            ```markdown
+            **If build or test commands fail:** Capture the error log and run H7 build
+            failure diagnosis to get actionable fix recommendations:
+
+            ```bash
+            # Capture error (replace <build-cmd> with actual command from Field 6)
+            <build-cmd> 2>&1 | tee /tmp/build-error-agent-{ID}.log
+
+            # Diagnose (replace <lang> with go/rust/javascript/typescript/python)
+            sawtools diagnose-build-failure /tmp/build-error-agent-{ID}.log --language <lang>
+            ```
+
+            If the diagnosis has `confidence ≥ 0.85` and `auto_fixable: true`, apply
+            the recommended fix. If `auto_fixable: false` or confidence is lower,
+            include the diagnosis output in Field 8 completion report notes and mark
+            `status: blocked` with `failure_type: fixable`.
+            ```
+
+            ## Tests to Write
+
+            No automated tests needed (documentation only). Manually verify:
+            1. Grep for "diagnose-build-failure" in agent-template.md after edit
+            2. Check placeholder syntax ({ID}, <lang>) is clear
+
+            ## Verification Gate
+
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave
+            # Verify the change exists
+            grep -A 10 "H7 build failure diagnosis" implementations/claude-code/prompts/agent-template.md
+            # Verify markdown syntax (no test command, manual review)
+            ```
+
+            ## Constraints
+
+            - Insert BEFORE the verification commands list (preserve existing content)
+            - Use placeholder syntax ({ID}, <lang>) that Scout will fill in
+            - Keep language detection manual (no auto-detection from project files)
+            - Reference Field 8 explicitly for where to document diagnosis results
+          files:
+            - implementations/claude-code/prompts/agent-template.md
+        - id: C
+          task: |
+            ## What to Implement
+
+            Update determinism-roadmap.md to mark H7 as COMPLETE with integration status.
+            Find the H7 section (around line 244) and update its status header.
+
+            ## What to Change
+
+            Replace the section header:
+
+            FROM:
+            ```markdown
+            ### H7: Build Failure Diagnosis (HIGH, Phase 3 — NEW)
+            ```
+
+            TO:
+            ```markdown
+            ### H7: Build Failure Diagnosis — ✅ COMPLETE (v0.38.0 + v0.39.0 integration)
+            ```
+
+            Add completion note after the pattern catalog examples (around line 293):
+
+            ```markdown
+
+            **Status: COMPLETE (2026-03-14)**
+            - v0.38.0: CLI command + pattern engine (27 patterns across 4 languages)
+            - v0.39.0: Wave agent integration (wave-agent.md + agent-template.md)
+            - Integration: Agents auto-call diagnose-build-failure on verification gate failures
+            - Confidence threshold: ≥0.85 for auto-fix, <0.85 for manual review
+            ```
+
+            ## Tests to Write
+
+            No automated tests needed (documentation only). Manually verify:
+            1. Status marker appears in roadmap
+            2. Version numbers are correct
+
+            ## Verification Gate
+
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave
+            # Verify H7 marked complete
+            grep "H7.*COMPLETE" docs/determinism-roadmap.md
+            # Verify version numbers present
+            grep "v0.39.0" docs/determinism-roadmap.md
+            ```
+
+            ## Constraints
+
+            - Do not modify other sections of the roadmap
+            - Do not renumber phases or reorder tools
+            - Keep existing H7 content (usage examples, pattern catalog) intact
+          files:
+            - docs/determinism-roadmap.md
+      base_commit: c82e6860f434693e7a023d529f22dedd10ddb969
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./pkg/builddiag/...
+          required: true
+        - type: test
+          command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go test ./pkg/builddiag/...
+          required: true
+        - type: lint
+          command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go vet ./pkg/builddiag/...
+          required: false
+completion_reports:
+    A:
+        status: complete
+        branch: wave1-agent-A
+        commit: a6b3f59
+        files_changed:
+            - implementations/claude-code/prompts/agents/wave-agent.md
+        verification: PASS
+    B:
+        status: complete
+        branch: wave1-agent-B
+        commit: a3dbdd8
+        files_changed:
+            - implementations/claude-code/prompts/agent-template.md
+        verification: PASS - Added H7 build failure diagnosis workflow. All builddiag quality gates pass.
+    C:
+        status: complete
+        branch: wave1-agent-C
+        commit: 2a4af0b
+        files_changed:
+            - docs/determinism-roadmap.md
+        verification: PASS
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: Wave agents ignore H7 guidance and continue ad-hoc debugging
+          likelihood: low
+          impact: medium
+          mitigation: Clear confidence threshold (≥0.85) and auto_fixable flag guidance. Agents already follow Field 6 verification protocol strictly.
+        - scenario: H7 produces low-confidence misdiagnoses that waste agent time
+          likelihood: low
+          impact: low
+          mitigation: 27 patterns already tested in v0.38.0. Confidence <0.85 triggers manual review, not auto-fix.
+        - scenario: Cross-repo commits cause merge conflicts in protocol repo
+          likelihood: low
+          impact: low
+          mitigation: All 3 agents modify different files in same repo (scout-and-wave). No cross-repo merge needed.
+state: SCOUT_PENDING
