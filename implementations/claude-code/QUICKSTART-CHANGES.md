@@ -45,7 +45,7 @@
 ### Section: Orchestrator merges (Step 5)
 - **Issue:** Showed raw git commands without sawtools wrapper
 - **Fix:** Added `sawtools verify-commits` and `sawtools merge-agents` commands
-- **Impact:** Reflects actual orchestrator behavior using SDK CLI (saw-skill.md v0.9.0)
+- **Impact:** Reflects actual orchestrator behavior using sawtools commands (saw-skill.md v0.9.0)
 
 ### Section: Post-merge verification (Step 6)
 - **Issue:** Showed verification steps without sawtools command

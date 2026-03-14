@@ -180,7 +180,7 @@ Scaffold files are committed to HEAD before worktrees are created. Once worktree
        repo: "saw-web"
    ```
 
-   **CLI cross-repo support:** All sawtools commands accept `--repo-dir` parameter. Run once per repository:
+   **sawtools cross-repo support:** All sawtools commands accept `--repo-dir` parameter. Run once per repository:
    ```bash
    sawtools create-worktrees "<manifest-path>" --wave <N> --repo-dir "~/code/saw-engine"
    sawtools create-worktrees "<manifest-path>" --wave <N> --repo-dir "~/code/saw-web"

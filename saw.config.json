@@ -1,4 +1,18 @@
 {
+  "repos": [
+    {
+      "name": "scout-and-wave",
+      "path": "/Users/dayna.blackwell/code/scout-and-wave"
+    },
+    {
+      "name": "scout-and-wave-go",
+      "path": "/Users/dayna.blackwell/code/scout-and-wave-go"
+    },
+    {
+      "name": "scout-and-wave-web",
+      "path": "/Users/dayna.blackwell/code/scout-and-wave-web"
+    }
+  ],
   "repo": {
     "path": ""
   },

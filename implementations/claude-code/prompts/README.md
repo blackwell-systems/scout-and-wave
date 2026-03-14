@@ -7,7 +7,7 @@ participant role or procedure defined in the [protocol/](../protocol/) specifica
 
 | File | Version | Purpose |
 |------|---------|---------|
-| [`saw-skill.md`](saw-skill.md) | v0.7.0 | The `/saw` skill router. Install to `~/.claude/skills/saw/SKILL.md`. Routes `bootstrap`, `scout`, `wave`, `wave --auto`, and `status` commands. Drives all protocol state transitions as the Orchestrator. Uses Protocol SDK CLI commands for all orchestration operations (`saw create-worktrees`, `saw merge-agents`, `saw verify-build`, `saw run-wave`, etc.). |
+| [`saw-skill.md`](saw-skill.md) | v0.7.0 | The `/saw` skill router. Install to `~/.claude/skills/saw/SKILL.md`. Routes `bootstrap`, `scout`, `wave`, `wave --auto`, and `status` commands. Drives all protocol state transitions as the Orchestrator. Uses sawtools commands for all orchestration operations (`sawtools create-worktrees`, `sawtools merge-agents`, `sawtools verify-build`, `sawtools run-wave`, etc.). |
 
 ## Participant Prompts
 

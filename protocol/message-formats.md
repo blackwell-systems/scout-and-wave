@@ -972,7 +972,7 @@ The orchestrator constructs a per-agent context payload (E23) before launching e
 | Agent's 9-field prompt | `### Agent {ID} - {Role}` through next `### Agent` heading | Complete implementation spec |
 | Interface contracts | `## Interface Contracts` | Cross-agent boundary definitions |
 | File ownership table | `## File Ownership` typed block | Agent verifies its row; sees peers' rows for I1 reasoning |
-| Scaffolds | `## Scaffolds` | Pre-built type files the agent imports |
+| Scaffolds section | `## Scaffolds` | Pre-built scaffold files (types/interfaces) the agent imports |
 | Quality gates | `## Quality Gates` | Verification commands required before completion report |
 | IMPL doc path | Literal string preamble | Agent writes completion report here (I4, I5) |
 
@@ -995,7 +995,7 @@ The orchestrator constructs a per-agent context payload (E23) before launching e
 
 ## Scaffolds
 
-{extracted scaffolds table}
+{extracted Scaffolds section}
 
 ## Quality Gates
 

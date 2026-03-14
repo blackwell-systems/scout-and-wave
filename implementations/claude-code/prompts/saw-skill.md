@@ -97,9 +97,9 @@ Read the agent template at `${CLAUDE_SKILL_DIR}/agent-template.md` for the 9-fie
 | `/saw status` | Show progress (auto-selects IMPL if only 1 pending) |
 | `/saw status --impl <id>` | Show progress of specific IMPL |
 
-## Protocol SDK CLI Commands
+## sawtools Commands
 
-All operations use the `sawtools` CLI. IMPL docs are YAML manifests (`.yaml`).
+All operations use the `sawtools` binary. IMPL docs are YAML manifests (`.yaml`).
 
 - `sawtools create-worktrees` — worktree setup for a wave
 - `sawtools verify-commits` — commit verification before merge

@@ -24,8 +24,8 @@ structure, agent tasks, scaffolds, quality gates, and pre-mortem risk assessment
 
 **Write the complete manifest to `docs/IMPL/IMPL-<feature-slug>.yaml` using the Write tool.**
 This YAML manifest is the single source of truth for all downstream agents and for tracking
-progress between waves. The SDK CLI commands (`saw validate`, `saw extract-context`,
-`saw set-completion`, etc.) operate on this file directly.
+progress between waves. The sawtools commands (`sawtools validate`, `sawtools extract-context`,
+`sawtools set-completion`, etc.) operate on this file directly.
 
 **CRITICAL OUTPUT FORMAT REQUIREMENTS:**
 
@@ -95,6 +95,31 @@ pre_mortem:                 # Struct with overall_risk + rows array
 ```
 
 **Important:** All fields expecting arrays must use YAML array syntax (`[]` or `- item`), not prose text. All fields expecting structs must use nested key-value pairs, not markdown sections.
+
+---
+
+## CRITICAL INVARIANTS (Validation Requirements)
+
+Before beginning analysis, understand these hard constraints enforced by E16 validation:
+
+**I1: Disjoint File Ownership**
+- No two agents in the same wave may own the same file
+- This is a correctness constraint, not a style preference
+- If two tasks need the same file: extract interfaces, split files, or sequence into different waves
+
+**I2: Cross-Wave Dependencies Only**
+- Agent dependencies MUST point ONLY to agents in PRIOR waves
+- **VALID:** Agent B (wave 2) depends on Agent A (wave 1)
+- **INVALID:** Agent B (wave 1) depends on Agent A (wave 1) ← same-wave dependency
+- If B needs A's output, put A in wave 1 and B in wave 2
+- Same-wave dependencies will cause validation failure—restructure before submitting
+
+**I3: Waves are 1-indexed**
+- First wave is `number: 1`, NOT `number: 0`
+- Wave sequence: 1, 2, 3, ... (never 0, 1, 2)
+- Scaffold agents are the only exception (wave 0, pre-wave work)
+
+**Validation checkpoint:** After writing the IMPL doc, the Orchestrator runs `sawtools validate`. Violations of I1, I2, or I3 will trigger a correction prompt. Write correct structure the first time to avoid retry loops.
 
 ---
 
@@ -385,14 +410,11 @@ They are NOT the structure of your output. Your output is PURE YAML following th
    pressure will self-heal by touching files outside their ownership. Naming these in
    advance prevents that improvisation.
 
-   **For non-Go projects:** Fall back to manual search only if the project uses
-   Rust/JavaScript/TypeScript/Python (multi-language support not yet implemented).
-   Manual method: run workspace-wide search (grep/rg) for the old type name, list
-   every file that imports or references it, manually classify as syntax vs semantic
-   based on context (import line = syntax, comment = semantic).
-
-   **Language support:** Go is fully supported (AST-based static analysis). Rust,
-   JavaScript/TypeScript, and Python planned for Phase 2.
+   **Language support:** `sawtools detect-cascades` currently supports Go only (AST-based static analysis).
+   For Rust, JavaScript/TypeScript, and Python projects, fall back to manual cascade detection:
+   run workspace-wide search (grep/rg) for the old type name, list every file that imports or
+   references it, manually classify as syntax vs semantic based on context (import line = syntax,
+   comment = semantic).
 
 5. **Define interface contracts.** For every function, method, or type that
    will be called across agent boundaries, write the exact signature.
@@ -451,11 +473,17 @@ They are NOT the structure of your output. Your output is PURE YAML following th
 
 8. **Structure waves from the DAG.** Group agents into waves:
 
-   **If analyze-deps was used (Go projects):**
+   **If analyze-deps was used (multi-language support):**
    Use the `wave_candidate` field from step 4's output. Files with `wave_candidate: 0`
    go to Wave 1, `wave_candidate: 1` go to Wave 2, etc. Group agents by the maximum
    `wave_candidate` of their owned files (an agent owning files at depths 0 and 1 goes
    to Wave 2, since it depends on Wave 1 completing).
+
+   **Supported languages:**
+   - **Go** — AST-based import analysis via `go/parser` and `go/ast` (fully supported)
+   - **Rust** — AST-based `use` statement analysis via external `rust-parser` helper binary (requires binary in PATH)
+   - **JavaScript/TypeScript** — ES6/CommonJS import analysis via external `js-parser.js` Node.js script (requires node in PATH)
+   - **Python** — `import`/`from X import Y` analysis via external `python-parser.py` script (requires python3 in PATH)
 
    **Manual wave assignment (all projects):**
    - Wave 1: Agents whose files have no dependencies on other new work.
@@ -599,7 +627,7 @@ They are NOT the structure of your output. Your output is PURE YAML following th
 ## Output Format
 
 Write a YAML manifest to `docs/IMPL/IMPL-<feature-slug>.yaml`. This file is parsed
-by the SDK CLI (`saw validate`, `saw extract-context`, `saw set-completion`, etc.).
+by sawtools (`sawtools validate`, `sawtools extract-context`, `sawtools set-completion`, etc.).
 The schema matches `pkg/protocol/types.go` in the Go SDK.
 
 **Agent task field:** The `task` field per agent is a multi-line string containing

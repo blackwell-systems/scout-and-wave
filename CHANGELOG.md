@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.37.0] | 2026-03-14 | H7 wave agent integration + Scout prompt cleanup — build failure diagnosis integrated into wave agent workflow, 168 lines of obsolete automation instructions removed from Scout prompt |
+| [0.36.0] | 2026-03-14 | Scout automation integration — H1a-H4 tools integrated into SDK engine and CLI skill (automated suitability analysis + dependency mapping) |
 | [0.35.0] | 2026-03-13 | I6 enforcement — Scout role separation (prevents Scout from writing source code) |
 | [0.34.0] | 2026-03-12 | Orchestrator v0.3.0 — batch wave commands integration (prepare-wave + finalize-wave reduce 11-command flow to 3) |
 | [0.33.0] | 2026-03-12 | Scout v0.10.0 — Phase 1 complete: H2 extract-commands integrated (automated build/test/lint command extraction) |
@@ -19,6 +21,89 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.29.0] | 2026-03-11 | mark-complete simplification — removed --archive flag from all docs, always archives to complete/ |
 
 ---
+## [0.37.0] - 2026-03-14
+
+### Added
+
+- **H7 build failure diagnosis — Wave agent integration** — Wave agents now automatically use H7 when verification gates fail
+  - **wave-agent.md** — Added "Build Failure Diagnosis (H7)" subsection (after line 259)
+    - 3-step workflow: capture error log → run `sawtools diagnose-build-failure` → apply fix if confidence ≥0.85
+    - Multi-language examples (Go, Rust, JS/TS, Python)
+    - Auto-fix when `confidence ≥ 0.85` and `auto_fixable: true`, otherwise escalate to completion report
+  - **agent-template.md** — Added H7 workflow to Field 6 (verification gates section, line 178)
+    - Placeholder syntax for Scout to fill in: `{ID}`, `<lang>`, `<build-cmd>`
+    - References Field 8 for completion report documentation
+  - **determinism-roadmap.md** — Marked H7 as ✅ COMPLETE
+    - v0.38.0: CLI command + pattern engine (27 patterns across 4 languages)
+    - v0.39.0: Wave agent integration (this release)
+
+### Changed
+
+- **Scout prompt cleanup** — Removed 168 lines of obsolete automation instructions (21% reduction: 805 → 637 lines)
+  - H1a section: 91 lines → 8 lines (removed manual `sawtools analyze-suitability` invocation, replaced with "read automation results")
+  - H3 section: 73 lines → 7 lines (removed manual `sawtools analyze-deps` invocation)
+  - H2 section: 41 lines → 6 lines (removed manual `sawtools extract-commands` invocation)
+  - Rationale: v0.36.0 automated these tools via `runScoutAutomation()` — Scout now reads pre-computed results instead of running tools
+- **Scout prompt — H3 language support documentation** — Updated to reflect v0.32.0 multi-language implementation
+  - Removed outdated "planned for Phase 2" text
+  - Added supported languages list: Go (native), Rust (rust-parser binary), JavaScript/TypeScript (js-parser.js), Python (python-parser.py)
+  - Clarified cascade detection (M2) is Go-only; other languages use manual fallback
+  - Changed section header from "Go projects" to "multi-language support"
+
+### Fixed
+
+- **same-repo worktree creation** (`scout-and-wave-go/pkg/protocol/worktree.go`)
+  - `prepare-wave` now handles IMPL docs with unnecessary `repo:` fields for same-repo work
+  - Before: Failed with "cannot change to 'scout-and-wave'" when all files had `repo: scout-and-wave` and orchestrating from that repo
+  - After: Detects when all agents reference the same repo as current directory → uses absolute path directly instead of cross-repo resolution
+  - Resolves `repoDir` to absolute path before basename extraction (fixes relative path case where `filepath.Base(".")` != actual repo name)
+
+---
+## [0.36.0] - 2026-03-14
+
+### Added
+
+- **Scout automation integration (H1a-H4)** — Scout agents now receive pre-execution automation analysis
+  - **SDK integration** (`scout-and-wave-go/pkg/engine/runner.go`)
+    - `runScoutAutomation()`: Orchestrates H2, H1a, H3 tool calls before Scout launch
+    - H2 (extract-commands): Detects build/test/lint commands from CI configs
+    - H1a (analyze-suitability): Conditional requirements file analysis when path detected in feature description
+    - H3 (analyze-deps): Dependency analysis using targetFiles from H1a or full repo scan
+    - Results injected as "Automation Analysis Results" section in Scout prompt
+    - Best-effort execution: tool failures logged but don't block Scout launch
+    - 4 comprehensive tests covering integration, failure handling, requirements detection
+  - **CLI integration** (`implementations/claude-code/prompts/saw-skill.md`)
+    - New orchestrator step runs automation tools before Agent tool launch
+    - Calls `sawtools extract-commands`, `analyze-suitability`, `analyze-deps` in sequence
+    - Results captured in `/tmp/scout-automation-$$.md` and prepended to Scout prompt
+    - Graceful error handling: failed commands don't block Scout agent launch
+  - **Wrapper functions** (`scout-and-wave-go/pkg/suitability/wrapper.go`)
+    - `AnalyzeSuitability()`: Engine-compatible wrapper for suitability analysis
+    - `ParseRequirements()`: Markdown requirements parser for audit.md format
+    - Enables engine integration without duplicating suitability package logic
+
+### Changed
+
+- **Scout prompt augmentation** — Automation results now prepended after CONTEXT.md, before scout.md contents
+  - SDK: Markdown section injected programmatically in `RunScout()`
+  - CLI: Temporary file prepended to agent prompt via Bash tool
+- **Requirements file detection** — Heuristic based on file extensions (.md, .txt) in feature description
+
+### Impact
+
+- **Scout planning quality** — Automation results inform wave structure, agent prompts, quality gates
+- **Manual analysis reduction** — H2 eliminates manual test command guessing, H1a provides DONE/TODO status
+- **Dependency awareness** — H3 wave_candidate field drives wave assignment decisions
+
+### Implementation
+
+- **Waves**: 2 | **Agents**: 4 (A, B, C, D)
+- **Repos**: scout-and-wave-go (Agent A, C), scout-and-wave-web (Agent B), scout-and-wave (Agent D)
+- **Cross-repo coordination**: Agent C in SDK, Agent D in protocol repo, both working in parallel
+- **Completion date**: 2026-03-14
+
+---
+
 
 ## [0.34.0] - 2026-03-12
 
