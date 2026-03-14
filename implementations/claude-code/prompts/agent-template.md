@@ -176,6 +176,18 @@ grep -r "SilenceErrors" path/to/*_test.go
 
 Update related tests to expect the NEW behavior, then run verification.
 
+**If build or test commands fail:** Capture the error log and run H7 build failure diagnosis to get actionable fix recommendations:
+
+```bash
+# Capture error (replace <build-cmd> with actual command from Field 6)
+<build-cmd> 2>&1 | tee /tmp/build-error-agent-{ID}.log
+
+# Diagnose (replace <lang> with go/rust/javascript/typescript/python)
+sawtools diagnose-build-failure /tmp/build-error-agent-{ID}.log --language <lang>
+```
+
+If the diagnosis has `confidence ≥ 0.85` and `auto_fixable: true`, apply the recommended fix. If `auto_fixable: false` or confidence is lower, include the diagnosis output in Field 8 completion report notes and mark `status: blocked` with `failure_type: fixable`.
+
 Run these commands. All must pass before you report completion.
 
 cd /path/to/project
