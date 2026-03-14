@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.36.0] | 2026-03-14 | Scout automation integration — H1a-H4 tools integrated into SDK engine and CLI skill (automated suitability analysis + dependency mapping) |
 | [0.35.0] | 2026-03-13 | I6 enforcement — Scout role separation (prevents Scout from writing source code) |
 | [0.34.0] | 2026-03-12 | Orchestrator v0.3.0 — batch wave commands integration (prepare-wave + finalize-wave reduce 11-command flow to 3) |
 | [0.33.0] | 2026-03-12 | Scout v0.10.0 — Phase 1 complete: H2 extract-commands integrated (automated build/test/lint command extraction) |
@@ -19,6 +20,51 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.29.0] | 2026-03-11 | mark-complete simplification — removed --archive flag from all docs, always archives to complete/ |
 
 ---
+## [0.36.0] - 2026-03-14
+
+### Added
+
+- **Scout automation integration (H1a-H4)** — Scout agents now receive pre-execution automation analysis
+  - **SDK integration** (`scout-and-wave-go/pkg/engine/runner.go`)
+    - `runScoutAutomation()`: Orchestrates H2, H1a, H3 tool calls before Scout launch
+    - H2 (extract-commands): Detects build/test/lint commands from CI configs
+    - H1a (analyze-suitability): Conditional requirements file analysis when path detected in feature description
+    - H3 (analyze-deps): Dependency analysis using targetFiles from H1a or full repo scan
+    - Results injected as "Automation Analysis Results" section in Scout prompt
+    - Best-effort execution: tool failures logged but don't block Scout launch
+    - 4 comprehensive tests covering integration, failure handling, requirements detection
+  - **CLI integration** (`implementations/claude-code/prompts/saw-skill.md`)
+    - New orchestrator step runs automation tools before Agent tool launch
+    - Calls `sawtools extract-commands`, `analyze-suitability`, `analyze-deps` in sequence
+    - Results captured in `/tmp/scout-automation-$$.md` and prepended to Scout prompt
+    - Graceful error handling: failed commands don't block Scout agent launch
+  - **Wrapper functions** (`scout-and-wave-go/pkg/suitability/wrapper.go`)
+    - `AnalyzeSuitability()`: Engine-compatible wrapper for suitability analysis
+    - `ParseRequirements()`: Markdown requirements parser for audit.md format
+    - Enables engine integration without duplicating suitability package logic
+
+### Changed
+
+- **Scout prompt augmentation** — Automation results now prepended after CONTEXT.md, before scout.md contents
+  - SDK: Markdown section injected programmatically in `RunScout()`
+  - CLI: Temporary file prepended to agent prompt via Bash tool
+- **Requirements file detection** — Heuristic based on file extensions (.md, .txt) in feature description
+
+### Impact
+
+- **Scout planning quality** — Automation results inform wave structure, agent prompts, quality gates
+- **Manual analysis reduction** — H2 eliminates manual test command guessing, H1a provides DONE/TODO status
+- **Dependency awareness** — H3 wave_candidate field drives wave assignment decisions
+
+### Implementation
+
+- **Waves**: 2 | **Agents**: 4 (A, B, C, D)
+- **Repos**: scout-and-wave-go (Agent A, C), scout-and-wave-web (Agent B), scout-and-wave (Agent D)
+- **Cross-repo coordination**: Agent C in SDK, Agent D in protocol repo, both working in parallel
+- **Completion date**: 2026-03-14
+
+---
+
 
 ## [0.34.0] - 2026-03-12
 
