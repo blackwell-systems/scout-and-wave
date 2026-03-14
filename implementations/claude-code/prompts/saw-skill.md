@@ -281,6 +281,15 @@ EOF
    If exit code is 0, proceed to human review. If exit code is 1, the stdout contains a plain-text error list — send it to Scout as a correction prompt: "Your IMPL doc failed validation. Fix only these sections:\n{errors}". Retry up to 3 attempts. On retry limit exhaustion, enter BLOCKED and surface the validation errors to the human. Do not present the doc for human review until validation passes.
 
    **E16A note:** The validator enforces required block presence — an IMPL doc missing `impl-file-ownership`, `impl-dep-graph`, or `impl-wave-structure` typed blocks will fail even if all present blocks are internally valid. E16C warnings (out-of-band dep graph content) appear in stdout but do not cause exit 1; include them in the correction prompt anyway so Scout moves the content into a typed block.
+4a. **M4: Auto-populate verification gates.** After validation passes, automatically generate verification gate blocks for all agents:
+   ```bash
+   sawtools populate-verification-gates "<absolute-path-to-impl-doc>"
+   ```
+   This orchestrator post-processor reads the IMPL doc's file ownership table and H2's toolchain data, then writes properly formatted verification blocks to each agent section. Exit code 0 means success; exit code 1 means failure (missing H2 data or malformed IMPL doc). If it fails, log the error but continue — verification gates can be manually written during human review. After M4 completes, run validation again to confirm gates are valid:
+   ```bash
+   sawtools validate "<absolute-path-to-impl-doc>"
+   ```
+   If this second validation fails, surface the errors to the human during review (M4 bug or edge case).
 5. Report the suitability verdict to the user, and if suitable: the wave structure, file ownership table, interface contracts, and Scaffolds section. Ask the user to review before proceeding.
 6. **Scaffold Agent (conditional):** If the IMPL doc Scaffolds section is non-empty and any scaffold file has `Status: pending`, launch a **Scaffold Agent** using the Agent tool with `subagent_type: scaffold-agent` and `run_in_background: true`. The prompt parameter is the path to the IMPL doc and the feature slug. If `subagent_type: scaffold-agent` fails, fall back to `subagent_type: general-purpose` with the contents of `${CLAUDE_SKILL_DIR}/agents/scaffold-agent.md` as its prompt. Use `[SAW:scaffold:<feature-slug>]` as the description prefix so claudewatch can identify the run. The Scaffold Agent reads the approved contracts and creates the scaffold source files. Inform the user the Scaffold Agent is running. Wait for it to complete, then read the Scaffolds section: if any file shows `Status: FAILED`, stop immediately — report the failure reason to the user and do not create worktrees. The user must revise the interface contracts in the IMPL doc and re-run the Scaffold Agent. If all files show `Status: committed`, proceed.
 

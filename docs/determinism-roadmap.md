@@ -302,7 +302,7 @@ sawtools resolve-repo /Users/user/code/myrepo/docs/IMPL/IMPL-X.yaml
 
 ---
 
-### M4: Verification Gate Template Generation (MEDIUM, Phase 4)
+### M4: Verification Gate Auto-Population (MEDIUM, Phase 4)
 
 **Current behavior:** Scout manually writes verification gate command blocks for each agent, copying from project toolchain detection.
 
@@ -310,32 +310,68 @@ sawtools resolve-repo /Users/user/code/myrepo/docs/IMPL/IMPL-X.yaml
 - Repetitive text generation
 - Easy to forget lint step or use wrong command format
 - Inconsistent formatting between agents
+- Relies on Scout discretion (non-deterministic)
 
-**Proposed solution:** `sawtools generate-verification-gate --toolchain <lang> --focused-test <pattern>`
+**Proposed solution:** `sawtools populate-verification-gates <impl-doc>`
+
+**Design principle:** Orchestrator post-processor (not Scout tool). Scout focuses on architecture decisions (file ownership, interface contracts), orchestrator handles mechanical formatting. This eliminates reliance on Scout discretion.
 
 **Usage:**
 ```bash
-sawtools generate-verification-gate \
-  --toolchain go \
-  --focused-test "go test ./pkg/auth -run TestAuth"
+# Orchestrator workflow after Scout completes IMPL doc:
+sawtools validate IMPL-X.yaml                    # E16: Check structure
+sawtools populate-verification-gates IMPL-X.yaml # M4: Generate gate blocks
+sawtools validate IMPL-X.yaml                    # Verify gates valid
 ```
 
-**Output:**
-```bash
-go build ./...
-go vet ./...
-go test ./pkg/auth -run TestAuth  # Focused on this agent's work
+**How it works:**
+1. Read IMPL doc to extract per-agent file ownership
+2. For each agent:
+   - Determine focused test pattern from owned files (e.g., `pkg/auth/*.go` → `go test ./pkg/auth`)
+   - Use H2 toolchain data to format full verification block
+   - Update agent's verification section in IMPL doc
+3. Save updated IMPL doc
+
+**Output (writes to IMPL doc):**
+```yaml
+## Wave 1
+
+### Agent A
+
+Files: pkg/auth.go, pkg/auth_test.go
+
+Verification:
+  - go build ./...
+  - go vet ./...
+  - go test ./pkg/auth -run TestAuth  # Focused on this agent's work
 ```
+
+**Integration:**
+
+**CLI Orchestration (`/saw` skill):**
+- After Scout completes, Orchestrator runs:
+  1. `sawtools validate IMPL-X.yaml` (E16)
+  2. `sawtools populate-verification-gates IMPL-X.yaml` (M4)
+  3. `sawtools validate IMPL-X.yaml` (confirm gates valid)
+  4. Present IMPL doc to user for review
+
+**SDK/Webapp Orchestration (`pkg/engine/`):**
+- Add `PopulateVerificationGates(implPath string)` to engine after Scout phase
+- Call automatically before presenting IMPL for human review
+- No Scout prompt changes needed (orchestrator-driven, not agent-driven)
 
 **Impact:**
-- **Frequency:** Every Scout run (once per agent)
-- **Error risk:** Wrong commands → agent verification fails
-- **Time savings:** ~1-2 minutes per Scout run (N agents)
-- **Consistency:** Eliminates formatting variance
+- **Frequency:** Every Scout run (once per IMPL doc, all agents)
+- **Error risk:** Wrong commands → agent verification fails (5% of gate failures)
+- **Time savings:** ~1-2 minutes per Scout run (eliminates manual formatting)
+- **Consistency:** Eliminates formatting variance (100% deterministic)
+- **Reliability:** No Scout discretion required (orchestrator always runs it)
 
 **Implementation notes:**
 - Depends on H2 (formats commands extracted by H2)
 - Cannot exist without H2
+- Validation remains read-only (no side effects)
+- Optional enhancement: `sawtools validate --fix-gates` shortcut (calls populate internally)
 
 ---
 
@@ -555,7 +591,7 @@ Phase 4 (Polish):                 │
 6. `sawtools assign-agent-ids` (M1)
 7. `sawtools detect-cascades` (M2)
 8. `sawtools resolve-repo` (M3)
-9. `sawtools generate-verification-gate` (M4)
+9. `sawtools populate-verification-gates` (M4)
 10. `sawtools estimate-manifest-size` (M5)
 11. `sawtools generate-commit-message` (L3)
 12. `sawtools check-deps` (H6 — NEW)
