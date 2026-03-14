@@ -31,6 +31,80 @@ Scout-and-Wave is a protocol for parallel agent coordination in software develop
                                    (wave1)    (wave1)
 ```
 
+## Execution Models
+
+Scout-and-Wave supports two distinct execution models, each with different orchestration mechanisms:
+
+### Model 1: CLI Orchestration (LLM-Driven)
+
+**Context:** Inside a Claude Code session with Max plan or AWS Bedrock credentials.
+
+**How it works:**
+- Orchestrator (Claude, using `/saw` skill) launches agents via the Agent tool
+- Agents inherit parent session credentials (Max plan or Bedrock)
+- Orchestrator uses `subagent_type: scout|wave-agent|scaffold-agent` to specify agent role
+- Manual worktree flow: orchestrator calls `sawtools create-worktrees`, launches agents, then calls `sawtools merge-agents`
+
+**Key constraint:** Cannot use automated `sawtools run-wave` (requires programmatic agent launching via API)
+
+**Use case:** Development workflows inside Claude Code, exploratory work, debugging
+
+### Model 2: Webapp/Native App Orchestration (Programmatic)
+
+**Context:** User in web browser or native app (Wails).
+
+**How it works:**
+- Backend HTTP server launches agents programmatically via multiprovider backend
+- Agents use configured LLM provider (see Configuration section for supported providers)
+- Fully automated: `saw run-wave` or API endpoints handle worktree creation, agent launch, verification, merge
+- Web app imports `scout-and-wave-go/pkg/engine` directly (Go library imports, not CLI subprocesses)
+
+**Key features:**
+- SSE streaming for real-time agent output
+- React UI for visual progress tracking
+- Approval workflows (review/approve/reject waves)
+- Parallel execution dashboard
+
+**Use case:** Team workflows, production deployments, code review, wave monitoring
+
+## Web Application Architecture
+
+The `scout-and-wave-web` repository provides the primary user interface for wave orchestration.
+
+**Architecture:**
+- HTTP server on port 7432 (default, configurable via `--port`)
+- React frontend embedded via `//go:embed all:dist` (Vite build, ~20MB binary)
+- SSE (Server-Sent Events) for real-time agent streaming
+- API-first design: all operations exposed via HTTP endpoints
+
+**Key components:**
+
+**Backend (`pkg/api/`):**
+- 36 Go files implementing ~47 HTTP routes
+- SSE broker for agent output streaming (`/api/events`)
+- Wave runner integrating with `pkg/engine` from scout-and-wave-go
+- File serving, IMPL manifest parsing, worktree management
+
+**Frontend (`web/`):**
+- React 18 + TypeScript
+- Tailwind CSS 3 (JIT mode)
+- Real-time wave execution dashboard
+- Dependency graph visualization (SVG)
+- Approval workflow UI (approve/request-changes/reject)
+
+**Build requirement:**
+```bash
+cd web && npm run build              # Build React assets
+cd .. && go build -o saw ./cmd/saw   # Embed assets into binary
+```
+
+**Critical:** Web assets are embedded at build time. Any frontend change requires rebuilding the Go binary for changes to take effect.
+
+**Import relationship:**
+- `scout-and-wave-web` imports `scout-and-wave-go/pkg/engine` and `pkg/protocol` as Go libraries
+- No CLI subprocess calls to `sawtools` binary
+- Direct Go function calls for all protocol operations
+
 ## Core Components
 
 ### 1. IMPL Manifest
@@ -60,10 +134,10 @@ repo/
 └── .claude/
     └── worktrees/
         ├── wave1-agent-A/    # Isolated worktree
-        │   ├── .git -> ...   # Links to main .git
+        │   ├── .git          # File with gitdir: pointer to main .git
         │   └── [files]       # Agent A's workspace
         └── wave1-agent-B/    # Isolated worktree
-            ├── .git -> ...
+            ├── .git          # File with gitdir: pointer to main .git
             └── [files]       # Agent B's workspace
 ```
 
@@ -72,9 +146,16 @@ repo/
 - Each agent has full git history and can commit independently
 - Merge happens after all agents complete (I3: wave sequencing)
 
-### 3. Protocol SDK (sawtools CLI)
+### 3. Protocol SDK and Binaries
 
-The `sawtools` binary provides all protocol operations:
+Scout-and-Wave provides two binaries with different purposes:
+
+#### sawtools (SDK Toolkit)
+
+**Location:** `~/.local/bin/sawtools` (installed from `scout-and-wave-go/cmd/saw`)
+**Size:** 11 MB
+**Purpose:** Full protocol SDK, operator utilities, CI/CD integration
+**Commands:** 38 commands organized by category
 
 **Worktree operations:**
 - `create-worktrees` — Create isolated worktrees for a wave
@@ -82,26 +163,140 @@ The `sawtools` binary provides all protocol operations:
 - `verify-isolation` — Check agent is in correct worktree
 
 **Wave execution:**
-- `run-wave` — Fully automated wave execution
+- `run-wave` — Fully automated wave execution (requires multiprovider backend)
 - `merge-agents` — Merge completed agents to main
 - `verify-commits` — Pre-merge commit verification
 - `verify-build` — Post-merge build verification
+- `prepare-agent` — Prepare agent context with journal
+- `prepare-wave` — Prepare wave execution environment
+- `finalize-wave` — Finalize wave after merge
+- `assign-agent-ids` — Assign stable IDs to agents
+- `run-scout` — Launch Scout agent
 
 **IMPL management:**
 - `list-impls` — Discover IMPL docs
 - `validate` — E16 manifest validation
 - `extract-context` — E23 per-agent context extraction
 - `update-status` — Agent status tracking
+- `update-context` — E18 update project memory
+- `update-agent-prompt` — Update agent task prompt in manifest
 - `mark-complete` — E15 completion marker
+- `set-completion` — Register completion report
 
 **Quality assurance:**
 - `scan-stubs` — E20 stub detection
 - `run-gates` — E21 quality gate verification
 - `check-conflicts` — I1 file ownership conflict detection
+- `check-deps` — Dependency analysis
+- `validate-scaffolds` — Validate scaffold file status (plural)
+- `validate-scaffold` — Validate single scaffold file (singular)
+- `freeze-check` — Check for interface contract freeze violations
+
+**Analysis and diagnostics:**
+- `solve` — Interactive problem solver
+- `debug-journal` — Inspect agent execution history
+- `journal-init` — Initialize journal directory
+- `journal-context` — Generate context from journal
+- `detect-cascades` — Detect cascade candidates from type renames
+- `detect-scaffolds` — Detect shared types needing scaffolds
+- `analyze-deps` — Analyze Go repository dependencies
+- `analyze-suitability` — Scan codebase for requirement status
+- `extract-commands` — Extract build/test/lint commands from CI configs
+- `diagnose-build-failure` — Diagnose post-merge build failures
+- `verify-hook-installed` — Check if Scout boundaries hook is installed
+
+**Target audience:** Protocol implementers, power users, CI/CD pipelines
+
+#### saw (Orchestration + Web UI)
+
+**Location:** `/Users/dayna.blackwell/code/scout-and-wave-web/saw` (project-local)
+**Size:** 20 MB (includes embedded React bundle via `//go:embed all:dist`)
+**Purpose:** User-facing orchestration, web UI, HTTP server
+**Primary command:** `serve` (HTTP server on port 7432, 47 API endpoints)
+**Commands:** 23 commands (subset focused on user workflows)
+
+**High-level orchestration:**
+- `serve` — Start HTTP server with embedded React UI
+- `scout` — Launch Scout agent (CLI or API)
+- `scaffold` — Launch Scaffold agent
+- `wave` — Execute wave agents
+- `merge` — Merge agent worktrees
+- `merge-wave` — Check wave merge readiness (JSON output)
+- `current-wave` — Return first incomplete wave number
+- `status` — Show wave/agent status
+
+**IMPL operations:**
+- `render` — Render YAML IMPL as markdown
+- `validate` — Validate IMPL manifest
+- `extract-context` — Extract agent-specific context
+- `set-completion` — Register completion report
+- `mark-complete` — Write SAW:COMPLETE marker
+- `update-agent-prompt` — Update agent prompt
+
+**Quality assurance:**
+- `run-gates` — Run quality gate checks
+- `check-conflicts` — Detect file ownership conflicts
+- `validate-scaffolds` — Validate scaffold status
+- `freeze-check` — Check interface freeze violations
+
+**Analysis:**
+- `analyze-deps` — Dependency graph analysis
+- `analyze-suitability` — Requirement status scan
+- `detect-cascades` — Cascade candidate detection
+- `detect-scaffolds` — Shared type detection
+- `extract-commands` — Extract CI commands
+
+**Target audience:** Feature developers, code reviewers, team leads
+
+**Command overlap:** 11 commands appear in both binaries (validation, manifest ops, gates) — intentional, as both contexts need them.
 
 See `protocol/execution-rules.md` for detailed command specifications.
 
-### 4. Interface Contracts
+### 4. Multiprovider Backend System
+
+The web application and `sawtools run-wave` command use a multiprovider backend for launching agents programmatically.
+
+**Location:** `scout-and-wave-go/pkg/agent/backend/`
+
+**Supported providers:**
+- **Anthropic Messages API** (`backend/api/`) — Official Anthropic endpoint, requires `ANTHROPIC_API_KEY`
+- **AWS Bedrock** (`backend/bedrock/`) — AWS Bedrock using AWS SDK v2, requires AWS credentials
+- **OpenAI-compatible API** (`backend/openai/`) — Supports:
+  - OpenAI (`openai:gpt-4o`) — requires `OPENAI_API_KEY`
+  - Groq (`openai:mixtral-8x7b`) — set `BaseURL: "https://api.groq.com/openai/v1"`
+  - Ollama (`ollama:qwen2.5-coder:32b`) — local LLM at `http://localhost:11434/v1`
+  - LM Studio (`lmstudio:phi-4`) — local LLM at `http://localhost:1234/v1`
+- **Claude Code CLI** (`backend/cli/`) — Subprocess execution for local development
+
+**Configuration:** Model names with provider prefixes route to the appropriate backend:
+```
+anthropic:claude-opus-4-6     → Anthropic API
+bedrock:claude-sonnet-4-5     → AWS Bedrock
+openai:gpt-4o                 → OpenAI API
+ollama:qwen2.5-coder:32b      → Ollama (localhost:11434)
+lmstudio:phi-4                → LM Studio (localhost:1234)
+cli:claude-sonnet-4-6         → Claude Code CLI subprocess
+claude-sonnet-4-6             → Anthropic API (default)
+```
+
+**Backend interface:**
+```go
+type Backend interface {
+    Run(ctx context.Context, systemPrompt, userMessage, workDir string) (string, error)
+    RunStreaming(ctx context.Context, systemPrompt, userMessage, workDir string, onChunk ChunkCallback) (string, error)
+    RunStreamingWithTools(ctx context.Context, systemPrompt, userMessage, workDir string, onChunk ChunkCallback, onToolCall ToolCallCallback) (string, error)
+}
+```
+
+**Tool call loop:** `RunStreamingWithTools` implements the agentic loop:
+1. Send messages + tools to LLM
+2. LLM responds with text or tool_use
+3. If tool_use: execute tool, append result, loop back to step 1
+4. If text (finish_reason: "stop"): return final answer
+
+**Project configuration:** Providers configured in `saw.config.json` (see Configuration section).
+
+### 5. Interface Contracts
 
 All cross-agent dependencies are defined as interface contracts in the IMPL manifest before parallel work begins.
 
@@ -114,7 +309,7 @@ All cross-agent dependencies are defined as interface contracts in the IMPL mani
 
 **Interface freeze:** When `create-worktrees` runs, contracts become immutable. Any interface change after this point requires recreating all worktrees.
 
-### 5. Tool Journaling Subsystem
+### 6. Tool Journaling Subsystem
 
 External observer pattern that preserves agent execution context across Claude Code's context window compaction events.
 
@@ -196,11 +391,19 @@ See [tool-journaling.md](./tool-journaling.md) for full documentation.
 
 ### Phase 1: Scout
 
-1. User invokes `/saw scout <feature-description>`
-2. Orchestrator launches Scout agent (async, `subagent_type: scout`)
+**CLI Orchestration (Model 1):**
+1. User invokes `/saw scout <feature-description>` in Claude Code session
+2. Orchestrator launches Scout agent (async, `subagent_type: scout`) via Agent tool
 3. Scout analyzes codebase, identifies interfaces, writes IMPL manifest
 4. Orchestrator validates IMPL manifest (E16: `sawtools validate`)
 5. User reviews and approves decomposition
+
+**Webapp Orchestration (Model 2):**
+1. User clicks "New Feature" in web UI or runs `saw scout <feature>` CLI
+2. Backend launches Scout agent via multiprovider backend
+3. Scout analyzes codebase, writes IMPL manifest
+4. Backend validates manifest, streams progress via SSE
+5. User reviews and approves in web UI or terminal
 
 ### Phase 2: Scaffold (if needed)
 
@@ -258,8 +461,9 @@ For each wave (1..N):
 
 1. Orchestrator runs `sawtools mark-complete` on IMPL manifest
 2. Orchestrator runs `sawtools update-context` (E18: update project memory)
-3. IMPL doc is marked `state: COMPLETE`
-4. Feature is done
+3. Orchestrator runs `sawtools update-agent-prompt` (if agent prompts need updates based on learnings)
+4. IMPL doc is marked `state: COMPLETE`
+5. Feature is done
 
 ## Invariants
 
@@ -350,11 +554,15 @@ repo/
 │       └── wave1-agent-A.tar.gz
 ├── docs/
 │   ├── IMPL/                       # IMPL manifests (I4)
-│   │   └── IMPL-<feature>.yaml
+│   │   ├── IMPL-<feature>.yaml     # Active work
+│   │   └── complete/               # Completed IMPL docs
+│   │       └── IMPL-<done>.yaml
 │   └── CONTEXT.md                  # Project memory (E18)
 ├── saw.config.json                 # Project config (journal settings, model defaults)
 └── [source code]
 ```
+
+**Note:** IMPL manifests support optional `repo:` field for cross-repo waves (when a single feature spans multiple repositories).
 
 ## Configuration
 
@@ -365,7 +573,11 @@ Project-local config at `<repo>/saw.config.json` or global default at `~/.claude
   "agent": {
     "scout_model": "claude-sonnet-4-5",
     "wave_model": "claude-sonnet-4-5",
-    "chat_model": "claude-sonnet-4-5"
+    "chat_model": "claude-sonnet-4-5",
+    "backend": "anthropic",
+    "anthropic_api_key": "${ANTHROPIC_API_KEY}",
+    "openai_api_key": "${OPENAI_API_KEY}",
+    "bedrock_region": "us-east-1"
   },
   "journal": {
     "enabled": true,
@@ -378,9 +590,35 @@ Project-local config at `<repo>/saw.config.json` or global default at `~/.claude
   "quality_gates": {
     "default_level": "standard",
     "fail_on_stubs": false
+  },
+  "providers": {
+    "anthropic": {
+      "api_key": "${ANTHROPIC_API_KEY}"
+    },
+    "openai": {
+      "api_key": "${OPENAI_API_KEY}",
+      "base_url": ""
+    },
+    "bedrock": {
+      "region": "us-east-1",
+      "profile": "default"
+    },
+    "ollama": {
+      "base_url": "http://localhost:11434/v1"
+    },
+    "lmstudio": {
+      "base_url": "http://localhost:1234/v1"
+    }
   }
 }
 ```
+
+**Provider selection:**
+- Model names with provider prefixes (`anthropic:`, `openai:`, `bedrock:`, `ollama:`, `lmstudio:`, `cli:`) route to specific backends
+- Models without prefix default to Anthropic Messages API
+- `${VAR}` syntax expands environment variables
+- Web application uses `providers` config for multiprovider backend
+- CLI orchestration (Model 1) uses parent session credentials (ignores `providers` config)
 
 ## See Also
 
