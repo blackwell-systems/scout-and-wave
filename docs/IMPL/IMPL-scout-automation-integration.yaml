@@ -335,6 +335,7 @@ waves:
             - implementations/claude-code/prompts/saw-skill.md
           dependencies:
             - B
+      base_commit: 2bcaee29819ddab57c572416b3bc210a495fe445
 quality_gates:
     level: standard
     gates:
@@ -375,4 +376,26 @@ completion_reports:
             - cmd/saw/extract_commands.go
         verification: PASS - Interface mismatch resolved with SDK wrapper functions
         repo: scout-and-wave-web
+    C:
+        status: complete
+        branch: wave2-agent-C
+        commit: "67285e3"
+        files_changed:
+            - pkg/engine/runner.go
+        files_created:
+            - pkg/engine/runner_automation_test.go
+            - pkg/suitability/wrapper.go
+        tests_added:
+            - TestRunScout_AutomationIntegration
+            - TestRunScout_AutomationFailure
+            - TestDetectRequirementsFile
+            - TestRunScoutAutomation_WithRequirementsFile
+        verification: PASS
+    D:
+        status: complete
+        branch: wave2-agent-D
+        commit: c610f56
+        files_changed:
+            - implementations/claude-code/prompts/saw-skill.md
+        verification: PASS
 state: WAVE_PENDING
