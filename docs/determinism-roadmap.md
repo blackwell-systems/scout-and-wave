@@ -11,22 +11,18 @@
 
 **All foundational Scout automation tools are now COMPLETE and integrated:**
 
-- ✅ **H2** (extract-commands) — CI config scanner with 8 parsers (GitHub Actions, CircleCI, Travis, Jenkins, GitLab, Makefile, package.json, justfile)
-- ✅ **H3** (analyze-deps) — Multi-language dependency analyzer (Go/Rust/JS/Python) with wave candidate suggestions
-- ✅ **H1a** (analyze-suitability) — Pre-implementation status scanner with DONE/PARTIAL/TODO classification
-- ✅ **H4** (detect-scaffolds) — Interface scaffold detection from type contracts
-- ✅ **M2** (detect-cascades) — AST-based rename cascade analyzer
+- ✅ **H2** (extract-commands) — v0.34.0 — CI config scanner, 8 parsers
+- ✅ **H3** (analyze-deps) — v0.35.0 — Multi-language dependency analyzer (Go/Rust/JS/Python)
+- ✅ **H1a** (analyze-suitability) — v0.36.0 — Pre-implementation status scanner (DONE/PARTIAL/TODO)
+- ✅ **H4** (detect-scaffolds) — v0.36.0 — Interface scaffold detection from type contracts
+- ✅ **M2** (detect-cascades) — v0.36.0 — AST-based rename cascade analyzer
+- ✅ **H7** (diagnose-build-failure) — v0.38.0 + v0.39.0 — Build error pattern matching
 
-**Integration (v0.36.0):**
-- SDK: `pkg/engine/runner.go` calls H2→H1a→H3 before Scout launch
-- CLI: `/saw` skill runs `sawtools` automation commands via Bash
-- Results injected into Scout prompts as "Automation Analysis Results" section
+**Integration:** SDK (`pkg/engine/runner.go`) and CLI (`/saw` skill) run H2→H1a→H3 before Scout launch. Results injected as "Automation Analysis Results" section in Scout prompts.
 
-**Measured impact:**
-- Build/test commands auto-detected (eliminates manual guessing)
-- Requirements status classified automatically (DONE/PARTIAL/TODO)
-- Dependency-aware wave structures (H3 wave_candidate field)
-- Zero Scout runtime overhead (runs in orchestrator layer)
+**Impact:** 50-65% Scout time reduction (25 min → 8-12 min), zero runtime overhead, auto-detected build/test commands, dependency-aware wave structures.
+
+See **"Completed Tools Archive"** section at end of document for implementation details.
 
 
 ## Executive Summary
@@ -241,76 +237,9 @@ sawtools check-deps docs/IMPL/IMPL-X.yaml --wave 1
 
 ---
 
-### H7: Build Failure Diagnosis — ✅ COMPLETE (v0.38.0 + v0.39.0 integration)
+### H7: Build Failure Diagnosis — ✅ COMPLETE (v0.38.0 + v0.39.0)
 
-**Current behavior (from `wave-agent.md` Field 6):**
-- Agents run verification gates (build + lint + test)
-- Build failures trigger ad-hoc debugging: reading error logs, checking imports, adjusting flags
-- No structured guidance on which build errors are fixable vs. should escalate
-
-**Determinism gap:**
-- Agents retry builds with slight variations (adding flags, changing paths) hoping for success
-- No catalog of "known build patterns" (e.g., Go: `cannot find package` → run `go mod tidy`)
-
-**Proposed solution:** `sawtools diagnose-build-failure <error-log> --language <lang>`
-
-**Usage:**
-```bash
-# Agent hits build failure:
-go build ./... 2>&1 | tee build-error.log
-
-# Diagnose:
-sawtools diagnose-build-failure build-error.log --language go
-```
-
-**Output:**
-```yaml
-diagnosis: "missing_import"
-confidence: 0.95
-fix: "go mod tidy && go build ./..."
-rationale: "Error 'cannot find package X' indicates go.sum is stale"
-auto_fixable: true
-```
-
-**Pattern catalog (examples):**
-
-**Go:**
-- `cannot find package` → `go mod tidy`
-- `undefined: X` → check imports, add missing import
-- `cannot use X (type Y) as type Z` → type mismatch, check interface contract
-
-**Rust:**
-- `error[E0425]: cannot find value` → check module imports, add `use` statement
-- `error[E0277]: the trait bound ... is not satisfied` → missing trait implementation
-
-**JavaScript/TypeScript:**
-- `Cannot find module 'X'` → `npm install X`
-- `Property 'X' does not exist on type 'Y'` → type definition mismatch, check interface contract
-
-**Python:**
-- `ModuleNotFoundError: No module named 'X'` → `pip install X`
-- `NameError: name 'X' is not defined` → check imports
-
-**Status: COMPLETE (2026-03-14)**
-- v0.38.0: CLI command + pattern engine (27 patterns across 4 languages)
-- v0.39.0: Wave agent integration (wave-agent.md + agent-template.md)
-- Integration: Agents auto-call diagnose-build-failure on verification gate failures
-- Confidence threshold: ≥0.85 for auto-fix, <0.85 for manual review
-
-**Impact:**
-- **Frequency:** ~30% of agents (agents with build failures)
-- **Error risk:** Agents waste 3-5 min per retry on ad-hoc debugging
-- **Time savings:** ~5-10 minutes per affected agent (structured diagnosis vs. trial-and-error)
-- **Reliability:** Pattern matching catches 60-70% of common build errors
-
-**Implementation notes:**
-- Standalone (no tool dependencies)
-- Pattern catalog evolves over time (add new patterns as observed)
-- LOW-MEDIUM confidence (error message patterns change with compiler versions)
-
-**Maintenance burden:** MEDIUM
-- Must stay current with compiler error message formats
-- Each language needs separate pattern catalog
+Pattern-match build errors and suggest fixes. Wave agents auto-call when verification gates fail (confidence ≥0.85 for auto-fix). 27 patterns across 4 languages (Go/Rust/JS/Python). See "Completed Tools Archive" section for implementation details.
 
 ---
 
@@ -723,6 +652,123 @@ Phase 4 (Polish):                 │
 - `sawtools update-agent-prompt` (downstream prompt updates)
 
 **Total sawtools commands after full implementation:** 20 existing + 14 new = 34 commands
+
+---
+
+## Completed Tools Archive
+
+This section contains implementation details for completed determinism tools. Active work is documented in the "Opportunities Catalog" section above.
+
+### H7: Build Failure Diagnosis (v0.38.0 + v0.39.0 integration)
+
+**Problem:** Wave agents hit build failures and retry with ad-hoc debugging (reading logs, adjusting flags) without structured guidance on fixable vs. escalate errors.
+
+**Solution:** `sawtools diagnose-build-failure <error-log> --language <lang>`
+
+**Usage:**
+```bash
+# Agent hits build failure:
+go build ./... 2>&1 | tee build-error.log
+
+# Diagnose:
+sawtools diagnose-build-failure build-error.log --language go
+```
+
+**Output:**
+```yaml
+diagnosis: "missing_import"
+confidence: 0.95
+fix: "go mod tidy && go build ./..."
+rationale: "Error 'cannot find package X' indicates go.sum is stale"
+auto_fixable: true
+```
+
+**Pattern catalog (27 patterns across 4 languages):**
+
+**Go:**
+- `cannot find package` → `go mod tidy`
+- `undefined: X` → check imports, add missing import
+- `cannot use X (type Y) as type Z` → type mismatch, check interface contract
+
+**Rust:**
+- `error[E0425]: cannot find value` → check module imports, add `use` statement
+- `error[E0277]: the trait bound ... is not satisfied` → missing trait implementation
+
+**JavaScript/TypeScript:**
+- `Cannot find module 'X'` → `npm install X`
+- `Property 'X' does not exist on type 'Y'` → type definition mismatch, check interface contract
+
+**Python:**
+- `ModuleNotFoundError: No module named 'X'` → `pip install X`
+- `NameError: name 'X' is not defined` → check imports
+
+**Integration (v0.39.0):**
+- wave-agent.md: Added "Build Failure Diagnosis (H7)" subsection after Verification Gates
+- agent-template.md: Added H7 workflow to Field 6 guidance
+- Auto-call when verification gates fail, confidence ≥0.85 for auto-fix
+
+**Impact:**
+- Frequency: ~30% of agents (agents with build failures)
+- Time savings: 5-10 minutes per affected agent (structured diagnosis vs. trial-and-error)
+- Reliability: Pattern matching catches 60-70% of common build errors
+
+**Maintenance:** MEDIUM (must stay current with compiler error message formats)
+
+---
+
+### H2: Extract Commands (v0.34.0)
+
+**Problem:** Scout manually guesses build/test/lint commands from project structure, high error risk (wrong commands break verification gates).
+
+**Solution:** `sawtools extract-commands <repo-root>`
+
+Scans CI configs (GitHub Actions, CircleCI, Travis, Jenkins, GitLab), Makefiles, package.json, justfile. Returns structured YAML with detected commands for build/test/lint/format.
+
+**Integration:** SDK and CLI run H2 before Scout launch, inject results into "Automation Analysis Results" section.
+
+---
+
+### H3: Analyze Dependencies (v0.35.0)
+
+**Problem:** Scout manually traces imports and function calls to build dependency graph, largest Scout time sink (15-20 min per feature).
+
+**Solution:** `sawtools analyze-deps <repo-root> --files "<file1,file2,file3>"`
+
+Multi-language AST analyzer (Go/Rust/JS/Python) with wave candidate suggestions based on topological sort.
+
+**Integration:** SDK and CLI run H3 before Scout launch, inject `wave_candidate` field for each file.
+
+---
+
+### H1a: Analyze Suitability (v0.36.0)
+
+**Problem:** Scout manually scans codebase to determine if work is already partially implemented.
+
+**Solution:** `sawtools analyze-suitability <requirements-file> --repo-root <repo-path>`
+
+Regex-based scanner classifies each requirement as DONE/PARTIAL/TODO based on function existence, test coverage, and TODO/FIXME markers.
+
+**Integration:** SDK and CLI run H1a before Scout launch (conditional on requirements file detected in feature description).
+
+---
+
+### H4: Detect Scaffolds (v0.36.0)
+
+**Problem:** Scout manually identifies shared types that need scaffold files.
+
+**Solution:** `sawtools detect-scaffolds <impl-doc>`
+
+Scans interface contracts section, identifies types referenced by ≥2 agents, generates Scaffolds section.
+
+---
+
+### M2: Detect Cascades (v0.36.0)
+
+**Problem:** Type renames cause syntax failures in files outside agent ownership (imports, type declarations).
+
+**Solution:** `sawtools detect-cascades --renames '[{"old":"AuthToken","new":"SessionToken","scope":"pkg/auth"}]'`
+
+AST-based analyzer (Go only) classifies cascade candidates as syntax (high/medium severity) vs. semantic (low severity, comments/strings).
 
 ---
 
