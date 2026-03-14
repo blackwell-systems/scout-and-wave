@@ -18,8 +18,8 @@ This roadmap tracks enhancements to the Scout-and-Wave protocol that improve aut
 ## Priority 1: Critical Resilience Gaps
 
 ### E23A: Tool Journal Recovery
-**Status:** Not Implemented
-**Risk Level:** High
+**Status:** ✅ Completed 2025-03-14
+**Risk Level:** High (resolved)
 **Execution Rule:** E23A in `protocol/execution-rules.md`
 **Audit Finding:** Protocol audit 2025-03-14
 
@@ -171,8 +171,8 @@ Message-formats.md states "Markdown format deprecated... Scout v0.7.1+ generates
 ---
 
 ### E9: Merge Idempotency
-**Status:** Not Implemented
-**Risk Level:** High
+**Status:** ✅ Completed 2025-03-14
+**Risk Level:** High (resolved)
 **Execution Rule:** E9 in `protocol/execution-rules.md`
 
 **Problem:**
@@ -423,7 +423,30 @@ Worktree isolation Layer 0 (pre-commit hook) is installed during `create-worktre
 
 ## Completed Enhancements
 
-None yet. This roadmap established 2025-03-14 based on comprehensive protocol audits (execution rules + spec files).
+### E23A: Tool Journal Recovery + E9: Merge Idempotency
+**Completed:** 2025-03-14
+**Implementation:** Combined in single IMPL (IMPL-journal-recovery-merge-idempotency)
+**Wave Structure:** Single wave, 4 agents (fully parallel)
+
+**E23A Deliverables:**
+- `pkg/orchestrator/journal_integration.go` - PrepareAgentContext(), WriteJournalEntry()
+- `pkg/journal/observer.go` - LoadJournal(), GenerateContext() implementation
+- Enables agents to recover execution history across retries and context compaction
+- Supports automatic failure remediation (E7a, E19)
+
+**E9 Deliverables:**
+- `pkg/protocol/merge_log.go` - MergeLog type, LoadMergeLog(), SaveMergeLog()
+- Idempotency checks integrated into finalize-wave, merge_agents, orchestrator/merge
+- .saw-state/wave{N}/merge-log.json tracks completed merges
+- Crashed merges can resume without duplicate commits
+
+**Verification:**
+- All tests passing (28 new tests total)
+- Build verification passed post-merge
+- Deployed to scout-and-wave-go develop branch
+
+**Time to Complete:** ~4 hours (Scout 15min + Wave agents 3h20min + Merge/fix 25min)
+**Time Estimate:** 33 minutes (actual was longer due to test fix iteration)
 
 ---
 
