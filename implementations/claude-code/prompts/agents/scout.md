@@ -676,6 +676,8 @@ state: "SCOUT_PENDING"
 # Recommendation: <proceed or not>
 
 # Quality Gates
+# Gate type MUST be one of: build | lint | test | typecheck | custom
+# Use "custom" for non-standard gates (vite build, e2e, benchmarks, etc.)
 quality_gates:
   level: "standard"
   gates:
