@@ -192,9 +192,9 @@ If no `docs/IMPL/IMPL-*.yaml` file exists for the current feature:
 2. When the Scout completes, read the resulting `docs/IMPL/IMPL-<feature-slug>.yaml`.
 3. **E16: Validate IMPL doc before review.** After Scout writes the IMPL doc, run:
    ```bash
-   sawtools validate "<absolute-path-to-impl-doc>"
+   sawtools validate --fix "<absolute-path-to-impl-doc>"
    ```
-   If exit code is 0, proceed to human review. If exit code is 1, the stdout contains a plain-text error list — send it to Scout as a correction prompt: "Your IMPL doc failed validation. Fix only these sections:\n{errors}". Retry up to 3 attempts. On retry limit exhaustion, enter BLOCKED and surface the validation errors to the human. Do not present the doc for human review until validation passes.
+   The `--fix` flag auto-corrects mechanically fixable issues (e.g. invalid gate types → `custom`) before validation runs. Check the `"fixed"` field in JSON output — if non-zero, log the corrections for the user. If exit code is 0, proceed to human review. If exit code is 1, the stdout contains remaining errors — send them to Scout as a correction prompt: "Your IMPL doc failed validation. Fix only these sections:\n{errors}". Retry up to 3 attempts. On retry limit exhaustion, enter BLOCKED and surface the validation errors to the human. Do not present the doc for human review until validation passes.
 
    **E16A note:** The validator enforces required block presence — an IMPL doc missing `impl-file-ownership`, `impl-dep-graph`, or `impl-wave-structure` typed blocks will fail even if all present blocks are internally valid. E16C warnings (out-of-band dep graph content) appear in stdout but do not cause exit 1; include them in the correction prompt anyway so Scout moves the content into a typed block.
 4. Report the suitability verdict to the user, and if suitable: the wave structure, file ownership table, interface contracts, and Scaffolds section. Ask the user to review before proceeding.
