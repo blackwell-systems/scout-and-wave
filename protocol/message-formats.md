@@ -1,6 +1,6 @@
 # Scout-and-Wave Message Formats
 
-**Version:** 0.14.0
+**Version:** 0.15.0
 
 This document defines the structured data formats exchanged between participants: suitability verdicts, agent prompts, completion reports, and scaffold specifications.
 
@@ -1003,6 +1003,82 @@ The orchestrator constructs a per-agent context payload (E23) before launching e
 ```
 
 **Stability:** Payload format is identical across waves. Wave 2 agents receive the same structure as Wave 1 agents — their own section extracted, same shared sections included.
+
+---
+
+## Integration Messages (E25/E26)
+
+The following message formats are emitted by the Orchestrator during integration validation (E25) and Integration Agent execution (E26). These messages are written to the IMPL doc and emitted as SSE events for web UI consumption.
+
+### `integration_gaps_detected`
+
+Emitted when `ValidateIntegration()` finds unconnected exports after a wave completes.
+
+```yaml
+type: integration_gaps_detected
+payload:
+  wave: int           # wave number that was just completed
+  gaps_count: int     # number of integration gaps detected
+  report:             # full IntegrationReport
+    wave: int
+    gaps:             # list of IntegrationGap
+      - export_name: string
+        file_path: string
+        agent_id: string
+        category: string       # function_call, type_usage, field_init
+        severity: string       # high, medium, low
+        reason: string
+        suggested_fix: string
+        search_results: [string]
+    valid: bool       # always false when this message is emitted
+    summary: string
+```
+
+### `integration_agent_started`
+
+Emitted when the Orchestrator launches the Integration Agent to wire detected gaps.
+
+```yaml
+type: integration_agent_started
+payload:
+  wave: int                    # wave number
+  connectors:                  # list of IntegrationConnector — files the agent may modify
+    - file: string
+      reason: string
+```
+
+### `integration_agent_complete`
+
+Emitted when the Integration Agent finishes successfully.
+
+```yaml
+type: integration_agent_complete
+payload:
+  wave: int                    # wave number
+  files_changed: [string]      # files the Integration Agent modified
+```
+
+### `integration_agent_failed`
+
+Emitted when the Integration Agent fails to wire integration gaps.
+
+```yaml
+type: integration_agent_failed
+payload:
+  wave: int                    # wave number
+  error: string                # error description
+```
+
+### `integration_agent_output`
+
+Streaming output from the Integration Agent, emitted as the agent produces output chunks. Used by SSE consumers for real-time progress display.
+
+```yaml
+type: integration_agent_output
+payload:
+  wave: int                    # wave number
+  chunk: string                # output text chunk
+```
 
 ---
 
