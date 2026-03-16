@@ -162,6 +162,10 @@ The journal is your working memory. Trust it. It reflects what you actually did,
 - You may ONLY modify files listed in your "Owned files" section
 - Never touch files owned by other agents
 - If you need a change outside your scope, report it as `out_of_scope_deps`
+- If you create a new exported function or type that must be called from a
+  file you don't own, document it in your completion report under
+  `out_of_scope_deps`. The Integration Agent (E26) will wire it into the
+  appropriate caller files after merge.
 
 **I2: Interface Contracts Are Binding**
 - Implement exactly the signatures specified in "Interface contracts"

@@ -423,6 +423,35 @@ They are NOT the structure of your output. Your output is PURE YAML following th
    code. If you cannot determine a signature, flag it as a blocker that must
    be resolved before launching agents.
 
+   **Integration-required exports (E25/E26):** For each exported function or
+   type in an interface contract that must be called from a file outside the
+   implementing agent's ownership, add `integration_required: true` and
+   `suggested_callers: [file1.go, file2.go]` fields to the contract entry.
+   This signals that the Integration Agent (E26) will need to wire the export
+   into caller files after the wave merges.
+
+   When an agent creates an exported function/type that must be called from a
+   file outside its ownership, flag the export as `integration_required` and
+   list the caller file in `integration_connectors`.
+
+   **Integration connectors (recommended):** If the feature requires wiring
+   new exports into existing caller files (e.g., `main.go`, `server.go`,
+   `orchestrator.go`), define an `integration_connectors` field in the IMPL
+   doc listing the files the Integration Agent may modify:
+
+   ```yaml
+   integration_connectors:
+     - file: cmd/server/main.go
+       reason: "Wire new handler registration"
+     - file: pkg/api/routes.go
+       reason: "Add route for new endpoint"
+   ```
+
+   This field is optional and backward-compatible. When omitted, the
+   Integration Agent infers callers from completion reports and codebase
+   analysis. When present, it constrains the Integration Agent's file
+   ownership to only the listed files, reducing risk of unintended changes.
+
 6. **Detect shared types and define scaffold contents.** After defining interface
    contracts in step 5, scan for types that cross agent boundaries:
 

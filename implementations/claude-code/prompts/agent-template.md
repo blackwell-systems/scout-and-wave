@@ -260,6 +260,10 @@ interface_deviations:
   - "Exact description of any deviation from the spec contract, or []"
 out_of_scope_deps:
   - "file: path/to/file, change: what's needed, reason: why"  # or []
+  # For new exports needing wiring into files you don't own, use this format:
+  # - "pkg/foo.NewHandler -> cmd/server/main.go"
+  # - "pkg/bar.RegisterRoutes -> pkg/api/routes.go"
+  # The Integration Agent (E26) uses these to wire exports after merge.
 tests_added:
   - test_function_name
 verification: PASS | FAIL ({command} - N/N tests)

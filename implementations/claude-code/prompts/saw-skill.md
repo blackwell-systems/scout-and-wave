@@ -120,6 +120,7 @@ All operations use the `sawtools` binary. IMPL docs are YAML manifests (`.yaml`)
 - `sawtools validate-scaffolds` — scaffold commit status verification
 - `sawtools freeze-check` — I2 interface contract freeze enforcement
 - `sawtools update-agent-prompt` — E8 downstream prompt updates
+- `sawtools validate-integration <manifest> --wave N` — E25 integration gap detection
 
 ## Execution Models
 
@@ -244,7 +245,12 @@ Follow the brief exactly.Follow the extracted brief exactly.
    ```bash
    sawtools finalize-wave "<manifest-path>" --wave <N> --repo-dir "<repo-path>"
    ```
-   This atomic operation combines the 6-step post-wave pipeline: (1) verify-commits (E7 check), (2) scan-stubs (E20), (3) run-gates (E21), (4) merge-agents, (5) verify-build, (6) cleanup. The command stops on first failure and returns comprehensive JSON with all verification results. Exit code 1 indicates failure at any step. Returns `Success: true` only if all steps pass. For solo agents (no worktrees), run the individual commands manually: `verify-build` to run tests, then proceed to step 8.
+   This atomic operation combines the 6-step post-wave pipeline: (1) verify-commits (E7 check), (2) scan-stubs (E20), (3) run-gates (E21), (4) merge-agents, (5) verify-build, (6) cleanup. The command stops on first failure and returns comprehensive JSON with all verification results. Exit code 1 indicates failure at any step. Returns `Success: true` only if all steps pass. For solo agents (no worktrees), run the individual commands manually: `verify-build` to run tests, then proceed to step 7a.
+7a. **E25/E26: Integration gap detection and wiring (post-merge).** After wave finalization succeeds, run integration validation to detect unconnected exports:
+   ```bash
+   sawtools validate-integration "<manifest-path>" --wave <N>
+   ```
+   This scans the merged codebase for exported symbols flagged as `integration_required` or detected via heuristics (e.g., `New*`, `Build*`, `Register*` functions with no callers). If gaps are found, the Integration Agent (E26) is launched to wire exports into the `integration_connectors` files listed in the IMPL doc. In the web app, this runs automatically after `finalize-wave`. CLI users can run `sawtools validate-integration` manually and review the integration report before proceeding to the next wave.
 8. **E15: IMPL doc completion marker.** If this was the final wave and post-merge verification passed, run:
    ```bash
    sawtools mark-complete "<impl-doc-path>" --date "YYYY-MM-DD"
