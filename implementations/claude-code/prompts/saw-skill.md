@@ -11,7 +11,8 @@ user-invocable: true
 allowed-tools: |
   Read, Write, Glob, Grep, Bash(git *), Bash(cd *), Bash(mkdir *),
   Agent(subagent_type=scout), Agent(subagent_type=scaffold-agent),
-  Agent(subagent_type=wave-agent), Agent(subagent_type=general-purpose)
+  Agent(subagent_type=wave-agent), Agent(subagent_type=integration-agent),
+  Agent(subagent_type=general-purpose)
 license: MIT OR Apache-2.0
 compatibility: Requires Claude Code (Skills API). Git 2.20+ required for worktree support.
 metadata:
@@ -55,7 +56,8 @@ for cross-referencing and audit.*
      "agent": {
        "scout_model": "claude-sonnet-4-5",
        "wave_model": "claude-sonnet-4-5",
-       "chat_model": "claude-sonnet-4-5"
+       "chat_model": "claude-sonnet-4-5",
+       "integration_model": "claude-sonnet-4-5"
      }
    }
    ```
@@ -250,7 +252,15 @@ Follow the brief exactly.Follow the extracted brief exactly.
    ```bash
    sawtools validate-integration "<manifest-path>" --wave <N>
    ```
-   This scans the merged codebase for exported symbols flagged as `integration_required` or detected via heuristics (e.g., `New*`, `Build*`, `Register*` functions with no callers). If gaps are found, the Integration Agent (E26) is launched to wire exports into the `integration_connectors` files listed in the IMPL doc. In the web app, this runs automatically after `finalize-wave`. CLI users can run `sawtools validate-integration` manually and review the integration report before proceeding to the next wave.
+   This scans the merged codebase for exported symbols flagged as `integration_required` or detected via heuristics (e.g., `New*`, `Build*`, `Register*` functions with no callers). If gaps are found, launch an **Integration Agent** to wire them:
+
+   1. Read `agent.integration_model` from `saw.config.json` (same two-level lookup as other models). If empty or missing, inherit the parent model.
+   2. Launch the integration agent via the Agent tool with `subagent_type: integration-agent` and `run_in_background: true`. Pass the IMPL doc path, wave number, and the integration report JSON as the prompt. Use `[SAW:wave{N}:integrator] wire integration gaps` as the description.
+   3. If `subagent_type: integration-agent` fails, fall back to `subagent_type: general-purpose` with the contents of `${CLAUDE_SKILL_DIR}/agents/integration-agent.md` as its prompt plus the integration report.
+   4. After the integration agent completes, verify the build: `go build ./...`. If it fails, surface the error to the user.
+   5. Read the integration agent's completion report from the IMPL doc (agent ID: `integrator`).
+
+   In the web app, this runs automatically after `finalize-wave`. CLI users can also run `sawtools validate-integration` manually and review the integration report before proceeding to the next wave.
 8. **E15: IMPL doc completion marker.** If this was the final wave and post-merge verification passed, run:
    ```bash
    sawtools mark-complete "<impl-doc-path>" --date "YYYY-MM-DD"
