@@ -1,0 +1,28 @@
+{
+  "slug": "bedrock-structured-output",
+  "current_stage": "wave_merge",
+  "entries": [
+    {
+      "stage": "scaffold",
+      "status": "complete",
+      "started_at": "2026-03-15T22:13:01.554759-07:00",
+      "completed_at": "2026-03-15T22:13:01.555615-07:00"
+    },
+    {
+      "stage": "wave_execute",
+      "status": "complete",
+      "wave_num": 1,
+      "started_at": "2026-03-15T22:13:01.57819-07:00",
+      "completed_at": "2026-03-15T22:23:04.25342-07:00"
+    },
+    {
+      "stage": "wave_merge",
+      "status": "failed",
+      "wave_num": 1,
+      "message": "engine.FinalizeWave: verify-build failed (test_passed=false, lint_passed=false)",
+      "started_at": "2026-03-15T22:23:04.253602-07:00",
+      "completed_at": "2026-03-15T22:23:23.094355-07:00"
+    }
+  ],
+  "updated_at": "2026-03-15T22:23:23.094355-07:00"
+}
