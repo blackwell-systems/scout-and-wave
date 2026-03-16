@@ -372,6 +372,10 @@
         "description": {
           "type": "string",
           "description": "Human-readable description of what this gate checks."
+        },
+        "repo": {
+          "type": "string",
+          "description": "If set, this gate only runs when finalize-wave processes this repo."
         }
       }
     },
