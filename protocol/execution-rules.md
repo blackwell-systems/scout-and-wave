@@ -1,6 +1,6 @@
 # Scout-and-Wave Protocol Execution Rules
 
-**Version:** 0.14.0
+**Version:** 0.15.0
 
 This document defines the execution rules that govern orchestrator behavior during Scout-and-Wave protocol execution. These rules are not captured by the state machine alone.
 
@@ -8,7 +8,7 @@ This document defines the execution rules that govern orchestrator behavior duri
 
 ## Overview
 
-Rules are numbered E1–E23 for cross-referencing and audit; the same convention as invariants (I1–I6). When referenced in implementation files, the E-number serves as an anchor; implementations should embed the canonical definition verbatim alongside the reference.
+Rules are numbered E1–E26 for cross-referencing and audit; the same convention as invariants (I1–I6). When referenced in implementation files, the E-number serves as an anchor; implementations should embed the canonical definition verbatim alongside the reference.
 
 To audit consistency, search implementation files for `E{N}` and verify the embedded definitions match this document.
 
@@ -685,6 +685,57 @@ This duality does not violate I4. The IMPL doc defines *what should be done*. Th
 
 ---
 
+## E25: Integration Validation
+
+**Trigger:** Wave agents complete and merge succeeds
+
+**Required Action:** Scan the merged result for unconnected exports using AST analysis. Produce an `IntegrationReport` with gaps classified by severity (`error`, `warning`, `info`).
+
+**Non-fatal:** Integration gaps do not block the pipeline. They are reported to the orchestrator, which decides whether to launch an Integration Agent (E26) to wire gaps automatically.
+
+**Process:**
+1. The orchestrator calls `ValidateIntegration` on the merged codebase for the completed wave.
+2. `ValidateIntegration` walks all files changed by wave agents, identifies new exported symbols, and classifies each as an `IntegrationGap` if no caller is found in the existing codebase.
+3. Each gap includes: `export_name`, `file_path`, `agent_id`, `category` (function_call, type_usage, field_init), `severity`, `reason`, and `suggested_fix`.
+4. The `IntegrationReport` is persisted to the IMPL manifest under `integration_report:` for the completed wave.
+
+**Severity classification:**
+- `error` — exported function or type constructor with no callers and naming pattern suggesting it must be called (e.g., `Register*`, `Init*`, `Build*`)
+- `warning` — exported symbol with no callers but ambiguous necessity (e.g., `New*` constructors that may be called by later waves)
+- `info` — exported symbol with no callers that is likely intentionally public (e.g., types, constants, interfaces)
+
+**Relationship to E21:** E25 runs after E21's post-wave verification gates pass. E21 validates that the build compiles and tests pass; E25 validates that the wave's exports are wired into the broader codebase.
+
+**Related Rules:** See E26 (Integration Agent), E21 (post-wave verification gates)
+
+---
+
+## E26: Integration Agent
+
+**Trigger:** E25 detects integration gaps with severity `error` or `warning`
+
+**Required Action:** Launch a single Integration Agent with:
+
+1. The `IntegrationReport` as input — the agent reads the gaps and their suggested fixes
+2. Access restricted to `integration_connectors` files only — the IMPL manifest lists which files the Integration Agent may modify
+3. Verification gate: `go build ./...` must pass after wiring
+
+**Execution context:**
+- The Integration Agent runs AFTER merge, on the main branch (no worktree)
+- Constraint role: `integrator` — may only modify files listed in the IMPL manifest's `integration_connectors` field
+- The `integrator` constraint is enforced via `AllowedPathPrefixes` — the agent cannot write to agent-owned files or scaffold files
+- Timeout: same as wave agent timeout (30 minutes)
+
+**Failure behavior:** Non-fatal. If the Integration Agent fails (build does not pass, timeout exceeded, or gaps cannot be wired), the gaps are reported to the human via the orchestrator. The pipeline does not block; the next wave may proceed if its dependencies are met.
+
+**Relationship to I1:** The Integration Agent is exempt from I1's disjoint ownership constraint. See I1 Amendment in `invariants.md` for the formal justification.
+
+**Relationship to E25:** E25 produces the report; E26 acts on it. If E25 finds no `error` or `warning` gaps, E26 does not launch.
+
+**Related Rules:** See E25 (Integration Validation), I1 Amendment (invariants.md)
+
+---
+
 ## Cross-References
 
 - See `preconditions.md` for conditions that must hold before execution begins
@@ -697,3 +748,5 @@ This duality does not violate I4. The IMPL doc defines *what should be done*. Th
 - E20: Orchestrator runs stub detection after each wave — see also E21, `message-formats.md` (## Stub Report Section Format)
 - E21: Orchestrator runs post-wave verification gates before merge — see also E20, E22, `message-formats.md` (## Quality Gates Section Format)
 - E22: Scaffold Agent runs build verification before committing scaffold files — see also `procedures.md` (Procedure 2: Scaffold Agent), `message-formats.md` (Scaffolds Section Format), `implementations/claude-code/prompts/agents/scaffold-agent.md`
+- E25: Orchestrator runs integration validation after wave merge — see also E26, `invariants.md` (I1 Amendment)
+- E26: Integration Agent wires unconnected exports — see also E25, `invariants.md` (I1 Amendment), `participants.md` (Integration Agent)

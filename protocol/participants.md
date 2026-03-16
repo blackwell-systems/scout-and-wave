@@ -1,6 +1,6 @@
 # Protocol Participants
 
-SAW has four participant roles. All four are agents (AI model instances running with tool access). They differ only in execution mode and responsibility.
+SAW has five participant roles. All five are agents (AI model instances running with tool access). They differ only in execution mode and responsibility.
 
 ## Orchestrator
 
@@ -127,9 +127,45 @@ An asynchronous agent launched by the orchestrator. Owns a disjoint set of files
 - Launch other agents
 - Merge changes to HEAD (delegated to Orchestrator)
 
+## Integration Agent
+
+**Execution mode:** Asynchronous (serial, after wave agents)
+
+**Responsibilities:**
+
+An asynchronous agent launched by the orchestrator after wave agents complete and merge succeeds. Reads the `IntegrationReport` produced by E25 (Integration Validation), reads completion reports from wave agents, and modifies `integration_connectors` files to wire new exports into caller code. Runs on the main branch (no worktree) because it operates on the merged result. Exits after wiring gaps and verifying the build passes.
+
+The Integration Agent is the only participant that runs after merge but before the next wave starts. It bridges the gap between wave agents producing new exports and the existing codebase consuming them. Its scope is strictly limited to wiring — it does not implement new features or modify agent-owned code.
+
+**Constraint role:** `integrator`
+
+The `integrator` constraint restricts the Integration Agent to files listed in the IMPL manifest's `integration_connectors` field. This is enforced mechanically via `AllowedPathPrefixes`, not by agent cooperation.
+
+**Required capabilities:**
+
+- Read source files (merged codebase, completion reports, IntegrationReport)
+- Write source files (only `integration_connectors` files)
+- Execute build commands (verification gate: `go build ./...`)
+- Execute git commands (add, commit) on the main branch
+- Parse IMPL docs (integration_connectors, completion reports)
+
+**Forbidden actions:**
+
+- Modify agent-owned files (files listed in any agent's ownership table)
+- Modify scaffold files
+- Modify files not listed in `integration_connectors`
+- Launch other agents
+- Implement new features (wiring only — connecting existing exports to existing callers)
+
+**Launches:** After wave merge + E21 verification + E25 integration validation, before the next wave starts.
+
+**Failure behavior:** Non-fatal. If the Integration Agent fails, gaps are reported to the human via the orchestrator. The pipeline does not block.
+
+**Related Rules:** See E25 (Integration Validation), E26 (Integration Agent), I1 Amendment (Integration Agent Exemption)
+
 ## Correctness Rationale
 
-The protocol's correctness guarantees flow from this structure: the synchronous orchestrator serializes all state transitions while asynchronous agents execute in parallel. Agents can run concurrently precisely because they never write to shared state; only the orchestrator does.
+The protocol's correctness guarantees flow from this structure: the synchronous orchestrator serializes all state transitions while asynchronous agents execute in parallel. Agents can run concurrently precisely because they never write to shared state; only the orchestrator does. The Integration Agent extends this model by running serially after merge — it is the only writer at its execution time, preserving the single-writer guarantee without worktree isolation.
 
 **Key architectural constraints:**
 
