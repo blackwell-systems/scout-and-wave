@@ -20,7 +20,8 @@
     "scout_model": "",
     "wave_model": "",
     "chat_model": "",
-    "scaffold_model": ""
+    "scaffold_model": "",
+    "integration_model": ""
   },
   "quality": {
     "require_tests": false,

@@ -101,7 +101,7 @@ The journal is agent-private working memory. It is not distributed to other agen
 
 ## I6: Role Separation
 
-**Formal Statement:** The Orchestrator does not perform Scout, Scaffold Agent, or Wave Agent duties. Codebase analysis, IMPL doc production, scaffold file creation, and source code implementation are delegated to the appropriate asynchronous agent.
+**Formal Statement:** The Orchestrator does not perform Scout, Scaffold Agent, Wave Agent, or Integration Agent duties. Codebase analysis, IMPL doc production, scaffold file creation, source code implementation, and post-merge wiring are delegated to the appropriate asynchronous agent.
 
 **Enforcement:** If the Orchestrator finds itself doing any of these, it has violated the protocol; it must stop and launch the correct agent.
 
@@ -128,7 +128,7 @@ Conditions that break invariants and invalidate the correctness guarantees:
 | Wave N+1 launched before Wave N verified | I3 | Cascade failures surface at end |
 | Completion report written to chat only | I4 | Downstream agents get stale context |
 | Agent reports complete with uncommitted changes | I5 | Merge requires manual copy |
-| Orchestrator performs Scout, Scaffold Agent, or Wave Agent duties | I6 | Context pollution, broken observability, async execution bypassed |
+| Orchestrator performs Scout, Scaffold Agent, Wave Agent, or Integration Agent duties | I6 | Context pollution, broken observability, async execution bypassed |
 
 ---
 

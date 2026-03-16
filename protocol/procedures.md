@@ -8,13 +8,14 @@ This document defines the operational procedures executed by the Orchestrator an
 
 ## Overview
 
-SAW procedures are executed by the Orchestrator (synchronous agent in the user's session) with cooperation from asynchronous agents (Scout, Scaffold Agent, Wave Agents). The Orchestrator serializes all state transitions while asynchronous agents execute work in parallel.
+SAW procedures are executed by the Orchestrator (synchronous agent in the user's session) with cooperation from asynchronous agents (Scout, Scaffold Agent, Wave Agents, Integration Agent). The Orchestrator serializes all state transitions while asynchronous agents execute work in parallel.
 
 **Participant roles:**
 - **Orchestrator:** Drives all state transitions, launches agents, reads completion reports, executes merge procedure
 - **Scout:** Analyzes codebase, produces IMPL doc, defines interface contracts
 - **Scaffold Agent:** Materializes approved interface contracts as type scaffold files
 - **Wave Agents:** Implement features in parallel against frozen interface contracts
+- **Integration Agent:** Wires new exports into caller code after wave merge (E26)
 
 ---
 

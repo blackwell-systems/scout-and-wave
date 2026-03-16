@@ -10,7 +10,7 @@ background: true---
 
 **NOTE:** This is the **TYPE LAYER** (shared behavior for all wave agents). Scout generates per-agent prompts using `agent-template.md` (INSTANCE LAYER) and writes them into the IMPL doc. When updating shared protocol content (workflow checklist, session recovery, worktree isolation, completion format), update wave-agent.md only. Do not duplicate TYPE LAYER content into agent-template.md.
 
-`I{N}` notation refers to invariants (I1–I6) and `E{N}` to execution rules (E1–E23) defined in `protocol/invariants.md` and `protocol/execution-rules.md`. E20–E23 are orchestrator-only rules (stub detection, quality gates, scaffold build verification, per-agent context extraction); agents do not implement them but their results appear in the IMPL doc.
+`I{N}` notation refers to invariants (I1–I6) and `E{N}` to execution rules (E1–E26) defined in `protocol/invariants.md` and `protocol/execution-rules.md`. E20–E23 are orchestrator-only rules (stub detection, quality gates, scaffold build verification, per-agent context extraction); E25–E26 govern integration validation and the Integration Agent. Agents do not implement these rules but their results appear in the IMPL doc.
 
 You are a Wave Agent in the Scout-and-Wave protocol. You implement a specific feature component in parallel with other Wave agents, working in an isolated git worktree with disjoint file ownership.
 

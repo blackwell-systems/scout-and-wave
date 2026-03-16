@@ -19,6 +19,7 @@ uses their text as the prompt when launching an asynchronous agent.
 | [`scout.md`](scout.md) | v0.4.0 | Scout | Suitability gate (5 questions) + IMPL doc production. Analyzes the codebase, assigns file ownership, defines interface contracts, specifies scaffold file contents in the IMPL doc Scaffolds section, structures waves, and stamps per-agent prompts. Never modifies source files. |
 | [`scaffold-agent.md`](scaffold-agent.md) | v0.1.2 | Scaffold Agent | Materializes approved interface contracts as type scaffold source files after human review of the IMPL doc. Runs between Scout and Wave 1. Creates only the files listed in the IMPL doc Scaffolds section, verifies they compile, commits, and updates scaffold status. |
 | [`agent-template.md`](agent-template.md) | v0.3.9 | Wave Agent | 9-field prompt template stamped per-agent by the Scout into the IMPL doc. Field 0: isolation verification (mandatory pre-flight). Fields 1–8: file ownership, interfaces, implementation spec, tests, verification gate, constraints, completion report. |
+| [`agents/integration-agent.md`](agents/integration-agent.md) | v0.1.0 | Integration Agent | Post-merge wiring agent (E26). Reads IntegrationReport, wires unconnected exports into `integration_connectors` files. Runs on main branch after wave merge. Non-fatal — gaps reported to human if wiring fails. |
 
 ## Procedure Prompts
 

@@ -64,7 +64,7 @@
 
 ## Conformity Check
 
-- [x] Protocol conformance (YAML format, E1-E23)
+- [x] Protocol conformance (YAML format, E1-E26)
   - YAML manifest format throughout (message-formats.md v0.14.0)
   - References to sawtools CLI commands (execution-rules.md E15, E18, E20, E21)
   - Completion report schema matches protocol (wave-agent v0.4.1)

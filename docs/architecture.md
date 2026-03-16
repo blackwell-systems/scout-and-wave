@@ -7,7 +7,7 @@ Scout-and-Wave is a protocol for parallel agent coordination in software develop
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │ Orchestrator (synchronous, /saw skill in Claude Code)          │
-│ • Launches Scout/Scaffold/Wave agents                          │
+│ • Launches Scout/Scaffold/Wave/Integration agents              │
 │ • Enforces invariants (I1-I6)                                  │
 │ • Manages wave lifecycle                                       │
 │ • Does NOT perform analysis or implementation itself           │
@@ -29,6 +29,15 @@ Scout-and-Wave is a protocol for parallel agent coordination in software develop
                                         ▼         ▼
                                    Agent A    Agent B
                                    (wave1)    (wave1)
+                                        │
+                                        ▼ (after merge)
+                                  ┌──────────────────┐
+                                  │ Integration Agent │
+                                  │ (async, serial)   │
+                                  │ • Wires exports   │
+                                  │   into callers    │
+                                  │ • Runs on main    │
+                                  └──────────────────┘
 ```
 
 ## Core Components
@@ -365,7 +374,8 @@ Project-local config at `<repo>/saw.config.json` or global default at `~/.claude
   "agent": {
     "scout_model": "claude-sonnet-4-5",
     "wave_model": "claude-sonnet-4-5",
-    "chat_model": "claude-sonnet-4-5"
+    "chat_model": "claude-sonnet-4-5",
+    "integration_model": "claude-sonnet-4-5"
   },
   "journal": {
     "enabled": true,
@@ -385,6 +395,6 @@ Project-local config at `<repo>/saw.config.json` or global default at `~/.claude
 ## See Also
 
 - [Protocol Invariants](../protocol/invariants.md) — I1-I6 formal specification
-- [Protocol Execution Rules](../protocol/execution-rules.md) — E1-E23 orchestrator rules
+- [Protocol Execution Rules](../protocol/execution-rules.md) — E1-E26 orchestrator rules
 - [Tool Journaling](./tool-journaling.md) — Compaction safety system
 - [Orchestrator Skill](../implementations/claude-code/prompts/saw-skill.md) — /saw command implementation

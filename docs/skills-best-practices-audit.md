@@ -64,7 +64,7 @@ Claude's agent skills documentation emphasizes:
 - Clear command documentation with exact syntax
 
 **Effective cross-referencing:**
-- Invariant/execution rule numbering (I1-I6, E1-E23) for audit trail
+- Invariant/execution rule numbering (I1-I6, E1-E26) for audit trail
 - Typed-block syntax for structured sections
 - Links to protocol documentation files
 

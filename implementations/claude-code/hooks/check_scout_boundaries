@@ -7,7 +7,7 @@ set -euo pipefail
 # Hook receives JSON input on stdin with fields:
 # - tool_name: string
 # - tool_input: object (contains file_path for Write/Edit)
-# - agent_type: string (scout, wave-agent, scaffold-agent, general-purpose)
+# - agent_type: string (scout, wave-agent, scaffold-agent, integration-agent, general-purpose)
 
 input=$(cat)
 
