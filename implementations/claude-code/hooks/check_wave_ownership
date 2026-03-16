@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+# I1 enforcement for Wave agents: block writes to files not in owned_files[]
+# PreToolUse hook that reads .saw-ownership.json from the worktree root and
+# blocks Write/Edit operations on files the agent does not own.
+
+set -euo pipefail
+
+# Hook receives JSON input on stdin with fields:
+# - tool_name: string
+# - tool_input: object (contains file_path for Write/Edit)
+# - agent_type: string (scout, wave-agent, scaffold-agent, general-purpose)
+
+input=$(cat)
+
+# Extract fields from JSON
+tool_name=$(echo "$input" | jq -r '.tool_name // empty')
+agent_type=$(echo "$input" | jq -r '.agent_type // empty')
+file_path=$(echo "$input" | jq -r '.tool_input.file_path // empty')
+
+# Only enforce on Wave agents
+if [[ "$agent_type" != "wave-agent" ]]; then
+  exit 0  # Allow (not a Wave agent)
+fi
+
+# Only enforce on Write/Edit tools
+if [[ "$tool_name" != "Write" && "$tool_name" != "Edit" && "$tool_name" != "NotebookEdit" ]]; then
+  exit 0  # Allow (not a write operation)
+fi
+
+# Allow if no file path
+if [[ -z "$file_path" ]]; then
+  exit 0
+fi
+
+# Find .saw-ownership.json by walking up from CWD
+# Wave agents cd to worktree root at startup, so it's usually in CWD.
+ownership_file=""
+search_dir="$PWD"
+for _ in 1 2 3 4 5; do
+  if [[ -f "$search_dir/.saw-ownership.json" ]]; then
+    ownership_file="$search_dir/.saw-ownership.json"
+    break
+  fi
+  parent=$(dirname "$search_dir")
+  if [[ "$parent" == "$search_dir" ]]; then
+    break  # Reached filesystem root
+  fi
+  search_dir="$parent"
+done
+
+# If no ownership manifest found, not in a SAW wave context — allow
+if [[ -z "$ownership_file" ]]; then
+  exit 0
+fi
+
+# The directory containing .saw-ownership.json is the worktree/repo root
+worktree_root=$(dirname "$ownership_file")
+
+# Read owned files list from manifest
+owned_files_json=$(jq -r '.owned_files // []' "$ownership_file")
+agent_id=$(jq -r '.agent // "unknown"' "$ownership_file")
+wave=$(jq -r '.wave // "unknown"' "$ownership_file")
+
+# Normalize file_path to be relative to worktree root for comparison
+# If absolute, strip the worktree root prefix.
+# If relative, use as-is (agents typically use paths relative to worktree root).
+if [[ "$file_path" == /* ]]; then
+  # Absolute path: compute relative path from worktree root
+  abs_worktree=$(realpath -m "$worktree_root" 2>/dev/null || echo "$worktree_root")
+  abs_file=$(realpath -m "$file_path" 2>/dev/null || echo "$file_path")
+  # Strip worktree root prefix
+  if [[ "$abs_file" == "$abs_worktree/"* ]]; then
+    normalized="${abs_file#"$abs_worktree/"}"
+  else
+    # File is outside worktree entirely — allow (could be system file, temp, etc.)
+    exit 0
+  fi
+else
+  # Relative path: normalize by removing ./ prefix and collapsing ..
+  normalized=$(realpath -m --relative-base "$worktree_root" "$worktree_root/$file_path" 2>/dev/null || echo "$file_path")
+  normalized="${normalized#./}"
+fi
+
+# Check if normalized path is in owned_files list
+# Use jq to compare (handles exact match)
+is_owned=$(echo "$owned_files_json" | jq --arg f "$normalized" 'map(. == $f) | any')
+
+if [[ "$is_owned" == "true" ]]; then
+  exit 0  # Allow: file is owned by this agent
+fi
+
+# Also check if any owned file path is a prefix (agent owns a directory)
+is_owned_dir=$(echo "$owned_files_json" | jq --arg f "$normalized" 'map(. as $pat | ($f | startswith($pat + "/"))) | any')
+
+if [[ "$is_owned_dir" == "true" ]]; then
+  exit 0  # Allow: file is inside an owned directory
+fi
+
+# Block: file is not owned by this agent
+owned_list=$(echo "$owned_files_json" | jq -r '.[]' | sed 's/^/  - /')
+
+echo "I1 VIOLATION: Wave agent ${agent_id} (wave ${wave}) attempted to write a file it does not own.
+
+Attempted: $file_path
+Normalized: $normalized
+
+Owned files for this agent:
+${owned_list}
+
+I1 (Disjoint File Ownership): Each file in a wave is assigned to exactly one agent.
+Agents must not modify files outside their ownership list.
+
+If this file needs to change as part of your task:
+1. Check if the task description includes this file — it may be a different agent's responsibility.
+2. If the change is genuinely required, report it in your completion report under 'cross_boundary_needs'
+   so the Orchestrator can assign a follow-up task or revise the IMPL doc.
+3. Do NOT write to files owned by other agents." >&2
+
+exit 1  # Block
