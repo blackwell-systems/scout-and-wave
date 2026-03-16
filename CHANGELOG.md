@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.38.0] | 2026-03-16 | Integration Agent (E25/E26) — fifth participant role, protocol text, agent type definition, skill orchestration, all docs updated |
 | [0.37.0] | 2026-03-14 | H7 wave agent integration + Scout prompt cleanup — build failure diagnosis integrated into wave agent workflow, 168 lines of obsolete automation instructions removed from Scout prompt |
 | [0.36.0] | 2026-03-14 | Scout automation integration — H1a-H4 tools integrated into SDK engine and CLI skill (automated suitability analysis + dependency mapping) |
 | [0.35.0] | 2026-03-13 | I6 enforcement — Scout role separation (prevents Scout from writing source code) |
@@ -19,6 +20,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.30.1] | 2026-03-12 | Scout v0.8.1 — format ambiguity fix prevents markdown section headers in YAML output |
 | [0.30.0] | 2026-03-12 | Scout v0.8.0 — analyze-deps now PRIMARY METHOD for Go dependency mapping (determinism improvement H3) |
 | [0.29.0] | 2026-03-11 | mark-complete simplification — removed --archive flag from all docs, always archives to complete/ |
+
+---
+## [0.38.0] - 2026-03-16
+
+### Added
+
+- **Integration Agent (E25/E26)** — Fifth participant role in the SAW protocol
+  - **E25: Integration Validation** — AST-scans merged wave files for unconnected exports, reports gaps
+  - **E26: Integration Agent** — Automatically wires detected gaps into connector files via LLM agent
+  - **`integration-agent.md`** — Custom `subagent_type` definition with tool/file restrictions
+  - **Protocol updates** — `execution-rules.md` (E25+E26), `invariants.md` (I1 exemption), `participants.md` (5th role), `procedures.md`, `state-machine.md`, `message-formats.md` (5 new message types), `preconditions.md` (E26 preconditions)
+  - **Skill orchestration** — `saw-skill.md` updated with `validate-integration` command and post-wave integration step
+  - **Agent prompts** — Scout, Wave Agent, and agent template updated with integration awareness
+  - **`integration_model`** — Added to config examples across all docs
+  - **All docs audited** — README, architecture, ECOSYSTEM, hooks, saw-teams all updated for E1-E26 and 5 participants
 
 ---
 ## [0.37.0] - 2026-03-14
