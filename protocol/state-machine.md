@@ -1,6 +1,6 @@
 # Scout-and-Wave State Machine
 
-**Version:** 0.14.0
+**Version:** 0.15.0
 
 This document defines the lifecycle states, transitions, and terminal conditions for Scout-and-Wave protocol execution.
 
@@ -20,7 +20,7 @@ SAW execution progresses through a series of states orchestrated by the synchron
 | **SCAFFOLD_PENDING** | Scaffold Agent creating type scaffold files from approved contracts. | Human approved IMPL doc, Scaffolds section non-empty | Scaffold Agent commits all files, updates IMPL doc |
 | **WAVE_PENDING** | Ready to launch wave agents. Worktrees not yet created. | Scaffolds committed (or no scaffolds needed) | Orchestrator creates worktrees, launches all agents |
 | **WAVE_EXECUTING** | Agents running in parallel. | All agents launched | All agents report completion |
-| **WAVE_MERGING** | All agents complete, orchestrator merging worktrees. | All completion reports written | All worktrees merged to main |
+| **WAVE_MERGING** | All agents complete, orchestrator merging worktrees. Integration validation (E25) and Integration Agent (E26) execute within this state, after quality gates pass and before merge. | All completion reports written | All worktrees merged to main |
 | **WAVE_VERIFIED** | Merge complete, post-merge verification passed. | Merge complete, verification passed | Next wave launches OR protocol complete |
 | **BLOCKED** | Wave failed verification or agent reported failure. | Any agent status: partial/blocked, OR verification failure | Issue resolved, verification re-run |
 | **COMPLETE** | All waves verified, feature complete. | Final wave verified, no more waves | Terminal state |
@@ -148,9 +148,11 @@ Transitions are conditional. The following guards determine whether a transition
 
 ### WAVE_MERGING → WAVE_VERIFIED
 
-**Guard:** Conflict prediction passes (E11: no file appears in multiple agents' `files_changed` or `files_created` lists) AND all worktree branches merged to main AND post-merge verification commands pass.
+**Guard:** Conflict prediction passes (E11: no file appears in multiple agents' `files_changed` or `files_created` lists) AND integration validation passes or Integration Agent completes successfully (E25/E26) AND all worktree branches merged to main AND post-merge verification commands pass.
 
-**Failure:** If merge conflicts occur OR verification fails, enter BLOCKED.
+**Integration validation (E25/E26):** Before merge, the Orchestrator runs `ValidateIntegration()` to scan for unconnected exports. If integration gaps are detected (`report.Valid == false`), the Integration Agent (E26) is launched to wire the gaps. The Integration Agent runs within WAVE_MERGING state. If the Integration Agent fails, transition to BLOCKED.
+
+**Failure:** If merge conflicts occur OR verification fails OR Integration Agent fails, enter BLOCKED.
 
 ### WAVE_VERIFIED → WAVE_PENDING (next wave)
 
@@ -194,7 +196,7 @@ These actions occur automatically when entering each state.
 | **SCAFFOLD_PENDING** | Orchestrator launches Scaffold Agent with absolute IMPL doc path |
 | **WAVE_PENDING** | Orchestrator runs pre-launch ownership verification (E3) |
 | **WAVE_EXECUTING** | Orchestrator monitors for completion notifications (async) |
-| **WAVE_MERGING** | Orchestrator runs conflict prediction (E11), executes merge procedure per agent |
+| **WAVE_MERGING** | Orchestrator runs integration validation (E25), launches Integration Agent if gaps detected (E26), runs conflict prediction (E11), executes merge procedure per agent |
 | **WAVE_VERIFIED** | Orchestrator runs post-merge verification (unscoped), updates IMPL doc state |
 | **BLOCKED** | Orchestrator surfaces failure details to human, awaits resolution |
 | **COMPLETE** | Orchestrator writes `<!-- SAW:COMPLETE -->` tag to IMPL doc (E15); updates `docs/CONTEXT.md` with feature summary (E18); reports final status; cleans up worktrees |
@@ -230,7 +232,7 @@ Waves execute sequentially (I3: Wave sequencing). When Wave N completes, its imp
 
 ## State Machine Correctness Properties
 
-When all invariants (I1–I6) and execution rules (E1–E23) are maintained:
+When all invariants (I1–I6) and execution rules (E1–E26) are maintained:
 
 - **Progress:** The state machine always advances or terminates. No infinite loops.
 - **Human checkpoints enforced:** REVIEWED state requires explicit approval. Suitability gate requires human review of NOT SUITABLE verdicts.

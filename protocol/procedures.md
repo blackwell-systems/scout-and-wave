@@ -1,6 +1,6 @@
 # Scout-and-Wave Procedures
 
-**Version:** 0.14.0
+**Version:** 0.15.0
 
 This document defines the operational procedures executed by the Orchestrator and other participants: suitability assessment, scaffold materialization, wave execution, and merge operations.
 
@@ -287,6 +287,18 @@ Scaffold files are committed to HEAD before worktrees are created. Once worktree
    - Run all gates with `required: true`
    - Required gate failures → enter BLOCKED
    - Optional gate failures → warn only; do not block merge
+
+6. **E25: Validate integration.** After quality gates pass, scan for unconnected exports:
+   - Run `ValidateIntegration()` on the completed wave to produce an `IntegrationReport`
+   - If `report.Valid == true`: No integration gaps detected, proceed to Phase 6 (merge)
+   - If `report.Valid == false`: Integration gaps detected, emit `integration_gaps_detected` message to IMPL doc, proceed to step 7
+
+7. **E26: Launch Integration Agent (if gaps detected).** If E25 report exists AND `report.Valid == false`:
+   - Verify `integration_connectors` field exists in IMPL manifest
+   - Emit `integration_agent_started` message
+   - Launch Integration Agent with `RunIntegrationAgent()` — agent may only modify files listed in `integration_connectors`
+   - On success: emit `integration_agent_complete` message, proceed to Phase 6 (merge)
+   - On failure: emit `integration_agent_failed` message, enter BLOCKED
 
 ### Phase 6: Failure Handling (If Blocked)
 
