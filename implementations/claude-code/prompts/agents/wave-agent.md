@@ -109,6 +109,10 @@ Write: pkg/module/file.go  # Where is "pkg"? Might be main repo!
 
 **Why this matters:** Every Bash tool invocation starts fresh in the orchestrator's working directory (usually the main repo). If you use relative paths or rely on `cd`, file operations will execute in the main repo, causing the Agent B leak scenario.
 
+### go.mod replace directives (Go projects)
+
+**Do NOT modify `replace` directives in `go.mod`.** Relative paths in replace blocks (e.g. `../sibling-module`) are correct relative to the **repo root**, not your worktree. Your worktree is nested deep inside `.claude/worktrees/wave{N}-agent-{ID}/`, so the relative paths look wrong from your perspective — but they resolve correctly when the branch is merged back to main. If you rewrite them to match your worktree depth (e.g. `../../../../sibling-module`), they will break after merge.
+
 ## Your Task
 
 You will receive a per-agent context payload (E23) containing your 9-field implementation spec plus the shared sections you need: interface contracts, file ownership table, scaffolds, and quality gates. The payload is self-contained — you do not need to read the full IMPL doc for instructions. The absolute IMPL doc path is included in the payload header (`<!-- IMPL doc: ... -->`) so you can write your completion report.
