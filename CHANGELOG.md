@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.40.0] | 2026-03-16 | E27: Planned Integration Waves — Scout can mark wiring-only waves as `type: integration`, orchestrator dispatches integration-agent (no worktree), `{braces}` notation in wave diagrams |
 | [0.39.0] | 2026-03-16 | Wave Agent v0.4.2 — go.mod replace directive guidance (do not modify worktree-relative paths) |
 | [0.38.0] | 2026-03-16 | Integration Agent (E25/E26) — fifth participant role, protocol text, agent type definition, skill orchestration, all docs updated |
 | [0.37.0] | 2026-03-14 | H7 wave agent integration + Scout prompt cleanup — build failure diagnosis integrated into wave agent workflow, 168 lines of obsolete automation instructions removed from Scout prompt |

@@ -736,6 +736,43 @@ This duality does not violate I4. The IMPL doc defines *what should be done*. Th
 
 ---
 
+## E27: Planned Integration Waves
+
+**Trigger:** Scout identifies a wave whose sole purpose is wiring exports from prior waves into existing caller code (e.g., registering CLI commands in `main.go`, adding function calls in `server.go`).
+
+**Required Action:** The Scout marks the wave with `type: integration` in the IMPL manifest. The Orchestrator dispatches the wave's agent(s) using the **Integration Agent** role (`subagent_type: integration-agent`) instead of the Wave Agent role.
+
+**Distinction from E25/E26:** E25/E26 is reactive — the orchestrator detects integration gaps post-merge and launches an integration agent automatically. E27 is proactive — the Scout identifies integration work at planning time and declares it in the IMPL doc. Both use the same Integration Agent participant (see `participants.md`), but E27 agents receive their task from the IMPL doc's agent brief rather than from an `IntegrationReport`.
+
+**Wave-level field:**
+```yaml
+waves:
+  - number: 2
+    type: integration    # Optional. Default: "standard"
+    agents:
+      - id: D
+        task: "Wire new packages into main.go and finalize.go"
+        files: [cmd/saw/main.go, pkg/engine/finalize.go]
+```
+
+**Orchestrator behavior for `type: integration` waves:**
+1. Skip worktree creation — integration agents run on the main branch (merged result)
+2. Skip isolation verification — no worktree branch to verify
+3. Launch agent(s) with `subagent_type: integration-agent` instead of `wave-agent`
+4. The agent's `files` list serves as `AllowedPathPrefixes` — same constraint as E26
+5. All other wave mechanics apply: completion reports, status tracking, finalize-wave
+
+**When to use `type: integration` vs relying on E25/E26:**
+- Use `type: integration` when the Scout can enumerate exactly which files need wiring and what the wiring entails (planned integration). This is preferred because it gives the human a review opportunity during IMPL review.
+- Rely on E25/E26 when integration gaps are not predictable at planning time (e.g., agents may or may not create new exports depending on implementation choices).
+- Both mechanisms may apply to the same wave: E27 handles planned wiring, then E25/E26 catches any gaps the Scout missed.
+
+**Relationship to I1:** Like E26, agents in `type: integration` waves are exempt from I1's disjoint ownership constraint for their listed files. See I1 Amendment in `invariants.md`.
+
+**Related Rules:** See E25 (Integration Validation), E26 (Integration Agent), I1 Amendment (invariants.md)
+
+---
+
 ## Cross-References
 
 - See `preconditions.md` for conditions that must hold before execution begins
@@ -750,3 +787,4 @@ This duality does not violate I4. The IMPL doc defines *what should be done*. Th
 - E22: Scaffold Agent runs build verification before committing scaffold files — see also `procedures.md` (Procedure 2: Scaffold Agent), `message-formats.md` (Scaffolds Section Format), `implementations/claude-code/prompts/agents/scaffold-agent.md`
 - E25: Orchestrator runs integration validation after wave merge — see also E26, `invariants.md` (I1 Amendment)
 - E26: Integration Agent wires unconnected exports — see also E25, `invariants.md` (I1 Amendment), `participants.md` (Integration Agent)
+- E27: Scout marks wiring-only waves as `type: integration` — see also E25, E26, `participants.md` (Integration Agent)

@@ -260,7 +260,15 @@ Wave 2 (2 parallel agents — consumer files):
 Wave 1: [A] [B]                    <- 2 parallel agents (spec foundation)
               | (A+B complete)
 Wave 2: [C] [D]                    <- 2 parallel agents (consumer files)
+              | (C+D complete)
+Wave 3: {E}                        <- type: integration (wiring only, E27)
 ```
+
+**Notation:** `[brackets]` for standard wave agents, `{braces}` for integration agents (E27).
+
+**Wave `type` field (optional, default: `standard`):**
+- `standard` — normal wave agents with worktree isolation (default when omitted)
+- `integration` — wiring-only agents dispatched as Integration Agents (E27). No worktree creation, no isolation verification. Agents run on main branch and are constrained to their listed files via `AllowedPathPrefixes`.
 
 **`impl-completion-report` — Completion Report (written by Wave agents):**
 

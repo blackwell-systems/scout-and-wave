@@ -434,10 +434,15 @@ They are NOT the structure of your output. Your output is PURE YAML following th
    file outside its ownership, flag the export as `integration_required` and
    list the caller file in `integration_connectors`.
 
-   **Integration connectors (recommended):** If the feature requires wiring
-   new exports into existing caller files (e.g., `main.go`, `server.go`,
-   `orchestrator.go`), define an `integration_connectors` field in the IMPL
-   doc listing the files the Integration Agent may modify:
+   **Integration connectors (legacy, use E27 instead):** If the feature
+   requires wiring new exports into existing caller files, **prefer creating
+   an explicit `type: integration` wave** (see E27 in the wave assignment
+   section above). This makes wiring work visible in the wave structure and
+   gives the human a review opportunity.
+
+   The `integration_connectors` field remains available as a fallback for
+   reactive E25/E26 gap detection when integration needs aren't predictable
+   at planning time:
 
    ```yaml
    integration_connectors:
@@ -447,10 +452,8 @@ They are NOT the structure of your output. Your output is PURE YAML following th
        reason: "Add route for new endpoint"
    ```
 
-   This field is optional and backward-compatible. When omitted, the
-   Integration Agent infers callers from completion reports and codebase
-   analysis. When present, it constrains the Integration Agent's file
-   ownership to only the listed files, reducing risk of unintended changes.
+   When both a `type: integration` wave and `integration_connectors` exist,
+   the planned wave handles known wiring and E25/E26 catches any gaps missed.
 
 6. **Detect shared types and define scaffold contents.** After defining interface
    contracts in step 5, scan for types that cross agent boundaries:
@@ -521,6 +524,41 @@ They are NOT the structure of your output. Your output is PURE YAML following th
    - An agent is in the earliest wave where all its dependencies are satisfied.
    - Annotate each wave transition with the *specific* agent(s) that unblock
      it, not "blocked on Wave 1" but "blocked on Agent A completing."
+
+   **Integration waves (E27):** When a wave exists solely to wire exports from
+   prior waves into existing caller code (e.g., registering CLI commands in
+   `main.go`, adding function calls in `server.go`, adding route registrations),
+   mark it with `type: integration`:
+
+   ```yaml
+   waves:
+     - number: 2
+       type: integration
+       agents:
+         - id: D
+           task: "Wire new packages into main.go and finalize.go"
+           files: [cmd/saw/main.go, pkg/engine/finalize.go]
+   ```
+
+   Integration waves differ from standard waves:
+   - No worktree — agents run on the main branch (merged result from prior waves)
+   - No isolation verification — no worktree branch to verify
+   - Agents are dispatched as Integration Agents, not Wave Agents
+   - Agent `files` list constrains what the agent may modify (same as `integration_connectors`)
+
+   **Prefer planned integration waves over `integration_connectors`.** When you
+   know at planning time that wiring work is needed, create an explicit
+   `type: integration` wave instead of relying on reactive E25/E26 gap detection.
+   This gives the human a review opportunity and makes the wiring task visible
+   in the wave structure diagram.
+
+   **Wave structure diagram notation:** Show integration waves distinctly:
+   ```
+   Wave 1: [A] [B] [C]              <- 3 parallel agents
+                 | (A+B+C complete)
+   Wave 2: {D}                       <- type: integration (wiring only)
+   ```
+   Use `{braces}` for integration agents and `[brackets]` for standard wave agents.
 
    **Cascade candidates:**
    If analyze-deps produced `cascade_candidates[]`, include them in the IMPL doc's
