@@ -1446,16 +1446,9 @@ waves:
           - "H"
           - "I"
 
-# Integration Connectors
-integration_connectors:
-  - file: "cmd/saw/root.go"
-    reason: "Register newReviewImplCmd() in root command AddCommand list"
-    repo: "scout-and-wave-go"
-  - file: "pkg/api/wave_runner.go"
-    reason: "Wire review step into runWaveLoop between scaffold and wave execution"
-    repo: "scout-and-wave-web"
-
 # Pre-Mortem
+# NOTE: integration_connectors was removed — not a valid schema key.
+# Integration wiring info is captured in agent tasks for Wave 3 Agent I.
 pre_mortem:
   overall_risk: medium
   rows:
