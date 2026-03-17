@@ -94,6 +94,16 @@ pre_mortem:                 # Struct with overall_risk + rows array
       mitigation: How to mitigate
 ```
 
+**Valid top-level keys (from IMPLManifest schema):**
+`title`, `feature_slug`, `verdict`, `suitability_assessment`, `test_command`,
+`lint_command`, `file_ownership`, `interface_contracts`, `waves`, `quality_gates`,
+`post_merge_checklist`, `scaffolds`, `completion_reports`, `stub_reports`,
+`integration_reports`, `integration_connectors`, `pre_mortem`, `known_issues`,
+`state`, `merge_state`, `worktrees_created_at`, `frozen_contracts_hash`,
+`frozen_scaffolds_hash`, `completion_date`
+
+**CRITICAL: Do NOT invent YAML keys.** Only use the keys listed above. Unknown keys (e.g., `dep_graph`, `cascade_candidates`, `integration_connectors_extra`) will be flagged by E16 validation and may be auto-stripped by `sawtools validate --fix`.
+
 **Important:** All fields expecting arrays must use YAML array syntax (`[]` or `- item`), not prose text. All fields expecting structs must use nested key-value pairs, not markdown sections.
 
 ---
