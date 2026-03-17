@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.44.0] | 2026-03-17 | SAW protocol gaps v1 — Scout prompt schema key reference (24 valid keys + "do not invent" warning), synced `knownKeys` map with `types.go`, `StripUnknownKeys` auto-strip in `validate --fix`, DependencyGraphPanel structured-data fallback, duplicate confirm dialog fix, `git worktree prune` in cleanup |
 | [0.43.0] | 2026-03-17 | Review-agent IMPL validation fix — added missing `repo: "scout-and-wave"` tags to waves 1-2 file_ownership, removed invalid `integration_connectors` key that blocked E16 schema validation (preventing `validateMultiRepoConsistency` from catching the missing tags) |
 | [0.42.0] | 2026-03-17 | Program Layer roadmap + Formic competitive analysis + Review Agent IMPL — multi-IMPL orchestration design (PROGRAM manifest, Planner agent, tiers, P1-P4 invariants), competitive analysis vs Formic, review-agent-protocol IMPL (E28, SCOUT_REVIEWING state, 6th participant role) |
 | [0.41.0] | 2026-03-16 | Failure recovery wiring — resume detection + structured retry context integrated into `/saw` skill (E7a), `resume-detect` and `build-retry-context` in sawtools commands list |
