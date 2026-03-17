@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.43.0] | 2026-03-17 | Review-agent IMPL validation fix — added missing `repo: "scout-and-wave"` tags to waves 1-2 file_ownership, removed invalid `integration_connectors` key that blocked E16 schema validation (preventing `validateMultiRepoConsistency` from catching the missing tags) |
+| [0.42.0] | 2026-03-17 | Program Layer roadmap + Formic competitive analysis + Review Agent IMPL — multi-IMPL orchestration design (PROGRAM manifest, Planner agent, tiers, P1-P4 invariants), competitive analysis vs Formic, review-agent-protocol IMPL (E28, SCOUT_REVIEWING state, 6th participant role) |
 | [0.41.0] | 2026-03-16 | Failure recovery wiring — resume detection + structured retry context integrated into `/saw` skill (E7a), `resume-detect` and `build-retry-context` in sawtools commands list |
 | [0.40.0] | 2026-03-16 | E27: Planned Integration Waves — Scout can mark wiring-only waves as `type: integration`, orchestrator dispatches integration-agent (no worktree), `{braces}` notation in wave diagrams |
 | [0.39.0] | 2026-03-16 | Wave Agent v0.4.2 — go.mod replace directive guidance (do not modify worktree-relative paths) |
@@ -23,6 +25,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.30.1] | 2026-03-12 | Scout v0.8.1 — format ambiguity fix prevents markdown section headers in YAML output |
 | [0.30.0] | 2026-03-12 | Scout v0.8.0 — analyze-deps now PRIMARY METHOD for Go dependency mapping (determinism improvement H3) |
 | [0.29.0] | 2026-03-11 | mark-complete simplification — removed --archive flag from all docs, always archives to complete/ |
+
+---
+## [0.42.0] - 2026-03-17
+
+### Added
+- **Program Layer roadmap** (`docs/program-layer-roadmap.md`) — multi-IMPL orchestration design for greenfield projects: PROGRAM manifest schema, Planner agent role, tier-based IMPL sequencing, cross-IMPL interface contracts, program invariants P1-P4, three autonomy levels (plan-only, tier-gated, full autonomous), 4-phase implementation plan
+- **Formic competitive analysis** (`docs/competitive/formic-comparison.md`) — SAW vs Formic: architecture, parallel execution, provider support, QA, strengths/weaknesses, ideas to borrow
+- **Review Agent IMPL** (`docs/IMPL/IMPL-review-agent-protocol.yaml`) — E28 Pre-Review Semantic Validation, SCOUT_REVIEWING state, Review Agent as 6th participant role, Generator-Critic pattern for IMPL quality assurance
 
 ---
 ## [0.41.0] - 2026-03-16
