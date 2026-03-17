@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.41.0] | 2026-03-16 | Failure recovery wiring — resume detection + structured retry context integrated into `/saw` skill (E7a), `resume-detect` and `build-retry-context` in sawtools commands list |
 | [0.40.0] | 2026-03-16 | E27: Planned Integration Waves — Scout can mark wiring-only waves as `type: integration`, orchestrator dispatches integration-agent (no worktree), `{braces}` notation in wave diagrams |
 | [0.39.0] | 2026-03-16 | Wave Agent v0.4.2 — go.mod replace directive guidance (do not modify worktree-relative paths) |
 | [0.38.0] | 2026-03-16 | Integration Agent (E25/E26) — fifth participant role, protocol text, agent type definition, skill orchestration, all docs updated |
@@ -22,6 +23,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.30.1] | 2026-03-12 | Scout v0.8.1 — format ambiguity fix prevents markdown section headers in YAML output |
 | [0.30.0] | 2026-03-12 | Scout v0.8.0 — analyze-deps now PRIMARY METHOD for Go dependency mapping (determinism improvement H3) |
 | [0.29.0] | 2026-03-11 | mark-complete simplification — removed --archive flag from all docs, always archives to complete/ |
+
+---
+## [0.41.0] - 2026-03-16
+
+### Added
+
+- **Resume detection in `/saw` skill** — `wave` and `status` commands now run `sawtools resume-detect` before execution, surfacing interrupted sessions (progress %, failed agents, orphaned worktrees, suggested action)
+- **Structured retry context in E7a** — `sawtools build-retry-context` classifies errors (import/type/test/build/lint) and provides targeted fix suggestions for automatic agent retries
+- **`sawtools` commands list** — Added `resume-detect` and `build-retry-context` to the saw-skill.md command reference
 
 ---
 ## [0.38.0] - 2026-03-16
