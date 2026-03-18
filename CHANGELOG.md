@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.48.0] | 2026-03-18 | Scout self-validation + program-layer-v2 IMPL — Scout prompt now requires `sawtools validate --fix` before completing (catches schema errors at source), program-layer-v1 marked complete (3 waves merged across 2 repos), Phase 2 IMPL scouted (tier-gated execution: 8 agents, 3 waves) |
 | [0.47.0] | 2026-03-18 | Scout v0.12.0 — prompt trim (929→628 lines, 32% reduction): removed duplicate schema in Output Format, removed Step 0/1 duplication, condensed verification gates (kept linter check-only rule + 4-language table), condensed suitability Q4 (removed tool output examples), condensed integration connectors legacy section. No information loss. |
 | [0.46.0] | 2026-03-18 | Scout v0.11.0 — integration completeness audit (step 9): Scout must verify every new artifact has its registration/wiring file assigned in file_ownership before writing agent prompts. Catches CLI registration, API route, agent type, and scaffold ownership gaps. Program Layer v1 IMPL patched (5 audit fixes). |
 | [0.45.0] | 2026-03-17 | Program Layer Phase 1 IMPL — PROGRAM manifest schema Scout (8 agents, 3 waves, 2 repos), `PROGRAMManifest` type scaffold, P1-P4 invariants spec, Planner agent prompt, `validate-program` + `list-programs` CLI commands |
