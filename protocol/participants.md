@@ -1,6 +1,6 @@
 # Protocol Participants
 
-SAW has five participant roles. All five are agents (AI model instances running with tool access). They differ only in execution mode and responsibility.
+SAW has six participant roles. All six are agents (AI model instances running with tool access). They differ only in execution mode and responsibility.
 
 ## Orchestrator
 
@@ -43,6 +43,8 @@ The orchestrator must not implement feature logic itself. All source file modifi
 - Merge conflicts are impossible (orchestrator doesn't compete with agents for file ownership)
 
 The orchestrator may modify orchestrator-owned files (append-only shared files like config registries) post-merge, but must not touch any file in any agent's ownership list.
+
+At program scope, the orchestrator launches the Planner role to analyze requirements and produce the PROGRAM manifest. The Planner operates at project scope, identifying feature boundaries and cross-feature dependencies, while Scouts operate at feature scope within individual IMPLs.
 
 **Required capabilities:**
 
@@ -162,6 +164,32 @@ The `integrator` constraint restricts the Integration Agent to files listed in t
 **Failure behavior:** Non-fatal. If the Integration Agent fails, gaps are reported to the human via the orchestrator. The pipeline does not block.
 
 **Related Rules:** See E25 (Integration Validation), E26 (Integration Agent), I1 Amendment (Integration Agent Exemption)
+
+## Planner
+
+**Execution mode:** Asynchronous
+
+**Responsibilities:**
+
+An asynchronous agent launched by the orchestrator at program scope. Analyzes REQUIREMENTS.md and the existing codebase, identifies feature boundaries, defines cross-feature dependencies and program contracts, produces the PROGRAM manifest. Functions as a "super-Scout" at project scope rather than feature scope — where the Scout analyzes a single feature and produces an IMPL doc, the Planner analyzes the entire project and produces a PROGRAM manifest that coordinates multiple IMPL docs into tiered execution.
+
+The Planner identifies which features can execute in parallel (same tier) and which must execute sequentially (dependencies across tiers). It defines program-level interface contracts that span multiple features, ensuring that IMPLs can depend on each other's outputs without circular dependencies. The Planner runs a program-level suitability assessment to determine if the requirements can be decomposed into parallelizable features under SAW constraints.
+
+**Required capabilities:**
+
+- Read REQUIREMENTS.md and source files
+- Analyze project structure and identify feature boundaries
+- Identify cross-feature dependencies and execution order constraints
+- Define program contracts (cross-IMPL interface contracts)
+- Produce PROGRAM manifest with tier structure, IMPL listings, and contracts
+- Run program-level suitability assessment (determine if requirements fit SAW execution model)
+
+**Forbidden actions:**
+
+- Write IMPL docs (delegated to Scout agents for each feature)
+- Write source code (delegated to Wave Agents)
+- Launch agents (delegated to Orchestrator)
+- Modify existing source files
 
 ## Correctness Rationale
 
