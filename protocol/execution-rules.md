@@ -144,7 +144,9 @@ Disjoint file ownership and worktree isolation are complementary layers that pro
 
 **Trigger:** Creating worktrees
 
-**Required Action:** Worktrees must be named `.claude/worktrees/wave{N}-agent-{ID}` where `{N}` is the 1-based wave number and `{ID}` is the agent identifier. Agent identifiers follow the `[A-Z][2-9]?` pattern: a single uppercase letter (generation 1, e.g., `A`, `B`, `C`) or a letter followed by a digit 2–9 (multi-generation, e.g., `A2`, `B3`). Examples: `wave1-agent-A`, `wave1-agent-A2`, `wave2-agent-B3`.
+**Required Action:** Worktrees must be named `.claude/worktrees/saw/{slug}/wave{N}-agent-{ID}` where `{slug}` is the IMPL doc's `feature_slug` field, `{N}` is the 1-based wave number, and `{ID}` is the agent identifier. Branch names follow the same pattern: `saw/{slug}/wave{N}-agent-{ID}`. Agent identifiers follow the `[A-Z][2-9]?` pattern: a single uppercase letter (generation 1, e.g., `A`, `B`, `C`) or a letter followed by a digit 2–9 (multi-generation, e.g., `A2`, `B3`). Examples: `saw/my-feature/wave1-agent-A`, `saw/my-feature/wave1-agent-A2`, `saw/my-feature/wave2-agent-B3`.
+
+**Backward compatibility:** Branches created before v0.39.0 use the legacy format `wave{N}-agent-{ID}` without slug prefix. Tools accept both formats.
 
 **Why This Is Not a Style Choice:** This is a canonical requirement. The naming scheme is the mechanism by which external tooling identifies SAW sessions and correlates agents to waves. Deviating from it breaks observability silently. Any tooling that consumes SAW session data must treat this naming scheme as the stable interface.
 

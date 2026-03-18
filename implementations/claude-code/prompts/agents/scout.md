@@ -511,7 +511,7 @@ They are NOT the structure of your output. Your output is PURE YAML following th
    - More than 26 agents are needed in a wave (exhausting single letters), OR
    - Agents share a logical sub-domain and the Scout wants to express that grouping explicitly (e.g., `A`, `A2`, `A3` for three closely related data-layer agents).
 
-   Note: `A` and `A1` are NOT both valid — only the bare letter represents generation 1. Worktree branches follow the same ID: `wave1-agent-A2`, `wave2-agent-B3`.
+   Note: `A` and `A1` are NOT both valid — only the bare letter represents generation 1. Worktree branches follow the same ID: `saw/{slug}/wave1-agent-A2`, `saw/{slug}/wave2-agent-B3`. Branches created before v0.39.0 use the legacy format `wave1-agent-A2` without slug prefix; tools accept both formats.
 
 8. **Structure waves from the DAG.** Group agents into waves:
 

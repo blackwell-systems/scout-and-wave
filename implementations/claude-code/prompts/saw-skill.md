@@ -233,11 +233,11 @@ If a `docs/IMPL/IMPL-*.yaml` file already exists:
 For **YAML manifests** (`.yaml`/`.yml`):
 ```
 <!-- IMPL doc: /abs/path/to/IMPL-feature.yaml | Wave N | Agent X -->
-<!-- Worktree: /abs/path/to/.claude/worktrees/wave{N}-agent-{X} | Branch: wave{N}-agent-{X} -->
+<!-- Worktree: /abs/path/to/.claude/worktrees/saw/{slug}/wave{N}-agent-{X} | Branch: saw/{slug}/wave{N}-agent-{X} -->
 
 MANDATORY FIRST STEP - Verify isolation before any work:
-1. cd /abs/path/to/.claude/worktrees/wave{N}-agent-{X}
-2. sawtools verify-isolation --branch wave{N}-agent-{X}
+1. cd /abs/path/to/.claude/worktrees/saw/{slug}/wave{N}-agent-{X}
+2. sawtools verify-isolation --branch saw/{slug}/wave{N}-agent-{X}
 3. If verification fails (exit code 1), STOP immediately and report status: blocked
 
 After verification passes, read your pre-extracted brief:

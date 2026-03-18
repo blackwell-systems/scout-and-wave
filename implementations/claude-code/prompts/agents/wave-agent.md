@@ -24,14 +24,14 @@ Your worktree path and branch name are provided in your agent prompt (Field 1). 
 
 ```bash
 # Verify isolation (this also validates you're in a worktree, not main repo)
-cd /full/path/to/your/worktree && sawtools verify-isolation --branch wave{N}-agent-{ID}
+cd /full/path/to/your/worktree && sawtools verify-isolation --branch saw/{slug}/wave{N}-agent-{ID}
 ```
 
 **Expected output:**
 ```json
 {
   "ok": true,
-  "branch": "wave1-agent-A"
+  "branch": "saw/my-feature/wave1-agent-A"
 }
 ```
 
@@ -111,7 +111,7 @@ Write: pkg/module/file.go  # Where is "pkg"? Might be main repo!
 
 ### go.mod replace directives (Go projects)
 
-**Do NOT modify `replace` directives in `go.mod`.** Relative paths in replace blocks (e.g. `../sibling-module`) are correct relative to the **repo root**, not your worktree. Your worktree is nested deep inside `.claude/worktrees/wave{N}-agent-{ID}/`, so the relative paths look wrong from your perspective — but they resolve correctly when the branch is merged back to main. If you rewrite them to match your worktree depth (e.g. `../../../../sibling-module`), they will break after merge.
+**Do NOT modify `replace` directives in `go.mod`.** Relative paths in replace blocks (e.g. `../sibling-module`) are correct relative to the **repo root**, not your worktree. Your worktree is nested deep inside `.claude/worktrees/saw/{slug}/wave{N}-agent-{ID}/`, so the relative paths look wrong from your perspective — but they resolve correctly when the branch is merged back to main. If you rewrite them to match your worktree depth (e.g. `../../../../sibling-module`), they will break after merge.
 
 ## Your Task
 
@@ -194,7 +194,7 @@ sawtools set-completion "<absolute-impl-doc-path>" \
   --agent "<your-agent-id>" \
   --status complete \
   --commit "<commit-sha>" \
-  --branch "wave{N}-agent-{ID}" \
+  --branch "saw/{slug}/wave{N}-agent-{ID}" \
   --files-changed "file1.go,file2.go,file3.go" \
   --verification "PASS"
 ```
@@ -225,7 +225,7 @@ sawtools set-completion "/Users/user/repo/docs/IMPL/IMPL-feature.yaml" \
   --agent "A" \
   --status complete \
   --commit "3dbd5bb" \
-  --branch "wave1-agent-A" \
+  --branch "saw/tool-journaling/wave1-agent-A" \
   --files-changed "pkg/journal/observer.go,pkg/journal/observer_test.go,pkg/journal/doc.go" \
   --files-created "pkg/journal/observer.go,pkg/journal/observer_test.go,pkg/journal/doc.go" \
   --tests-added "TestNewObserver_CreatesDirectories,TestSync_FirstRun,TestSync_Incremental" \
@@ -240,7 +240,7 @@ sawtools set-completion "/Users/user/repo/docs/IMPL/IMPL-feature.yaml" \
   --status blocked \
   --failure-type needs_replan \
   --commit "abc123" \
-  --branch "wave1-agent-B" \
+  --branch "saw/tool-journaling/wave1-agent-B" \
   --verification "FAIL (interface contract unimplementable)" \
   --notes "Interface contract specifies sync API but requires async for external service calls. Recommend revising contract to return Future<T>."
 ```

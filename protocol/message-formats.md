@@ -276,8 +276,8 @@ Wave 3: {E}                        <- type: integration (wiring only, E27)
 status: complete | partial | blocked
 failure_type: transient | fixable | needs_replan | escalate | timeout  # required when status is partial or blocked; omit when status is complete
 repo: /absolute/path/to/repo  # omit for single-repo waves
-worktree: .claude/worktrees/wave{N}-agent-{ID}
-branch: wave{N}-agent-{ID}
+worktree: .claude/worktrees/saw/{slug}/wave{N}-agent-{ID}
+branch: saw/{slug}/wave{N}-agent-{ID}
 commit: {sha}
 files_changed:
   - path/to/file
@@ -428,13 +428,13 @@ Emitted by the Scout at the end of the suitability gate. Written to the IMPL doc
 
 **Step 1: Navigate to worktree**
 ```bash
-cd {absolute-repo-path}/.claude/worktrees/wave{N}-agent-{ID}
+cd {absolute-repo-path}/.claude/worktrees/saw/{slug}/wave{N}-agent-{ID}
 ```
 
 **Step 2: Verify isolation**
 ```bash
 ACTUAL_DIR=$(pwd)
-EXPECTED_DIR="{absolute-repo-path}/.claude/worktrees/wave{N}-agent-{ID}"
+EXPECTED_DIR="{absolute-repo-path}/.claude/worktrees/saw/{slug}/wave{N}-agent-{ID}"
 
 if [ "$ACTUAL_DIR" != "$EXPECTED_DIR" ]; then
   echo "ISOLATION FAILURE: Wrong directory"
@@ -444,7 +444,7 @@ if [ "$ACTUAL_DIR" != "$EXPECTED_DIR" ]; then
 fi
 
 ACTUAL_BRANCH=$(git branch --show-current)
-EXPECTED_BRANCH="wave{N}-agent-{ID}"
+EXPECTED_BRANCH="saw/{slug}/wave{N}-agent-{ID}"
 
 if [ "$ACTUAL_BRANCH" != "$EXPECTED_BRANCH" ]; then
   echo "ISOLATION FAILURE: Wrong branch"
@@ -471,7 +471,7 @@ Agent identifiers follow the `[Letter][Generation]` scheme:
 - **Generation 1:** The bare letter, e.g., `A`, `B`, `C`. The digit is omitted for generation 1. `A` and `A1` are NOT both valid — only `A` represents generation 1.
 - **Multi-generation:** `A2`, `B3`, `C4`, etc. Used when >26 agents are needed, or when the Scout wants to express that agents share a logical sub-domain (e.g., `A`, `A2`, `A3` for closely related work).
 - **Appears in:** file ownership tables (`Agent` column), dep graph blocks (`[A2]`), wave structure blocks, SAW tags, worktree branch names, and completion report sections.
-- **Worktree naming:** `wave{N}-agent-{ID}` — e.g., `wave1-agent-A2`, `wave2-agent-B3`.
+- **Worktree naming:** `saw/{slug}/wave{N}-agent-{ID}` — e.g., `saw/my-feature/wave1-agent-A2`, `saw/my-feature/wave2-agent-B3`. Branches created before v0.39.0 use the legacy format `wave{N}-agent-{ID}` without slug prefix; tools accept both formats.
 - **SAW tag format:** `[SAW:wave{N}:agent-{ID}]` — e.g., `[SAW:wave1:agent-A2]`.
 
 Generation-1 IDs (`A`, `B`, `C`, …) are valid wherever an agent ID appears. Multi-generation IDs are assigned by the Scout when needed; agents receive their full ID (e.g., `A2`) in Field 0 of their prompt.
@@ -507,8 +507,8 @@ status: complete | partial | blocked
 failure_type: transient | fixable | needs_replan | escalate | timeout
   # Required when status is partial or blocked.
   # Omit (or set to null) when status is complete.
-worktree: .claude/worktrees/wave{N}-agent-{ID}
-branch: wave{N}-agent-{ID}
+worktree: .claude/worktrees/saw/{slug}/wave{N}-agent-{ID}
+branch: saw/{slug}/wave{N}-agent-{ID}
 commit: {sha}  # or "uncommitted" if commit failed
 files_changed:
   - path/to/modified/file
@@ -546,9 +546,9 @@ verification: PASS | FAIL ({command} - N/N tests)
 
 - **repo:** Absolute path to the repository this agent worked in. Required for cross-repo waves so the Orchestrator knows which repo to merge in. Omit for single-repo waves.
 
-- **worktree:** Canonical worktree path. Must match E5 naming convention: `.claude/worktrees/wave{N}-agent-{ID}`
+- **worktree:** Canonical worktree path. Must match E5 naming convention: `.claude/worktrees/saw/{slug}/wave{N}-agent-{ID}`
 
-- **branch:** Branch name. Must match worktree naming: `wave{N}-agent-{ID}`
+- **branch:** Branch name. Must match worktree naming: `saw/{slug}/wave{N}-agent-{ID}`. Branches created before v0.39.0 use the legacy format `wave{N}-agent-{ID}` without slug prefix; tools accept both formats.
 
 - **commit:** Git commit SHA if changes were committed. `"uncommitted"` if no changes or commit failed. I5 requires agents commit before reporting.
 
@@ -617,7 +617,7 @@ type ToolEntry struct {
 
 **Journal persistence across retries:** If an agent fails with `failure_type: transient` or `failure_type: fixable` (E19), the Orchestrator relaunches it. The journal is preserved — entries from the failed attempt remain in `index.jsonl`. On relaunch, the agent sees what it tried before via the recovered context (E23A). This prevents retry loops where the agent repeats the same failing operation without learning from it.
 
-**Journal cleanup:** Journals are archived after wave merge (per agent completion). Archived journals are compressed and moved to `.saw-state/archives/wave{N}-agent-{ID}.tar.gz` for post-mortem debugging but are not loaded during normal execution. Only active agent journals (for in-progress waves) are read by E23A recovery.
+**Journal cleanup:** Journals are archived after wave merge (per agent completion). Archived journals are compressed and moved to `.saw-state/archives/wave{N}-agent-{ID}.tar.gz` for post-mortem debugging but are not loaded during normal execution. Only active agent journals (for in-progress waves) are read by E23A recovery. Note: archive paths remain at `.saw-state/archives/wave{N}-agent-{ID}.tar.gz` (no slug needed -- `.saw-state/` is already project-scoped).
 
 **Related Rules:** See E23A (tool journal recovery), E19 (failure type decision tree), I4 (IMPL doc and journal duality).
 
@@ -961,6 +961,7 @@ If no known issues exist, omit the section entirely or write:
 - Keep suitability verdict, scaffolds, dependency graph, interface contracts, file ownership, wave structure, and status in the main IMPL doc
 - Move agent prompts to separate files: `docs/IMPL/IMPL-<feature>-wave{N}-agent-{ID}.md`
 - Main IMPL doc links to per-agent files: `See [Agent A prompt](IMPL-<feature>-wave1-agent-A.md)`
+- Note: per-agent filenames use the flat `wave{N}-agent-{ID}` format (no slug prefix needed since the feature name is already in the filename).
 
 **When NOT to split:**
 - Documentation-only refactors (agent prompts are small)
