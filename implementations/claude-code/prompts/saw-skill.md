@@ -17,7 +17,7 @@ license: MIT OR Apache-2.0
 compatibility: Requires Claude Code (Skills API). Git 2.20+ required for worktree support.
 metadata:
   author: blackwell-systems
-  version: "0.10.0"
+  version: "0.11.0"
 ---
 
 # Scout-and-Wave: Parallel Agent Coordination
@@ -99,15 +99,21 @@ Read the agent template at `${CLAUDE_SKILL_DIR}/agent-template.md` for the 9-fie
 | `/saw wave --model <m>` | Wave agents with explicit model override |
 | `/saw status` | Show progress (auto-selects IMPL if only 1 pending) |
 | `/saw status --impl <id>` | Show progress of specific IMPL |
+| `/saw program plan "<description>"` | Analyze project and produce PROGRAM manifest (Level A) |
+| `/saw program execute "<description>"` | Plan + tier-gated execution (Level B) |
+| `/saw program execute --auto "<description>"` | Level B without human gates between tiers (future, Phase 4) |
+| `/saw program status` | Show program-level progress (tier completion, IMPL statuses) |
 
 ### Program Commands (Level A: Planning Only)
 
 | Command | Purpose |
 |---------|---------|
 | `/saw program plan "<project-description>"` | Analyze project and produce PROGRAM manifest |
+| `/saw program execute "<project-description>"` | Plan + tier-gated execution (Level B) |
+| `/saw program execute --auto "<project-description>"` | Level B without human gates between tiers (future, Phase 4) |
 | `/saw program status` | Show program-level progress (tier completion, IMPL statuses) |
 
-**Note:** `/saw program execute` (Level B: automated execution) is Phase 2 scope and not yet implemented.
+**Note:** `/saw program execute` (Level B: tier-gated execution) is documented below. Full autonomous execution with `--auto` is Phase 4 scope.
 
 ## sawtools Commands
 
@@ -135,6 +141,10 @@ All operations use the `sawtools` binary. IMPL docs are YAML manifests (`.yaml`)
 - `sawtools validate-integration <manifest> --wave N` — E25 integration gap detection
 - `sawtools resume-detect` — detect interrupted SAW sessions in the repository
 - `sawtools build-retry-context <manifest> --agent <ID>` — structured failure context for agent retries
+- `sawtools tier-gate <manifest> --tier N` — tier quality gate verification (E29)
+- `sawtools freeze-contracts <manifest> --tier N` — program contract freezing (E30)
+- `sawtools program-status <manifest>` — full program status report (E32)
+- `sawtools run-scout "<impl-title>" --program "<manifest>"` — Scout with program contract inputs (E31)
 
 ## Execution Models
 
@@ -351,7 +361,93 @@ After human approval, the program enters the execution phase:
 - **Tier 2 execution:** Launch Scout agents for all Tier 2 IMPLs in parallel
 - Repeat until all tiers complete
 
-This is the `/saw program execute` flow (Level B), which is Phase 2 scope and not yet implemented. For now, program planning stops at human review.
+This is the `/saw program execute` flow (Level B), which is documented in the next section.
+
+### `/saw program execute "<project-description>"`
+
+Orchestrator flow for `/saw program execute`: Plan and execute a multi-IMPL program with tier-gated progression. This extends the Level A planning flow with automated execution.
+
+**Phase 1: Planning (reuses /saw program plan flow)**
+
+Steps 1-6 from the existing `/saw program plan` section apply:
+1. Requirements intake
+2. Launch Planner agent
+3. Wait for Planner completion
+4. Validate PROGRAM manifest
+5. Human review
+6. State transition to REVIEWED
+
+After human approves the PROGRAM manifest, continue to Phase 2.
+
+**Phase 2: Program Scaffold (if program contracts exist)**
+
+If the manifest has program_contracts with defined locations, launch a Scaffold Agent to materialize them as source code:
+1. Launch Scaffold Agent using the Agent tool with `subagent_type: scaffold-agent` and `run_in_background: true`
+2. The prompt parameter is the path to the PROGRAM manifest
+3. The Scaffold Agent reads the program_contracts section and creates the scaffold source files
+4. Wait for Scaffold Agent to complete
+5. Verify all contract files show `Status: committed` in the manifest
+6. If any file shows `Status: FAILED`, stop and surface the failure to the user
+7. Commit scaffold files to HEAD
+8. Transition manifest state to TIER_EXECUTING
+
+**Phase 3: Tier Execution Loop (E28)**
+
+For each tier N from 1 to manifest.tiers_total:
+
+**Step 3a: Parallel Scout Launching (E31)**
+- For each IMPL in tier N with status "pending":
+  - Launch Scout agent with: `subagent_type: scout`, `run_in_background: true`
+  - Pass --program flag: `sawtools run-scout "<impl-title>" --program "<manifest-path>"`
+  - Scout receives frozen program contracts as immutable inputs
+- Wait for all Scouts to complete
+- Validate each IMPL doc (E16): run `sawtools validate --fix "<impl-doc-path>"` for each
+- Present all IMPL docs for human review (tier structure, file ownership, interface contracts)
+
+**Step 3b: IMPL Execution**
+- For each reviewed IMPL in tier N:
+  - Execute the full IMPL lifecycle: scaffold, waves, merge
+  - Use existing `/saw wave --auto` flow per IMPL
+  - Update IMPL status in PROGRAM manifest as each completes (E32):
+    ```bash
+    sawtools update-program-impl "<manifest>" --impl "<slug>" --status "<status>"
+    ```
+- Wait for all IMPLs in the tier to reach "complete"
+
+**Step 3c: Tier Gate (E29)**
+- Run: `sawtools tier-gate "<manifest>" --tier N`
+- This verifies all IMPLs are complete and runs tier_gates quality gate commands from the PROGRAM manifest
+- If gate fails, enter BLOCKED. Surface failure to user.
+- If gate passes, proceed to contract freezing.
+
+**Step 3d: Contract Freezing (E30)**
+- Run: `sawtools freeze-contracts "<manifest>" --tier N`
+- This identifies program contracts whose freeze_at matches tier N
+- Verifies contract source files exist and are committed to HEAD
+- Marks contracts as frozen in the manifest
+- If freezing fails (missing files, uncommitted changes), enter BLOCKED
+- If freezing succeeds, all contracts consumed by next tier are locked
+
+**Step 3e: Tier Boundary Review**
+- Run: `sawtools program-status "<manifest>"`
+- Surface tier completion status to user (tier N complete, contracts frozen)
+- Pause for human review (unless --auto active, Phase 4)
+- Human approves to advance to next tier
+
+**Phase 4: Program Completion**
+
+After final tier gate passes:
+1. Run: `sawtools mark-program-complete "<manifest>"` (or update state to COMPLETE manually if command not yet available)
+2. Update CONTEXT.md with program-level completion data:
+   ```bash
+   sawtools update-context "<manifest>" --project-root "<repo-path>"
+   ```
+3. Report final program status to user
+
+**Error handling:**
+- If any IMPL enters BLOCKED during tier execution, that IMPL's failure does not cascade to other IMPLs in the same tier (P1).
+- If the tier cannot complete because one IMPL is blocked, enter BLOCKED and surface the specific IMPL failure.
+- The user may fix the blocked IMPL and resume, or re-plan.
 
 ### `/saw program status`
 
@@ -427,6 +523,7 @@ Show program-level progress: tier completion, IMPL statuses, and program contrac
 - `wave --auto`: Execute all remaining waves automatically; only pause if verification fails
 - `status`: Show current progress from the IMPL doc
 - `program plan "<project-description>"`: Analyze project and produce PROGRAM manifest coordinating multiple IMPLs (Level A: planning only)
+- `program execute "<project-description>"`: Plan and execute multi-IMPL program with tier-gated progression. Extends Level A planning with automated Scout launching, IMPL execution, tier gates, and contract freezing. Pauses for human review at tier boundaries (Level B).
 - `program status`: Show program-level progress (tier completion, IMPL statuses, contract freeze status)
 
 Always read the full IMPL doc before taking any action. The IMPL doc is the single source of truth.
