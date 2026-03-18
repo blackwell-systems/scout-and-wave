@@ -1,6 +1,6 @@
 # Scout-and-Wave Protocol Execution Rules
 
-**Version:** 0.15.0
+**Version:** 0.16.0
 
 This document defines the execution rules that govern orchestrator behavior during Scout-and-Wave protocol execution. These rules are not captured by the state machine alone.
 
@@ -8,7 +8,7 @@ This document defines the execution rules that govern orchestrator behavior duri
 
 ## Overview
 
-Rules are numbered E1–E26 for cross-referencing and audit; the same convention as invariants (I1–I6). When referenced in implementation files, the E-number serves as an anchor; implementations should embed the canonical definition verbatim alongside the reference.
+Rules are numbered E1–E32 for cross-referencing and audit; the same convention as invariants (I1–I6). When referenced in implementation files, the E-number serves as an anchor; implementations should embed the canonical definition verbatim alongside the reference.
 
 To audit consistency, search implementation files for `E{N}` and verify the embedded definitions match this document.
 
@@ -775,6 +775,116 @@ waves:
 
 ---
 
+## E28: Tier Execution Loop
+
+**Trigger:** PROGRAM manifest state transitions to TIER_EXECUTING
+
+**Required Action:** The Orchestrator reads the current tier from the PROGRAM manifest and launches Scout agents for all IMPLs in the tier with status "pending" (in parallel, using the existing `/saw scout` flow per IMPL). Each Scout receives the `--program` flag pointing to the PROGRAM manifest so it can consume frozen program contracts as immutable inputs.
+
+After all IMPLs in the tier are scouted and reviewed, the Orchestrator executes each IMPL's waves using the standard `/saw wave --auto` flow. Track IMPL completion. When all IMPLs in the tier reach "complete", transition to tier gate (E29).
+
+**Relationship to E1:** Scout launches are async (E1 applies)
+
+**Relationship to P1/P3:** Tier structure is defined by PROGRAM manifest; enforcement of P1 (IMPLs are independent within a tier) and P3 (tier N+1 does not begin until tier N's gate passes)
+
+**Enforcement of P1:** IMPLs within the same tier execute in parallel without coordination
+
+**Related Invariants:** See P1 (intra-tier independence), P3 (tier gate sequencing) in `program-invariants.md`
+
+---
+
+## E29: Tier Gate Verification
+
+**Trigger:** All IMPLs in a tier reach "complete"
+
+**Required Action:** Run `sawtools tier-gate <manifest> --tier N`. This verifies all IMPLs are complete and runs the tier_gates quality gate commands from the PROGRAM manifest. If all gates pass, mark the tier as verified. If any required gate fails, enter BLOCKED.
+
+**Enforcement of P3:** Tier N+1 does not begin until tier gate passes
+
+**Failure Handling:** On gate failure, the Orchestrator surfaces the specific gate failure to the user and enters BLOCKED state. The user must resolve the failure (fix code, update gate definition, or descope failing IMPL) before the PROGRAM can advance to the next tier.
+
+**Implementation:** `sawtools tier-gate` is implemented by the `RunTierGate` function (see interface contracts in IMPL doc). The function returns a `TierGateResult` struct with per-gate and per-IMPL status.
+
+**Related Invariants:** See P3 (tier gate sequencing) in `program-invariants.md`
+
+**Related Rules:** See E30 (contract freezing after gate pass), E28 (tier execution loop)
+
+---
+
+## E30: Program Contract Freezing
+
+**Trigger:** Tier gate passes (E29)
+
+**Required Action:** Run `sawtools freeze-contracts <manifest> --tier N`. This identifies program contracts whose `freeze_at` matches the completing tier, verifies their source files exist and are committed to HEAD, and marks them as frozen. Frozen contracts are immutable — any IMPL in a later tier that attempts to redefine a frozen contract violates P2.
+
+**Enforcement of P2:** Contracts are frozen before next tier's Scouts launch. When Scouts in tier N+1 receive the PROGRAM manifest via `--program` flag (E28), they receive all contracts frozen up through tier N. Scouts must not redefine frozen contracts.
+
+**Human gate:** After freezing, pause for human review before advancing to the next tier (unless `--auto` mode is active). The Orchestrator presents the list of newly frozen contracts and waits for confirmation to proceed.
+
+**Implementation:** `sawtools freeze-contracts` is implemented by the `FreezeContracts` function (see interface contracts in IMPL doc). The function returns a `FreezeContractsResult` struct listing which contracts were frozen and any errors.
+
+**Related Invariants:** See P2 (contract immutability) in `program-invariants.md`
+
+**Related Rules:** See E29 (tier gate triggers freezing), E31 (Scouts receive frozen contracts)
+
+---
+
+## E31: Parallel Scout Launching
+
+**Trigger:** Orchestrator is about to scout all IMPLs in a tier
+
+**Required Action:** Launch one Scout agent per IMPL in the tier, all in parallel (E1 applies). Each Scout receives:
+- (a) The feature description from the PROGRAM manifest's IMPL entry
+- (b) `--program` flag with path to PROGRAM manifest
+- (c) Standard Scout inputs (codebase access, CONTEXT.md)
+
+Scout agents are independent — they do not coordinate with each other. The Orchestrator waits for all Scouts to complete, then validates each IMPL doc (E16), then presents all for human review.
+
+**Relationship to E16:** Each IMPL doc is validated independently after its Scout completes
+
+**Relationship to P2:** Scouts receive frozen contracts (E30) and must not redefine them. If a Scout attempts to redefine a frozen contract, the human reviewer catches this during IMPL review before any waves execute.
+
+**Relationship to E28:** E31 defines the "launch Scouts for all IMPLs in the tier" step referenced in E28's tier execution loop
+
+**Implementation:** The `--program` flag is passed to the Scout via `RunScoutOpts.ProgramManifestPath` (see interface contracts in IMPL doc). The engine reads the PROGRAM manifest and injects frozen contracts into the Scout prompt.
+
+**Related Invariants:** See P1 (intra-tier independence), P2 (contract immutability) in `program-invariants.md`
+
+**Related Rules:** See E28 (tier execution loop), E16 (IMPL doc validation), E30 (contract freezing)
+
+---
+
+## E32: Cross-IMPL Progress Tracking
+
+**Trigger:** Any IMPL within a PROGRAM changes state
+
+**Required Action:** The Orchestrator updates the PROGRAM manifest's impl status field and completion counters. Run `sawtools program-status <manifest>` to get a structured report. When reporting status to the user, show tier-level progress (how many IMPLs in each tier are complete) and overall progress.
+
+**Enforcement of P4:** PROGRAM manifest is always up to date. The manifest is the single source of truth for program state, including which IMPLs are pending, in progress, complete, or blocked.
+
+**Status report structure:** The `ProgramStatusResult` (see interface contracts in IMPL doc) includes:
+- Current tier number
+- Per-tier IMPL statuses (pending, in_progress, complete, blocked)
+- Contract freeze states (which contracts are frozen at which tier)
+- Completion tracking (N of M IMPLs complete in current tier, overall completion percentage)
+
+**Implementation:** `sawtools program-status` is implemented by the `GetProgramStatus` function (see interface contracts in IMPL doc). The function cross-references IMPL docs on disk for real-time status.
+
+**User reporting:** The Orchestrator displays tier-level progress in the CLI/UI:
+```
+PROGRAM: my-program (Tier 2 of 3)
+  Tier 1: 3/3 complete ✓
+  Tier 2: 2/4 complete (IMPL-feature-a, IMPL-feature-b complete; IMPL-feature-c, IMPL-feature-d in progress)
+  Tier 3: 0/2 pending
+Overall: 5/9 IMPLs complete (56%)
+```
+
+**Related Invariants:** See P4 (PROGRAM manifest as source of truth) in `program-invariants.md`
+
+**Related Rules:** See E28 (tier execution loop), E29 (tier gate verification)
+
+---
+
 ## Cross-References
 
 - See `preconditions.md` for conditions that must hold before execution begins
@@ -790,3 +900,8 @@ waves:
 - E25: Orchestrator runs integration validation after wave merge — see also E26, `invariants.md` (I1 Amendment)
 - E26: Integration Agent wires unconnected exports — see also E25, `invariants.md` (I1 Amendment), `participants.md` (Integration Agent)
 - E27: Scout marks wiring-only waves as `type: integration` — see also E25, E26, `participants.md` (Integration Agent)
+- E28: Orchestrator executes PROGRAM tiers (launches Scouts per IMPL, tracks completion) — see also `program-invariants.md` (P1, P3), E29, E31
+- E29: Orchestrator runs tier gate verification before advancing to next tier — see also `program-invariants.md` (P3), E28, E30
+- E30: Orchestrator freezes program contracts at tier boundaries — see also `program-invariants.md` (P2), E29, E31
+- E31: Orchestrator launches Scouts in parallel for all IMPLs in a tier — see also `program-invariants.md` (P1, P2), E28, E16
+- E32: Orchestrator tracks cross-IMPL progress and updates PROGRAM manifest — see also `program-invariants.md` (P4), E28, E29
