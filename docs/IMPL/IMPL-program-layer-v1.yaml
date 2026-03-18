@@ -1,0 +1,846 @@
+# IMPL: program-layer-v1
+# Phase 1 of Program Layer: Planner Agent + PROGRAM Manifest (Level A)
+# Scope: PROGRAM manifest schema, validation, Planner agent prompt,
+#         /saw program plan orchestrator flow, sawtools commands
+
+title: "Program Layer Phase 1: Planner Agent and PROGRAM Manifest"
+feature_slug: program-layer-v1
+verdict: SUITABLE
+test_command: "cd /Users/dayna.blackwell/code/scout-and-wave-go && go test ./..."
+lint_command: "cd /Users/dayna.blackwell/code/scout-and-wave-go && go vet ./..."
+state: SCOUT_PENDING
+
+# Suitability Assessment
+# ----------------------
+# Verdict: SUITABLE
+#
+# 1. File decomposition: YES — Work spans 2 repos (protocol, Go SDK) with
+#    12+ distinct files. No two agents need the same file. Protocol docs are
+#    independent markdown/YAML files. Go SDK work splits cleanly into types,
+#    validation, CLI commands, and parser.
+#
+# 2. Investigation-first: NO — The design doc at docs/program-layer-roadmap.md
+#    fully specifies the PROGRAM manifest schema, invariants P1-P4, Planner
+#    agent responsibilities, and state machine extensions. No unknowns.
+#
+# 3. Interface discoverability: YES — The PROGRAMManifest Go struct can be
+#    defined from the schema in Section 3.1 of the design doc. All CLI
+#    commands have known inputs/outputs. The Planner agent prompt structure
+#    follows the existing 9-field template.
+#
+# 4. Pre-implementation status check:
+#    Total items: 8 deliverables
+#    Already implemented (DONE): 0
+#    Partially implemented (PARTIAL): 0
+#    Not implemented (TO-DO): 8
+#    All work is greenfield within existing repo structures.
+#
+# 5. Parallelization value: HIGH — Go build/test >30s, agents average 2-3
+#    files each, tasks involve schema definition + validation logic + tests.
+#    Wave 1 has 4 independent agents across 2 repos. Wave 2 has 3 agents.
+#    Wave 3 has 1 agent for CLI commands (depends on Wave 2 library code).
+#
+# Estimated times:
+# - Scout phase: ~8 min (dependency mapping, cross-repo interface contracts)
+# - Agent execution: ~30 min (8 agents, ~10 min avg, 3 waves with parallelism)
+# - Merge & verification: ~8 min (3 waves)
+# Total SAW time: ~46 min
+#
+# Sequential baseline: ~80 min (8 agents x 10 min avg)
+# Time savings: ~34 min (~43% faster)
+# Recommendation: Clear speedup. Proceed.
+
+suitability_assessment: |
+  Phase 1 of the Program Layer introduces 8 deliverables across 2 repositories
+  (protocol repo and Go SDK). The design doc fully specifies the PROGRAM manifest
+  schema, Planner agent role, program invariants P1-P4, and sawtools commands.
+  All work is greenfield with no pre-existing implementations to account for.
+
+  The work decomposes cleanly into 8 agents across 3 waves:
+  - Wave 1 (4 agents): Protocol docs (independent markdown files)
+  - Wave 2 (3 agents): Go SDK validation, parser/discovery, and saw-skill update
+  - Wave 3 (1 agent): CLI commands that depend on Wave 2 library functions
+
+  Cross-repo coordination is straightforward: protocol docs define the spec,
+  Go SDK implements the types and tooling. No web app changes in Phase 1 —
+  web integration is deferred to Phase 3 per the roadmap.
+
+# Quality Gates
+quality_gates:
+  level: standard
+  gates:
+    - type: build
+      command: "cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./..."
+      required: true
+    - type: test
+      command: "cd /Users/dayna.blackwell/code/scout-and-wave-go && go test ./..."
+      required: true
+    - type: lint
+      command: "cd /Users/dayna.blackwell/code/scout-and-wave-go && go vet ./..."
+      required: false
+      description: "Check for common Go mistakes"
+
+# Scaffolds
+# The PROGRAMManifest type and sub-types must exist before Wave 2 agents
+# can write validation logic and CLI commands against them.
+scaffolds:
+  - file_path: "pkg/protocol/program_types.go"
+    contents: |
+      package protocol
+
+      // PROGRAMManifest is the structured representation of a SAW PROGRAM document.
+      // It coordinates multiple IMPL docs into tiered execution.
+      type PROGRAMManifest struct {
+        Title            string             `yaml:"title" json:"title"`
+        ProgramSlug      string             `yaml:"program_slug" json:"program_slug"`
+        State            ProgramState       `yaml:"state" json:"state"`
+        Created          string             `yaml:"created,omitempty" json:"created,omitempty"`
+        Updated          string             `yaml:"updated,omitempty" json:"updated,omitempty"`
+        Requirements     string             `yaml:"requirements,omitempty" json:"requirements,omitempty"`
+        ProgramContracts []ProgramContract  `yaml:"program_contracts,omitempty" json:"program_contracts,omitempty"`
+        Impls            []ProgramIMPL      `yaml:"impls" json:"impls"`
+        Tiers            []ProgramTier      `yaml:"tiers" json:"tiers"`
+        TierGates        []QualityGate      `yaml:"tier_gates,omitempty" json:"tier_gates,omitempty"`
+        Completion       ProgramCompletion  `yaml:"completion" json:"completion"`
+        PreMortem        []PreMortemRow     `yaml:"pre_mortem,omitempty" json:"pre_mortem,omitempty"`
+      }
+
+      // ProgramState represents the current state of the PROGRAM manifest.
+      type ProgramState string
+
+      const (
+        ProgramStatePlanning     ProgramState = "PLANNING"
+        ProgramStateValidating   ProgramState = "VALIDATING"
+        ProgramStateReviewed     ProgramState = "REVIEWED"
+        ProgramStateScaffold     ProgramState = "SCAFFOLD"
+        ProgramStateTierExecuting ProgramState = "TIER_EXECUTING"
+        ProgramStateTierVerified ProgramState = "TIER_VERIFIED"
+        ProgramStateComplete     ProgramState = "COMPLETE"
+        ProgramStateBlocked      ProgramState = "BLOCKED"
+        ProgramStateNotSuitable  ProgramState = "NOT_SUITABLE"
+      )
+
+      // ProgramContract defines a cross-IMPL interface contract.
+      type ProgramContract struct {
+        Name        string                    `yaml:"name" json:"name"`
+        Description string                    `yaml:"description,omitempty" json:"description,omitempty"`
+        Definition  string                    `yaml:"definition" json:"definition"`
+        Consumers   []ProgramContractConsumer `yaml:"consumers,omitempty" json:"consumers,omitempty"`
+        Location    string                    `yaml:"location" json:"location"`
+        FreezeAt    string                    `yaml:"freeze_at,omitempty" json:"freeze_at,omitempty"`
+      }
+
+      // ProgramContractConsumer identifies an IMPL that consumes a program contract.
+      type ProgramContractConsumer struct {
+        Impl  string `yaml:"impl" json:"impl"`
+        Usage string `yaml:"usage" json:"usage"`
+      }
+
+      // ProgramIMPL represents an IMPL within the PROGRAM manifest.
+      type ProgramIMPL struct {
+        Slug            string   `yaml:"slug" json:"slug"`
+        Title           string   `yaml:"title" json:"title"`
+        Tier            int      `yaml:"tier" json:"tier"`
+        DependsOn       []string `yaml:"depends_on,omitempty" json:"depends_on,omitempty"`
+        EstimatedAgents int      `yaml:"estimated_agents,omitempty" json:"estimated_agents,omitempty"`
+        EstimatedWaves  int      `yaml:"estimated_waves,omitempty" json:"estimated_waves,omitempty"`
+        KeyOutputs      []string `yaml:"key_outputs,omitempty" json:"key_outputs,omitempty"`
+        Status          string   `yaml:"status" json:"status"`
+      }
+
+      // ProgramTier groups IMPLs that can execute in parallel.
+      type ProgramTier struct {
+        Number      int      `yaml:"number" json:"number"`
+        Impls       []string `yaml:"impls" json:"impls"`
+        Description string   `yaml:"description,omitempty" json:"description,omitempty"`
+      }
+
+      // ProgramCompletion tracks overall program progress.
+      type ProgramCompletion struct {
+        TiersComplete int `yaml:"tiers_complete" json:"tiers_complete"`
+        TiersTotal    int `yaml:"tiers_total" json:"tiers_total"`
+        ImplsComplete int `yaml:"impls_complete" json:"impls_complete"`
+        ImplsTotal    int `yaml:"impls_total" json:"impls_total"`
+        TotalAgents   int `yaml:"total_agents" json:"total_agents"`
+        TotalWaves    int `yaml:"total_waves" json:"total_waves"`
+      }
+    import_path: "github.com/blackwell-systems/scout-and-wave-go/pkg/protocol"
+    status: pending
+
+# Interface Contracts
+interface_contracts:
+  - name: PROGRAMManifest
+    description: |
+      Core Go struct representing the PROGRAM manifest. Defined in scaffold.
+      All Wave 2 and Wave 3 agents depend on this type.
+    definition: |
+      See scaffold file pkg/protocol/program_types.go for full definition.
+      Key types: PROGRAMManifest, ProgramState, ProgramContract,
+      ProgramIMPL, ProgramTier, ProgramCompletion.
+    location: "pkg/protocol/program_types.go"
+
+  - name: ValidateProgram
+    description: |
+      Validates a PROGRAMManifest against the schema rules including
+      P1 (IMPL independence within tier) and tier ordering correctness.
+    definition: |
+      func ValidateProgram(manifest *PROGRAMManifest) []ValidationError
+    location: "pkg/protocol/program_validation.go"
+
+  - name: ParseProgramManifest
+    description: |
+      Parses a PROGRAM YAML file from disk into a PROGRAMManifest struct.
+    definition: |
+      func ParseProgramManifest(path string) (*PROGRAMManifest, error)
+    location: "pkg/protocol/program_parser.go"
+
+  - name: ListPrograms
+    description: |
+      Discovers PROGRAM manifest files in a directory.
+    definition: |
+      func ListPrograms(dir string) ([]ProgramDiscovery, error)
+
+      type ProgramDiscovery struct {
+        Path    string       `json:"path"`
+        Slug    string       `json:"slug"`
+        State   ProgramState `json:"state"`
+        Title   string       `json:"title"`
+      }
+    location: "pkg/protocol/program_discovery.go"
+
+# File Ownership
+file_ownership:
+  # Wave 1 - Protocol docs (protocol repo)
+  - file: protocol/program-manifest.md
+    agent: A
+    wave: 1
+    action: new
+    repo: scout-and-wave
+  - file: protocol/program-invariants.md
+    agent: B
+    wave: 1
+    action: new
+    repo: scout-and-wave
+  - file: protocol/participants.md
+    agent: C
+    wave: 1
+    action: modify
+    repo: scout-and-wave
+  - file: protocol/state-machine.md
+    agent: C
+    wave: 1
+    action: modify
+    repo: scout-and-wave
+  - file: implementations/claude-code/prompts/agents/planner.md
+    agent: D
+    wave: 1
+    action: new
+    repo: scout-and-wave
+
+  # Wave 2 - Go SDK library code + saw-skill update
+  - file: pkg/protocol/program_validation.go
+    agent: E
+    wave: 2
+    action: new
+    repo: scout-and-wave-go
+  - file: pkg/protocol/program_validation_test.go
+    agent: E
+    wave: 2
+    action: new
+    repo: scout-and-wave-go
+  - file: pkg/protocol/program_parser.go
+    agent: F
+    wave: 2
+    action: new
+    repo: scout-and-wave-go
+  - file: pkg/protocol/program_parser_test.go
+    agent: F
+    wave: 2
+    action: new
+    repo: scout-and-wave-go
+  - file: pkg/protocol/program_discovery.go
+    agent: F
+    wave: 2
+    action: new
+    repo: scout-and-wave-go
+  - file: pkg/protocol/program_discovery_test.go
+    agent: F
+    wave: 2
+    action: new
+    repo: scout-and-wave-go
+  - file: implementations/claude-code/prompts/saw-skill.md
+    agent: H
+    wave: 2
+    action: modify
+    repo: scout-and-wave
+
+  # Wave 3 - CLI commands (depends on Wave 2 library code)
+  - file: cmd/saw/validate_program_cmd.go
+    agent: G
+    wave: 3
+    action: new
+    repo: scout-and-wave-go
+  - file: cmd/saw/validate_program_cmd_test.go
+    agent: G
+    wave: 3
+    action: new
+    repo: scout-and-wave-go
+  - file: cmd/saw/list_programs_cmd.go
+    agent: G
+    wave: 3
+    action: new
+    repo: scout-and-wave-go
+  - file: cmd/saw/list_programs_cmd_test.go
+    agent: G
+    wave: 3
+    action: new
+    repo: scout-and-wave-go
+
+# Waves
+waves:
+  - number: 1
+    agents:
+      - id: A
+        task: |
+          ## What to Implement
+
+          Create `protocol/program-manifest.md` — the canonical schema specification
+          for the PROGRAM manifest YAML format. This is the protocol-level reference
+          that the Go SDK implements against.
+
+          ## Content to Write
+
+          Document the full PROGRAM manifest schema as specified in Section 3.1 of
+          `docs/program-layer-roadmap.md`. The doc must cover:
+
+          1. **File location convention:** `docs/PROGRAM-<name>.yaml`
+          2. **Top-level fields:** title, program_slug, state, created, updated, requirements
+          3. **program_contracts section:** Full schema for cross-IMPL interface contracts
+             including name, description, definition, consumers (impl + usage), location, freeze_at
+          4. **impls section:** Schema for IMPL entries including slug, title, tier,
+             depends_on, estimated_agents, estimated_waves, key_outputs, status
+          5. **tiers section:** Schema for tier groupings (number, impls array, description)
+          6. **tier_gates section:** Reuses existing QualityGate schema from IMPL docs
+          7. **completion section:** tiers_complete, tiers_total, impls_complete, impls_total,
+             total_agents, total_waves
+          8. **pre_mortem section:** Reuses existing PreMortemRow schema from IMPL docs
+          9. **State enum values:** PLANNING, VALIDATING, REVIEWED, SCAFFOLD,
+             TIER_EXECUTING, TIER_VERIFIED, COMPLETE, BLOCKED, NOT_SUITABLE
+          10. **IMPL status enum values:** pending, scouting, reviewed, executing, complete
+
+          Include a full example manifest (use the example from the design doc Section 3.1).
+
+          Document the relationship between PROGRAM manifests and IMPL docs:
+          - PROGRAM manifest references IMPL docs by slug
+          - IMPL docs are produced by Scout agents, not the Planner
+          - Tiers are analogous to waves (same-tier IMPLs execute in parallel)
+
+          ## Style and Format
+
+          Follow the existing protocol doc style in `protocol/invariants.md` and
+          `protocol/state-machine.md`:
+          - Start with a title and version number (0.1.0)
+          - Use markdown with clear section headers
+          - Include tables for field reference
+          - Cross-reference related docs (invariants, state machine, participants)
+
+          ## Verification Gate
+          - File exists and is valid markdown
+          - Contains all 10 content items listed above
+          - Example manifest is syntactically valid YAML
+
+          ## Constraints
+          - Do NOT define invariants (that is Agent B's job)
+          - Do NOT modify any existing protocol docs
+          - Reference the design doc but do not duplicate its prose verbatim
+        files:
+          - protocol/program-manifest.md
+
+      - id: B
+        task: |
+          ## What to Implement
+
+          Create `protocol/program-invariants.md` — the formal specification of
+          program-level invariants P1-P4 as defined in Section 6 of
+          `docs/program-layer-roadmap.md`.
+
+          ## Content to Write
+
+          Define four invariants following the structure of `protocol/invariants.md`:
+
+          **P1: IMPL Independence Within a Tier**
+          - Formal statement: No two IMPLs in the same tier may have a dependency relationship
+          - Enforcement: Planner defines tiers; Orchestrator validates no IMPL in tier N
+            has depends_on referencing an IMPL also in tier N
+          - Rationale: Same principle as I1 but at IMPL level
+          - Related rules: reference future E-numbers for program execution
+
+          **P2: Program Contracts Precede Tier Execution**
+          - All cross-IMPL types must be defined, materialized as code, and frozen
+            before any Scout in the consuming tier begins
+          - Extension of I2 to program level
+          - Enforcement: Orchestrator verifies program contract files exist and are
+            committed before launching Scouts
+
+          **P3: Tier Sequencing**
+          - Tier N+1 does not begin until all Tier N IMPLs complete, tier gates pass,
+            and program contracts freeze
+          - Extension of I3 to program level
+
+          **P4: PROGRAM Manifest is Source of Truth**
+          - Single source of truth for IMPL ordering, cross-IMPL dependencies,
+            program contracts, and tier completion status
+          - Extension of I4 to program level
+
+          For each invariant include: formal statement, enforcement mechanism,
+          rationale, and cross-references to existing I1-I6 invariants and the
+          program manifest schema doc.
+
+          Add a "Relationship to IMPL-Level Invariants" section showing the mapping:
+          P1 maps to I1, P2 maps to I2, P3 maps to I3, P4 maps to I4.
+
+          ## Verification Gate
+          - File exists and is valid markdown
+          - All four invariants P1-P4 are defined with formal statements
+          - Cross-references to protocol/invariants.md are present
+
+          ## Constraints
+          - Do NOT modify protocol/invariants.md (that file covers I1-I6 only)
+          - Do NOT define the PROGRAM manifest schema (that is Agent A's job)
+          - Follow the existing invariant document structure exactly
+        files:
+          - protocol/program-invariants.md
+
+      - id: C
+        task: |
+          ## What to Implement
+
+          Update two existing protocol docs to reference the Program Layer:
+
+          **1. protocol/participants.md — Add Planner role**
+
+          Add a new "## Planner" section after the Integration Agent section,
+          following the exact structure of existing participant definitions. Include:
+
+          - **Execution mode:** Asynchronous
+          - **Responsibilities:** Analyzes REQUIREMENTS.md and existing codebase,
+            identifies feature boundaries, defines cross-feature dependencies and
+            program contracts, produces PROGRAM manifest. A "super-Scout" at project
+            scope rather than feature scope.
+          - **Required capabilities:** Read requirements + source, analyze project
+            structure, identify cross-feature deps, define program contracts,
+            produce PROGRAM manifest, run program-level suitability assessment
+          - **Forbidden actions:** Write IMPL docs, write source code, launch agents,
+            modify existing source files
+          - Update the opening sentence count from "five" to "six" participant roles
+          - Update the I6 section to mention the Planner role
+
+          **2. protocol/state-machine.md — Add Program states reference**
+
+          Add a new section "## Program State Machine" at the end (before References)
+          that briefly describes the program-level states and points to
+          `protocol/program-invariants.md` for full invariant definitions. Include:
+
+          - List of program states: PROGRAM_PLANNING, PROGRAM_VALIDATING,
+            PROGRAM_REVIEWED, PROGRAM_SCAFFOLD, TIER_EXECUTING, TIER_VERIFIED,
+            PROGRAM_COMPLETE, PROGRAM_BLOCKED, PROGRAM_NOT_SUITABLE
+          - Note that these are an outer loop containing the existing IMPL state machine
+          - State that full program execution rules will be defined in Phase 2
+          - Cross-reference protocol/program-manifest.md and protocol/program-invariants.md
+
+          ## Interfaces to Call
+          - Read existing protocol/participants.md for current structure
+          - Read existing protocol/state-machine.md for current structure
+
+          ## Verification Gate
+          - Both files parse as valid markdown
+          - Planner section exists in participants.md with all required subsections
+          - Program State Machine section exists in state-machine.md
+          - Participant count updated from "five" to "six"
+
+          ## Constraints
+          - Do NOT remove or rewrite existing content — only ADD new sections
+          - Preserve all existing cross-references
+          - Follow the exact formatting patterns of existing sections
+          - The Planner section must match the structure of Scout/Wave Agent sections
+        files:
+          - protocol/participants.md
+          - protocol/state-machine.md
+
+      - id: D
+        task: |
+          ## What to Implement
+
+          Create `implementations/claude-code/prompts/agents/planner.md` — the
+          Planner agent system prompt following the 9-field agent template format
+          used by existing agent prompts.
+
+          ## Content to Write
+
+          The Planner agent prompt must follow the same structure as
+          `implementations/claude-code/prompts/agents/scout.md` but adapted for
+          project-level decomposition:
+
+          **Role and Identity:**
+          - "You are the Planner agent for Scout-and-Wave"
+          - Your job is to decompose a project into features (IMPL docs) organized
+            into tiers for parallel execution
+
+          **Input:**
+          - REQUIREMENTS.md (or project description)
+          - Existing codebase (for refactors)
+          - Optional CONTEXT.md
+
+          **Output:**
+          - PROGRAM manifest at `docs/PROGRAM-<name>.yaml`
+
+          **Suitability Gate (program-level):**
+          Answer 4 questions before producing the manifest:
+          1. Feature independence: Can the project decompose into 3+ features?
+          2. Tier depth: Are there at least 2 tiers?
+          3. Shared types: Are there cross-feature types needing formal contracts?
+          4. Scale justification: Is total estimated work >8 agents?
+
+          Verdicts: PROGRAM_SUITABLE, SINGLE_IMPL_SUFFICIENT, NOT_DECOMPOSABLE
+
+          **PROGRAM Manifest Production:**
+          - Identify natural feature boundaries (packages, services, layers)
+          - Define cross-IMPL dependencies
+          - Group into tiers (independent features in same tier)
+          - Define program contracts for shared types
+          - Estimate agent count and wave count per IMPL
+          - Define tier gates
+
+          **Constraints:**
+          - Do NOT write IMPL docs (Scout does that)
+          - Do NOT write source code
+          - Do NOT launch agents
+          - PROGRAM manifest is a roadmap, not an executor (Level A)
+          - Follow invariants P1-P4
+
+          Reference existing agent prompts for formatting style. The prompt should
+          be self-contained — a model receiving it should be able to produce a valid
+          PROGRAM manifest without external docs.
+
+          ## Verification Gate
+          - File exists and is valid markdown
+          - Contains suitability gate with 4 questions and 3 verdicts
+          - Contains PROGRAM manifest schema reference
+          - Contains constraints section with forbidden actions
+
+          ## Constraints
+          - Follow the formatting style of existing agent prompts in the same directory
+          - Do NOT modify any existing agent prompt files
+          - The prompt must reference P1-P4 by number
+          - Include a full example PROGRAM manifest in the prompt
+        files:
+          - implementations/claude-code/prompts/agents/planner.md
+
+  - number: 2
+    agents:
+      - id: E
+        task: |
+          ## What to Implement
+
+          Create `pkg/protocol/program_validation.go` and its test file — the
+          validation logic for PROGRAM manifests, analogous to the existing
+          `pkg/protocol/validation.go` for IMPL manifests.
+
+          ## Interfaces to Implement
+
+          ```go
+          func ValidateProgram(manifest *PROGRAMManifest) []ValidationError
+          ```
+
+          ## Validation Rules
+
+          Implement the following checks:
+
+          1. **Required fields:** title, program_slug, state must be non-empty
+          2. **State enum:** Must be one of the ProgramState constants
+          3. **IMPL status enum:** Each impl.Status must be one of:
+             pending, scouting, reviewed, executing, complete
+          4. **P1 enforcement — IMPL independence within a tier:**
+             For each tier, verify no IMPL in the tier has depends_on referencing
+             another IMPL in the same tier. Return a ValidationError with
+             code "P1_VIOLATION" if found.
+          5. **Tier-IMPL consistency:** Every IMPL slug must appear in exactly one tier.
+             Every tier must reference only IMPLs defined in the impls section.
+          6. **Dependency validity:** All depends_on references must point to
+             existing IMPL slugs.
+          7. **Tier ordering:** If IMPL-A depends on IMPL-B, A's tier must be
+             strictly greater than B's tier.
+          8. **Program contract consumers:** Each consumer.Impl must reference
+             an existing IMPL slug.
+          9. **Slug format:** program_slug and impl slugs must be kebab-case
+             (lowercase letters, digits, hyphens only).
+          10. **Completion bounds:** tiers_complete <= tiers_total,
+              impls_complete <= impls_total.
+
+          ## Tests to Write
+
+          1. TestValidateProgram_ValidManifest - valid manifest returns no errors
+          2. TestValidateProgram_MissingRequiredFields - empty title/slug/state
+          3. TestValidateProgram_InvalidState - unknown state string
+          4. TestValidateProgram_P1Violation - same-tier dependency
+          5. TestValidateProgram_TierIMPLMismatch - IMPL not in any tier
+          6. TestValidateProgram_InvalidDependency - depends_on nonexistent IMPL
+          7. TestValidateProgram_TierOrderViolation - dep in same or later tier
+          8. TestValidateProgram_InvalidConsumer - consumer references unknown IMPL
+          9. TestValidateProgram_InvalidSlugFormat - uppercase or special chars
+          10. TestValidateProgram_CompletionBounds - complete > total
+
+          ## Interfaces to Call
+          - PROGRAMManifest and related types from pkg/protocol/program_types.go (scaffold)
+          - ValidationError from pkg/protocol/types.go (existing)
+
+          ## Verification Gate
+          ```bash
+          cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./...
+          cd /Users/dayna.blackwell/code/scout-and-wave-go && go vet ./...
+          cd /Users/dayna.blackwell/code/scout-and-wave-go && go test ./pkg/protocol/ -run TestValidateProgram
+          ```
+
+          ## Constraints
+          - Follow the validation pattern in existing pkg/protocol/validation.go
+          - Use the same ValidationError type (do not define a new error type)
+          - Return all errors found (do not short-circuit on first error)
+          - Error codes should follow the pattern: P1_VIOLATION, MISSING_FIELD,
+            INVALID_STATE, INVALID_DEPENDENCY, TIER_MISMATCH, etc.
+        files:
+          - pkg/protocol/program_validation.go
+          - pkg/protocol/program_validation_test.go
+        dependencies:
+          - A
+          - B
+
+      - id: F
+        task: |
+          ## What to Implement
+
+          Create three files in pkg/protocol/:
+          1. `program_parser.go` — YAML parser for PROGRAM manifests
+          2. `program_discovery.go` — discovery of PROGRAM manifest files
+          3. Test files for both
+
+          ## Interfaces to Implement
+
+          ```go
+          // program_parser.go
+          func ParseProgramManifest(path string) (*PROGRAMManifest, error)
+
+          // program_discovery.go
+          type ProgramDiscovery struct {
+            Path    string       `json:"path"`
+            Slug    string       `json:"slug"`
+            State   ProgramState `json:"state"`
+            Title   string       `json:"title"`
+          }
+
+          func ListPrograms(dir string) ([]ProgramDiscovery, error)
+          ```
+
+          ## Implementation Details
+
+          **ParseProgramManifest:**
+          - Read YAML file from disk
+          - Unmarshal into PROGRAMManifest struct
+          - Return descriptive error on file not found or parse failure
+          - Follow the pattern of existing IMPL manifest parsing in pkg/protocol/parser.go
+
+          **ListPrograms:**
+          - Scan directory for files matching `PROGRAM-*.yaml`
+          - Parse each file's header fields (title, slug, state) without full validation
+          - Return sorted by filename
+          - Follow the pattern of existing ListIMPLs in pkg/protocol/discovery.go
+
+          ## Tests to Write
+
+          1. TestParseProgramManifest_Valid - round-trip parse of valid manifest
+          2. TestParseProgramManifest_FileNotFound - missing file returns error
+          3. TestParseProgramManifest_InvalidYAML - malformed YAML returns error
+          4. TestParseProgramManifest_AllFields - verify all fields populated
+          5. TestListPrograms_MultipleFiles - discovers 2+ manifests
+          6. TestListPrograms_EmptyDir - returns empty slice, no error
+          7. TestListPrograms_IgnoresNonProgram - ignores IMPL docs and other files
+
+          ## Interfaces to Call
+          - PROGRAMManifest and related types from pkg/protocol/program_types.go (scaffold)
+          - Standard library: os, path/filepath, gopkg.in/yaml.v3
+
+          ## Verification Gate
+          ```bash
+          cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./...
+          cd /Users/dayna.blackwell/code/scout-and-wave-go && go vet ./...
+          cd /Users/dayna.blackwell/code/scout-and-wave-go && go test ./pkg/protocol/ -run "TestParseProgramManifest|TestListPrograms"
+          ```
+
+          ## Constraints
+          - Follow existing parser.go and discovery.go patterns exactly
+          - Use gopkg.in/yaml.v3 (already in go.mod)
+          - ListPrograms must not call ValidateProgram (discovery is lightweight)
+          - Test files should use t.TempDir() for filesystem tests
+        files:
+          - pkg/protocol/program_parser.go
+          - pkg/protocol/program_parser_test.go
+          - pkg/protocol/program_discovery.go
+          - pkg/protocol/program_discovery_test.go
+        dependencies:
+          - A
+
+      - id: H
+        task: |
+          ## What to Implement
+
+          Update `implementations/claude-code/prompts/saw-skill.md` to add the
+          `/saw program plan` orchestrator flow. This is the protocol repo's
+          orchestrator instruction file that tells the /saw skill how to handle
+          program-level commands.
+
+          ## Content to Add
+
+          Add a new section (after existing /saw commands) for the program plan flow:
+
+          **`/saw program plan "<project description>"`**
+
+          Orchestrator flow:
+          1. User provides project description or references REQUIREMENTS.md
+          2. Orchestrator writes REQUIREMENTS.md if needed (from user description)
+          3. Orchestrator launches Planner agent (async, like Scout)
+             - System prompt: planner.md agent prompt
+             - User message: "Analyze REQUIREMENTS.md and produce PROGRAM manifest"
+             - Working directory: project root
+          4. Wait for Planner completion
+          5. Run `sawtools validate-program docs/PROGRAM-<slug>.yaml`
+          6. If validation fails, issue correction prompt (up to 3 retries, like E16)
+          7. If validation passes, enter PROGRAM_REVIEWED
+          8. Surface PROGRAM manifest to human for review
+          9. Human approves or requests changes
+
+          **`/saw program status`**
+          - Read PROGRAM manifest
+          - Display tier structure with IMPL statuses
+          - Show program contracts and their freeze status
+          - Show completion progress
+
+          Note: `/saw program execute` (Level B) is Phase 2 scope — do NOT document it here.
+
+          ## Interfaces to Call
+          - Read existing saw-skill.md for current structure and patterns
+          - Reference planner.md agent prompt (Agent D creates it in Wave 1)
+          - Reference sawtools validate-program (Agent G creates it in Wave 3)
+
+          ## Verification Gate
+          - File is valid markdown
+          - Contains /saw program plan section
+          - Contains /saw program status section
+          - Does NOT contain /saw program execute (Phase 2)
+          - Version number incremented
+
+          ## Constraints
+          - Do NOT remove or rewrite existing content in saw-skill.md
+          - Only ADD new sections for program commands
+          - Follow the exact style and formatting of existing /saw command sections
+          - Keep Level A scope: plan only, no automated execution
+          - Increment the version number in the file header
+        files:
+          - implementations/claude-code/prompts/saw-skill.md
+        dependencies:
+          - D
+
+  - number: 3
+    agents:
+      - id: G
+        task: |
+          ## What to Implement
+
+          Create two new sawtools CLI commands:
+          1. `sawtools validate-program <program-manifest>` — schema validation
+          2. `sawtools list-programs --dir <path>` — program discovery
+
+          ## Files to Create
+
+          **cmd/saw/validate_program_cmd.go:**
+          - Cobra command: `validate-program`
+          - Takes one positional arg: path to PROGRAM manifest
+          - Calls ParseProgramManifest then ValidateProgram
+          - Outputs JSON result: `{"valid": true/false, "errors": [...]}`
+          - Exit code 0 if valid, 1 if validation errors, 2 if parse error
+          - Follow the pattern of existing cmd/saw/validate_cmd.go
+
+          **cmd/saw/list_programs_cmd.go:**
+          - Cobra command: `list-programs`
+          - Takes --dir flag (defaults to "docs/")
+          - Calls ListPrograms
+          - Outputs JSON array of ProgramDiscovery structs
+          - Follow the pattern of existing cmd/saw/list_impls.go
+
+          ## Tests to Write
+
+          1. TestValidateProgramCmd_ValidManifest - exit 0, valid: true
+          2. TestValidateProgramCmd_InvalidManifest - exit 1, errors present
+          3. TestValidateProgramCmd_MissingFile - exit 2, parse error
+          4. TestListProgramsCmd_Discovery - finds PROGRAM manifests
+          5. TestListProgramsCmd_EmptyDir - returns empty array
+
+          ## Interfaces to Call
+          - ParseProgramManifest from pkg/protocol/program_parser.go (Agent F, Wave 2)
+          - ValidateProgram from pkg/protocol/program_validation.go (Agent E, Wave 2)
+          - ListPrograms from pkg/protocol/program_discovery.go (Agent F, Wave 2)
+
+          ## Verification Gate
+          ```bash
+          cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./...
+          cd /Users/dayna.blackwell/code/scout-and-wave-go && go vet ./...
+          cd /Users/dayna.blackwell/code/scout-and-wave-go && go test ./cmd/saw/ -run "TestValidateProgramCmd|TestListProgramsCmd"
+          ```
+
+          ## Constraints
+          - Register both commands in cmd/saw/root.go init() function
+          - Follow existing command patterns (cobra, JSON output, structured errors)
+          - Do NOT modify any existing command files except root.go for registration
+          - Use the same JSON output format conventions as validate_cmd.go
+        files:
+          - cmd/saw/validate_program_cmd.go
+          - cmd/saw/validate_program_cmd_test.go
+          - cmd/saw/list_programs_cmd.go
+          - cmd/saw/list_programs_cmd_test.go
+        dependencies:
+          - E
+          - F
+
+# Pre-Mortem
+pre_mortem:
+  overall_risk: medium
+  rows:
+    - scenario: "Scaffold file (program_types.go) has wrong field tags or types"
+      likelihood: medium
+      impact: high
+      mitigation: |
+        Scaffold contents are derived directly from the design doc Section 3.1
+        schema. Wave 2 agents will catch compilation errors immediately.
+        Scaffold Agent can be re-run if needed.
+    - scenario: "Planner agent prompt is too long for model context"
+      likelihood: low
+      impact: medium
+      mitigation: |
+        The planner.md prompt includes a full example manifest which adds bulk.
+        If context is an issue, the example can be truncated. The PROGRAM manifest
+        schema doc (Agent A) serves as the canonical reference.
+    - scenario: "Validation rules miss edge cases in P1 enforcement"
+      likelihood: medium
+      impact: low
+      mitigation: |
+        P1 validation is straightforward graph analysis (check depends_on within
+        same tier). Test suite covers the key scenarios. Additional edge cases
+        can be added in Phase 2 when tier execution exercises validation.
+    - scenario: "saw-skill.md merge conflict with concurrent protocol changes"
+      likelihood: medium
+      impact: low
+      mitigation: |
+        Agent H only appends new sections to saw-skill.md. Append-only changes
+        are low-conflict. If concurrent changes land first, the merge is
+        straightforward.
+
+# Completion Reports
+completion_reports: {}
