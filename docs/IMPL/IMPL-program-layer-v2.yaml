@@ -4,7 +4,7 @@ feature_slug: program-layer-v2
 verdict: SUITABLE
 test_command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go test ./...
 lint_command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go vet ./...
-state: SCOUT_PENDING
+state: REVIEWED
 
 # Suitability Assessment
 # ----------------------
@@ -348,7 +348,7 @@ waves:
           - Required Action: Run `sawtools tier-gate <manifest> --tier N`.
             This verifies all IMPLs are complete and runs the tier_gates quality
             gate commands from the PROGRAM manifest. If all gates pass, mark
-            tier as verified. If any required gate fails, enter PROGRAM_BLOCKED.
+            tier as verified. If any required gate fails, enter BLOCKED.
           - Enforcement of P3: Tier N+1 does not begin until tier gate passes
 
           **E30: Program Contract Freezing**
@@ -389,8 +389,9 @@ waves:
 
           Update the version number in the file header (increment minor version).
 
-          Update the Overview section to change "E1-E26" to "E1-E32" (or whatever
-          the current range says, extend it to E32).
+          IMPORTANT: E27 already exists ("Planned Integration Waves"). Append
+          E28-E32 AFTER E27. Update the Overview section to extend the range
+          to E1-E32 (currently says "E1–E26" but E27 is already defined).
 
           ## Verification Gate
           - File is valid markdown
@@ -524,8 +525,9 @@ waves:
 
           ## Constraints
           - Use os/exec for git commands (same pattern as internal/git/ package)
-          - Match by substring: if any IMPL slug in the completing tier appears
-            in the FreezeAt string, that contract freezes
+          - Match by exact slug: check if any IMPL slug in the completing tier
+            appears as a whole word in the FreezeAt string (e.g., "IMPL-auth completion"
+            matches slug "auth" but NOT "authorization"). Use word boundary matching.
           - Do NOT modify the manifest on disk — return the result and let the
             caller (CLI command) handle persistence
         files:
@@ -688,7 +690,8 @@ waves:
           - Cobra command: `tier-gate`
           - Takes one positional arg: path to PROGRAM manifest
           - Required flag: --tier <N> (integer)
-          - Calls ParseProgramManifest then RunTierGate
+          - Optional flag: --repo-dir <path> (default: current working directory)
+          - Calls ParseProgramManifest then RunTierGate(manifest, tier, repoDir)
           - Outputs JSON TierGateResult
           - Exit code 0 if passed, 1 if failed, 2 if parse error
           - Follow pattern of validate_program_cmd.go
@@ -697,7 +700,8 @@ waves:
           - Cobra command: `freeze-contracts`
           - Takes one positional arg: path to PROGRAM manifest
           - Required flag: --tier <N> (integer)
-          - Calls ParseProgramManifest then FreezeContracts
+          - Optional flag: --repo-dir <path> (default: current working directory)
+          - Calls ParseProgramManifest then FreezeContracts(manifest, tier, repoDir)
           - Outputs JSON FreezeContractsResult
           - Exit code 0 if success, 1 if freeze errors, 2 if parse error
           - Follow pattern of validate_program_cmd.go
@@ -819,12 +823,12 @@ waves:
 
                Step 3c: Tier Gate (E29)
                - Run: `sawtools tier-gate "<manifest>" --tier N`
-               - If gate fails, enter PROGRAM_BLOCKED. Surface failure to user.
+               - If gate fails, enter BLOCKED. Surface failure to user.
                - If gate passes, proceed to contract freezing.
 
                Step 3d: Contract Freezing (E30)
                - Run: `sawtools freeze-contracts "<manifest>" --tier N`
-               - If freezing fails (missing files, uncommitted), PROGRAM_BLOCKED.
+               - If freezing fails (missing files, uncommitted), BLOCKED.
                - If freezing succeeds, all contracts consumed by next tier are locked.
 
                Step 3e: Tier Boundary Review
@@ -844,7 +848,7 @@ waves:
              - If any IMPL enters BLOCKED during tier execution, that IMPL's
                failure does not cascade to other IMPLs in the same tier (P1).
              - If the tier cannot complete because one IMPL is blocked,
-               enter PROGRAM_BLOCKED and surface the specific IMPL failure.
+               enter BLOCKED and surface the specific IMPL failure.
              - The user may fix the blocked IMPL and resume, or re-plan.
 
           5. **Update the Arguments section** to add:
