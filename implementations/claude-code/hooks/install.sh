@@ -6,10 +6,12 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HOOK_SCRIPT="$SCRIPT_DIR/check_scout_boundaries"
+VALIDATE_SCRIPT="$SCRIPT_DIR/validate_impl_on_write"
 SYMLINK_PATH="$HOME/.local/bin/check_scout_boundaries"
+VALIDATE_SYMLINK="$HOME/.local/bin/validate_impl_on_write"
 SETTINGS_FILE="$HOME/.claude/settings.json"
 
-echo "🔧 Installing Scout boundaries hook..."
+echo "🔧 Installing SAW hooks..."
 echo
 
 # Step 1: Create symlink
@@ -27,6 +29,20 @@ else
   echo "   ✓ Created symlink: $SYMLINK_PATH"
 fi
 chmod +x "$HOOK_SCRIPT"
+
+# Validate IMPL on write hook
+echo "   Installing validate_impl_on_write..."
+if [ -L "$VALIDATE_SYMLINK" ]; then
+  ln -sf "$VALIDATE_SCRIPT" "$VALIDATE_SYMLINK"
+  echo "   ✓ Symlink updated: $VALIDATE_SYMLINK"
+elif [ -e "$VALIDATE_SYMLINK" ]; then
+  echo "   ✗ Error: $VALIDATE_SYMLINK exists but is not a symlink"
+  exit 1
+else
+  ln -sf "$VALIDATE_SCRIPT" "$VALIDATE_SYMLINK"
+  echo "   ✓ Created symlink: $VALIDATE_SYMLINK"
+fi
+chmod +x "$VALIDATE_SCRIPT"
 echo
 
 # Step 2: Configure settings.json
@@ -68,7 +84,7 @@ EOF
 EXISTING=$(jq -r '.hooks.PreToolUse // [] | map(select(.hooks[]?.command | contains("check_scout_boundaries"))) | length' "$SETTINGS_FILE")
 
 if [ "$EXISTING" -gt 0 ]; then
-  echo "   ✓ Hook already configured (skipping)"
+  echo "   ✓ PreToolUse hook already configured (skipping)"
 else
   # Merge the hook config into settings.json
   jq --argjson hook "$HOOK_CONFIG" '
@@ -78,24 +94,65 @@ else
   mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
   echo "   ✓ Added PreToolUse hook configuration"
 fi
+
+# Add PostToolUse validation hook
+VALIDATE_HOOK_CONFIG=$(cat <<'EOF'
+{
+  "matcher": "Write",
+  "hooks": [
+    {
+      "type": "command",
+      "command": "$HOME/.local/bin/validate_impl_on_write"
+    }
+  ]
+}
+EOF
+)
+
+VALIDATE_EXISTING=$(jq -r '.hooks.PostToolUse // [] | map(select(.hooks[]?.command | contains("validate_impl_on_write"))) | length' "$SETTINGS_FILE")
+
+if [ "$VALIDATE_EXISTING" -gt 0 ]; then
+  echo "   ✓ PostToolUse validation hook already configured (skipping)"
+else
+  jq --argjson hook "$VALIDATE_HOOK_CONFIG" '
+    .hooks.PostToolUse = (.hooks.PostToolUse // []) + [$hook]
+  ' "$SETTINGS_FILE" > "$SETTINGS_FILE.tmp"
+
+  mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
+  echo "   ✓ Added PostToolUse IMPL validation hook"
+fi
 echo
 
 # Step 3: Verify installation
 echo "3. Verifying installation..."
 
-# Check symlink
+# Check symlinks
 if [ -x "$SYMLINK_PATH" ]; then
-  echo "   ✓ Hook script executable: $SYMLINK_PATH"
+  echo "   ✓ Scout boundaries hook executable: $SYMLINK_PATH"
 else
-  echo "   ✗ Hook script not executable"
+  echo "   ✗ Scout boundaries hook not executable"
+  exit 1
+fi
+
+if [ -x "$VALIDATE_SYMLINK" ]; then
+  echo "   ✓ IMPL validation hook executable: $VALIDATE_SYMLINK"
+else
+  echo "   ✗ IMPL validation hook not executable"
   exit 1
 fi
 
 # Check settings.json
 if jq -e '.hooks.PreToolUse[]?.hooks[]? | select(.command | contains("check_scout_boundaries"))' "$SETTINGS_FILE" &> /dev/null; then
-  echo "   ✓ Hook configured in settings.json"
+  echo "   ✓ PreToolUse hook configured in settings.json"
 else
-  echo "   ✗ Hook not found in settings.json"
+  echo "   ✗ PreToolUse hook not found in settings.json"
+  exit 1
+fi
+
+if jq -e '.hooks.PostToolUse[]?.hooks[]? | select(.command | contains("validate_impl_on_write"))' "$SETTINGS_FILE" &> /dev/null; then
+  echo "   ✓ PostToolUse validation hook configured in settings.json"
+else
+  echo "   ✗ PostToolUse validation hook not found in settings.json"
   exit 1
 fi
 
@@ -121,9 +178,10 @@ fi
 echo
 echo "✅ Installation complete!"
 echo
-echo "The Scout boundaries hook is now active."
-echo "Scout agents will be restricted to writing only docs/IMPL/IMPL-*.yaml files."
+echo "Active hooks:"
+echo "  PreToolUse:  check_scout_boundaries (I6 — Scouts can only write IMPL docs)"
+echo "  PostToolUse: validate_impl_on_write (E16 — IMPL docs validated on write)"
 echo
 echo "To uninstall:"
-echo "  1. Remove symlink: rm $SYMLINK_PATH"
-echo "  2. Edit $SETTINGS_FILE and remove the PreToolUse hook"
+echo "  1. Remove symlinks: rm $SYMLINK_PATH $VALIDATE_SYMLINK"
+echo "  2. Edit $SETTINGS_FILE and remove the PreToolUse/PostToolUse hook entries"
