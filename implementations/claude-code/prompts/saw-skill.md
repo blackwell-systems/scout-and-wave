@@ -17,7 +17,7 @@ license: MIT OR Apache-2.0
 compatibility: Requires Claude Code (Skills API). Git 2.20+ required for worktree support.
 metadata:
   author: blackwell-systems
-  version: "0.9.0"
+  version: "0.10.0"
 ---
 
 # Scout-and-Wave: Parallel Agent Coordination
@@ -41,7 +41,7 @@ tools).
 Each is embedded verbatim at its point of enforcement; the number is the anchor
 for cross-referencing and audit.*
 
-**Agent type preference:** Use custom `subagent_type` values (`scout`, `scaffold-agent`, `wave-agent`) when launching agents. These provide tool-level enforcement (scout cannot Edit source, wave-agent cannot spawn sub-agents) and carry behavioral instructions in the type definition. If a custom type fails to load, fall back to `subagent_type: general-purpose` with the full prompt from the prompts directory.
+**Agent type preference:** Use custom `subagent_type` values (`scout`, `scaffold-agent`, `wave-agent`, `integration-agent`, `planner`) when launching agents. These provide tool-level enforcement (scout cannot Edit source, wave-agent cannot spawn sub-agents) and carry behavioral instructions in the type definition. If a custom type fails to load, fall back to `subagent_type: general-purpose` with the full prompt from the prompts directory.
 
 **Agent model selection:** Agents inherit the parent session's model by default. Model can be overridden at three levels (highest precedence first):
 
@@ -81,6 +81,7 @@ in the `CLAUDE_SKILL_DIR` environment variable; if unset, fall back to `~/.claud
 - **agents/scout.md** - Scout subagent definition (optional, for custom agent types).
 - **agents/wave-agent.md** - Wave subagent definition (optional, for custom agent types).
 - **agents/scaffold-agent.md** - Scaffold subagent definition (optional, for custom agent types).
+- **agents/planner.md** - Planner subagent definition (optional, for custom agent types).
 
 Read the agent template at `${CLAUDE_SKILL_DIR}/agent-template.md` for the 9-field agent prompt format.
 
@@ -98,6 +99,15 @@ Read the agent template at `${CLAUDE_SKILL_DIR}/agent-template.md` for the 9-fie
 | `/saw wave --model <m>` | Wave agents with explicit model override |
 | `/saw status` | Show progress (auto-selects IMPL if only 1 pending) |
 | `/saw status --impl <id>` | Show progress of specific IMPL |
+
+### Program Commands (Level A: Planning Only)
+
+| Command | Purpose |
+|---------|---------|
+| `/saw program plan "<project-description>"` | Analyze project and produce PROGRAM manifest |
+| `/saw program status` | Show program-level progress (tier completion, IMPL statuses) |
+
+**Note:** `/saw program execute` (Level B: automated execution) is Phase 2 scope and not yet implemented.
 
 ## sawtools Commands
 
@@ -294,6 +304,110 @@ Follow the brief exactly.Follow the extracted brief exactly.
 10. **I3: Wave sequencing.** Wave N+1 does not launch until Wave N has been merged and post-merge verification has passed. If `--auto` was passed and verification passed, immediately proceed to the next wave. Otherwise, report the wave result and ask the user if they want to continue.
 11. If verification fails, report the failures and ask the user how to proceed.
 
+## Program Commands (Level A: Planning Only)
+
+### `/saw program plan "<project-description>"`
+
+Analyze a project and produce a PROGRAM manifest that decomposes it into multiple IMPLs organized into tiers for parallel execution. Use this for projects that span multiple features with cross-feature dependencies.
+
+**Orchestrator flow:**
+
+1. **Requirements intake.** If user provides a project description (not a reference to existing REQUIREMENTS.md), write `docs/REQUIREMENTS.md` using the template from the bootstrap flow. If the user references an existing REQUIREMENTS.md, skip this step. Ask the user to review the requirements before proceeding.
+
+2. **Launch Planner agent.** Use the Agent tool with `subagent_type: planner` and `run_in_background: true`. The prompt parameter is:
+   ```
+   Analyze the project described in docs/REQUIREMENTS.md and produce a PROGRAM manifest at docs/PROGRAM-<slug>.yaml. Follow the protocol in agents/planner.md.
+   ```
+   If `subagent_type: planner` fails, fall back to `subagent_type: general-purpose` with the contents of `${CLAUDE_SKILL_DIR}/agents/planner.md` as its prompt. Inform the user the Planner is running.
+
+3. **Wait for Planner completion.** The Planner produces `docs/PROGRAM-<slug>.yaml`. If the Planner determines the project is NOT_SUITABLE for multi-IMPL orchestration, it writes a minimal manifest with `state: "NOT_SUITABLE"` and an explanation. Surface this to the user and recommend `/saw bootstrap` or `/saw scout` instead.
+
+4. **Validate PROGRAM manifest.** Run:
+   ```bash
+   sawtools validate-program "<absolute-path-to-program-manifest>"
+   ```
+   This validates the PROGRAM schema and enforces invariant P1 (no circular dependencies within tiers). If exit code is 0, proceed to human review. If exit code is 1, send the validation errors back to the Planner as a correction prompt using **resume with the Planner's agent ID**: `resume: <planner-agent-id>`, `prompt: "Your PROGRAM manifest failed validation. Fix these issues:\n{errors}"`. Retry up to 3 attempts. On retry limit exhaustion, enter BLOCKED state and surface the validation errors to the user.
+
+5. **Human review.** If validation passes, report the PROGRAM manifest to the user:
+   - Tier structure (how many tiers, which IMPLs in each)
+   - Program contracts (shared types/APIs that span features)
+   - Cross-IMPL dependencies (which IMPLs depend on which)
+   - Estimated complexity (total agents, total waves across all IMPLs)
+   - Tier gates (quality checks between tiers)
+
+   Surface the PROGRAM manifest and ask the user to review. The user may approve as-is, request changes, or reject the plan.
+
+6. **State transition.** If the user approves, update the PROGRAM manifest state to `REVIEWED`:
+   ```bash
+   sawtools update-program-state "<manifest-path>" --state REVIEWED
+   ```
+
+**What happens next (not in your scope as Orchestrator):**
+
+After human approval, the program enters the execution phase:
+- **Scaffold phase:** Materialize program contracts as source code (committed to HEAD)
+- **Tier 1 execution:** Launch Scout agents for all Tier 1 IMPLs in parallel
+- **Tier boundary:** Run tier gates, freeze program contracts consumed by Tier 2
+- **Tier 2 execution:** Launch Scout agents for all Tier 2 IMPLs in parallel
+- Repeat until all tiers complete
+
+This is the `/saw program execute` flow (Level B), which is Phase 2 scope and not yet implemented. For now, program planning stops at human review.
+
+### `/saw program status`
+
+Show program-level progress: tier completion, IMPL statuses, and program contract freeze status.
+
+**Orchestrator flow:**
+
+1. **Discover PROGRAM manifests.** Run:
+   ```bash
+   sawtools list-programs --dir "<repo-path>/docs"
+   ```
+   This returns a JSON array of PROGRAM manifest metadata (path, slug, state, title). If no PROGRAM manifests are found, report: "No PROGRAM manifests found. Use `/saw program plan` to create one."
+
+2. **Select target PROGRAM.** If exactly 1 PROGRAM manifest is found, use it automatically. If multiple are found, list them and ask the user to specify which one.
+
+3. **Read PROGRAM manifest.** Load the selected manifest from disk.
+
+4. **Display program status:**
+
+   **Tier Structure:**
+   ```
+   Tier 1 (2/2 IMPLs complete):
+     - data-model: COMPLETE
+     - auth: COMPLETE
+
+   Tier 2 (1/2 IMPLs complete):
+     - api-routes: EXECUTING (Wave 2/3)
+     - frontend: COMPLETE
+
+   Tier 3 (0/1 IMPLs complete):
+     - integration-tests: PENDING
+   ```
+
+   **Program Contracts:**
+   ```
+   User (pkg/types/user.go)
+     - Frozen: Yes (Tier 1)
+     - Consumers: auth, api-routes, frontend
+
+   Task (pkg/types/task.go)
+     - Frozen: Yes (Tier 1)
+     - Consumers: api-routes, frontend
+   ```
+
+   **Overall Progress:**
+   ```
+   Tiers: 1/3 complete
+   IMPLs: 3/5 complete
+   Total agents: 12/13 complete
+   Total waves: 5/7 complete
+   ```
+
+   **Current State:** `TIER_EXECUTING` (or `REVIEWED`, `SCAFFOLD`, `COMPLETE`, `BLOCKED`)
+
+5. **Blocked state handling.** If the program state is `BLOCKED`, read the IMPL docs for all IMPLs in the current tier and surface any failure reports or blocking issues to the user.
+
 ## Arguments
 
 - `bootstrap <project-name>`: Design-first architecture for new projects with no
@@ -312,5 +426,7 @@ Follow the brief exactly.Follow the extracted brief exactly.
 - `wave`: Execute the next pending wave, pause for review after each wave
 - `wave --auto`: Execute all remaining waves automatically; only pause if verification fails
 - `status`: Show current progress from the IMPL doc
+- `program plan "<project-description>"`: Analyze project and produce PROGRAM manifest coordinating multiple IMPLs (Level A: planning only)
+- `program status`: Show program-level progress (tier completion, IMPL statuses, contract freeze status)
 
 Always read the full IMPL doc before taking any action. The IMPL doc is the single source of truth.
