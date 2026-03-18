@@ -1,0 +1,604 @@
+# IMPL: resumable-wave-sessions
+title: "Resumable Wave Sessions"
+feature_slug: "resumable-wave-sessions"
+verdict: "SUITABLE"
+test_command: "go test ./..."
+lint_command: "go vet ./..."
+state: "SCOUT_PENDING"
+
+# Suitability Assessment
+# ----------------------
+# Verdict: SUITABLE
+#
+# 1. File decomposition: YES — Work decomposes into 5 distinct areas across 2 repos:
+#    (a) cross-repo worktree detection in pkg/resume/detect.go + new config loader,
+#    (b) dirty worktree classification in new pkg/resume/worktree_status.go,
+#    (c) agent session ID persistence in new pkg/resume/sessions.go,
+#    (d) web API resume endpoint in pkg/api/resume_handler.go + new resume_action.go,
+#    (e) frontend ResumeBanner upgrade + new ResumeButton in web/src/components/.
+#    All agents have disjoint file ownership.
+#
+# 2. Investigation-first: NO — All five issues are well-characterized with clear
+#    code paths identified. No unknown root causes.
+#
+# 3. Interface discoverability: YES — The SessionState struct is the shared contract.
+#    New fields (DirtyWorktrees, AgentSessionIDs, WorktreeAgentMap) extend it with
+#    backward-compatible additions. Cross-agent interfaces are fully specifiable.
+#
+# 4. Pre-implementation status check:
+#    Total items: 5 (one per known issue in the feature description)
+#    Already implemented (DONE): 0
+#    Partially implemented (PARTIAL): 1 (wave inference from worktrees — runWaveLoop
+#      already has waveAgentsHaveCommitsWithManifest but resume.Detect does not use it)
+#    Not implemented (TO-DO): 4
+#
+# 5. Parallelization value: HIGH — Two repos with independent build/test cycles
+#    (go test takes >30s in each). 5 agents across 2 waves with 3 agents in Wave 1
+#    running fully in parallel. Each agent touches 2-3 files.
+#
+# Estimated times:
+# - Scout phase: ~8 min (cross-repo dependency mapping, interface contracts)
+# - Agent execution: ~15 min (3 Wave 1 agents parallel ~8 min + 2 Wave 2 agents parallel ~7 min)
+# - Merge & verification: ~5 min (2 waves x 2.5 min)
+# Total SAW time: ~28 min
+#
+# Sequential baseline: ~50 min (5 agents x 10 min avg)
+# Time savings: ~22 min (~44% faster)
+# Recommendation: Clear speedup. Proceed.
+
+suitability_assessment: |
+  SUITABLE. Five well-characterized issues decompose cleanly into 5 agents with
+  disjoint file ownership across 2 repos. Cross-repo build/test cycles amplify
+  parallelization benefit. Wave 1 handles all backend detection logic (3 agents
+  in parallel), Wave 2 handles web API and frontend (2 agents, depends on new
+  SessionState fields from Wave 1).
+
+quality_gates:
+  level: "standard"
+  gates:
+    - type: "build"
+      command: "go build ./..."
+      required: true
+    - type: "test"
+      command: "go test ./..."
+      required: true
+    - type: "lint"
+      command: "go vet ./..."
+      required: false
+    - type: "build"
+      command: "go build ./..."
+      required: true
+    - type: "test"
+      command: "go test ./..."
+      required: true
+    - type: "custom"
+      command: "cd web && npm run build"
+      required: true
+      description: "Build frontend assets (embedded in Go binary)"
+
+scaffolds: []
+# No scaffolds needed — all shared types are extensions to the existing
+# SessionState struct in pkg/resume/detect.go, owned by Agent A.
+
+interface_contracts:
+  - name: "SessionState (extended)"
+    description: |
+      The existing SessionState struct gains new fields for dirty worktree
+      classification, agent session IDs, and per-worktree agent mapping.
+      All new fields are omitempty for backward compatibility.
+    definition: |
+      // Added to existing SessionState in pkg/resume/detect.go:
+      type SessionState struct {
+          // ... existing fields unchanged ...
+          DirtyWorktrees  []DirtyWorktree         `json:"dirty_worktrees,omitempty"`
+          AgentSessions   map[string]AgentSession  `json:"agent_sessions,omitempty"`
+      }
+
+      type DirtyWorktree struct {
+          Path       string `json:"path"`
+          Branch     string `json:"branch"`
+          AgentID    string `json:"agent_id"`
+          WaveNum    int    `json:"wave_num"`
+          HasChanges bool   `json:"has_changes"`  // uncommitted modifications
+      }
+
+      type AgentSession struct {
+          AgentID       string `json:"agent_id"`
+          SessionID     string `json:"session_id"`      // Claude Code session ID
+          WaveNum       int    `json:"wave_num"`
+          WorktreePath  string `json:"worktree_path"`
+          LastActive    string `json:"last_active"`      // RFC3339 timestamp
+      }
+    location: "pkg/resume/detect.go"
+
+  - name: "DetectWithConfig"
+    description: |
+      New function that accepts a list of repo paths (from saw.config.json)
+      and scans worktrees across all repos for the given IMPL manifest.
+      Called by the web app's resume handler instead of per-repo Detect().
+    definition: |
+      func DetectWithConfig(repoPaths []string) ([]SessionState, error)
+    location: "pkg/resume/detect.go"
+
+  - name: "ClassifyWorktrees"
+    description: |
+      Inspects each worktree path to determine if it has uncommitted changes
+      (dirty) or is clean. Uses git status --porcelain on the worktree path.
+    definition: |
+      func ClassifyWorktrees(worktreePaths []string, manifest *protocol.IMPLManifest) ([]DirtyWorktree, error)
+    location: "pkg/resume/worktree_status.go"
+
+  - name: "SaveAgentSession / LoadAgentSessions"
+    description: |
+      Persists and loads agent session IDs to/from .saw-state/sessions/{slug}.json.
+      SaveAgentSession is called by the engine when launching an agent.
+      LoadAgentSessions is called by Detect to populate SessionState.AgentSessions.
+    definition: |
+      func SaveAgentSession(stateDir string, slug string, session AgentSession) error
+      func LoadAgentSessions(stateDir string, slug string) (map[string]AgentSession, error)
+    location: "pkg/resume/sessions.go"
+
+  - name: "handleResumeExecution"
+    description: |
+      New POST /api/wave/{slug}/resume endpoint. Loads SessionState, determines
+      which agents need re-launch (dirty worktrees = resume, clean = skip),
+      and calls engine.RunSingleWave with only the pending agents.
+    definition: |
+      func (s *Server) handleResumeExecution(w http.ResponseWriter, r *http.Request)
+    location: "pkg/api/resume_action.go"
+    # integration: register route in pkg/api/server.go
+
+  - name: "InterruptedSession (TypeScript, extended)"
+    description: |
+      Frontend type gains dirty_worktrees and agent_sessions fields
+      to support the enhanced resume UI.
+    definition: |
+      // Added to existing InterruptedSession in web/src/types.ts:
+      interface DirtyWorktree {
+        path: string
+        branch: string
+        agent_id: string
+        wave_num: number
+        has_changes: boolean
+      }
+      interface AgentSessionInfo {
+        agent_id: string
+        session_id: string
+        wave_num: number
+        worktree_path: string
+        last_active: string
+      }
+      // Extend InterruptedSession:
+      dirty_worktrees?: DirtyWorktree[]
+      agent_sessions?: Record<string, AgentSessionInfo>
+    location: "web/src/types.ts"
+
+file_ownership:
+  # Wave 1 - Agent A: Cross-repo detection + SessionState extensions
+  - file: "pkg/resume/detect.go"
+    agent: "A"
+    wave: 1
+    action: "modify"
+    repo: "scout-and-wave-go"
+  - file: "pkg/resume/detect_test.go"
+    agent: "A"
+    wave: 1
+    action: "modify"
+    repo: "scout-and-wave-go"
+
+  # Wave 1 - Agent B: Dirty worktree classification
+  - file: "pkg/resume/worktree_status.go"
+    agent: "B"
+    wave: 1
+    action: "new"
+    repo: "scout-and-wave-go"
+  - file: "pkg/resume/worktree_status_test.go"
+    agent: "B"
+    wave: 1
+    action: "new"
+    repo: "scout-and-wave-go"
+
+  # Wave 1 - Agent C: Agent session ID persistence
+  - file: "pkg/resume/sessions.go"
+    agent: "C"
+    wave: 1
+    action: "new"
+    repo: "scout-and-wave-go"
+  - file: "pkg/resume/sessions_test.go"
+    agent: "C"
+    wave: 1
+    action: "new"
+    repo: "scout-and-wave-go"
+
+  # Wave 2 - Agent D: Web API resume endpoint
+  - file: "pkg/api/resume_handler.go"
+    agent: "D"
+    wave: 2
+    action: "modify"
+    repo: "scout-and-wave-web"
+  - file: "pkg/api/resume_action.go"
+    agent: "D"
+    wave: 2
+    action: "new"
+    repo: "scout-and-wave-web"
+  - file: "pkg/api/resume_action_test.go"
+    agent: "D"
+    wave: 2
+    action: "new"
+    repo: "scout-and-wave-web"
+
+  # Wave 2 - Agent E: Frontend resume UI
+  - file: "web/src/components/ResumeBanner.tsx"
+    agent: "E"
+    wave: 2
+    action: "modify"
+    repo: "scout-and-wave-web"
+  - file: "web/src/types.ts"
+    agent: "E"
+    wave: 2
+    action: "modify"
+    repo: "scout-and-wave-web"
+  - file: "web/src/api.ts"
+    agent: "E"
+    wave: 2
+    action: "modify"
+    repo: "scout-and-wave-web"
+
+waves:
+  - number: 1
+    agents:
+      - id: "A"
+        task: |
+          ## What to Implement
+
+          Extend the resume detection system to support cross-repo worktree scanning
+          and improve wave inference when no completion reports exist.
+
+          **Cross-repo detection (Issue 1):**
+          Add `DetectWithConfig(repoPaths []string) ([]SessionState, error)` that accepts
+          a list of repo paths and runs `git worktree list --porcelain` in ALL repos,
+          not just the IMPL's own repo. For each IMPL manifest found, aggregate worktrees
+          from all repos by matching the slug-scoped branch pattern
+          `saw/{slug}/wave{N}-agent-{ID}`. The existing `Detect(repoPath)` function
+          should remain for backward compatibility but internally call DetectWithConfig
+          with a single-element list.
+
+          **Wave inference from worktrees (Issue 2):**
+          Modify `determineCurrentWave()` to fall back to worktree branch names when
+          no completion reports exist. If completion reports give wave 0 but orphaned
+          worktrees exist with branch names matching `wave{N}-agent-{ID}`, extract the
+          wave number from the branch name and use the highest as currentWave. This
+          means agents were launched but none completed yet.
+
+          **SessionState extensions:**
+          Add two new fields to SessionState:
+          - `DirtyWorktrees []DirtyWorktree` (json:"dirty_worktrees,omitempty")
+          - `AgentSessions map[string]AgentSession` (json:"agent_sessions,omitempty")
+
+          Define the DirtyWorktree and AgentSession structs per the interface contract.
+          These are populated by Agents B and C respectively, but the struct definitions
+          live here since SessionState is in this file.
+
+          **Action misclassification fix (partial, Issue 3):**
+          Update `buildActionAndCommand()` so that when orphaned worktrees exist,
+          the suggested action distinguishes between dirty and clean worktrees:
+          - If ANY DirtyWorktree has `HasChanges: true` -> "Resume wave N (agents have uncommitted work)"
+          - If ALL worktrees are clean -> "Clean up orphaned worktrees, then resume wave N"
+          Note: The actual dirty detection is done by Agent B's ClassifyWorktrees;
+          this agent wires the result into the action string. During buildSessionState,
+          call ClassifyWorktrees (imported from the same package) on the orphaned
+          worktree paths and store the result in state.DirtyWorktrees.
+
+          ## Interfaces to Implement
+          - `func DetectWithConfig(repoPaths []string) ([]SessionState, error)`
+          - `type DirtyWorktree struct { ... }` and `type AgentSession struct { ... }`
+          - Extended `determineCurrentWave()` with worktree fallback
+
+          ## Interfaces to Call
+          - `protocol.Load(implPath)` — existing, unchanged
+          - `ClassifyWorktrees(paths, manifest)` — from Agent B (same package, will compile together)
+          - `LoadAgentSessions(stateDir, slug)` — from Agent C (same package)
+
+          ## Tests to Write
+          1. TestDetectWithConfig_MultipleRepos — verify worktrees from sibling repos are found
+          2. TestDetermineCurrentWave_FallbackToWorktrees — wave inferred from branch names when no reports
+          3. TestBuildAction_DirtyWorktrees — "Resume" vs "Clean up" based on dirty status
+          4. TestDetectWithConfig_EmptyRepoList — returns empty, no error
+
+          ## Verification Gate
+          ```bash
+          cd /Users/dayna.blackwell/code/scout-and-wave-go
+          go build ./...
+          go vet ./...
+          go test ./pkg/resume/ -v
+          ```
+
+          ## Constraints
+          - Do NOT break the existing Detect(repoPath) signature; it must remain backward compatible
+          - All new JSON fields must use omitempty
+          - The DirtyWorktree and AgentSession structs must match the interface contract exactly
+          - ClassifyWorktrees and LoadAgentSessions are in the same package but different files
+            (Agent B and C); use forward references — they will compile together at merge time
+        files:
+          - "pkg/resume/detect.go"
+          - "pkg/resume/detect_test.go"
+
+      - id: "B"
+        task: |
+          ## What to Implement
+
+          Create `pkg/resume/worktree_status.go` with dirty worktree classification.
+
+          **ClassifyWorktrees function:**
+          Given a list of worktree paths and a manifest, check each worktree for
+          uncommitted changes using `git -C <path> status --porcelain`. Parse the
+          worktree's branch name to extract agent ID and wave number using the
+          existing `worktreePattern` regex from detect.go (same package, accessible).
+
+          Return a `[]DirtyWorktree` where each entry has:
+          - Path: the worktree filesystem path
+          - Branch: the branch name
+          - AgentID: extracted from branch pattern
+          - WaveNum: extracted from branch pattern
+          - HasChanges: true if `git status --porcelain` returns non-empty output
+
+          Handle edge cases:
+          - Worktree path does not exist (skip, do not error)
+          - git command fails (treat as not dirty, log warning)
+          - Branch name does not match SAW pattern (skip)
+
+          ## Interfaces to Implement
+          - `func ClassifyWorktrees(worktreePaths []string, manifest *protocol.IMPLManifest) ([]DirtyWorktree, error)`
+
+          ## Interfaces to Call
+          - `worktreePattern` regex — defined in detect.go (same package)
+          - `git -C <path> status --porcelain` via os/exec
+          - `protocol.IMPLManifest` — for slug filtering
+
+          ## Tests to Write
+          1. TestClassifyWorktrees_DirtyWorktree — create a git repo + worktree with uncommitted file, verify HasChanges=true
+          2. TestClassifyWorktrees_CleanWorktree — worktree with no changes, verify HasChanges=false
+          3. TestClassifyWorktrees_NonexistentPath — path does not exist, returns empty slice (no error)
+          4. TestClassifyWorktrees_MixedDirtyClean — 2 worktrees, one dirty one clean, verify correct classification
+
+          ## Verification Gate
+          ```bash
+          cd /Users/dayna.blackwell/code/scout-and-wave-go
+          go build ./...
+          go vet ./...
+          go test ./pkg/resume/ -run TestClassifyWorktrees -v
+          ```
+
+          ## Constraints
+          - Use os/exec to call git, not the internal/git package (resume package
+            does not currently import internal/git, keep it that way for consistency)
+          - The DirtyWorktree struct is defined by Agent A in detect.go; do NOT
+            redefine it — just use it (same package, no import needed)
+          - Do not modify any existing files
+        files:
+          - "pkg/resume/worktree_status.go"
+          - "pkg/resume/worktree_status_test.go"
+
+      - id: "C"
+        task: |
+          ## What to Implement
+
+          Create `pkg/resume/sessions.go` with agent session ID persistence.
+
+          **Storage format:**
+          Agent session IDs are stored in `.saw-state/sessions/{slug}.json` as a JSON
+          object mapping agent ID to AgentSession struct. The file is created on first
+          save and updated (read-modify-write) on subsequent saves.
+
+          **SaveAgentSession(stateDir, slug, session):**
+          - stateDir is the repo's .saw-state directory path
+          - Creates `.saw-state/sessions/` directory if it does not exist
+          - Reads existing file if present, unmarshals to map[string]AgentSession
+          - Adds/updates the entry for session.AgentID
+          - Writes back atomically (write to temp file, rename)
+
+          **LoadAgentSessions(stateDir, slug):**
+          - Returns map[string]AgentSession from the file
+          - Returns empty map (not error) if file does not exist
+          - Returns error only on I/O or parse failures
+
+          The AgentSession struct is defined by Agent A in detect.go (same package).
+
+          ## Interfaces to Implement
+          - `func SaveAgentSession(stateDir string, slug string, session AgentSession) error`
+          - `func LoadAgentSessions(stateDir string, slug string) (map[string]AgentSession, error)`
+
+          ## Interfaces to Call
+          - `AgentSession` struct — defined in detect.go by Agent A (same package)
+          - Standard library: os, encoding/json, path/filepath
+
+          ## Tests to Write
+          1. TestSaveAndLoadAgentSession — save one session, load it back, verify fields match
+          2. TestSaveAgentSession_UpdateExisting — save two sessions for different agents, verify both persisted
+          3. TestLoadAgentSessions_FileNotExist — returns empty map, no error
+          4. TestSaveAgentSession_CreatesDirectory — .saw-state/sessions/ does not exist, verify it is created
+          5. TestSaveAgentSession_AtomicWrite — verify temp file pattern (write + rename)
+
+          ## Verification Gate
+          ```bash
+          cd /Users/dayna.blackwell/code/scout-and-wave-go
+          go build ./...
+          go vet ./...
+          go test ./pkg/resume/ -run TestSave -v
+          go test ./pkg/resume/ -run TestLoad -v
+          ```
+
+          ## Constraints
+          - The AgentSession struct is defined by Agent A; do NOT redefine it
+          - Use atomic write (temp file + os.Rename) to prevent corruption
+          - File path must be .saw-state/sessions/{slug}.json exactly
+          - Do not modify any existing files
+        files:
+          - "pkg/resume/sessions.go"
+          - "pkg/resume/sessions_test.go"
+
+  - number: 2
+    agents:
+      - id: "D"
+        task: |
+          ## What to Implement
+
+          Enhance the web API resume flow with two changes:
+
+          **1. Update handleInterruptedSessions (resume_handler.go):**
+          Modify the existing handler to use `resume.DetectWithConfig()` instead of
+          calling `resume.Detect()` per-repo in a loop. Collect all repo paths from
+          saw.config.json and pass them as a single list. This fixes cross-repo
+          worktree detection (Issue 1) from the web side.
+
+          **2. Create handleResumeExecution (resume_action.go):**
+          New POST /api/wave/{slug}/resume endpoint that performs intelligent resume:
+          - Load the IMPL manifest and call `resume.DetectWithConfig()` to get current state
+          - Determine which agents in the current wave need re-launch:
+            * Agents with completion reports status "complete" -> skip
+            * Agents with dirty worktrees (has_changes=true) -> resume in existing worktree
+            * Agents with clean worktrees or no worktree -> fresh launch
+          - For agents that need resume: call `engine.RunSingleAgent()` with the existing
+            worktree path (do not create a new one)
+          - For agents that need fresh launch: call `engine.RunSingleAgent()` normally
+          - Publish SSE events: "resume_started", "agent_resumed", "resume_complete"
+          - Return 202 Accepted immediately, run in background goroutine
+
+          The handler must be registered in server.go at route POST /api/wave/{slug}/resume.
+          Add a comment noting the integration connector but do NOT modify server.go
+          (the integration agent will wire it).
+
+          ## Interfaces to Implement
+          - `func (s *Server) handleResumeExecution(w http.ResponseWriter, r *http.Request)`
+
+          ## Interfaces to Call
+          - `resume.DetectWithConfig(repoPaths)` — from Agent A (Wave 1, scout-and-wave-go)
+          - `resume.ClassifyWorktrees(paths, manifest)` — from Agent B (Wave 1)
+          - `resume.LoadAgentSessions(stateDir, slug)` — from Agent C (Wave 1)
+          - `engine.RunSingleAgent(ctx, opts, wave, letter, prefix, publisher)` — existing
+          - `protocol.Load(implPath)` — existing
+          - `s.resolveIMPLPath(slug)` — existing on Server
+          - `s.makePublisher(slug)` — existing on Server
+
+          ## Tests to Write
+          1. TestHandleResumeExecution_NoInterruptedSession — returns 404 when no interrupted session found
+          2. TestHandleResumeExecution_Accepted — returns 202 for valid slug with interrupted session
+          3. TestHandleInterruptedSessions_UsesDetectWithConfig — verify it calls DetectWithConfig
+
+          ## Verification Gate
+          ```bash
+          cd /Users/dayna.blackwell/code/scout-and-wave-web
+          go build ./...
+          go vet ./...
+          go test ./pkg/api/ -run TestHandleResume -v
+          ```
+
+          ## Constraints
+          - Do NOT modify server.go (route registration is an integration connector)
+          - handleResumeExecution must check s.activeRuns to prevent concurrent execution (same pattern as handleWaveStart)
+          - Use the same model resolution pattern as handleWaveStart (saw.config.json + fallback)
+          - The resume_handler.go modification must remain backward-compatible if DetectWithConfig is unavailable
+        files:
+          - "pkg/api/resume_handler.go"
+          - "pkg/api/resume_action.go"
+          - "pkg/api/resume_action_test.go"
+        dependencies:
+          - "A"
+          - "B"
+          - "C"
+
+      - id: "E"
+        task: |
+          ## What to Implement
+
+          Upgrade the frontend resume UI to show dirty worktree details and add a
+          "Resume Execution" action button.
+
+          **1. Extend TypeScript types (types.ts):**
+          Add DirtyWorktree and AgentSessionInfo interfaces. Extend InterruptedSession
+          with optional dirty_worktrees and agent_sessions fields per the interface contract.
+
+          **2. Add resume API call (api.ts):**
+          Add `resumeExecution(slug: string): Promise<void>` that POSTs to
+          `/api/wave/{slug}/resume`. Handle errors gracefully (non-fatal toast).
+
+          **3. Enhance ResumeBanner.tsx:**
+          - Show dirty worktree details: for each session, if dirty_worktrees exists
+            and has entries with has_changes=true, show "N agents have uncommitted work"
+            with agent IDs listed
+          - Replace the current click-to-navigate behavior with two actions:
+            * "View" button (existing behavior: navigates to IMPL via onSelect)
+            * "Resume" button: calls resumeExecution(slug), shows loading state,
+              disabled when can_auto_resume is false
+          - Style the Resume button with a green accent (bg-emerald-600) to distinguish
+            from the neutral View action
+          - When no dirty worktrees or all clean: show "Resume" as the primary action
+            (will do fresh re-launch of pending agents)
+          - When dirty worktrees with changes: show "Resume (continue N agents)" to
+            indicate it will pick up where agents left off
+
+          ## Interfaces to Implement
+          - TypeScript: DirtyWorktree, AgentSessionInfo interfaces
+          - TypeScript: resumeExecution(slug) API function
+          - React: Enhanced ResumeBanner with Resume button
+
+          ## Interfaces to Call
+          - POST /api/wave/{slug}/resume — from Agent D (Wave 2, same wave but
+            disjoint files; the endpoint exists when frontend is built)
+          - Existing onSelect callback prop
+
+          ## Tests to Write
+          No unit tests required for React components in this project (no test
+          infrastructure for TSX). Manual verification via the web UI.
+
+          ## Verification Gate
+          ```bash
+          cd /Users/dayna.blackwell/code/scout-and-wave-web/web
+          npx tsc --noEmit
+          npm run build
+          ```
+
+          ## Constraints
+          - Keep ResumeBanner as a single file component (do not split into subcomponents)
+          - All new fields on InterruptedSession must be optional (?) for backward compat
+          - Use the existing design system: rounded-none, text-xs/text-[10px], dark: variants
+          - The Resume button must be disabled during active execution (check can_auto_resume)
+          - Do NOT import from api.ts at module top level if it causes circular deps;
+            use dynamic import or pass resumeExecution as a prop
+        files:
+          - "web/src/components/ResumeBanner.tsx"
+          - "web/src/types.ts"
+          - "web/src/api.ts"
+        dependencies:
+          - "A"
+
+pre_mortem:
+  overall_risk: "medium"
+  rows:
+    - scenario: "Agent A's struct definitions and Agent B/C's usage compile independently but have field name mismatches at merge"
+      likelihood: "low"
+      impact: "high"
+      mitigation: "Interface contracts specify exact field names and JSON tags. All three agents are in the same Go package so compilation catches mismatches immediately at merge."
+
+    - scenario: "Cross-repo git worktree list returns worktrees from repos where the user has unrelated SAW work, polluting results"
+      likelihood: "medium"
+      impact: "low"
+      mitigation: "Slug-scoped branch filtering (saw/{slug}/wave{N}-agent-{ID}) already exists in detect.go. DetectWithConfig inherits this filtering."
+
+    - scenario: "Agent D's resume endpoint conflicts with existing handleWaveStart race condition on s.activeRuns"
+      likelihood: "medium"
+      impact: "medium"
+      mitigation: "Resume handler must check s.activeRuns.LoadOrStore (same pattern as handleWaveStart). Specified in agent constraints."
+
+    - scenario: "Frontend build fails because types.ts changes from Agent E conflict with other in-progress web work"
+      likelihood: "low"
+      impact: "medium"
+      mitigation: "Agent E only adds optional fields and new interfaces to types.ts. Additive-only changes minimize conflict risk."
+
+known_issues:
+  - title: "scout-and-wave-web uses local replace directive for scout-and-wave-go"
+    description: "go.mod has 'replace github.com/blackwell-systems/scout-and-wave-go => /Users/dayna.blackwell/code/scout-and-wave-go'. Wave 1 changes to scout-and-wave-go are immediately visible to Wave 2 agents in scout-and-wave-web without a version bump."
+    status: "By design — local development workflow"
+    workaround: "Ensure Wave 1 is fully merged before Wave 2 agents build."
+
+completion_reports: {}

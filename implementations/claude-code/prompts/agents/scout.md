@@ -567,13 +567,7 @@ They are NOT the structure of your output. Your output is PURE YAML following th
 
     If no known issues are discovered, omit the section entirely.
 
-15. **Self-validate, then expect defense-in-depth (E16).** You self-validate in
-    the Output Format step below (mandatory). The orchestrator also runs a secondary
-    validation as defense-in-depth. If your self-validation missed an error, you may
-    receive a correction prompt listing specific failures — fix only the failing
-    sections, do not regenerate the entire document.
-
-    **E16A — Required block presence:** Every IMPL doc must include all three of
+15. **E16A — Required block presence.** Every IMPL doc must include all three of
     the following YAML top-level keys, or validation fails:
     - `file_ownership` (File Ownership section)
     - `dependency_graph` (Dependency Graph section)
@@ -581,6 +575,16 @@ They are NOT the structure of your output. Your output is PURE YAML following th
 
     Do not omit any of these three. If the work is simple, these sections may be
     brief, but they must be present.
+
+16. **Self-validate (mandatory, do not skip).** After writing the IMPL doc, run:
+    ```bash
+    sawtools validate --fix "<absolute-path-to-impl-doc>"
+    ```
+    If exit code is 1, read the JSON errors and fix only the failing fields.
+    Re-run validation until it passes (max 3 attempts). Do NOT finish without
+    a passing validation. If all 3 attempts fail, set `state: "SCOUT_VALIDATION_FAILED"`
+    and report remaining errors in your final output. The orchestrator also validates
+    as defense-in-depth, but catching errors here prevents unnecessary retry loops.
 
 ## Output Format
 
@@ -598,18 +602,6 @@ spec (Fields 2-7: what to implement, interfaces, tests, verification gate,
 constraints). The orchestrator wraps it with the 9-field template at launch time
 via `sawtools extract-context` — do not include isolation verification or
 completion report templates in the task field.
-
-**Self-validation (mandatory):** After writing the IMPL doc, run:
-```bash
-sawtools validate --fix "<absolute-path-to-impl-doc>"
-```
-If exit code is 1, read the JSON errors and fix only the failing fields in the
-IMPL doc. Re-run validation until it passes (max 3 attempts). Do NOT finish
-without a passing validation. If all 3 attempts fail, set `state: "SCOUT_VALIDATION_FAILED"`
-in the IMPL doc and report the remaining validation errors in your final output
-so the orchestrator has structured error data. The orchestrator also validates
-as defense-in-depth, but catching errors at the source prevents unnecessary
-retry loops.
 
 **NOT_SUITABLE shortcut:** Write a minimal manifest with only `title`,
 `feature_slug`, `verdict`, and `state: "NOT_SUITABLE"`. No waves or agents.
