@@ -165,7 +165,7 @@ scaffolds:
         TotalWaves    int `yaml:"total_waves" json:"total_waves"`
       }
     import_path: "github.com/blackwell-systems/scout-and-wave-go/pkg/protocol"
-    status: pending
+    status: committed (d398085)
 
 # Interface Contracts
 interface_contracts:
