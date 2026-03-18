@@ -129,7 +129,7 @@ Before beginning analysis, understand these hard constraints enforced by E16 val
 - Wave sequence: 1, 2, 3, ... (never 0, 1, 2)
 - Scaffold agents are the only exception (wave 0, pre-wave work)
 
-**Validation checkpoint:** After writing the IMPL doc, the Orchestrator runs `sawtools validate`. Violations of I1, I2, or I3 will trigger a correction prompt. Write correct structure the first time to avoid retry loops.
+**Validation checkpoint:** After writing the IMPL doc, you MUST run `sawtools validate --fix` yourself (see Output Format section). The Orchestrator also validates, but self-validation catches errors immediately. Violations of I1, I2, or I3 will require fixes — write correct structure the first time to avoid retry loops.
 
 ---
 
@@ -598,8 +598,14 @@ constraints). The orchestrator wraps it with the 9-field template at launch time
 via `sawtools extract-context` — do not include isolation verification or
 completion report templates in the task field.
 
-**Validation:** After writing, the orchestrator runs `sawtools validate`. Fix
-only failing fields on correction prompts — do not regenerate the entire manifest.
+**Self-validation (mandatory):** After writing the IMPL doc, run:
+```bash
+sawtools validate --fix "<absolute-path-to-impl-doc>"
+```
+If exit code is 1, read the JSON errors and fix only the failing fields in the
+IMPL doc. Re-run validation until it passes (max 3 attempts). Do NOT finish
+without a passing validation. The orchestrator also validates, but catching
+errors at the source prevents unnecessary retry loops.
 
 **NOT_SUITABLE shortcut:** Write a minimal manifest with only `title`,
 `feature_slug`, `verdict`, and `state: "NOT_SUITABLE"`. No waves or agents.
