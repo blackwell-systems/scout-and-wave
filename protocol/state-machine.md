@@ -242,4 +242,67 @@ When all invariants (I1–I6) and execution rules (E1–E26) are maintained:
 
 ---
 
+## Program State Machine
+
+The PROGRAM layer adds an outer state machine that coordinates multiple IMPL executions. Where the IMPL state machine governs a single feature's lifecycle (SCOUT_PENDING → REVIEWED → WAVE_EXECUTING → COMPLETE), the Program state machine governs an entire project composed of multiple features.
+
+### Program State Catalog
+
+| State | Description |
+|-------|-------------|
+| **PROGRAM_PLANNING** | Planner analyzing requirements and codebase, producing PROGRAM manifest |
+| **PROGRAM_VALIDATING** | Orchestrator validating PROGRAM manifest structure and dependencies |
+| **PROGRAM_REVIEWED** | PROGRAM manifest approved, awaiting execution launch |
+| **PROGRAM_SCAFFOLD** | Creating program-level scaffolds (program contracts) |
+| **TIER_EXECUTING** | One or more IMPLs executing in parallel within current tier |
+| **TIER_VERIFIED** | Current tier complete, all IMPLs verified |
+| **PROGRAM_COMPLETE** | All tiers complete, all IMPLs complete |
+| **PROGRAM_BLOCKED** | Program execution blocked (IMPL failure, dependency failure, etc.) |
+| **PROGRAM_NOT_SUITABLE** | Requirements not suitable for SAW program execution |
+
+### Program State Flow
+
+```
+PROGRAM_PLANNING
+    ↓ (Planner completes)
+PROGRAM_VALIDATING
+    ↓ (Validation passes)
+PROGRAM_REVIEWED
+    ↓ (Human approves)
+PROGRAM_SCAFFOLD (if program contracts exist)
+    ↓ (Scaffolds committed)
+TIER_EXECUTING (Tier 1)
+    ↓ (All Tier 1 IMPLs complete)
+TIER_VERIFIED
+    ↓ (More tiers exist)
+TIER_EXECUTING (Tier N)
+    ↓ (All tiers complete)
+PROGRAM_COMPLETE
+```
+
+### Relationship to IMPL State Machine
+
+The Program state machine is an **outer loop** containing the IMPL state machine. When the Program enters `TIER_EXECUTING`, one or more IMPLs launch concurrently. Each IMPL progresses through its own state machine (SCOUT_PENDING → REVIEWED → WAVE_EXECUTING → COMPLETE). The Program waits for all IMPLs in the current tier to reach COMPLETE before advancing to TIER_VERIFIED.
+
+**Key properties:**
+- IMPLs within the same tier execute in parallel (P1: IMPL independence within tier)
+- IMPLs in different tiers execute sequentially (tier N+1 depends on tier N outputs)
+- Program contracts defined at PROGRAM_REVIEWED freeze before any IMPL executes (interface freeze applies at program scope)
+- Each IMPL has its own Scout, Scaffold Agent, and Wave Agents — the Planner does not write IMPL docs
+
+### Phase 2 Scope
+
+Full program execution rules, invariants, and orchestrator procedures for the Program layer will be defined in **Phase 2** of the Program Layer implementation. This section provides the state catalog and conceptual model. Phase 2 will define:
+- Program state transition guards
+- Program-level invariants (P1, P2, P3, etc.)
+- Orchestrator procedures for tier execution
+- Program completion criteria
+- Cross-tier dependency validation
+
+**Related documents:**
+- `protocol/program-manifest.md` — PROGRAM manifest structure and schema
+- `protocol/program-invariants.md` — Program-level invariants (P1, P2, P3)
+
+---
+
 **Reference:** See `message-formats.md` for IMPL doc structure and completion report schema. See `procedures.md` for orchestrator actions at each state.
