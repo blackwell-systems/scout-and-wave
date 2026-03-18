@@ -210,6 +210,13 @@ interface_contracts:
 
 # File Ownership
 file_ownership:
+  # Scaffold (created by Scaffold Agent before Wave 2)
+  - file: pkg/protocol/program_types.go
+    agent: SCAFFOLD
+    wave: 0
+    action: new
+    repo: scout-and-wave-go
+
   # Wave 1 - Protocol docs (protocol repo)
   - file: protocol/program-manifest.md
     agent: A
@@ -294,6 +301,11 @@ file_ownership:
     agent: G
     wave: 3
     action: new
+    repo: scout-and-wave-go
+  - file: cmd/saw/root.go
+    agent: G
+    wave: 3
+    action: modify
     repo: scout-and-wave-go
 
 # Waves
@@ -395,6 +407,21 @@ waves:
           For each invariant include: formal statement, enforcement mechanism,
           rationale, and cross-references to existing I1-I6 invariants and the
           program manifest schema doc.
+
+          **Enforcement mechanisms must be concrete and mechanical:**
+          - P1: `ValidateProgram()` checks depends_on within same tier; Planner
+            correction loop (like E16 for Scout) retries up to 3 times on P1 violation
+          - P2: Orchestrator verifies program contract scaffold files are committed
+            before launching any Scout in consuming tier (analogous to scaffold
+            check before worktree creation)
+          - P3: Orchestrator checks all Tier N IMPL states == "complete" and
+            tier gate commands pass before advancing to Tier N+1
+          - P4: Orchestrator reads PROGRAM manifest for all tier/IMPL ordering
+            decisions; never infers from IMPL docs alone
+
+          Program-level execution rules (E27+) are deferred to Phase 2.
+          Phase 1 defines invariants only; enforcement is documented so Phase 2
+          implementors know exactly what to build.
 
           Add a "Relationship to IMPL-Level Invariants" section showing the mapping:
           P1 maps to I1, P2 maps to I2, P3 maps to I3, P4 maps to I4.
@@ -737,6 +764,19 @@ waves:
           - Does NOT contain /saw program execute (Phase 2)
           - Version number incremented
 
+          ## Additional Integration Requirements
+
+          1. **Register planner subagent_type:** In the "Agent type preference" paragraph
+             near the top of saw-skill.md, add `planner` to the list of custom
+             subagent_type values (alongside scout, scaffold-agent, wave-agent,
+             integration-agent).
+          2. **Add to Supporting Files:** Add a line referencing
+             `agents/planner.md` in the Supporting Files section.
+          3. **Read planner.md first:** Before writing, read
+             `implementations/claude-code/prompts/agents/planner.md` (produced by
+             Agent D in Wave 1) to ensure the saw-skill references match the
+             actual agent prompt structure.
+
           ## Constraints
           - Do NOT remove or rewrite existing content in saw-skill.md
           - Only ADD new sections for program commands
@@ -800,6 +840,18 @@ waves:
           - Follow existing command patterns (cobra, JSON output, structured errors)
           - Do NOT modify any existing command files except root.go for registration
           - Use the same JSON output format conventions as validate_cmd.go
+
+          ## Scope Note
+          Phase 1 CLI only includes validation and discovery. Program execution
+          commands (tier-gate, tier-status, program-status, mark-program-complete)
+          are Phase 2 scope per the Program Layer Roadmap. Do NOT implement them.
+
+          ## Pre-Wave Gate
+          Before starting, verify Wave 2 library code compiles:
+          ```bash
+          cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./pkg/protocol/...
+          ```
+          If this fails, report status: blocked — Wave 2 library code has errors.
         files:
           - cmd/saw/validate_program_cmd.go
           - cmd/saw/validate_program_cmd_test.go

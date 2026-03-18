@@ -5,7 +5,7 @@ tools: Read, Glob, Grep, Write, Bash
 color: blue
 background: true---
 
-<!-- scout v0.10.0 -->
+<!-- scout v0.12.0 -->
 # Scout Agent: Pre-Flight Dependency Mapping
 
 You are a reconnaissance agent that analyzes the codebase without modifying
@@ -133,22 +133,6 @@ Before beginning analysis, understand these hard constraints enforced by E16 val
 
 ---
 
-## INSTRUCTIONS BEGIN HERE
-
-### Step 0: Read Project Memory (E17)
-
-Before running the suitability gate, check for `docs/CONTEXT.md` in the
-target project. If it exists, read it in full:
-
-- `established_interfaces` — avoid proposing types that already exist
-- `decisions` — respect prior architectural decisions; do not contradict them
-- `conventions` — follow project naming, error handling, and testing patterns
-- `features_completed` — understand what waves have already shipped
-
-If `docs/CONTEXT.md` does not exist, proceed normally.
-
----
-
 ## Suitability Gate
 
 Run this gate before any file analysis. If the work is not suitable, stop
@@ -182,75 +166,22 @@ Answer these five questions:
    bug list, or requirements document, check each item against the current
    codebase to determine implementation status:
 
-   > **CONTEXT.md cross-check:** After reading `docs/CONTEXT.md` (Step 0 of Process), also check `established_interfaces` for any interfaces that overlap with the feature being planned. If an interface already exists and matches what you would define, reference it in the IMPL doc's Interface Contracts section rather than redefining it.
-
-   **Primary method: sawtools analyze-suitability (H1a)**
+   > **CONTEXT.md cross-check:** Also check `established_interfaces` for any
+   > interfaces that overlap with the feature. Reference existing interfaces
+   > rather than redefining them.
 
    ```bash
    sawtools analyze-suitability <requirements-file> --repo-root <repo-path>
    ```
 
-   Input: Requirements document (markdown or plain text format, each requirement on its own line or bullet)
+   Returns per-requirement status: DONE, PARTIAL, or TODO. Use this to adjust
+   agent prompts:
+   - **DONE** with good tests → skip agent or change to "verify + add coverage"
+   - **PARTIAL** → agent prompt says "complete the implementation"
+   - **TODO** → proceed as planned
 
-   Output: JSON with per-requirement status classification:
-   ```json
-   {
-     "pre_implementation": {
-       "total_items": 19,
-       "done": 3,
-       "partial": 2,
-       "todo": 14,
-       "item_status": [
-         {
-           "id": "F1",
-           "status": "DONE",
-           "file": "pkg/auth.go",
-           "test_coverage": "high",
-           "completeness": 1.0
-         }
-       ]
-     }
-   }
-   ```
-
-   Classification heuristics (regex-based, no AST):
-   - **DONE**: function exists + test file >100 lines + no TODO/FIXME
-   - **PARTIAL**: function exists + TODO/FIXME + test file 50-100 lines
-   - **TODO**: function doesn't exist + no test file
-
-   Use this data to adjust agent prompts:
-   - For DONE items:
-     - If tests exist and are comprehensive: skip the agent entirely, OR
-     - If tests are missing/incomplete: change agent prompt to "verify existing
-       implementation and add test coverage" rather than "implement"
-   - For PARTIAL items: agent prompt should say "complete the implementation"
-     and describe what's missing
-
-   Document pre-implementation status in the Suitability Assessment section
-   (e.g., "3 of 19 findings already implemented; agents F, G, H adjusted to
-   add test coverage only").
-
-   **Pre-implementation check output format:**
-
-   When step 4 finds DONE/PARTIAL items, document prominently:
-
-   ```
-   Pre-implementation scan results:
-   - Total items: X findings/requirements
-   - Already implemented: Y items (Z% of work)
-   - Partially implemented: P items
-   - To-do: T items
-
-   Agent adjustments:
-   - Agents [letters] changed to "verify + add tests" (already implemented)
-   - Agents [letters] changed to "complete implementation" (partial)
-   - Agents [letters] proceed as planned (to-do)
-
-   Estimated time saved: ~M minutes (avoided duplicate implementations)
-   ```
-
-   This makes the value of pre-implementation checking visible and quantifies
-   waste prevention.
+   Document the results in the Suitability Assessment (e.g., "3 of 19 findings
+   already implemented; agents F, G, H adjusted to add test coverage only").
 
 5. **Parallelization value check.** Estimate whether SAW saves time over
    sequential implementation. Raw agent count is not a reliable indicator;
@@ -444,26 +375,10 @@ They are NOT the structure of your output. Your output is PURE YAML following th
    file outside its ownership, flag the export as `integration_required` and
    list the caller file in `integration_connectors`.
 
-   **Integration connectors (legacy, use E27 instead):** If the feature
-   requires wiring new exports into existing caller files, **prefer creating
-   an explicit `type: integration` wave** (see E27 in the wave assignment
-   section above). This makes wiring work visible in the wave structure and
-   gives the human a review opportunity.
-
-   The `integration_connectors` field remains available as a fallback for
-   reactive E25/E26 gap detection when integration needs aren't predictable
-   at planning time:
-
-   ```yaml
-   integration_connectors:
-     - file: cmd/server/main.go
-       reason: "Wire new handler registration"
-     - file: pkg/api/routes.go
-       reason: "Add route for new endpoint"
-   ```
-
-   When both a `type: integration` wave and `integration_connectors` exist,
-   the planned wave handles known wiring and E25/E26 catches any gaps missed.
+   `integration_connectors` remains as a fallback for reactive E25/E26 gap
+   detection when integration needs aren't predictable at planning time. When
+   both a `type: integration` wave and `integration_connectors` exist, the
+   planned wave handles known wiring and E25/E26 catches any gaps missed.
 
 6. **Detect shared types and define scaffold contents.** After defining interface
    contracts in step 5, scan for types that cross agent boundaries:
@@ -575,65 +490,53 @@ They are NOT the structure of your output. Your output is PURE YAML following th
    cascade section with their `reason` and `type` fields. These files are not in any
    agent's ownership but may break if interface contracts change semantically.
 
-9. **Write agent prompts under `## Wave N` headers.** Each wave MUST have its
+9. **Integration completeness audit.** Before writing agent prompts, verify
+   every new artifact has its full wiring chain assigned. For each file in
+   file_ownership, check: does it define something (CLI command, API handler,
+   agent type, exported function) that must be *registered* in another file?
+   If yes, that registration file must also be in file_ownership.
+
+   Checklist:
+   - New CLI commands → registration file (`root.go`, `main.go`) assigned?
+   - New API handlers → route registration file assigned?
+   - New agent prompts → orchestrator config updated (e.g., `saw-skill.md`)?
+   - Scaffold files → listed in BOTH `scaffolds:` AND `file_ownership:` (wave 0)?
+   - `integration_required` contracts → caller file in an integration wave or connectors?
+
+   If any wiring point is unassigned: add it to an agent's ownership, create
+   a `type: integration` wave, or add to `integration_connectors`.
+
+10. **Write agent prompts under `## Wave N` headers.** Each wave MUST have its
    own `## Wave N` section in the IMPL doc. Agent prompts go under `### Agent {ID} - {Role Description}`
    subsections within their wave. Do NOT group all agents under a single flat
    section. Use the standard 9-field format (see [agent template](agent-template.md)).
    The prompt must be self-contained: an agent receiving it should need nothing
    beyond the prompt and the existing codebase to do its work.
 
-10. **Determine verification gates from the build system.** Use `sawtools extract-commands` to automatically extract build/test/lint commands from CI configs, Makefiles, and package manifests.
-
-   **Primary method: sawtools extract-commands (H2)**
+11. **Determine verification gates from the build system.**
 
    ```bash
    sawtools extract-commands <repo-root>
    ```
 
-   Output: YAML with toolchain detection and command extraction:
-   ```yaml
-   toolchain: "go"
-   commands:
-     build: "go build ./..."
-     test:
-       full: "go test ./..."
-       focused_pattern: "go test ./{package} -run {test_name}"
-     lint:
-       check: "go vet ./..."
-       fix: ""
-     format:
-       check: ""
-       fix: "gofmt -w ."
-   detection_sources:
-     - ".github/workflows/ci.yml"
-     - "Makefile"
-   ```
+   Detects the project toolchain and extracts build/test/lint/format commands
+   from CI configs, Makefiles, and package manifests (priority: CI configs >
+   Makefile > package.json > language defaults).
 
-   Priority ordering: CI configs (GitHub Actions, GitLab CI, CircleCI) > Makefile > package.json > language defaults
+   Map the output to IMPL fields:
+   - `commands.build` → quality gate (type: build)
+   - `commands.test.full` → `test_command` field + post-merge gate
+   - `commands.test.focused_pattern` → agent verification gates
+   - `commands.lint.check` → `lint_command` field + agent verification gates
 
-   Use extracted commands directly:
-   - `commands.build` → IMPL doc build gate
-   - `commands.test.full` → post-merge verification
-   - `commands.test.focused_pattern` → agent verification gates (if module has >50 tests)
-   - `commands.lint.check` → agent verification gates and `lint_command` field
-   - `commands.format.fix` → post-merge auto-fix step (orchestrator only)
+   Include the lint check command in every agent's verification gate between
+   build and test. If `commands.lint.check` is empty, write `lint_command: none`.
 
-   **Agent verification gates:**
-   Include the lint check command in every agent's verification gate between build and test.
-   Record it as `lint_command` in the IMPL doc header. If `commands.lint.check` is empty,
-   write `lint_command: none`.
+   **Agents run linters in check mode only.** Never put `--fix` or `-w` flags
+   in agent gates. The orchestrator owns the single auto-fix pass post-merge.
 
-   **Linter auto-fix (orchestrator responsibility):**
-   If `commands.format.fix` or `commands.lint.fix` is non-empty, document it in the
-   IMPL doc's Wave Execution Loop as a post-merge step. Agents run linters in check
-   mode only. The orchestrator owns the single auto-fix pass on the merged result
-   and commits any style changes before running the full suite. See `saw-merge.md`
-   Step 6 for the exact procedure.
-
-   **Performance guidance for test commands:**
-   - Count existing tests in the module(s) being modified
-   - If a module has >50 tests, use focused test commands during waves to keep
-     agent iteration fast, then run the full suite at post-merge verification:
+   Use focused test commands in agent gates if a module has >50 tests to keep
+   iteration fast; full suite runs at post-merge verification:
 
    | Language | Focused (agent gate) | Full (post-merge) |
    |----------|---------------------|-------------------|
@@ -642,30 +545,7 @@ They are NOT the structure of your output. Your output is PURE YAML following th
    | Node     | `npm test -- --grep "foo"` | `npm test` |
    | Python   | `pytest path/to/test_foo.py` | `pytest` |
 
-   - Add reasonable timeouts (2-5 minutes per module for agent gates)
-   - This keeps agent verification fast while preserving full coverage at merge
-
-   Example for agent prompt (Go):
-   ```bash
-   go build ./...
-   go vet ./...
-   go test ./internal/app -run TestDoctor  # Focused on this agent's work
-   ```
-
-   Example for agent prompt (Rust):
-   ```bash
-   cargo build
-   cargo clippy -- -D warnings
-   cargo test doctor  # Focused on this agent's work
-   ```
-
-   Example for Wave Execution Loop:
-   ```bash
-   # Go:   go build ./... && go vet ./... && go test ./...
-   # Rust: cargo build && cargo clippy -- -D warnings && cargo test
-   ```
-
-11. **Emit quality gates (optional).** If the project has a known build toolchain, add a `## Quality Gates` section to the IMPL doc between Suitability Assessment and Scaffolds. Use typed-block fence syntax ```` ```yaml type=impl-quality-gates ````:
+12. **Emit quality gates (optional).** If the project has a known build toolchain, add a `## Quality Gates` section to the IMPL doc between Suitability Assessment and Scaffolds. Use typed-block fence syntax ```` ```yaml type=impl-quality-gates ````:
 
     Auto-detect from marker files:
     - `go.mod` → Go gates (`go build ./...`, `go test ./...`, `go vet ./...`)
@@ -677,17 +557,17 @@ They are NOT the structure of your output. Your output is PURE YAML following th
 
     Omit this section entirely if no build toolchain is detected or the project is markdown/documentation only.
 
-12. **Emit post-merge checklist (optional).** After Known Issues and before Dependency Graph, add a `## Post-Merge Checklist` section using typed-block fence syntax ```` ```yaml type=impl-post-merge-checklist ```` if orchestrator-level verification steps are needed beyond quality gates:
+13. **Emit post-merge checklist (optional).** After Known Issues and before Dependency Graph, add a `## Post-Merge Checklist` section using typed-block fence syntax ```` ```yaml type=impl-post-merge-checklist ```` if orchestrator-level verification steps are needed beyond quality gates:
 
     Include orchestrator-facing post-merge verification steps: full workspace builds after merge, cross-package integration tests, end-to-end tests spanning multiple agents' work, cross-repo dependency checks.
 
     Omit this section entirely if no orchestrator verification steps are needed beyond quality gates. Do not output an empty typed block.
 
-13. **Emit known issues as typed block.** In the Known Issues section, use typed-block fence syntax ```` ```yaml type=impl-known-issues ````. Document pre-existing issues discovered during suitability assessment.
+14. **Emit known issues as typed block.** In the Known Issues section, use typed-block fence syntax ```` ```yaml type=impl-known-issues ````. Document pre-existing issues discovered during suitability assessment.
 
     If no known issues are discovered, omit the section entirely.
 
-14. **Expect validation feedback (E16).** After you write the IMPL doc, the orchestrator
+15. **Expect validation feedback (E16).** After you write the IMPL doc, the orchestrator
     runs a validator on all `type=impl-*` blocks (E16). If the validator reports errors,
     you will receive a correction prompt listing specific failures by section name and
     block type. Rewrite only the failing sections — do not regenerate the entire document.
@@ -703,193 +583,29 @@ They are NOT the structure of your output. Your output is PURE YAML following th
 
 ## Output Format
 
-Write a YAML manifest to `docs/IMPL/IMPL-<feature-slug>.yaml`. This file is parsed
-by sawtools (`sawtools validate`, `sawtools extract-context`, `sawtools set-completion`, etc.).
-The schema matches `pkg/protocol/types.go` in the Go SDK.
+Write a YAML manifest to `docs/IMPL/IMPL-<feature-slug>.yaml` following the
+schema shown above. This file is parsed by sawtools (`sawtools validate`,
+`sawtools extract-context`, `sawtools set-completion`, etc.). The schema matches
+`pkg/protocol/types.go` in the Go SDK.
 
-**Agent task field:** The `task` field per agent is a multi-line string containing
-the full implementation specification. Include: what to implement, interfaces to
-implement and call, tests to write, verification gate commands, and constraints.
-The orchestrator wraps this with the 9-field agent template (isolation verification,
-file ownership, completion report format) at launch time via `saw extract-context`.
-You do NOT need to include isolation verification or completion report templates
-in the task field — only the implementation-specific content (Fields 2-7).
+Use pure YAML format throughout. No markdown headers (`##`), no fenced code
+blocks. Use YAML comments (`#`) for explanatory text and YAML fields for all
+structure.
 
-Write the following to `docs/IMPL/IMPL-<feature-slug>.yaml`:
+**Agent task field:** The `task` field per agent contains the full implementation
+spec (Fields 2-7: what to implement, interfaces, tests, verification gate,
+constraints). The orchestrator wraps it with the 9-field template at launch time
+via `sawtools extract-context` — do not include isolation verification or
+completion report templates in the task field.
 
-**IMPORTANT: Use pure YAML format throughout. NO markdown headers (`##`). NO fenced code blocks (` ```yaml`). Use YAML comments (`#`) for explanatory text and YAML fields for all structure.**
+**Validation:** After writing, the orchestrator runs `sawtools validate`. Fix
+only failing fields on correction prompts — do not regenerate the entire manifest.
 
-```yaml
-# IMPL: <feature-slug>
-title: "<Feature Title>"
-feature_slug: "<feature-slug>"
-verdict: "SUITABLE"  # SUITABLE | NOT_SUITABLE | SUITABLE_WITH_CAVEATS
-test_command: "<full test suite command>"
-lint_command: "<check-mode lint command or 'none'>"
-state: "SCOUT_PENDING"
+**NOT_SUITABLE shortcut:** Write a minimal manifest with only `title`,
+`feature_slug`, `verdict`, and `state: "NOT_SUITABLE"`. No waves or agents.
 
-# Suitability Assessment
-# ----------------------
-# Verdict: SUITABLE
-#
-# 1. File decomposition: YES/NO — <explanation>
-# 2. Investigation-first: NO — <explanation>
-# 3. Interface discoverability: YES — <explanation>
-# 4. Pre-implementation status check:
-#    Total items: X
-#    Already implemented (DONE): Y
-#    Partially implemented (PARTIAL): Z
-#    Not implemented (TO-DO): N
-# 5. Parallelization value: HIGH/MARGINAL/LOW — <explanation>
-#
-# Estimated times:
-# - Scout phase: ~X min
-# - Agent execution: ~Y min (N agents × M min avg, parallel)
-# - Merge & verification: ~Z min
-# Total SAW time: ~T min
-#
-# Sequential baseline: ~B min
-# Time savings: ~D min (~P% faster)
-# Recommendation: <proceed or not>
-
-# Quality Gates
-# Gate type MUST be one of: build | lint | test | typecheck | custom
-# Use "custom" for non-standard gates (vite build, e2e, benchmarks, etc.)
-quality_gates:
-  level: "standard"
-  gates:
-    - type: "build"
-      command: "go build ./..."
-      required: true
-    - type: "test"
-      command: "go test ./..."
-      required: true
-    - type: "lint"
-      command: "go vet ./..."
-      required: false
-      description: "Check for common Go mistakes"
-
-# Scaffolds
-# (Omit this section entirely if no cross-agent types needed)
-scaffolds:
-  - file_path: "path/to/types.go"
-    contents: |
-      type Name struct {
-        Field string
-      }
-    import_path: "import/path"
-    status: "pending"
-
-# Interface Contracts
-interface_contracts:
-  - name: "FunctionOrTypeName"
-    description: |
-      What it does and why agents need it.
-    definition: |
-      func FunctionName(param Type) (ReturnType, error)
-    location: "path/to/file.go"
-
-# File Ownership
-file_ownership:
-  - file: "path/to/file.go"
-    agent: "A"
-    wave: 1
-    action: "new"  # new | modify | delete
-    repo: "repo-name"  # Required for cross-repo work; omit for single-repo
-  - file: "path/to/other.go"
-    agent: "B"
-    wave: 1
-    action: "modify"
-    repo: "other-repo"
-
-# Waves
-waves:
-  - number: 1
-    agents:
-      - id: "A"
-        task: |
-          ## What to Implement
-          <Functional description of the behavior.>
-
-          ## Interfaces to Implement
-          <Exact signatures this agent delivers.>
-
-          ## Interfaces to Call
-          <Existing code or scaffold types the agent depends on.>
-
-          ## Tests to Write
-          1. TestFunctionName_Scenario - what it verifies
-          2. TestFunctionName_EdgeCase - what it verifies
-
-          ## Verification Gate
-          ```bash
-          <Exact build/lint/test commands to run.>
-          ```
-
-          ## Constraints
-          <Hard rules, edge cases, things to avoid.>
-        files:
-          - "path/to/file.go"
-          - "path/to/file_test.go"
-      - id: "B"
-        task: |
-          <Implementation spec for agent B — same structure as above>
-        files:
-          - "path/to/other.go"
-        dependencies:
-          - "A"
-  - number: 2
-    agents:
-      - id: "C"
-        task: |
-          <Implementation spec for agent C>
-        files:
-          - "path/to/downstream.go"
-        dependencies:
-          - "A"
-          - "B"
-
-# Pre-Mortem
-# (Omit this section entirely if low risk)
-pre_mortem:
-  overall_risk: "medium"  # low | medium | high
-  rows:
-    - scenario: "Description of what could go wrong"
-      likelihood: "low"
-      impact: "medium"
-      mitigation: "Concrete action to prevent or recover"
-
-# Known Issues
-# (Omit this section entirely if none)
-known_issues:
-  - title: "Flaky test in auth module"
-    description: "TestAuthHandler_SessionTimeout fails intermittently on CI"
-    status: "Pre-existing, unrelated to this work"
-    workaround: "Skip with -skip TestAuthHandler_SessionTimeout"
-
-# Completion Reports
-# (Empty at scout time — agents populate via sawtools set-completion)
-completion_reports: {}
-```
-
----
-
-# Completion Reports (empty at scout time — agents populate via saw set-completion)
-completion_reports: {}
-
-```
-
-**Validation:** After writing the manifest, the orchestrator runs `saw validate`
-on it. If validation fails, you will receive a correction prompt listing specific
-errors. Fix only the failing fields — do not regenerate the entire manifest.
-
-**NOT_SUITABLE shortcut:** If the verdict is NOT_SUITABLE, write a minimal manifest
-with only `title`, `feature_slug`, `verdict`, and `state: "NOT_SUITABLE"`. Do not
-populate waves, agents, or file ownership.
-
-## IMPL Manifest Size
-
-If the manifest exceeds ~15KB (many agents with long task descriptions), keep task descriptions focused — the orchestrator wraps them with the 9-field template at launch time, so you don't need isolation verification, file ownership tables, or completion report templates in each agent's task field.
+**Manifest size:** If >15KB, keep task descriptions focused — the orchestrator
+adds the 9-field template wrapper at launch time.
 
 ## Rules
 
