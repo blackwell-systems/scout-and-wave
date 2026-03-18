@@ -1,3 +1,4 @@
+completion_date: "2026-03-18"
 title: 'Program Layer Phase 1: Planner Agent and PROGRAM Manifest'
 feature_slug: program-layer-v1
 verdict: SUITABLE
@@ -689,6 +690,7 @@ waves:
           dependencies:
             - E
             - F
+      base_commit: 74e6d8bb06b4ac3e78d1e0e65588aa26bc09074e
 quality_gates:
     level: standard
     gates:
@@ -840,6 +842,18 @@ completion_reports:
             - pkg/protocol/program_parser.go
             - pkg/protocol/program_parser_test.go
         notes: auto-committed by orchestrator (API agent)
+    G:
+        status: complete
+        worktree: /Users/dayna.blackwell/code/scout-and-wave-go/.claude/worktrees/saw/program-layer-v1/wave3-agent-G
+        branch: saw/program-layer-v1/wave3-agent-G
+        commit: d90176caf84ddc963add6f753a467bd712b2e90b
+        files_changed:
+            - cmd/saw/list_programs_cmd.go
+            - cmd/saw/list_programs_cmd_test.go
+            - cmd/saw/main.go
+            - cmd/saw/validate_program_cmd.go
+            - cmd/saw/validate_program_cmd_test.go
+        notes: auto-committed by orchestrator (API agent)
     H:
         status: complete
         worktree: /Users/dayna.blackwell/code/scout-and-wave/.claude/worktrees/saw/program-layer-v1/wave2-agent-H
@@ -859,6 +873,11 @@ integration_reports:
         gaps: []
         valid: true
         summary: 'Wave 2: all exports are integrated (no gaps detected)'
+    wave3:
+        wave: 3
+        gaps: []
+        valid: true
+        summary: 'Wave 3: all exports are integrated (no gaps detected)'
 pre_mortem:
     overall_risk: medium
     rows:
