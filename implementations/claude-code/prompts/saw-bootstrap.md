@@ -343,9 +343,14 @@ to implement and call, tests to write, verification gate commands, and constrain
 The orchestrator wraps this with the 9-field agent template (isolation verification,
 file ownership, completion report format) at launch time via `saw extract-context`.
 
-**Validation:** After writing the manifest, the orchestrator runs `saw validate`
-on it. If validation fails, you will receive a correction prompt listing specific
-errors. Fix only the failing fields — do not regenerate the entire manifest.
+**Self-validation (mandatory):** After writing the manifest, run:
+```bash
+sawtools validate --fix "<absolute-path-to-impl-doc>"
+```
+If exit code is 1, read the JSON errors and fix only the failing fields. Re-run
+validation until it passes (max 3 attempts). If all 3 attempts fail, set
+`state: "SCOUT_VALIDATION_FAILED"` and report remaining errors in your final output.
+The orchestrator also validates as defense-in-depth.
 
 ## Rules
 
@@ -361,6 +366,7 @@ errors. Fix only the failing fields — do not regenerate the entire manifest.
   A CLI tool with 3 concerns needs 3 packages, not 8.
 - If fewer than 3 concerns are identified, flag as NOT SUITABLE and recommend
   sequential implementation or a redesign that produces more separable concerns.
-- After writing the manifest, expect validation feedback via `saw validate`. If the
-  orchestrator returns errors, fix only the failing fields — do not regenerate the
-  entire manifest.
+- After writing the manifest, self-validate via `sawtools validate --fix` (see
+  Output Format above). If the orchestrator returns additional errors as
+  defense-in-depth, fix only the failing fields — do not regenerate the entire
+  manifest.

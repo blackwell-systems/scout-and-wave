@@ -567,19 +567,20 @@ They are NOT the structure of your output. Your output is PURE YAML following th
 
     If no known issues are discovered, omit the section entirely.
 
-15. **Expect validation feedback (E16).** After you write the IMPL doc, the orchestrator
-    runs a validator on all `type=impl-*` blocks (E16). If the validator reports errors,
-    you will receive a correction prompt listing specific failures by section name and
-    block type. Rewrite only the failing sections — do not regenerate the entire document.
+15. **Self-validate, then expect defense-in-depth (E16).** You self-validate in
+    the Output Format step below (mandatory). The orchestrator also runs a secondary
+    validation as defense-in-depth. If your self-validation missed an error, you may
+    receive a correction prompt listing specific failures — fix only the failing
+    sections, do not regenerate the entire document.
 
-    **E16A — Required block presence:** Every IMPL doc that contains any typed blocks
-    must include all three of the following, or validation fails:
-    - `` ```yaml type=impl-file-ownership `` (File Ownership section)
-    - `` ```yaml type=impl-dep-graph `` (Dependency Graph section)
-    - `` ```yaml type=impl-wave-structure `` (Wave Structure section)
+    **E16A — Required block presence:** Every IMPL doc must include all three of
+    the following YAML top-level keys, or validation fails:
+    - `file_ownership` (File Ownership section)
+    - `dependency_graph` (Dependency Graph section)
+    - `waves` (Wave Structure section)
 
-    Do not omit any of these three blocks. If the work is simple, these sections may be
-    brief, but they must be present whenever you write any typed block.
+    Do not omit any of these three. If the work is simple, these sections may be
+    brief, but they must be present.
 
 ## Output Format
 
@@ -604,8 +605,11 @@ sawtools validate --fix "<absolute-path-to-impl-doc>"
 ```
 If exit code is 1, read the JSON errors and fix only the failing fields in the
 IMPL doc. Re-run validation until it passes (max 3 attempts). Do NOT finish
-without a passing validation. The orchestrator also validates, but catching
-errors at the source prevents unnecessary retry loops.
+without a passing validation. If all 3 attempts fail, set `state: "SCOUT_VALIDATION_FAILED"`
+in the IMPL doc and report the remaining validation errors in your final output
+so the orchestrator has structured error data. The orchestrator also validates
+as defense-in-depth, but catching errors at the source prevents unnecessary
+retry loops.
 
 **NOT_SUITABLE shortcut:** Write a minimal manifest with only `title`,
 `feature_slug`, `verdict`, and `state: "NOT_SUITABLE"`. No waves or agents.
