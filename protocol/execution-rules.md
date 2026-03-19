@@ -572,6 +572,46 @@ limit (2 retries) applies.
 **Related Rules:** See E7 (agent failure handling), E7a (automatic failure
 remediation), message-formats.md (failure_type field definition).
 
+### E19.1 — Per-IMPL Reactions Override
+
+Scout may write a `reactions:` block in the IMPL doc to override E19 defaults
+for a specific feature. When present, the orchestrator reads this block at wave
+start and uses it instead of the hardcoded constants.
+
+**reactions block schema:**
+
+```yaml
+reactions:
+  transient:
+    action: retry
+    max_attempts: 3     # override default (2)
+  timeout:
+    action: retry
+    max_attempts: 1
+  fixable:
+    action: send-fix-prompt
+    max_attempts: 1
+  needs_replan:
+    action: pause       # surface to human; "auto-scout" is a stretch goal
+  escalate:
+    action: pause
+```
+
+**Valid action values:**
+- `retry` — re-launch agent with retry context (transient, timeout)
+- `send-fix-prompt` — apply fix from notes and relaunch (fixable)
+- `pause` — surface to human, do not auto-retry
+- `auto-scout` — re-engage Scout automatically (stretch goal; treat as pause if not implemented)
+
+**Backward compatibility:** IMPL docs without a `reactions:` block get E19
+default behavior unchanged. Individual missing entries also fall back to defaults.
+
+**When Scout should write reactions:**
+- High pre-mortem risk (overall_risk: high) → increase max_attempts for transient
+- Strict/sensitive codebase → reduce max_attempts, prefer pause over auto-retry
+- Known flaky CI → increase timeout max_attempts
+- needs_replan or escalate: always use `pause` (auto-scout is optional enhancement)
+
 ---
 
 ## E20: Stub Detection Post-Wave

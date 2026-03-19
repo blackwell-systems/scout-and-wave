@@ -289,6 +289,43 @@ Follow the brief exactly.Follow the extracted brief exactly.
    - `timeout` → retry once with a scope-reduction note prepended to the agent prompt; if retry fails, escalate to user
    - absent → treat as `escalate` (backward compatibility)
 
+   **E19.1: Per-IMPL reactions override.** If the IMPL doc contains a `reactions:` block, use it to override the E19 defaults above. Each entry maps a failure type to an action and optional max_attempts. Absent entries fall back to E19 defaults. Valid actions: `retry`, `send-fix-prompt`, `pause`, `auto-scout` (treat as `pause` if not implemented). See E19.1 in `protocol/execution-rules.md` for the full schema.
+
+   **reactions block (optional):** Write a `reactions:` block based on the pre-mortem risk assessment and codebase context. Use this to customize failure routing per failure type, overriding the E19 global defaults.
+
+   Write reactions when:
+   - `pre_mortem.overall_risk` is `high` → set transient max_attempts: 3
+   - CI is known to be flaky (detected from .github/workflows or test patterns) → increase timeout retries
+   - Codebase has strict review/merge policies → prefer `pause` over auto-retry
+   - needs_replan and escalate: always set action: pause
+
+   Example for a high-risk IMPL:
+   ```yaml
+   reactions:
+     transient:
+       action: retry
+       max_attempts: 3
+     timeout:
+       action: retry
+       max_attempts: 2
+     fixable:
+       action: send-fix-prompt
+       max_attempts: 1
+     needs_replan:
+       action: pause
+     escalate:
+       action: pause
+   ```
+
+   Example for a low-risk IMPL (omit entirely, or write minimal block):
+   ```yaml
+   reactions:
+     needs_replan:
+       action: pause
+     escalate:
+       action: pause
+   ```
+
    Correctable failures (transient/fixable): (a) isolation failures (wrong directory/branch) - re-launch with explicit repository context including absolute IMPL doc path; (b) missing dependencies - install and re-launch; (c) transient build errors - retry automatically. Non-correctable failures (`needs_replan`, `escalate`) always surface to the user. Track retries per agent; after retry limits are exhausted, escalate to user. **E8: Same-wave interface failure.** If any agent reports `status: blocked` due to an interface contract being unimplementable as specified, the wave does not merge. Mark the wave BLOCKED, revise the affected contracts in the IMPL doc, and re-issue prompts to all agents whose work depends on the changed contract. Use `sawtools update-agent-prompt "<manifest-path>" --agent "<id>" < new-prompt.txt` to update affected agent prompts and `sawtools check-conflicts "<manifest-path>"` to verify no ownership conflicts before re-launching. Agents that completed cleanly against unaffected contracts do not re-run. The wave restarts from WAVE_PENDING with the corrected contracts.
    **E20: Stub scan.** Collect the union of all `files_changed` and `files_created` from agent completion reports. Run:
    ```bash
