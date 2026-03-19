@@ -287,9 +287,9 @@ Follow the brief exactly.Follow the extracted brief exactly.
 
 8. **Wave finalization:** Use the batch finalization command to verify, merge, and cleanup:
    ```bash
-   sawtools finalize-wave "<manifest-path>" --wave <N> --repo-dir "<repo-path>"
+   sawtools finalize-wave "<absolute-manifest-path>" --wave <N> --repo-dir "<repo-path>"
    ```
-   This atomic operation combines the 6-step post-wave pipeline: (1) verify-commits (E7 check), (2) scan-stubs (E20), (3) run-gates (E21), (4) merge-agents, (5) verify-build, (6) cleanup. The command stops on first failure and returns comprehensive JSON with all verification results. Exit code 1 indicates failure at any step. Returns `Success: true` only if all steps pass. For solo agents (no worktrees), run the individual commands manually: `verify-build` to run tests, then proceed to step 8a. For `type: integration` waves, skip merge-agents (no worktree branches to merge) and run only verify-build + cleanup.
+   **Always pass an absolute path for `<manifest-path>`.** If the manifest lives in a different repo than the one pointed to by `--repo-dir` (cross-repo IMPL), a relative path will silently fail with "file not found" before any git checks run. Use `$(realpath <path>)` or construct the absolute path from the project root. This atomic operation combines the 6-step post-wave pipeline: (1) verify-commits (E7 check), (2) scan-stubs (E20), (3) run-gates (E21), (4) merge-agents, (5) verify-build, (6) cleanup. The command stops on first failure and returns comprehensive JSON with all verification results. Exit code 1 indicates failure at any step. Returns `Success: true` only if all steps pass. For solo agents (no worktrees), run the individual commands manually: `verify-build` to run tests, then proceed to step 8a. For `type: integration` waves, skip merge-agents (no worktree branches to merge) and run only verify-build + cleanup.
 8a. **E25/E26: Integration gap detection and wiring (post-merge).** After wave finalization succeeds, run integration validation to detect unconnected exports:
    ```bash
    sawtools validate-integration "<manifest-path>" --wave <N>
