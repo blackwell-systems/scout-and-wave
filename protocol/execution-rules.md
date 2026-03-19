@@ -435,6 +435,40 @@ where `N` is the 1-based line number of the opening fence of the suspect block.
 
 **Warning does not cause E16A to fire:** If E16C fires (a plain block looks like a dep graph), the `impl-dep-graph` typed block is still considered missing for E16A purposes. Both E16A and E16C will appear in the correction prompt.
 
+### E16D: Enhanced Validation Checks
+
+**Trigger:** Scout writes IMPL doc to disk OR human runs `sawtools validate`
+
+**Required Action:** Run enhanced validation checks on the manifest:
+
+**1. Duplicate Key Detection**
+- Detects duplicate top-level YAML keys (e.g., two `state:` fields)
+- Error code: E16_DUPLICATE_KEY
+- Example: "duplicate key 'state' at lines 4, 55"
+- Rationale: yaml.v3 silently overwrites duplicates, causing state corruption
+
+**2. Action Enum Validation**
+- Validates file_ownership action field: must be "new", "modify", or "delete"
+- Empty/omitted action is allowed (backward compatibility)
+- Error code: E16_INVALID_ACTION
+- Example: "file_ownership[3].action has invalid value 'update' — must be new, modify, or delete"
+
+**3. Integration Checklist Warning**
+- Warns when new API handlers or React components lack post_merge_checklist
+- Detection: action=new files matching pkg/api/*_handler.go or web/src/components/*.tsx
+- Warning code: E16_MISSING_CHECKLIST (warning, not blocker)
+- Example: "new handlers detected but post_merge_checklist is empty — integration steps may be needed"
+
+**4. File Existence Warning**
+- Warns when action=modify files do not exist in repository
+- Only runs when repoPath is provided (CLI/web validation, not struct-only validation)
+- Warning code: E16_FILE_NOT_FOUND (warning, not blocker)
+- Example: "file 'pkg/foo/bar.go' marked action=modify but does not exist"
+
+**Failure Handling:** Errors (duplicate keys, invalid action) block Scout completion. Warnings (missing checklist, file not found) are surfaced to human but do not block.
+
+**Related Rules:** See E16A (required block presence), E16B (dep graph grammar), E16C (out-of-band detection)
+
 ---
 
 ## E17: Scout Reads Project Memory
