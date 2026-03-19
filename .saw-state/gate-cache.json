@@ -96,6 +96,28 @@
         "cached_at": "2026-03-18T16:05:17.161091-07:00"
       }
     },
+    "acc0a369ef4797bfe8f96a1c0ab9a050": {
+      "build": {
+        "gate_type": "build",
+        "command": "go build ./...",
+        "passed": false,
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "pattern ./...: directory prefix . does not contain main module or its selected dependencies\n",
+        "from_cache": true,
+        "cached_at": "2026-03-19T04:34:33.914502-07:00"
+      },
+      "test": {
+        "gate_type": "test",
+        "command": "go test ./...",
+        "passed": false,
+        "exit_code": 1,
+        "stdout": "FAIL\t./... [setup failed]\nFAIL\n",
+        "stderr": "# ./...\npattern ./...: directory prefix . does not contain main module or its selected dependencies\n",
+        "from_cache": true,
+        "cached_at": "2026-03-19T04:34:33.980504-07:00"
+      }
+    },
     "b3324dea4f0064af4810ef9b35e06636": {
       "build": {
         "gate_type": "build",
