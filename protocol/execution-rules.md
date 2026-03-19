@@ -1,6 +1,6 @@
 # Scout-and-Wave Protocol Execution Rules
 
-**Version:** 0.18.0
+**Version:** 0.19.0
 
 This document defines the execution rules that govern orchestrator behavior during Scout-and-Wave protocol execution. These rules are not captured by the state machine alone.
 
@@ -1069,6 +1069,40 @@ The Planner produces a revised PROGRAM manifest. The orchestrator validates it (
 
 ---
 
+## E35: Wiring Obligation Declaration
+
+**Trigger:** Scout identifies that an agent will implement an exported symbol (function, type, method) that must be called from an existing aggregation point in a file not created by that agent.
+
+**Rule:** The Scout MUST:
+1. Assign the aggregation file to the implementing agent's `file_ownership` (preferred), OR
+2. Write a `wiring:` entry in the IMPL doc if assigning to the same agent creates a same-wave conflict, and assign the caller to an integration agent in a later wave.
+
+**Wiring declaration schema:**
+```yaml
+wiring:
+  - symbol: <exported function or type name>
+    defined_in: <relative path to implementing file>
+    must_be_called_from: <relative path to caller/aggregator file>
+    agent: <agent ID that owns both sides>
+    wave: <wave number>
+    integration_pattern: append | register | inject | call
+```
+
+**Enforcement:**
+- **prepare-wave pre-flight (Layer 3A):** fails if `must_be_called_from` is not in the owning agent's `file_ownership`.
+- **validate-integration --wiring (Layer 3B):** post-merge grep/AST check that `symbol` actually appears as a call in `must_be_called_from`. Reports severity: error (not info) for declared but missing wiring.
+- **Agent brief injection (Layer 3C):** prepare-wave injects all `wiring:` entries for the agent into `.saw-agent-brief.md` with explicit instruction.
+
+**Rationale:** The heuristic export scanner (E25/E26) detects gaps reactively post-merge. E35 makes wiring intent explicit and machine-checkable before and after execution.
+
+**Relationship to E25/E26:** E25/E26 is reactive — it detects integration gaps post-merge via heuristics. E35 is proactive — the Scout declares wiring obligations at planning time, enabling pre-wave verification (Layer 3A) and precise post-merge checking (Layer 3B). Both mechanisms may apply to the same wave: E35 handles declared obligations, E25/E26 catches any gaps the Scout missed.
+
+**Relationship to E27:** E27 allows Scout to create a planned `type: integration` wave for wiring work. E35 is the per-symbol declaration that precedes E27 — the `wiring:` entries drive which files the integration agent needs to modify.
+
+**Related Rules:** See E25 (Integration Validation), E26 (Integration Agent), E27 (Planned Integration Waves)
+
+---
+
 ## Cross-References
 
 - See `preconditions.md` for conditions that must hold before execution begins
@@ -1093,3 +1127,4 @@ The Planner produces a revised PROGRAM manifest. The orchestrator validates it (
 - E32: Orchestrator tracks cross-IMPL progress and updates PROGRAM manifest — see also `program-invariants.md` (P4), E28, E29
 - E33: Orchestrator auto-advances to next tier in `--auto` mode after tier gate passes — see also `program-invariants.md` (P2, P3), E29, E30, E31
 - E34: Orchestrator re-engages Planner on tier gate failure to revise PROGRAM manifest — see also `program-invariants.md` (P2, P4), E8, E16, E29
+- E35: Scout declares wiring obligations for exported symbols that must be called from aggregation files — enforced by prepare-wave (Layer 3A), validate-integration (Layer 3B), and agent brief injection (Layer 3C) — see also E25, E26, E27
