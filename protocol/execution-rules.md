@@ -333,6 +333,10 @@ Three distinct conflict types can arise; each has a different resolution path:
 
 **Related Rules:** See E14 (IMPL doc write discipline). See state-machine.md for the WAVE_VERIFIED → COMPLETE transition guard.
 
+**Amend constraint:** Once the `<!-- SAW:COMPLETE -->` marker is written, `saw amend`
+is invalid. The orchestrator must reject any amend attempt against a completed IMPL.
+To extend completed work, start a new IMPL doc (E36).
+
 ---
 
 ## E16: Scout Output Validation
@@ -1103,6 +1107,57 @@ wiring:
 
 ---
 
+## E36: IMPL Amendment (Living IMPL Docs)
+
+**Trigger:** Orchestrator receives `/saw amend` subcommand on an active IMPL doc
+(state is not COMPLETE; no SAW:COMPLETE marker present).
+
+**Three operations:**
+
+### E36a: Add Wave
+`sawtools amend-impl <manifest> --add-wave`
+- Appends a new wave skeleton (next wave number, empty agents array) to the manifest
+- Validates the resulting manifest passes `sawtools validate` before saving
+- New wave starts in WAVE_PENDING state after Scout adds agents via Scout-style
+  interface contract definition
+- Completed waves (all agents status: complete) are immutable — their file_ownership
+  and interface_contracts entries cannot be changed by this operation
+
+### E36b: Redirect Agent
+`sawtools amend-impl <manifest> --redirect-agent <ID> --wave <N>`
+- Valid only if the agent has NOT committed yet (checked by: no completion report
+  in completion_reports map AND no git commits on worktree branch beyond base_commit)
+- Updates the agent's task field in the manifest with new content (read from stdin
+  or --new-task flag)
+- Clears any partial completion report for the agent (if status != "complete")
+- Does NOT recreate the worktree (agent re-reads updated task on next launch)
+- If agent HAS committed: operation is rejected with ErrAmendBlocked
+
+### E36c: Extend Scope
+`sawtools amend-impl <manifest> --extend-scope`
+- Re-engages Scout with the current IMPL YAML injected as context
+- Scout receives the full IMPL as a "current plan" and is instructed to append
+  new waves only (not modify existing waves or contracts)
+- Scout produces an updated IMPL doc with additional waves appended
+- Human reviews before any new wave executes
+- The extend-scope path is handled by the CLI/orchestrator layer (not amend.go);
+  `--extend-scope` triggers a Scout agent launch, not a direct mutation
+
+**Common preconditions for all E36 operations:**
+1. IMPL doc must not have completion_date set (state != COMPLETE)
+2. SAW:COMPLETE marker must not be present in the file
+3. Resulting manifest must pass `sawtools validate` after mutation
+4. File ownership for agents in completed waves is frozen (cannot be changed)
+5. Interface contracts listed in frozen_contracts_hash are immutable
+
+**Failure handling:** If any precondition fails, the operation returns an error
+with `ErrAmendBlocked` as the sentinel. The IMPL doc is not modified.
+
+**Related Rules:** See E2 (interface freeze), E14 (IMPL doc write discipline),
+E15 (completion marker — amend invalid after SAW:COMPLETE)
+
+---
+
 ## Cross-References
 
 - See `preconditions.md` for conditions that must hold before execution begins
@@ -1128,3 +1183,4 @@ wiring:
 - E33: Orchestrator auto-advances to next tier in `--auto` mode after tier gate passes — see also `program-invariants.md` (P2, P3), E29, E30, E31
 - E34: Orchestrator re-engages Planner on tier gate failure to revise PROGRAM manifest — see also `program-invariants.md` (P2, P4), E8, E16, E29
 - E35: Scout declares wiring obligations for exported symbols that must be called from aggregation files — enforced by prepare-wave (Layer 3A), validate-integration (Layer 3B), and agent brief injection (Layer 3C) — see also E25, E26, E27
+- E36: IMPL Amendment — see E2, E14, E15
