@@ -1,6 +1,6 @@
 # Scout-and-Wave Procedures
 
-**Version:** 0.15.0
+**Version:** 0.16.0
 
 This document defines the operational procedures executed by the Orchestrator and other participants: suitability assessment, scaffold materialization, wave execution, and merge operations.
 
@@ -145,6 +145,12 @@ Scaffold files are committed to HEAD before worktrees are created. Once worktree
 **Executor:** Orchestrator (launches agents), Wave Agents (execute work)
 
 ### Phase 1: Pre-Launch Verification
+
+0. **Baseline verification (E21A):** For multi-agent waves with quality gates defined in the IMPL doc:
+   - Run `sawtools run-gates "<manifest-path>" --baseline` to execute all quality gate commands against current HEAD.
+   - If all required gates pass (or no gates defined): proceed to Step 1.
+   - If any required gate fails: Protocol stop. Report `baseline_verification_failed` to human with the failing gate commands and their output. Do not create worktrees. The human must fix the codebase or gate configuration before re-running `prepare-wave`.
+   - E21A is a no-op for solo waves (Step 3 solo wave exception applies; skip this step if the wave has exactly one agent).
 
 1. **Ownership verification (E3):** Orchestrator scans wave's file ownership table in IMPL doc
    - Check: No file appears in more than one agent's Field 1 (File Ownership) list
