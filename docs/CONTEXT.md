@@ -7,3 +7,5 @@
   - IMPL doc: docs/IMPL/IMPL-program-layer-v2.yaml
 - **program-layer-phase4**: completed 2026-03-18, 3 waves, 6 agents
   - IMPL doc: docs/IMPL/complete/IMPL-program-layer-phase4.yaml
+- **e21a-baseline-gate**: completed 2026-03-19, 1 waves, 4 agents
+  - IMPL doc: docs/IMPL/IMPL-e21a-baseline-gate.yaml
