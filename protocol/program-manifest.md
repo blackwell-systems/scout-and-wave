@@ -1,6 +1,6 @@
 # PROGRAM Manifest Schema Specification
 
-**Version:** 0.1.0
+**Version:** 0.2.0
 
 This document defines the canonical schema for the PROGRAM manifest YAML format. The PROGRAM manifest is the protocol-level artifact that coordinates multiple IMPL docs into tiered execution for large-scale projects.
 
@@ -372,11 +372,69 @@ See `protocol/state-machine.md` for detailed state machine specification (to be 
 
 ---
 
-## 10. Pre-Mortem Section
+## 10. Re-Planning
+
+When a tier gate fails (E29) or the user explicitly requests it, the
+Planner agent can be re-engaged to revise the PROGRAM manifest.
+
+**Triggers:**
+- Tier gate failure (required gates fail, tier cannot advance)
+- Cross-IMPL interface mismatch detected
+- User request (`/saw program replan`)
+
+**Planner receives:**
+- Current PROGRAM manifest
+- Failure context (tier number, gate results, IMPL completion reports)
+- Instruction to revise program contracts or tier structure
+
+**Planner may revise:**
+- Program contracts (add/remove/modify shared types)
+- Tier structure (reorder IMPLs, add/remove tiers)
+- IMPL decomposition (split/merge features)
+
+**Planner may NOT revise:**
+- Completed tiers (already executed and merged)
+- Frozen program contracts (used by completed IMPLs)
+
+**Output:**
+Revised PROGRAM manifest with updated state: PROGRAM_REVIEWED.
+Human must approve revised plan before execution resumes.
+
+**Non-destructive guarantee:**
+Re-planning does not discard completed work. Completed IMPLs remain
+in the manifest with status "complete". Only pending and failed IMPLs
+may be revised.
+
+---
+
+## 11. Orchestrator Commands
+
+The following `/saw program` commands are available for program-level orchestration:
+
+| Command | Description |
+|---------|-------------|
+| `/saw program plan <requirements>` | Launch Planner to produce a PROGRAM manifest from requirements |
+| `/saw program status` | Show current program state, tier progress, and IMPL statuses |
+| `/saw program execute [--auto]` | Begin or resume program execution (tier-by-tier) |
+| `/saw program replan` | Re-engage Planner to revise PROGRAM manifest after failure or on request |
+
+**Command details:**
+
+- **`/saw program plan`** — Runs the Planner agent, which analyzes requirements and produces a `PROGRAM-<name>.yaml` manifest. The Planner also runs a suitability gate; if the project is too small or too simple for multi-IMPL orchestration, the Planner returns `NOT_SUITABLE` with an explanation.
+
+- **`/saw program status`** — Reads the PROGRAM manifest from disk and renders a human-readable summary of tier and IMPL progress without modifying state.
+
+- **`/saw program execute [--auto]`** — Executes the program tier by tier. Without `--auto`, halts at each tier gate for human review. With `--auto`, advances automatically through tier gates that pass, stopping only on failure or program completion.
+
+- **`/saw program replan`** — Re-engages the Planner with the current PROGRAM manifest and any available failure context (tier gate results, blocked IMPL reports). Sets program state to `PLANNING` and produces a revised manifest for human approval before execution resumes. See Section 10 for full re-planning semantics.
+
+---
+
+## 12. Pre-Mortem Section
 
 The `pre_mortem` section captures program-level risk analysis performed by the Planner.
 
-### 10.1 Schema
+### 12.1 Schema
 
 Pre-mortem entries reuse the `PreMortemRow` schema from IMPL manifests:
 
@@ -387,7 +445,7 @@ Pre-mortem entries reuse the `PreMortemRow` schema from IMPL manifests:
 | `impact` | string | Yes | `low`, `medium`, or `high` |
 | `mitigation` | string | Yes | How the program addresses this risk |
 
-### 10.2 Example
+### 12.2 Example
 
 ```yaml
 pre_mortem:
@@ -418,9 +476,9 @@ pre_mortem:
 
 ---
 
-## 11. Relationship to IMPL Documents
+## 13. Relationship to IMPL Documents
 
-### 11.1 PROGRAM References IMPL
+### 13.1 PROGRAM References IMPL
 
 The PROGRAM manifest **references** IMPL docs by slug in the `impls` section. The Planner does **not** produce IMPL docs; that remains the Scout's responsibility.
 
@@ -437,7 +495,7 @@ PROGRAM-greenfield-api.yaml
 → IMPL-auth.yaml         ← Produced by Scout, not Planner
 ```
 
-### 11.2 IMPL Docs Are Produced by Scout
+### 13.2 IMPL Docs Are Produced by Scout
 
 The Planner **does not write IMPL docs**. Instead:
 
@@ -446,7 +504,7 @@ The Planner **does not write IMPL docs**. Instead:
 3. Scout produces `IMPL-<slug>.yaml` for its assigned feature
 4. Scout reads program contracts from PROGRAM manifest (if consuming Tier N-1 outputs)
 
-### 11.3 Tiers Are Analogous to Waves
+### 13.3 Tiers Are Analogous to Waves
 
 | Concept | Scope | Contains | Execution |
 |---------|-------|----------|-----------|
@@ -457,7 +515,7 @@ Within a tier, all IMPLs execute their full lifecycle (Scout → Scaffold → Wa
 
 ---
 
-## 12. Full Example Manifest
+## 14. Full Example Manifest
 
 ```yaml
 # PROGRAM: greenfield-api
@@ -634,36 +692,36 @@ pre_mortem:
 
 ---
 
-## 13. Validation Rules
+## 15. Validation Rules
 
 The orchestrator validates PROGRAM manifests before proceeding with execution. Validation checks include:
 
-### 13.1 Schema Validation
+### 15.1 Schema Validation
 
 - All required fields present
 - Field types correct (string, integer, array, object)
 - Enum values valid (state, IMPL status)
 
-### 13.2 Structural Validation
+### 15.2 Structural Validation
 
 - `program_slug` matches filename (e.g., `greenfield-api` → `PROGRAM-greenfield-api.yaml`)
 - All IMPLs referenced in `tiers` exist in `impls` section
 - No IMPL appears in multiple tiers
 - Tier numbers are sequential starting from 1
 
-### 13.3 Dependency Validation (P1 Invariant)
+### 15.3 Dependency Validation (P1 Invariant)
 
 - No IMPL in tier N has `depends_on` referencing another IMPL also in tier N
 - All `depends_on` references point to IMPLs in earlier tiers
 - No circular dependencies in the IMPL dependency graph
 
-### 13.4 Program Contract Validation
+### 15.4 Program Contract Validation
 
 - All `consumers[].impl` references point to valid IMPL slugs
 - Contract `location` paths do not conflict (no two contracts write to same file)
 - `freeze_at` references valid tier boundaries
 
-### 13.5 Completion Consistency
+### 15.5 Completion Consistency
 
 - `tiers_total` matches number of entries in `tiers` section
 - `impls_total` matches number of entries in `impls` section
@@ -672,9 +730,9 @@ The orchestrator validates PROGRAM manifests before proceeding with execution. V
 
 ---
 
-## 14. Protocol-Level Integration
+## 16. Protocol-Level Integration
 
-### 14.1 Cross-References
+### 16.1 Cross-References
 
 - **Planner agent:** See `protocol/participants.md` for Planner role definition
 - **Program invariants:** See `protocol/program-invariants.md` (to be created) for P1-P4
@@ -682,7 +740,7 @@ The orchestrator validates PROGRAM manifests before proceeding with execution. V
 - **IMPL manifest:** See `protocol/message-formats.md` for IMPL doc schema
 - **State machine:** See `protocol/state-machine.md` (to be extended with Program states)
 
-### 14.2 Hierarchy
+### 16.2 Hierarchy
 
 ```
 protocol/preconditions.md          (prerequisites for SAW execution)
@@ -698,6 +756,6 @@ The PROGRAM manifest extends SAW's protocol from feature-level coordination (IMP
 
 ---
 
-**Document Status:** Version 0.1.0 — Initial schema specification  
-**Next Steps:** Define program-level invariants (P1-P4) and extend state machine with Program states  
+**Document Status:** Version 0.2.0 — Added Re-Planning section (§10) and Orchestrator Commands section (§11)
+**Next Steps:** Define program-level invariants (P1-P4) and extend state machine with Program states
 **Related Implementation:** See `pkg/protocol/program_types.go` for Go SDK struct definitions
