@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.52.0] | 2026-03-19 | E35: Wiring Obligation Rule — agents must declare `wiring:` blocks for every exported symbol that requires integration; `prepare-wave` enforces ownership pre-flight (Layer 3A), `validate-integration --wiring` verifies post-merge (Layer 3B), agent briefs inject wiring table (Layer 3C); saw-skill.md updated with E35 orchestration guidance |
 | [0.51.0] | 2026-03-19 | E21A: Pre-Wave Baseline Verification + E21B: Parallel Gate Execution — `prepare-wave` now runs quality gates against HEAD before creating worktrees; solo waves and empty gate lists are exempt; E21B makes `run-gates` execute all gates concurrently and report all failures together |
 | [0.50.0] | 2026-03-18 | E16 defense-in-depth: PostToolUse IMPL validation hook — auto-validates IMPL docs on every Write (blocks on schema errors), `validate_impl_on_write` script in hooks dir, install.sh updated for both hooks, Scout forbidden-keys list expanded (`integration_connectors`, `integration_required`, `suggested_callers`) |
 | [0.49.0] | 2026-03-18 | Scout self-validation alignment — Step 15 rewritten (self-validate primary, E16 defense-in-depth), bootstrap Scout gets mandatory self-validation, explicit failure path (SCOUT_VALIDATION_FAILED state on 3-attempt exhaustion), orchestrator retry reduced 3→1 |
