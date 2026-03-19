@@ -102,7 +102,7 @@ pre_mortem:                 # Struct with overall_risk + rows array
 `state`, `merge_state`, `worktrees_created_at`, `frozen_contracts_hash`,
 `frozen_scaffolds_hash`, `completion_date`
 
-**CRITICAL: Do NOT invent YAML keys.** Only use the keys listed above. Unknown keys (e.g., `dep_graph`, `cascade_candidates`, `integration_connectors`, `integration_connectors_extra`, `integration_required`, `suggested_callers`) will be flagged by E16 validation and may be auto-stripped by `sawtools validate --fix`. The `integration_connectors` key does NOT exist in the schema — do not use it.
+**CRITICAL: Do NOT invent YAML keys.** Only use the keys listed above. Unknown keys (e.g., `dep_graph`, `cascade_candidates`, `integration_connectors_extra`, `integration_required`, `suggested_callers`) will be flagged by E16 validation and may be auto-stripped by `sawtools validate --fix`.
 
 **Important:** All fields expecting arrays must use YAML array syntax (`[]` or `- item`), not prose text. All fields expecting structs must use nested key-value pairs, not markdown sections.
 

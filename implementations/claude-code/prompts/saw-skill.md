@@ -37,7 +37,7 @@ observability (no Scout agent means no SAW session is detectable by monitoring
 tools).
 
 *`I{N}` notation refers to invariants (I1–I6) and `E{N}` to execution rules
-(E1–E26) defined in `protocol/invariants.md` and `protocol/execution-rules.md`.
+(E1–E34) defined in `protocol/invariants.md` and `protocol/execution-rules.md`.
 Each is embedded verbatim at its point of enforcement; the number is the anchor
 for cross-referencing and audit.*
 
@@ -57,11 +57,13 @@ for cross-referencing and audit.*
        "scout_model": "claude-sonnet-4-5",
        "wave_model": "claude-sonnet-4-5",
        "chat_model": "claude-sonnet-4-5",
-       "integration_model": "claude-sonnet-4-5"
+       "integration_model": "claude-sonnet-4-5",
+       "scaffold_model": "claude-sonnet-4-5",
+       "planner_model": "claude-sonnet-4-5"
      }
    }
    ```
-   For `/saw scout`, read `agent.scout_model`. For `/saw wave`, read `agent.wave_model`. Empty string or missing field means "inherit parent model." If neither config file exists, fall through to level 3.
+   For `/saw scout`, read `agent.scout_model`. For `/saw wave`, read `agent.wave_model`. For `/saw program execute`, read `agent.planner_model` for the Planner agent. For Scaffold agents, read `agent.scaffold_model`. Empty string or missing field means "inherit parent model." If neither config file exists, fall through to level 3.
 3. **Parent model** — If neither arg nor config specifies a model, agents inherit the parent session's model (no `model:` in frontmatter = inherit).
 
 **Implementation:** The Agent tool does not expose a model parameter, so model override works indirectly. Custom `subagent_type` values (`scout`, `wave-agent`, `scaffold-agent`) inherit the parent session's model. When `--model` is specified explicitly and the custom subagent_type's inherited model doesn't match (e.g., parent is Opus but `--model sonnet` requested), fall back to `subagent_type: general-purpose` with the full agent prompt from the prompts directory.
@@ -147,6 +149,8 @@ All operations use the `sawtools` binary. IMPL docs are YAML manifests (`.yaml`)
 - `sawtools program-status <manifest>` — full program status report (E32)
 - `sawtools run-scout "<impl-title>" --program "<manifest>"` — Scout with program contract inputs (E31)
 - `sawtools mark-program-complete "<manifest>"` — mark PROGRAM manifest complete and update CONTEXT.md
+- `sawtools update-program-state <manifest> --state <state>` — update PROGRAM manifest state field (E32)
+- `sawtools update-program-impl <manifest> --impl <slug> --status <status>` — update per-IMPL execution status in PROGRAM manifest (E32)
 
 ## Execution Models
 
