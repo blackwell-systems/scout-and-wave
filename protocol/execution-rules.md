@@ -1,6 +1,6 @@
 # Scout-and-Wave Protocol Execution Rules
 
-**Version:** 0.16.0
+**Version:** 0.17.0
 
 This document defines the execution rules that govern orchestrator behavior during Scout-and-Wave protocol execution. These rules are not captured by the state machine alone.
 
@@ -8,7 +8,7 @@ This document defines the execution rules that govern orchestrator behavior duri
 
 ## Overview
 
-Rules are numbered E1–E32 for cross-referencing and audit; the same convention as invariants (I1–I6). When referenced in implementation files, the E-number serves as an anchor; implementations should embed the canonical definition verbatim alongside the reference.
+Rules are numbered E1–E34 for cross-referencing and audit; the same convention as invariants (I1–I6). When referenced in implementation files, the E-number serves as an anchor; implementations should embed the canonical definition verbatim alongside the reference.
 
 To audit consistency, search implementation files for `E{N}` and verify the embedded definitions match this document.
 
@@ -919,6 +919,57 @@ Overall: 5/9 IMPLs complete (56%)
 
 ---
 
+## E33: Automatic Tier Advancement (--auto mode)
+
+**Trigger:** All IMPLs in a tier reach "complete" and tier gate passes (E29)
+
+**Required Action:** When `--auto` flag is active, the orchestrator automatically advances to the next tier without a human review gate. The advancement sequence is:
+
+1. Run `sawtools freeze-contracts` (E30) to freeze contracts for the completing tier
+2. Update PROGRAM manifest state to `TIER_EXECUTING` for the next tier
+3. Launch Scout agents for all IMPLs in the next tier in parallel (E31)
+
+If `--auto` is NOT active, pause for human review after contract freezing before advancing to the next tier (standard E30 behavior).
+
+**Enforcement of P3:** Tier N+1 still waits for the tier gate (E29) to pass before any advancement occurs. The `--auto` flag bypasses the human confirmation step at tier boundaries, not the gate itself. Gate failures always surface to the human.
+
+**Human gate exception:** The `PROGRAM_REVIEWED` state (initial plan approval by the human before any tier executes) is NEVER skipped, even in `--auto` mode. `--auto` only bypasses inter-tier human confirmation gates after the initial plan is approved. The human must approve the PROGRAM manifest before execution begins regardless of `--auto`.
+
+**Failure handling:** If the tier gate fails (E29), the orchestrator enters `PROGRAM_BLOCKED` regardless of `--auto` mode. Failures always surface to the human. `--auto` provides no special handling for gate failures — the failure classification and remediation path (E19, E34) apply identically in both modes.
+
+**Implementation:** Implemented by `AdvanceTierAutomatically(manifest, completedTier, repoPath, autoMode)` which returns a `TierAdvanceResult` struct indicating whether the tier was advanced, whether human review is required, and any errors encountered during freeze or state transition.
+
+**Related Invariants:** See P2 (contract immutability), P3 (tier gate sequencing) in `program-invariants.md`
+
+**Related Rules:** See E29 (tier gate triggers freezing), E30 (contract freezing after gate pass), E31 (parallel Scout launching)
+
+---
+
+## E34: Planner Re-Engagement on Failure
+
+**Trigger:** Tier gate fails (E29) OR user explicitly requests re-plan
+
+**Required Action:** Launch a Planner agent with a revision prompt containing:
+
+1. The current PROGRAM manifest (full content)
+2. Failure context: which tier failed, which IMPL failed (if applicable), which gate command failed and its output
+3. Completion reports from all IMPLs in the failed tier (extracted from their IMPL docs)
+4. Instruction to revise PROGRAM contracts or tier structure to address the failure
+
+The Planner produces a revised PROGRAM manifest. The orchestrator validates it (E16) and presents it for human review (`PROGRAM_REVIEWED` state). Execution does NOT resume automatically — the human must approve the revised plan before any tier re-executes.
+
+**Non-destructive:** Completed tiers are NOT re-run. The Planner may revise the failed tier and all subsequent tiers, but must not alter contracts already frozen for completed tiers (P2). The orchestrator validates that the revised manifest does not modify frozen contracts before presenting it for human review.
+
+**Relationship to E8:** E34 is the program-scope analog of E8 (same-wave interface failure). E8 handles intra-wave contract failures by re-engaging Scout to revise an IMPL doc. E34 handles inter-tier failures by re-engaging Planner to revise the PROGRAM manifest. Both require human review of the revised plan before execution resumes.
+
+**Implementation:** Implemented by `ReplanProgram(opts ReplanProgramOpts)` which reads the current manifest, constructs the revision prompt with failure context, launches the Planner agent, and returns a `ReplanResult` struct with the path to the revised manifest and validation status.
+
+**Related Invariants:** See P2 (contract immutability — frozen contracts cannot be revised), P4 (PROGRAM manifest as source of truth) in `program-invariants.md`
+
+**Related Rules:** See E8 (same-wave interface failure — analogous pattern at IMPL scope), E29 (tier gate verification — failure trigger), E16 (IMPL doc validation — applied to revised manifest)
+
+---
+
 ## Cross-References
 
 - See `preconditions.md` for conditions that must hold before execution begins
@@ -939,3 +990,5 @@ Overall: 5/9 IMPLs complete (56%)
 - E30: Orchestrator freezes program contracts at tier boundaries — see also `program-invariants.md` (P2), E29, E31
 - E31: Orchestrator launches Scouts in parallel for all IMPLs in a tier — see also `program-invariants.md` (P1, P2), E28, E16
 - E32: Orchestrator tracks cross-IMPL progress and updates PROGRAM manifest — see also `program-invariants.md` (P4), E28, E29
+- E33: Orchestrator auto-advances to next tier in `--auto` mode after tier gate passes — see also `program-invariants.md` (P2, P3), E29, E30, E31
+- E34: Orchestrator re-engages Planner on tier gate failure to revise PROGRAM manifest — see also `program-invariants.md` (P2, P4), E8, E16, E29
