@@ -4,7 +4,13 @@ feature_slug: review-agent-protocol
 verdict: SUITABLE
 test_command: "cd /Users/dayna.blackwell/code/scout-and-wave-go && go test ./... && cd /Users/dayna.blackwell/code/scout-and-wave-web && go test ./pkg/api/... && cd web && npx tsc --noEmit"
 lint_command: "cd /Users/dayna.blackwell/code/scout-and-wave-go && go vet ./... && cd /Users/dayna.blackwell/code/scout-and-wave-web && go vet ./pkg/api/..."
-state: SCOUT_PENDING
+state: ARCHIVED_SUPERSEDED
+archive_reason: |
+  E28 naming collision — program-layer evolution (E28-E34: tier execution, contract
+  freezing, gate verification) already fills the validation/gate need. Review Agent
+  concept predates program-layer; the planned E28 Pre-Review Semantic Validation rule
+  conflicts with the existing E28 Tier Execution Loop. Archiving rather than renumbering.
+  If lightweight review-impl command is wanted in future, scope separately.
 
 suitability_assessment: |
   Verdict: SUITABLE
