@@ -1,6 +1,6 @@
 # Scout-and-Wave Protocol Execution Rules
 
-**Version:** 0.17.0
+**Version:** 0.18.0
 
 This document defines the execution rules that govern orchestrator behavior during Scout-and-Wave protocol execution. These rules are not captured by the state machine alone.
 
@@ -619,7 +619,66 @@ For each gate:
 
 **Rationale:** Individual agents run gates in isolation (their own package scope). The orchestrator's post-wave gate runs unscoped — catching cross-package cascade failures that agent-scoped gates miss.
 
-**Related Rules:** See E20 (stub detection), E22 (scaffold build verification), `message-formats.md` (## Quality Gates Section Format).
+**Related Rules:** See E20 (stub detection), E22 (scaffold build verification), `message-formats.md` (## Quality Gates Section Format). See also E21A (pre-wave baseline), E21B (parallel gate execution).
+
+---
+
+## E21A: Pre-Wave Baseline Verification
+
+**Trigger:** `prepare-wave` is about to create worktrees for a multi-agent wave
+
+**Required Action:** Before creating any worktrees, the Orchestrator runs the
+IMPL doc's `quality_gates` commands against the current HEAD. If any required
+gate fails, `prepare-wave` exits with error code `baseline_verification_failed`
+listing which gate commands failed. Wave agents do not launch until the baseline
+is green.
+
+**Exemptions:**
+- If the IMPL doc defines no `quality_gates` (or the gates list is empty), E21A
+  is a no-op. The wave proceeds without a baseline check.
+- Solo waves (exactly one agent, no worktrees) are exempt from E21A. Baseline
+  verification applies only to multi-agent waves.
+
+**Rationale:** E21 (post-merge) runs gates after all agents have finished. If
+the codebase is already broken at wave-start time, agents work on a broken
+foundation and E21 fails after all parallel work is wasted. E21A catches this
+upfront — a pre-flight check that verifies the baseline is green before
+committing parallel agent time to a wave that will fail regardless.
+
+**Failure handling:** On `baseline_verification_failed`, the Orchestrator surfaces
+the failing gate commands and their output to the human. The wave does not launch.
+The human must fix the codebase baseline (or update the gate configuration) before
+re-running `prepare-wave`.
+
+**E21B interaction:** When E21A runs multiple quality gates, E21B applies —
+all gates execute concurrently and all failures are reported together before
+the wave is blocked.
+
+**Related Rules:** See E21 (post-merge quality gates), E21B (parallel gate
+execution), `procedures.md` (Procedure 3, Phase 1: Pre-Launch Verification)
+
+---
+
+## E21B: Parallel Gate Execution
+
+**Trigger:** `run-gates` is invoked with two or more quality gate commands
+
+**Required Action:** Execute all quality gate commands concurrently rather than
+sequentially. Collect all results before reporting. Report all failures together
+(do not stop at the first failure). This applies to both E21 (post-merge) and
+E21A (pre-wave baseline) invocations of `run-gates`.
+
+**Rationale:** Sequential gate execution produces misleading failure reports: a
+build gate failure suppresses test gate output, leaving the human uncertain whether
+tests would have passed. Running gates concurrently reveals the full failure surface
+in one pass, enabling faster diagnosis and fix.
+
+**Failure reporting:** `run-gates` output lists each failing gate command with its
+exit code and stderr/stdout excerpt, even when multiple gates fail simultaneously.
+The overall exit code is non-zero if any required gate fails.
+
+**Related Rules:** See E21 (post-merge quality gates), E21A (pre-wave baseline),
+`message-formats.md` (Quality Gates Section Format)
 
 ---
 
@@ -980,7 +1039,9 @@ The Planner produces a revised PROGRAM manifest. The orchestrator validates it (
 - E18: Orchestrator creates/updates `docs/CONTEXT.md` after WAVE_VERIFIED → COMPLETE — see also E15, `message-formats.md`
 - E19: Orchestrator applies `failure_type` decision tree on partial/blocked agents — see also E7, E7a, `message-formats.md`
 - E20: Orchestrator runs stub detection after each wave — see also E21, `message-formats.md` (## Stub Report Section Format)
-- E21: Orchestrator runs post-wave verification gates before merge — see also E20, E22, `message-formats.md` (## Quality Gates Section Format)
+- E21: Orchestrator runs post-wave verification gates before merge — see also E20, E22, `message-formats.md` (## Quality Gates Section Format). See also E21A (pre-wave baseline), E21B (parallel gate execution)
+- E21A: runs pre-wave baseline gates before worktree creation — see also E21, E21B, `procedures.md` (Procedure 3 Phase 1), `state-machine.md` (WAVE_PENDING → WAVE_EXECUTING guard)
+- E21B: parallel gate execution for run-gates (E21 and E21A) — see also E21, E21A, `message-formats.md` (Quality Gates Section Format)
 - E22: Scaffold Agent runs build verification before committing scaffold files — see also `procedures.md` (Procedure 2: Scaffold Agent), `message-formats.md` (Scaffolds Section Format), `implementations/claude-code/prompts/agents/scaffold-agent.md`
 - E25: Orchestrator runs integration validation after wave merge — see also E26, `invariants.md` (I1 Amendment)
 - E26: Integration Agent wires unconnected exports — see also E25, `invariants.md` (I1 Amendment), `participants.md` (Integration Agent)
