@@ -17,7 +17,7 @@ license: MIT OR Apache-2.0
 compatibility: Requires Claude Code (Skills API). Git 2.20+ required for worktree support.
 metadata:
   author: blackwell-systems
-  version: "0.11.0"
+  version: "0.12.0"
 ---
 
 # Scout-and-Wave: Parallel Agent Coordination
@@ -101,7 +101,7 @@ Read the agent template at `${CLAUDE_SKILL_DIR}/agent-template.md` for the 9-fie
 | `/saw status --impl <id>` | Show progress of specific IMPL |
 | `/saw program plan "<description>"` | Analyze project and produce PROGRAM manifest (Level A) |
 | `/saw program execute "<description>"` | Plan + tier-gated execution (Level B) |
-| `/saw program execute --auto "<description>"` | Level B without human gates between tiers (future, Phase 4) |
+| `/saw program execute --auto "<description>"` | Full autonomous execution (Level C) |
 | `/saw program status` | Show program-level progress (tier completion, IMPL statuses) |
 
 ### Program Commands (Level A: Planning Only)
@@ -110,10 +110,10 @@ Read the agent template at `${CLAUDE_SKILL_DIR}/agent-template.md` for the 9-fie
 |---------|---------|
 | `/saw program plan "<project-description>"` | Analyze project and produce PROGRAM manifest |
 | `/saw program execute "<project-description>"` | Plan + tier-gated execution (Level B) |
-| `/saw program execute --auto "<project-description>"` | Level B without human gates between tiers (future, Phase 4) |
+| `/saw program execute --auto "<project-description>"` | Full autonomous execution (Level C) |
 | `/saw program status` | Show program-level progress (tier completion, IMPL statuses) |
 
-**Note:** `/saw program execute` (Level B: tier-gated execution) is documented below. Full autonomous execution with `--auto` is Phase 4 scope.
+**Note:** `/saw program execute` (Level B: tier-gated execution) is documented below. `/saw program execute --auto` (Level C) enables full autonomous execution without human gates between tiers.
 
 ## sawtools Commands
 
@@ -145,6 +145,7 @@ All operations use the `sawtools` binary. IMPL docs are YAML manifests (`.yaml`)
 - `sawtools freeze-contracts <manifest> --tier N` — program contract freezing (E30)
 - `sawtools program-status <manifest>` — full program status report (E32)
 - `sawtools run-scout "<impl-title>" --program "<manifest>"` — Scout with program contract inputs (E31)
+- `sawtools mark-program-complete "<manifest>"` — mark PROGRAM manifest complete and update CONTEXT.md
 
 ## Execution Models
 
@@ -431,8 +432,13 @@ For each tier N from 1 to manifest.tiers_total:
 **Step 3e: Tier Boundary Review**
 - Run: `sawtools program-status "<manifest>"`
 - Surface tier completion status to user (tier N complete, contracts frozen)
-- Pause for human review (unless --auto active, Phase 4)
-- Human approves to advance to next tier
+- If `--auto` flag is active:
+  - Call `AdvanceTierAutomatically(manifest, N, repoPath, autoMode=true)` to check gate, freeze contracts, and advance (E33)
+  - If gate passed, automatically proceed to next tier (no human review)
+  - If gate failed, enter PROGRAM_BLOCKED and surface failure to user (E34)
+- If `--auto` flag is NOT active:
+  - Pause for human review as normal
+  - Human approves to advance to next tier
 
 **Phase 4: Program Completion**
 
@@ -504,6 +510,52 @@ Show program-level progress: tier completion, IMPL statuses, and program contrac
 
 5. **Blocked state handling.** If the program state is `BLOCKED`, read the IMPL docs for all IMPLs in the current tier and surface any failure reports or blocking issues to the user.
 
+### `/saw program replan`
+
+Re-engage the Planner agent to revise a PROGRAM manifest after a tier gate failure or when the user explicitly requests it.
+
+**Orchestrator flow:**
+
+1. Parse existing PROGRAM manifest.
+
+2. Construct revision prompt with failure context:
+   - Current PROGRAM manifest content
+   - Reason for re-planning (tier gate failure, user request, etc.)
+   - Failed tier number (if applicable)
+   - Completion reports from IMPLs in failed tier
+
+3. Launch Planner agent with revision prompt:
+   - Use Agent tool with `subagent_type: planner` and `run_in_background: true`
+   - Pass revision prompt as parameter
+   - If `subagent_type: planner` fails, fall back to `subagent_type: general-purpose`
+     with full Planner prompt from `${CLAUDE_SKILL_DIR}/agents/planner.md`
+
+4. Wait for Planner completion. Planner produces revised PROGRAM manifest.
+
+5. Validate revised manifest:
+   ```bash
+   sawtools validate-program "<revised-manifest-path>"
+   ```
+   If validation fails, send errors back to Planner as correction prompt
+   using resume (up to 3 attempts).
+
+6. Present revised PROGRAM manifest for human review:
+   - Show what changed (tiers added/removed, contracts revised, IMPLs reordered)
+   - Surface the changes summary
+   - Ask user to approve revised plan
+
+7. If approved, update manifest state to PROGRAM_REVIEWED and resume execution
+   from the failed tier (or next pending tier).
+
+**Non-destructive guarantee:** Re-planning does not discard completed work.
+Completed tiers and their IMPLs remain in the manifest with status "complete".
+Only pending and failed tiers may be revised.
+
+**Error handling:**
+- If Planner fails to produce valid revision after 3 attempts, enter BLOCKED
+  and surface validation errors to user
+- User may manually edit PROGRAM manifest or abandon re-planning
+
 ## Arguments
 
 - `bootstrap <project-name>`: Design-first architecture for new projects with no
@@ -525,5 +577,6 @@ Show program-level progress: tier completion, IMPL statuses, and program contrac
 - `program plan "<project-description>"`: Analyze project and produce PROGRAM manifest coordinating multiple IMPLs (Level A: planning only)
 - `program execute "<project-description>"`: Plan and execute multi-IMPL program with tier-gated progression. Extends Level A planning with automated Scout launching, IMPL execution, tier gates, and contract freezing. Pauses for human review at tier boundaries (Level B).
 - `program status`: Show program-level progress (tier completion, IMPL statuses, contract freeze status)
+- `program replan`: Re-engage Planner to revise PROGRAM manifest after tier gate failure or user request
 
 Always read the full IMPL doc before taking any action. The IMPL doc is the single source of truth.
