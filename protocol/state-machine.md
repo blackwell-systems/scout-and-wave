@@ -1,6 +1,6 @@
 # Scout-and-Wave State Machine
 
-**Version:** 0.15.0
+**Version:** 0.16.0
 
 This document defines the lifecycle states, transitions, and terminal conditions for Scout-and-Wave protocol execution.
 
@@ -130,9 +130,11 @@ Transitions are conditional. The following guards determine whether a transition
 
 ### WAVE_PENDING → WAVE_EXECUTING
 
-**Guard:** File ownership verification passes (no file appears in multiple agents' ownership lists) AND all worktrees created successfully AND all agents launched.
+**Guard:** E21A baseline verification passes (or is exempt per E21A) AND file ownership verification passes (no file appears in multiple agents' ownership lists) AND all worktrees created successfully AND all agents launched.
 
-**Solo wave exception:** If wave contains exactly one agent, no worktrees are created. Agent runs on main branch directly. Transition still proceeds through WAVE_EXECUTING but skips WAVE_MERGING.
+**E21A baseline verification:** Before creating worktrees, `prepare-wave` runs the IMPL doc's quality gates against current HEAD. If any required gate fails, this transition does not fire — the wave enters BLOCKED with error `baseline_verification_failed`. If the IMPL doc has no quality gates, or if the wave is a solo wave, E21A is a no-op and this guard proceeds without a baseline check.
+
+**Solo wave exception:** If wave contains exactly one agent, no worktrees are created. Agent runs on main branch directly. E21A does not apply (solo wave exemption). Transition still proceeds through WAVE_EXECUTING but skips WAVE_MERGING.
 
 ### WAVE_EXECUTING → WAVE_MERGING
 
@@ -194,7 +196,7 @@ These actions occur automatically when entering each state.
 | **SCOUT_VALIDATING** | Orchestrator runs validator on all `type=impl-*` blocks in IMPL doc; on failure, issues correction prompt to Scout (E16); on pass, advances to REVIEWED |
 | **REVIEWED** | Orchestrator surfaces IMPL doc to human, requests approval |
 | **SCAFFOLD_PENDING** | Orchestrator launches Scaffold Agent with absolute IMPL doc path |
-| **WAVE_PENDING** | Orchestrator runs pre-launch ownership verification (E3) |
+| **WAVE_PENDING** | Orchestrator runs E21A baseline gate verification (if gates defined and multi-agent wave); then pre-launch ownership verification (E3) |
 | **WAVE_EXECUTING** | Orchestrator monitors for completion notifications (async) |
 | **WAVE_MERGING** | Orchestrator runs integration validation (E25), launches Integration Agent if gaps detected (E26), runs conflict prediction (E11), executes merge procedure per agent |
 | **WAVE_VERIFIED** | Orchestrator runs post-merge verification (unscoped), updates IMPL doc state |
@@ -232,7 +234,7 @@ Waves execute sequentially (I3: Wave sequencing). When Wave N completes, its imp
 
 ## State Machine Correctness Properties
 
-When all invariants (I1–I6) and execution rules (E1–E26) are maintained:
+When all invariants (I1–I6) and execution rules (E1–E34, E21A, E21B) are maintained:
 
 - **Progress:** The state machine always advances or terminates. No infinite loops.
 - **Human checkpoints enforced:** REVIEWED state requires explicit approval. Suitability gate requires human review of NOT SUITABLE verdicts.
