@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.51.0] | 2026-03-19 | E21A: Pre-Wave Baseline Verification + E21B: Parallel Gate Execution — `prepare-wave` now runs quality gates against HEAD before creating worktrees; solo waves and empty gate lists are exempt; E21B makes `run-gates` execute all gates concurrently and report all failures together |
 | [0.50.0] | 2026-03-18 | E16 defense-in-depth: PostToolUse IMPL validation hook — auto-validates IMPL docs on every Write (blocks on schema errors), `validate_impl_on_write` script in hooks dir, install.sh updated for both hooks, Scout forbidden-keys list expanded (`integration_connectors`, `integration_required`, `suggested_callers`) |
 | [0.49.0] | 2026-03-18 | Scout self-validation alignment — Step 15 rewritten (self-validate primary, E16 defense-in-depth), bootstrap Scout gets mandatory self-validation, explicit failure path (SCOUT_VALIDATION_FAILED state on 3-attempt exhaustion), orchestrator retry reduced 3→1 |
 | [0.48.0] | 2026-03-18 | Scout self-validation + program-layer-v2 IMPL — Scout prompt now requires `sawtools validate --fix` before completing (catches schema errors at source), program-layer-v1 marked complete (3 waves merged across 2 repos), Phase 2 IMPL scouted (tier-gated execution: 8 agents, 3 waves) |
@@ -32,6 +33,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.30.1] | 2026-03-12 | Scout v0.8.1 — format ambiguity fix prevents markdown section headers in YAML output |
 | [0.30.0] | 2026-03-12 | Scout v0.8.0 — analyze-deps now PRIMARY METHOD for Go dependency mapping (determinism improvement H3) |
 | [0.29.0] | 2026-03-11 | mark-complete simplification — removed --archive flag from all docs, always archives to complete/ |
+
+---
+## [0.51.0] - 2026-03-19
+
+### Added
+
+- **E21A: Pre-Wave Baseline Verification** (`protocol/execution-rules.md`) —
+  `prepare-wave` now runs the IMPL doc's quality gates against current HEAD
+  before creating any worktrees. If any required gate fails, `prepare-wave`
+  exits with `baseline_verification_failed` and the wave does not launch.
+  Exemptions: solo waves (single agent, no worktrees) and IMPL docs with no
+  quality gates defined. Prevents agents from working on a broken baseline
+  and wasting parallel execution time on a wave that would fail E21 anyway.
+
+- **E21B: Parallel Gate Execution** (`protocol/execution-rules.md`) —
+  `run-gates` now executes all quality gate commands concurrently rather than
+  sequentially when two or more gates are configured. All failures are
+  collected and reported together before blocking. Applies to both E21
+  (post-merge) and E21A (pre-wave baseline) invocations. Enables faster
+  failure diagnosis by revealing the full failure surface in a single pass.
+
+### Changed
+
+- `protocol/state-machine.md` v0.15.0 → v0.16.0 — WAVE_PENDING →
+  WAVE_EXECUTING guard updated: E21A baseline check is now a pre-condition;
+  State Entry Actions table updated for WAVE_PENDING; Correctness Properties
+  rule reference updated.
+- `protocol/procedures.md` v0.15.0 → v0.16.0 — Procedure 3 Phase 1 now
+  has Step 0 (E21A baseline verification) before ownership verification (E3).
+- `implementations/claude-code/prompts/saw-skill.md` v0.12.0 → v0.13.0 —
+  Step 4 (prepare-wave) updated to document `baseline_verification_failed`
+  error; `sawtools run-gates` description updated to reference E21A and E21B.
 
 ---
 ## [0.42.0] - 2026-03-17
