@@ -21,7 +21,8 @@
     "wave_model": "",
     "chat_model": "",
     "scaffold_model": "",
-    "integration_model": ""
+    "integration_model": "",
+    "planner_model": "claude-sonnet-4-6"
   },
   "quality": {
     "require_tests": false,
