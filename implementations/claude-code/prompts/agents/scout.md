@@ -548,10 +548,14 @@ They are NOT the structure of your output. Your output is PURE YAML following th
 12. **Emit quality gates (optional).** If the project has a known build toolchain, add a `## Quality Gates` section to the IMPL doc between Suitability Assessment and Scaffolds. Use typed-block fence syntax ```` ```yaml type=impl-quality-gates ````:
 
     Auto-detect from marker files:
-    - `go.mod` → Go gates (`go build ./...`, `go test ./...`, `go vet ./...`)
-    - `package.json` → Node gates (`tsc --noEmit`, `npm test`, `eslint .`)
-    - `Cargo.toml` → Rust gates (`cargo build`, `cargo test`, `cargo clippy`)
-    - `pyproject.toml` → Python gates (`mypy .`, `pytest`, `ruff check .`)
+    - `go.mod` → Go gates (`go build ./...`, `go test ./...`, `go vet ./...`); format gate (`gofmt -l .`)
+    - `package.json` → Node gates (`tsc --noEmit`, `npm test`, `eslint .`); format gate (`npx prettier --check .`)
+    - `Cargo.toml` → Rust gates (`cargo build`, `cargo test`, `cargo clippy`); format gate (`cargo fmt --check`)
+    - `pyproject.toml` → Python gates (`mypy .`, `pytest`, `ruff check .`); format gate (`ruff format --check .`)
+
+    **Valid gate types:** `build`, `lint`, `test`, `typecheck`, `format`, `custom`. Use `type: format` for auto-formatting checks (see format gate description below). Invalid types are rewritten to `custom` by `sawtools validate --fix`.
+
+    **format gate** — Auto-formatting check. Detects project formatter (`gofmt`, `prettier`, `ruff`, `cargo fmt`) and runs in check mode (report-only) or fix mode (auto-apply). Set `fix: true` to auto-apply. Cache is invalidated after fix mode. Use before lint gates to reduce noise. The `command` field is optional; if omitted, the formatter is auto-detected from marker files.
 
     Use the same toolchain commands already identified for the `test_command` field — no new discovery needed.
 
