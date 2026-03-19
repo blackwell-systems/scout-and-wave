@@ -89,102 +89,14 @@ scaffolds:  # optional - omit if no scaffold files needed
     status: "pending" | "committed" | "FAILED"
     # See Scaffolds section for full schema
 
-    ---
-
-    ## Pre-Mortem
-
-    {Pre-mortem risk table — see Pre-Mortem Section Format below}
-
-    ---
-
-    ## Known Issues
-
-    ```yaml type=impl-known-issues
-    {known issues — see Typed Metadata Blocks below}
-    ```
-
-    ---
-
-    ## Post-Merge Checklist
-
-    ```yaml type=impl-post-merge-checklist
-    {post-merge checklist — see Typed Metadata Blocks below. Optional — omit if no post-merge steps needed beyond quality gates.}
-    ```
-
-    ---
-
-    ## Dependency Graph
-
-    ```yaml type=impl-dep-graph
-    {dependency graph — see Typed Metadata Blocks below}
-    ```
-
-    ---
-
-    ## Interface Contracts
-
-    {Interface contracts — exact function/method/type signatures that cross agent boundaries. Prose-only, not a typed block. See ## Agent Prompt Format for field definitions.}
-
-    ---
-
-    ## File Ownership
-
-    ```yaml type=impl-file-ownership
-    {file ownership table — see Typed Metadata Blocks below}
-    ```
-
-    ---
-
-    ## Wave Structure
-
-    ```yaml type=impl-wave-structure
-    {wave structure diagram — see Typed Metadata Blocks below}
-    ```
-
-    ---
-
-    ## Wave 1
-
-    {Wave-level introduction}
-
-    ### Agent A - {Role Description}
-
-    {9-field agent prompt - see format below}
-
-    ### Agent B - {Role Description}
-
-    {9-field agent prompt}
-
-    ...
-
-    ---
-
-    ## Wave 2
-
-    {Similar structure for additional waves}
-
-    ---
-
-### Agent A - Completion Report
-    ### Agent A - Completion Report
-
-    ```yaml type=impl-completion-report
-    {Structured fields - see Typed Metadata Blocks below}
-    ```
-
-    {Free-form notes}
-
-    ### Agent B - Completion Report
-
-    ```yaml type=impl-completion-report
-    {Structured fields}
-    ```
-
-    {Free-form notes}
-
-    ## Stub Report — Wave {N}
-
-    {Written by Orchestrator after E20 stub scan — see ## Stub Report Section Format. One section per wave, placed after the last completion report for that wave.}
+waves:  # optional - omit if not using per-agent model overrides or launch ordering
+  - number: 1
+    agent_launch_order: ["A", "B"]  # optional — explicit ordering within wave
+    base_commit: "abc1234"          # recorded when worktrees are created; used for post-merge verification
+    agents:
+      - id: "A"
+        model: "claude-opus-4-5"   # optional — overrides default model for this specific agent
+```
 
 ---
 
@@ -270,6 +182,13 @@ Wave 3: {E}                        <- type: integration (wiring only, E27)
 - `standard` — normal wave agents with worktree isolation (default when omitted)
 - `integration` — wiring-only agents dispatched as Integration Agents (E27). No worktree creation, no isolation verification. Agents run on main branch and are constrained to their listed files via `AllowedPathPrefixes`.
 
+**Wave additional fields:**
+- `agent_launch_order` — Optional list of agent IDs specifying explicit launch ordering within the wave (e.g. `["A", "B", "C"]`). When omitted, agents are launched in parallel. Use when an agent requires another agent's output before starting, but they are in the same wave.
+- `base_commit` — Git commit SHA recorded when worktrees are created. Used by the Orchestrator for post-merge verification to confirm no upstream commits were missed. Set automatically by `sawtools prepare-wave`; do not set manually.
+
+**Agent additional fields:**
+- `model` — Optional model override for this specific agent (e.g. `"claude-opus-4-5"`). Overrides the default model configured in the Orchestrator. Use when an agent's task requires a different model capability level than the wave default.
+
 **`impl-completion-report` — Completion Report (written by Wave agents):**
 
 ```yaml type=impl-completion-report
@@ -298,6 +217,8 @@ gates:
     command: {exact shell command}
     required: true | false
     description: {optional human-readable description}
+    repo: {optional repo short name}  # if set, gate only runs in the specified repo (multi-repo waves)
+    fix: true | false                  # if true, run in fix mode (e.g. gofmt -w); default false
 ```
 
 Written by Scout between Suitability Assessment and Scaffolds. Defines verification commands that run after wave completion (E21).
@@ -753,6 +674,8 @@ gates:
     command: {exact shell command}
     required: true | false
     description: {optional human-readable description}
+    repo: {optional repo short name}  # if set, gate only runs in the specified repo (multi-repo waves)
+    fix: true | false                  # if true, run in fix mode (e.g. gofmt -w); default false
 ```
 
 Example:
