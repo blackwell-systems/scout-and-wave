@@ -5,3 +5,5 @@
   - IMPL doc: docs/IMPL/complete/IMPL-saw-protocol-gaps-v1.yaml
 - **program-layer-v2**: completed 2026-03-18, 3 waves, 8 agents
   - IMPL doc: docs/IMPL/IMPL-program-layer-v2.yaml
+- **program-layer-phase4**: completed 2026-03-18, 3 waves, 6 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-program-layer-phase4.yaml
