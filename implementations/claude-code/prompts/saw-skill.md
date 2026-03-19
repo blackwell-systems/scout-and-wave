@@ -17,7 +17,7 @@ license: MIT OR Apache-2.0
 compatibility: Requires Claude Code (Skills API). Git 2.20+ required for worktree support.
 metadata:
   author: blackwell-systems
-  version: "0.12.0"
+  version: "0.13.0"
 ---
 
 # Scout-and-Wave: Parallel Agent Coordination
@@ -133,7 +133,8 @@ All operations use the `sawtools` binary. IMPL docs are YAML manifests (`.yaml`)
 - `sawtools extract-context` — E23 per-agent context extraction
 - `sawtools set-completion` — agent completion report registration
 - `sawtools mark-complete` — E15 SAW:COMPLETE marker and archive to `docs/IMPL/complete/`
-- `sawtools run-gates` — E21 quality gate verification
+- `sawtools run-gates` — E21/E21A quality gate verification (post-merge and
+  pre-wave baseline; E21B: gates run concurrently when multiple gates defined)
 - `sawtools check-conflicts` — I1 file ownership conflict detection
 - `sawtools validate-scaffolds` — scaffold commit status verification
 - `sawtools freeze-check` — I2 interface contract freeze enforcement
@@ -248,7 +249,7 @@ If a `docs/IMPL/IMPL-*.yaml` file already exists:
    ```bash
    sawtools prepare-wave "<manifest-path>" --wave <N> --repo-dir "<repo-path>"
    ```
-   This atomic operation combines worktree creation and per-agent preparation (brief extraction + journal initialization) into a single command. Exit code 1 indicates failure (uncommitted scaffolds, freeze violations, or worktree creation errors) — do not proceed until resolved. **Interface freeze checkpoint:** interface contracts become immutable when worktrees are created. This is the last moment to revise type signatures, add fields, or restructure APIs. Returns JSON with all worktree paths and agent brief metadata.
+   This atomic operation combines worktree creation and per-agent preparation (brief extraction + journal initialization) into a single command. Exit code 1 indicates failure (baseline gate failure — codebase does not pass quality gates at wave-start time; uncommitted scaffolds; freeze violations; or worktree creation errors) — do not proceed until resolved. **E21A baseline failure:** If the failure reason is `baseline_verification_failed`, the codebase was already broken before any agent started. Fix the codebase (or gate configuration) and re-run `prepare-wave`. Do not launch agents onto a broken baseline — E21 will fail after all agent work is wasted. **Interface freeze checkpoint:** interface contracts become immutable when worktrees are created. This is the last moment to revise type signatures, add fields, or restructure APIs. Returns JSON with all worktree paths and agent brief metadata.
 5. For each agent in the current wave, launch a parallel **Wave agent** using the Agent tool with `subagent_type: wave-agent`, `run_in_background: true`, and the per-agent context payload (E23) as the prompt parameter. **Journal context prepending:** Before passing the prompt to the Agent tool, prepend the content of `.saw-state/journals/wave<N>/agent-<ID>/context.md` (if it exists and is non-empty) to the agent's prompt as a `## Prior Work` section. This ensures the agent has visibility into its own execution history even after context compaction. **Use short IMPL-referencing prompts — do not copy-paste agent briefs.** Pass a ~60-token stub containing the IMPL doc path, wave number, and agent ID. The agent reads its own full brief on its first tool call via its Read tool or `sawtools extract-context`. This is 10–15× faster to generate than copy-pasting the full context, and no information is lost — the IMPL doc is already the single source of truth (I4).
 
 For **YAML manifests** (`.yaml`/`.yml`):
