@@ -122,6 +122,43 @@ Read the agent template at `${CLAUDE_SKILL_DIR}/agent-template.md` for the 9-fie
 
 **Note:** `/saw program execute` (Level B: tier-gated execution) is documented below. `/saw program execute --auto` (Level C) enables full autonomous execution without human gates between tiers.
 
+## Pre-flight Validation
+
+When `/saw` is invoked for the first time in a session, run these checks
+silently. If any fail, print the diagnostic and stop.
+
+Run these checks once per session. Skip on subsequent `/saw` invocations.
+
+1. **sawtools on PATH**: Run `which sawtools` or `command -v sawtools`.
+   If missing, print:
+   ```
+   sawtools not found on PATH. Install it:
+     cd /path/to/scout-and-wave-go && go build -o ~/.local/bin/sawtools ./cmd/saw
+     Then add ~/.local/bin to your PATH.
+   ```
+
+2. **Skill files present**: Check that `${CLAUDE_SKILL_DIR}/agent-template.md` exists.
+   If missing, print:
+   ```
+   Skill files not installed. Run: ./install.sh from the scout-and-wave repo root.
+   ```
+
+3. **Git version**: Run `git --version` and parse major.minor.
+   If < 2.20, print:
+   ```
+   Git 2.20+ required for worktree support. Current version: {version}.
+   ```
+
+4. **saw.config.json**: Check for `saw.config.json` in the project root.
+   If missing, print informational note (not a blocker):
+   ```
+   No saw.config.json found. Using defaults. See docs/INSTALLATION.md for config options.
+   ```
+
+All checks are lightweight — no network calls, no builds. If checks 1–3 fail,
+stop and display the remediation message. Check 4 is informational only and
+does not block execution.
+
 ## /saw amend
 
 Extends or adjusts an in-progress IMPL doc without starting over.
