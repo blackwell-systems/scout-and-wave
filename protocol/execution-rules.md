@@ -1216,6 +1216,50 @@ E2 (interface freeze: critic runs before freeze, so corrections are safe)
 
 ---
 
+## E38: Gate Result Caching
+
+**Trigger:** `run-gates` or `finalize-wave` runs quality gates with caching
+enabled (the default). Opt out with `--no-cache` on `run-gates`.
+
+**Required Action:** For each quality gate in the manifest:
+
+1. Compute a cache key: `hash(headCommit + stagedDiffStat + unstagedDiffStat + gateCommand)`.
+   The gate command string is part of the key, so changing a gate's command
+   (e.g. adding a flag) automatically invalidates its cached result.
+
+2. Check `.saw-state/gate-cache.json` for a non-expired entry matching the key.
+
+3. **Cache hit:** Return the cached result immediately without re-executing the
+   gate. Emit to stderr: `gate [TYPE]: skipped (cached at SHA <headCommit>)`.
+   Set `from_cache: true` and `skip_reason: "cached at SHA <sha>"` in the
+   GateResult.
+
+4. **Cache miss:** Execute the gate command normally. Store the result in the
+   cache under the computed key with a timestamp.
+
+**TTL:** Cached entries expire after 5 minutes. Expired entries are treated
+as misses and re-executed.
+
+**Storage:** `.saw-state/gate-cache.json` — a runtime artifact. This file
+MUST be listed in `.gitignore` and is not committed to version control.
+
+**Opt-out:** Pass `--no-cache` to `sawtools run-gates` to bypass caching
+entirely for that invocation. `finalize-wave` always uses caching for
+pre-merge gates (steps 3, 3.5). Post-merge gates (step 5.5) always execute
+fresh via `RunPostMergeGates`, which never consults the cache.
+
+**Rationale:** Quality gate commands on large projects (full test suites,
+slow linters) can take minutes per run. When the underlying codebase has not
+changed between invocations — same HEAD commit, no staged/unstaged changes,
+same command — re-execution produces identical output. Caching eliminates
+this redundant work at wave boundaries, especially during iterative
+development where gates are run multiple times before merge.
+
+**Related Rules:** See E21 (post-wave verification gates), E21A (pre-wave
+baseline), E21B (parallel gate execution).
+
+---
+
 ## Cross-References
 
 - See `preconditions.md` for conditions that must hold before execution begins
@@ -1243,3 +1287,4 @@ E2 (interface freeze: critic runs before freeze, so corrections are safe)
 - E35: Scout declares wiring obligations for exported symbols that must be called from aggregation files — enforced by prepare-wave (Layer 3A), validate-integration (Layer 3B), and agent brief injection (Layer 3C) — see also E25, E26, E27
 - E37: Pre-Wave Brief Review (Critic Gate) — after E16 validation, before REVIEWED state; auto-triggered for large/multi-repo IMPLs; critic agent verifies briefs against actual codebase — see also E16, E36, E2, `participants.md` (Critic Agent)
 - E36: IMPL Amendment — see E2, E14, E15
+- E38: Gate Result Caching — run-gates/finalize-wave cache gate results keyed on headCommit+diffStat+command; TTL 5 min; --no-cache opt-out; stored in .saw-state/gate-cache.json — see also E21, E21A, E21B
