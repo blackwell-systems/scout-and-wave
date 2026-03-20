@@ -11,3 +11,11 @@
   - IMPL doc: docs/IMPL/IMPL-e21a-baseline-gate.yaml
 - **resumable-wave-sessions**: completed 2026-03-19, 2 waves, 5 agents
   - IMPL doc: docs/IMPL/complete/IMPL-resumable-wave-sessions.yaml
+- **new-user-audit**: completed 2026-03-19, 2 waves, 7 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-new-user-audit.yaml
+- **webapp-optimization**: completed 2026-03-19, 2 waves, 7 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-webapp-optimization.yaml
+- **critic-repair-ui**: completed 2026-03-19, 2 waves, 3 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-critic-repair-ui.yaml
+- **program-import**: completed 2026-03-20, 3 waves, 4 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-program-import.yaml
