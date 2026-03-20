@@ -1,6 +1,6 @@
 # Scout-and-Wave Protocol Execution Rules
 
-**Version:** 0.19.0
+**Version:** 0.20.0
 
 This document defines the execution rules that govern orchestrator behavior during Scout-and-Wave protocol execution. These rules are not captured by the state machine alone.
 
@@ -8,7 +8,7 @@ This document defines the execution rules that govern orchestrator behavior duri
 
 ## Overview
 
-Rules are numbered E1–E34 for cross-referencing and audit; the same convention as invariants (I1–I6). When referenced in implementation files, the E-number serves as an anchor; implementations should embed the canonical definition verbatim alongside the reference.
+Rules are numbered E1–E40 for cross-referencing and audit; the same convention as invariants (I1–I6). When referenced in implementation files, the E-number serves as an anchor; implementations should embed the canonical definition verbatim alongside the reference.
 
 To audit consistency, search implementation files for `E{N}` and verify the embedded definitions match this document.
 
@@ -1368,6 +1368,47 @@ See `interview-mode.md` for full specification, schema details, and implementati
 
 ---
 
+## E40: Observability Event Emission
+
+**Trigger:** Orchestrator actions that represent significant lifecycle transitions or resource consumption — specifically: Scout launch, Scout completion, agent start, agent completion (success or failure), wave start, wave merge, wave failure, IMPL completion, quality gate execution (pass or fail), tier advancement, tier gate pass/fail.
+
+**Required Action:** Emit the appropriate observability event to the observability store using the SDK's `observability.RecordEvent()` function. Each trigger maps to a specific event type:
+
+| Trigger               | Event Type           | Key Fields                                              |
+|-----------------------|---------------------|---------------------------------------------------------|
+| Scout launch          | `activity`          | activity_type=`scout_launch`                            |
+| Scout completion      | `activity`          | activity_type=`scout_complete`                          |
+| Agent start           | `activity`          | activity_type=`wave_start` (per-wave, not per-agent)    |
+| Agent completion      | `agent_performance` | status, failure_type, duration, files_modified, tests   |
+| Agent token usage     | `cost`              | model, input_tokens, output_tokens, cost_usd            |
+| Wave merge            | `activity`          | activity_type=`wave_merge`                              |
+| Wave failure          | `activity`          | activity_type=`wave_failed`                             |
+| IMPL completion       | `activity`          | activity_type=`impl_complete`                           |
+| Gate executed (pass)  | `activity`          | activity_type=`gate_executed`                           |
+| Gate executed (fail)  | `activity`          | activity_type=`gate_failed`                             |
+| Tier advanced         | `activity`          | activity_type=`tier_advanced`                           |
+| Tier gate pass        | `activity`          | activity_type=`tier_gate_passed`                        |
+| Tier gate fail        | `activity`          | activity_type=`tier_gate_failed`                        |
+
+**Non-blocking requirement:** Event emission must not fail orchestrator operations. If the observability store is unavailable or a write fails, log the error and continue. Observability is informational — it must never block Scout launches, wave execution, or merges.
+
+**Batch writes preferred:** When multiple events are generated in quick succession (e.g., multiple agents completing in a wave), implementations should batch writes into a single transaction where possible. This reduces database contention and improves throughput.
+
+**Wire format:** Events are stored as JSONB in the observability database. There is no separate wire protocol — the SDK writes directly to the store. See `observability-events.md` for the complete event schema and JSON examples.
+
+**Implementation guidance:**
+1. Use `observability.RecordEvent(ctx, event)` from the SDK
+2. Wrap event emission in a goroutine or fire-and-forget pattern to avoid blocking
+3. If the store is not configured (e.g., local development without a database), skip emission silently
+4. Include the IMPL slug and wave number in all events for cross-referencing
+5. For cost events, compute `cost_usd` using the model's published pricing at the time of the call
+
+**Why This Matters:** Without observability events, operators cannot track cost trends across IMPLs, identify agents with high failure rates, or audit orchestrator actions. E40 makes observability a first-class protocol concern rather than an afterthought.
+
+**Related Rules:** See E19 (failure type classification — used in `agent_performance` events), E21 (quality gate execution — triggers `gate_executed`/`gate_failed` events), E28 (tier execution — triggers tier-level activity events), E29 (tier gate — triggers `tier_gate_passed`/`tier_gate_failed`), E33 (auto tier advancement — triggers `tier_advanced`)
+
+---
+
 ## Cross-References
 
 - See `preconditions.md` for conditions that must hold before execution begins
@@ -1397,3 +1438,4 @@ See `interview-mode.md` for full specification, schema details, and implementati
 - E36: IMPL Amendment — see E2, E14, E15
 - E38: Gate Result Caching — run-gates/finalize-wave cache gate results keyed on headCommit+diffStat+command; TTL 5 min; --no-cache opt-out; stored in .saw-state/gate-cache.json — see also E21, E21A, E21B
 - E39: Interview Mode (Deterministic Requirements Gathering) — /saw interview command; 6-phase structured Q&A; state persistence in INTERVIEW-<slug>.yaml; resume capability; outputs REQUIREMENTS.md for bootstrap/scout — see also E16, E17, Scout Agent, `interview-mode.md`, `state-machine.md` (INTERVIEWING state)
+- E40: Observability Event Emission — orchestrator emits cost, agent_performance, and activity events at lifecycle transitions; non-blocking; batch writes preferred; stored as JSONB — see also E19, E21, E28, E29, E33, `observability-events.md`
