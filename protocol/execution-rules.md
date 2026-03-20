@@ -471,7 +471,7 @@ where `N` is the 1-based line number of the opening fence of the suspect block.
 
 **Failure Handling:** Errors (duplicate keys, invalid action) block Scout completion. Warnings (missing checklist, file not found) are surfaced to human but do not block.
 
-**Related Rules:** See E16A (required block presence), E16B (dep graph grammar), E16C (out-of-band detection)
+**Related Rules:** See E16A (required block presence), E16B (dep graph grammar), E16C (out-of-band detection), E39 (Interview Mode — alternative requirements gathering pathway)
 
 ---
 
@@ -1304,6 +1304,70 @@ baseline), E21B (parallel gate execution).
 
 ---
 
+## E39: Interview Mode (Deterministic Requirements Gathering)
+
+**Trigger:** User invokes `/saw interview "<description>"` (in Claude Code) or `sawtools interview "<description>"` (CLI)
+
+**Rule:** The orchestrator enters an INTERVIEWING state and conducts a structured question-and-answer session with the user. This is an alternative entry point to the Scout Agent pathway — instead of generating an IMPL doc in one turn, the orchestrator guides the user through explicit requirements gathering, then produces a REQUIREMENTS.md file suitable for `/saw bootstrap` or `/saw scout`.
+
+### State Machine
+
+Interview mode adds a new state to the Scout-and-Wave state machine:
+
+```
+IDLE → INTERVIEWING (on /saw interview command)
+INTERVIEWING → SCOUT_PENDING (on interview completion, REQUIREMENTS.md written)
+```
+
+The INTERVIEWING state is terminal for the interview process — it either completes (writes REQUIREMENTS.md and transitions to SCOUT_PENDING) or the user pauses/abandons it. There is no automatic retry or failure recovery; if the user exits, they must explicitly resume.
+
+### Interview Phases
+
+An interview consists of **6 sequential phases**, each gathering a specific category of requirements:
+
+1. **overview** — Title, goal, success metrics, non-goals
+2. **scope** — In-scope items, out-of-scope items, assumptions
+3. **requirements** — Functional requirements, non-functional requirements, constraints
+4. **interfaces** — Data models, APIs, external dependencies
+5. **stories** — User stories or use cases
+6. **review** — Summary and confirmation
+
+### State Persistence
+
+After each question-answer turn, the orchestrator writes the current state to `docs/INTERVIEW-<slug>.yaml`. This file is the single source of truth for the interview's progress. The schema includes metadata (slug, status, mode), progress (phase, question_cursor), accumulated spec_data (structured answers by phase), and full history (transcript of all Q&A turns).
+
+See `interview-mode.md` for full INTERVIEW-<slug>.yaml schema definition.
+
+### Resume Capability
+
+The user may pause an interview at any point. To resume:
+
+```bash
+sawtools interview --resume docs/INTERVIEW-<slug>.yaml
+```
+
+The orchestrator reads the INTERVIEW doc, restores the phase and question cursor, and continues from the next unanswered question. The history is preserved across resume operations.
+
+### Output Contract
+
+On completion, the orchestrator compiles the accumulated spec_data into `docs/REQUIREMENTS.md`, a structured markdown file with sections corresponding to the 6 interview phases. This file is suitable input for `/saw bootstrap` or `/saw scout`.
+
+### Error Handling
+
+- **Max questions exceeded:** Compile partial requirements with a warning, mark status=complete
+- **Invalid phase transition:** Fail fast (internal bug, not user error)
+- **stdin closed before completion:** Save state, print resume instruction, exit code 2
+
+### Related Rules
+
+- **E16 (Scout Output Validation):** Both interview mode and Scout produce structured requirements docs; E16 validates the IMPL doc that Scout produces
+- **E17 (Scout Reads Project Memory):** Scout reads docs/CONTEXT.md; interview mode does not (it's earlier in the lifecycle)
+- **Scout Agent (Scout.md):** Interview mode is an alternative to the Scout Agent when the user needs more structure
+
+See `interview-mode.md` for full specification, schema details, and implementation notes.
+
+---
+
 ## Cross-References
 
 - See `preconditions.md` for conditions that must hold before execution begins
@@ -1332,3 +1396,4 @@ baseline), E21B (parallel gate execution).
 - E37: Pre-Wave Brief Review (Critic Gate) — after E16 validation, before REVIEWED state; auto-triggered for large/multi-repo IMPLs; critic agent verifies briefs against actual codebase — see also E16, E36, E2, `participants.md` (Critic Agent)
 - E36: IMPL Amendment — see E2, E14, E15
 - E38: Gate Result Caching — run-gates/finalize-wave cache gate results keyed on headCommit+diffStat+command; TTL 5 min; --no-cache opt-out; stored in .saw-state/gate-cache.json — see also E21, E21A, E21B
+- E39: Interview Mode (Deterministic Requirements Gathering) — /saw interview command; 6-phase structured Q&A; state persistence in INTERVIEW-<slug>.yaml; resume capability; outputs REQUIREMENTS.md for bootstrap/scout — see also E16, E17, Scout Agent, `interview-mode.md`, `state-machine.md` (INTERVIEWING state)
