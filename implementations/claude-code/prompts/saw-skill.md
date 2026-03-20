@@ -5,7 +5,7 @@ description: |
   features that can be decomposed into multiple independent work units with clear
   interfaces. Suitable for: multi-package architectures, parallel refactors,
   coordinated feature additions across modules.
-argument-hint: "[bootstrap <project-name> | scout [--model <m>] <feature> | wave [--impl <id>] [--auto] [--model <m>] | status [--impl <id>]]"
+argument-hint: "[bootstrap <project-name> | interview <description> | scout [--model <m>] <feature> | wave [--impl <id>] [--auto] [--model <m>] | status [--impl <id>]]"
 disable-model-invocation: true
 user-invocable: true
 allowed-tools: |
@@ -111,6 +111,8 @@ Read the agent template at `${CLAUDE_SKILL_DIR}/agent-template.md` for the 9-fie
 | `/saw program plan "<description>"` | Analyze project and produce PROGRAM manifest (Level A) |
 | `/saw program execute "<description>"` | Plan + tier-gated execution (Level B) |
 | `/saw program execute --auto "<description>"` | Full autonomous execution (Level C) |
+| `/saw interview "<description>"` | Conduct structured requirements interview, write docs/REQUIREMENTS.md |
+| `/saw interview --resume <path>` | Resume an in-progress interview |
 | `/saw program status` | Show program-level progress (tier completion, IMPL statuses) |
 
 ### Program Commands (Level A: Planning Only)
@@ -697,6 +699,25 @@ Only pending and failed tiers may be revised.
   disjoint file ownership. Produces `docs/IMPL/IMPL-bootstrap.yaml` with interface
   contracts, scaffolds, and parallel implementation waves. Use when starting from
   scratch or from an empty repo.
+- `interview <description>`: Conduct a structured requirements interview that
+  produces `docs/REQUIREMENTS.md`. The Orchestrator runs the interview via sawtools:
+
+  If the argument is `interview <description>` (or `interview --resume <path>`):
+  1. Run the requirements interview by invoking:
+     ```bash
+     sawtools interview "<description>" --docs-dir "<project-docs-dir>" --output "<project-docs-dir>/REQUIREMENTS.md"
+     ```
+     OR conduct the interview inline using AskUserQuestion if sawtools interview is not available
+     in the current environment (fallback mode).
+  2. After sawtools interview exits 0, docs/REQUIREMENTS.md exists.
+  3. Inform the user: "Interview complete. REQUIREMENTS.md written to docs/REQUIREMENTS.md.
+     Run /saw bootstrap to design the architecture, or /saw scout <feature> to plan a feature."
+  4. Do NOT automatically launch bootstrap or scout -- wait for explicit user command.
+
+  If the argument is `interview --resume <path>`:
+  1. Run: `sawtools interview --resume "<path>"`
+  2. Same completion handling as above.
+
 - `scout <feature-description>`: The Orchestrator launches a Scout agent
   (asynchronous) to analyze the codebase and produce the IMPL doc. The Scout
   runs the suitability gate first; if the work is not suitable, it writes a
