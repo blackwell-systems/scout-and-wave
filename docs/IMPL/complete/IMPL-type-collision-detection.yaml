@@ -1,0 +1,527 @@
+completion_date: "2026-03-20"
+title: Pre-merge Type Collision Detection
+feature_slug: type-collision-detection
+verdict: SUITABLE_WITH_CAVEATS
+suitability_assessment: |
+    **File decomposition:** Yes. 4 distinct files: collision detection logic (pkg/collision/),
+    CLI command (cmd/saw/check_type_collisions_cmd.go), finalize-wave integration, and tests.
+    Work decomposes into 3 agents with disjoint ownership.
+
+    **Investigation-first items:** None. Problem is well-understood from wails-readiness Wave 1
+    where RepoEntry, SAWConfig, and RunTracker were independently declared by 3-5 agents,
+    requiring manual deduplication post-merge. AST parsing pattern already exists in
+    pkg/analyzer/cascade.go.
+
+    **Interface discoverability:** Yes. CollisionReport structure can be defined upfront:
+    type name, package path, list of agents, suggested resolution. Integration into
+    finalize-wave follows existing pre-merge gate pattern (called after verify-commits,
+    before merge-agents).
+
+    **Pre-implementation status:** All TODO. No collision detection exists.
+
+    **Parallelization value:** Low-to-medium. 3 agents, straightforward AST parsing task.
+    Go build cycle ~10s. Coordination overhead slightly exceeds parallelization benefit for
+    raw time savings, but IMPL doc provides value as specification for critical merge safety
+    feature. The coordination artifact documents integration path clearly.
+
+    Estimated times:
+    - Scout phase: ~8 min
+    - Agent execution: ~12 min (3 agents × ~4 min avg parallel)
+    - Merge & verification: ~4 min
+    Total SAW time: ~24 min
+
+    Sequential baseline: ~18 min (3 agents × ~6 min avg sequential)
+    Time savings: ~-6 min (33% slower)
+
+    Recommendation: Marginal overhead dominates time savings, but coordination value justifies
+    SAW approach. This is a critical merge safety feature — formal specification prevents
+    implementation gaps.
+test_command: go test ./...
+lint_command: go vet ./...
+file_ownership:
+    - file: pkg/collision/detector.go
+      agent: A
+      wave: 1
+      action: new
+    - file: pkg/collision/detector_test.go
+      agent: A
+      wave: 1
+      action: new
+    - file: pkg/collision/types.go
+      agent: A
+      wave: 1
+      action: new
+    - file: cmd/saw/check_type_collisions_cmd.go
+      agent: B
+      wave: 2
+      action: new
+      depends_on:
+        - A
+    - file: cmd/saw/check_type_collisions_cmd_test.go
+      agent: B
+      wave: 2
+      action: new
+      depends_on:
+        - A
+    - file: cmd/saw/finalize_wave.go
+      agent: C
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+    - file: cmd/saw/main.go
+      agent: C
+      wave: 2
+      action: modify
+interface_contracts:
+    - name: CollisionReport
+      description: Structured report of type name collisions across agent branches
+      definition: |
+        type CollisionReport struct {
+            Collisions []TypeCollision `json:"collisions"`
+            Valid      bool            `json:"valid"`
+        }
+
+        type TypeCollision struct {
+            TypeName    string   `json:"type_name"`
+            Package     string   `json:"package"`
+            Agents      []string `json:"agents"`
+            Resolution  string   `json:"resolution"`
+        }
+      location: pkg/collision/types.go
+    - name: DetectCollisions
+      description: |
+        Scans all agent branches for the given wave, extracts new type declarations
+        via AST parsing, and detects collisions (same type name in same package
+        across 2+ branches).
+      definition: |
+        func DetectCollisions(manifestPath string, waveNum int, repoPath string) (CollisionReport, error)
+      location: pkg/collision/detector.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## What to Implement
+
+            Create `pkg/collision/` package with AST-based type collision detection.
+
+            **Core algorithm:**
+            1. Load IMPL manifest, identify all agents in target wave
+            2. For each agent, get branch name (saw/{slug}/waveN-agent-{ID} or legacy waveN-agent-{ID})
+            3. Run `git diff main...branch --name-only` to get changed .go files
+            4. For each changed .go file, parse AST and extract new type declarations:
+               - `type Foo struct {...}`
+               - `type Bar interface {...}`
+               - `type Baz = OtherType` (alias)
+            5. Group extracted types by package path
+            6. Detect collisions: any type name appearing in 2+ agent branches within same package
+            7. For each collision, suggest resolution (pick canonical agent based on alphabetical
+               order or explicit heuristic)
+
+            **Files to create:**
+            - `pkg/collision/types.go` — CollisionReport, TypeCollision, TypeDeclaration structs
+            - `pkg/collision/detector.go` — DetectCollisions(manifestPath, waveNum, repoPath) function
+            - `pkg/collision/detector_test.go` — unit tests with mock git diffs
+
+            ## Interface Contracts
+
+            **Exports:**
+            ```go
+            // types.go
+            type CollisionReport struct {
+                Collisions []TypeCollision `json:"collisions"`
+                Valid      bool            `json:"valid"` // false if any collisions detected
+            }
+
+            type TypeCollision struct {
+                TypeName    string   `json:"type_name"`    // e.g. "RepoEntry"
+                Package     string   `json:"package"`      // e.g. "pkg/service"
+                Agents      []string `json:"agents"`       // e.g. ["A", "B", "C"]
+                Resolution  string   `json:"resolution"`   // e.g. "Keep A, remove from B and C"
+            }
+
+            type TypeDeclaration struct {
+                Name    string `json:"name"`
+                Package string `json:"package"`
+                Kind    string `json:"kind"` // "struct" | "interface" | "alias"
+            }
+
+            // detector.go
+            func DetectCollisions(manifestPath string, waveNum int, repoPath string) (CollisionReport, error)
+            ```
+
+            **Imports:**
+            - `github.com/blackwell-systems/scout-and-wave-go/pkg/protocol` (IMPLManifest loading)
+            - `github.com/blackwell-systems/scout-and-wave-go/internal/git` (git diff execution)
+            - `go/ast`, `go/parser`, `go/token` (AST parsing)
+
+            ## Implementation Guidance
+
+            **AST extraction pattern (reuse from pkg/analyzer/cascade.go):**
+            ```go
+            func extractTypeDecls(filePath string) ([]TypeDeclaration, error) {
+                fset := token.NewFileSet()
+                node, err := parser.ParseFile(fset, filePath, nil, parser.ParseComments)
+                if err != nil {
+                    return nil, err
+                }
+
+                var decls []TypeDeclaration
+                ast.Inspect(node, func(n ast.Node) bool {
+                    switch t := n.(type) {
+                    case *ast.TypeSpec:
+                        kind := "alias"
+                        switch t.Type.(type) {
+                        case *ast.StructType:
+                            kind = "struct"
+                        case *ast.InterfaceType:
+                            kind = "interface"
+                        }
+                        decls = append(decls, TypeDeclaration{
+                            Name:    t.Name.Name,
+                            Package: node.Name.Name,
+                            Kind:    kind,
+                        })
+                    }
+                    return true
+                })
+                return decls, nil
+            }
+            ```
+
+            **Git diff execution (reuse from internal/git):**
+            ```go
+            import igit "github.com/blackwell-systems/scout-and-wave-go/internal/git"
+
+            changedFiles, err := igit.Run(repoPath, "diff", "main..."+branchName, "--name-only", "--", "*.go")
+            ```
+
+            **Branch name format detection (reuse from pkg/git/activity.go):**
+            Support both legacy (`wave1-agent-A`) and slug-scoped (`saw/my-slug/wave1-agent-A`) formats.
+
+            **Resolution heuristic:**
+            For each collision, suggest keeping the type from the agent with the alphabetically
+            first ID (Agent A > Agent B > Agent C). If all colliding agents are essential,
+            recommend extracting to a scaffold file.
+
+            ## Tests
+
+            Unit tests in `detector_test.go`:
+            1. No collisions — 3 agents define different types in different packages
+            2. Single collision — Agents A and B both define `RepoEntry` in `pkg/service`
+            3. Multi-collision — Agents A, B, C all define `SAWConfig` in same package
+            4. Cross-package safety — Agent A defines `Foo` in pkg/a, Agent B defines `Foo` in pkg/b (no collision)
+            5. Mixed kinds — Agent A defines `type Logger interface`, Agent B defines `type Logger struct` (collision)
+
+            Mock git diff output using test fixtures. Do not require real git branches for unit tests.
+
+            ## Verification Gate
+
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go
+            go build ./pkg/collision/...
+            go test ./pkg/collision/...
+            go vet ./pkg/collision/...
+            ```
+
+            ## Constraints
+
+            - Follow existing AST parsing patterns from `pkg/analyzer/cascade.go`
+            - Use `internal/git.Run()` for all git operations (no direct exec.Command)
+            - Support both legacy and slug-scoped branch name formats
+            - Sort all output slices deterministically (alphabetical by type name, then agent ID)
+            - Error on unparseable Go files (do not skip silently)
+          files:
+            - pkg/collision/detector.go
+            - pkg/collision/detector_test.go
+            - pkg/collision/types.go
+      base_commit: f9f6a61fd4bcf42e18fdf99bc89d8928bd6d75e6
+    - number: 2
+      agents:
+        - id: B
+          task: |
+            ## What to Implement
+
+            Create `check-type-collisions` CLI command that wraps `pkg/collision.DetectCollisions`.
+
+            **Command signature:**
+            ```bash
+            sawtools check-type-collisions <manifest-path> --wave N [--repo-dir PATH]
+            ```
+
+            **Output format:** JSON with structured CollisionReport
+            **Exit code:** 0 if no collisions, 1 if collisions detected
+
+            **Files to create:**
+            - `cmd/saw/check_type_collisions_cmd.go` — cobra command implementation
+            - `cmd/saw/check_type_collisions_cmd_test.go` — CLI integration tests
+
+            ## Interface Contracts
+
+            **Imports:**
+            ```go
+            import "github.com/blackwell-systems/scout-and-wave-go/pkg/collision"
+            ```
+
+            **Uses:**
+            - `collision.DetectCollisions(manifestPath, waveNum, repoPath)` from Agent A
+
+            ## Implementation Guidance
+
+            **Command structure (follow existing pattern from cmd/saw/check_conflicts_cmd.go):**
+            ```go
+            func newCheckTypeCollisionsCmd() *cobra.Command {
+                var waveNum int
+                var repoDir string
+
+                cmd := &cobra.Command{
+                    Use:   "check-type-collisions <manifest-path>",
+                    Short: "Detect type name collisions across agent branches",
+                    Long: `Scans all agent branches in the specified wave for duplicate type
+            declarations in the same package. Uses AST parsing to extract type names from
+            git diffs (base..branch). Returns structured collision report with suggested
+            resolution.`,
+                    Args: cobra.ExactArgs(1),
+                    RunE: func(cmd *cobra.Command, args []string) error {
+                        manifestPath := args[0]
+                        if repoDir == "" {
+                            repoDir = "."
+                        }
+
+                        report, err := collision.DetectCollisions(manifestPath, waveNum, repoDir)
+                        if err != nil {
+                            return fmt.Errorf("check-type-collisions: %w", err)
+                        }
+
+                        out, _ := json.MarshalIndent(report, "", "  ")
+                        fmt.Println(string(out))
+
+                        if !report.Valid {
+                            os.Exit(1)
+                        }
+                        return nil
+                    },
+                }
+
+                cmd.Flags().IntVar(&waveNum, "wave", 0, "Wave number (required)")
+                cmd.Flags().StringVar(&repoDir, "repo-dir", ".", "Repository root directory")
+                _ = cmd.MarkFlagRequired("wave")
+
+                return cmd
+            }
+            ```
+
+            ## Tests
+
+            CLI integration tests in `check_type_collisions_cmd_test.go`:
+            1. Valid case — no collisions, exit 0
+            2. Collision case — 2 agents define same type, exit 1
+            3. Missing wave flag — returns error
+            4. Invalid manifest path — returns error
+
+            Use test fixtures (pre-created IMPL manifests and mock collision reports). Do not
+            require real git branches.
+
+            ## Verification Gate
+
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go
+            go build ./cmd/saw/...
+            go test ./cmd/saw/ -run TestCheckTypeCollisions
+            go vet ./cmd/saw/...
+            ```
+
+            ## Constraints
+
+            - Follow existing command patterns from `check_conflicts_cmd.go` and `check_deps_cmd.go`
+            - Use JSON output format (no plain text summary)
+            - Exit code 1 on collisions (blocking failure for finalize-wave integration)
+            - Require `--wave` flag (no default value)
+          files:
+            - cmd/saw/check_type_collisions_cmd.go
+            - cmd/saw/check_type_collisions_cmd_test.go
+          dependencies:
+            - A
+        - id: C
+          task: |
+            ## What to Implement
+
+            Integrate `check-type-collisions` into `finalize-wave` as a new pre-merge gate.
+
+            **Integration point:** After verify-commits (Step 1), before merge-agents (Step 4).
+            Run collision check per repo (for cross-repo IMPLs).
+
+            **Blocking behavior:** If any collisions detected, stop immediately and return partial
+            FinalizeWaveResult with collision report. Do NOT proceed to merge.
+
+            **Files to modify:**
+            - `cmd/saw/finalize_wave.go` — add collision check step
+            - `cmd/saw/main.go` — register `newCheckTypeCollisionsCmd()`
+
+            ## Interface Contracts
+
+            **Imports:**
+            ```go
+            import "github.com/blackwell-systems/scout-and-wave-go/pkg/collision"
+            ```
+
+            **Uses:**
+            - `collision.DetectCollisions(manifestPath, waveNum, repoPath)` from Agent A
+
+            ## Implementation Guidance
+
+            **Step insertion in finalize-wave (after Step 1, before Step 4):**
+            ```go
+            // Existing Step 1: VerifyCommits
+            // ...
+
+            // NEW Step 1.5: Check type collisions (per repo)
+            collisionReports := make(map[string]*collision.CollisionReport)
+            for repoKey, repoPath := range repos {
+                collisionReport, err := collision.DetectCollisions(manifestPath, waveNum, repoPath)
+                if err != nil {
+                    return fmt.Errorf("finalize-wave: check-type-collisions failed in %s: %w", repoKey, err)
+                }
+                collisionReports[repoKey] = &collisionReport
+                if !collisionReport.Valid {
+                    // Stop immediately - collision detected
+                    result.CollisionReports = collisionReports
+                    out, _ := json.MarshalIndent(result, "", "  ")
+                    fmt.Println(string(out))
+                    return fmt.Errorf("finalize-wave: type collisions detected in %s", repoKey)
+                }
+            }
+
+            // Existing Step 2: ScanStubs
+            // ...
+            ```
+
+            **Add CollisionReports field to FinalizeWaveResult:**
+            ```go
+            type FinalizeWaveResult struct {
+                // ... existing fields ...
+                CollisionReports map[string]*collision.CollisionReport `json:"collision_reports,omitempty"`
+                // ... rest of fields ...
+            }
+            ```
+
+            **Register command in main.go:**
+            Add `newCheckTypeCollisionsCmd()` to `rootCmd.AddCommand()` list (alphabetically
+            after `newCheckDepsCmd()`).
+
+            ## Tests
+
+            Modify existing `finalize_wave_test.go` (if exists) to add:
+            1. Collision detected — finalize-wave stops before merge, returns collision report
+            2. No collisions — finalize-wave proceeds normally through all steps
+
+            If no test file exists, create `cmd/saw/finalize_wave_test.go` with integration tests.
+
+            ## Verification Gate
+
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go
+            go build ./cmd/saw/...
+            go test ./cmd/saw/ -run TestFinalizeWave
+            sawtools check-type-collisions --help  # verify command registered
+            go vet ./cmd/saw/...
+            ```
+
+            ## Constraints
+
+            - Run collision check per repo (for cross-repo IMPL support)
+            - Stop immediately on first collision (do not proceed to merge)
+            - Include collision report in FinalizeWaveResult JSON output
+            - Follow existing pre-merge gate pattern (verify-commits, scan-stubs)
+          files:
+            - cmd/saw/finalize_wave.go
+            - cmd/saw/main.go
+          dependencies:
+            - A
+      base_commit: 62afcfd8b4977616d418c08ad6c88cf6fce5f71e
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./...
+          required: true
+        - type: test
+          command: go test ./...
+          required: true
+        - type: lint
+          command: go vet ./...
+          required: true
+completion_reports:
+    A:
+        status: complete
+        branch: saw/type-collision-detection/wave1-agent-A
+        commit: 34f849e
+        files_changed:
+            - pkg/collision/detector.go
+            - pkg/collision/detector_test.go
+            - pkg/collision/types.go
+        files_created:
+            - pkg/collision/detector.go
+            - pkg/collision/detector_test.go
+            - pkg/collision/types.go
+        tests_added:
+            - TestExtractTypeDecls
+            - TestDetectCollisionsInTypes
+            - TestBuildBranchName
+        verification: PASS
+    B:
+        status: complete
+        branch: saw/type-collision-detection/wave2-agent-B
+        commit: e45bfc0
+        files_changed:
+            - cmd/saw/main.go
+        files_created:
+            - cmd/saw/check_type_collisions_cmd.go
+            - cmd/saw/check_type_collisions_cmd_test.go
+        tests_added:
+            - TestCheckTypeCollisionsCmd_MissingWaveFlag
+            - TestCheckTypeCollisionsCmd_InvalidManifestPath
+        verification: PASS
+    C:
+        status: complete
+        branch: saw/type-collision-detection/wave2-agent-C
+        commit: 093c819
+        files_changed:
+            - cmd/saw/finalize_wave.go
+            - cmd/saw/finalize_wave_test.go
+            - cmd/saw/main.go
+        tests_added:
+            - TestFinalizeWaveResult_CollisionReportsField
+            - TestFinalizeWaveResult_CollisionReportIntegration
+        verification: PASS (build, test, vet all pass)
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: AST parsing fails on generated Go code (e.g., protobuf, gRPC stubs)
+          likelihood: low
+          impact: medium
+          mitigation: |
+            Skip unparseable files with warning, do not block finalize-wave. Log skipped
+            files to collision report for manual review.
+        - scenario: Git diff returns deleted files, causing file-not-found errors
+          likelihood: medium
+          impact: low
+          mitigation: |
+            Filter git diff output to only include added/modified files (exclude deleted).
+            Use `git diff --diff-filter=AM` to get only additions and modifications.
+        - scenario: Legacy branch format (wave1-agent-A) vs slug-scoped (saw/slug/wave1-agent-A) causes branch name mismatch
+          likelihood: low
+          impact: medium
+          mitigation: |
+            Support both formats in branch name construction. Check manifest.FeatureSlug —
+            if present, use slug-scoped format; if empty, use legacy format. Reuse logic
+            from pkg/git/activity.go agentBranchRe regex.
+        - scenario: Type collision on private (unexported) types causes false positive
+          likelihood: low
+          impact: low
+          mitigation: |
+            Private types in the same package are legitimate — agents working in different
+            files within the same package may independently define private helpers. Filter
+            collisions to only flag exported types (names starting with uppercase letter).
+state: WAVE_PENDING
