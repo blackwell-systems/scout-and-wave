@@ -1158,6 +1158,64 @@ E15 (completion marker — amend invalid after SAW:COMPLETE)
 
 ---
 
+## E37: Pre-Wave Brief Review (Critic Gate)
+
+**Trigger:** After IMPL doc validation passes (E16) and before entering REVIEWED state.
+Auto-triggered when wave 1 has 3 or more agents, or when file_ownership contains
+entries from 2 or more repos. Optional for smaller IMPLs; can be invoked explicitly
+with `sawtools run-critic <impl-path>` or suppressed with `--no-review` flag.
+
+**Required Action:** The orchestrator launches a critic agent with the IMPL doc and
+all source files listed in file_ownership. The critic:
+1. Reads the IMPL doc in full (all agent briefs, interface contracts, file ownership)
+2. For each agent brief, reads every source file listed in that agent's file ownership
+3. Verifies each brief against the actual codebase (see verification checks below)
+4. Writes a structured CriticResult to the IMPL doc under critic_report field
+5. Emits overall verdict: PASS or ISSUES
+
+**Verification checks per agent brief:**
+- file_existence: Every file marked action=modify must exist in the repo; every file
+  marked action=new must NOT exist (would cause conflict)
+- symbol_accuracy: Function names, type names, method signatures referenced in the
+  brief must exist in the codebase as stated (for modify files) or must not conflict
+  with existing symbols (for new files)
+- pattern_accuracy: Implementation patterns described in the brief (e.g. "call X to
+  register handler", "add field to struct Y") must match the actual patterns in the
+  source files
+- interface_consistency: Interface contracts specified in the IMPL must be
+  syntactically valid for the target language and consistent with types referenced
+  in source files
+- import_chains: For new files, all packages referenced in interface contracts must
+  be importable from the target module (exist in go.mod or local packages)
+- side_effect_completeness: If a brief creates a new exported symbol that must be
+  registered (CLI command in root.go, HTTP route in server.go, React component in
+  a page), verify the registration file is also in the file_ownership table
+
+**Output format:** CriticResult written to IMPL doc critic_report field (see
+interface contracts in IMPL-critic-agent.yaml). Per-agent verdict: PASS or ISSUES.
+Overall verdict: PASS (all agents pass) or ISSUES (one or more agents have errors).
+
+**Failure path:** If overall verdict is ISSUES, orchestrator does NOT enter REVIEWED
+state. Instead:
+1. Orchestrator presents issues to human via the CriticResult summary
+2. Human (or orchestrator in --auto mode) applies corrections:
+   - Wrong file: update file_ownership, re-validate (E16), re-run critic
+   - Wrong symbol: update interface contract or agent brief, re-validate, re-run critic
+   - Missing registration: add registration file to file_ownership, re-validate, re-run critic
+3. After corrections applied, orchestrator re-runs critic via `sawtools run-critic`
+4. Repeat until verdict is PASS, then enter REVIEWED state normally
+
+**Skip condition:** Pass `--no-review` to `sawtools run-scout` or set
+`min_agents_for_review: 0` in saw.config.json to disable auto-triggering.
+Manual skip: `sawtools run-critic --skip` writes a PASS result with
+summary "Skipped by operator" to satisfy downstream state checks.
+
+**Related rules:** E16 (schema validation precedes critic gate), E36 (amend
+--redirect-agent is the recovery mechanism for agent-level brief corrections),
+E2 (interface freeze: critic runs before freeze, so corrections are safe)
+
+---
+
 ## Cross-References
 
 - See `preconditions.md` for conditions that must hold before execution begins
@@ -1183,4 +1241,5 @@ E15 (completion marker — amend invalid after SAW:COMPLETE)
 - E33: Orchestrator auto-advances to next tier in `--auto` mode after tier gate passes — see also `program-invariants.md` (P2, P3), E29, E30, E31
 - E34: Orchestrator re-engages Planner on tier gate failure to revise PROGRAM manifest — see also `program-invariants.md` (P2, P4), E8, E16, E29
 - E35: Scout declares wiring obligations for exported symbols that must be called from aggregation files — enforced by prepare-wave (Layer 3A), validate-integration (Layer 3B), and agent brief injection (Layer 3C) — see also E25, E26, E27
+- E37: Pre-Wave Brief Review (Critic Gate) — after E16 validation, before REVIEWED state; auto-triggered for large/multi-repo IMPLs; critic agent verifies briefs against actual codebase — see also E16, E36, E2, `participants.md` (Critic Agent)
 - E36: IMPL Amendment — see E2, E14, E15

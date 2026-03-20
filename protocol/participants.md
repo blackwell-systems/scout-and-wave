@@ -165,6 +165,38 @@ The `integrator` constraint restricts the Integration Agent to files listed in t
 
 **Related Rules:** See E25 (Integration Validation), E26 (Integration Agent), I1 Amendment (Integration Agent Exemption)
 
+## Critic Agent
+
+**Execution mode:** Asynchronous
+
+**Responsibilities:**
+
+An asynchronous agent launched by the orchestrator after IMPL doc validation (E16)
+and before REVIEWED state (E37). Reads every agent brief in the IMPL doc, reads
+every source file in the file_ownership table, and verifies briefs against the
+actual codebase. Produces a structured CriticResult with per-agent verdicts and
+an overall PASS/ISSUES decision. Writes the result to the IMPL doc critic_report
+field using WriteCriticReview. Never modifies source files. Exits after writing
+the review.
+
+The critic closes the gap between schema validation (E16, which checks structure)
+and human review (which checks intent). It catches semantic errors: wrong function
+names, missing files, patterns that do not exist as described, interfaces incompatible
+with existing types, and missing registration wiring.
+
+**Required capabilities:**
+- Read IMPL docs and source files
+- Execute read-only commands (grep, find, list directories)
+- Write structured review results to IMPL doc (WriteCriticReview)
+- Parse Go/TypeScript/Markdown source files
+
+**Forbidden actions:**
+- Modify any source files
+- Modify IMPL doc fields other than critic_report
+- Launch other agents
+- Participate in wave execution
+- Apply corrections to briefs (correction is orchestrator's responsibility)
+
 ## Planner
 
 **Execution mode:** Asynchronous
