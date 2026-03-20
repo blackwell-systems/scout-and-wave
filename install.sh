@@ -53,9 +53,28 @@ for entry in "${FILES[@]}"; do
   echo "  Linked ${dst} -> ${src}"
 done
 
+# Verify symlinks
+echo ""
+echo "Verifying installation..."
+VERIFY_OK=true
+for entry in "${FILES[@]}"; do
+  dst="${SKILL_DIR}/${entry##*:}"
+  if [ ! -L "${dst}" ]; then
+    echo "  WARNING: ${dst} is not a symlink" >&2
+    VERIFY_OK=false
+  fi
+done
+if [ "${VERIFY_OK}" = true ]; then
+  echo "  All symlinks verified."
+fi
+
 echo ""
 echo "Done. Restart Claude Code to pick up the new skill."
 echo ""
 echo "Next steps:"
-echo "  1. Add \"Agent\" to your allow list in ~/.claude/settings.json"
-echo "  2. Run: /saw scout \"your feature description\""
+echo "  1. Add Agent permission to ~/.claude/settings.json:"
+echo '     { "permissions": { "allow": ["Agent"] } }'
+echo "  2. Verify installation: sawtools verify-install"
+echo "  3. Run your first scout: /saw scout \"your feature description\""
+echo ""
+echo "  Full guide: docs/GETTING_STARTED.md"
