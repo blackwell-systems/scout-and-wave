@@ -563,13 +563,31 @@ If the manifest has program_contracts with defined locations, launch a Scaffold 
 For each tier N from 1 to manifest.tiers_total:
 
 **Step 3a: Parallel Scout Launching (E31)**
+
+Partition tier N IMPLs by status (E28A):
+- **pending / scouting** — Scout as normal (existing flow below)
+- **reviewed / complete** — Validate only (skip Scout, see pre-existing validation below)
+
+*Scout new IMPLs:*
 - For each IMPL in tier N with status "pending":
   - Launch Scout agent with: `subagent_type: scout`, `run_in_background: true`
   - Pass --program flag: `sawtools run-scout "<impl-title>" --program "<manifest-path>"`
   - Scout receives frozen program contracts as immutable inputs
 - Wait for all Scouts to complete
-- Validate each IMPL doc (E16): run `sawtools validate --fix "<impl-doc-path>"` for each
-- Present all IMPL docs for human review (tier structure, file ownership, interface contracts)
+- Validate each newly scouted IMPL doc (E16): run `sawtools validate --fix "<impl-doc-path>"` for each
+
+*Validate pre-existing IMPLs (E28A):*
+- For each IMPL in tier N with status "reviewed" or "complete":
+  - Verify IMPL doc exists: `docs/IMPL/IMPL-<slug>.yaml`
+  - Run: `sawtools validate --fix "<impl-doc-path>"`
+  - Check P2 compliance: `sawtools freeze-check "<program-manifest>" --impl "<slug>"`
+  - If validation fails, enter BLOCKED
+
+> **Tip:** Use `sawtools import-impls` before program execution to bulk-import
+> pre-existing IMPL docs into the PROGRAM manifest with correct tier assignments
+> and status. This avoids manual manifest editing when adopting existing work.
+
+- Present ALL IMPL docs (newly scouted + pre-existing) for unified human review (tier structure, file ownership, interface contracts)
 
 **Step 3b: IMPL Execution**
 - For each reviewed IMPL in tier N:
