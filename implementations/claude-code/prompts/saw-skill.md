@@ -11,7 +11,7 @@ user-invocable: true
 allowed-tools: |
   Read, Write, Glob, Grep, Bash(git *), Bash(cd *), Bash(mkdir *),
   Agent(subagent_type=scout), Agent(subagent_type=scaffold-agent),
-  Agent(subagent_type=wave-agent), Agent(subagent_type=integration-agent),
+  Agent(subagent_type=wave-agent), Agent(subagent_type=integration-agent), Agent(subagent_type=critic-agent),
   Agent(subagent_type=general-purpose)
 license: MIT OR Apache-2.0
 compatibility: Requires Claude Code (Skills API). Git 2.20+ required for worktree support.
@@ -37,7 +37,7 @@ observability (no Scout agent means no SAW session is detectable by monitoring
 tools).
 
 *`I{N}` notation refers to invariants (I1–I6) and `E{N}` to execution rules
-(E1–E35) defined in `protocol/invariants.md` and `protocol/execution-rules.md`.
+(E1–E37) defined in `protocol/invariants.md` and `protocol/execution-rules.md`.
 Each is embedded verbatim at its point of enforcement; the number is the anchor
 for cross-referencing and audit.*
 
@@ -59,11 +59,12 @@ for cross-referencing and audit.*
        "chat_model": "claude-sonnet-4-5",
        "integration_model": "claude-sonnet-4-5",
        "scaffold_model": "claude-sonnet-4-5",
-       "planner_model": "claude-sonnet-4-5"
+       "planner_model": "claude-sonnet-4-5",
+       "critic_model": "claude-sonnet-4-5"
      }
    }
    ```
-   For `/saw scout`, read `agent.scout_model`. For `/saw wave`, read `agent.wave_model`. For `/saw program execute`, read `agent.planner_model` for the Planner agent. For Scaffold agents, read `agent.scaffold_model`. Empty string or missing field means "inherit parent model." If neither config file exists, fall through to level 3.
+   For `/saw scout`, read `agent.scout_model`. For `/saw wave`, read `agent.wave_model`. For `/saw program execute`, read `agent.planner_model` for the Planner agent. For Scaffold agents, read `agent.scaffold_model`. For critic-agent runs, read `agent.critic_model`. Empty string or missing field means "inherit parent model." If neither config file exists, fall through to level 3.
 3. **Parent model** — If neither arg nor config specifies a model, agents inherit the parent session's model (no `model:` in frontmatter = inherit).
 
 **Implementation:** The Agent tool does not expose a model parameter, so model override works indirectly. Custom `subagent_type` values (`scout`, `wave-agent`, `scaffold-agent`) inherit the parent session's model. When `--model` is specified explicitly and the custom subagent_type's inherited model doesn't match (e.g., parent is Opus but `--model sonnet` requested), fall back to `subagent_type: general-purpose` with the full agent prompt from the prompts directory.
@@ -84,6 +85,7 @@ in the `CLAUDE_SKILL_DIR` environment variable; if unset, fall back to `~/.claud
 - **agents/wave-agent.md** - Wave subagent definition (optional, for custom agent types).
 - **agents/scaffold-agent.md** - Scaffold subagent definition (optional, for custom agent types).
 - **agents/planner.md** - Planner subagent definition (optional, for custom agent types).
+- **agents/critic-agent.md** - Critic subagent definition (E37 pre-wave brief review).
 
 Read the agent template at `${CLAUDE_SKILL_DIR}/agent-template.md` for the 9-field agent prompt format.
 
@@ -277,7 +279,23 @@ If no `docs/IMPL/IMPL-*.yaml` file exists for the current feature:
    The `--fix` flag auto-corrects mechanically fixable issues (e.g. invalid gate types → `custom`; valid types: build, lint, test, typecheck, format, custom) before validation runs. Check the `"fixed"` field in JSON output — if non-zero, log the corrections for the user. If exit code is 0, proceed to human review. If exit code is 1, the Scout should have already self-validated (up to 3 internal retries). Send the remaining errors to Scout as a single correction prompt using **resume with the Scout's agent ID** (preserves codebase analysis context): `resume: <scout-agent-id>`, `prompt: "Your IMPL doc failed orchestrator validation. Fix only these sections:\n{errors}"`. Retry once (the Scout already exhausted its own retries; more than 1 orchestrator retry is unlikely to help). On failure, enter BLOCKED and surface the validation errors to the human. Do not present the doc for human review until validation passes.
 
    **E16A note:** The validator enforces required block presence — an IMPL doc missing `impl-file-ownership`, `impl-dep-graph`, or `impl-wave-structure` typed blocks will fail even if all present blocks are internally valid. E16C warnings (out-of-band dep graph content) appear in stdout but do not cause exit 1; include them in the correction prompt anyway so Scout moves the content into a typed block.
-4. Report the suitability verdict to the user, and if suitable: the wave structure, file ownership table, interface contracts, and Scaffolds section. Ask the user to review before proceeding.
+4. **Critic Gate (E37).** After `sawtools validate` passes, check whether critic review is warranted:
+   - Auto-trigger: wave 1 has 3+ agents OR file_ownership spans 2+ repos
+   - Manual trigger: user passed `--review` to `/saw scout`
+   - Skip: user passed `--no-review` OR `min_agents_for_review: 0` in saw.config.json
+
+   If triggering:
+   1. Read `agent.critic_model` from saw.config.json (fall back to parent model)
+   2. Launch critic agent: `Agent(subagent_type=critic-agent)` with:
+      - IMPL doc absolute path
+      - Repo root absolute path(s)
+   3. Wait for critic agent to complete
+   4. Read critic_report field from IMPL doc
+   5. If verdict is ISSUES: present issues to human, wait for corrections, re-validate
+      (E16), re-run critic. Repeat until PASS.
+   6. If verdict is PASS: proceed to human REVIEWED checkpoint normally.
+
+5. Report the suitability verdict to the user, and if suitable: the wave structure, file ownership table, interface contracts, and Scaffolds section. Ask the user to review before proceeding.
 6. **Scaffold Agent (conditional):** If the IMPL doc Scaffolds section is non-empty and any scaffold file has `Status: pending`, launch a **Scaffold Agent** using the Agent tool with `subagent_type: scaffold-agent` and `run_in_background: true`. The prompt parameter is the path to the IMPL doc and the feature slug. If `subagent_type: scaffold-agent` fails, fall back to `subagent_type: general-purpose` with the contents of `${CLAUDE_SKILL_DIR}/agents/scaffold-agent.md` as its prompt. Use `[SAW:scaffold:<feature-slug>]` as the description prefix so claudewatch can identify the run. The Scaffold Agent reads the approved contracts and creates the scaffold source files. Inform the user the Scaffold Agent is running. Wait for it to complete, then read the Scaffolds section: if any file shows `Status: FAILED`, stop immediately — report the failure reason to the user and do not create worktrees. The user must revise the interface contracts in the IMPL doc and re-run the Scaffold Agent. If all files show `Status: committed`, proceed.
 
 If a `docs/IMPL/IMPL-*.yaml` file already exists:
