@@ -19,3 +19,5 @@
   - IMPL doc: docs/IMPL/complete/IMPL-critic-repair-ui.yaml
 - **program-import**: completed 2026-03-20, 3 waves, 4 agents
   - IMPL doc: docs/IMPL/complete/IMPL-program-import.yaml
+- **protocol-docs-gaps**: completed 2026-03-20, 1 waves, 3 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-protocol-docs-gaps.yaml
