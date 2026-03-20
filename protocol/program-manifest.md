@@ -513,6 +513,104 @@ The Planner **does not write IMPL docs**. Instead:
 
 Within a tier, all IMPLs execute their full lifecycle (Scout → Scaffold → Wave 1 → Wave 2 → ... → COMPLETE) in parallel. Tier gates only fire when **all IMPLs in the tier reach COMPLETE**.
 
+### 13.4 Importing Pre-Existing IMPLs
+
+When a project already has completed or reviewed IMPL docs (from prior work, manual authoring, or a previous program run), these can be imported into a PROGRAM manifest rather than re-scouted from scratch.
+
+#### Import Workflow
+
+1. **Discover:** Scan `docs/IMPL/` and `docs/IMPL/complete/` for existing `IMPL-<slug>.yaml` files not already referenced in the PROGRAM manifest.
+
+2. **Validate:** For each discovered IMPL, run `ValidateProgramImportMode` to verify:
+   - The IMPL doc exists on disk and is parseable
+   - The IMPL doc's `state` field maps to a valid program status (see Status Mapping below)
+   - P1 compliance: the IMPL's `file_ownership` does not conflict with other IMPLs assigned to the same tier
+   - P2 compliance: the IMPL does not redefine any frozen program contract
+
+3. **Assign tier:** Place the IMPL into the appropriate tier based on its `depends_on` relationships. An imported IMPL with no dependencies goes to Tier 1; one depending on other IMPLs goes to the earliest tier after all its dependencies.
+
+4. **Update manifest:** Add the IMPL entry to the `impls` section with its validated status, update `tiers` to include it, and update `completion` counters.
+
+#### Status Mapping
+
+IMPL doc states map to program-level IMPL statuses as follows:
+
+| IMPL Doc State | Program IMPL Status | Tier Execution Behavior |
+|----------------|---------------------|-------------------------|
+| `SCOUT_COMPLETE` | `reviewed` | Skip Scout (E31), enter wave execution after review |
+| `REVIEWED` | `reviewed` | Skip Scout (E31), enter wave execution after review |
+| `COMPLETE` | `complete` | Skip Scout and wave execution entirely |
+| `SCOUTING` | `scouting` | Treated as in-progress; may need Scout restart |
+| Other states | `pending` | Proceed with normal Scout flow (E31) |
+
+#### Example: Mixed Manifest with Imported IMPLs
+
+```yaml
+title: "Dashboard v2 with pre-existing auth"
+program_slug: dashboard-v2
+state: TIER_EXECUTING
+
+impls:
+  # Pre-existing IMPL — already reviewed from prior work
+  - slug: "auth"
+    title: "Authentication and session management"
+    tier: 1
+    depends_on: []
+    estimated_agents: 2
+    estimated_waves: 1
+    key_outputs:
+      - "pkg/auth/*.go"
+    status: reviewed        # Imported: IMPL-auth.yaml exists with state REVIEWED
+
+  # Pre-existing IMPL — already complete from prior work
+  - slug: "data-model"
+    title: "Core data model"
+    tier: 1
+    depends_on: []
+    estimated_agents: 3
+    estimated_waves: 1
+    key_outputs:
+      - "pkg/models/*.go"
+    status: complete         # Imported: IMPL-data-model.yaml exists with state COMPLETE
+
+  # New IMPL — needs Scout
+  - slug: "dashboard-views"
+    title: "Dashboard visualization components"
+    tier: 2
+    depends_on: ["data-model", "auth"]
+    estimated_agents: 4
+    estimated_waves: 2
+    key_outputs:
+      - "web/src/components/dashboard/*.tsx"
+    status: pending          # New: will be scouted normally
+
+tiers:
+  - number: 1
+    impls: ["auth", "data-model"]
+    description: "Foundation — auth is reviewed (imported), data-model is complete (imported)"
+  - number: 2
+    impls: ["dashboard-views"]
+    description: "New work — depends on Tier 1 outputs"
+
+completion:
+  tiers_complete: 0
+  tiers_total: 2
+  impls_complete: 1        # data-model is already complete
+  impls_total: 3
+  total_agents: 4
+  total_waves: 2
+```
+
+In this example, when Tier 1 executes (E28):
+- E28A partitions the tier: `needsScout = []`, `preExisting = [auth, data-model]`
+- `data-model` (status: complete) skips both Scout and wave execution
+- `auth` (status: reviewed) skips Scout but enters wave execution after human review
+- No Scouts are launched for Tier 1 (E31 is effectively skipped)
+
+#### Relationship to E28A
+
+E28A (Pre-Existing IMPL Handling in Tier Execution) defines the runtime behavior when a tier contains imported IMPLs. Section 13.4 describes the import workflow that produces the manifest state that E28A consumes. See `protocol/execution-rules.md` for the full E28A specification.
+
 ---
 
 ## 14. Full Example Manifest

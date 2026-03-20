@@ -930,6 +930,43 @@ After all IMPLs in the tier are scouted and reviewed, the Orchestrator executes 
 
 ---
 
+## E28A: Pre-Existing IMPL Handling in Tier Execution
+
+**Trigger:** Tier execution begins (E28) and the tier contains IMPLs with status "reviewed" or "complete" (pre-existing IMPLs that were imported into the PROGRAM manifest rather than created fresh by a Planner).
+
+**Required Action:**
+
+1. **Partition IMPLs by status.** Before launching Scouts, call `PartitionIMPLsByStatus(manifest, tierNumber)` to split the tier's IMPLs into two groups:
+   - **needsScout:** IMPLs with status "pending" or "scouting" — proceed with normal Scout flow (E31)
+   - **preExisting:** IMPLs with status "reviewed" or "complete" — skip Scout, validate instead
+
+2. **Validate pre-existing IMPLs.** For each pre-existing IMPL, run `ValidateProgramImportMode(manifest, repoPath)` which performs:
+   - **File existence:** Verify `IMPL-<slug>.yaml` exists at `docs/IMPL/` or `docs/IMPL/complete/`
+   - **State consistency:** Parse the IMPL doc and verify its `state` field is consistent with the program-level status (e.g., an IMPL with program status "reviewed" must have IMPL doc state SCOUT_COMPLETE or REVIEWED; program status "complete" must have IMPL doc state COMPLETE)
+   - **P1 compliance:** Verify `file_ownership` across all IMPLs in the same tier (both new and pre-existing) is disjoint — no two IMPLs in the tier may claim the same file
+   - **P2 compliance:** Verify no pre-existing IMPL redefines a frozen program contract (a contract whose `freeze_at` tier has already completed)
+
+3. **Unified review gate.** Present all IMPLs in the tier for human review together — both newly scouted IMPLs and validated pre-existing IMPLs. The reviewer sees the full tier picture and can reject any IMPL (new or imported) before wave execution begins.
+
+4. **Proceed to wave execution.** After review approval, execute waves for all IMPLs in the tier. Pre-existing IMPLs with status "complete" skip wave execution entirely. Pre-existing IMPLs with status "reviewed" enter wave execution normally.
+
+**Failure Handling:**
+
+- If a pre-existing IMPL doc is missing from disk, the Orchestrator reports the missing file and enters BLOCKED. The user must either provide the IMPL doc or remove the IMPL from the PROGRAM manifest.
+- If P1 validation fails (file ownership conflict between IMPLs in the same tier), the Orchestrator reports the conflicting files and enters BLOCKED. The user must resolve the conflict by moving one IMPL to a different tier or adjusting file ownership.
+- If P2 validation fails (pre-existing IMPL redefines a frozen contract), the Orchestrator reports the violation and enters BLOCKED. The IMPL must be revised to consume (not redefine) the frozen contract.
+- If state consistency fails (IMPL doc state does not match program status), the Orchestrator reports the mismatch and enters BLOCKED. The user must update either the IMPL doc state or the program status to be consistent.
+
+**Relationship to E28:** E28A extends E28's tier execution loop to handle mixed tiers containing both new and pre-existing IMPLs. When all IMPLs in a tier are "pending", E28A is a no-op and E28 proceeds normally.
+
+**Relationship to E31:** Scouts are only launched for IMPLs in the needsScout partition. Pre-existing IMPLs bypass E31 entirely.
+
+**Related Invariants:** See P1 (intra-tier independence), P2 (contract immutability) in `program-invariants.md`
+
+**Related Rules:** See E28 (tier execution loop), E31 (parallel Scout launching), E16 (IMPL doc validation)
+
+---
+
 ## E29: Tier Gate Verification
 
 **Trigger:** All IMPLs in a tier reach "complete"
