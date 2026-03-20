@@ -9,3 +9,5 @@
   - IMPL doc: docs/IMPL/complete/IMPL-program-layer-phase4.yaml
 - **e21a-baseline-gate**: completed 2026-03-19, 1 waves, 4 agents
   - IMPL doc: docs/IMPL/IMPL-e21a-baseline-gate.yaml
+- **resumable-wave-sessions**: completed 2026-03-19, 2 waves, 5 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-resumable-wave-sessions.yaml

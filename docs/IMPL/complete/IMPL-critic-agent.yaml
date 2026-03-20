@@ -1,0 +1,1357 @@
+completion_date: "2026-03-19"
+title: Critic Agent / Pre-Wave Brief Review
+feature_slug: critic-agent
+verdict: SUITABLE
+suitability_assessment: |
+    File decomposition: Work spans 3 repos with clear seams — protocol docs (scout-and-wave),
+    Go engine types + CLI (scout-and-wave-go), and web UI (scout-and-wave-web). Within each
+    repo the file sets are disjoint across agents. 12 distinct files change across 8 agents,
+    averaging 1-2 files per agent. No two agents in the same wave touch the same file.
+
+    Investigation-first: None needed. The feature is additive — new role, new CLI command,
+    new UI panel. No crash to diagnose, no race to reproduce.
+
+    Interface discoverability: CriticResult type and WriteCriticReview function can be fully
+    specified before Wave 1 launches. The web handler depends on the Go type (cross-wave
+    dependency), which is handled by placing the Go type work in Wave 1 and web work in Wave 2.
+
+    Pre-implementation status: All items are TODO. No existing critic infrastructure exists.
+    The review_handler.go stub exists but is for wave-level code review, not critic-agent
+    brief review — these are different features.
+
+    Parallelization value: High. Wave 1 has 5 parallel agents across 3 repos. Go build+test
+    cycle is ~30s. Protocol agents own documentation files (docs-only wave gates apply).
+    Clear speedup from parallel execution.
+
+    Estimated times:
+    - Scout phase: ~15 min (3-repo analysis, interface contracts, IMPL doc)
+    - Agent execution: ~40 min (5 Wave 1 agents x ~8 min avg, parallel; 3 Wave 2 agents x ~10 min avg, parallel)
+    - Merge and verification: ~10 min (2 waves x 5 min each)
+    Total SAW time: ~65 min
+
+    Sequential baseline: ~120 min (8 agents x ~15 min avg sequential)
+    Time savings: ~55 min (~46% faster)
+
+    Recommendation: Clear speedup. Proceed with full execution.
+test_command: go test ./...
+lint_command: go vet ./...
+file_ownership:
+    - file: protocol/execution-rules.md
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: protocol/participants.md
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: implementations/claude-code/prompts/agents/critic-agent.md
+      agent: A
+      wave: 1
+      action: new
+      repo: scout-and-wave
+    - file: implementations/claude-code/prompts/saw-skill.md
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: pkg/protocol/critic.go
+      agent: B
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: pkg/protocol/critic_test.go
+      agent: B
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: cmd/saw/run_critic_cmd.go
+      agent: C
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: cmd/saw/run_critic_cmd_test.go
+      agent: C
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: cmd/saw/run_scout_cmd.go
+      agent: D
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/api/critic_handler.go
+      agent: E
+      wave: 2
+      action: new
+      depends_on:
+        - B
+      repo: scout-and-wave-web
+    - file: pkg/api/impl.go
+      agent: E
+      wave: 2
+      action: modify
+      depends_on:
+        - B
+      repo: scout-and-wave-web
+    - file: pkg/api/global_events.go
+      agent: E
+      wave: 2
+      action: modify
+      depends_on:
+        - B
+      repo: scout-and-wave-web
+    - file: web/src/components/CriticReviewPanel.tsx
+      agent: F
+      wave: 2
+      action: new
+      repo: scout-and-wave-web
+    - file: web/src/pages/ReviewScreen.tsx
+      agent: G
+      wave: 3
+      action: modify
+      depends_on:
+        - F
+      repo: scout-and-wave-web
+    - file: web/src/types.ts
+      agent: G
+      wave: 3
+      action: modify
+      depends_on:
+        - B
+      repo: scout-and-wave-web
+interface_contracts:
+    - name: CriticResult
+      description: |
+        Structured output written by the critic agent to the IMPL doc. Contains
+        per-agent verdicts and an overall pass/fail decision. Persisted as YAML
+        in the IMPL manifest under critic_report.
+      definition: |
+        // CriticResult is the structured output of a critic-agent review run.
+        // Written to the IMPL doc by WriteCriticReview after the critic agent completes.
+        type CriticResult struct {
+            // Verdict is the overall decision: "PASS" or "ISSUES"
+            Verdict     string         `yaml:"verdict" json:"verdict"`
+            // AgentReviews contains per-agent verdicts indexed by agent ID
+            AgentReviews map[string]AgentCriticReview `yaml:"agent_reviews" json:"agent_reviews"`
+            // Summary is a human-readable summary of the overall findings
+            Summary     string         `yaml:"summary" json:"summary"`
+            // ReviewedAt is an ISO8601 timestamp of when the review completed
+            ReviewedAt  string         `yaml:"reviewed_at" json:"reviewed_at"`
+            // IssueCount is the total number of issues found across all agents
+            IssueCount  int            `yaml:"issue_count" json:"issue_count"`
+        }
+
+        // AgentCriticReview is the per-agent verdict from the critic.
+        type AgentCriticReview struct {
+            // AgentID is the agent identifier (e.g. "A", "B2")
+            AgentID     string   `yaml:"agent_id" json:"agent_id"`
+            // Verdict is "PASS" or "ISSUES"
+            Verdict     string   `yaml:"verdict" json:"verdict"`
+            // Issues lists specific problems found, empty if Verdict is PASS
+            Issues      []CriticIssue `yaml:"issues,omitempty" json:"issues,omitempty"`
+        }
+
+        // CriticIssue describes a single problem found by the critic.
+        type CriticIssue struct {
+            // Check is the verification category (e.g. "file_existence", "symbol_accuracy")
+            Check       string `yaml:"check" json:"check"`
+            // Severity is "error" (blocks wave) or "warning" (advisory)
+            Severity    string `yaml:"severity" json:"severity"`
+            // Description is a human-readable explanation of the problem
+            Description string `yaml:"description" json:"description"`
+            // File is the specific file referenced in the brief, if applicable
+            File        string `yaml:"file,omitempty" json:"file,omitempty"`
+            // Symbol is the specific function/type name that failed verification, if applicable
+            Symbol      string `yaml:"symbol,omitempty" json:"symbol,omitempty"`
+        }
+      location: pkg/protocol/critic.go
+    - name: WriteCriticReview
+      description: |
+        Writes a CriticResult to the IMPL doc's critic_report field. Called by
+        run-critic command after the critic agent completes. Persists result atomically
+        by loading, updating, and saving the YAML manifest.
+      definition: |
+        // WriteCriticReview writes the critic result to the IMPL manifest at implPath.
+        // It loads the existing manifest, sets the CriticReport field, and saves.
+        // Returns an error if the manifest cannot be loaded or saved.
+        func WriteCriticReview(implPath string, result CriticResult) error
+      location: pkg/protocol/critic.go
+    - name: GetCriticReview
+      description: |
+        Reads the CriticResult from a loaded IMPL manifest. Returns nil if no
+        critic review has been written yet. Used by the web API handler to serve
+        GET /api/impl/{slug}/critic-review.
+      definition: |
+        // GetCriticReview returns the critic review from a loaded manifest, or nil
+        // if no review has been written. Does not load from disk; caller must load
+        // the manifest first using protocol.Load.
+        func GetCriticReview(manifest *IMPLManifest) *CriticResult
+      location: pkg/protocol/critic.go
+    - name: CriticReviewPanel
+      description: |
+        React component that displays a CriticResult. Shows an overall verdict
+        banner (PASS green / ISSUES red) and a per-agent accordion with issue
+        details. Imported by ReviewScreen.tsx.
+      definition: |
+        // TypeScript interface matching CriticResult Go type
+        interface CriticResultType {
+          verdict: 'PASS' | 'ISSUES';
+          agent_reviews: Record<string, AgentCriticReview>;
+          summary: string;
+          reviewed_at: string;
+          issue_count: number;
+        }
+        interface AgentCriticReview {
+          agent_id: string;
+          verdict: 'PASS' | 'ISSUES';
+          issues?: CriticIssue[];
+        }
+        interface CriticIssue {
+          check: string;
+          severity: 'error' | 'warning';
+          description: string;
+          file?: string;
+          symbol?: string;
+        }
+
+        interface CriticReviewPanelProps {
+          result: CriticResultType;
+        }
+        export function CriticReviewPanel({ result }: CriticReviewPanelProps): JSX.Element
+      location: web/src/components/CriticReviewPanel.tsx
+    - name: handleGetCriticReview
+      description: |
+        HTTP handler for GET /api/impl/{slug}/critic-review. Loads the IMPL manifest
+        for the given slug, reads the critic_report field, and returns it as JSON.
+        Returns 404 if no review exists, 200 with JSON CriticResult if one does.
+      definition: |
+        func (s *Server) handleGetCriticReview(w http.ResponseWriter, r *http.Request)
+        // Route: GET /api/impl/{slug}/critic-review
+        // Response 200: JSON-encoded CriticResult
+        // Response 404: { "error": "no critic review for this IMPL" }
+        // Response 500: { "error": "..." }
+      location: pkg/api/critic_handler.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## Agent A — Protocol Spec + Critic Agent Prompt (scout-and-wave repo)
+
+            Repository: /Users/dayna.blackwell/code/scout-and-wave
+            IMPL doc: /Users/dayna.blackwell/code/scout-and-wave/docs/IMPL/IMPL-critic-agent.yaml
+
+            ### What to implement
+
+            You are adding E37 (Pre-Wave Brief Review / Critic Gate) to the SAW protocol
+            and creating the critic-agent prompt. This is pure documentation work — no
+            source code.
+
+            **File 1: protocol/execution-rules.md**
+
+            Add E37 after E36 (the last execution rule). Use the same format as existing
+            rules (heading, trigger, required action, failure handling, related rules).
+
+            E37 content to write:
+
+            ```
+            ## E37: Pre-Wave Brief Review (Critic Gate)
+
+            **Trigger:** After IMPL doc validation passes (E16) and before entering REVIEWED state.
+            Auto-triggered when wave 1 has 3 or more agents, or when file_ownership contains
+            entries from 2 or more repos. Optional for smaller IMPLs; can be invoked explicitly
+            with `sawtools run-critic <impl-path>` or suppressed with `--no-review` flag.
+
+            **Required Action:** The orchestrator launches a critic agent with the IMPL doc and
+            all source files listed in file_ownership. The critic:
+            1. Reads the IMPL doc in full (all agent briefs, interface contracts, file ownership)
+            2. For each agent brief, reads every source file listed in that agent's file ownership
+            3. Verifies each brief against the actual codebase (see verification checks below)
+            4. Writes a structured CriticResult to the IMPL doc under critic_report field
+            5. Emits overall verdict: PASS or ISSUES
+
+            **Verification checks per agent brief:**
+            - file_existence: Every file marked action=modify must exist in the repo; every file
+              marked action=new must NOT exist (would cause conflict)
+            - symbol_accuracy: Function names, type names, method signatures referenced in the
+              brief must exist in the codebase as stated (for modify files) or must not conflict
+              with existing symbols (for new files)
+            - pattern_accuracy: Implementation patterns described in the brief (e.g. "call X to
+              register handler", "add field to struct Y") must match the actual patterns in the
+              source files
+            - interface_consistency: Interface contracts specified in the IMPL must be
+              syntactically valid for the target language and consistent with types referenced
+              in source files
+            - import_chains: For new files, all packages referenced in interface contracts must
+              be importable from the target module (exist in go.mod or local packages)
+            - side_effect_completeness: If a brief creates a new exported symbol that must be
+              registered (CLI command in root.go, HTTP route in server.go, React component in
+              a page), verify the registration file is also in the file_ownership table
+
+            **Output format:** CriticResult written to IMPL doc critic_report field (see
+            interface contracts in IMPL-critic-agent.yaml). Per-agent verdict: PASS or ISSUES.
+            Overall verdict: PASS (all agents pass) or ISSUES (one or more agents have errors).
+
+            **Failure path:** If overall verdict is ISSUES, orchestrator does NOT enter REVIEWED
+            state. Instead:
+            1. Orchestrator presents issues to human via the CriticResult summary
+            2. Human (or orchestrator in --auto mode) applies corrections:
+               - Wrong file: update file_ownership, re-validate (E16), re-run critic
+               - Wrong symbol: update interface contract or agent brief, re-validate, re-run critic
+               - Missing registration: add registration file to file_ownership, re-validate, re-run critic
+            3. After corrections applied, orchestrator re-runs critic via `sawtools run-critic`
+            4. Repeat until verdict is PASS, then enter REVIEWED state normally
+
+            **Skip condition:** Pass `--no-review` to `sawtools run-scout` or set
+            `min_agents_for_review: 0` in saw.config.json to disable auto-triggering.
+            Manual skip: `sawtools run-critic --skip` writes a PASS result with
+            summary "Skipped by operator" to satisfy downstream state checks.
+
+            **Related rules:** E16 (schema validation precedes critic gate), E36 (amend
+            --redirect-agent is the recovery mechanism for agent-level brief corrections),
+            E2 (interface freeze: critic runs before freeze, so corrections are safe)
+            ```
+
+            **File 2: protocol/participants.md**
+
+            Add a "Critic Agent" section after the "Integration Agent" section and before
+            "Planner". Use the same structure as existing participant sections (Execution mode,
+            Responsibilities, Required capabilities, Forbidden actions).
+
+            Content to add:
+
+            ```markdown
+            ## Critic Agent
+
+            **Execution mode:** Asynchronous
+
+            **Responsibilities:**
+
+            An asynchronous agent launched by the orchestrator after IMPL doc validation (E16)
+            and before REVIEWED state (E37). Reads every agent brief in the IMPL doc, reads
+            every source file in the file_ownership table, and verifies briefs against the
+            actual codebase. Produces a structured CriticResult with per-agent verdicts and
+            an overall PASS/ISSUES decision. Writes the result to the IMPL doc critic_report
+            field using WriteCriticReview. Never modifies source files. Exits after writing
+            the review.
+
+            The critic closes the gap between schema validation (E16, which checks structure)
+            and human review (which checks intent). It catches semantic errors: wrong function
+            names, missing files, patterns that do not exist as described, interfaces incompatible
+            with existing types, and missing registration wiring.
+
+            **Required capabilities:**
+            - Read IMPL docs and source files
+            - Execute read-only commands (grep, find, list directories)
+            - Write structured review results to IMPL doc (WriteCriticReview)
+            - Parse Go/TypeScript/Markdown source files
+
+            **Forbidden actions:**
+            - Modify any source files
+            - Modify IMPL doc fields other than critic_report
+            - Launch other agents
+            - Participate in wave execution
+            - Apply corrections to briefs (correction is orchestrator's responsibility)
+            ```
+
+            **File 3: implementations/claude-code/prompts/agents/critic-agent.md**
+
+            Create the critic agent prompt. Study the format of scout.md, wave-agent.md,
+            and integration-agent.md in the same directory — match their frontmatter format
+            and overall structure. The prompt must be self-contained and precise.
+
+            Write the full critic agent prompt with this content:
+
+            ```markdown
+            ---
+            name: critic-agent
+            description: Scout-and-Wave critic agent (E37) that reviews IMPL doc agent briefs against the actual codebase before wave execution. Reads every brief, reads every owned file, verifies accuracy across 6 checks, and writes a structured CriticResult to the IMPL doc. Runs after E16 validation, before REVIEWED state. Never modifies source files.
+            tools: Read, Glob, Grep, Bash
+            color: yellow
+            background: true---
+
+            <!-- critic-agent v0.1.0 -->
+            # Critic Agent: Pre-Wave Brief Review (E37)
+
+            You are a Critic Agent in the Scout-and-Wave protocol. Your job is to verify that
+            each agent brief in the IMPL doc is accurate against the actual codebase before
+            wave execution begins.
+
+            **What you prevent:** Scout agents read the codebase but can hallucinate function
+            signatures, reference renamed symbols, or describe patterns that do not exist as
+            stated. Human reviewers read briefs but rarely cross-check every function name
+            against every source file. You do this verification mechanically.
+
+            **What you do NOT do:** You do not fix briefs. You do not modify source files. You
+            do not decide whether the feature is good. You verify accuracy only.
+
+            ## Input
+
+            Your launch parameters include:
+            1. **IMPL doc path** — absolute path to the YAML manifest
+            2. **Repo root** — absolute path to the repository root (may be multiple repos)
+
+            ## Step 0: Derive Repository Context
+
+            Extract the repo root from the IMPL doc path:
+            ```bash
+            # Example: /Users/user/code/myrepo/docs/IMPL/IMPL-feature.yaml -> /Users/user/code/myrepo
+            IMPL_PATH="<your-impl-path>"
+            REPO_ROOT=$(echo "$IMPL_PATH" | sed 's|/docs/IMPL/.*||')
+            ```
+
+            For cross-repo IMPLs, the IMPL doc's file_ownership table includes a `repo` field
+            with each file's repository name. Resolve repository roots by looking up the repo
+            name against the `repositories` field in the IMPL manifest header, or ask the
+            orchestrator if not present.
+
+            ## Step 1: Read the IMPL Doc
+
+            Read the full IMPL manifest. Extract:
+            - All agent IDs and their owned files (file_ownership table)
+            - All agent briefs (waves[].agents[].task fields)
+            - All interface contracts (interface_contracts[])
+            - The feature slug and repo root(s)
+
+            ## Step 2: For Each Agent, Run 6 Verification Checks
+
+            Process agents one at a time. For each agent:
+
+            ### Check 1: file_existence
+            For every file in the agent's ownership:
+            - `action: modify` → file MUST exist. If not found, severity: error.
+            - `action: new` → file MUST NOT exist. If found, severity: error (conflict).
+            - `action: delete` → file MUST exist. If not found, severity: warning.
+            - No action specified → skip this check for that file.
+
+            ### Check 2: symbol_accuracy
+            Parse the agent's task description for specific function names, type names, method
+            names, struct fields, and interface method sets that the agent is told to call or
+            implement against. For each named symbol:
+            - If the symbol is from a file the agent owns (action: new), verify it does not
+              conflict with existing exported names in the same package.
+            - If the symbol is from a file the agent does NOT own (a dependency), grep for it
+              in the relevant source files. If not found under that exact name, severity: error.
+            - Interface contract definitions are the authoritative source for cross-agent symbols.
+              Verify any function the brief says to "call from" an interface contract matches the
+              contract definition exactly.
+
+            ### Check 3: pattern_accuracy
+            For each implementation pattern described in the agent's brief (e.g. "register via
+            mux.HandleFunc", "add entry to cobra.Command", "append to the Waves slice"), verify
+            the pattern matches how the target file actually works:
+            - Read the target file
+            - Confirm the described pattern exists (e.g. the mux.HandleFunc call style, the
+              cobra command registration pattern)
+            - If the brief describes a pattern that doesn't match what the file actually uses,
+              severity: warning
+
+            ### Check 4: interface_consistency
+            For each interface contract in the IMPL:
+            - Verify the type signatures are syntactically valid for the target language
+            - For Go: check that referenced packages in import paths exist (check go.mod or local
+              pkg/ directories)
+            - Verify that types referenced within the contract (e.g. a struct field referencing
+              another type) either exist already in the codebase or are defined in another
+              interface contract in the same IMPL
+
+            ### Check 5: import_chains
+            For each new file an agent will create:
+            - Identify all packages that file would need to import (based on the interface
+              contracts and brief description)
+            - Verify each required package is either in go.mod (for external packages) or exists
+              as a local package in the repo
+            - If a required package does not exist, severity: error
+
+            ### Check 6: side_effect_completeness
+            For each agent that creates a new exported symbol that requires registration:
+            - New CLI command (cobra.Command) → is a registration file (root.go, main.go)
+              in the file_ownership table?
+            - New HTTP route handler → is the server/mux registration file (server.go, impl.go)
+              in file_ownership?
+            - New React component used as a page → is the router/page file in file_ownership?
+            - New Go type that must be wired into a caller → is the caller file in
+              file_ownership or integration_connectors?
+            If a required registration is missing, severity: warning (may be intentional if
+            handled by integration wave).
+
+            ## Step 3: Write the CriticResult
+
+            After reviewing all agents, write the result using `sawtools set-critic-review`:
+
+            ```bash
+            # Build the JSON result and write it
+            sawtools set-critic-review "<impl-path>" \
+              --verdict "<PASS|ISSUES>" \
+              --summary "<one paragraph summary>" \
+              --issue-count <N> \
+              --agent-reviews '<JSON array of AgentCriticReview>'
+            ```
+
+            The JSON format for --agent-reviews:
+            ```json
+            [
+              {
+                "agent_id": "A",
+                "verdict": "PASS",
+                "issues": []
+              },
+              {
+                "agent_id": "B",
+                "verdict": "ISSUES",
+                "issues": [
+                  {
+                    "check": "symbol_accuracy",
+                    "severity": "error",
+                    "description": "Function WriteCriticReview referenced in brief does not exist in pkg/protocol/",
+                    "file": "pkg/protocol/critic.go",
+                    "symbol": "WriteCriticReview"
+                  }
+                ]
+              }
+            ]
+            ```
+
+            ## Verdict Thresholds
+
+            - **PASS:** Zero errors across all agents. Warnings are noted but do not block.
+            - **ISSUES:** One or more errors found in any agent's review.
+
+            A "warning" severity issue is advisory — it should be fixed but does not prevent
+            wave execution. An "error" severity issue must be resolved before the orchestrator
+            can enter REVIEWED state.
+
+            ## Output Format Summary
+
+            After writing the result with `sawtools set-critic-review`, output a brief human-
+            readable summary to the orchestrator:
+
+            ```
+            Critic Review Complete: <PASS|ISSUES>
+
+            Agents reviewed: N
+            Issues found: N errors, N warnings
+
+            <If ISSUES: list each agent with errors and the specific problems>
+            <If PASS: "All briefs verified against codebase. Wave execution may proceed.">
+            ```
+
+            ## Rules
+
+            - Read every file in file_ownership before reporting on any agent
+            - Never modify source files
+            - Never modify IMPL doc fields other than critic_report (via set-critic-review)
+            - Report what you find, not what you think should be there
+            - If a file cannot be read (permission error, repo not available), report as
+              severity: warning with check: file_existence and note the read failure
+            - Do not speculate about runtime behavior; only verify static accuracy
+            ```
+
+            **File 4: implementations/claude-code/prompts/saw-skill.md**
+
+            Add the critic agent to the saw-skill.md orchestrator prompt. Make two changes:
+
+            **Change 1:** In the "Agent model selection" config section (around line 49-66),
+            add `critic_model` to the per-role model fields JSON example:
+            ```json
+            {
+              "agent": {
+                "scout_model": "claude-sonnet-4-5",
+                "wave_model": "claude-sonnet-4-5",
+                "chat_model": "claude-sonnet-4-5",
+                "integration_model": "claude-sonnet-4-5",
+                "scaffold_model": "claude-sonnet-4-5",
+                "planner_model": "claude-sonnet-4-5",
+                "critic_model": "claude-sonnet-4-5"
+              }
+            }
+            ```
+            Also add to the prose after: "For critic-agent runs, read `agent.critic_model`."
+
+            **Change 2:** In the Supporting Files section (around line 81-88), add:
+            ```
+            - **agents/critic-agent.md** - Critic subagent definition (E37 pre-wave brief review).
+            ```
+
+            **Change 3:** Add critic-agent to the `allowed-tools` frontmatter list:
+            Change: `Agent(subagent_type=wave-agent), Agent(subagent_type=integration-agent),`
+            To: `Agent(subagent_type=wave-agent), Agent(subagent_type=integration-agent), Agent(subagent_type=critic-agent),`
+
+            **Change 4:** In the `/saw scout` flow section, after the E16 validation step and
+            before human review, add:
+
+            ```
+            ### Critic Gate (E37)
+
+            After `sawtools validate` passes, check whether critic review is warranted:
+            - Auto-trigger: wave 1 has 3+ agents OR file_ownership spans 2+ repos
+            - Manual trigger: user passed `--review` to `/saw scout`
+            - Skip: user passed `--no-review` OR `min_agents_for_review: 0` in saw.config.json
+
+            If triggering:
+            1. Read `agent.critic_model` from saw.config.json (fall back to parent model)
+            2. Launch critic agent: `Agent(subagent_type=critic-agent)` with:
+               - IMPL doc absolute path
+               - Repo root absolute path(s)
+            3. Wait for critic agent to complete
+            4. Read critic_report field from IMPL doc
+            5. If verdict is ISSUES: present issues to human, wait for corrections, re-validate
+               (E16), re-run critic. Repeat until PASS.
+            6. If verdict is PASS: proceed to human REVIEWED checkpoint normally.
+            ```
+
+            ### Verification gate
+
+            This agent owns only documentation files (.md, .yaml). The sawtools build/test
+            gates are automatically skipped for docs-only waves. Run:
+            ```
+            sawtools validate /Users/dayna.blackwell/code/scout-and-wave/docs/IMPL/IMPL-critic-agent.yaml
+            ```
+
+            ### Constraints
+            - Do NOT modify any source files in scout-and-wave-go or scout-and-wave-web
+            - Do NOT modify protocol files other than execution-rules.md and participants.md
+            - The critic-agent.md prompt must include all 6 verification checks verbatim as
+              specified above — this is the authoritative definition of what the critic does
+            - Match the exact frontmatter format of existing agent .md files (name, description,
+              tools, color, background fields)
+            - E37 rule number is binding — do not renumber existing rules
+          files:
+            - protocol/execution-rules.md
+            - protocol/participants.md
+            - implementations/claude-code/prompts/agents/critic-agent.md
+            - implementations/claude-code/prompts/saw-skill.md
+        - id: B
+          task: |
+            ## Agent B — CriticResult Type + WriteCriticReview (scout-and-wave-go repo)
+
+            Repository: /Users/dayna.blackwell/code/scout-and-wave-go
+            IMPL doc: /Users/dayna.blackwell/code/scout-and-wave/docs/IMPL/IMPL-critic-agent.yaml
+
+            ### What to implement
+
+            Create `pkg/protocol/critic.go` with the CriticResult type family and two
+            functions: WriteCriticReview and GetCriticReview.
+
+            **File 1: pkg/protocol/critic.go**
+
+            Package: `package protocol`
+
+            Types to define (exact signatures from interface contracts):
+
+            ```go
+            // CriticResult is the structured output of a critic-agent review run.
+            type CriticResult struct {
+                Verdict      string                      `yaml:"verdict" json:"verdict"`
+                AgentReviews map[string]AgentCriticReview `yaml:"agent_reviews" json:"agent_reviews"`
+                Summary      string                      `yaml:"summary" json:"summary"`
+                ReviewedAt   string                      `yaml:"reviewed_at" json:"reviewed_at"`
+                IssueCount   int                         `yaml:"issue_count" json:"issue_count"`
+            }
+
+            // AgentCriticReview is the per-agent verdict from the critic.
+            type AgentCriticReview struct {
+                AgentID string        `yaml:"agent_id" json:"agent_id"`
+                Verdict string        `yaml:"verdict" json:"verdict"`
+                Issues  []CriticIssue `yaml:"issues,omitempty" json:"issues,omitempty"`
+            }
+
+            // CriticIssue describes a single problem found by the critic.
+            type CriticIssue struct {
+                Check       string `yaml:"check" json:"check"`
+                Severity    string `yaml:"severity" json:"severity"`
+                Description string `yaml:"description" json:"description"`
+                File        string `yaml:"file,omitempty" json:"file,omitempty"`
+                Symbol      string `yaml:"symbol,omitempty" json:"symbol,omitempty"`
+            }
+            ```
+
+            Functions to implement:
+
+            ```go
+            // WriteCriticReview writes the critic result to the IMPL manifest at implPath.
+            func WriteCriticReview(implPath string, result CriticResult) error
+
+            // GetCriticReview returns the critic review from a loaded manifest, or nil.
+            func GetCriticReview(manifest *IMPLManifest) *CriticResult
+            ```
+
+            WriteCriticReview implementation pattern:
+            1. Load manifest using `protocol.Load(implPath)` (which already exists in manifest.go)
+            2. Set `manifest.CriticReport = &result`
+            3. Save using `protocol.Save(manifest, implPath)` (already exists)
+            4. Return any error from load or save
+
+            GetCriticReview implementation:
+            1. Return `manifest.CriticReport` (pointer, may be nil)
+
+            You must also add the `CriticReport` field to the `IMPLManifest` struct in
+            `types.go`. Read types.go first to find the right insertion point (add after
+            `KnownIssues` field, before `State`). The field:
+            ```go
+            CriticReport *CriticResult `yaml:"critic_report,omitempty" json:"critic_report,omitempty"`
+            ```
+
+            **IMPORTANT:** types.go is NOT in your file ownership. You must add the
+            CriticReport field to types.go as part of your work. Read types.go, identify
+            the insertion point, and use Edit to add the field. This is an exception granted
+            because the type definition and the struct field must be atomically consistent —
+            they cannot be split across agents without a scaffold. Document this as
+            out_of_scope_deps in your completion report.
+
+            **File 2: pkg/protocol/critic_test.go**
+
+            Write tests for:
+            - `TestWriteCriticReview_WritesAndReads`: write a CriticResult with known data,
+              read it back with GetCriticReview, verify all fields round-trip correctly
+            - `TestWriteCriticReview_FileNotFound`: passing a nonexistent path returns error
+            - `TestGetCriticReview_Nil`: GetCriticReview on a manifest with no critic_report
+              returns nil
+            - `TestCriticResult_YAMLRoundtrip`: marshal CriticResult to YAML and unmarshal,
+              verify all fields preserved including nested AgentReviews map
+
+            Use testify or the existing test helper patterns from other *_test.go files in
+            pkg/protocol/ — read a few to match style.
+
+            ### Verification gate
+
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go
+            go build ./...
+            go vet ./...
+            go test ./pkg/protocol/... -run TestWriteCriticReview -v
+            go test ./pkg/protocol/... -run TestGetCriticReview -v
+            go test ./pkg/protocol/... -run TestCriticResult -v
+            ```
+
+            ### Constraints
+            - Do NOT modify any file other than pkg/protocol/critic.go, pkg/protocol/critic_test.go,
+              and pkg/protocol/types.go (types.go edit only — add CriticReport field)
+            - Follow the exact type signatures from the interface contracts above
+            - Use yaml tags matching the JSON field names (snake_case)
+            - verdict field valid values: "PASS" or "ISSUES" (document as const or comment)
+            - severity field valid values: "error" or "warning" (document as const or comment)
+          files:
+            - pkg/protocol/critic.go
+            - pkg/protocol/critic_test.go
+        - id: C
+          task: |
+            ## Agent C — sawtools run-critic Command (scout-and-wave-go repo)
+
+            Repository: /Users/dayna.blackwell/code/scout-and-wave-go
+            IMPL doc: /Users/dayna.blackwell/code/scout-and-wave/docs/IMPL/IMPL-critic-agent.yaml
+
+            ### What to implement
+
+            Create the `sawtools run-critic` command. Read run_scout_cmd.go and root.go to
+            understand the cobra command registration pattern and how other commands are structured.
+
+            **File 1: cmd/saw/run_critic_cmd.go**
+
+            ```go
+            package main
+
+            // newRunCriticCmd creates the run-critic subcommand.
+            // Usage: sawtools run-critic <impl-path> [--no-review] [--model <model>]
+            //
+            // Launches a critic agent that reviews agent briefs in the IMPL doc against
+            // the actual codebase. Writes CriticResult to impl doc critic_report field.
+            // Exits 0 if verdict is PASS, exits 1 if verdict is ISSUES.
+            func newRunCriticCmd() *cobra.Command
+            ```
+
+            Command behavior:
+            1. Accept one positional argument: `<impl-path>` (absolute path to IMPL YAML)
+            2. Flag `--no-review` (bool): write a PASS result with summary "Skipped by operator"
+               and exit 0 without launching an agent
+            3. Flag `--model <string>`: override the model used for the critic agent (optional)
+            4. Flag `--skip` (bool): alias for --no-review (same behavior)
+            5. Launch the critic agent using the same agent-launch pattern as run-scout:
+               - Read the IMPL doc to extract repo root(s) from repositories/repository field
+               - Construct the critic agent prompt payload (include IMPL path + repo roots)
+               - Launch via the engine's agent runner (follow the pattern in run_scout_cmd.go)
+               - Wait for completion (poll for critic_report field appearing in the IMPL doc,
+                 or use the engine's wait-for-completion pattern)
+            6. After agent completes, read critic_report from IMPL doc
+            7. Print human-readable summary to stdout
+            8. Exit 0 if PASS, exit 1 if ISSUES
+
+            Also add a `set-critic-review` subcommand in this same file:
+            ```
+            // sawtools set-critic-review <impl-path> --verdict <PASS|ISSUES>
+            //   --summary <string> --issue-count <N> --agent-reviews <JSON>
+            //
+            // Parses the JSON agent reviews, constructs a CriticResult, and calls
+            // protocol.WriteCriticReview. Used by critic agents to write their output.
+            ```
+
+            Register both commands in root.go under the main command. Read root.go to find
+            where other commands are registered (look for `rootCmd.AddCommand`), then add:
+            ```go
+            rootCmd.AddCommand(newRunCriticCmd())
+            rootCmd.AddCommand(newSetCriticReviewCmd())
+            ```
+
+            **IMPORTANT:** root.go is NOT in your file ownership. Use Edit to add the two
+            AddCommand calls. Document this as out_of_scope_deps in your completion report.
+
+            **File 2: cmd/saw/run_critic_cmd_test.go**
+
+            Tests:
+            - `TestRunCriticCmd_SkipFlag`: run with --skip, verify IMPL doc gets PASS result
+              with "Skipped by operator" summary, command exits 0
+            - `TestSetCriticReviewCmd_ValidInput`: run set-critic-review with valid JSON,
+              verify IMPL doc critic_report is written correctly
+            - `TestSetCriticReviewCmd_InvalidJSON`: invalid --agent-reviews JSON returns error
+
+            ### Verification gate
+
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go
+            go build ./...
+            go vet ./...
+            go test ./cmd/saw/... -run TestRunCritic -v
+            go test ./cmd/saw/... -run TestSetCriticReview -v
+            ```
+
+            ### Constraints
+            - Do NOT modify any file other than run_critic_cmd.go, run_critic_cmd_test.go,
+              and root.go (root.go edit only — add two AddCommand lines)
+            - Follow the cobra command pattern from run_scout_cmd.go exactly
+            - The set-critic-review subcommand is what critic agents call to persist results;
+              it must accept JSON on --agent-reviews flag
+            - Exit code 1 on ISSUES verdict is a hard requirement (used by CI/orchestrator)
+          files:
+            - cmd/saw/run_critic_cmd.go
+            - cmd/saw/run_critic_cmd_test.go
+        - id: D
+          task: |
+            ## Agent D — run-scout Critic Integration (scout-and-wave-go repo)
+
+            Repository: /Users/dayna.blackwell/code/scout-and-wave-go
+            IMPL doc: /Users/dayna.blackwell/code/scout-and-wave/docs/IMPL/IMPL-critic-agent.yaml
+
+            ### What to implement
+
+            Modify `cmd/saw/run_scout_cmd.go` to optionally run the critic gate after
+            finalize-impl completes. The critic step is gated by agent count threshold.
+
+            Read run_scout_cmd.go in full before making changes. Understand the existing
+            workflow steps (launch scout, wait, validate, correct IDs, finalize-impl).
+
+            **Changes to run_scout_cmd.go:**
+
+            1. Add two new flags to the command:
+               ```go
+               var (
+                   noCritic     bool   // --no-critic: skip critic gate even if threshold met
+                   criticModel  string // --critic-model: override model for critic agent
+               )
+               // In cmd.Flags():
+               cmd.Flags().BoolVar(&noCritic, "no-critic", false, "Skip critic gate")
+               cmd.Flags().StringVar(&criticModel, "critic-model", "", "Model override for critic agent")
+               ```
+
+            2. After the finalize-impl step succeeds, add an optional critic step:
+               ```go
+               // Step 6 (optional): Run critic gate if agent count threshold is met
+               // Threshold: wave 1 has 3+ agents OR file_ownership spans 2+ repos
+               if !noCritic && criticThresholdMet(manifest) {
+                   fmt.Fprintf(os.Stdout, "Step 6: Running critic gate (E37)...\n")
+                   criticArgs := []string{"run-critic", implPath}
+                   if criticModel != "" {
+                       criticArgs = append(criticArgs, "--model", criticModel)
+                   }
+                   // run sawtools run-critic as subprocess or call the function directly
+                   // Follow the pattern used for finalize-impl invocation
+               }
+               ```
+
+            3. Implement the `criticThresholdMet` helper:
+               ```go
+               // criticThresholdMet returns true if the IMPL doc meets the auto-trigger
+               // threshold for the critic gate: wave 1 has 3+ agents OR file_ownership
+               // spans 2+ distinct repos.
+               func criticThresholdMet(manifest *protocol.IMPLManifest) bool
+               ```
+
+            ### Verification gate
+
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go
+            go build ./...
+            go vet ./...
+            go test ./cmd/saw/... -run TestRunScout -v
+            ```
+
+            ### Constraints
+            - Do NOT add the critic step in a way that can block or panic if run-critic
+              is not yet installed — gracefully skip if the command fails
+            - The --no-critic flag must default to false (critic runs by default when threshold met)
+            - Do NOT modify any other files besides run_scout_cmd.go
+          files:
+            - cmd/saw/run_scout_cmd.go
+      base_commit: f47d9c63ceb08a13fc012b1d368ffb4c3542a53e
+    - number: 2
+      agents:
+        - id: E
+          task: |
+            ## Agent E — Web API Critic Handler + Route + SSE (scout-and-wave-web repo)
+
+            Repository: /Users/dayna.blackwell/code/scout-and-wave-web
+            IMPL doc: /Users/dayna.blackwell/code/scout-and-wave/docs/IMPL/IMPL-critic-agent.yaml
+
+            Wave 1 Agent B must complete before this agent runs. The CriticResult type
+            and WriteCriticReview function from pkg/protocol/critic.go (in scout-and-wave-go)
+            are available via the go.mod dependency on scout-and-wave-go.
+
+            ### What to implement
+
+            **File 1: pkg/api/critic_handler.go**
+
+            Create a new file with the HTTP handler for GET /api/impl/{slug}/critic-review.
+
+            ```go
+            package api
+
+            import (
+                "encoding/json"
+                "net/http"
+                "path/filepath"
+                "github.com/blackwell-systems/scout-and-wave-go/pkg/protocol"
+            )
+
+            // handleGetCriticReview serves GET /api/impl/{slug}/critic-review.
+            // Returns the CriticResult for the given IMPL slug, or 404 if none exists.
+            func (s *Server) handleGetCriticReview(w http.ResponseWriter, r *http.Request) {
+                slug := r.PathValue("slug")
+                // Resolve IMPL path from slug (follow the pattern from impl.go)
+                // Load manifest
+                // Call protocol.GetCriticReview(manifest)
+                // If nil, return 404
+                // Otherwise JSON-encode and return 200
+            }
+            ```
+
+            Study impl.go to understand how other handlers resolve slug to IMPL path
+            (look for slug resolution + protocol.Load patterns). Match that pattern exactly.
+
+            **File 2: pkg/api/impl.go**
+
+            Register the new route. Find the existing route registrations (around line 173
+            where handleGetReview is registered). Add:
+            ```go
+            s.mux.HandleFunc("GET /api/impl/{slug}/critic-review", s.handleGetCriticReview)
+            ```
+
+            **File 3: pkg/api/global_events.go**
+
+            Add a `critic_review_complete` SSE event emission function that can be called
+            when the critic agent finishes. Study global_events.go to understand the
+            broadcastJSON pattern and event naming conventions. Add:
+
+            ```go
+            // EmitCriticReviewComplete broadcasts a critic_review_complete SSE event
+            // to all connected clients. Called after sawtools run-critic completes.
+            func (s *Server) EmitCriticReviewComplete(slug string, result *protocol.CriticResult) {
+                s.broadcastJSON("critic_review_complete", map[string]interface{}{
+                    "slug":   slug,
+                    "result": result,
+                })
+            }
+            ```
+
+            ### Verification gate
+
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-web
+            go build ./...
+            go vet ./...
+            go test ./pkg/api/... -run TestCritic -v
+            ```
+
+            Write at least one test in critic_handler_test.go (new file, part of your
+            ownership — add it to your files list in the completion report):
+            - `TestHandleGetCriticReview_NoReview`: GET with no critic_report returns 404
+            - `TestHandleGetCriticReview_WithReview`: GET after writing a CriticResult returns
+              200 with correct JSON
+
+            ### Constraints
+            - Do NOT modify any file other than critic_handler.go, impl.go, global_events.go,
+              and critic_handler_test.go (new file)
+            - Match the existing handler pattern in impl_handlers.go and review_handler.go
+            - The route must be /api/impl/{slug}/critic-review (not /api/wave/{slug}/critic-review)
+            - Use r.PathValue("slug") for slug extraction (Go 1.22+ stdlib mux pattern)
+          files:
+            - pkg/api/critic_handler.go
+            - pkg/api/impl.go
+            - pkg/api/global_events.go
+          dependencies:
+            - B
+        - id: F
+          task: |
+            ## Agent F — CriticReviewPanel React Component (scout-and-wave-web repo)
+
+            Repository: /Users/dayna.blackwell/code/scout-and-wave-web
+            IMPL doc: /Users/dayna.blackwell/code/scout-and-wave/docs/IMPL/IMPL-critic-agent.yaml
+
+            ### What to implement
+
+            Create `web/src/components/CriticReviewPanel.tsx`. This component displays
+            a CriticResult — the output of a critic agent review run.
+
+            Read other components in web/src/components/ to understand styling conventions
+            (class names, Tailwind usage, component structure patterns).
+
+            **Interface (from interface contracts):**
+
+            ```typescript
+            interface CriticResultType {
+              verdict: 'PASS' | 'ISSUES';
+              agent_reviews: Record<string, AgentCriticReviewType>;
+              summary: string;
+              reviewed_at: string;
+              issue_count: number;
+            }
+            interface AgentCriticReviewType {
+              agent_id: string;
+              verdict: 'PASS' | 'ISSUES';
+              issues?: CriticIssueType[];
+            }
+            interface CriticIssueType {
+              check: string;
+              severity: 'error' | 'warning';
+              description: string;
+              file?: string;
+              symbol?: string;
+            }
+
+            interface CriticReviewPanelProps {
+              result: CriticResultType;
+            }
+            export function CriticReviewPanel({ result }: CriticReviewPanelProps): JSX.Element
+            ```
+
+            **Component behavior:**
+
+            1. **Overall verdict banner** at the top:
+               - PASS: green background, checkmark icon, "All briefs verified — wave execution may proceed"
+               - ISSUES: red background, warning icon, "Brief verification found N issues — review before executing"
+
+            2. **Summary text** below banner (result.summary)
+
+            3. **Per-agent accordion** (collapsible rows):
+               - Each row shows agent ID and PASS/ISSUES badge
+               - Expanding a row shows the agent's issues list (if any)
+               - Each issue shows: check name, severity badge (error=red, warning=yellow),
+                 description, and optionally file and symbol in monospace
+
+            4. **Reviewed at timestamp** at the bottom (format: "Reviewed at: <human-readable date>")
+
+            No external UI library beyond what already exists in the project. Check
+            package.json for available dependencies before using any library.
+
+            ### Verification gate
+
+            This agent owns a TypeScript/React file. Verify:
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-web/web
+            npm run build
+            ```
+
+            If build passes, the component is type-safe and importable.
+
+            ### Constraints
+            - Export the component as a named export: `export function CriticReviewPanel`
+            - Types should be defined in the component file (Agent G owns types.ts)
+            - Do NOT import from types.ts — define local interfaces within the component
+              file. Agent G will add the canonical types to types.ts separately.
+            - Match the visual style of existing components in web/src/components/
+          files:
+            - web/src/components/CriticReviewPanel.tsx
+      base_commit: 09baf3203144c51fda0601095a2095be0f1af223
+    - number: 3
+      agents:
+        - id: G
+          task: |
+            ## Agent G — ReviewScreen Integration + TypeScript Types (scout-and-wave-web repo)
+
+            Repository: /Users/dayna.blackwell/code/scout-and-wave-web
+            IMPL doc: /Users/dayna.blackwell/code/scout-and-wave/docs/IMPL/IMPL-critic-agent.yaml
+
+            Wave 2 Agent F must complete before this agent runs (CriticReviewPanel must exist
+            to be imported into ReviewScreen). Wave 1 Agent B must also complete (CriticResult
+            Go type defines the TypeScript types structure).
+
+            ### What to implement
+
+            **File 1: web/src/types.ts**
+
+            Add the canonical TypeScript types for CriticResult to types.ts. Read the existing
+            types.ts to understand naming conventions. Append these types:
+
+            ```typescript
+            // E37: Critic Agent review result types
+            export interface CriticResult {
+              verdict: 'PASS' | 'ISSUES';
+              agent_reviews: Record<string, AgentCriticReview>;
+              summary: string;
+              reviewed_at: string;
+              issue_count: number;
+            }
+
+            export interface AgentCriticReview {
+              agent_id: string;
+              verdict: 'PASS' | 'ISSUES';
+              issues?: CriticIssue[];
+            }
+
+            export interface CriticIssue {
+              check: string;
+              severity: 'error' | 'warning';
+              description: string;
+              file?: string;
+              symbol?: string;
+            }
+            ```
+
+            **File 2: web/src/pages/ReviewScreen.tsx**
+
+            Read the existing ReviewScreen.tsx in full. Understand its state management,
+            data fetching patterns, and component layout before making changes.
+
+            Add the following to ReviewScreen:
+
+            1. **"Run Critic Review" button** — visible when:
+               - IMPL state is SCOUT_PENDING or REVIEWED (before waves execute)
+               - No critic_report exists yet in the IMPL data
+               - Button label: "Run Critic Review"
+               - On click: use whichever existing pipeline action mechanism ReviewScreen uses,
+                 or leave as a UI placeholder documented in out_of_scope_deps
+
+            2. **CriticReviewPanel display** — shown when critic_report exists:
+               - Import CriticReviewPanel from `../components/CriticReviewPanel`
+               - Pass `result={implData.critic_report}` to the component
+               - Position it between the IMPL metadata header and the wave list
+
+            3. **SSE event handler** for `critic_review_complete`:
+               - When this event fires, refresh the IMPL data to show the new critic_report
+               - Follow the pattern of other SSE event handlers already in ReviewScreen
+
+            Study ReviewScreen.tsx carefully before making changes — match its existing
+            state management and data fetching approach (useState, useEffect, fetch patterns).
+
+            ### Verification gate
+
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-web/web
+            npm run build
+            ```
+
+            TypeScript build must pass with no type errors.
+
+            ### Constraints
+            - Do NOT modify any file other than ReviewScreen.tsx and types.ts
+            - The CriticReviewPanel import path must be `../components/CriticReviewPanel`
+            - Use the CriticResult type from types.ts (not local interfaces) in ReviewScreen
+            - If ReviewScreen fetches IMPL data as a typed object, extend that type to include
+              `critic_report?: CriticResult` rather than using `any`
+          files:
+            - web/src/pages/ReviewScreen.tsx
+            - web/src/types.ts
+          dependencies:
+            - F
+            - B
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./...
+          required: true
+        - type: lint
+          command: go vet ./...
+          required: true
+        - type: test
+          command: go test ./...
+          required: true
+post_merge_checklist:
+    groups:
+        - title: Binary rebuilds
+          items:
+            - description: Rebuild sawtools binary after Wave 1 merges (adds run-critic and set-critic-review commands).
+              command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go build -o sawtools ./cmd/saw
+            - description: Rebuild scout-and-wave-web binary after Wave 3 merges (embeds new React component and API route).
+              command: cd /Users/dayna.blackwell/code/scout-and-wave-web/web && npm run build && cd /Users/dayna.blackwell/code/scout-and-wave-web && go build -o saw ./cmd/saw
+        - title: Smoke tests
+          items:
+            - description: Verify sawtools run-critic --skip writes a PASS result with "Skipped by operator" summary.
+              command: sawtools run-critic /tmp/test-impl.yaml --skip
+            - description: Verify GET /api/impl/{slug}/critic-review returns 404 for an IMPL with no critic review.
+        - title: Config updates
+          items:
+            - description: Update saw.config.json (project-local and global) to add critic_model field. Example value "claude-sonnet-4-5".
+completion_reports:
+    A:
+        status: complete
+        branch: saw/critic-agent/wave1-agent-A
+        commit: 7b0db3c
+        files_changed:
+            - protocol/execution-rules.md
+            - protocol/participants.md
+            - implementations/claude-code/prompts/saw-skill.md
+        files_created:
+            - implementations/claude-code/prompts/agents/critic-agent.md
+        verification: PASS
+    B:
+        status: complete
+        branch: saw/critic-agent/wave1-agent-B
+        commit: "0641639"
+        files_changed:
+            - pkg/protocol/critic.go
+            - pkg/protocol/critic_test.go
+            - pkg/protocol/types.go
+        files_created:
+            - pkg/protocol/critic.go
+            - pkg/protocol/critic_test.go
+        tests_added:
+            - TestWriteCriticReview_WritesAndReads
+            - TestWriteCriticReview_FileNotFound
+            - TestGetCriticReview_Nil
+            - TestCriticResult_YAMLRoundtrip
+        verification: PASS
+    C:
+        status: complete
+        branch: saw/critic-agent/wave1-agent-C
+        commit: bb9a077
+        files_changed:
+            - cmd/saw/run_critic_cmd.go
+            - cmd/saw/run_critic_cmd_test.go
+            - cmd/saw/main.go
+        files_created:
+            - cmd/saw/run_critic_cmd.go
+            - cmd/saw/run_critic_cmd_test.go
+        tests_added:
+            - TestRunCriticCmd_SkipFlag
+            - TestRunCriticCmd_NoReviewFlag
+            - TestRunCriticCmd_MissingImplPath
+            - TestSetCriticReviewCmd_ValidInput
+            - TestSetCriticReviewCmd_InvalidJSON
+            - TestSetCriticReviewCmd_InvalidVerdict
+            - TestSetCriticReviewCmd_EmptyAgentReviews
+            - TestCollectRepoPaths
+            - TestInferRepoRoot
+        verification: PASS
+    D:
+        status: complete
+        branch: saw/critic-agent/wave1-agent-D
+        commit: 70e0be2
+        files_changed:
+            - cmd/saw/run_scout_cmd.go
+            - cmd/saw/run_scout_cmd_test.go
+        tests_added:
+            - TestCriticThresholdMet
+            - TestRunScoutCmd_CriticFlags
+        verification: PASS
+    E:
+        status: complete
+        branch: saw/critic-agent/wave2-agent-E
+        commit: f2b9590
+        files_changed:
+            - pkg/api/critic_handler.go
+            - pkg/api/critic_handler_test.go
+            - pkg/api/global_events.go
+            - pkg/api/impl.go
+        files_created:
+            - pkg/api/critic_handler.go
+            - pkg/api/critic_handler_test.go
+        tests_added:
+            - TestHandleGetCriticReview_NoReview
+            - TestHandleGetCriticReview_WithReview
+            - TestHandleGetCriticReview_NotFound
+        verification: PASS
+    F:
+        status: complete
+        branch: saw/critic-agent/wave2-agent-F
+        commit: 3adc0ac
+        files_changed:
+            - web/src/components/CriticReviewPanel.tsx
+        files_created:
+            - web/src/components/CriticReviewPanel.tsx
+        verification: PASS
+    G:
+        status: complete
+        branch: main
+        commit: bc15194
+        files_changed:
+            - web/src/types.ts
+            - web/src/components/ReviewScreen.tsx
+            - pkg/api/server.go
+        verification: 'PASS: tsc+vite build clean, go build clean, go test ./... all pass. Out-of-scope: wired s.RegisterCriticRoutes() in pkg/api/server.go (Agent E Wave 2 did not wire it). ReviewScreen.tsx in components/ not pages/ — used ./CriticReviewPanel import. Critic report fetched via separate GET /api/impl/slug/critic-review endpoint.'
+pre_mortem:
+    overall_risk: medium
+    rows:
+        - scenario: |
+            Agent B adds CriticReport field to types.go (outside its file ownership) and Agent C
+            also modifies types.go for command registration — merge conflict on types.go.
+          likelihood: low
+          impact: high
+          mitigation: |
+            Agent B owns the types.go edit (CriticReport field only). Agent C is explicitly
+            forbidden from touching types.go. Root.go registration is the only file Agent C
+            edits outside its ownership. Both edits are to different files so conflict is avoided.
+            If conflict occurs, orchestrator resolves manually before merge.
+        - scenario: |
+            Critic agent prompt (agent-agent.md) defines set-critic-review CLI format that
+            doesn't match what Agent C actually implements — critic agents in future runs
+            use wrong command syntax.
+          likelihood: medium
+          impact: medium
+          mitigation: |
+            Interface contract for set-critic-review is defined in this IMPL doc and both
+            Agent A (writes prompt) and Agent C (implements command) receive the same spec.
+            Agent A writes the prompt verbatim from the task description. Post-merge: verify
+            the command syntax in critic-agent.md matches the implemented --agent-reviews flag.
+        - scenario: |
+            scout-and-wave-go module is a dependency of scout-and-wave-web. If Wave 1 Agent B
+            adds CriticResult type to a published module version, Agent E (Wave 2) needs that
+            type available. If the go.mod in scout-and-wave-web pins an older version, Agent E
+            will get compile errors.
+          likelihood: high
+          impact: high
+          mitigation: |
+            scout-and-wave-web uses a local replace directive in go.mod pointing to the local
+            scout-and-wave-go checkout. As long as both repos are on the same machine and Agent B
+            commits to its worktree, Agent E can use the replace directive to pick up the new types.
+            Verify go.mod replace directive before launching Wave 2. If missing, add it before
+            wave 2 launches.
+        - scenario: |
+            ReviewScreen.tsx is complex enough that Agent G's changes (adding CriticReviewPanel
+            and SSE handler) conflict with its existing state management, causing TypeScript errors
+            that block the Wave 2 build gate.
+          likelihood: medium
+          impact: medium
+          mitigation: |
+            Agent G is explicitly instructed to read ReviewScreen.tsx in full before making
+            changes and to match its existing patterns. Agent G's verification gate is `npm run build`
+            which catches TypeScript errors. If blocked, Agent G reports partial with specific
+            TypeScript error and the orchestrator can apply a targeted fix.
+        - scenario: |
+            sawtools set-critic-review command is what the critic agent uses to write results.
+            If this command doesn't exist when Wave 1 merges (Agent C's work), the critic agent
+            prompt (Agent A's work) will reference a non-existent command.
+          likelihood: low
+          impact: low
+          mitigation: |
+            Both A and C are in Wave 1, so they merge together. The critic-agent.md prompt is not
+            executed until a critic agent is actually launched (which requires the binary to be rebuilt
+            post-merge per the post_merge_checklist). Binary rebuild happens after merge, which is
+            after both A and C complete. No timing issue.
+state: WAVE_PENDING
+integration_reports:
+    wave3:
+        wave: 3
+        gaps: []
+        valid: true
+        summary: 'Wave 3: all exports are integrated (no gaps detected)'
