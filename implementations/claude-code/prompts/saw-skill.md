@@ -41,7 +41,9 @@ tools).
 Each is embedded verbatim at its point of enforcement; the number is the anchor
 for cross-referencing and audit.*
 
-**Agent type preference:** Use custom `subagent_type` values (`scout`, `scaffold-agent`, `wave-agent`, `integration-agent`, `planner`) when launching agents. These provide tool-level enforcement (scout cannot Edit source, wave-agent cannot spawn sub-agents) and carry behavioral instructions in the type definition. If a custom type fails to load, fall back to `subagent_type: general-purpose` with the full prompt from the prompts directory.
+**Agent type preference:** Use custom `subagent_type` values (`scout`, `scaffold-agent`, `wave-agent`, `integration-agent`, `critic-agent`, `planner`) when launching agents. These provide tool-level enforcement (scout cannot Edit source, wave-agent cannot spawn sub-agents) and carry behavioral instructions in the type definition.
+
+**Fallback rule:** If any custom `subagent_type` fails to load, fall back to `subagent_type: general-purpose` with the agent prompt from `${CLAUDE_SKILL_DIR}/agents/<type>.md` (e.g., `agents/scout.md`, `agents/wave-agent.md`). For bootstrap Scout, use `${CLAUDE_SKILL_DIR}/saw-bootstrap.md`. Always pass the same context payload (IMPL doc path, feature description, repo root, etc.) to the fallback. This rule applies to all agent launches below — individual fallback instructions are omitted.
 
 **Agent model selection:** Agents inherit the parent session's model by default. Model can be overridden at three levels (highest precedence first):
 
@@ -67,7 +69,7 @@ for cross-referencing and audit.*
    For `/saw scout`, read `agent.scout_model`. For `/saw wave`, read `agent.wave_model`. For `/saw program execute`, read `agent.planner_model` for the Planner agent. For Scaffold agents, read `agent.scaffold_model`. For critic-agent runs, read `agent.critic_model`. Empty string or missing field means "inherit parent model." If neither config file exists, fall through to level 3.
 3. **Parent model** — If neither arg nor config specifies a model, agents inherit the parent session's model (no `model:` in frontmatter = inherit).
 
-**Implementation:** The Agent tool does not expose a model parameter, so model override works indirectly. Custom `subagent_type` values (`scout`, `wave-agent`, `scaffold-agent`) inherit the parent session's model. When `--model` is specified explicitly and the custom subagent_type's inherited model doesn't match (e.g., parent is Opus but `--model sonnet` requested), fall back to `subagent_type: general-purpose` with the full agent prompt from the prompts directory.
+**Implementation:** The Agent tool does not expose a model parameter, so model override works indirectly. Custom `subagent_type` values (`scout`, `wave-agent`, `scaffold-agent`) inherit the parent session's model. When `--model` is specified explicitly and the custom subagent_type's inherited model doesn't match (e.g., parent is Opus but `--model sonnet` requested), apply the Fallback Rule above.
 
 **Rate-limit fallback:** If an agent returns immediately with 0 tool uses and a rate-limit error message, retry once using `subagent_type: general-purpose` with the full agent prompt. Log the fallback to the user: "Agent hit rate limit on [model], retrying with parent model."
 
@@ -124,40 +126,14 @@ Read the agent template at `${CLAUDE_SKILL_DIR}/agent-template.md` for the 9-fie
 
 ## Pre-flight Validation
 
-When `/saw` is invoked for the first time in a session, run these checks
-silently. If any fail, print the diagnostic and stop.
+Run once per session on first `/saw` invocation. Skip on subsequent invocations.
 
-Run these checks once per session. Skip on subsequent `/saw` invocations.
+1. **sawtools on PATH**: `command -v sawtools` — blocker if missing
+2. **Skill files present**: Check `${CLAUDE_SKILL_DIR}/agent-template.md` exists — blocker if missing
+3. **Git 2.20+**: `git --version` — blocker if < 2.20
+4. **saw.config.json** (informational): Check project root for config — not a blocker
 
-1. **sawtools on PATH**: Run `which sawtools` or `command -v sawtools`.
-   If missing, print:
-   ```
-   sawtools not found on PATH. Install it:
-     cd /path/to/scout-and-wave-go && go build -o ~/.local/bin/sawtools ./cmd/saw
-     Then add ~/.local/bin to your PATH.
-   ```
-
-2. **Skill files present**: Check that `${CLAUDE_SKILL_DIR}/agent-template.md` exists.
-   If missing, print:
-   ```
-   Skill files not installed. Run: ./install.sh from the scout-and-wave repo root.
-   ```
-
-3. **Git version**: Run `git --version` and parse major.minor.
-   If < 2.20, print:
-   ```
-   Git 2.20+ required for worktree support. Current version: {version}.
-   ```
-
-4. **saw.config.json**: Check for `saw.config.json` in the project root.
-   If missing, print informational note (not a blocker):
-   ```
-   No saw.config.json found. Using defaults. See docs/INSTALLATION.md for config options.
-   ```
-
-All checks are lightweight — no network calls, no builds. If checks 1–3 fail,
-stop and display the remediation message. Check 4 is informational only and
-does not block execution.
+If checks 1-3 fail, print what's missing and how to install it (see `docs/INSTALLATION.md`), then stop.
 
 ## /saw amend
 
@@ -300,14 +276,14 @@ If the argument is `bootstrap <project-description>`:
 
    Ask the user to confirm the requirements before proceeding. If requirements were already discussed in conversation, fill in what you know and ask the user to confirm or adjust.
 
-2. Read `${CLAUDE_SKILL_DIR}/saw-bootstrap.md` from the scout-and-wave repository. Launch a **Scout agent** using the Agent tool with `subagent_type: scout` and `run_in_background: true`. The prompt must reference `docs/REQUIREMENTS.md` in the target project and include the path to `${CLAUDE_SKILL_DIR}/saw-bootstrap.md` as the procedure to follow. If `subagent_type: scout` fails, fall back to `subagent_type: general-purpose` with the contents of `${CLAUDE_SKILL_DIR}/saw-bootstrap.md` as its prompt. Inform the user the Scout is running.
+2. Read `${CLAUDE_SKILL_DIR}/saw-bootstrap.md` from the scout-and-wave repository. Launch a **Scout agent** using the Agent tool with `subagent_type: scout` and `run_in_background: true`. The prompt must reference `docs/REQUIREMENTS.md` in the target project and include the path to `${CLAUDE_SKILL_DIR}/saw-bootstrap.md` as the procedure to follow. Inform the user the Scout is running.
 3. When the Scout completes, read `docs/IMPL/IMPL-bootstrap.yaml`.
 5. Report the architecture design and wave structure. Ask the user to review before proceeding.
-6. **Scaffold Agent (conditional):** If the IMPL doc Scaffolds section is non-empty and any scaffold file has `Status: pending`, launch a **Scaffold Agent** using the Agent tool with `subagent_type: scaffold-agent` and `run_in_background: true`. The prompt parameter is the path to the IMPL doc and the feature slug. If `subagent_type: scaffold-agent` fails, fall back to `subagent_type: general-purpose` with the contents of `${CLAUDE_SKILL_DIR}/agents/scaffold-agent.md` as its prompt. Use `[SAW:scaffold:bootstrap]` as the description prefix. Wait for it to complete. If any scaffold file shows `Status: FAILED`, stop — report the failure and do not create worktrees. If all files show `Status: committed`, proceed.
+6. **Scaffold Agent (conditional):** If the IMPL doc Scaffolds section is non-empty and any scaffold file has `Status: pending`, launch a **Scaffold Agent** using the Agent tool with `subagent_type: scaffold-agent` and `run_in_background: true`. The prompt parameter is the path to the IMPL doc and the feature slug. Use `[SAW:scaffold:bootstrap]` as the description prefix. Wait for it to complete. If any scaffold file shows `Status: FAILED`, stop — report the failure and do not create worktrees. If all files show `Status: committed`, proceed.
 7. **Wave 1:** Create worktrees and launch Wave 1 agents exactly as in the IMPL-exists flow (step 2 onward of that branch). The bootstrap IMPL doc is now the single source of truth; all wave execution follows the standard wave loop from this point.
 
 If no `docs/IMPL/IMPL-*.yaml` file exists for the current feature:
-1. Launch a **Scout agent** using the Agent tool with `subagent_type: scout` and `run_in_background: true`. The prompt parameter is the feature description (the type definition carries the full behavioral instructions). If `subagent_type: scout` fails, fall back to `subagent_type: general-purpose` with the contents of `${CLAUDE_SKILL_DIR}/agents/scout.md` as its prompt and the feature description as context. The Scout analyzes the codebase, runs the suitability gate, and writes the IMPL doc; the Orchestrator does not perform this analysis itself. Inform the user that the Scout is running.
+1. Launch a **Scout agent** using the Agent tool with `subagent_type: scout` and `run_in_background: true`. The prompt parameter is the feature description (the type definition carries the full behavioral instructions). The Scout analyzes the codebase, runs the suitability gate, and writes the IMPL doc; the Orchestrator does not perform this analysis itself. Inform the user that the Scout is running.
 2. When the Scout completes, read the resulting `docs/IMPL/IMPL-<feature-slug>.yaml`.
 3. **E16: Validate IMPL doc before review.** After Scout writes the IMPL doc, run:
    ```bash
@@ -316,46 +292,21 @@ If no `docs/IMPL/IMPL-*.yaml` file exists for the current feature:
    The `--fix` flag auto-corrects mechanically fixable issues (e.g. invalid gate types → `custom`; valid types: build, lint, test, typecheck, format, custom) before validation runs. Check the `"fixed"` field in JSON output — if non-zero, log the corrections for the user. If exit code is 0, proceed to human review. If exit code is 1, the Scout should have already self-validated (up to 3 internal retries). Send the remaining errors to Scout as a single correction prompt using **resume with the Scout's agent ID** (preserves codebase analysis context): `resume: <scout-agent-id>`, `prompt: "Your IMPL doc failed orchestrator validation. Fix only these sections:\n{errors}"`. Retry once (the Scout already exhausted its own retries; more than 1 orchestrator retry is unlikely to help). On failure, enter BLOCKED and surface the validation errors to the human. Do not present the doc for human review until validation passes.
 
    **E16A note:** The validator enforces required block presence — an IMPL doc missing `impl-file-ownership`, `impl-dep-graph`, or `impl-wave-structure` typed blocks will fail even if all present blocks are internally valid. E16C warnings (out-of-band dep graph content) appear in stdout but do not cause exit 1; include them in the correction prompt anyway so Scout moves the content into a typed block.
-4. **Critic Gate (E37).** After `sawtools validate` passes, check whether critic review is warranted:
-   - Auto-trigger: wave 1 has 3+ agents OR file_ownership spans 2+ repos
-   - Manual trigger: user passed `--review` to `/saw scout`
-   - Skip: user passed `--no-review` OR `min_agents_for_review: 0` in saw.config.json
+4. **Critic Gate (E37).** After `sawtools validate` passes, check E37 trigger conditions and run if warranted (see E37 reference below). If verdict is PASS, proceed. If ISSUES with severity: error, correct briefs, re-validate (E16), re-run critic.
 
-   If triggering:
-   1. Read `agent.critic_model` from saw.config.json (fall back to parent model)
-   2. Launch critic agent: `Agent(subagent_type=critic-agent)` with:
-      - IMPL doc absolute path
-      - Repo root absolute path(s)
-   3. Wait for critic agent to complete
-   4. Read critic_report field from IMPL doc
-   5. If verdict is ISSUES: present issues to human, wait for corrections, re-validate
-      (E16), re-run critic. Repeat until PASS.
-   6. If verdict is PASS: proceed to human REVIEWED checkpoint normally.
+   **E37 reference (used by both scout and existing-IMPL flows):**
+   - **Trigger:** Auto-trigger if wave 1 has 3+ agents OR file_ownership spans 2+ repos. Manual: `--review` flag. Skip: `--no-review` OR `min_agents_for_review: 0` in saw.config.json.
+   - **Execution:** Read `agent.critic_model` from saw.config.json (fall back to parent model). Launch critic agent via Agent tool — do NOT use `sawtools run-critic` in CLI mode (spawns subprocess that fails in Claude Code session): `Agent(subagent_type=critic-agent, run_in_background=true, description="[SAW:critic:<slug>] pre-wave brief review", prompt="<IMPL doc path>\n<repo root path>")`. Wait for completion. Read `critic_report.verdict` from IMPL doc.
+   - **PASS:** Proceed to human REVIEWED checkpoint.
+   - **ISSUES (severity: error):** BLOCKS execution. Correct briefs (`sawtools amend-impl --redirect-agent <ID>`), re-validate (E16), re-run critic.
+   - **ISSUES (warnings only):** Advisory. Inform user, ask if they want to proceed.
 
 5. Report the suitability verdict to the user, and if suitable: the wave structure, file ownership table, interface contracts, and Scaffolds section. Ask the user to review before proceeding.
-6. **Scaffold Agent (conditional):** If the IMPL doc Scaffolds section is non-empty and any scaffold file has `Status: pending`, launch a **Scaffold Agent** using the Agent tool with `subagent_type: scaffold-agent` and `run_in_background: true`. The prompt parameter is the path to the IMPL doc and the feature slug. If `subagent_type: scaffold-agent` fails, fall back to `subagent_type: general-purpose` with the contents of `${CLAUDE_SKILL_DIR}/agents/scaffold-agent.md` as its prompt. Use `[SAW:scaffold:<feature-slug>]` as the description prefix so claudewatch can identify the run. The Scaffold Agent reads the approved contracts and creates the scaffold source files. Inform the user the Scaffold Agent is running. Wait for it to complete, then read the Scaffolds section: if any file shows `Status: FAILED`, stop immediately — report the failure reason to the user and do not create worktrees. The user must revise the interface contracts in the IMPL doc and re-run the Scaffold Agent. If all files show `Status: committed`, proceed.
+6. **Scaffold Agent (conditional):** If the IMPL doc Scaffolds section is non-empty and any scaffold file has `Status: pending`, launch a **Scaffold Agent** using the Agent tool with `subagent_type: scaffold-agent` and `run_in_background: true`. The prompt parameter is the path to the IMPL doc and the feature slug. Use `[SAW:scaffold:<feature-slug>]` as the description prefix so claudewatch can identify the run. The Scaffold Agent reads the approved contracts and creates the scaffold source files. Inform the user the Scaffold Agent is running. Wait for it to complete, then read the Scaffolds section: if any file shows `Status: FAILED`, stop immediately — report the failure reason to the user and do not create worktrees. The user must revise the interface contracts in the IMPL doc and re-run the Scaffold Agent. If all files show `Status: committed`, proceed.
 
 If a `docs/IMPL/IMPL-*.yaml` file already exists:
 1. Read it and identify the current wave (the first wave with unchecked status items). Also check the Scaffolds section: if any scaffold file has `Status: pending`, the Scaffold Agent has not yet run — spawn it now (see step 5 of the Scout flow above) before creating any worktrees. If any file shows `Status: FAILED`, stop and report the failure to the user before proceeding.
-2. **Critic gate (E37):** Check whether the critic has already run (look for a non-empty `critic_report` field in the IMPL doc). If it has already run with verdict PASS, skip this step. If it has not run (or has verdict ISSUES), check whether the threshold is met:
-   - Auto-trigger: wave 1 has 3+ agents OR file_ownership spans 2+ repos
-   - Manual trigger: user passed `--review` to the current command
-   - Skip: user passed `--no-review` OR `min_agents_for_review: 0` in saw.config.json
-
-   If triggering:
-   1. Read `agent.critic_model` from saw.config.json (fall back to parent model)
-   2. Launch critic agent via the Agent tool — **do NOT use `sawtools run-critic` in CLI orchestration mode; that command spawns a `claude` subprocess which fails inside a Claude Code session**:
-      ```
-      Agent(subagent_type=critic-agent, run_in_background=true,
-            description="[SAW:critic:<feature-slug>] pre-wave brief review",
-            prompt="<absolute IMPL doc path>\n<repo root absolute path>")
-      ```
-      If `subagent_type: critic-agent` fails to load, fall back to `subagent_type: general-purpose` with the contents of `${CLAUDE_SKILL_DIR}/agents/critic-agent.md` as its prompt plus the IMPL doc path and repo root.
-   3. Wait for the critic agent to complete.
-   4. Read the `critic_report.verdict` from the IMPL doc.
-      - **PASS:** Proceed to wave execution (step 3 onward).
-      - **ISSUES:** Surface the errors and warnings to the user. Any issue with `severity: error` BLOCKS wave execution — correct the affected agent briefs in the IMPL doc (use `sawtools amend-impl --redirect-agent <ID>` if the agent has not committed), re-validate (E16), and re-run the critic gate. Warnings are advisory — inform the user and ask if they want to proceed anyway.
-   - If threshold is NOT met: skip the critic gate entirely and proceed to step 3.
+2. **Critic gate (E37):** Check whether the critic has already run (look for non-empty `critic_report` field). If already PASS, skip. Otherwise, check E37 trigger conditions (see E37 reference in scout flow above). If triggered, run E37 execution steps. If threshold not met, skip and proceed to step 3.
 
 3. **Integration wave check (E27):** If the current wave has `type: integration` in the manifest, this is a wiring-only wave. Skip worktree creation and isolation verification. For each agent in the wave:
    - Run `sawtools prepare-agent "<manifest-path>" --wave <N> --agent <ID> --repo-dir "<repo-path>" --no-worktree` to extract brief and init journal
@@ -385,10 +336,10 @@ MANDATORY FIRST STEP - Verify isolation before any work:
 After verification passes, read your pre-extracted brief:
 Read .saw-agent-brief.md
 
-Follow the brief exactly.Follow the extracted brief exactly.
+Follow the brief exactly.
 ```
 
-**Fallback (full context):** If the IMPL doc path is not accessible from the agent's working directory (e.g., cross-repo orchestration where the doc is in a different repo the agent cannot reach), construct the full payload by extracting: (1) the agent's 9-field prompt section, (2) Interface Contracts, (3) File Ownership table, (4) Scaffolds section, (5) Quality Gates section, (6) absolute IMPL doc path as a header comment. Use the full-context fallback only when the short stub approach is not viable. **Cross-repository orchestration:** If the orchestrator and target repository are the same, use `isolation: "worktree"` for each agent. If orchestrating repo B from repo A, do NOT use the `isolation` parameter (it creates worktrees in repo A's context, not repo B). Instead, rely on manual worktree creation (step 5) and Field 0 cd navigation (Layer 1 + Layer 3 defense-in-depth). If `subagent_type: wave-agent` fails, fall back to `subagent_type: general-purpose` with the same prompt. **Async execution:** All Scout, Scaffold Agent, and Wave agent launches MUST use `run_in_background: true` so the Orchestrator remains responsive while agents work. Launch all agents in the current wave in a single message, then immediately inform the user that agents are running. **I1: Disjoint File Ownership:** no two agents in the same wave own the same file; this is a hard constraint, not a preference, and is the mechanism that makes parallel execution safe. Worktree isolation does not substitute for it; the IMPL doc's file ownership table is the enforcement mechanism. **E35: Own the caller too (wiring obligation rule).** When an agent implements function or type X that must be called from an existing aggregation function Y in file Z (e.g., a validator registry, a CLI command registration, a route table), file Z MUST be in that agent's `file_ownership`. The agent who defines X owns the responsibility to wire it in. If no single agent can own both sides (e.g., Z is modified by a different agent in the same wave), create a `wiring:` entry in the IMPL doc and assign the caller file to an integration agent in a later wave. **Wiring declarations:** For every such obligation, write a `wiring:` entry in the IMPL doc: `wiring: [{symbol: ValidateReactions, defined_in: pkg/protocol/reactions_validation.go, must_be_called_from: pkg/protocol/schema_validation.go, agent: B, wave: 1, integration_pattern: append}]`. prepare-wave pre-flight will reject if `must_be_called_from` is not in the owning agent's `file_ownership`. validate-integration will grep/AST-parse the caller file post-merge and report severity: error if the call is absent. **I2: Interface contracts precede parallel implementation.** The Scout defines all interfaces that cross agent boundaries in the IMPL doc. The Scaffold Agent implements them as type scaffold files committed to HEAD after human review, before any Wave Agent launches. Agents implement against the spec; they never coordinate directly. Verify scaffold files are committed (Scaffolds section status) before creating worktrees. **SAW tag requirement:** The `description` parameter of every Task tool call must be prefixed with a structured SAW tag in this exact format: `[SAW:wave{N}:agent-{ID}] {short description}`, where `{N}` is the 1-indexed wave number and `{ID}` is the full agent ID (matching `[A-Z][2-9]?` — a letter, or a letter plus digit 2–9). Examples: `[SAW:wave1:agent-A] implement cache layer`, `[SAW:wave2:agent-B] add MCP tools`, `[SAW:wave1:agent-A2] implement secondary cache`. This enables claudewatch to automatically parse wave timing and agent breakdown from session transcripts; structured observability with zero overhead. **Status tracking:** After each agent completes, update its status in the manifest:
+**Fallback (full context):** If the IMPL doc path is not accessible from the agent's working directory (e.g., cross-repo orchestration where the doc is in a different repo the agent cannot reach), construct the full payload by extracting: (1) the agent's 9-field prompt section, (2) Interface Contracts, (3) File Ownership table, (4) Scaffolds section, (5) Quality Gates section, (6) absolute IMPL doc path as a header comment. Use the full-context fallback only when the short stub approach is not viable. **Cross-repository orchestration:** If the orchestrator and target repository are the same, use `isolation: "worktree"` for each agent. If orchestrating repo B from repo A, do NOT use the `isolation` parameter (it creates worktrees in repo A's context, not repo B). Instead, rely on manual worktree creation (step 5) and Field 0 cd navigation (Layer 1 + Layer 3 defense-in-depth). **Async execution:** All Scout, Scaffold Agent, and Wave agent launches MUST use `run_in_background: true` so the Orchestrator remains responsive while agents work. Launch all agents in the current wave in a single message, then immediately inform the user that agents are running. **I1: Disjoint File Ownership:** no two agents in the same wave own the same file; this is a hard constraint, not a preference, and is the mechanism that makes parallel execution safe. Worktree isolation does not substitute for it; the IMPL doc's file ownership table is the enforcement mechanism. **E35: Own the caller too (wiring obligation rule).** When an agent implements function or type X that must be called from an existing aggregation function Y in file Z (e.g., a validator registry, a CLI command registration, a route table), file Z MUST be in that agent's `file_ownership`. The agent who defines X owns the responsibility to wire it in. If no single agent can own both sides (e.g., Z is modified by a different agent in the same wave), create a `wiring:` entry in the IMPL doc and assign the caller file to an integration agent in a later wave. **Wiring declarations:** For every such obligation, write a `wiring:` entry in the IMPL doc: `wiring: [{symbol: ValidateReactions, defined_in: pkg/protocol/reactions_validation.go, must_be_called_from: pkg/protocol/schema_validation.go, agent: B, wave: 1, integration_pattern: append}]`. prepare-wave pre-flight will reject if `must_be_called_from` is not in the owning agent's `file_ownership`. validate-integration will grep/AST-parse the caller file post-merge and report severity: error if the call is absent. **I2: Interface contracts precede parallel implementation.** The Scout defines all interfaces that cross agent boundaries in the IMPL doc. The Scaffold Agent implements them as type scaffold files committed to HEAD after human review, before any Wave Agent launches. Agents implement against the spec; they never coordinate directly. Verify scaffold files are committed (Scaffolds section status) before creating worktrees. **SAW tag requirement:** The `description` parameter of every Task tool call must be prefixed with a structured SAW tag in this exact format: `[SAW:wave{N}:agent-{ID}] {short description}`, where `{N}` is the 1-indexed wave number and `{ID}` is the full agent ID (matching `[A-Z][2-9]?` — a letter, or a letter plus digit 2–9). Examples: `[SAW:wave1:agent-A] implement cache layer`, `[SAW:wave2:agent-B] add MCP tools`, `[SAW:wave1:agent-A2] implement secondary cache`. This enables claudewatch to automatically parse wave timing and agent breakdown from session transcripts; structured observability with zero overhead. **Status tracking:** After each agent completes, update its status in the manifest:
    ```bash
    sawtools update-status "<manifest-path>" --wave <N> --agent <ID> --status complete
    ```
@@ -464,9 +415,8 @@ Follow the brief exactly.Follow the extracted brief exactly.
 
    1. Read `agent.integration_model` from `saw.config.json` (same two-level lookup as other models). If empty or missing, inherit the parent model.
    2. Launch the integration agent via the Agent tool with `subagent_type: integration-agent` and `run_in_background: true`. Pass the IMPL doc path, wave number, and the integration report JSON as the prompt. Use `[SAW:wave{N}:integrator] wire integration gaps` as the description.
-   3. If `subagent_type: integration-agent` fails, fall back to `subagent_type: general-purpose` with the contents of `${CLAUDE_SKILL_DIR}/agents/integration-agent.md` as its prompt plus the integration report.
-   4. After the integration agent completes, verify the build: `go build ./...`. If it fails, surface the error to the user.
-   5. Read the integration agent's completion report from the IMPL doc (agent ID: `integrator`).
+   3. After the integration agent completes, verify the build: `go build ./...`. If it fails, surface the error to the user.
+   4. Read the integration agent's completion report from the IMPL doc (agent ID: `integrator`).
 
    In the web app, this runs automatically after `finalize-wave`. CLI users can also run `sawtools validate-integration` manually and review the integration report before proceeding to the next wave.
 9. **E15: IMPL doc completion marker.** If this was the final wave and post-merge verification passed, run:
@@ -495,7 +445,7 @@ Analyze a project and produce a PROGRAM manifest that decomposes it into multipl
    ```
    Analyze the project described in docs/REQUIREMENTS.md and produce a PROGRAM manifest at docs/PROGRAM-<slug>.yaml. Follow the protocol in agents/planner.md.
    ```
-   If `subagent_type: planner` fails, fall back to `subagent_type: general-purpose` with the contents of `${CLAUDE_SKILL_DIR}/agents/planner.md` as its prompt. Inform the user the Planner is running.
+   Inform the user the Planner is running.
 
 3. **Wait for Planner completion.** The Planner produces `docs/PROGRAM-<slug>.yaml`. If the Planner determines the project is NOT_SUITABLE for multi-IMPL orchestration, it writes a minimal manifest with `state: "NOT_SUITABLE"` and an explanation. Surface this to the user and recommend `/saw bootstrap` or `/saw scout` instead.
 
@@ -711,8 +661,6 @@ Re-engage the Planner agent to revise a PROGRAM manifest after a tier gate failu
 3. Launch Planner agent with revision prompt:
    - Use Agent tool with `subagent_type: planner` and `run_in_background: true`
    - Pass revision prompt as parameter
-   - If `subagent_type: planner` fails, fall back to `subagent_type: general-purpose`
-     with full Planner prompt from `${CLAUDE_SKILL_DIR}/agents/planner.md`
 
 4. Wait for Planner completion. Planner produces revised PROGRAM manifest.
 
@@ -762,5 +710,3 @@ Only pending and failed tiers may be revised.
 - `program execute "<project-description>"`: Plan and execute multi-IMPL program with tier-gated progression. Extends Level A planning with automated Scout launching, IMPL execution, tier gates, and contract freezing. Pauses for human review at tier boundaries (Level B).
 - `program status`: Show program-level progress (tier completion, IMPL statuses, contract freeze status)
 - `program replan`: Re-engage Planner to revise PROGRAM manifest after tier gate failure or user request
-
-Always read the full IMPL doc before taking any action. The IMPL doc is the single source of truth.
