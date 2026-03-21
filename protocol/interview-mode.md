@@ -206,6 +206,62 @@ If the CLI detects EOF on stdin before the interview is complete, it:
 **Question Generation:**
 The deterministic mode uses a fixed question bank defined in `pkg/interview/phase_questions.go`. Each phase has a predefined list of questions with field mappings to the SpecData schema. The LLM mode (not yet implemented) will generate questions dynamically based on prior answers.
 
+### Canonical Question Bank (Deterministic Mode)
+
+The deterministic interview mode uses a fixed question bank defined in `pkg/interview/phase_questions.go` (scout-and-wave-go repo). Each phase has a predefined list of questions with field mappings to the SpecData schema. The total question count is 16 (plus 1 confirmation prompt in the review phase).
+
+**Phase 1: Overview (4 questions)**
+
+| Field | Question | Required |
+|-------|----------|----------|
+| `title` | "What is the title of this project or feature?" | Yes |
+| `goal` | "What is the primary goal? (one sentence)" | Yes |
+| `success_metrics` | "What are the success metrics? (comma-separated) (or type 'skip' to skip)" | No |
+| `non_goals` | "What is explicitly out of scope? (comma-separated) (or type 'skip' to skip)" | No |
+
+**Phase 2: Scope (3 questions)**
+
+| Field | Question | Required |
+|-------|----------|----------|
+| `in_scope` | "What is in scope? List the key deliverables (comma-separated)" | Yes |
+| `out_of_scope` | "What is out of scope? (comma-separated) (or type 'skip' to skip)" | No |
+| `assumptions` | "What assumptions are you making? (comma-separated) (or type 'skip' to skip)" | No |
+
+**Phase 3: Requirements (3 questions)**
+
+| Field | Question | Required |
+|-------|----------|----------|
+| `functional` | "List the functional requirements (one per line or comma-separated)" | Yes |
+| `non_functional` | "Any non-functional requirements? (e.g., performance, security) (or type 'skip' to skip)" | No |
+| `constraints` | "Any technical constraints? (e.g., Go 1.21+, no CGO) (or type 'skip' to skip)" | No |
+
+**Phase 4: Interfaces (3 questions)**
+
+| Field | Question | Required |
+|-------|----------|----------|
+| `data_models` | "What are the key data models or types? (or type 'skip' to skip)" | No |
+| `apis` | "What are the key APIs or command interfaces? (or type 'skip' to skip)" | No |
+| `external` | "Any external integrations? (or type 'skip' to skip)" | No |
+
+**Phase 5: Stories (1 question)**
+
+| Field | Question | Required |
+|-------|----------|----------|
+| `stories` | "List the key user stories or tasks (one per line) (or type 'skip' to skip)" | No |
+
+**Phase 6: Review (2 questions)**
+
+| Field | Question | Required |
+|-------|----------|----------|
+| `open_questions` | "Any open questions or unresolved decisions? (or type 'skip' to skip)" | No |
+| `_confirm` | "Review complete. Ready to generate REQUIREMENTS.md? (yes/no)" | Yes |
+
+**Phase transition rules:** A phase advances to the next when all its required fields are populated AND all optional fields have been asked (answered or skipped). The `_confirm` field in the review phase is special: it is never considered "populated" and is always asked exactly once. A "yes" answer transitions to `PhaseComplete`; a "no" answer keeps the interview in the review phase (implementation-defined behavior for re-asking).
+
+**Skip semantics:** When the user types "skip" for an optional field, the field is set to an empty slice (`[]`) rather than left as `nil`. This distinguishes "asked and skipped" from "not yet asked" -- a `nil` slice means the question has not been presented.
+
+**LLM mode (not yet implemented):** The LLM-backed mode will generate questions dynamically based on prior answers, enabling follow-up questions and adaptive depth. The deterministic question bank above serves as the baseline; LLM mode may ask these same questions plus additional context-sensitive ones.
+
 ### Related Rules
 
 - **E16 (Scout Output Validation):** Both interview mode and Scout produce structured requirements docs; E16 validates the IMPL doc that Scout produces, while interview mode validates its own output via the compiler
