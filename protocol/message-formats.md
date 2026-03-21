@@ -49,7 +49,7 @@ completion_reports:
     verification: "PASS"
 ```
 
-**Markdown format deprecated:** Prior to v0.7.0, Scout agents generated markdown IMPL docs (`.md` files with `# IMPL:` headers). This format is deprecated and will be removed in a future protocol version. Scout v0.7.1+ generates YAML manifests exclusively. The parser still reads markdown format temporarily for backward compatibility with existing IMPL docs, but all new work MUST use YAML manifests.
+**Legacy markdown format (removed):** Prior to v0.7.0, Scout agents generated markdown IMPL docs (`.md` files with `# IMPL:` headers). This format is fully deprecated. Scout v0.7.1+ generates YAML manifests exclusively. The parser retains read-only backward compatibility for pre-existing markdown IMPL docs, but **no new IMPL docs may use the markdown format**. All tooling, validation (E16), and orchestrator parsing targets YAML manifests only.
 
 ---
 

@@ -8,7 +8,7 @@ This document defines the execution rules that govern orchestrator behavior duri
 
 ## Overview
 
-Rules are numbered E1–E40 for cross-referencing and audit; the same convention as invariants (I1–I6). When referenced in implementation files, the E-number serves as an anchor; implementations should embed the canonical definition verbatim alongside the reference.
+Rules are numbered E1–E41 for cross-referencing and audit; the same convention as invariants (I1–I6). When referenced in implementation files, the E-number serves as an anchor; implementations should embed the canonical definition verbatim alongside the reference.
 
 To audit consistency, search implementation files for `E{N}` and verify the embedded definitions match this document.
 
@@ -471,6 +471,20 @@ where `N` is the 1-based line number of the opening fence of the suspect block.
 
 **Failure Handling:** Errors (duplicate keys, invalid action) block Scout completion. Warnings (missing checklist, file not found) are surfaced to human but do not block.
 
+### E16 Correction Loop (Automatic Re-Prompting)
+
+When validation fails, the orchestrator may automatically re-prompt the Scout with the validation errors (up to 3 retries). The correction loop:
+
+1. Runs `sawtools validate --fix` on the IMPL doc to apply auto-correctable fixes (e.g., normalizing field names, fixing YAML indentation)
+2. If errors remain after `--fix`, constructs a correction prompt listing each specific error with section name, failure description, and block identifier
+3. Re-launches the Scout with the correction prompt prepended to its original context
+4. Repeats up to 3 times (configurable via retry limit)
+5. After 3 failures, sets state to `SCOUT_VALIDATION_FAILED` (enters BLOCKED)
+
+The correction loop is implemented by `ScoutCorrectionLoop()` in the engine (`pkg/engine/` in scout-and-wave-go). The function reads validation errors from `sawtools validate`, formats them into a targeted correction prompt, and re-invokes the Scout agent with only the failing sections highlighted for revision.
+
+**Key property:** The correction loop is idempotent — running it multiple times on an already-valid IMPL doc is a no-op (validation passes on first attempt, no Scout re-invocation).
+
 **Related Rules:** See E16A (required block presence), E16B (dep graph grammar), E16C (out-of-band detection), E39 (Interview Mode — alternative requirements gathering pathway)
 
 ---
@@ -658,6 +672,27 @@ For each gate:
 - `quick` — skip all gates
 - `standard` — run all gates; failures warn
 - `full` — run all gates; required failures block merge
+
+### Format Gate Fix Mode
+
+Quality gates with `fix: true` in their configuration run in **fix mode** — they auto-apply formatting corrections (e.g., `gofmt -w`, `prettier --write`) rather than merely checking. Fix-mode gates:
+
+1. Execute the fix command (e.g., `gofmt -w ./...`)
+2. Stage any modified files (`git add` the formatted files)
+3. Report the fix as a pass (exit code 0 after formatting)
+
+Fix-mode gates run **before** check-only gates in the gate execution order. This ensures that formatting is applied before lint/test gates verify correctness.
+
+**When to use fix mode:**
+- Formatting tools with deterministic, safe auto-fix (gofmt, prettier, black)
+- Import sorting tools (goimports, isort)
+
+**When NOT to use fix mode:**
+- Linters with opinionated auto-fix that may change logic (eslint --fix with non-style rules)
+- Test commands (never fix mode)
+- Build commands (never fix mode)
+
+**Default:** `fix: false`. Gates are check-only unless explicitly configured with `fix: true`.
 
 **Out of scope:** AI Verification Gate (an agent that reviews implementation correctness). Subprocess-based gates only.
 
@@ -1299,6 +1334,24 @@ same command — re-execution produces identical output. Caching eliminates
 this redundant work at wave boundaries, especially during iterative
 development where gates are run multiple times before merge.
 
+### E38 Cache Completeness Checklist
+
+All gate execution paths must check the cache before running commands. The following paths are covered:
+
+| Execution Path | Cache Consulted | Notes |
+|----------------|----------------|-------|
+| `sawtools run-gates` | Yes (default) | Opt-out via `--no-cache` |
+| `finalize-wave` pre-merge gates (step 3, 3.5) | Yes (always) | Uses cached results from prior `run-gates` invocations |
+| `finalize-wave` post-merge gates (step 5.5) | No (never) | Post-merge gates always execute fresh via `RunPostMergeGates` — the merge changes HEAD, invalidating any prior cache |
+| E21A pre-wave baseline | Yes | Runs through `run-gates` internally |
+| E21 post-wave verification | Yes | Runs through `run-gates` internally |
+
+**Cache invalidation:** The cache key includes `headCommit + stagedDiffStat + unstagedDiffStat + gateCommand`. Any of the following invalidates the cache automatically:
+- New commit (changes headCommit)
+- Staged or unstaged file changes (changes diffStat)
+- Modified gate command in IMPL doc (changes gateCommand)
+- TTL expiry (5 minutes)
+
 **Related Rules:** See E21 (post-wave verification gates), E21A (pre-wave
 baseline), E21B (parallel gate execution).
 
@@ -1403,9 +1456,54 @@ See `interview-mode.md` for full specification, schema details, and implementati
 4. Include the IMPL slug and wave number in all events for cross-referencing
 5. For cost events, compute `cost_usd` using the model's published pricing at the time of the call
 
+### E40 Lifecycle Event Coverage Checklist
+
+The following checklist enumerates ALL lifecycle events that must be emitted. Events marked "wired" are implemented in the SDK; events marked "pending" require implementation.
+
+| Lifecycle Event | Event Type | Status | Emitting Location |
+|----------------|-----------|--------|-------------------|
+| Scout launch | `activity` (scout_launch) | wired | `RunScout()` in engine |
+| Scout completion | `activity` (scout_complete) | wired | `RunScout()` in engine |
+| Wave start | `activity` (wave_start) | wired | `prepare-wave` command |
+| Agent completion (success) | `agent_performance` | wired | `finalize-wave` reads completion reports |
+| Agent completion (failure) | `agent_performance` | wired | `finalize-wave` reads completion reports |
+| Agent token usage | `cost` | pending | Requires Claude API usage callback integration |
+| Wave merge | `activity` (wave_merge) | wired | `finalize-wave` merge step |
+| Wave failure | `activity` (wave_failed) | wired | `finalize-wave` on merge failure |
+| IMPL completion | `activity` (impl_complete) | wired | State machine COMPLETE transition |
+| Gate executed (pass) | `activity` (gate_executed) | wired | `run-gates` command |
+| Gate executed (fail) | `activity` (gate_failed) | wired | `run-gates` command |
+| Tier advanced | `activity` (tier_advanced) | pending | Requires `RunTierLoop()` implementation |
+| Tier gate pass | `activity` (tier_gate_passed) | pending | Requires `RunTierLoop()` implementation |
+| Tier gate fail | `activity` (tier_gate_failed) | pending | Requires `RunTierLoop()` implementation |
+
+**Pending events note:** Token/cost events require integration with Claude API response metadata. Tier-level events require the `RunTierLoop()` orchestration function (E28). These will be wired when their respective features are implemented.
+
 **Why This Matters:** Without observability events, operators cannot track cost trends across IMPLs, identify agents with high failure rates, or audit orchestrator actions. E40 makes observability a first-class protocol concern rather than an afterthought.
 
 **Related Rules:** See E19 (failure type classification — used in `agent_performance` events), E21 (quality gate execution — triggers `gate_executed`/`gate_failed` events), E28 (tier execution — triggers tier-level activity events), E29 (tier gate — triggers `tier_gate_passed`/`tier_gate_failed`), E33 (auto tier advancement — triggers `tier_advanced`)
+
+---
+
+## E41: Type Collision Detection
+
+**Trigger:** Before worktree creation (during prepare-wave)
+
+**Required Action:** Run `sawtools check-type-collisions <impl-doc>` to detect potential type name collisions across agents in the same wave. If two agents define the same type name in different files, the merge will fail with duplicate declarations.
+
+**Implementation:** The `pkg/collision/` package in scout-and-wave-go provides AST-based detection. The check runs as a pre-flight step in prepare-wave alongside E3 ownership verification.
+
+**Detection mechanism:**
+1. Parse all scaffold files and agent-owned files listed in the IMPL doc's file ownership table
+2. Extract all top-level type, function, and const declarations from each file
+3. Group declarations by Go package (files in the same directory share a package namespace)
+4. Flag any type/function/const name that appears in files owned by different agents within the same package
+
+**Failure Handling:** If collisions are detected, the wave does not launch. The Scout must revise the IMPL doc to resolve naming conflicts — either by renaming types to be unique, consolidating shared types into scaffold files (which are committed before worktree creation and thus shared by all agents), or moving conflicting declarations to different packages.
+
+**Relationship to I1:** Type collision detection extends I1 (disjoint file ownership) from file-level to symbol-level. Two agents may own different files in the same package, but if both define `type Config struct{...}`, the merge produces a compilation error despite no file-level conflict.
+
+**Related Rules:** See E3 (pre-launch ownership verification), E22 (scaffold build verification), I1 (disjoint file ownership)
 
 ---
 
@@ -1439,3 +1537,4 @@ See `interview-mode.md` for full specification, schema details, and implementati
 - E38: Gate Result Caching — run-gates/finalize-wave cache gate results keyed on headCommit+diffStat+command; TTL 5 min; --no-cache opt-out; stored in .saw-state/gate-cache.json — see also E21, E21A, E21B
 - E39: Interview Mode (Deterministic Requirements Gathering) — /saw interview command; 6-phase structured Q&A; state persistence in INTERVIEW-<slug>.yaml; resume capability; outputs REQUIREMENTS.md for bootstrap/scout — see also E16, E17, Scout Agent, `interview-mode.md`, `state-machine.md` (INTERVIEWING state)
 - E40: Observability Event Emission — orchestrator emits cost, agent_performance, and activity events at lifecycle transitions; non-blocking; batch writes preferred; stored as JSONB — see also E19, E21, E28, E29, E33, `observability-events.md`
+- E41: Type Collision Detection — pre-flight check during prepare-wave; AST-based detection of duplicate type/function/const names across agents in same package; blocks wave launch on collision — see also E3, E22, I1

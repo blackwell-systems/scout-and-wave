@@ -368,7 +368,7 @@ TIER_EXECUTING (Tier 2) → TIER_VERIFIED (Tier 2) →
 - `TIER_EXECUTING → BLOCKED` (IMPL failure or tier gate failure)
 - `BLOCKED → TIER_EXECUTING` (recovery, issue resolved)
 
-See `protocol/state-machine.md` for detailed state machine specification (to be updated in subsequent implementation phase).
+See `protocol/state-machine.md` for detailed state machine specification. Program-level state transitions (TIER_EXECUTING, TIER_VERIFIED, etc.) are governed by E28 (Tier Execution Loop), E29 (Tier Gate Verification), and E33 (Automatic Tier Advancement).
 
 ---
 

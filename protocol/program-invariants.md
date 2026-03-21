@@ -58,7 +58,7 @@ If P1 is violated, the Planner is issued a correction prompt (analogous to Scout
 
 **Related Rules:**
 - See I1 (disjoint file ownership) in `protocol/invariants.md`
-- See future E27+ (program execution rules) in Phase 2
+- See E28 (Tier Execution Loop), E29 (Tier Gate Verification), E31 (Parallel Scout Launching) in `protocol/execution-rules.md`
 - See `protocol/program-manifest.md` for tier and dependency schema
 
 ---
@@ -105,7 +105,7 @@ Program contracts are defined by the Planner. IMPL contracts are defined by the 
 - See I2 (interface contracts precede implementation) in `protocol/invariants.md`
 - See E2 (interface freeze) in `protocol/execution-rules.md`
 - See E8 (same-wave interface failure handling) in `protocol/execution-rules.md`
-- See future E28+ (program contract materialization) in Phase 2
+- See E30 (Program Contract Freezing), E31 (Parallel Scout Launching) in `protocol/execution-rules.md`
 - See `protocol/program-manifest.md` for program contract schema
 
 ---
@@ -168,7 +168,7 @@ The tier does not advance until BOTH reach COMPLETE.
 **Related Rules:**
 - See I3 (wave sequencing) in `protocol/invariants.md`
 - See `protocol/state-machine.md` for IMPL state transitions
-- See future program state machine documentation in Phase 2
+- See E28 (Tier Execution Loop), E29 (Tier Gate Verification), E33 (Automatic Tier Advancement) in `protocol/execution-rules.md`
 - See `protocol/program-manifest.md` for tier gate schema
 
 ---
@@ -342,7 +342,7 @@ This is a discipline enforced by code structure, not a single validation functio
 - See `protocol/participants.md` for Planner role definition
 - See `protocol/state-machine.md` for IMPL state transitions
 - See `docs/program-layer-roadmap.md` for full Program Layer design (Section 6)
-- Future: `protocol/program-execution-rules.md` (Phase 2) for E27+ rules
+- Program execution rules E28-E34 are defined in `protocol/execution-rules.md` (not a separate file)
 
 ---
 
