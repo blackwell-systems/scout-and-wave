@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.54.0] | 2026-03-20 | Housekeeping — archive completed IMPL docs (protocol-docs-gaps, resumable-wave-sessions), remove stale roadmap/proposal docs, update CONTEXT.md |
 | [0.53.0] | 2026-03-19 | E36: IMPL Amendment (Living IMPL Docs) — three amend operations: `add-wave` (append empty wave skeleton), `redirect-agent` (re-queue uncommitted agent), `extend-scope` (re-engage Scout with current IMPL as context); common preconditions (no SAW:COMPLETE, frozen completed-wave ownership, I1 compliance); `ErrAmendBlocked` sentinel; E15 amended (amend invalid after SAW:COMPLETE); saw-skill.md updated with `/saw amend` invocation modes and per-operation orchestrator flows |
 | [0.52.0] | 2026-03-19 | E35: Wiring Obligation Rule — agents must declare `wiring:` blocks for every exported symbol that requires integration; `prepare-wave` enforces ownership pre-flight (Layer 3A), `validate-integration --wiring` verifies post-merge (Layer 3B), agent briefs inject wiring table (Layer 3C); saw-skill.md updated with E35 orchestration guidance |
 | [0.51.0] | 2026-03-19 | E21A: Pre-Wave Baseline Verification + E21B: Parallel Gate Execution — `prepare-wave` now runs quality gates against HEAD before creating worktrees; solo waves and empty gate lists are exempt; E21B makes `run-gates` execute all gates concurrently and report all failures together |
@@ -35,6 +36,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.30.1] | 2026-03-12 | Scout v0.8.1 — format ambiguity fix prevents markdown section headers in YAML output |
 | [0.30.0] | 2026-03-12 | Scout v0.8.0 — analyze-deps now PRIMARY METHOD for Go dependency mapping (determinism improvement H3) |
 | [0.29.0] | 2026-03-11 | mark-complete simplification — removed --archive flag from all docs, always archives to complete/ |
+
+---
+## [0.54.0] - 2026-03-20
+
+### Removed
+- `docs/IMPL/IMPL-protocol-docs-gaps.yaml` — archived (IMPL complete)
+- `docs/IMPL/IMPL-resumable-wave-sessions.yaml` — archived (IMPL complete)
+- `docs/program-layer-roadmap.md` — stale, superseded by PROGRAM manifest spec
+- `docs/saw-pipeline-proposal.md` — stale, superseded by autonomy layer
+
+### Changed
+- `docs/CONTEXT.md` — updated with latest completed features
 
 ---
 ## [0.51.0] - 2026-03-19

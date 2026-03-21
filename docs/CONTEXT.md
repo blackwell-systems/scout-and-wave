@@ -21,3 +21,5 @@
   - IMPL doc: docs/IMPL/complete/IMPL-program-import.yaml
 - **protocol-docs-gaps**: completed 2026-03-20, 1 waves, 3 agents
   - IMPL doc: docs/IMPL/complete/IMPL-protocol-docs-gaps.yaml
+- **long-term-observability**: completed 2026-03-20, 3 waves, 8 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-long-term-observability.yaml
