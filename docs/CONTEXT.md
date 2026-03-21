@@ -23,3 +23,5 @@
   - IMPL doc: docs/IMPL/complete/IMPL-protocol-docs-gaps.yaml
 - **long-term-observability**: completed 2026-03-20, 3 waves, 8 agents
   - IMPL doc: docs/IMPL/complete/IMPL-long-term-observability.yaml
+- **protocol-conformity**: completed 2026-03-20, 3 waves, 7 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-protocol-conformity.yaml

@@ -1,0 +1,941 @@
+completion_date: "2026-03-21"
+title: Protocol Conformity — Close All Gaps Between Spec and Engine
+feature_slug: protocol-conformity
+verdict: SUITABLE
+suitability_assessment: |
+    Suitability gate passed on all five questions:
+
+    1. File decomposition: 20 gaps span ~25 files across 2 repos (protocol spec + Go engine).
+       Clear disjoint ownership possible — protocol docs vs engine code vs agent prompts.
+
+    2. Investigation-first: No unknowns. All gaps are well-characterized with specific
+       missing functions, missing integrations, or missing documentation sections identified.
+
+    3. Interface discoverability: All cross-agent interfaces are already defined in the
+       protocol spec (E28-E34). Engine functions have existing type signatures (TierAdvanceResult,
+       ReplanResult, TierGateResult, FreezeContractsResult). New functions follow established patterns.
+
+    4. Pre-implementation status: Partial implementations exist:
+       - AdvanceTierAutomatically() exists but no RunTierLoop() caller
+       - RunTierGate(), FreezeContracts(), ReplanProgram() exist standalone
+       - GetProgramStatus() reads but doesn't auto-update manifest
+       - Scout prompt has --program flag support but missing frozen contract guidance
+       - saw-skill.md has program commands listed but incomplete documentation
+
+    5. Parallelization value: High. 7 agents across 3 waves. Go build+test cycle >30s.
+       Protocol doc agents are fully independent from engine agents.
+
+    Estimated times:
+    - Scout phase: ~8 min
+    - Agent execution: ~25 min (7 agents, 3 waves, ~8 min avg accounting for parallelism)
+    - Merge and verification: ~8 min
+    Total SAW time: ~41 min
+
+    Sequential baseline: ~56 min (7 agents x 8 min avg)
+    Time savings: ~15 min (27% faster)
+
+    Recommendation: Clear speedup. Cross-repo separation makes parallelism natural.
+test_command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go test ./...
+lint_command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go vet ./...
+file_ownership:
+    - file: pkg/engine/program_tier_loop.go
+      agent: A
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: pkg/engine/program_tier_loop_test.go
+      agent: A
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: pkg/engine/program_parallel_scout.go
+      agent: B
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: pkg/engine/program_parallel_scout_test.go
+      agent: B
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: pkg/engine/program_progress.go
+      agent: B
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: pkg/engine/program_progress_test.go
+      agent: B
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: protocol/execution-rules.md
+      agent: C
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: protocol/program-manifest.md
+      agent: C
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: protocol/program-invariants.md
+      agent: C
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: protocol/message-formats.md
+      agent: C
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: protocol/interview-mode.md
+      agent: C
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: implementations/claude-code/prompts/agents/scout.md
+      agent: D
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: implementations/claude-code/prompts/agents/wave-agent.md
+      agent: D
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: implementations/claude-code/prompts/agents/integration-agent.md
+      agent: D
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: pkg/engine/scout_correction_loop.go
+      agent: E
+      wave: 2
+      action: new
+      repo: scout-and-wave-go
+    - file: pkg/engine/scout_correction_loop_test.go
+      agent: E
+      wave: 2
+      action: new
+      repo: scout-and-wave-go
+    - file: pkg/engine/gate_cache.go
+      agent: E
+      wave: 2
+      action: new
+      repo: scout-and-wave-go
+    - file: pkg/engine/gate_cache_test.go
+      agent: E
+      wave: 2
+      action: new
+      repo: scout-and-wave-go
+    - file: implementations/claude-code/prompts/saw-skill.md
+      agent: F
+      wave: 2
+      action: modify
+      repo: scout-and-wave
+    - file: pkg/orchestrator/events.go
+      agent: F
+      wave: 2
+      action: modify
+      repo: scout-and-wave-go
+    - file: cmd/saw/program_execute_cmd.go
+      agent: G
+      wave: 3
+      action: new
+      repo: scout-and-wave-go
+    - file: cmd/saw/program_execute_cmd_test.go
+      agent: G
+      wave: 3
+      action: new
+      repo: scout-and-wave-go
+interface_contracts:
+    - name: RunTierLoop
+      description: |
+        Full tier execution loop that reads PROGRAM manifest, partitions IMPLs,
+        launches Scouts in parallel, executes waves, runs tier gates, freezes
+        contracts, and advances to next tier. This is the missing orchestration
+        function that ties E28-E34 together.
+      definition: |
+        func RunTierLoop(ctx context.Context, opts TierLoopOpts) (*TierLoopResult, error)
+
+        type TierLoopOpts struct {
+            ManifestPath string
+            RepoPath     string
+            AutoMode     bool
+            Model        string
+            OnEvent      func(TierLoopEvent)
+        }
+
+        type TierLoopResult struct {
+            TiersExecuted   int
+            TiersRemaining  int
+            ProgramComplete bool
+            FinalState      string
+            Errors          []string
+        }
+
+        type TierLoopEvent struct {
+            Type    string // "tier_started", "scout_launched", "impl_complete", "tier_gate", "contracts_frozen", "tier_advanced", "replan_triggered"
+            Tier    int
+            Detail  string
+        }
+      location: pkg/engine/program_tier_loop.go
+    - name: PartitionIMPLsByStatus
+      description: |
+        Partitions IMPLs in a tier into needsScout vs preExisting groups per E28A.
+      definition: |
+        func PartitionIMPLsByStatus(manifest *protocol.PROGRAMManifest, tierNumber int) (needsScout []string, preExisting []string)
+      location: pkg/engine/program_tier_loop.go
+    - name: LaunchParallelScouts
+      description: |
+        Launches N Scout agents in parallel for all pending IMPLs in a tier (E31).
+      definition: |
+        func LaunchParallelScouts(ctx context.Context, opts ParallelScoutOpts) (*ParallelScoutResult, error)
+
+        type ParallelScoutOpts struct {
+            ManifestPath string
+            RepoPath     string
+            TierNumber   int
+            Slugs        []string
+            Model        string
+            OnEvent      func(TierLoopEvent)
+        }
+
+        type ParallelScoutResult struct {
+            Completed []string
+            Failed    []string
+            Errors    map[string]string
+        }
+      location: pkg/engine/program_parallel_scout.go
+    - name: UpdateProgramIMPLStatus
+      description: |
+        Hook called after IMPL state transitions to update PROGRAM manifest (E32).
+      definition: |
+        func UpdateProgramIMPLStatus(manifestPath string, implSlug string, newStatus string) error
+      location: pkg/engine/program_progress.go
+    - name: AutoTriggerReplan
+      description: |
+        Automatically triggers Planner re-engagement when tier gate fails (E34).
+      definition: |
+        func AutoTriggerReplan(manifestPath string, tierNumber int, gateResult *protocol.TierGateResult, model string) (*ReplanResult, error)
+      location: pkg/engine/program_tier_loop.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## Agent A — Tier Execution Loop (E28/E28A/E29/E30/E33/E34)
+
+            **Repo:** scout-and-wave-go (Go engine)
+            **Files:** pkg/engine/program_tier_loop.go, pkg/engine/program_tier_loop_test.go
+
+            ### What to Implement
+
+            Create `pkg/engine/program_tier_loop.go` containing the full tier execution loop
+            that ties together all existing standalone functions into a cohesive orchestration flow.
+
+            **Core function: `RunTierLoop(ctx, opts) (*TierLoopResult, error)`**
+
+            The loop implements E28's tier execution sequence:
+            1. Parse PROGRAM manifest from opts.ManifestPath
+            2. Determine current tier (lowest tier with incomplete IMPLs)
+            3. Call `PartitionIMPLsByStatus()` (E28A) to split tier into needsScout vs preExisting
+            4. For needsScout IMPLs: call `LaunchParallelScouts()` (E31, implemented by Agent B)
+               - For now, stub this as a function variable `launchParallelScoutsFunc` so it compiles
+                 independently. Agent B implements the real function.
+            5. For preExisting IMPLs: validate via existing `protocol.ValidateProgramImportMode()`
+            6. Wait for all Scouts + validations to complete
+            7. If NOT autoMode: return with RequiresReview=true (human gate for IMPL review)
+            8. Execute waves for each IMPL using existing engine.RunWaveFull()
+            9. When all IMPLs complete: run existing `protocol.RunTierGate()` (E29)
+            10. If gate passes: call existing `protocol.FreezeContracts()` (E30)
+            11. If gate fails and autoMode: call `AutoTriggerReplan()` (E34)
+                - AutoTriggerReplan wraps existing `engine.ReplanProgram()` with gate failure context
+            12. If gate passes and autoMode: call existing `engine.AdvanceTierAutomatically()` (E33)
+            13. Loop back to step 2 for next tier (if auto mode)
+            14. If final tier complete: set ProgramComplete=true
+
+            **Helper: `PartitionIMPLsByStatus(manifest, tierNumber) (needsScout, preExisting)`**
+            - needsScout: IMPLs with status "pending" or "scouting"
+            - preExisting: IMPLs with status "reviewed" or "complete"
+
+            **Helper: `AutoTriggerReplan(manifestPath, tierNumber, gateResult, model) (*ReplanResult, error)`**
+            - Constructs reason string from gate failure details
+            - Calls existing engine.ReplanProgram() with the constructed opts
+
+            **Event emission:** Call opts.OnEvent() at each major step for observability.
+
+            ### Existing Code to Reference
+            - `pkg/engine/program_auto.go` — AdvanceTierAutomatically(), ReplanProgram() (use these, don't reimplement)
+            - `pkg/protocol/program_tier_gate.go` — RunTierGate()
+            - `pkg/protocol/program_freeze.go` — FreezeContracts()
+            - `pkg/protocol/program_status.go` — GetProgramStatus()
+            - `pkg/engine/run_wave_full.go` — RunWaveFull() for per-IMPL wave execution
+
+            ### Tests
+            Write table-driven tests in program_tier_loop_test.go:
+            - Test PartitionIMPLsByStatus with mixed statuses
+            - Test RunTierLoop with single tier, all pending (mock scout + wave execution)
+            - Test RunTierLoop stops at human gate when autoMode=false
+            - Test AutoTriggerReplan constructs correct reason from gate result
+            - Test tier loop advances to next tier in auto mode
+            - Test tier loop sets ProgramComplete on final tier
+
+            ### Verification Gate
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./pkg/engine/... && go test ./pkg/engine/ -run TestTierLoop -v
+            ```
+
+            ### Constraints
+            - Do NOT modify existing files (program_auto.go, etc.) — only create new files
+            - Use function variables for cross-agent dependencies (launchParallelScoutsFunc)
+            - Follow existing engine patterns (see program_auto.go for style)
+          files:
+            - pkg/engine/program_tier_loop.go
+            - pkg/engine/program_tier_loop_test.go
+        - id: B
+          task: |
+            ## Agent B — Parallel Scout Launching + Progress Tracking (E31/E32)
+
+            **Repo:** scout-and-wave-go (Go engine)
+            **Files:** pkg/engine/program_parallel_scout.go, program_parallel_scout_test.go,
+                       pkg/engine/program_progress.go, program_progress_test.go
+
+            ### What to Implement
+
+            **File 1: pkg/engine/program_parallel_scout.go — Parallel Scout Launching (E31)**
+
+            Create `LaunchParallelScouts(ctx, opts) (*ParallelScoutResult, error)` that:
+            1. Reads PROGRAM manifest to get IMPL entries for the given tier
+            2. For each slug in opts.Slugs, launches a Scout in a goroutine using existing
+               `engine.RunScout()` with opts including `--program` flag
+            3. Uses errgroup for concurrent execution with context cancellation
+            4. Collects results: which Scouts completed, which failed, error details
+            5. Calls opts.OnEvent() for each Scout launch/completion (observability)
+
+            Each Scout receives:
+            - Feature description from manifest.Impls[slug].Title
+            - ProgramManifestPath set to opts.ManifestPath (passes frozen contracts)
+            - RepoPath from opts.RepoPath
+            - IMPLOutPath derived from slug: docs/IMPL/IMPL-<slug>.yaml
+
+            Reference: `pkg/engine/runner.go` RunScout() and RunScoutOpts for the existing
+            Scout launch interface.
+
+            **File 2: pkg/engine/program_progress.go — Cross-IMPL Progress Tracking (E32)**
+
+            Create `UpdateProgramIMPLStatus(manifestPath, implSlug, newStatus) error` that:
+            1. Parses the PROGRAM manifest
+            2. Finds the IMPL entry matching implSlug
+            3. Updates its Status field to newStatus
+            4. Recalculates completion counters (ImplsComplete, TiersComplete)
+            5. Writes the updated manifest back to disk
+
+            Also create `SyncProgramStatusFromDisk(manifestPath, repoPath) error` that:
+            1. Parses the PROGRAM manifest
+            2. For each IMPL, checks IMPL doc on disk for current state
+            3. Updates PROGRAM manifest status fields to match disk state
+            4. Recalculates completion counters
+            5. Writes back
+
+            This builds on existing `protocol.GetProgramStatus()` (which reads but doesn't write)
+            by adding the write-back capability.
+
+            ### Existing Code to Reference
+            - `pkg/engine/runner.go` — RunScout(), RunScoutOpts
+            - `pkg/protocol/program_status.go` — GetProgramStatus(), enrichIMPLStatusesFromDisk()
+            - `pkg/protocol/program_parser.go` — ParseProgramManifest()
+
+            ### Tests
+            - Test LaunchParallelScouts with 3 mock Scouts (2 succeed, 1 fails)
+            - Test LaunchParallelScouts respects context cancellation
+            - Test UpdateProgramIMPLStatus updates status and recalculates counters
+            - Test SyncProgramStatusFromDisk reads IMPL docs and updates manifest
+
+            ### Verification Gate
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./pkg/engine/... && go test ./pkg/engine/ -run "TestParallelScout|TestProgramProgress" -v
+            ```
+
+            ### Constraints
+            - Do NOT modify existing files — only create new files
+            - Use existing RunScout() interface, do not reimplement Scout launching
+            - Mock RunScout in tests using a function variable seam
+          files:
+            - pkg/engine/program_parallel_scout.go
+            - pkg/engine/program_parallel_scout_test.go
+            - pkg/engine/program_progress.go
+            - pkg/engine/program_progress_test.go
+        - id: C
+          task: |
+            ## Agent C — Protocol Documentation Updates (Gaps 10-14, 17-19)
+
+            **Repo:** scout-and-wave (protocol spec)
+            **Files:** protocol/execution-rules.md, protocol/program-manifest.md,
+                       protocol/program-invariants.md, protocol/message-formats.md,
+                       protocol/interview-mode.md
+
+            ### What to Implement
+
+            **1. execution-rules.md — Add E-rule for Type Collision Detection (Gap 11)**
+            Add a new rule after E40 (or find the appropriate gap in numbering):
+
+            ```
+            ## E41: Type Collision Detection
+
+            **Trigger:** Before worktree creation (during prepare-wave)
+
+            **Required Action:** Run `sawtools check-type-collisions <impl-doc>` to detect
+            potential type name collisions across agents in the same wave. If two agents
+            define the same type name in different files, the merge will fail with duplicate
+            declarations.
+
+            **Implementation:** The `pkg/collision/` package provides AST-based detection.
+            The check runs as a pre-flight step in prepare-wave alongside E3 ownership verification.
+
+            **Failure Handling:** If collisions are detected, the wave does not launch.
+            The Scout must revise the IMPL doc to resolve naming conflicts (rename types
+            or consolidate into scaffolds).
+            ```
+
+            **2. execution-rules.md — Document E16 Correction Loop behavior (Gap 10)**
+            In the existing E16 section, add a subsection:
+
+            ```
+            ### E16 Correction Loop (Automatic Re-Prompting)
+
+            When validation fails, the orchestrator may automatically re-prompt the Scout
+            with the validation errors (up to 3 retries). The correction loop:
+            1. Runs `sawtools validate --fix` on the IMPL doc
+            2. If errors remain after --fix, constructs a correction prompt with specific errors
+            3. Re-launches the Scout with the correction prompt prepended
+            4. Repeats up to 3 times
+            5. After 3 failures, sets state to SCOUT_VALIDATION_FAILED
+
+            The correction loop is implemented by `ScoutCorrectionLoop()` in the engine.
+            ```
+
+            **3. execution-rules.md — Document E38 gate caching completeness (Gap 16)**
+            In existing E38 section, add a note about ensuring all gate execution paths
+            check the cache before running commands.
+
+            **4. execution-rules.md — Document E40 observability completeness (Gap 15)**
+            In existing E40 section, add a checklist of ALL lifecycle events that must be
+            emitted, noting which ones may not yet be wired.
+
+            **5. execution-rules.md — Document format gate fix mode (Gap 19)**
+            Add subsection to E21 or create new section documenting when format gates
+            auto-apply fixes vs check-only mode.
+
+            **6. program-manifest.md — Fix stale cross-references (Gap 18)**
+            Search for "to be updated" and replace with actual content references.
+            Update any sections that say "see future documentation" with the now-existing
+            execution rules (E28-E34).
+
+            **7. program-invariants.md — Update P-invariant references**
+            Update references from "See future E27+" to specific E28-E34 rule numbers.
+
+            **8. message-formats.md — Remove legacy markdown IMPL references (Gap 17)**
+            Remove or update any references to the deprecated markdown IMPL format.
+            Ensure all format descriptions reference YAML-only format.
+
+            **9. interview-mode.md — Document canonical question bank (Gap 14)**
+            Add a section listing the 6 phases and their canonical questions, referencing
+            the implementation in `pkg/interview/phase_questions.go`. Document the fixed
+            question set for deterministic mode.
+
+            ### Verification Gate
+            ```
+            echo "Protocol docs are markdown — no build gate. Verify files exist and are non-empty."
+            test -s /Users/dayna.blackwell/code/scout-and-wave/protocol/execution-rules.md && echo "OK"
+            ```
+
+            ### Constraints
+            - Do NOT modify Go source files — only protocol markdown files
+            - Preserve existing section numbering; add new rules at the end
+            - Use existing E-rule numbering convention (E41 for type collision)
+            - Reference existing implementation locations accurately
+          files:
+            - protocol/execution-rules.md
+            - protocol/program-manifest.md
+            - protocol/program-invariants.md
+            - protocol/message-formats.md
+            - protocol/interview-mode.md
+        - id: D
+          task: |
+            ## Agent D — Agent Prompt Updates (Gaps 9, 12, 20)
+
+            **Repo:** scout-and-wave (protocol spec)
+            **Files:** implementations/claude-code/prompts/agents/scout.md,
+                       implementations/claude-code/prompts/agents/wave-agent.md,
+                       implementations/claude-code/prompts/agents/integration-agent.md
+
+            ### What to Implement
+
+            **1. scout.md — Add Program Contract Guidance (Gap 9)**
+
+            Add a new section (after the existing scaffold/interface contracts guidance):
+
+            ```markdown
+            ## Program Contract Awareness
+
+            When the `--program` flag is provided, the Scout receives frozen program contracts
+            from a PROGRAM manifest. These contracts are IMMUTABLE — the Scout must:
+
+            1. **Recognize frozen contracts:** Check the program contracts section for any
+               contracts with `frozen: true`. These types/interfaces already exist as committed
+               source code and must not be redefined.
+
+            2. **Consume, don't redefine:** If a frozen contract defines `type AuthToken struct`,
+               the IMPL must import and use it, not create a new type with the same name.
+
+            3. **Immutability rule:** Never propose modifications to frozen contracts in the
+               interface_contracts or scaffolds sections. If a frozen contract needs changes,
+               the Scout must set `verdict: SUITABLE_WITH_CAVEATS` and document that the
+               Planner must be re-engaged (E34) to revise the program contract.
+
+            4. **Escalation:** If the feature genuinely cannot be implemented without modifying
+               a frozen contract, write in the suitability_assessment: "BLOCKED: requires
+               modification to frozen program contract <name>. Planner re-engagement required."
+            ```
+
+            **2. wave-agent.md — Add Program Contract Awareness (Gap 12)**
+
+            Add a section about frozen vs mutable interfaces:
+
+            ```markdown
+            ## Program Contract Awareness
+
+            When working within a PROGRAM-managed IMPL, some interface contracts may be
+            program-level contracts (frozen at a prior tier boundary). These are marked in
+            the IMPL doc's interface_contracts with `frozen: true`.
+
+            - **Frozen contracts:** Read-only. Import and use them. Do NOT modify the source
+              files containing frozen contracts. If your implementation cannot work with a
+              frozen contract as-is, report `status: blocked, failure_type: needs_replan`.
+
+            - **Mutable contracts:** Normal IMPL-level contracts. You may implement them
+              according to the interface_contracts specification.
+
+            Check the `frozen_contracts_hash` field in the IMPL doc — if present, this IMPL
+            is part of a PROGRAM and some contracts may be frozen.
+            ```
+
+            **3. integration-agent.md — Improve integration_connectors docs (Gap 20)**
+
+            Expand the existing integration-agent prompt to better explain:
+
+            - What `integration_connectors` are and when they are used
+            - How `AllowedPathPrefixes` constrains which files the integration agent may modify
+            - The relationship between `type: integration` waves and integration_connectors
+            - Example: wiring a new CLI command into root.go, registering a handler in main.go
+
+            Add concrete examples showing the JSON structure of integration_connectors and
+            how the agent should interpret AllowedPathPrefixes constraints.
+
+            ### Verification Gate
+            ```
+            echo "Prompt files are markdown — no build gate."
+            test -s /Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/prompts/agents/scout.md && echo "OK"
+            ```
+
+            ### Constraints
+            - Do NOT modify Go source files — only agent prompt markdown files
+            - Preserve existing prompt structure; add new sections at appropriate locations
+            - Use terminology consistent with existing protocol documentation
+            - Reference E-rule numbers (E28, E30, E34) and P-invariant numbers (P2) accurately
+          files:
+            - implementations/claude-code/prompts/agents/scout.md
+            - implementations/claude-code/prompts/agents/wave-agent.md
+            - implementations/claude-code/prompts/agents/integration-agent.md
+      base_commit: 48f35d52a2df907b7ca56d63b26cc2e9c8660688
+    - number: 2
+      agents:
+        - id: E
+          task: |
+            ## Agent E — E16 Correction Loop + E38 Gate Caching (Gaps 10, 16)
+
+            **Repo:** scout-and-wave-go (Go engine)
+            **Files:** pkg/engine/scout_correction_loop.go, scout_correction_loop_test.go,
+                       pkg/engine/gate_cache.go, gate_cache_test.go
+
+            ### What to Implement
+
+            **File 1: pkg/engine/scout_correction_loop.go — E16 Correction Loop (Gap 10)**
+
+            Create `ScoutCorrectionLoop(ctx, opts) error` that:
+            1. After RunScout() completes, runs `sawtools validate --fix` on the output IMPL doc
+            2. If validation passes, return nil (success)
+            3. If validation fails, parse the JSON error output to extract specific failures
+            4. Construct a correction prompt: "The IMPL doc you produced has validation errors.
+               Fix the following issues:\n" + error details
+            5. Re-launch RunScout() with the correction prompt prepended to the feature description
+            6. Repeat up to 3 times (MaxScoutCorrectionRetries = 3)
+            7. After 3 failures, set IMPL doc state to SCOUT_VALIDATION_FAILED and return error
+
+            ```go
+            type ScoutCorrectionOpts struct {
+                ScoutOpts    RunScoutOpts
+                MaxRetries   int  // default 3
+                OnRetry      func(attempt int, errors []string)
+            }
+            ```
+
+            Reference existing patterns:
+            - `pkg/engine/runner.go` RunScout() for the Scout launch interface
+            - `pkg/engine/finalize_impl.go` for how validation is currently called post-Scout
+            - The correction loop wraps RunScout, NOT replaces it
+
+            **File 2: pkg/engine/gate_cache.go — E38 Gate Result Caching (Gap 16)**
+
+            Create a gate result cache that stores pass/fail results keyed by
+            (command + input file hashes). This ensures repeated gate runs within the
+            same wave execution reuse prior results.
+
+            ```go
+            type GateResultCache struct {
+                mu      sync.RWMutex
+                entries map[string]CachedGateResult
+            }
+
+            type CachedGateResult struct {
+                Passed    bool
+                Output    string
+                CachedAt  time.Time
+                InputHash string  // hash of files that affect this gate
+            }
+
+            func NewGateResultCache() *GateResultCache
+            func (c *GateResultCache) Get(command string, inputHash string) (CachedGateResult, bool)
+            func (c *GateResultCache) Set(command string, inputHash string, result CachedGateResult)
+            func (c *GateResultCache) Invalidate()
+            func (c *GateResultCache) InvalidateCommand(command string)
+            ```
+
+            The cache is invalidated when:
+            - Format gate runs in fix mode (files changed)
+            - New wave merges (files changed)
+            - Explicit invalidation by orchestrator
+
+            ### Tests
+            - Test ScoutCorrectionLoop succeeds on first try (no retries needed)
+            - Test ScoutCorrectionLoop retries on validation failure, succeeds on retry 2
+            - Test ScoutCorrectionLoop exhausts retries and sets SCOUT_VALIDATION_FAILED
+            - Test GateResultCache get/set/invalidate
+            - Test GateResultCache returns miss for different inputHash
+            - Test GateResultCache Invalidate clears all entries
+
+            ### Verification Gate
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./pkg/engine/... && go test ./pkg/engine/ -run "TestScoutCorrection|TestGateCache" -v
+            ```
+
+            ### Constraints
+            - Do NOT modify existing engine files — only create new files
+            - ScoutCorrectionLoop wraps RunScout; it does not replace or modify runner.go
+            - Gate cache is a standalone utility; integration into orchestrator is for Wave 3
+          files:
+            - pkg/engine/scout_correction_loop.go
+            - pkg/engine/scout_correction_loop_test.go
+            - pkg/engine/gate_cache.go
+            - pkg/engine/gate_cache_test.go
+          dependencies:
+            - A
+        - id: F
+          task: |
+            ## Agent F — Saw-Skill Prompt + Observability Event Wiring (Gaps 13, 15)
+
+            **Repo:** scout-and-wave (protocol) + scout-and-wave-go (engine)
+            **Files:** implementations/claude-code/prompts/saw-skill.md (protocol repo),
+                       pkg/orchestrator/events.go (Go repo)
+
+            ### What to Implement
+
+            **File 1: saw-skill.md — Complete Program Command Documentation (Gap 13)**
+
+            The saw-skill.md already mentions `/saw program plan/execute/status` but the
+            documentation is incomplete. Expand the program section to include:
+
+            1. Full `/saw program plan "<description>"` workflow documentation with all steps
+            2. Full `/saw program execute "<description>"` workflow with tier loop steps
+            3. `/saw program execute --auto` documentation explaining auto-advancement
+            4. `/saw program status` output format documentation
+            5. `/saw program replan --reason "<reason>"` documentation for manual re-engagement
+            6. Document all sawtools program commands:
+               - `sawtools program-status <manifest>`
+               - `sawtools freeze-contracts <manifest> --tier N`
+               - `sawtools tier-gate <manifest> --tier N`
+               - `sawtools program-replan <manifest> --reason "<reason>"`
+               - `sawtools update-program-state <manifest> --state <state>`
+               - `sawtools update-program-impl <manifest> --impl <slug> --status <status>`
+
+            **File 2: pkg/orchestrator/events.go — E40 Observability Completeness (Gap 15)**
+
+            Review the existing events.go and add any missing lifecycle event types.
+            The E40 rule requires events for ALL state transitions. Ensure these event
+            types exist:
+
+            - `program_tier_started` — when a tier begins execution
+            - `program_scout_launched` — when a Scout is launched within a tier
+            - `program_scout_complete` — when a Scout finishes
+            - `program_impl_complete` — when an IMPL completes all waves
+            - `program_tier_gate_started` — when tier gate verification begins
+            - `program_tier_gate_result` — when tier gate passes/fails
+            - `program_contracts_frozen` — when contracts are frozen at tier boundary
+            - `program_tier_advanced` — when moving to next tier
+            - `program_replan_triggered` — when Planner re-engagement starts
+            - `program_complete` — when all tiers complete
+
+            Add event type constants and payload structs following the existing pattern
+            in events.go. These event types will be emitted by the tier loop (Agent A's
+            code) via the OnEvent callback.
+
+            ### Verification Gate
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./pkg/orchestrator/...
+            ```
+
+            ### Constraints
+            - For saw-skill.md: preserve existing structure, expand program sections
+            - For events.go: add new event types/payloads, do NOT modify existing events
+            - Follow existing event naming conventions in events.go
+          files:
+            - implementations/claude-code/prompts/saw-skill.md
+            - pkg/orchestrator/events.go
+          dependencies:
+            - C
+            - D
+      base_commit: d4bb229c7d4afba395e5570250f54f5b7802ad14
+    - number: 3
+      type: integration
+      agents:
+        - id: G
+          task: |
+            ## Agent G — Wire Tier Loop into CLI (Integration)
+
+            **Repo:** scout-and-wave-go (Go engine)
+            **Files:** cmd/saw/program_execute_cmd.go, cmd/saw/program_execute_cmd_test.go
+
+            ### What to Implement
+
+            Create `cmd/saw/program_execute_cmd.go` — a new `sawtools program-execute` command
+            that invokes the tier loop from Agent A.
+
+            ```go
+            func newProgramExecuteCmd() *cobra.Command
+            ```
+
+            The command:
+            1. Takes a PROGRAM manifest path as positional argument
+            2. Flags: `--auto` (bool, enables auto-advancement), `--model` (string, model override)
+            3. Calls `engine.RunTierLoop()` with appropriate opts
+            4. Streams TierLoopEvents to stdout as JSON lines
+            5. Exits 0 on program complete, 1 on failure, 2 on parse error
+
+            Also wire `LaunchParallelScouts` into the tier loop by setting the function
+            variable that Agent A stubbed.
+
+            Register the command in the root command (find where other program commands
+            are registered and add this one).
+
+            Wire `UpdateProgramIMPLStatus()` (Agent B) into the IMPL completion hooks
+            by calling it from the tier loop's OnEvent handler when impl_complete events fire.
+
+            ### Tests
+            - Test command parses flags correctly
+            - Test command exits 2 on invalid manifest path
+
+            ### Verification Gate
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./cmd/saw/... && go test ./cmd/saw/ -run TestProgramExecute -v
+            ```
+
+            ### Constraints
+            - Create new files only (program_execute_cmd.go)
+            - Wire together Agent A + Agent B functions; do not reimplement
+            - Follow existing cmd/saw patterns (see program_replan_cmd.go, program_status_cmd.go)
+          files:
+            - cmd/saw/program_execute_cmd.go
+            - cmd/saw/program_execute_cmd_test.go
+          dependencies:
+            - A
+            - B
+            - E
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./...
+          required: true
+        - type: lint
+          command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go vet ./...
+          required: true
+        - type: test
+          command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go test ./pkg/engine/... ./pkg/protocol/... ./pkg/orchestrator/...
+          required: true
+post_merge_checklist:
+    groups:
+        - title: Cross-Repo Verification
+          items:
+            - description: Run full test suite in Go engine repo
+              command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go test ./...
+            - description: Verify sawtools builds with new program-execute command
+              command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go build -o /dev/null ./cmd/saw/
+            - description: Spot-check protocol doc E-rule cross-references
+              command: grep -c 'E28\|E29\|E30\|E31\|E32\|E33\|E34\|E41' /Users/dayna.blackwell/code/scout-and-wave/protocol/execution-rules.md
+completion_reports:
+    A:
+        status: complete
+        branch: saw/protocol-conformity/wave1-agent-A
+        commit: c14fe5c
+        files_changed:
+            - pkg/engine/program_tier_loop.go
+            - pkg/engine/program_tier_loop_test.go
+        files_created:
+            - pkg/engine/program_tier_loop.go
+            - pkg/engine/program_tier_loop_test.go
+        tests_added:
+            - TestTierLoop_PartitionIMPLsByStatus_MixedStatuses
+            - TestTierLoop_PartitionIMPLsByStatus_NonexistentTier
+            - TestTierLoop_AutoTriggerReplan_ConstructsCorrectReason
+            - TestTierLoop_StopsAtHumanGate_WhenAutoModeOff
+            - TestTierLoop_FindCurrentTier_AllComplete
+            - TestTierLoop_ProgramComplete_OnFinalTier
+            - TestTierLoop_AdvancesToNextTier_InAutoMode
+            - TestTierLoop_GetIMPLWaveCount
+            - TestTierLoop_EmitEvent_NilCallback
+            - TestTierLoop_EmitEvent_CallbackInvoked
+            - TestTierLoop_BuildReplanReason
+            - TestTierLoop_LaunchParallelScoutsFunc_DefaultStub
+            - TestTierLoop_GetTierSlugs
+        verification: PASS
+    B:
+        status: complete
+        branch: saw/protocol-conformity/wave1-agent-B
+        commit: 6f6b53d
+        files_changed:
+            - pkg/engine/program_parallel_scout.go
+            - pkg/engine/program_parallel_scout_test.go
+            - pkg/engine/program_progress.go
+            - pkg/engine/program_progress_test.go
+        files_created:
+            - pkg/engine/program_parallel_scout.go
+            - pkg/engine/program_parallel_scout_test.go
+            - pkg/engine/program_progress.go
+            - pkg/engine/program_progress_test.go
+        tests_added:
+            - TestParallelScout_ThreeScouts_TwoSucceedOneFails
+            - TestParallelScout_RespectsContextCancellation
+            - TestParallelScout_EmptySlugs
+            - TestParallelScout_ScoutOptsCorrect
+            - TestProgramProgress_UpdateStatus
+            - TestProgramProgress_UpdateStatus_NotFound
+            - TestProgramProgress_SyncFromDisk
+        verification: PASS
+    C:
+        status: complete
+        branch: saw/protocol-conformity/wave1-agent-C
+        commit: 154508a
+        files_changed:
+            - protocol/execution-rules.md
+            - protocol/interview-mode.md
+            - protocol/message-formats.md
+            - protocol/program-invariants.md
+            - protocol/program-manifest.md
+        verification: PASS
+    D:
+        status: complete
+        branch: saw/protocol-conformity/wave1-agent-D
+        commit: fb1cfab
+        files_changed:
+            - implementations/claude-code/prompts/agents/scout.md
+            - implementations/claude-code/prompts/agents/wave-agent.md
+            - implementations/claude-code/prompts/agents/integration-agent.md
+        verification: PASS
+    E:
+        status: complete
+        branch: saw/protocol-conformity/wave2-agent-E
+        commit: 4f86a78
+        files_changed:
+            - pkg/engine/scout_correction_loop.go
+            - pkg/engine/scout_correction_loop_test.go
+            - pkg/engine/gate_cache.go
+            - pkg/engine/gate_cache_test.go
+        files_created:
+            - pkg/engine/scout_correction_loop.go
+            - pkg/engine/scout_correction_loop_test.go
+            - pkg/engine/gate_cache.go
+            - pkg/engine/gate_cache_test.go
+        tests_added:
+            - TestScoutCorrectionLoop_SucceedsFirstTry
+            - TestScoutCorrectionLoop_RetriesAndSucceeds
+            - TestScoutCorrectionLoop_ExhaustsRetriesAndSetsState
+            - TestScoutCorrectionLoop_ContextCancelled
+            - TestBuildCorrectionPrompt
+            - TestGateCacheGetSet
+            - TestGateCacheMissForDifferentInputHash
+            - TestGateCacheInvalidate
+            - TestGateCacheInvalidateCommand
+            - TestGateCacheSetAutoTimestamp
+        verification: PASS
+    F:
+        status: complete
+        branch: saw/protocol-conformity/wave2-agent-F
+        commit: 76deeef
+        files_changed:
+            - implementations/claude-code/prompts/saw-skill.md
+            - pkg/orchestrator/events.go
+        verification: PASS
+    G:
+        status: complete
+pre_mortem:
+    overall_risk: medium
+    rows:
+        - scenario: Agent A's tier loop function variable for LaunchParallelScouts doesn't match Agent B's signature
+          likelihood: medium
+          impact: medium
+          mitigation: Interface contract defines exact signature. Agent G (Wave 3) wires them together and can adapt if needed.
+        - scenario: Protocol doc updates (Agent C) reference engine functions that Agent A/B name differently
+          likelihood: low
+          impact: low
+          mitigation: Protocol docs reference function names from interface contracts, not implementation details.
+        - scenario: Cross-repo file ownership causes confusion about which repo to work in
+          likelihood: medium
+          impact: low
+          mitigation: 'Each agent task explicitly states which repo. File ownership has repo: field.'
+        - scenario: Wave 2 Agent F modifies events.go which other orchestrator code imports
+          likelihood: low
+          impact: medium
+          mitigation: Agent F only adds new event types and payloads. No existing events are modified.
+        - scenario: E16 correction loop (Agent E) needs RunScout internal details not exposed
+          likelihood: low
+          impact: medium
+          mitigation: ScoutCorrectionLoop wraps RunScout as a black box. Only needs the public RunScout/RunScoutOpts interface.
+critic_report:
+    verdict: PASS
+    agent_reviews:
+        A:
+            agent_id: A
+            verdict: PASS
+        B:
+            agent_id: B
+            verdict: PASS
+        C:
+            agent_id: C
+            verdict: PASS
+        D:
+            agent_id: D
+            verdict: PASS
+        E:
+            agent_id: E
+            verdict: PASS
+        F:
+            agent_id: F
+            verdict: PASS
+        G:
+            agent_id: G
+            verdict: PASS
+    summary: All 7 agent briefs verified against codebase. File existence confirmed for all referenced files. Symbol accuracy verified — RunScout, RunWaveFull, AdvanceTierAutomatically, ReplanProgram, RunTierGate, FreezeContracts, GetProgramStatus all exist at stated locations. No blocking issues found.
+    reviewed_at: "2026-03-21T05:22:00Z"
+    issue_count: 0
+state: WAVE_PENDING
