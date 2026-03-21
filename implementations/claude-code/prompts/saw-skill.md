@@ -114,6 +114,7 @@ Read the agent template at `${CLAUDE_SKILL_DIR}/agent-template.md` for the 9-fie
 | `/saw interview "<description>"` | Conduct structured requirements interview, write docs/REQUIREMENTS.md |
 | `/saw interview --resume <path>` | Resume an in-progress interview |
 | `/saw program status` | Show program-level progress (tier completion, IMPL statuses) |
+| `/saw program replan --reason "<reason>"` | Re-engage Planner to revise PROGRAM manifest (E34) |
 
 ### Program Commands (Level A: Planning Only)
 
@@ -123,6 +124,7 @@ Read the agent template at `${CLAUDE_SKILL_DIR}/agent-template.md` for the 9-fie
 | `/saw program execute "<project-description>"` | Plan + tier-gated execution (Level B) |
 | `/saw program execute --auto "<project-description>"` | Full autonomous execution (Level C) |
 | `/saw program status` | Show program-level progress (tier completion, IMPL statuses) |
+| `/saw program replan --reason "<reason>"` | Re-engage Planner to revise PROGRAM manifest (E34) |
 
 **Note:** `/saw program execute` (Level B: tier-gated execution) is documented below. `/saw program execute --auto` (Level C) enables full autonomous execution without human gates between tiers.
 
@@ -209,6 +211,7 @@ All operations use the `sawtools` binary. IMPL docs are YAML manifests (`.yaml`)
 - `sawtools mark-program-complete "<manifest>"` — mark PROGRAM manifest complete and update CONTEXT.md
 - `sawtools update-program-state <manifest> --state <state>` — update PROGRAM manifest state field (E32)
 - `sawtools update-program-impl <manifest> --impl <slug> --status <status>` — update per-IMPL execution status in PROGRAM manifest (E32)
+- `sawtools program-replan <manifest> --reason "<reason>"` — trigger Planner re-engagement for PROGRAM manifest revision (E34)
 
 ## Execution Models
 
@@ -646,39 +649,46 @@ Show program-level progress: tier completion, IMPL statuses, and program contrac
 
 5. **Blocked state handling.** If the program state is `BLOCKED`, read the IMPL docs for all IMPLs in the current tier and surface any failure reports or blocking issues to the user.
 
-### `/saw program replan`
+### `/saw program replan --reason "<reason>"`
 
-Re-engage the Planner agent to revise a PROGRAM manifest after a tier gate failure or when the user explicitly requests it.
+Re-engage the Planner agent to revise a PROGRAM manifest after a tier gate failure or when the user explicitly requests it. The `--reason` argument is required and provides context for the Planner about why re-planning is needed.
 
 **Orchestrator flow:**
 
 1. Parse existing PROGRAM manifest.
 
-2. Construct revision prompt with failure context:
+2. Record the replan trigger:
+   ```bash
+   sawtools program-replan "<manifest-path>" --reason "<reason>"
+   ```
+   This updates the manifest state to `REPLANNING` and records the reason for audit. If the reason originates from a tier gate failure, include the tier number and gate output in the reason string.
+
+3. Construct revision prompt with failure context:
    - Current PROGRAM manifest content
-   - Reason for re-planning (tier gate failure, user request, etc.)
+   - Reason for re-planning (from `--reason` argument)
    - Failed tier number (if applicable)
    - Completion reports from IMPLs in failed tier
+   - Any tier gate output that triggered the replan
 
-3. Launch Planner agent with revision prompt:
+4. Launch Planner agent with revision prompt:
    - Use Agent tool with `subagent_type: planner` and `run_in_background: true`
    - Pass revision prompt as parameter
 
-4. Wait for Planner completion. Planner produces revised PROGRAM manifest.
+5. Wait for Planner completion. Planner produces revised PROGRAM manifest.
 
-5. Validate revised manifest:
+6. Validate revised manifest:
    ```bash
    sawtools validate-program "<revised-manifest-path>"
    ```
    If validation fails, send errors back to Planner as correction prompt
    using resume (up to 3 attempts).
 
-6. Present revised PROGRAM manifest for human review:
+7. Present revised PROGRAM manifest for human review:
    - Show what changed (tiers added/removed, contracts revised, IMPLs reordered)
    - Surface the changes summary
    - Ask user to approve revised plan
 
-7. If approved, update manifest state to PROGRAM_REVIEWED and resume execution
+8. If approved, update manifest state to PROGRAM_REVIEWED and resume execution
    from the failed tier (or next pending tier).
 
 **Non-destructive guarantee:** Re-planning does not discard completed work.
@@ -730,4 +740,4 @@ Only pending and failed tiers may be revised.
 - `program plan "<project-description>"`: Analyze project and produce PROGRAM manifest coordinating multiple IMPLs (Level A: planning only)
 - `program execute "<project-description>"`: Plan and execute multi-IMPL program with tier-gated progression. Extends Level A planning with automated Scout launching, IMPL execution, tier gates, and contract freezing. Pauses for human review at tier boundaries (Level B).
 - `program status`: Show program-level progress (tier completion, IMPL statuses, contract freeze status)
-- `program replan`: Re-engage Planner to revise PROGRAM manifest after tier gate failure or user request
+- `program replan --reason "<reason>"`: Re-engage Planner to revise PROGRAM manifest after tier gate failure or user request. The reason is recorded in the manifest for audit and passed to the Planner as context.
