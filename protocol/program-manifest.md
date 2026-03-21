@@ -171,6 +171,10 @@ The `impls` section decomposes the project into features, each represented by an
 | `estimated_waves` | integer | No | Expected wave count (populated by Scout after analysis) |
 | `key_outputs` | array | No | Expected file/directory outputs |
 | `status` | string | Yes | Current IMPL status (see Section 5.2) |
+| `priority_score` | integer | No | Scheduling priority (higher = sooner); optional |
+| `priority_reasoning` | string | No | Explanation for priority assignment; optional |
+
+These optional scheduling fields enable priority-based IMPL ordering within a tier. The engine uses them when multiple IMPLs in the same tier compete for concurrent execution slots.
 
 ### 5.2 IMPL Status Values
 
@@ -234,6 +238,7 @@ Tiers group IMPLs that can execute in parallel. All IMPLs within the same tier a
 | `number` | integer | Yes | Tier number (1-based, sequential) |
 | `impls` | array | Yes | List of IMPL slugs in this tier |
 | `description` | string | No | Purpose/rationale for this tier grouping |
+| `concurrency_cap` | integer | No | Maximum number of IMPLs executing simultaneously in this tier; optional |
 
 ### 6.2 Example
 
