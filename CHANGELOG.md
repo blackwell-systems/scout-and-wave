@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.55.0] | 2026-03-21 | Protocol conformity — 20 engine-to-protocol gaps closed across 7 agents, 3 waves, 2 repos: E19.1 reactions block spec, E38 gate result caching, E40 observability event schema, program contract awareness in agent prompts, `replan --reason` flag, Scout correction loop (E16 retry), comprehensive `/saw program` command documentation in saw-skill.md |
 | [0.54.0] | 2026-03-20 | Housekeeping — archive completed IMPL docs (protocol-docs-gaps, resumable-wave-sessions), remove stale roadmap/proposal docs, update CONTEXT.md |
 | [0.53.0] | 2026-03-19 | E36: IMPL Amendment (Living IMPL Docs) — three amend operations: `add-wave` (append empty wave skeleton), `redirect-agent` (re-queue uncommitted agent), `extend-scope` (re-engage Scout with current IMPL as context); common preconditions (no SAW:COMPLETE, frozen completed-wave ownership, I1 compliance); `ErrAmendBlocked` sentinel; E15 amended (amend invalid after SAW:COMPLETE); saw-skill.md updated with `/saw amend` invocation modes and per-operation orchestrator flows |
 | [0.52.0] | 2026-03-19 | E35: Wiring Obligation Rule — agents must declare `wiring:` blocks for every exported symbol that requires integration; `prepare-wave` enforces ownership pre-flight (Layer 3A), `validate-integration --wiring` verifies post-merge (Layer 3B), agent briefs inject wiring table (Layer 3C); saw-skill.md updated with E35 orchestration guidance |
