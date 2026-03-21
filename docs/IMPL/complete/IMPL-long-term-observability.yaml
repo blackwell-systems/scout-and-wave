@@ -1,0 +1,962 @@
+completion_date: "2026-03-20"
+title: Long-term Observability Infrastructure
+feature_slug: long-term-observability
+verdict: SUITABLE
+suitability_assessment: |
+    This feature decomposes cleanly into parallelizable work across three repositories:
+
+    **File decomposition:** 8 distinct agents with disjoint file ownership:
+    - Protocol docs (event schema, E40 execution rule)
+    - SDK core (store interface, event types, query API)
+    - SDK implementations (SQLite store, PostgreSQL store)
+    - SDK rollups (aggregation logic)
+    - CLI commands (metrics command, query command)
+    - Web API wrapper (HTTP endpoints)
+
+    **Investigation requirements:** None. Requirements are clear from Paperclip competitive
+    analysis. Event schema, storage patterns, and query API are well-understood.
+
+    **Interface discoverability:** All interfaces can be defined upfront:
+    - Store interface (CRUD operations for events)
+    - Event types (CostEvent, AgentPerformanceEvent, ActivityEvent)
+    - Query API (filters, rollups, time ranges)
+    - HTTP API contracts
+
+    **Pre-implementation status:** Greenfield work. No existing observability infrastructure
+    beyond tool journals (file-based, no aggregation, no queries). All work is TODO.
+
+    **Parallelization value:** High
+    - Build/test cycle: Go projects ~10-30s (go test ./pkg/observability/...)
+    - Files per agent: 2-4 files each (good granularity)
+    - Agent independence: Most agents in Wave 1, minimal cross-dependencies
+    - Task complexity: Medium (schema design, SQL, API implementation)
+
+    Time estimate: ~35 min total (Scout 10min + Wave execution 20min + Merge 5min)
+    vs ~90 min sequential. 61% speedup with clear parallelization benefit.
+
+    **Wails compatibility:** SDK-level design enables all three deployment modes:
+    - Web app: HTTP API wraps SDK observability package
+    - Wails app: Direct SDK calls via Wails bindings (no HTTP layer)
+    - CLI: sawtools commands use SDK directly
+
+    React UI can share components across web and Wails with transport adapter pattern.
+test_command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go test ./pkg/observability/... && cd /Users/dayna.blackwell/code/scout-and-wave-web && go test ./pkg/api/...
+lint_command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go vet ./pkg/observability/... && cd /Users/dayna.blackwell/code/scout-and-wave-web && go vet ./pkg/api/...
+file_ownership:
+    - file: protocol/observability-events.md
+      agent: A
+      wave: 1
+      action: new
+      repo: scout-and-wave
+    - file: protocol/execution-rules.md
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: pkg/observability/doc.go
+      agent: B
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: pkg/observability/events.go
+      agent: B
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: pkg/observability/store.go
+      agent: B
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: pkg/observability/sqlite.go
+      agent: C
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: pkg/observability/sqlite_test.go
+      agent: C
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: pkg/observability/postgres.go
+      agent: D
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: pkg/observability/postgres_test.go
+      agent: D
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: pkg/observability/rollups.go
+      agent: E
+      wave: 2
+      action: new
+      depends_on:
+        - B
+      repo: scout-and-wave-go
+    - file: pkg/observability/rollups_test.go
+      agent: E
+      wave: 2
+      action: new
+      depends_on:
+        - B
+      repo: scout-and-wave-go
+    - file: pkg/observability/query.go
+      agent: F
+      wave: 2
+      action: new
+      depends_on:
+        - B
+      repo: scout-and-wave-go
+    - file: pkg/observability/query_test.go
+      agent: F
+      wave: 2
+      action: new
+      depends_on:
+        - B
+      repo: scout-and-wave-go
+    - file: cmd/saw/observability_metrics.go
+      agent: G
+      wave: 3
+      action: new
+      depends_on:
+        - B
+        - E
+      repo: scout-and-wave-go
+    - file: cmd/saw/observability_query.go
+      agent: G
+      wave: 3
+      action: new
+      depends_on:
+        - B
+        - F
+      repo: scout-and-wave-go
+    - file: pkg/api/observability.go
+      agent: H
+      wave: 3
+      action: new
+      depends_on:
+        - B
+        - E
+        - F
+      repo: scout-and-wave-web
+    - file: pkg/api/observability_test.go
+      agent: H
+      wave: 3
+      action: new
+      depends_on:
+        - B
+        - E
+        - F
+      repo: scout-and-wave-web
+interface_contracts:
+    - name: Event
+      description: Base event interface for all observability events
+      definition: |
+        type Event interface {
+            EventID() string
+            EventType() string
+            Timestamp() time.Time
+            Metadata() map[string]interface{}
+        }
+      location: pkg/observability/events.go
+    - name: CostEvent
+      description: Token usage and cost tracking event
+      definition: |
+        type CostEvent struct {
+            ID            string
+            Type          string // "cost"
+            Time          time.Time
+            AgentID       string
+            WaveNumber    int
+            IMPLSlug      string
+            ProgramSlug   string // optional, if part of a program
+            Model         string
+            InputTokens   int
+            OutputTokens  int
+            CostUSD       float64
+            Metadata      map[string]interface{}
+        }
+      location: pkg/observability/events.go
+    - name: AgentPerformanceEvent
+      description: Agent execution outcome tracking
+      definition: |
+        type AgentPerformanceEvent struct {
+            ID              string
+            Type            string // "agent_performance"
+            Time            time.Time
+            AgentID         string
+            WaveNumber      int
+            IMPLSlug        string
+            ProgramSlug     string // optional
+            Status          string // "success" | "failed" | "blocked" | "partial"
+            FailureType     string // if failed: "transient" | "fixable" | "needs_replan" | "escalate"
+            RetryCount      int
+            DurationSeconds int
+            FilesModified   []string
+            TestsPassed     int
+            TestsFailed     int
+            Metadata        map[string]interface{}
+        }
+      location: pkg/observability/events.go
+    - name: ActivityEvent
+      description: High-level orchestrator actions (Scout launch, Wave start, merge, etc.)
+      definition: |
+        type ActivityEvent struct {
+            ID           string
+            Type         string // "activity"
+            Time         time.Time
+            ActivityType string // "scout_launch" | "wave_start" | "wave_merge" | "impl_complete"
+            IMPLSlug     string
+            ProgramSlug  string // optional
+            WaveNumber   int    // if wave-related
+            User         string // who triggered the action
+            Details      string
+            Metadata     map[string]interface{}
+        }
+      location: pkg/observability/events.go
+    - name: Store
+      description: Storage interface for observability events (SQLite/PostgreSQL implementations)
+      definition: |
+        type Store interface {
+            // RecordEvent writes a new event to storage
+            RecordEvent(ctx context.Context, event Event) error
+
+            // QueryEvents retrieves events matching filters
+            QueryEvents(ctx context.Context, filters QueryFilters) ([]Event, error)
+
+            // GetRollup computes aggregated metrics
+            GetRollup(ctx context.Context, rollup RollupRequest) (*RollupResult, error)
+
+            // Close releases resources
+            Close() error
+        }
+      location: pkg/observability/store.go
+    - name: QueryFilters
+      description: Query filter parameters for event retrieval
+      definition: |
+        type QueryFilters struct {
+            EventTypes   []string   // filter by event type ("cost", "agent_performance", "activity")
+            IMPLSlugs    []string   // filter by IMPL slug
+            ProgramSlugs []string   // filter by program slug
+            AgentIDs     []string   // filter by agent ID
+            StartTime    *time.Time // events after this time
+            EndTime      *time.Time // events before this time
+            Limit        int        // max results (default 100)
+            Offset       int        // pagination offset
+        }
+      location: pkg/observability/query.go
+    - name: RollupRequest
+      description: Aggregation request for metrics rollup
+      definition: |
+        type RollupRequest struct {
+            Type         string     // "cost" | "success_rate" | "retry_count"
+            GroupBy      []string   // "agent" | "wave" | "impl" | "program" | "model"
+            IMPLSlug     string     // optional: scope to specific IMPL
+            ProgramSlug  string     // optional: scope to specific program
+            StartTime    *time.Time
+            EndTime      *time.Time
+        }
+      location: pkg/observability/rollups.go
+    - name: RollupResult
+      description: Aggregated metrics result
+      definition: |
+        type RollupResult struct {
+            Type      string
+            Groups    []RollupGroup
+            TotalCost float64 // if cost rollup
+            AvgRate   float64 // if success_rate rollup
+        }
+
+        type RollupGroup struct {
+            Key       map[string]string // e.g., {"agent": "A", "wave": "1"}
+            Count     int
+            TotalCost float64
+            SuccessRate float64
+            AvgRetries float64
+        }
+      location: pkg/observability/rollups.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## Agent A — Protocol Event Schema & E40 Execution Rule
+
+            **What to implement:**
+
+            Create `protocol/observability-events.md` defining the observability event schema
+            (Event interface, CostEvent, AgentPerformanceEvent, ActivityEvent) based on the
+            interface contracts. Add E40 execution rule to `protocol/execution-rules.md`
+            specifying when and how observability events must be emitted.
+
+            **Event schema requirements:**
+            - Three event types: cost (token usage), agent_performance (success/failure/retry),
+              activity (orchestrator actions like Scout launch, Wave start, merge)
+            - All events have: ID, timestamp, type, metadata map
+            - Cost events track: agent, wave, IMPL, program (optional), model, tokens, cost USD
+            - Performance events track: agent, wave, status, failure type, retry count, duration,
+              files modified, test results
+            - Activity events track: activity type (scout_launch, wave_start, wave_merge, etc.),
+              IMPL slug, program slug (optional), user, details
+
+            **E40 execution rule:**
+            - Title: "Observability Event Emission"
+            - Trigger: Various orchestrator actions (Scout launch, agent start/complete, wave merge,
+              IMPL completion, gate execution)
+            - Required action: Emit appropriate event to observability store
+            - Implementation guidance: Use SDK `observability.RecordEvent()` function, non-blocking
+              (log errors but don't fail orchestrator operations), batch writes preferred
+            - Wire format: Events stored as JSONB in database, no specific wire protocol
+
+            **Interface contracts to reference:**
+            - Event (base interface)
+            - CostEvent
+            - AgentPerformanceEvent
+            - ActivityEvent
+
+            Use language-agnostic protocol specification style (no Go-specific syntax in protocol
+            docs). Include examples of each event type in JSON format.
+
+            **Tests:**
+            No automated tests for protocol docs. Manual review verification: check that event
+            schema is complete, E40 rule is clear about when events are emitted, and examples are
+            valid JSON.
+
+            **Verification gate:**
+            ```bash
+            # Verify protocol docs are well-formed markdown
+            grep -q "## E40: Observability Event Emission" protocol/execution-rules.md && \
+            grep -q "# Observability Events" protocol/observability-events.md && \
+            echo "Protocol docs verified"
+            ```
+
+            **Constraints:**
+            - Follow existing protocol doc style (see execution-rules.md, message-formats.md)
+            - Keep schema implementation-agnostic (no Go types in protocol docs)
+            - E40 should follow same structure as other execution rules (Trigger, Required Action,
+              Why This Matters, Related Rules)
+          files:
+            - protocol/observability-events.md
+            - protocol/execution-rules.md
+        - id: B
+          task: |
+            ## Agent B — SDK Core (Events, Store Interface)
+
+            **What to implement:**
+
+            Create the core observability package in `pkg/observability/` with:
+            - Event types (CostEvent, AgentPerformanceEvent, ActivityEvent) implementing Event interface
+            - Store interface defining CRUD operations for events
+            - Package documentation
+
+            **Event types:**
+            Implement the three event types from interface contracts:
+            - `Event` interface with EventID(), EventType(), Timestamp(), Metadata() methods
+            - `CostEvent` struct with all fields from contract
+            - `AgentPerformanceEvent` struct with all fields from contract
+            - `ActivityEvent` struct with all fields from contract
+
+            Each concrete type should implement the Event interface. Include JSON struct tags for
+            database serialization.
+
+            **Store interface:**
+            Define the storage abstraction:
+            ```go
+            type Store interface {
+                RecordEvent(ctx context.Context, event Event) error
+                QueryEvents(ctx context.Context, filters QueryFilters) ([]Event, error)
+                GetRollup(ctx context.Context, rollup RollupRequest) (*RollupResult, error)
+                Close() error
+            }
+            ```
+
+            Agents C and D will implement this interface for SQLite and PostgreSQL respectively.
+
+            **Package documentation:**
+            Create `doc.go` with package overview, architecture summary (Store interface +
+            implementations), and usage examples.
+
+            **Tests:**
+            - Unit tests for Event interface implementation (each concrete type)
+            - Test JSON marshaling/unmarshaling for each event type
+            - Test that Metadata() returns correct map
+
+            **Verification gate:**
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && \
+            go build ./pkg/observability/... && \
+            go test ./pkg/observability/... -run TestEvent && \
+            go vet ./pkg/observability/...
+            ```
+
+            **Constraints:**
+            - Follow existing SDK package patterns (see pkg/protocol, pkg/engine)
+            - Use context.Context for all Store methods (cancellation support)
+            - Event IDs should be UUIDs (use stdlib crypto/rand or google/uuid)
+            - Timestamp should be time.Time in UTC
+          files:
+            - pkg/observability/doc.go
+            - pkg/observability/events.go
+            - pkg/observability/store.go
+        - id: C
+          task: |
+            ## Agent C — SQLite Store Implementation
+
+            **What to implement:**
+
+            Implement the Store interface using SQLite for local/desktop/single-user deployments.
+            Create `pkg/observability/sqlite.go` and `pkg/observability/sqlite_test.go`.
+
+            **SQLiteStore implementation:**
+            - Implements Store interface from Agent B
+            - Schema: single `events` table with columns: id (text primary key), type (text),
+              timestamp (integer unix time), data (jsonb), impl_slug (text), program_slug (text),
+              agent_id (text), wave_number (integer)
+            - Indexes on: type, timestamp, impl_slug, program_slug, agent_id for fast queries
+            - Use `github.com/mattn/go-sqlite3` or `modernc.org/sqlite` (pure Go)
+            - RecordEvent: INSERT event as JSON blob in data column, extract common fields to
+              indexed columns
+            - QueryEvents: SELECT with WHERE clauses built from filters, ORDER BY timestamp DESC
+            - GetRollup: Use SQL GROUP BY aggregations (SUM for costs, AVG for success rates)
+            - Close: close database connection
+
+            **Database location:**
+            - Default: `~/.saw/observability.db` (or XDG_DATA_HOME on Linux)
+            - Support custom path via constructor param
+            - Auto-create parent directories if missing
+            - Run schema migrations on open (create tables if not exist)
+
+            **Concurrency:**
+            - SQLite supports multiple readers, single writer
+            - Use WAL mode for better concurrency
+            - Set busy_timeout=5000 to handle write conflicts gracefully
+
+            **Tests:**
+            - Test RecordEvent (insert cost event, verify retrieval)
+            - Test QueryEvents with various filters (type, time range, IMPL slug)
+            - Test GetRollup (cost rollup by agent, success rate rollup by wave)
+            - Test concurrent writes (multiple goroutines recording events)
+            - Use in-memory database for tests (`:memory:` or `file::memory:?cache=shared`)
+
+            **Verification gate:**
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && \
+            go build ./pkg/observability/... && \
+            go test ./pkg/observability -run TestSQLite && \
+            go vet ./pkg/observability/sqlite.go
+            ```
+
+            **Constraints:**
+            - Follow interface contract exactly (Store interface from Agent B)
+            - Handle missing optional fields gracefully (program_slug may be empty)
+            - Return errors with context (wrap with fmt.Errorf or errors.Wrap)
+            - Use prepared statements to prevent SQL injection
+          files:
+            - pkg/observability/sqlite.go
+            - pkg/observability/sqlite_test.go
+        - id: D
+          task: |
+            ## Agent D — PostgreSQL Store Implementation
+
+            **What to implement:**
+
+            Implement the Store interface using PostgreSQL for production/multi-user deployments.
+            Create `pkg/observability/postgres.go` and `pkg/observability/postgres_test.go`.
+
+            **PostgresStore implementation:**
+            - Implements Store interface from Agent B
+            - Schema: single `events` table with columns: id (uuid primary key), type (text),
+              timestamp (timestamptz), data (jsonb), impl_slug (text), program_slug (text),
+              agent_id (text), wave_number (integer)
+            - Indexes on: type, timestamp, impl_slug, program_slug, agent_id, GIN index on data
+              for JSONB queries
+            - Use `github.com/lib/pq` or `github.com/jackc/pgx/v5`
+            - RecordEvent: INSERT event as JSONB in data column, extract common fields to indexed
+              columns
+            - QueryEvents: SELECT with WHERE clauses built from filters, ORDER BY timestamp DESC
+            - GetRollup: Use SQL GROUP BY aggregations, leverage JSONB operators for nested fields
+            - Close: close connection pool
+
+            **Connection string:**
+            - Support standard Postgres DSN: `postgres://user:pass@host:port/dbname?sslmode=...`
+            - Use connection pooling (pgx.ConnPool or sql.DB with SetMaxOpenConns)
+            - Auto-create schema if not exists (CREATE TABLE IF NOT EXISTS)
+            - Run migrations on connect
+
+            **Concurrency:**
+            - Postgres handles concurrent writes natively
+            - Use connection pool (5-10 connections for typical workload)
+            - Prepared statements for query performance
+
+            **Tests:**
+            - Test RecordEvent (insert agent performance event, verify retrieval)
+            - Test QueryEvents with JSONB filters (query by nested metadata fields)
+            - Test GetRollup (cost rollup by program, retry count rollup by agent)
+            - Test connection pool exhaustion (many concurrent queries)
+            - Skip tests if Postgres not available (use t.Skip with env var POSTGRES_TEST_DSN)
+
+            **Verification gate:**
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && \
+            go build ./pkg/observability/... && \
+            go test ./pkg/observability -run TestPostgres || echo "Postgres tests skipped (no test DB)" && \
+            go vet ./pkg/observability/postgres.go
+            ```
+
+            **Constraints:**
+            - Follow interface contract exactly (Store interface from Agent B)
+            - Support both lib/pq and pgx (use sql.DB interface for portability)
+            - Handle connection errors gracefully (return errors, don't panic)
+            - JSONB data column should store full event for future schema evolution
+          files:
+            - pkg/observability/postgres.go
+            - pkg/observability/postgres_test.go
+      base_commit: 53a8375bf014edc7b556c01a067053f023335fdb
+    - number: 2
+      agents:
+        - id: E
+          task: |
+            ## Agent E — Rollups & Aggregations
+
+            **What to implement:**
+
+            Create `pkg/observability/rollups.go` with aggregation logic for computing metrics
+            rollups (cost totals, success rates, retry counts, trends over time).
+
+            **Rollup functions:**
+
+            Implement functions that use the Store interface to compute aggregations:
+
+            - `ComputeCostRollup(ctx context.Context, store Store, req RollupRequest) (*RollupResult, error)`
+              - Group cost events by requested dimensions (agent, wave, IMPL, program, model)
+              - Return total cost per group, overall total, average cost per group
+
+            - `ComputeSuccessRateRollup(ctx context.Context, store Store, req RollupRequest) (*RollupResult, error)`
+              - Group agent performance events by requested dimensions
+              - Calculate success rate (success / total attempts) per group
+              - Return average success rate across groups
+
+            - `ComputeRetryRollup(ctx context.Context, store Store, req RollupRequest) (*RollupResult, error)`
+              - Group agent performance events by requested dimensions
+              - Calculate average retry count per group
+              - Identify agents with high retry rates (>2 retries avg)
+
+            - `ComputeTrend(ctx context.Context, store Store, metric string, timeRange time.Duration, buckets int) (*TrendResult, error)`
+              - Time-series trend (e.g., cost per day over last 30 days)
+              - Split time range into N buckets, compute metric per bucket
+              - Return timeseries data for charting
+
+            **RollupRequest and RollupResult:**
+            Defined in interface contracts. Implement per contract specification.
+
+            **Aggregation strategy:**
+            - Use Store.QueryEvents() to fetch raw events matching filters
+            - Perform aggregation in-memory (Go map reduce)
+            - For SQL stores, could push aggregation to database (future optimization)
+
+            **Tests:**
+            - Test ComputeCostRollup (insert 10 cost events across 3 agents, verify rollup)
+            - Test ComputeSuccessRateRollup (insert success/failure events, verify rates)
+            - Test ComputeRetryRollup (insert events with varying retry counts)
+            - Test ComputeTrend (insert events over 7 days, verify timeseries buckets)
+            - Use mock Store or in-memory SQLite for tests
+
+            **Verification gate:**
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && \
+            go build ./pkg/observability/... && \
+            go test ./pkg/observability -run TestRollup && \
+            go vet ./pkg/observability/rollups.go
+            ```
+
+            **Constraints:**
+            - Depends on Agent B (Store interface, Event types)
+            - Handle empty result sets gracefully (return zero values, not errors)
+            - Support time-based filtering (StartTime, EndTime in RollupRequest)
+            - Group by multiple dimensions (e.g., "agent+wave" rollup)
+          files:
+            - pkg/observability/rollups.go
+            - pkg/observability/rollups_test.go
+          dependencies:
+            - B
+        - id: F
+          task: |
+            ## Agent F — Query API
+
+            **What to implement:**
+
+            Create `pkg/observability/query.go` with high-level query functions for common
+            observability use cases (get agent history, get IMPL metrics, get program summary).
+
+            **Query functions:**
+
+            - `GetAgentHistory(ctx context.Context, store Store, agentID string, limit int) ([]AgentPerformanceEvent, error)`
+              - Retrieve recent performance events for specific agent
+              - Ordered by timestamp descending
+              - Useful for "Agent A failure history" view
+
+            - `GetIMPLMetrics(ctx context.Context, store Store, implSlug string) (*IMPLMetrics, error)`
+              - Aggregate all events for an IMPL (cost, duration, success rate, agent count)
+              - Return struct with: TotalCost, TotalDurationMin, SuccessRate, AgentsFailed,
+                WavesCompleted
+
+            - `GetProgramSummary(ctx context.Context, store Store, programSlug string) (*ProgramSummary, error)`
+              - Aggregate all events for a program across all its IMPLs
+              - Return struct with: TotalCost, IMPLCount, TotalDuration, OverallSuccessRate
+
+            - `GetCostBreakdown(ctx context.Context, store Store, implSlug string) (map[string]float64, error)`
+              - Cost breakdown by agent for an IMPL
+              - Return map[agentID]costUSD
+
+            - `GetFailurePatterns(ctx context.Context, store Store, filters QueryFilters) ([]FailurePattern, error)`
+              - Identify common failure types across agents
+              - Group by failure_type, count occurrences, list affected agents
+              - Useful for "why do agents keep failing with fixable errors?" analysis
+
+            **QueryFilters:**
+            Defined in interface contracts. Use to scope queries.
+
+            **Tests:**
+            - Test GetAgentHistory (insert 5 performance events for agent A, verify retrieval)
+            - Test GetIMPLMetrics (insert mixed events for an IMPL, verify aggregations)
+            - Test GetProgramSummary (insert events across 2 IMPLs in same program, verify rollup)
+            - Test GetCostBreakdown (verify per-agent cost totals)
+            - Test GetFailurePatterns (insert failure events with various failure types)
+            - Use mock Store or in-memory SQLite for tests
+
+            **Verification gate:**
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && \
+            go build ./pkg/observability/... && \
+            go test ./pkg/observability -run TestQuery && \
+            go vet ./pkg/observability/query.go
+            ```
+
+            **Constraints:**
+            - Depends on Agent B (Store interface, Event types, QueryFilters)
+            - Handle missing data gracefully (empty IMPL returns zero metrics, not error)
+            - Use QueryFilters consistently for time-based scoping
+            - Return structured data (not raw events) for easy UI consumption
+          files:
+            - pkg/observability/query.go
+            - pkg/observability/query_test.go
+          dependencies:
+            - B
+      base_commit: 10137166218276395adc7f9f9b541678a869ebe1
+    - number: 3
+      agents:
+        - id: G
+          task: |
+            ## Agent G — CLI Commands (sawtools metrics, sawtools query)
+
+            **What to implement:**
+
+            Add two CLI commands to sawtools for querying observability data from the command line:
+            - `sawtools metrics <impl-slug>` — show cost and performance metrics for an IMPL
+            - `sawtools query events --type <type> --impl <slug> --since <duration>` — query events
+
+            **sawtools metrics command:**
+            Create `cmd/saw/observability_metrics.go`:
+            - Command: `sawtools metrics <impl-slug> [--program <slug>]`
+            - Output: table showing:
+              - Total cost (USD)
+              - Total duration (minutes)
+              - Success rate (%)
+              - Agents: total / succeeded / failed
+              - Waves: total / completed
+              - Cost breakdown by agent (if --breakdown flag)
+            - Use Agent F's GetIMPLMetrics() or GetProgramSummary() functions
+            - Format output as ASCII table (use github.com/olekukonko/tablewriter or similar)
+
+            **sawtools query command:**
+            Create `cmd/saw/observability_query.go`:
+            - Command: `sawtools query events --type <type> [--impl <slug>] [--agent <id>] [--since <duration>]`
+            - Flags:
+              - `--type`: event type filter (cost, agent_performance, activity)
+              - `--impl`: IMPL slug filter
+              - `--program`: program slug filter
+              - `--agent`: agent ID filter
+              - `--since`: time range (e.g., "24h", "7d", "30d")
+              - `--format`: output format (table, json, csv)
+            - Use Store.QueryEvents() with filters built from flags
+            - Output: formatted event list (table by default, JSON/CSV optional)
+
+            **Store initialization:**
+            - Default to SQLite store at `~/.saw/observability.db`
+            - Support `--store` flag to override (postgres://... or file path)
+            - Auto-create database if missing
+
+            **Tests:**
+            - Test metrics command with mock store (verify table output)
+            - Test query command with various flag combinations
+            - Test store initialization (SQLite path, Postgres DSN parsing)
+
+            **Verification gate:**
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && \
+            go build ./cmd/saw && \
+            ./saw metrics --help | grep -q "Show metrics for an IMPL" && \
+            ./saw query events --help | grep -q "Query observability events" && \
+            go vet ./cmd/saw/observability_*.go
+            ```
+
+            **Constraints:**
+            - Depends on Agent B (Store interface, Event types)
+            - Depends on Agent E (rollup functions for metrics command)
+            - Depends on Agent F (query functions for metrics command)
+            - Follow existing sawtools command patterns (see cmd/saw/*.go)
+            - Use cobra for CLI framework (consistent with existing commands)
+            - Handle database connection errors gracefully (clear error messages)
+          files:
+            - cmd/saw/observability_metrics.go
+            - cmd/saw/observability_query.go
+          dependencies:
+            - B
+            - E
+            - F
+        - id: H
+          task: |
+            ## Agent H — Web API Wrapper
+
+            **What to implement:**
+
+            Create HTTP API endpoints in the web app to expose observability data via REST API.
+            Create `pkg/api/observability.go` and `pkg/api/observability_test.go`.
+
+            **HTTP endpoints:**
+
+            - `GET /api/observability/metrics/:impl_slug` — get IMPL metrics
+              - Query params: none
+              - Response: JSON with IMPLMetrics struct (from Agent F)
+              - Status: 200 OK, 404 if IMPL not found, 500 on error
+
+            - `GET /api/observability/metrics/program/:program_slug` — get program summary
+              - Query params: none
+              - Response: JSON with ProgramSummary struct (from Agent F)
+              - Status: 200 OK, 404 if program not found, 500 on error
+
+            - `GET /api/observability/events` — query events
+              - Query params: type, impl, program, agent, start_time, end_time, limit, offset
+              - Response: JSON array of events (matches QueryFilters)
+              - Status: 200 OK, 400 if invalid params, 500 on error
+
+            - `GET /api/observability/rollup` — compute rollup
+              - Query params: type (cost|success_rate|retry), group_by (agent|wave|impl|program),
+                impl, program, start_time, end_time
+              - Response: JSON with RollupResult struct (from Agent E)
+              - Status: 200 OK, 400 if invalid params, 500 on error
+
+            - `GET /api/observability/cost-breakdown/:impl_slug` — cost by agent
+              - Query params: none
+              - Response: JSON map[agentID]costUSD
+              - Status: 200 OK, 404 if IMPL not found, 500 on error
+
+            **API handler structure:**
+            - Initialize Store once in NewServer() (SQLite by default, configurable)
+            - Handlers call observability package functions (Agent E, F)
+            - Use existing SSE publisher for real-time event streaming (future enhancement)
+            - Follow existing API patterns (see pkg/api/*.go)
+
+            **Store configuration:**
+            - Default: SQLite at `~/.saw/observability.db`
+            - Support env var SAW_OBSERVABILITY_STORE (postgres://... or file path)
+            - Pass store to API handlers via dependency injection
+
+            **Tests:**
+            - Test each endpoint with mock store
+            - Test query param parsing (type, impl, time ranges)
+            - Test error handling (404, 400, 500)
+            - Test JSON response formatting
+            - Use httptest.NewRecorder for HTTP tests
+
+            **Verification gate:**
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-web && \
+            go build ./pkg/api/... && \
+            go test ./pkg/api/observability_test.go && \
+            go vet ./pkg/api/observability.go
+            ```
+
+            **Constraints:**
+            - Depends on Agent B (Store interface, Event types)
+            - Depends on Agent E (rollup functions)
+            - Depends on Agent F (query functions)
+            - Follow existing web API patterns (see pkg/api/impl.go, pkg/api/wave.go)
+            - Use standard library net/http (no external router beyond existing patterns)
+            - Import scout-and-wave-go SDK (go.mod already has dependency)
+          files:
+            - pkg/api/observability.go
+            - pkg/api/observability_test.go
+          dependencies:
+            - B
+            - E
+            - F
+      base_commit: 10137166218276395adc7f9f9b541678a869ebe1
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./pkg/observability/...
+          required: true
+          description: Build SDK observability package
+          repo: scout-and-wave-go
+        - type: build
+          command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./cmd/saw
+          required: true
+          description: Build sawtools CLI with new commands
+          repo: scout-and-wave-go
+        - type: test
+          command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go test ./pkg/observability/...
+          required: true
+          description: Run observability package tests
+          repo: scout-and-wave-go
+        - type: lint
+          command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go vet ./pkg/observability/...
+          required: true
+          description: Lint observability package
+          repo: scout-and-wave-go
+        - type: build
+          command: cd /Users/dayna.blackwell/code/scout-and-wave-web && go build ./cmd/saw
+          required: true
+          description: Build web server with observability API
+          repo: scout-and-wave-web
+          timing: post-merge
+        - type: test
+          command: cd /Users/dayna.blackwell/code/scout-and-wave-web && go test ./pkg/api/...
+          required: true
+          description: Run web API tests
+          repo: scout-and-wave-web
+          timing: post-merge
+completion_reports:
+    A:
+        status: complete
+        worktree: /Users/dayna.blackwell/code/scout-and-wave/.claude/worktrees/saw/long-term-observability/wave1-agent-A
+        branch: saw/long-term-observability/wave1-agent-A
+        commit: e5ae00d69092ab7e90a91c011057260c30703559
+        files_changed:
+            - protocol/execution-rules.md
+            - protocol/observability-events.md
+        notes: auto-committed by orchestrator (API agent)
+    B:
+        status: complete
+        worktree: /Users/dayna.blackwell/code/scout-and-wave-go/.claude/worktrees/saw/long-term-observability/wave1-agent-B
+        branch: saw/long-term-observability/wave1-agent-B
+        commit: 21b973ef204ed66adab02c1eb42a79de1e1972b7
+        files_changed:
+            - pkg/observability/doc.go
+            - pkg/observability/events.go
+            - pkg/observability/events_test.go
+            - pkg/observability/store.go
+        notes: auto-committed by orchestrator (API agent)
+    C:
+        status: complete
+        worktree: /Users/dayna.blackwell/code/scout-and-wave-go/.claude/worktrees/saw/long-term-observability/wave1-agent-C
+        branch: saw/long-term-observability/wave1-agent-C
+        commit: 72cdf8d214b73fc9e452d41bfb0d20b85dd4d2a7
+        files_changed:
+            - go.mod
+            - go.sum
+            - pkg/observability/events.go
+            - pkg/observability/query.go
+            - pkg/observability/rollups.go
+            - pkg/observability/sqlite.go
+            - pkg/observability/sqlite_test.go
+            - pkg/observability/store.go
+        notes: auto-committed by orchestrator (API agent)
+    D:
+        status: complete
+        worktree: /Users/dayna.blackwell/code/scout-and-wave-go/.claude/worktrees/saw/long-term-observability/wave1-agent-D
+        branch: saw/long-term-observability/wave1-agent-D
+        commit: d4a8843fa413162f5564537d6b7b6edc8583d1ed
+        files_changed:
+            - go.mod
+            - go.sum
+            - pkg/observability/events.go
+            - pkg/observability/postgres.go
+            - pkg/observability/postgres_test.go
+            - pkg/observability/store.go
+        notes: auto-committed by orchestrator (API agent)
+    E:
+        status: complete
+        worktree: /Users/dayna.blackwell/code/scout-and-wave-go/.claude/worktrees/saw/long-term-observability/wave2-agent-E
+        branch: saw/long-term-observability/wave2-agent-E
+        commit: 9145f71aa03c330ebe0ad4716535408e3881f98a
+        files_changed:
+            - pkg/observability/rollups.go
+            - pkg/observability/rollups_test.go
+        notes: auto-committed by orchestrator (API agent)
+    F:
+        status: complete
+        worktree: /Users/dayna.blackwell/code/scout-and-wave-go/.claude/worktrees/saw/long-term-observability/wave2-agent-F
+        branch: saw/long-term-observability/wave2-agent-F
+        commit: 7f3a989179746319830e33cafd81e575df5769bb
+        files_changed:
+            - pkg/observability/query.go
+            - pkg/observability/query_test.go
+        notes: auto-committed by orchestrator (API agent)
+    G:
+        status: complete
+        worktree: /Users/dayna.blackwell/code/scout-and-wave-go/.claude/worktrees/saw/long-term-observability/wave3-agent-G
+        branch: saw/long-term-observability/wave3-agent-G
+        commit: ca16ab12c5e30534ef80bb374582c4ead3446d98
+        files_changed:
+            - cmd/saw/main.go
+            - cmd/saw/observability_metrics.go
+            - cmd/saw/observability_query.go
+        notes: auto-committed by orchestrator (API agent)
+    H:
+        status: complete
+        worktree: /Users/dayna.blackwell/code/scout-and-wave-web/.claude/worktrees/saw/long-term-observability/wave3-agent-H
+        branch: saw/long-term-observability/wave3-agent-H
+        commit: 373f04fa0c6ae1fbc5c34da4979ed30527bdaf33
+        files_changed:
+            - pkg/api/observability.go
+            - pkg/api/observability_test.go
+            - pkg/api/server.go
+        notes: auto-committed by orchestrator (API agent)
+integration_reports:
+    wave1:
+        wave: 1
+        gaps: []
+        valid: true
+        summary: 'Wave 1: all exports are integrated (no gaps detected)'
+    wave2:
+        wave: 2
+        gaps: []
+        valid: true
+        summary: 'Wave 2: all exports are integrated (no gaps detected)'
+    wave3:
+        wave: 3
+        gaps: []
+        valid: true
+        summary: 'Wave 3: all exports are integrated (no gaps detected)'
+pre_mortem:
+    overall_risk: medium
+    rows:
+        - scenario: Database schema incompatibility between SQLite and PostgreSQL implementations
+          likelihood: medium
+          impact: high
+          mitigation: Define unified schema in Agent B's store.go as documentation. Both C and D implement identical schema with database-specific types. Add schema validation tests.
+        - scenario: Query performance degrades with large event volumes (>100k events)
+          likelihood: high
+          impact: medium
+          mitigation: Add database indexes on common query fields (type, timestamp, impl_slug, agent_id). Document recommended PostgreSQL maintenance (VACUUM, REINDEX). Consider pagination for large result sets.
+        - scenario: Store interface too generic, forces reimplementation in both SQLite and PostgreSQL
+          likelihood: medium
+          impact: low
+          mitigation: Agent B defines clear interface with well-scoped methods. Shared query-building logic can be extracted to helper functions if duplication emerges during implementation.
+        - scenario: Web API becomes import bottleneck (scout-and-wave-web imports scout-and-wave-go SDK)
+          likelihood: low
+          impact: low
+          mitigation: scout-and-wave-web already imports scout-and-wave-go as dependency. No new import patterns. If circular dependency emerges, observability stays in SDK (no web→SDK dependency).
+        - scenario: CLI commands conflict with existing sawtools command names
+          likelihood: low
+          impact: low
+          mitigation: Use namespaced commands (sawtools observability metrics, sawtools observability query) if "metrics" or "query" already exist. Scout to verify no conflicts during file ownership assignment.
+        - scenario: Event emission overhead slows orchestrator operations
+          likelihood: medium
+          impact: medium
+          mitigation: E40 rule specifies non-blocking emission (fire-and-forget). Use buffered channel + background goroutine for batch writes. Log errors but don't fail orchestrator operations.
+state: "COMPLETE"

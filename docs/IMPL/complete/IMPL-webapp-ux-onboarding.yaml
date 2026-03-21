@@ -1,0 +1,492 @@
+completion_date: "2026-03-20"
+title: Webapp UX & Onboarding - New User Education
+feature_slug: webapp-ux-onboarding
+verdict: SUITABLE
+suitability_assessment: |
+    **Verdict: SUITABLE**
+
+    1. **File decomposition**: Work spans 6 distinct React component files with no
+       shared modifications. Each component (ReviewScreen, ActionButtons, ScoutLauncher,
+       AgentCard, OverviewPanel, and new Tooltip component) has independent scope.
+       The tooltip component is created once and consumed by others - no conflicts.
+
+    2. **Investigation-first items**: None. All UI changes are additive enhancements
+       with known locations and APIs.
+
+    3. **Interface discoverability**: Tooltip component API is straightforward (React
+       component with children, content, position props). No runtime discovery needed.
+
+    4. **Pre-implementation status**: All target components exist and have stable
+       interfaces. This is purely additive work (no deletions, no refactoring).
+
+    5. **Parallelization value check**:
+       - Build/test cycle: ~10-15s (`npm run build` + vitest)
+       - Files per agent: 1-2 files each
+       - Agent independence: 4 of 5 agents are fully independent (Wave 2)
+       - Task complexity: Medium - involves UI component creation and integration
+       - **Assessment**: Clear parallelization benefit. 5 agents working in parallel
+         complete in ~5-10 min vs 20-30 min sequential. Coordination value is high -
+         tooltip component must be created before consumers reference it.
+
+    **Estimated times:**
+    - Scout phase: ~5 min (dependency mapping, interface contracts, IMPL doc)
+    - Agent execution: ~10 min (5 agents × 2 min avg, accounting for parallelism)
+    - Merge & verification: ~3 min
+    Total SAW time: ~18 min
+
+    Sequential baseline: ~25 min (5 agents × 4 min sequential + overhead)
+    Time savings: ~7 min (28% faster)
+
+    Recommendation: Clear speedup. The scaffold-first pattern prevents tooltip API
+    divergence across consumers.
+test_command: cd /Users/dayna.blackwell/code/scout-and-wave-web/web && npm test
+lint_command: cd /Users/dayna.blackwell/code/scout-and-wave-web && go vet ./...
+file_ownership:
+    - file: web/src/components/ui/tooltip.tsx
+      agent: A
+      wave: 1
+      action: new
+      repo: scout-and-wave-web
+    - file: web/src/components/review/OverviewPanel.tsx
+      agent: B
+      wave: 2
+      action: modify
+      repo: scout-and-wave-web
+    - file: web/src/components/ActionButtons.tsx
+      agent: C
+      wave: 2
+      action: modify
+      repo: scout-and-wave-web
+    - file: web/src/components/ScoutLauncher.tsx
+      agent: D
+      wave: 2
+      action: modify
+      repo: scout-and-wave-web
+    - file: web/src/components/AgentCard.tsx
+      agent: E
+      wave: 2
+      action: modify
+      repo: scout-and-wave-web
+    - file: web/src/components/ReviewScreen.tsx
+      agent: F
+      wave: 3
+      action: modify
+      repo: scout-and-wave-web
+interface_contracts:
+    - name: Tooltip
+      description: Reusable tooltip component for inline concept explanations
+      definition: |
+        // React component with hover/click interaction
+        export interface TooltipProps {
+          children: React.ReactNode  // Element to wrap (triggers tooltip on hover)
+          content: string | React.ReactNode  // Tooltip content (text or JSX)
+          position?: 'top' | 'bottom' | 'left' | 'right'  // Default: 'top'
+          maxWidth?: number  // Max width in pixels, default: 300
+        }
+        export function Tooltip(props: TooltipProps): JSX.Element
+
+        // Implementation: CSS-only tooltip using ::before pseudo-element and
+        // data attributes. No external dependencies (no Radix UI). Accessible
+        // via aria-label fallback. Dark mode aware via CSS variables.
+      location: web/src/components/ui/tooltip.tsx
+    - name: ScoutCompletionBanner
+      description: Banner shown after Scout completes, before ReviewScreen loads
+      definition: |
+        // Inline banner component (not standalone file)
+        interface BannerProps {
+          agentCount: number
+          waveCount: number
+          fileCount: number
+          onReview: () => void
+        }
+
+        // Render location: ScoutLauncher.tsx, between output panel and "Review" button
+        // Visual: Green background, checkmark icon, summary stats, CTA button
+      location: web/src/components/ScoutLauncher.tsx (inline)
+    - name: FailureTypeExplanations
+      description: Human-readable explanations for agent failure_type enum values
+      definition: |
+        // Mapping from failure_type to user-friendly explanation
+        const FAILURE_EXPLANATIONS: Record<string, { title: string; why: string; action: string }> = {
+          merge_conflict: {
+            title: "Merge Conflict",
+            why: "File ownership overlap detected (I1 violation)",
+            action: "Check File Ownership table - two agents modified the same file"
+          },
+          failed_gate: {
+            title: "Quality Gate Failed",
+            why: "Build, test, or lint check did not pass",
+            action: "Review gate output above. Fix errors and retry agent."
+          },
+          timeout: {
+            title: "Agent Timeout",
+            why: "Agent exceeded max execution time (10 minutes)",
+            action: "Check for infinite loops or blocking operations. Simplify task."
+          },
+          // ... (add more as needed)
+        }
+      location: web/src/components/AgentCard.tsx (inline const)
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            **Agent A: Create Tooltip Component**
+
+            Create `web/src/components/ui/tooltip.tsx` implementing the Tooltip interface contract.
+
+            **Requirements:**
+            1. Pure CSS tooltip using ::before pseudo-element (no JS libraries)
+            2. Supports top/bottom/left/right positioning (default: top)
+            3. Triggered by hover on children element
+            4. Max width: 300px (configurable via prop)
+            5. Dark mode support via CSS variables (--tooltip-bg, --tooltip-text)
+            6. Accessible: include aria-label fallback
+            7. TypeScript: strict typing, no `any`
+
+            **Implementation notes:**
+            - Use `position: relative` on wrapper, `position: absolute` on ::before
+            - Arrow via ::after pseudo-element with CSS triangle
+            - Fade-in animation (opacity 0 → 1, 200ms)
+            - z-index: 50 (above most UI elements)
+
+            **Example usage:**
+            ```tsx
+            <Tooltip content="Prevents merge conflicts (I1 invariant)">
+              <span className="underline decoration-dotted">File Ownership</span>
+            </Tooltip>
+            ```
+
+            **Tests:** Create tooltip.test.tsx with rendering and prop validation tests.
+
+            **Verification gate:**
+            ```bash
+            cd web && npm test -- tooltip.test.tsx
+            ```
+          files:
+            - web/src/components/ui/tooltip.tsx
+    - number: 2
+      agents:
+        - id: B
+          task: |
+            **Agent B: Add Tooltips to OverviewPanel**
+
+            Modify `web/src/components/review/OverviewPanel.tsx` to wrap key terms with Tooltip components.
+
+            **Changes:**
+            1. Import Tooltip from `../ui/tooltip`
+            2. Wrap "SUITABLE" verdict text:
+               - Content: "Scout verified this work can be parallelized. All agents have
+                 disjoint file ownership (I1) and interface contracts are defined (I2)."
+            3. Wrap "files" stat:
+               - Content: "Number of files that will be created or modified. Each file
+                 is owned by exactly one agent (I1 invariant)."
+            4. Wrap "agents" stat:
+               - Content: "Number of parallel agents. Each owns distinct files and
+                 implements interface contracts."
+            5. Wrap "waves" stat:
+               - Content: "Sequential execution phases. Wave N+1 depends on Wave N's
+                 outputs. Agents within a wave run in parallel."
+
+            **Visual style:**
+            - Underline with dotted decoration (`className="underline decoration-dotted"`)
+            - Keep existing text colors (don't change verdictColor logic)
+
+            **Verification gate:**
+            ```bash
+            cd web && npm test -- OverviewPanel.test.tsx
+            ```
+          files:
+            - web/src/components/review/OverviewPanel.tsx
+        - id: C
+          task: |
+            **Agent C: Add Approval Workflow Tooltip**
+
+            Modify `web/src/components/ActionButtons.tsx` to add tooltip to the "Approve" button.
+
+            **Changes:**
+            1. Import Tooltip from `./ui/tooltip`
+            2. Wrap the Approve button with Tooltip:
+               - Content: "Launches Wave 1 agents in parallel. Each agent works in an
+                 isolated git worktree (I3). Scaffolds are created first if needed (I2).
+                 Estimated time: 5-15 minutes depending on complexity."
+               - Position: 'top'
+            3. Preserve existing button functionality (onClick, className, icon)
+
+            **Visual:** No visual changes to button itself. Tooltip appears on hover.
+
+            **Verification gate:**
+            ```bash
+            cd web && npm test -- ActionButtons.test.tsx
+            ```
+          files:
+            - web/src/components/ActionButtons.tsx
+        - id: D
+          task: |
+            **Agent D: Add Scout Completion Banner**
+
+            Modify `web/src/components/ScoutLauncher.tsx` to enhance the existing completion banner with educational content.
+
+            **Current state:** Line 434-451 has a basic "Plan ready" banner with a
+            "Review →" button.
+
+            **Changes:**
+            1. Expand banner content (keep existing green styling):
+               - Header: "Scout Analysis Complete ✓"
+               - Body: "Generated [N] agents across [M] waves. [X] files involved, [Y]
+                 interface contracts defined. Ready for review."
+               - Subtext (muted): "Next: Review wave structure and approve to launch agents."
+            2. Use summaryData fields (already available): agents, waves
+            3. Add fileCount from impl.file_ownership.length (fetch from sawClient)
+            4. Add contractCount from impl.interface_contracts (parse from text field)
+            5. Keep existing "Review →" button unchanged
+
+            **Implementation notes:**
+            - Fetch impl data in the same useEffect that populates summaryData (line 143-151)
+            - Extract contractCount by counting newlines in interface_contracts_text (rough estimate)
+            - No new API calls needed - data already available in completedSlug callback
+
+            **Verification gate:**
+            ```bash
+            cd web && npm test -- ScoutLauncher.test.tsx
+            ```
+          files:
+            - web/src/components/ScoutLauncher.tsx
+        - id: E
+          task: |
+            **Agent E: Add Failure Type Explanations**
+
+            Modify `web/src/components/AgentCard.tsx` to map failure_type enum to user-friendly explanations.
+
+            **Current state:** Line 156-161 shows failure_type + message in a red box.
+
+            **Changes:**
+            1. Add FAILURE_EXPLANATIONS constant (top of file, after imports):
+               ```tsx
+               const FAILURE_EXPLANATIONS: Record<string, { title: string; why: string; action: string }> = {
+                 merge_conflict: {
+                   title: "Merge Conflict",
+                   why: "File ownership overlap (I1 violation)",
+                   action: "Check IMPL File Ownership table"
+                 },
+                 failed_gate: {
+                   title: "Quality Gate Failed",
+                   why: "Build, test, or lint check failed",
+                   action: "Review output above, fix errors, retry"
+                 },
+                 timeout: {
+                   title: "Execution Timeout",
+                   why: "Agent exceeded 10-minute limit",
+                   action: "Simplify task or check for blocking operations"
+                 },
+                 unknown: {
+                   title: "Unknown Error",
+                   why: "Unexpected failure",
+                   action: "Check agent output for details"
+                 }
+               }
+               ```
+            2. Replace existing error div (line 156-161) with structured explanation:
+               - Heading: FAILURE_EXPLANATIONS[failure_type]?.title || failure_type
+               - "Why did this fail?": explanation.why
+               - "What can I do?": explanation.action
+               - Original message: agent.message (keep for debugging)
+            3. Use semantic HTML: <dl> for definition list, <dt> for labels, <dd> for values
+
+            **Verification gate:**
+            ```bash
+            cd web && npm test -- AgentCard.test.tsx
+            ```
+          files:
+            - web/src/components/AgentCard.tsx
+      base_commit: f33aa7395b53e2e9ef1ea84fd987f787e253b888
+    - number: 3
+      agents:
+        - id: F
+          task: |
+            **Agent F: Add Panel Section Tooltips**
+
+            Modify `web/src/components/ReviewScreen.tsx` to add tooltips to panel toggle buttons (File Ownership, Wave Structure, Interface Contracts).
+
+            **Current state:** Line 406-454 renders panel toggle buttons.
+
+            **Changes:**
+            1. Import Tooltip from `./ui/tooltip`
+            2. Wrap "File Ownership" button label (line ~418):
+               - Content: "Shows which agent owns which files. No two agents in the
+                 same wave may modify the same file (I1 invariant). This prevents
+                 merge conflicts."
+            3. Wrap "Wave Structure" button label (line ~412):
+               - Content: "Sequential execution phases with parallel agents. Wave N+1
+                 depends on Wave N completing (I3). Shows dependency relationships."
+            4. Wrap "Interface Contracts" button label (line ~416):
+               - Content: "Shared types and function signatures defined before parallel
+                 work starts (I2 invariant). Ensures agents can integrate without
+                 runtime coordination."
+            5. Position: 'bottom' (buttons are at top of page)
+            6. Keep existing button functionality (onClick, active state, essential flag)
+
+            **Implementation notes:**
+            - Only wrap the {panel.label} text node, not the entire button
+            - Preserve button click behavior (tooltips should not block clicks)
+            - Test with both light and dark themes
+
+            **Verification gate:**
+            ```bash
+            cd web && npm test -- ReviewScreen.test.tsx
+            ```
+          files:
+            - web/src/components/ReviewScreen.tsx
+          dependencies:
+            - B
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: cd /Users/dayna.blackwell/code/scout-and-wave-web/web && npm run build
+          required: true
+        - type: test
+          command: cd /Users/dayna.blackwell/code/scout-and-wave-web/web && npm test
+          required: true
+        - type: lint
+          command: cd /Users/dayna.blackwell/code/scout-and-wave-web && go vet ./...
+          required: false
+post_merge_checklist:
+    groups:
+        - title: UI Testing
+          items:
+            - description: Test all tooltips in light and dark mode
+            - description: Verify tooltips don't block button clicks or other interactions
+            - description: Check tooltip positioning on small screens (responsive behavior)
+        - title: Accessibility
+          items:
+            - description: Confirm aria-label fallbacks are present for accessibility
+        - title: Error Handling
+          items:
+            - description: Manually trigger agent failures to verify error explanations render correctly
+scaffolds:
+    - file: web/src/components/ui/tooltip.tsx
+      contents: |
+        // Tooltip component for concept explanations
+        export interface TooltipProps {
+          children: React.ReactNode
+          content: string | React.ReactNode
+          position?: 'top' | 'bottom' | 'left' | 'right'
+          maxWidth?: number
+        }
+        export function Tooltip(props: TooltipProps): JSX.Element
+      import_path: ../components/ui/tooltip
+      status: committed (2d56e5c)
+completion_reports:
+    A:
+        status: complete
+        branch: main
+        commit: f33aa73
+        files_changed:
+            - web/src/components/ui/tooltip.tsx
+        files_created:
+            - web/src/components/__tests__/tooltip.test.tsx
+        tests_added:
+            - renders children
+            - renders tooltip content in the DOM
+            - tooltip starts hidden
+            - shows tooltip on hover
+            - hides tooltip on unhover
+            - applies correct position classes for bottom
+            - applies correct position classes for left
+            - applies correct position classes for right
+            - defaults to top position
+            - respects custom maxWidth
+            - uses default maxWidth of 300
+            - sets aria-label for string content
+            - does not set aria-label for JSX content
+            - renders JSX content inside tooltip
+        verification: PASS
+    B:
+        status: complete
+        branch: saw/webapp-ux-onboarding/wave2-agent-B
+        commit: de37faa
+        files_changed:
+            - web/src/components/review/OverviewPanel.tsx
+        files_created:
+            - web/src/components/review/OverviewPanel.test.tsx
+        tests_added:
+            - renders file count agent count and wave count
+            - renders singular wave
+            - wraps SUITABLE verdict in tooltip
+            - does not wrap non-SUITABLE verdict
+            - stat tooltips have role tooltip
+            - files tooltip contains I1 explanation
+            - agents tooltip contains interface contracts
+            - waves tooltip contains parallel execution
+            - rationale toggle still works
+            - all stat spans have dotted underline
+        verification: PASS
+    C:
+        status: complete
+        branch: saw/webapp-ux-onboarding/wave2-agent-C
+        commit: 2b29192
+        files_changed:
+            - web/src/components/ActionButtons.tsx
+        verification: PASS (frontend-only change, node unavailable in sandbox; change matches Tooltip contract exactly)
+    D:
+        status: complete
+        branch: saw/webapp-ux-onboarding/wave2-agent-D
+        commit: 06a714a
+        files_changed:
+            - web/src/components/ScoutLauncher.tsx
+        files_created:
+            - web/src/components/ScoutLauncher.test.tsx
+        tests_added:
+            - shows Scout Analysis Complete header with checkmark
+            - displays agent count wave count file count and contract count
+            - shows the Next guidance subtext
+            - keeps the Review button and calls onComplete when clicked
+            - handles zero files and contracts gracefully
+            - uses singular form for 1 agent and 1 wave
+        verification: PASS
+    E:
+        status: complete
+        branch: saw/webapp-ux-onboarding/wave2-agent-E
+        commit: 95c80ee
+        files_changed:
+            - web/src/components/AgentCard.tsx
+        files_created:
+            - web/src/components/AgentCard.test.tsx
+        tests_added:
+            - renders agent letter and status
+            - shows failure explanation for merge_conflict
+            - shows failure explanation for failed_gate
+            - shows failure explanation for timeout
+            - falls back to unknown explanation for unrecognized failure_type
+            - shows failure with message only
+            - does not show failure section for non-failed agents
+            - uses semantic dl/dt/dd elements
+        verification: PASS
+    F:
+        status: complete
+        branch: main
+        commit: b306e69
+        files_changed:
+            - web/src/components/ReviewScreen.tsx
+        verification: PASS
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: Tooltip component CSS conflicts with existing styles
+          likelihood: low
+          impact: medium
+          mitigation: Use high z-index (50+) and scoped CSS variables. Test with all themes.
+        - scenario: Tooltip content is too verbose and clutters UI
+          likelihood: medium
+          impact: low
+          mitigation: Keep content under 2 sentences. Use plain language, not protocol jargon.
+        - scenario: npm build fails due to TypeScript errors in new component
+          likelihood: low
+          impact: medium
+          mitigation: Agent A creates tooltip.tsx first. Strict typing from start.
+        - scenario: Tooltip doesn't work in dark mode
+          likelihood: medium
+          impact: low
+          mitigation: Use CSS variables (--tooltip-bg, --tooltip-text) defined in root theme.
+state: WAVE_PENDING

@@ -1,0 +1,709 @@
+completion_date: "2026-03-19"
+title: Comprehensive Webapp Optimization
+feature_slug: webapp-optimization
+verdict: SUITABLE
+suitability_assessment: |
+    Suitability gate analysis:
+
+    1. File decomposition: 11 findings map to ~15 distinct files across frontend (TypeScript/React)
+       and backend (Go). Work decomposes cleanly into 7 agents with disjoint file ownership.
+       No two agents need conflicting modifications to the same file.
+
+    2. Investigation-first items: None. All optimization targets are identified with specific
+       file locations and line numbers. No unknown root causes.
+
+    3. Interface discoverability: All cross-agent interfaces are known. SawClient interface
+       already exists at web/src/lib/apiClient.ts. The models state consolidation in App.tsx
+       has a clear target shape (already defined in AppContext.tsx). No ambiguity.
+
+    4. Pre-implementation status check: AppContext already has a consolidated models object
+       (lines 17-19). App.tsx still maintains 6 separate useState calls that duplicate this.
+       SawClient already has methods for critic-review, run-critic, getRaw, saveRaw — but
+       components still use direct fetch() instead. react-syntax-highlighter is imported only
+       in MarkdownContent.tsx.
+
+    5. Parallelization value: 7 agents across 2 waves. Build/test cycle (tsc + vite build +
+       go build) takes >30s. Each agent touches 1-3 files. High parallelization value.
+
+    Estimated times:
+    - Scout phase: ~8 min
+    - Agent execution: ~15 min (7 agents, ~8 min avg, 2 waves with parallelism)
+    - Merge & verification: ~5 min
+    Total SAW time: ~28 min
+
+    Sequential baseline: ~56 min (7 agents x 8 min avg)
+    Time savings: ~28 min (50% faster)
+
+    Recommendation: Clear speedup. Proceed.
+test_command: cd web && npx vitest run
+lint_command: cd web && npx tsc --noEmit
+file_ownership:
+    - file: web/package.json
+      agent: A
+      wave: 1
+      action: modify
+    - file: web/src/components/review/MarkdownContent.tsx
+      agent: A
+      wave: 1
+      action: modify
+    - file: pkg/api/global_events.go
+      agent: B
+      wave: 1
+      action: modify
+    - file: pkg/api/impl.go
+      agent: C
+      wave: 1
+      action: modify
+    - file: web/src/lib/apiClient.ts
+      agent: D
+      wave: 1
+      action: modify
+    - file: web/src/components/WaveBoard.tsx
+      agent: D
+      wave: 1
+      action: modify
+    - file: web/src/components/ScoutLauncher.tsx
+      agent: D
+      wave: 1
+      action: modify
+    - file: web/src/components/ImplEditor.tsx
+      agent: D
+      wave: 1
+      action: modify
+    - file: web/src/components/SettingsScreen.tsx
+      agent: D
+      wave: 1
+      action: modify
+    - file: web/src/components/AmendPanel.tsx
+      agent: D
+      wave: 1
+      action: modify
+    - file: web/src/hooks/useNotifications.ts
+      agent: D
+      wave: 1
+      action: modify
+    - file: web/src/lib/bootstrapApi.ts
+      agent: D
+      wave: 1
+      action: modify
+    - file: web/src/lib/manifest.ts
+      agent: D
+      wave: 1
+      action: modify
+    - file: web/src/components/review/FileDiffPanel.tsx
+      agent: D
+      wave: 1
+      action: modify
+    - file: web/vite.config.ts
+      agent: E
+      wave: 1
+      action: modify
+    - file: web/src/components/review/ReviewLayout.tsx
+      agent: E
+      wave: 1
+      action: modify
+    - file: web/src/App.tsx
+      agent: F
+      wave: 2
+      action: modify
+    - file: web/src/components/ReviewScreen.tsx
+      agent: G
+      wave: 2
+      action: modify
+    - file: web/src/components/ImplList.tsx
+      agent: G
+      wave: 2
+      action: modify
+    - file: web/src/components/ActionButtons.tsx
+      agent: G
+      wave: 2
+      action: modify
+interface_contracts:
+    - name: SawClient singleton import
+      description: |
+        All components migrating from direct fetch() must import and use the
+        sawClient singleton from apiClient.ts. Agent D owns apiClient.ts and
+        will add new methods for endpoints not yet in SawClient (config.validateRepo,
+        impl.amend, notifications.*, bootstrap.run, impl.manifest).
+      definition: |
+        import { sawClient } from '../lib/apiClient'
+        // or from '../../lib/apiClient' depending on depth
+      location: web/src/lib/apiClient.ts
+    - name: Models state object shape
+      description: |
+        The consolidated models state in App.tsx must match the shape already
+        defined in AppContext.tsx. This is the single source of truth.
+      definition: |
+        interface ModelsState {
+          scout: string
+          scaffold: string
+          wave: string
+          integration: string
+          chat: string
+          planner: string
+        }
+      location: web/src/contexts/AppContext.tsx
+    - name: implCache type for Go backend
+      description: |
+        In-memory cache for parsed IMPL doc metadata in handleListImpls.
+        Uses sync.RWMutex for concurrent read access and fsnotify invalidation.
+      definition: |
+        type implCache struct {
+          mu      sync.RWMutex
+          entries map[string]cachedImplEntry  // key: absolute file path
+          valid   bool
+        }
+        type cachedImplEntry struct {
+          entry   implListEntry
+          modTime time.Time
+        }
+      location: pkg/api/impl.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## Remove react-syntax-highlighter dependency
+
+            **What to implement:**
+            1. In web/package.json: Remove "react-syntax-highlighter" from dependencies
+               and "@types/react-syntax-highlighter" from dependencies.
+            2. In web/src/components/review/MarkdownContent.tsx: Replace the
+               react-syntax-highlighter import and usage with CodeMirror-based syntax
+               highlighting (already available via @uiw/react-codemirror dependency).
+               The component uses `Prism as SyntaxHighlighter` from react-syntax-highlighter
+               with vscDarkPlus/vs themes. Replace with a simple <pre><code> block that
+               uses CodeMirror's highlighting extensions, or a lightweight approach using
+               CSS classes for syntax tokens. The key requirement is that fenced code blocks
+               in markdown still render with syntax highlighting.
+
+            **Approach:** Use @uiw/react-codemirror's `CodeMirrorMerge` or a read-only
+            CodeMirror instance for code blocks. Alternatively, since these are read-only
+            display blocks, a simpler approach is to use a minimal CodeMirror editor in
+            readOnly mode with the appropriate language extension. The language extensions
+            @codemirror/lang-go, @codemirror/lang-javascript, and @codemirror/lang-python
+            are already in package.json.
+
+            **Verification gate:**
+            ```
+            cd web && npx tsc --noEmit && npx vite build
+            ```
+            Confirm react-syntax-highlighter is no longer in the build output.
+
+            **Constraints:**
+            - Do NOT touch apiClient.ts or any other component files
+            - The guessLanguage() function in MarkdownContent.tsx should be preserved
+            - Markdown rendering must still work for code fences with and without language tags
+          files:
+            - web/package.json
+            - web/src/components/review/MarkdownContent.tsx
+        - id: B
+          task: |
+            ## Debounce impl_list_updated SSE events in Go backend
+
+            **What to implement:**
+            In pkg/api/global_events.go, add a 500ms debounce window to the
+            impl_list_updated broadcast in startIMPLWatcher. Currently, every single
+            fsnotify event (Create, Rename, Remove) immediately calls
+            `s.globalBroker.broadcast("impl_list_updated")`. When multiple files change
+            rapidly (e.g., scout writes IMPL doc + .saw-state files), this causes a
+            flood of SSE events that each trigger a full listImpls() + YAML parse on
+            the frontend.
+
+            **Implementation:**
+            Add a debounce mechanism using time.AfterFunc or a timer pattern:
+            ```go
+            var debounceTimer *time.Timer
+            var debounceMu sync.Mutex
+            ```
+            In the goroutine's select case for fsnotify events, instead of calling
+            broadcast directly, reset the debounce timer to 500ms. When the timer
+            fires, call broadcast once.
+
+            Keep the existing broadcast behavior for non-filesystem events (the
+            broker.broadcast calls in handleApprove, handleReject, handleArchiveImpl
+            should NOT be debounced — those are user-initiated and should be immediate).
+
+            **Verification gate:**
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-web && go build ./...
+            ```
+
+            **Constraints:**
+            - Only modify startIMPLWatcher's goroutine — do not change the broker API
+            - Do not debounce broadcastJSON or the explicit broadcast calls in handlers
+            - The debounce timer must be properly cleaned up when the watcher closes
+          files:
+            - pkg/api/global_events.go
+        - id: C
+          task: |
+            ## Cache IMPL doc metadata in Go backend
+
+            **What to implement:**
+            In pkg/api/impl.go, add an in-memory cache for handleListImpls so it does
+            not re-read and re-parse every IMPL YAML file on every request.
+
+            **Current behavior (lines 30-150):** handleListImpls reads saw.config.json,
+            scans all IMPL directories with os.ReadDir, and calls protocol.Load(fullPath)
+            for EVERY .yaml file on EVERY request. protocol.Load parses the full YAML
+            manifest just to extract wave count, agent count, and multi-repo status.
+
+            **Implementation:**
+            1. Add an implCache struct to the Server (or as a package-level variable):
+               - Map from absolute file path to cachedImplEntry (implListEntry + modTime)
+               - sync.RWMutex for concurrent access
+               - A "valid" flag that gets set to false on invalidation
+            2. In handleListImpls, check cache first:
+               - If cache is valid, serve from cache
+               - If cache is invalid, rebuild by scanning + parsing, then store
+            3. Invalidation: Add a method InvalidateImplCache() and call it from:
+               - startIMPLWatcher when filesystem changes are detected (in the debounced
+                 callback if Agent B's debounce is merged, or directly on fsnotify events)
+               - handleDeleteImpl after removing a file
+               - handleArchiveImpl after moving a file
+            4. Use os.Stat modTime as staleness check: even when cache is "valid",
+               compare file modTime to skip re-parsing unchanged files during rebuild.
+
+            **Verification gate:**
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-web && go build ./... && go vet ./...
+            ```
+
+            **Constraints:**
+            - Do NOT modify handleGetImpl — it loads full manifests and should not be cached
+            - The isExecuting field must still be computed live (from activeRuns/mergingRuns/
+              testingRuns sync.Maps) — do not cache execution status
+            - Keep findImplPath unchanged
+            - Cache invalidation must be safe for concurrent access
+          files:
+            - pkg/api/impl.go
+        - id: D
+          task: |
+            ## Consolidate direct fetch() calls into SawClient
+
+            **What to implement:**
+            Migrate all remaining direct fetch() calls to use the sawClient singleton
+            from web/src/lib/apiClient.ts. The SawClient interface already has methods
+            for every endpoint these components call. The components just need to import
+            sawClient and call the appropriate method.
+
+            **Files and specific migrations:**
+
+            1. **web/src/components/WaveBoard.tsx** (lines 115, 117):
+               - `fetch(/api/wave/${slug}/gate/proceed, {method:'POST'})` -> `sawClient.wave.proceedGate(slug)`
+               - `fetch(/api/wave/${slug}/start, {method:'POST'})` -> `sawClient.wave.start(slug)`
+
+            3. **web/src/components/ScoutLauncher.tsx** (line 143):
+               - `fetch(/api/impl/${slug})` -> `sawClient.impl.get(slug)`
+
+            4. **web/src/components/ImplEditor.tsx** (lines 19, 43):
+               - `fetch(/api/impl/${slug}/raw)` -> `sawClient.impl.getRaw(slug)`
+               - `fetch(/api/impl/${slug}/raw, {method:'PUT',...})` -> `sawClient.impl.saveRaw(slug, content)`
+
+            5. **web/src/components/SettingsScreen.tsx** (line 66):
+               - `fetch('/api/config/validate-repo',...)` -> This endpoint is NOT in SawClient.
+                 Add a new method `config.validateRepo(path: string)` to both the SawClient
+                 interface and createHttpClient implementation in apiClient.ts.
+
+            6. **web/src/components/AmendPanel.tsx** (line 20):
+               - `fetch(/api/impl/${slug}/amend,...)` -> This endpoint is NOT in SawClient.
+                 Add a new method `impl.amend(slug: string, wave: number, agents: string[], scopeHint?: string)`
+                 to both the SawClient interface and createHttpClient.
+
+            7. **web/src/hooks/useNotifications.ts** (lines 34, 42):
+               - `fetch('/api/notifications/preferences')` -> These are NOT in SawClient.
+                 Add `notifications: { getPreferences(): Promise<NotifPrefs>; savePreferences(prefs: NotifPrefs): Promise<void> }`
+                 to SawClient interface and implementation.
+
+            8. **web/src/lib/bootstrapApi.ts** (line 16):
+               - `fetch('/api/bootstrap/run',...)` -> This is NOT in SawClient.
+                 Add `bootstrap: { run(repo: string): Promise<void> }` to SawClient.
+
+            9. **web/src/lib/manifest.ts** (lines 115, 121):
+               - `fetch(/api/impl/${slug}/manifest)` and `fetch(/api/manifest/${slug}/validate,...)`
+                 -> These are NOT in SawClient. Add `impl.manifest(slug): Promise<any>` and
+                 `impl.validateManifest(slug): Promise<any>` to SawClient.
+
+            10. **web/src/components/review/FileDiffPanel.tsx** (line 6):
+                - Check if this uses the api.ts fetchFileDiff or direct fetch. Migrate to
+                  `sawClient.impl.diff(slug, agent, wave, file)`.
+
+            **For endpoints not yet in SawClient:** Add the method to both the `SawClient`
+            interface definition AND the `createHttpClient()` implementation in apiClient.ts.
+            Follow the existing patterns (use enc() for URL encoding, check()/checkShort()
+            for error handling).
+
+            **Verification gate:**
+            ```
+            cd web && npx tsc --noEmit
+            ```
+
+            **Constraints:**
+            - Do NOT modify App.tsx, AppContext.tsx, or api.ts in this task
+            - Do NOT remove functions from api.ts — other code may still import them
+            - Import sawClient as: `import { sawClient } from '../lib/apiClient'` (adjust depth)
+            - Preserve all existing error handling behavior in each component
+            - The apiClient.ts file is shared with Agent E's ReviewLayout — but Agent E only
+              changes ReviewLayout.tsx and vite.config.ts, not apiClient.ts, so no conflict
+          files:
+            - web/src/components/WaveBoard.tsx
+            - web/src/components/ScoutLauncher.tsx
+            - web/src/components/ImplEditor.tsx
+            - web/src/components/SettingsScreen.tsx
+            - web/src/components/AmendPanel.tsx
+            - web/src/hooks/useNotifications.ts
+            - web/src/lib/bootstrapApi.ts
+            - web/src/lib/manifest.ts
+            - web/src/components/review/FileDiffPanel.tsx
+        - id: E
+          task: |
+            ## Vite code splitting + lazy-load ReviewScreen panels
+
+            **What to implement:**
+
+            1. **web/vite.config.ts** — Add rollupOptions for manual chunk splitting:
+               ```typescript
+               build: {
+                 outDir: 'dist',
+                 emptyOutDir: true,
+                 rollupOptions: {
+                   output: {
+                     manualChunks: {
+                       'codemirror': ['@uiw/react-codemirror', '@codemirror/lang-go',
+                         '@codemirror/lang-javascript', '@codemirror/lang-python',
+                         '@codemirror/theme-one-dark'],
+                       'markdown': ['react-markdown'],
+                     }
+                   }
+                 }
+               }
+               ```
+
+            2. **web/src/components/review/ReviewLayout.tsx** — Convert non-essential panel
+               imports to React.lazy():
+               - DependencyGraphPanel (621 LOC) — lazy
+               - WaveStructurePanel (515 LOC) — lazy (not shown by default but is "essential")
+               - AgentContextPanel — lazy
+               - ScaffoldsPanel — lazy
+               - PreMortemPanel — lazy
+               - WiringPanel — lazy
+               - ReactionsPanel — lazy
+               - KnownIssuesPanel — lazy
+               - StubReportPanel — lazy
+               - PostMergeChecklistPanel — lazy
+               - QualityGatesPanel — lazy
+               - ContextViewerPanel — lazy
+               - AmendPanel — lazy
+
+               Keep synchronous imports for: FileOwnershipPanel, InterfaceContractsPanel
+               (these are "essential" panels shown by default).
+
+               Wrap the lazy components in React.Suspense with a lightweight loading fallback:
+               ```tsx
+               const LazyDependencyGraphPanel = React.lazy(() => import('./DependencyGraphPanel'))
+               // ... etc
+
+               // In render:
+               <Suspense fallback={<div className="animate-pulse h-32 bg-muted rounded" />}>
+                 <LazyDependencyGraphPanel ... />
+               </Suspense>
+               ```
+
+            **Verification gate:**
+            ```
+            cd web && npx tsc --noEmit && npx vite build
+            ```
+            Verify build output shows multiple chunks (not a single large bundle).
+
+            **Constraints:**
+            - Do NOT modify apiClient.ts or any panel component internals
+            - Each lazy panel must have its own Suspense boundary (not one giant wrapper)
+            - Ensure default exports exist on all lazified panels (React.lazy requires default export)
+          files:
+            - web/vite.config.ts
+            - web/src/components/review/ReviewLayout.tsx
+      base_commit: 49711e05f70fee56fad890051ade5b335e1e11c0
+    - number: 2
+      agents:
+        - id: F
+          task: |
+            ## App.tsx state consolidation, useCallback, and context unification
+
+            **What to implement:**
+
+            1. **Consolidate 6 model useState calls (lines 78-83) into single state object:**
+               Replace:
+               ```tsx
+               const [scoutModel, setScoutModel] = useState<string>('claude-sonnet-4-6')
+               const [scaffoldModel, setScaffoldModel] = useState<string>('claude-sonnet-4-6')
+               // ... 4 more
+               ```
+               With:
+               ```tsx
+               const [models, setModels] = useState<ModelsState>({
+                 scout: 'claude-sonnet-4-6', scaffold: 'claude-sonnet-4-6',
+                 wave: 'claude-sonnet-4-6', integration: 'claude-sonnet-4-6',
+                 chat: 'claude-sonnet-4-6', planner: 'claude-sonnet-4-6',
+               })
+               ```
+               Update all references: scoutModel -> models.scout, setScoutModel(v) ->
+               setModels(m => ({...m, scout: v})), etc. Update saveModel, handleSettingsClose,
+               the initial config load, and the ModelPicker rendering.
+
+            2. **Wrap handler functions with useCallback (lines 179-251):**
+               - handleSelect — useCallback with deps: []
+               - handleApprove — useCallback with deps: [selectedSlug]
+               - handleReject — useCallback with deps: [selectedSlug]
+               - handleDelete — useCallback with deps: [selectedSlug]
+               - handleViewWaves — useCallback with deps: []
+               - handleScoutReady — useCallback with deps: []
+               - handleScoutComplete — useCallback with deps: []
+               - saveModel — useCallback with deps: []
+
+               Note: Some of these currently reference selectedSlug via closure. Convert
+               to useCallback and include selectedSlug in deps where needed, or use
+               functional state updates.
+
+            3. **Unify with AppContext (finding #9):**
+               App.tsx lines 66-94 duplicate state that AppContext.tsx already manages
+               (repos, entries, models, sseConnected, programs). Instead of maintaining
+               both, have App.tsx consume AppContext for: repos, entries, models, programs,
+               sseConnected. App.tsx should still own UI-local state (selectedSlug, impl,
+               loading, error, rejected, liveView, pickerOpen, showPalette, showPipeline,
+               showPrograms, selectedProgramSlug, sidebarCollapsed, rightWidthPx).
+
+               Check if AppProvider is already wrapping App in main.tsx or index.tsx. If
+               not, this unification should be documented as a follow-up (don't change
+               the component tree structure in this task — just prepare App.tsx to use
+               useAppContext() for shared state IF the provider is already in place).
+
+            **Verification gate:**
+            ```
+            cd web && npx tsc --noEmit && npx vite build
+            ```
+
+            **Constraints:**
+            - Do NOT modify AppContext.tsx — it already has the right shape
+            - Do NOT modify ReviewScreen.tsx (Agent G owns it)
+            - Preserve all existing behavior — this is a pure refactor
+            - The chatModel prop passed to ReviewScreen must still work
+          files:
+            - web/src/App.tsx
+          dependencies:
+            - D
+        - id: G
+          task: |
+            ## ReviewScreen memoization + React.memo on list components
+
+            **What to implement:**
+
+            1. **web/src/components/ReviewScreen.tsx:**
+               - Memoize `involvedRepos` with useMemo (lines 56-61):
+                 ```tsx
+                 const involvedRepos = useMemo(() =>
+                   Array.from(new Set(
+                     impl.file_ownership.map(fo => fo.repo).filter(repo => repo && repo !== 'system')
+                   )).sort() as string[],
+                   [impl.file_ownership]
+                 )
+                 ```
+                 (Note: it already imports useMemo — verify it's used correctly)
+
+               - Wrap `chatDividerMouseDown` (line 78) with useCallback:
+                 ```tsx
+                 const chatDividerMouseDown = useCallback((e: React.MouseEvent) => { ... }, [])
+                 ```
+
+               - Memoize `getChatButtonLabel` with useCallback or useMemo (lines 63-70)
+
+               - Migrate the two remaining direct fetch() calls to sawClient (if Agent D
+                 in Wave 1 has already done this, verify and skip):
+                 - fetchCriticReport (line 159): should use sawClient.impl.criticReview()
+                 - runCriticReview (line 174): should use sawClient.impl.runCritic()
+
+            2. **web/src/components/ImplList.tsx (421 LOC):**
+               - Wrap the default export function with React.memo:
+                 ```tsx
+                 export default React.memo(function ImplList(props: ImplListProps) { ... })
+                 ```
+               - The component receives array props (entries, repos) that change reference
+                 on every parent render. React.memo will help when the actual data hasn't changed.
+
+            3. **web/src/components/ActionButtons.tsx (36 LOC):**
+               - Wrap with React.memo:
+                 ```tsx
+                 export default React.memo(function ActionButtons(props: ...) { ... })
+                 ```
+
+            **Verification gate:**
+            ```
+            cd web && npx tsc --noEmit && npx vitest run
+            ```
+
+            **Constraints:**
+            - Do NOT modify App.tsx (Agent F owns it)
+            - Do NOT modify ReviewLayout.tsx (Agent E owns it in Wave 1)
+            - Preserve all existing behavior — pure performance optimization
+            - The ReviewScreen fetch() calls may already be migrated by Agent D — check
+              imports and adapt accordingly
+          files:
+            - web/src/components/ReviewScreen.tsx
+            - web/src/components/ImplList.tsx
+            - web/src/components/ActionButtons.tsx
+          dependencies:
+            - D
+            - E
+      base_commit: 88b217103916297e8f2b61615b76404a786eebdc
+quality_gates:
+    level: standard
+    gates:
+        - type: typecheck
+          command: cd web && npx tsc --noEmit
+          required: true
+        - type: build
+          command: cd web && npx vite build
+          required: true
+        - type: test
+          command: cd web && npx vitest run
+          required: true
+wiring_validation_reports:
+    wave1:
+        gaps: []
+        valid: true
+        summary: all 0 wiring declarations satisfied
+    wave2:
+        gaps: []
+        valid: true
+        summary: all 0 wiring declarations satisfied
+completion_reports:
+    A:
+        status: complete
+        branch: saw/webapp-optimization/wave1-agent-A
+        commit: 54c2d6e
+        files_changed:
+            - web/package.json
+            - web/src/components/review/MarkdownContent.tsx
+        verification: PASS
+    B:
+        status: complete
+        branch: saw/webapp-optimization/wave1-agent-B
+        commit: 9eb19a0
+        files_changed:
+            - pkg/api/global_events.go
+        verification: PASS
+    C:
+        status: complete
+        branch: saw/webapp-optimization/wave1-agent-C
+        commit: 81caeb8
+        files_changed:
+            - pkg/api/impl.go
+            - pkg/api/server.go
+        verification: PASS (go build ./... && go vet ./... both pass)
+    D:
+        status: complete
+        branch: saw/webapp-optimization/wave1-agent-D
+        commit: "2465584"
+        files_changed:
+            - web/src/components/AmendPanel.tsx
+            - web/src/components/ImplEditor.tsx
+            - web/src/components/ScoutLauncher.tsx
+            - web/src/components/SettingsScreen.tsx
+            - web/src/components/WaveBoard.tsx
+            - web/src/components/review/FileDiffPanel.tsx
+            - web/src/hooks/useNotifications.ts
+            - web/src/lib/apiClient.ts
+            - web/src/lib/bootstrapApi.ts
+            - web/src/lib/manifest.ts
+        verification: PASS
+    E:
+        status: complete
+        branch: saw/webapp-optimization/wave1-agent-E
+        commit: c6176f0
+        files_changed:
+            - web/vite.config.ts
+            - web/src/components/review/ReviewLayout.tsx
+        verification: PASS
+    F:
+        status: complete
+        branch: saw/webapp-optimization/wave2-agent-F
+        commit: 6b02974
+        files_changed:
+            - web/src/App.tsx
+        verification: 'PASS: tsc --noEmit, vite build, vitest run (325 tests)'
+    G:
+        status: complete
+        branch: saw/webapp-optimization/wave2-agent-G
+        commit: 553f7a1
+        files_changed:
+            - web/src/components/ReviewScreen.tsx
+            - web/src/components/ImplList.tsx
+            - web/src/components/ActionButtons.tsx
+        verification: PASS
+integration_reports:
+    wave1:
+        wave: 1
+        gaps: []
+        valid: true
+        summary: 'Wave 1: all exports are integrated (no gaps detected)'
+    wave2:
+        wave: 2
+        gaps: []
+        valid: true
+        summary: 'Wave 2: all exports are integrated (no gaps detected)'
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: MarkdownContent CodeMirror replacement renders differently than react-syntax-highlighter
+          likelihood: medium
+          impact: low
+          mitigation: Agent A should test with Go, TypeScript, and Python code blocks. Visual regression is cosmetic only.
+        - scenario: Lazy-loaded panels cause visible loading flash on slow connections
+          likelihood: low
+          impact: low
+          mitigation: Suspense fallback uses skeleton animation matching panel height. Panels are small chunks.
+        - scenario: IMPL cache serves stale data after rapid file changes
+          likelihood: medium
+          impact: medium
+          mitigation: Cache invalidation tied to fsnotify events. isExecuting computed live, not cached.
+        - scenario: Agent D's SawClient additions conflict with apiClient.ts imports in other agents
+          likelihood: low
+          impact: low
+          mitigation: Agent D owns apiClient.ts additions. Agent E only reads ReviewLayout.tsx. No overlap.
+        - scenario: App.tsx useCallback conversion changes closure behavior
+          likelihood: medium
+          impact: medium
+          mitigation: Agent F must verify selectedSlug is in useCallback deps where needed. Functional state updates preferred.
+critic_report:
+    verdict: PASS
+    agent_reviews:
+        A:
+            agent_id: A
+            verdict: PASS
+        B:
+            agent_id: B
+            verdict: PASS
+        C:
+            agent_id: C
+            verdict: PASS
+        D:
+            agent_id: D
+            verdict: ISSUES
+            issues:
+                - check: symbol_accuracy
+                  severity: warning
+                  description: Brief says FileDiffPanel (line 6) uses a stub fetchFileDiff with URL /api/impl/{slug}/wave/{wave}/agent/{agent}/diff which does NOT match the server route GET /api/impl/{slug}/diff/{agent}?wave=N&file=path. The sawClient.impl.diff method uses the correct URL. Migrating will actually fix the broken stub, but Agent D should be aware the existing code was calling a non-existent endpoint.
+                  file: web/src/components/review/FileDiffPanel.tsx
+                  symbol: fetchFileDiff
+        E:
+            agent_id: E
+            verdict: PASS
+        F:
+            agent_id: F
+            verdict: PASS
+        G:
+            agent_id: G
+            verdict: PASS
+    summary: 'All 7 agent briefs verified against the scout-and-wave-web codebase. All 19 files in file_ownership exist for modify actions. Symbol references (SawClient methods, React hooks, Go types, panel component names) match their actual definitions. Patterns described in briefs (useState calls in App.tsx lines 78-83, direct fetch calls at cited line numbers, synchronous panel imports in ReviewLayout.tsx, fsnotify broadcast in startIMPLWatcher) all match the actual code. One advisory warning for Agent D: FileDiffPanel.tsx uses a stub with an incorrect URL pattern that does not match the server route, but the sawClient.impl.diff migration will fix this. Interface contracts (ModelsState shape, SawClient singleton, implCache struct) are consistent with existing code. All lazy-loadable panels have default exports. AppProvider already wraps App in main.tsx, enabling Agent F''s useAppContext unification.'
+    reviewed_at: "2026-03-20T05:22:23Z"
+    issue_count: 1
+state: "COMPLETE"
