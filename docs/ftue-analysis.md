@@ -224,16 +224,24 @@ The repo path picker in Settings uses the native OS file picker when available, 
 
 ## Summary Priority Order
 
-| Priority | Issue | Effort |
-|---|---|---|
-| Critical | 1.1 No onboarding / empty-state guidance | Low |
-| Critical | 1.2 Settings not surfaced as required | Low |
-| Critical | 1.3 Terminology never explained | Medium |
-| Critical | 1.4 Approve triggers irreversible execution without context | Low |
-| Critical | 1.5 Scout output is a firehose with no summary | Low |
-| High | 2.1 Feature input has no quality guidance | Low |
-| High | 2.2 ReviewScreen panel defaults overwhelming | Medium |
-| High | 2.3 No explanation of what happens after Approve | Low |
-| High | 2.4 Post-completion dead-end | Low |
-| High | 2.5 New vs. Existing project mode indistinguishable | Low |
-| Polish | 3.1–3.7 Various small labeling and copy issues | Very Low |
+| Priority | Issue | Effort | Status |
+|---|---|---|---|
+| Critical | 1.1 No onboarding / empty-state guidance | Low | TODO |
+| Critical | 1.2 Settings not surfaced as required | Low | TODO |
+| Critical | 1.4 Approve triggers irreversible execution without context | Low | TODO |
+| Critical | 1.5 Scout output is a firehose with no summary | Low | TODO |
+| High | 2.1 Feature input has no quality guidance | Low | TODO |
+| High | 2.3 No explanation of what happens after Approve | Low | TODO |
+| High | 2.5 New vs. Existing project mode indistinguishable | Low | TODO |
+| Polish | 3.1 Run Scout button disabled no explanation | Very Low | TODO |
+| Polish | 3.3 "Plan rejected" not actionable | Very Low | TODO |
+
+Removed (resolved or rejected):
+- 1.3 Terminology — PARTIAL (NavTip tooltips added to header)
+- 2.2 ReviewScreen panel defaults — rejected (layout is fine)
+- 2.4 Post-completion dead-end — rejected (developers can git log)
+- 3.2 SSE dot has no label — DONE (NavTip added)
+- 3.4 Sidebar shows slugs not titles — rejected
+- 3.5 Validate/Worktrees buttons — rejected
+- 3.6 Request Changes no instructions — rejected
+- 3.7 Programs empty state CLI reference — rejected
