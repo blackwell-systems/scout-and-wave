@@ -85,30 +85,59 @@ repo/
 
 ### 3. Protocol SDK (sawtools CLI)
 
-The `sawtools` binary provides all protocol operations:
+The `sawtools` binary provides 71+ commands covering all protocol operations. Key commands include:
+
+**Batching commands (atomic multi-step workflows):**
+- `run-scout` — Launch Scout, validate IMPL, auto-correct IDs, finalize gates
+- `prepare-wave` — Check deps, create worktrees, extract briefs, init journals, verify hooks
+- `finalize-wave` — Verify commits, scan stubs, run gates, merge, verify build, cleanup
+- `finalize-impl` — Validate, populate gates, re-validate
+- `run-wave` — Fully automated wave execution
 
 **Worktree operations:**
 - `create-worktrees` — Create isolated worktrees for a wave
-- `cleanup` — Remove worktrees after merge
+- `cleanup` / `cleanup-stale` — Remove worktrees after merge
 - `verify-isolation` — Check agent is in correct worktree
-
-**Wave execution:**
-- `run-wave` — Fully automated wave execution
-- `merge-agents` — Merge completed agents to main
-- `verify-commits` — Pre-merge commit verification
-- `verify-build` — Post-merge build verification
 
 **IMPL management:**
 - `list-impls` — Discover IMPL docs
 - `validate` — E16 manifest validation
 - `extract-context` — E23 per-agent context extraction
-- `update-status` — Agent status tracking
-- `mark-complete` — E15 completion marker
+- `update-status` / `set-impl-state` — Agent and IMPL status tracking
+- `mark-complete` / `set-completion` — E15 completion marker
+- `amend-impl` / `check-impl-conflicts` — IMPL modification and conflict detection
 
 **Quality assurance:**
-- `scan-stubs` — E20 stub detection
-- `run-gates` — E21 quality gate verification
-- `check-conflicts` — I1 file ownership conflict detection
+- `scan-stubs` / `detect-scaffolds` / `validate-scaffolds` — E20 stub and scaffold detection
+- `run-gates` / `tier-gate` — E21 quality gate verification
+- `check-conflicts` / `check-type-collisions` — I1 ownership and type collision detection
+- `run-critic` / `set-critic-review` / `run-review` — Code review system
+
+**Program layer (multi-IMPL coordination):**
+- `create-program` / `list-programs` / `program-status` — Program lifecycle
+- `program-execute` / `program-replan` — Program execution and replanning
+- `finalize-tier` / `mark-program-complete` — Program completion
+- `freeze-contracts` / `freeze-check` — Contract management
+- `check-program-conflicts` / `validate-program` — Program validation
+- `import-impls` — Import existing IMPLs into a program
+
+**Agent and execution:**
+- `prepare-agent` / `update-agent-prompt` — Agent setup
+- `interview` — E39 requirements gathering mode
+- `retry` / `build-retry-context` / `diagnose-build-failure` — Failure recovery
+- `resume-detect` — Session resumption detection
+- `daemon` — Continuous queue-processing daemon
+
+**Analysis and utilities:**
+- `analyze-deps` / `check-deps` / `detect-cascades` — Dependency analysis
+- `analyze-suitability` — Codebase suitability assessment
+- `assign-agent-ids` / `extract-commands` — IMPL utilities
+- `journal-init` / `journal-context` — Journal management
+- `metrics` / `query` / `solve` — Metrics, queries, and dependency solving
+- `verify-hook-installed` / `verify-install` — Installation verification
+- `update-context` — E18 project memory update
+
+Run `sawtools --help` for the complete command list.
 
 See `protocol/execution-rules.md` for detailed command specifications.
 
@@ -151,12 +180,12 @@ External observer pattern that preserves agent execution context across Claude C
 ┌──────────────────────────────────────────────────────────────┐
 │ JournalObserver (pkg/journal/)                               │
 │ ┌──────────────────────────────────────────────────────────┐ │
-│ │ .saw-state/journals/wave1/agent-A/                       │ │
+│ │ .saw-state/wave1/agent-A/                                │ │
 │ │ ├── cursor.json      (read position)                     │ │
 │ │ ├── index.jsonl      (tool execution history)            │ │
-│ │ ├── context.md       (generated summary)                 │ │
-│ │ ├── recent.jsonl     (last 50 entries)                   │ │
-│ │ └── results/         (full tool outputs)                 │ │
+│ │ ├── context.md       (generated on-demand summary)       │ │
+│ │ ├── recent.json      (last 30 entries)                   │ │
+│ │ └── tool-results/    (full tool outputs)                 │ │
 │ └──────────────────────────────────────────────────────────┘ │
 │                                                               │
 │ Methods:                                                      │
@@ -352,20 +381,20 @@ repo/
 │   └── sessions/                   # Claude Code session logs (read by journal)
 │       └── 1a2b3c4d.jsonl
 ├── .saw-state/
-│   ├── journals/                   # Tool execution history
-│   │   └── wave1/
-│   │       ├── agent-A/
-│   │       │   ├── index.jsonl
-│   │       │   ├── context.md
-│   │       │   └── results/
-│   │       └── agent-B/
+│   ├── wave1/                      # Tool execution history
+│   │   ├── agent-A/
+│   │   │   ├── cursor.json
+│   │   │   ├── index.jsonl
+│   │   │   ├── recent.json
+│   │   │   └── tool-results/
+│   │   └── agent-B/
 │   └── archives/                   # Compressed journals after merge
 │       └── wave1-agent-A.tar.gz
 ├── docs/
 │   ├── IMPL/                       # IMPL manifests (I4)
 │   │   └── IMPL-<feature>.yaml
 │   └── CONTEXT.md                  # Project memory (E18)
-├── saw.config.json                 # Project config (journal settings, model defaults)
+├── saw.config.json                 # Project config (model defaults, quality settings)
 └── [source code]
 ```
 
@@ -375,29 +404,111 @@ Project-local config at `<repo>/saw.config.json` or global default at `~/.claude
 
 ```json
 {
+  "repos": [],
+  "repo": {
+    "path": ""
+  },
   "agent": {
-    "scout_model": "claude-sonnet-4-5",
-    "wave_model": "claude-sonnet-4-5",
-    "chat_model": "claude-sonnet-4-5",
-    "integration_model": "claude-sonnet-4-5",
-    "scaffold_model": "claude-sonnet-4-5",
-    "planner_model": "claude-sonnet-4-5",
-    "critic_model": "claude-sonnet-4-5"
+    "scout_model": "claude-sonnet-4-6",
+    "wave_model": "claude-sonnet-4-6",
+    "chat_model": "claude-sonnet-4-6",
+    "integration_model": "claude-sonnet-4-6",
+    "scaffold_model": "claude-sonnet-4-6",
+    "planner_model": "claude-sonnet-4-6"
   },
-  "journal": {
-    "enabled": true,
-    "retention_days": 30,
-    "auto_archive": true,
-    "sync_interval_seconds": 30,
-    "max_context_entries": 50,
-    "max_preview_chars": 800
+  "quality": {
+    "require_tests": false,
+    "require_lint": false,
+    "block_on_failure": false
   },
-  "quality_gates": {
-    "default_level": "standard",
-    "fail_on_stubs": false
+  "appearance": {
+    "theme": "dark"
   }
 }
 ```
+
+## Program Layer (Multi-IMPL Coordination)
+
+The Program manifest system coordinates multiple related IMPLs that together deliver a larger initiative. A Program defines tiers of IMPLs with dependency relationships, enabling ordered execution across features.
+
+**Key concepts:**
+- **Program manifest** — YAML file defining tiers, IMPL references, and dependency graph
+- **Tiers** — Ordered groups of IMPLs; Tier N+1 waits for Tier N completion
+- **Contract freezing** — Cross-IMPL interfaces are frozen before dependent tiers execute
+- **Cascade detection** — Identifies when changes in one IMPL affect others
+
+**Protocol spec:** `protocol/program-invariants.md`, `protocol/program-manifest.md`
+
+**Commands:** `create-program`, `program-execute`, `program-replan`, `program-status`, `list-programs`, `finalize-tier`, `tier-gate`, `freeze-contracts`, `freeze-check`, `check-program-conflicts`, `import-impls`, `mark-program-complete`, `validate-program`
+
+## Daemon, Queue, and Autonomy
+
+The system supports continuous automated execution through a daemon loop:
+
+- **Daemon** (`sawtools daemon`) — Long-running process that pulls work from a queue and executes Scout/Wave workflows continuously
+- **Queue** — Ordered list of pending work items (features to scout, waves to execute)
+- **Autonomy settings** — Controls how much the daemon can do without human approval (e.g., auto-approve scouts, auto-merge waves)
+
+## Interview Mode (E39)
+
+A requirements-gathering pathway that launches an interactive interview session before Scout. The interview agent asks clarifying questions to refine a vague feature request into a well-specified Scout input.
+
+**Command:** `sawtools interview`
+
+## Go Engine Package Structure
+
+The Go engine (`scout-and-wave-go`) contains 32+ packages under `pkg/`. Key packages beyond the core:
+
+| Package | Purpose |
+|---------|---------|
+| `pkg/engine` | High-level Scout, Wave, Scaffold, Chat operations |
+| `pkg/protocol` | YAML manifest parsing, validation, extraction |
+| `pkg/agent` | Agent execution runtime with tool system and 4 backends (Anthropic API, AWS Bedrock, OpenAI-compatible, Claude CLI) |
+| `pkg/journal` | External observer for tool execution history |
+| `pkg/orchestrator` | State machine, event publishing, wave management |
+| `pkg/types` | Shared type definitions used across all packages |
+| `pkg/worktree` | Git worktree creation and management |
+| `pkg/suitability` | Codebase suitability analysis |
+| `pkg/solver` | Dependency solver for wave agent assignment |
+| `pkg/observability` | Event emission system (E40) |
+| `pkg/queue` | Work queue for daemon mode |
+| `pkg/autonomy` | Autonomy level settings and enforcement |
+| `pkg/interview` | E39 interview mode implementation |
+| `pkg/resume` | Session resumption detection and context recovery |
+| `pkg/retry` / `pkg/retryctx` | Failure retry logic and context building |
+| `pkg/scaffold` / `pkg/scaffoldval` | Scaffold creation and validation |
+| `pkg/collision` | Type collision detection across agents |
+| `pkg/deps` | Dependency analysis |
+| `pkg/builddiag` | Build failure diagnosis |
+| `pkg/codereview` | Critic/review agent support |
+| `pkg/hooks` | Git hook installation and verification |
+| `pkg/pipeline` | Execution pipeline management |
+| `pkg/format` | Output formatting |
+| `pkg/gatecache` | Quality gate result caching |
+| `internal/git` | Low-level git command execution |
+
+## Web Application Architecture
+
+The web application (`scout-and-wave-web`) provides an HTTP/SSE interface for the protocol engine.
+
+**Dependency:** Imports `scout-and-wave-go` via a `replace` directive pointing to the local filesystem in `go.mod`.
+
+**Structure:**
+- `pkg/api/` — HTTP route handlers (88 route registrations)
+- `pkg/service/` — Service layer between API handlers and engine (`config_service.go`, `impl_service.go`, `wave_service.go`, `scout_service.go`, `program_service.go`, `merge_service.go`)
+- `web/` — React frontend (TypeScript)
+- `cmd/saw/` — Server binary entry point
+- `web/embed.go` — `//go:embed` directive embeds built frontend assets into the Go binary
+
+**Binaries produced:**
+- `scout-and-wave-go` produces `sawtools` (CLI toolkit, ~21MB)
+- `scout-and-wave-web` produces `saw` (web server with embedded assets, ~24MB)
+
+**Build requirement:** Web assets are embedded at compile time. Any frontend change requires `cd web && npm run build` followed by `go build -o saw ./cmd/saw` to produce an updated binary.
+
+**Key UI components:** `ProgramBoard`, `ProgramDependencyGraph`, `DaemonControl`, `QueuePanel`, `AutonomySettings`, `InterviewLauncher`
+
+**API surface:** REST endpoints under `/api/` covering IMPLs, waves, programs, daemon control, queue management, autonomy settings, and interviews. Server-Sent Events (SSE) provide real-time progress updates during Scout and Wave execution.
 
 ## See Also
 
