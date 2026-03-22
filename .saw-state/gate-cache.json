@@ -438,6 +438,18 @@
         "cached_at": "2026-03-18T21:23:58.737676-07:00"
       }
     },
+    "d162cbd21c28f78f7561fdd514672c72": {
+      "custom": {
+        "gate_type": "custom",
+        "command": "echo 'docs-only: no build required'",
+        "passed": true,
+        "exit_code": 0,
+        "stdout": "docs-only: no build required\n",
+        "stderr": "",
+        "from_cache": true,
+        "cached_at": "2026-03-22T00:23:07.437824-07:00"
+      }
+    },
     "d2440aa4ec7bb75ad5bf9e9a4dd8ee30": {
       "build": {
         "gate_type": "build",
@@ -580,6 +592,18 @@
         "stderr": "",
         "from_cache": true,
         "cached_at": "2026-03-18T12:37:28.169499-07:00"
+      }
+    },
+    "e1006d1ae8ccbb1174004f42a5a6da9b": {
+      "custom": {
+        "gate_type": "custom",
+        "command": "echo 'docs-only: no build required'",
+        "passed": true,
+        "exit_code": 0,
+        "stdout": "docs-only: no build required\n",
+        "stderr": "",
+        "from_cache": true,
+        "cached_at": "2026-03-22T00:17:01.467249-07:00"
       }
     },
     "e536eb984bb965fbc3ccd42cffd619f2": {

@@ -1,0 +1,485 @@
+completion_date: "2026-03-22"
+title: Documentation Consistency Fixes
+feature_slug: documentation-fixes
+verdict: SUITABLE_WITH_CAVEATS
+suitability_assessment: |
+    Suitability gate results:
+
+    1. File decomposition: YES — 15 distinct markdown files need changes across 4 directory
+       subtrees (root, protocol/, implementations/, docs/). Files can be cleanly partitioned
+       by directory with no overlapping edits.
+
+    2. Investigation-first items: NO blockers — the documentation audit
+       (docs/documentation-audit.md) has already identified every finding with file paths,
+       line numbers, and suggested fixes. No root cause analysis needed.
+
+    3. Interface discoverability: YES — no cross-agent interfaces. Each agent edits
+       independent markdown files. The only shared context is the current version number
+       (0.55.0) and E-rule range (E1-E41), which are constants provided in prompts.
+
+    4. Pre-implementation status: Critical issues #1 and #2 (ECOSYSTEM.md) already resolved
+       (file deleted). Remaining: 2 critical, 14 major, 12 minor findings.
+
+    5. Parallelization value: SUITABLE WITH CAVEATS — all work is markdown edits with no
+       build/test cycle. SAW overhead is comparable to parallelization savings. However,
+       the coordination value is high: the IMPL doc serves as an audit trail mapping each
+       finding to its responsible agent, preventing findings from being missed. The 15-file
+       scope across 4 directories benefits from parallel execution to avoid a single agent
+       losing context across so many unrelated files.
+
+    Caveats:
+    - All changes are markdown-only. No build gates are meaningful.
+    - Quality gates are limited to file-existence checks and grep verification.
+    - The value is coordination (tracking 28 findings) more than speed.
+
+    Estimated times:
+    - Scout phase: ~8 min (reading audit report, mapping files, writing IMPL)
+    - Agent execution: ~10 min (4 agents x 5 min avg, single wave)
+    - Merge and verification: ~3 min
+    Total SAW time: ~21 min
+
+    Sequential baseline: ~20 min (4 agents x 5 min sequential)
+    Time savings: ~1 min (marginal)
+
+    Recommendation: Coordination value. The IMPL doc tracks 28 findings across 15
+    files. Parallelization savings are marginal but the structured assignment prevents
+    missed findings.
+test_command: 'echo ''markdown-only: no tests'''
+lint_command: none
+file_ownership:
+    - file: README.md
+      agent: A
+      wave: 1
+      action: modify
+    - file: ROADMAP.md
+      agent: A
+      wave: 1
+      action: modify
+    - file: CLAUDE.md
+      agent: A
+      wave: 1
+      action: modify
+    - file: protocol/README.md
+      agent: B
+      wave: 1
+      action: modify
+    - file: protocol/state-machine.md
+      agent: B
+      wave: 1
+      action: modify
+    - file: protocol/preconditions.md
+      agent: B
+      wave: 1
+      action: modify
+    - file: protocol/participants.md
+      agent: B
+      wave: 1
+      action: modify
+    - file: protocol/message-formats.md
+      agent: B
+      wave: 1
+      action: modify
+    - file: implementations/claude-code/prompts/agent-template.md
+      agent: C
+      wave: 1
+      action: modify
+    - file: implementations/claude-code/prompts/agents/wave-agent.md
+      agent: C
+      wave: 1
+      action: modify
+    - file: implementations/claude-code/prompts/saw-skill.md
+      agent: C
+      wave: 1
+      action: modify
+    - file: docs/architecture.md
+      agent: D
+      wave: 1
+      action: modify
+    - file: docs/INSTALLATION.md
+      agent: D
+      wave: 1
+      action: modify
+    - file: docs/GETTING_STARTED.md
+      agent: D
+      wave: 1
+      action: modify
+interface_contracts: []
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## Agent A: Root-Level Documentation Fixes
+
+            Fix findings in README.md, ROADMAP.md, and CLAUDE.md from the documentation
+            audit at docs/documentation-audit.md.
+
+            ### README.md changes (findings #3, #4, #7, #19, #20, #25, #26):
+
+            1. **Line 4 — Finding #3 (Critical):** Update version badge from `version-0.14.0`
+               to `version-0.55.0`.
+
+            2. **Lines 86-94 — Finding #4 (Critical):** Remove the symlink lines for
+               `saw-merge.md` and `saw-worktree.md` (lines 89-90) since those files no longer
+               exist. Fix line 92: change `prompts/scout.md` to `prompts/agents/scout.md`.
+               Also remove the `scaffold-agent.md` symlink on line 93 since it should be
+               `agents/scaffold-agent.md`. The manual install block should show only symlinks
+               for files that actually exist in `implementations/claude-code/prompts/`:
+               - `saw-skill.md` -> SKILL.md
+               - `saw-bootstrap.md`
+               - `agent-template.md`
+               Then symlink the agents directory:
+               `ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agents ~/.claude/skills/saw/agents`
+
+            3. **Line 39 — Finding #19 (Minor):** Change "a markdown coordination artifact"
+               to "a YAML coordination artifact". On line 97, change
+               `docs/IMPL/IMPL-caching-layer.md` to `docs/IMPL/IMPL-caching-layer.yaml`.
+               On line 107, update the description to say YAML not markdown, and change
+               `docs/IMPL/IMPL-<feature>.md` to `docs/IMPL/IMPL-<feature>.yaml`.
+
+            4. **Line 32 — Finding #26 (Minor):** Update "Five participants" to "Seven
+               participants" and add Critic Agent and Planner to the list. Use wording like:
+               "Seven participants coordinate within a single session: the **Orchestrator**
+               (your Claude Code session), **Scout** (analyzes codebase, assigns files),
+               **Scaffold Agent** (creates shared types), **Wave Agents** (implement in
+               parallel worktrees), **Integration Agent** (wires exports post-merge),
+               **Critic Agent** (reviews wave output against quality gates), and **Planner**
+               (coordinates cross-IMPL program execution)."
+
+            5. **Line 132 — Finding #7 (Major):** Update "E1-E26" to "E1-E41" in the
+               execution-rules.md link description. Add mention of the newer rule categories:
+               planned integration waves (E27), program execution (E28-E34), wiring obligation
+               (E35), IMPL amendment (E36), critic gate (E37), gate caching (E38), interview
+               mode (E39), observability (E40), and type collision detection (E41).
+
+            6. **Lines 115-120 — Finding #20 (Minor):** Add a third row to the "Ways to Use
+               SAW" table for the Web UI:
+               | Web UI (`saw serve`) | [scout-and-wave-web](https://github.com/blackwell-systems/scout-and-wave-web) | Browser-based dashboard with real-time SSE updates. Imports scout-and-wave-go as dependency. |
+
+            7. **Line 129 — Finding #25 (Minor):** Update
+               `protocol/participants.md` link text from "Five participant roles" to
+               "Seven participant roles".
+
+            ### ROADMAP.md changes (findings #15, #16, #28, #29):
+
+            8. **Lines 1027-1082 — Finding #15+#16 (Major):** The entire "SDK Branch as
+               Generated Build Artifact" section is obsolete (sdk branch merged into main).
+               Replace the section content with a short note:
+               ```
+               ## SDK Branch as Generated Build Artifact
+
+               **RESOLVED (v0.54.0).** The `sdk` branch was merged into `main`. The dual-branch
+               approach described here is no longer needed. `main` now uses `sawtools` throughout.
+               ```
+
+            9. **Lines 560-573 — Finding #28 (Minor):** In the E23A section, check off the
+               completed deliverables that are actually implemented. The core journal, context
+               generator, and checkpoint system are all implemented. Change `- [ ]` to `- [x]`
+               for items that have shipped.
+
+            10. **Lines 957-997 — Finding #29 (Minor):** The "IMPL-Level Parallelism" section
+                is superseded by the Program Layer. Add a note at the top:
+                ```
+                > **Superseded by Program Layer.** The concerns in this section are now addressed
+                > by program invariants (P1-P4) in `protocol/program-invariants.md` and the
+                > program manifest format in `protocol/program-manifest.md`. Tier-gated execution
+                > replaces the proposed meta-orchestrator and I7 invariant.
+                ```
+
+            ### CLAUDE.md (finding #22):
+
+            11. **Finding #22 (Minor):** The file is empty. Add minimal project instructions:
+                ```
+                # Scout-and-Wave Protocol Repository
+
+                This repository contains the language-agnostic SAW protocol specification.
+                No source code — markdown and YAML only.
+
+                - Protocol spec: protocol/
+                - Claude Code implementation: implementations/claude-code/
+                - IMPL docs: docs/IMPL/
+                - Current version: see CHANGELOG.md
+                ```
+
+            ### Verification
+
+            After all changes, verify:
+            - `grep '0.55.0' README.md` returns the badge line
+            - `grep 'saw-merge' README.md` returns NO results
+            - `grep 'saw-worktree' README.md` returns NO results
+            - `grep 'E1-E41' README.md` returns at least one result
+            - `grep 'Seven participants' README.md` returns a result
+            - `grep 'RESOLVED' ROADMAP.md` returns the SDK branch section
+            - CLAUDE.md is non-empty
+          files:
+            - README.md
+            - ROADMAP.md
+            - CLAUDE.md
+        - id: B
+          task: |
+            ## Agent B: Protocol Directory Fixes
+
+            Fix findings in protocol/ directory files from the documentation audit at
+            docs/documentation-audit.md.
+
+            ### protocol/README.md (findings #5, #6):
+
+            1. **Line 52 — Finding #5 (Major):** Update version from "0.14.8" to "0.55.0".
+
+            2. **Line 16 — Finding #6 (Major):** Update "twenty-six execution rules (E1-E26)"
+               to "forty-one execution rules (E1-E41)". Update the description to include the
+               newer rules. The current text after "E26" should be extended to include:
+               planned integration waves (E27), program execution tiers and invariants
+               (E28-E34), wiring obligation (E35), IMPL amendment (E36), critic gate (E37),
+               gate caching (E38), interview mode (E39), observability events (E40), and
+               type collision detection (E41).
+
+            3. **Line 13 in the navigation table:** Update the participants.md description
+               from "five participant roles" to "seven participant roles" (Critic Agent and
+               Planner were added).
+
+            ### protocol/state-machine.md (finding #18):
+
+            4. **Line 237 — Finding #18 (Major):** Update "E1-E34, E21A, E21B" to "E1-E41,
+               E21A, E21B" in the Correctness Properties section.
+
+            ### protocol/preconditions.md (finding #21):
+
+            5. **Finding #21 (Minor):** The preconditions use P1-P5 labels which collide with
+               program invariants P1-P4 in protocol/program-invariants.md. Add a disambiguation
+               note at the top of the preconditions section, after the Overview:
+
+               ```
+               > **Note:** Precondition labels (P1-P5) in this document refer to suitability
+               > preconditions, not program invariants. Program invariants P1-P4 are defined in
+               > [program-invariants.md](program-invariants.md). The naming collision is
+               > historical; context disambiguates.
+               ```
+
+            ### protocol/participants.md (finding #25):
+
+            6. **Line 3 — Finding #25 (Minor):** Verify the participant count. The file
+               currently says "six participant roles" but there are seven (Orchestrator, Scout,
+               Scaffold Agent, Wave Agent, Integration Agent, Critic Agent, Planner). If the
+               Planner is documented in this file, update to "seven". If the Planner is only
+               in the program-level docs, add a note: "A seventh role, the **Planner**, operates
+               at the program level; see [program-manifest.md](program-manifest.md)."
+
+            ### protocol/message-formats.md (finding #24):
+
+            7. **Line 897 — Finding #24 (Minor):** The split agent prompt files reference
+               `.md` extension (`IMPL-<feature>-wave{N}-agent-{ID}.md`). Since IMPL docs are
+               now YAML, clarify: add a note that per-agent prompt files remain `.md` (they
+               contain agent task text, not YAML schema). The current text is acceptable as-is
+               since agent prompt files are indeed markdown, but add a clarifying parenthetical:
+               "Per-agent prompt files use `.md` extension (agent task content, not IMPL schema)."
+
+            ### Verification
+
+            After all changes, verify:
+            - `grep '0.55.0' protocol/README.md` returns the version line
+            - `grep 'E1-E41' protocol/README.md` returns a result
+            - `grep 'E1-E41' protocol/state-machine.md` returns a result
+            - `grep 'program-invariants' protocol/preconditions.md` returns a result
+          files:
+            - protocol/README.md
+            - protocol/state-machine.md
+            - protocol/preconditions.md
+            - protocol/participants.md
+            - protocol/message-formats.md
+        - id: C
+          task: |
+            ## Agent C: Implementation Prompt Fixes
+
+            Fix findings in implementations/claude-code/prompts/ directory from the
+            documentation audit at docs/documentation-audit.md.
+
+            ### agent-template.md (findings #11, #13):
+
+            1. **Line 22 — Finding #11 (Major):** Update "E1-E26" to "E1-E41". Also update
+               the surrounding text that says "E25-E26 govern integration validation and the
+               Integration Agent" to include the newer rules: "E25-E26 govern integration;
+               E27-E41 cover planned integration waves, program execution, wiring obligation,
+               IMPL amendment, critic gate, gate caching, interview mode, observability, and
+               type collision detection."
+
+            2. **Lines 54, 62, 73, 98 — Finding #13 (Major):** Update legacy worktree paths.
+               Change `.claude/worktrees/wave{N}-agent-{ID}` to
+               `.claude/worktrees/saw/{slug}/wave{N}-agent-{ID}` throughout Field 0.
+               Change branch names from `wave{N}-agent-{ID}` to
+               `saw/{slug}/wave{N}-agent-{ID}`.
+
+               Note: The template uses `{slug}`, `{N}`, and `{ID}` as placeholders that the
+               orchestrator fills in. Keep the placeholder syntax but add the `saw/{slug}/`
+               prefix.
+
+            ### wave-agent.md (finding #12):
+
+            3. **Line 13 — Finding #12 (Major):** Update "E1-E26" to "E1-E41". Also update
+               the rule range descriptions similar to agent-template.md: "E20-E23 are
+               orchestrator-only rules; E25-E26 govern integration; E27-E41 cover planned
+               integration waves, program execution, wiring obligation, IMPL amendment,
+               critic gate, gate caching, interview mode, observability, and type collision
+               detection."
+
+            ### saw-skill.md (finding #14):
+
+            4. **Line 20 — Finding #14 (Major):** Update `version: "0.13.0"` to
+               `version: "0.55.0"` in the YAML frontmatter.
+
+            5. **Line 40 — Finding #14 (Major):** Update "E1-E37" to "E1-E41".
+
+            ### Verification
+
+            After all changes, verify:
+            - `grep 'E1-E41' implementations/claude-code/prompts/agent-template.md` returns results
+            - `grep 'E1-E41' implementations/claude-code/prompts/agents/wave-agent.md` returns results
+            - `grep 'E1-E41' implementations/claude-code/prompts/saw-skill.md` returns results
+            - `grep '0.55.0' implementations/claude-code/prompts/saw-skill.md` returns the version
+            - `grep 'saw/{slug}' implementations/claude-code/prompts/agent-template.md` returns results (worktree paths updated)
+          files:
+            - implementations/claude-code/prompts/agent-template.md
+            - implementations/claude-code/prompts/agents/wave-agent.md
+            - implementations/claude-code/prompts/saw-skill.md
+        - id: D
+          task: |
+            ## Agent D: docs/ Directory Fixes
+
+            Fix findings in docs/ directory files from the documentation audit at
+            docs/documentation-audit.md.
+
+            ### docs/architecture.md (findings #8, #9, #10):
+
+            1. **Line 398 — Finding #8 (Major):** Update "E1-E26 orchestrator rules" to
+               "E1-E41 orchestrator rules" in the See Also section.
+
+            2. **Lines 71-76 — Finding #9 (Major):** Update worktree directory tree example
+               from legacy format to canonical format. Change:
+               ```
+               ├── wave1-agent-A/    # Isolated worktree
+               ```
+               to:
+               ```
+               ├── saw/
+               │   └── {slug}/
+               │       ├── wave1-agent-A/    # Isolated worktree
+               ```
+               Apply the same update to the second directory tree at lines 346-349. The
+               worktrees directory should show the `saw/{slug}/` prefix structure.
+
+            3. **Lines 374-392 — Finding #10 (Major):** Add missing model fields to the
+               `saw.config.json` example. Add these fields inside the `"agent"` block:
+               ```json
+               "scaffold_model": "claude-sonnet-4-5",
+               "planner_model": "claude-sonnet-4-5",
+               "critic_model": "claude-sonnet-4-5"
+               ```
+
+            ### docs/INSTALLATION.md (finding #17):
+
+            4. **Finding #17 (Major):** The Go version "1.25+" is technically correct (1.26 >=
+               1.25) but could be confusing. Since this is a protocol repo and does not have a
+               go.mod, leave the minimum version as-is but add a parenthetical note:
+               "Go 1.25+ (tested with 1.26)" in the prerequisites table. This avoids making
+               claims about go.mod that don't apply to this repo.
+
+            ### docs/GETTING_STARTED.md (finding #23):
+
+            5. **Finding #23 (Minor):** The quickstart files (QUICKSTART-CLI.md and
+               QUICKSTART-WEB.md) exist and are NOT stubs — they have real content. Remove the
+               "(coming soon)" text from lines 42 and 45. Change:
+               ```
+               See: QUICKSTART-CLI.md (coming soon)
+               See: QUICKSTART-WEB.md (coming soon)
+               ```
+               to:
+               ```
+               See: [QUICKSTART-CLI.md](QUICKSTART-CLI.md)
+               See: [QUICKSTART-WEB.md](QUICKSTART-WEB.md)
+               ```
+
+            ### Verification
+
+            After all changes, verify:
+            - `grep 'E1-E41' docs/architecture.md` returns a result
+            - `grep 'saw/' docs/architecture.md` returns results for worktree paths
+            - `grep 'scaffold_model' docs/architecture.md` returns a result
+            - `grep 'coming soon' docs/GETTING_STARTED.md` returns NO results
+            - `grep 'QUICKSTART-CLI' docs/GETTING_STARTED.md` returns a link
+          files:
+            - docs/architecture.md
+            - docs/INSTALLATION.md
+            - docs/GETTING_STARTED.md
+      base_commit: 20320b63aa8a0292158bdd783310f1487063ac42
+quality_gates:
+    level: standard
+    gates:
+        - type: custom
+          command: 'echo ''docs-only: no build required'''
+          required: false
+completion_reports:
+    A:
+        status: complete
+        branch: saw/documentation-fixes/wave1-agent-A
+        commit: 033a84d
+        files_changed:
+            - README.md
+            - ROADMAP.md
+            - CLAUDE.md
+        verification: PASS
+    B:
+        status: complete
+        branch: saw/documentation-fixes/wave1-agent-B
+        commit: 82816d9
+        files_changed:
+            - protocol/README.md
+            - protocol/state-machine.md
+            - protocol/preconditions.md
+            - protocol/participants.md
+            - protocol/message-formats.md
+        verification: PASS
+    C:
+        status: complete
+        branch: saw/documentation-fixes/wave1-agent-C
+        commit: c115b53
+        files_changed:
+            - implementations/claude-code/prompts/agent-template.md
+            - implementations/claude-code/prompts/agents/wave-agent.md
+            - implementations/claude-code/prompts/saw-skill.md
+        verification: PASS
+    D:
+        status: complete
+        branch: saw/documentation-fixes/wave1-agent-D
+        commit: 15a9c8a
+        files_changed:
+            - docs/architecture.md
+            - docs/INSTALLATION.md
+            - docs/GETTING_STARTED.md
+        verification: PASS
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: Agent updates E-rule range inconsistently (e.g., E1-E41 in one place, E1-E40 in another)
+          likelihood: low
+          impact: low
+          mitigation: Each agent prompt specifies the exact string 'E1-E41' to use. Post-merge grep verification.
+        - scenario: Agent misses a finding in a file with multiple findings
+          likelihood: medium
+          impact: low
+          mitigation: Each finding is numbered and listed explicitly in agent prompts. Verification grep commands catch omissions.
+        - scenario: ROADMAP.md edits land on wrong line numbers due to large file size
+          likelihood: medium
+          impact: low
+          mitigation: Agent A should search for section headers rather than relying on line numbers. Findings reference section names.
+        - scenario: Worktree path format update in agent-template.md breaks placeholder syntax
+          likelihood: low
+          impact: medium
+          mitigation: Agent C prompt specifies to keep {slug}/{N}/{ID} placeholder syntax while adding the saw/ prefix.
+known_issues:
+    - title: 'Finding #27 excluded — archive historical docs'
+      description: 'Finding #27 (archive historical docs) is excluded from this IMPL — it requires directory creation and file moves that should be a separate decision'
+    - title: 'Finding #30 excluded — sawtools update-context'
+      description: 'Finding #30 (run sawtools update-context) is excluded — it requires the sawtools binary and is a runtime operation, not a doc edit'
+    - title: ECOSYSTEM.md findings already resolved
+      description: 'ECOSYSTEM.md findings #1 and #2 already resolved (file deleted prior to this IMPL)'
+state: "COMPLETE"
