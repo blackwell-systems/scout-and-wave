@@ -1,7 +1,7 @@
 # Scout-and-Wave
 
 [![Blackwell Systems™](https://raw.githubusercontent.com/blackwell-systems/blackwell-docs-theme/main/badge-trademark.svg)](https://github.com/blackwell-systems)
-![Version](https://img.shields.io/badge/version-0.14.0-blue)
+![Version](https://img.shields.io/badge/version-0.55.0-blue)
 [![Agent Skills](assets/badge-agentskills.svg)](https://agentskills.io)
 
 SAW is published as an [Agent Skill](https://agentskills.io) — a portable, tool-agnostic package for adding capabilities to AI coding agents.
@@ -29,14 +29,14 @@ Most frameworks try to solve this with better prompts. SAW solves it with struct
 - **Human review before execution.** You see the full plan - file assignments, interface contracts, wave structure - and approve it before any agent launches. This is the last point where changing the architecture is cheap.
 - **Suitability gate.** SAW says "no" when the work doesn't decompose cleanly. A poor-fit assessment prevents bad decompositions from producing expensive failures.
 
-Five participants coordinate within a single session: the **Orchestrator** (your Claude Code session), **Scout** (analyzes codebase, assigns files to agents), **Scaffold Agent** (creates shared types before parallel work begins), **Wave Agents** (implement their assigned files in parallel worktrees, one wave at a time), and **Integration Agent** (wires new exports into caller code after wave merge). The scout enforces disjoint ownership at planning time, the scaffold agent creates interface contracts before parallelization, wave agents work in isolated worktrees, and the integration agent connects the pieces post-merge. Everything is coordinated by a single orchestrator that holds full state.
+Seven participants coordinate within a single session: the **Orchestrator** (your Claude Code session), **Scout** (analyzes codebase, assigns files), **Scaffold Agent** (creates shared types), **Wave Agents** (implement in parallel worktrees), **Integration Agent** (wires exports post-merge), **Critic Agent** (reviews wave output against quality gates), and **Planner** (coordinates cross-IMPL program execution). The scout enforces disjoint ownership at planning time, the scaffold agent creates interface contracts before parallelization, wave agents work in isolated worktrees, the integration agent connects the pieces post-merge, the critic reviews quality, and the planner manages multi-feature programs. Everything is coordinated by a single orchestrator that holds full state.
 
 ## How
 
 **What happens when you run SAW:**
 
 1. You run `/saw scout "feature"` → Scout analyzes codebase, assigns files to agents
-2. Scout writes IMPL doc (implementation document — a markdown coordination artifact that defines file ownership, interface contracts, and wave structure for the feature) → You review the wave structure (waves are groups of agents that execute in parallel)
+2. Scout writes IMPL doc (implementation document — a YAML coordination artifact that defines file ownership, interface contracts, and wave structure for the feature) → You review the wave structure (waves are groups of agents that execute in parallel)
 3. You run `/saw wave` → Scaffold Agent creates scaffold files (type/interface definitions shared across agents, created before any wave launches) if needed
 4. Wave Agents launch in parallel → Each works in isolated worktree on disjoint files
 5. Orchestrator merges → Runs tests → Cleans up worktrees
@@ -86,15 +86,12 @@ git clone https://github.com/blackwell-systems/scout-and-wave.git ~/code/scout-a
 mkdir -p ~/.claude/skills/saw/agents
 ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/saw-skill.md ~/.claude/skills/saw/SKILL.md
 ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/saw-bootstrap.md ~/.claude/skills/saw/saw-bootstrap.md
-ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/saw-merge.md ~/.claude/skills/saw/saw-merge.md
-ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/saw-worktree.md ~/.claude/skills/saw/saw-worktree.md
 ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agent-template.md ~/.claude/skills/saw/agent-template.md
-ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/scout.md ~/.claude/skills/saw/scout.md
-ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/scaffold-agent.md ~/.claude/skills/saw/scaffold-agent.md
+ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agents ~/.claude/skills/saw/agents
 
 # 2. Restart Claude Code, then in any session on any project:
 /saw scout "add a caching layer to the API client"
-# → Scout analyzes the codebase, assigns files to agents, writes docs/IMPL/IMPL-caching-layer.md
+# → Scout analyzes the codebase, assigns files to agents, writes docs/IMPL/IMPL-caching-layer.yaml
 # → Orchestrator shows you the wave structure and interface contracts for review
 # → You review the IMPL doc. This is the last chance to change interfaces.
 
@@ -104,20 +101,21 @@ ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/scaffold-agent.
 # → Orchestrator merges, runs tests, reports result
 ```
 
-The scout produces an **Implementation Document (IMPL doc)** (`docs/IMPL/IMPL-<feature>.md`): a structured coordination document that defines which files each agent will modify, what interfaces they'll implement, and how they'll work in parallel. You review it before any agent writes code. This is the human checkpoint that makes parallel execution safe.
+The scout produces an **Implementation Document (IMPL doc)** (`docs/IMPL/IMPL-<feature>.yaml`): a structured YAML coordination document that defines which files each agent will modify, what interfaces they'll implement, and how they'll work in parallel. You review it before any agent writes code. This is the human checkpoint that makes parallel execution safe.
 
 **First time using SAW?** See [implementations/claude-code/QUICKSTART.md](implementations/claude-code/QUICKSTART.md) for step-by-step guidance with example output.
 
 ## Ways to Use SAW
 
-SAW has two interfaces backed by two separate repositories, both implementing the same protocol.
+SAW has three interfaces backed by separate repositories, all implementing the same protocol.
 
 | Interface | Repository | Description |
 |-----------|------------|-------------|
 | Claude Code skill (`/saw`) | [scout-and-wave](https://github.com/blackwell-systems/scout-and-wave) (this repo) | Runs inside Claude Code as a slash command. The orchestrator is Claude itself. Fastest way to get started. |
-| Standalone CLI (`saw`) | [scout-and-wave-go](https://github.com/blackwell-systems/scout-and-wave-go) | Go binary with built-in web UI (`saw serve`). Supports both API and CLI backends. Works with Claude Max (no API key required). |
+| Standalone CLI (`saw`) | [scout-and-wave-go](https://github.com/blackwell-systems/scout-and-wave-go) | Go binary with built-in engine and SDK. Supports both API and CLI backends. Works with Claude Max (no API key required). |
+| Web UI (`saw serve`) | [scout-and-wave-web](https://github.com/blackwell-systems/scout-and-wave-web) | Browser-based dashboard with real-time SSE updates. Imports scout-and-wave-go as dependency. |
 
-Both implement the same SAW protocol and produce identical IMPL docs. Use the Claude Code skill to start quickly. Use the Go CLI when you want a standalone binary, the web UI, or Claude Max support.
+All implement the same SAW protocol and produce identical IMPL docs. Use the Claude Code skill to start quickly. Use the Go CLI for standalone operation, or the Web UI for a browser-based dashboard with real-time monitoring.
 
 ## Documentation
 
@@ -126,10 +124,10 @@ Both implement the same SAW protocol and produce identical IMPL docs. Use the Cl
 The protocol is defined independent of any implementation. Read these to understand how SAW works:
 
 - **[protocol/README.md](protocol/README.md)** - Protocol overview and navigation guide
-- **[protocol/participants.md](protocol/participants.md)** - Five participant roles and their responsibilities
+- **[protocol/participants.md](protocol/participants.md)** - Seven participant roles and their responsibilities
 - **[protocol/preconditions.md](protocol/preconditions.md)** - Five preconditions for suitability gate
 - **[protocol/invariants.md](protocol/invariants.md)** - Six invariants (I1–I6) — formal correctness rules that every implementation must satisfy (e.g., I1: disjoint file ownership, I2: interface contracts precede parallel implementation)
-- **[protocol/execution-rules.md](protocol/execution-rules.md)** - Execution rules (E1–E26) governing state transitions, agent launches, completion handling, merge procedures, verification gates, IMPL doc lifecycle, Scout output validation (E16A/B/C), project memory lifecycle (E17/E18), failure taxonomy (E19), stub detection (E20), post-wave quality gates (E21), scaffold build verification (E22), per-agent context extraction (E23), integration validation (E25), and integration agent (E26)
+- **[protocol/execution-rules.md](protocol/execution-rules.md)** - Execution rules (E1–E41) governing state transitions, agent launches, completion handling, merge procedures, verification gates, IMPL doc lifecycle, Scout output validation (E16A/B/C), project memory lifecycle (E17/E18), failure taxonomy (E19), stub detection (E20), post-wave quality gates (E21), scaffold build verification (E22), per-agent context extraction (E23), integration validation (E25), integration agent (E26), planned integration waves (E27), program execution (E28–E34), wiring obligation (E35), IMPL amendment (E36), critic gate (E37), gate caching (E38), interview mode (E39), observability (E40), and type collision detection (E41)
 - **[protocol/state-machine.md](protocol/state-machine.md)** - Protocol states and transitions
 - **[protocol/message-formats.md](protocol/message-formats.md)** - IMPL doc and completion report schemas
 - **[protocol/procedures.md](protocol/procedures.md)** - Step-by-step merge and verification procedures
