@@ -1026,6 +1026,55 @@ After all IMPLs in the tier are scouted and reviewed, the Orchestrator executes 
 
 ---
 
+## E28B: IMPL Branch Isolation
+
+**Trigger:** The Orchestrator begins wave execution for an IMPL within a program tier (E28).
+
+**Required Action:** Before executing waves for an IMPL in a program tier, the Orchestrator MUST create a long-lived IMPL branch using the `ProgramBranchName()` format:
+
+```
+saw/program/{slug}/tier{N}-impl-{implSlug}
+```
+
+All wave merges for that IMPL target the IMPL branch, not main. The IMPL branch serves as the baseline for `prepare-wave` verification when running inside a program context.
+
+**Branch Lifecycle:**
+
+```
+main ──────────────────────────────────────> (tier gate) ──>
+  \                                         /
+   └─ IMPL-A branch ── wave1 ── wave2 ──┘
+   └─ IMPL-B branch ── wave1 ──────────┘
+```
+
+1. `CreateProgramWorktrees` creates the IMPL branch from main at the start of tier execution.
+2. `RunWaveFull` receives `MergeTarget` set to the IMPL branch name.
+3. `FinalizeWave` / `MergeAgents` checks out the MergeTarget branch before merging agent branches, so wave results accumulate on the IMPL branch rather than main.
+4. After ALL IMPLs in the tier complete, `FinalizeTier` merges each IMPL branch to main in sequence, then runs the tier gate (E29).
+
+**MergeTarget Threading:**
+
+The `MergeTarget` field flows through the wave lifecycle to control where agent branches merge:
+
+- `RunTierLoop` sets `MergeTarget` to the IMPL branch name (from `ProgramBranchName()`)
+- `RunWaveFull` passes `MergeTarget` through to `FinalizeWave`
+- `FinalizeWave` passes `MergeTarget` through to `MergeAgents`
+- `MergeAgents` checks out the target branch before performing no-fast-forward merges
+
+When `MergeTarget` is empty (the default), merges target the current HEAD. This preserves backward compatibility for non-program IMPL execution where waves merge directly to main.
+
+**Baseline Verification:**
+
+When `prepare-wave` runs inside a program context, it uses the IMPL branch as the baseline for verification gates rather than main. The `--merge-target` flag controls which branch is checked out before running baseline checks. This ensures that each IMPL's wave preparation validates against the IMPL's own accumulated state, not against main (which may not yet contain any of the tier's work).
+
+**Relationship to E28:** E28B specifies the branch isolation mechanism used during E28's wave execution step. E28 defines when IMPLs are executed; E28B defines where their wave merges land.
+
+**Relationship to E29:** After E28B isolates each IMPL's work on its own branch, E29's tier gate runs after `FinalizeTier` merges all IMPL branches to main.
+
+**Related Invariants:** See P5 (IMPL Branch Isolation) in `invariants.md`
+
+---
+
 ## E29: Tier Gate Verification
 
 **Trigger:** All IMPLs in a tier reach "complete"
