@@ -27,3 +27,5 @@
   - IMPL doc: docs/IMPL/complete/IMPL-protocol-conformity.yaml
 - **documentation-fixes**: completed 2026-03-22, 1 waves, 4 agents
   - IMPL doc: docs/IMPL/complete/IMPL-documentation-fixes.yaml
+- **program-tier-isolation**: completed 2026-03-22, 3 waves, 7 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-program-tier-isolation.yaml

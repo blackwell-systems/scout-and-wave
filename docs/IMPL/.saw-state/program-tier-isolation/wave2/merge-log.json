@@ -1,0 +1,20 @@
+{
+  "wave": 2,
+  "merges": [
+    {
+      "agent": "C",
+      "merge_sha": "8effab48712ec81f642d4f0325fe0f09a38c7b7c",
+      "timestamp": "2026-03-22T00:48:32.342134-07:00"
+    },
+    {
+      "agent": "D",
+      "merge_sha": "1fd6909a6b7676f5bfac73b380363cde8bfb8091",
+      "timestamp": "2026-03-22T00:48:32.443299-07:00"
+    },
+    {
+      "agent": "E",
+      "merge_sha": "7252ad3add7f101d6d4e882e66168fd936e2591e",
+      "timestamp": "2026-03-22T00:48:32.552952-07:00"
+    }
+  ]
+}

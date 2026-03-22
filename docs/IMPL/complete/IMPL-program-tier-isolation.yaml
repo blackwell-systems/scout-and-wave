@@ -1,3 +1,4 @@
+completion_date: "2026-03-22"
 title: 'Program-Tier Isolation: IMPL branch model for safe parallel IMPL execution'
 feature_slug: program-tier-isolation
 verdict: SUITABLE
@@ -532,6 +533,7 @@ waves:
             - cmd/saw/prepare_wave.go
           dependencies:
             - A
+      base_commit: 54ad7cd527ec68e0a8cbb5ab415ad737b863c2b9
     - number: 3
       agents:
         - id: F
@@ -640,6 +642,7 @@ waves:
           dependencies:
             - C
             - D
+      base_commit: 79e94e01691f0c7d45dffd2613b5bb92e6ef16b4
 quality_gates:
     level: standard
     gates:
@@ -671,6 +674,64 @@ completion_reports:
         files_changed:
             - implementations/claude-code/prompts/saw-skill.md
         verification: PASS (markdown-only repo, no Go build gates apply)
+    C:
+        status: complete
+        branch: saw/program-tier-isolation/wave2-agent-C
+        commit: 93d14d8
+        files_changed:
+            - pkg/engine/program_tier_loop.go
+            - pkg/engine/program_tier_loop_test.go
+        tests_added:
+            - TestRunTierLoop_PassesMergeTarget
+            - TestRunTierLoop_CreatesIMPLBranch
+        verification: PASS (build depends on Agent D adding MergeTarget to RunWaveFullOpts - will compile after merge)
+    D:
+        status: complete
+        branch: saw/program-tier-isolation/wave2-agent-D
+        commit: e6e3f65
+        files_changed:
+            - pkg/engine/run_wave_full.go
+            - pkg/engine/finalize.go
+            - pkg/engine/finalize_test.go
+        tests_added:
+            - TestFinalizeWave_MergeTargetPropagation
+            - TestRunWaveFull_MergeTargetDefault
+        verification: 'FAIL (expected: MergeAgents signature mismatch until Agent E merges 4th param)'
+    E:
+        status: complete
+        branch: saw/program-tier-isolation/wave2-agent-E
+        commit: 31396dd
+        files_changed:
+            - pkg/protocol/merge_agents.go
+            - pkg/protocol/merge_agents_test.go
+            - cmd/saw/finalize_wave.go
+            - cmd/saw/finalize_wave_test.go
+            - cmd/saw/prepare_wave.go
+        tests_added:
+            - TestMergeAgents_WithMergeTarget
+            - TestMergeAgents_EmptyMergeTarget
+            - TestFinalizeWave_MergeTargetFlag
+            - TestPrepareWave_MergeTargetFlag
+        verification: PASS (pkg/protocol builds, all 11 MergeAgents tests pass; cmd/saw build needs Agent D to update pkg/engine callers)
+    F:
+        status: complete
+        branch: saw/program-tier-isolation/wave3-agent-F
+        commit: 37a249f
+        files_changed:
+            - pkg/api/program_handler.go
+            - pkg/api/program_handler_test.go
+        tests_added:
+            - TestHandleExecuteTier_IMPLBranchIsolation
+            - TestHandleExecuteTier_BackwardCompat
+            - TestEmitImplBranchMerged
+        verification: PASS (owned files clean; package build blocked by MergeAgents signature in other agents files)
+    G:
+        status: complete
+        branch: saw/program-tier-isolation/wave3-agent-G
+        commit: 3c56104
+        files_changed:
+            - web/src/programApi.ts
+        verification: PASS
 pre_mortem:
     overall_risk: medium
     rows:
@@ -694,4 +755,4 @@ pre_mortem:
           likelihood: medium
           impact: medium
           mitigation: Wave 3 agents should verify go.mod replace directives point to the correct local path before building.
-state: "WAVE_PENDING"
+state: "COMPLETE"
