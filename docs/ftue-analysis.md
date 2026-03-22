@@ -231,8 +231,8 @@ The repo path picker in Settings uses the native OS file picker when available, 
 | Critical | 1.4 Approve triggers irreversible execution without context | Low | TODO |
 | Critical | 1.5 Scout output is a firehose with no summary | Low | TODO |
 | High | 2.1 Feature input has no quality guidance | Low | TODO |
-| High | 2.3 No explanation of what happens after Approve | Low | TODO |
-| High | 2.5 New vs. Existing project mode indistinguishable | Low | TODO |
+| High | 2.3 No explanation of what happens after Approve | Low | DONE — ActionButtons.tsx already shows "Launches Wave 1 agents in parallel..." |
+| High | 2.5 New vs. Existing project mode indistinguishable | Low | DONE — ScoutLauncher already shows mode-specific description |
 | Polish | 3.1 Run Scout button disabled no explanation | Very Low | TODO |
 | Polish | 3.3 "Plan rejected" not actionable | Very Low | TODO |
 
