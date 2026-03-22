@@ -1,4 +1,4 @@
-completion_date: "2026-03-14"
+completion_date: "2026-03-22"
 title: 'prepare-wave Workflow Fixes: Idempotent Cleanup, Hook Auto-Install, Force Branch Deletion'
 feature_slug: prepare-wave-workflow-fixes
 verdict: SUITABLE
@@ -221,6 +221,7 @@ waves:
             - internal/git/commands.go
             - internal/git/commands_test.go
             - pkg/protocol/cleanup_test.go
+      base_commit: ea742a2511c0514ce0574a2295a33f4cc51c0be7
     - number: 2
       agents:
         - id: B
@@ -332,30 +333,19 @@ quality_gates:
 completion_reports:
     A:
         status: complete
-        branch: develop
-        commit: 83fb25b
+        branch: saw/prepare-wave-workflow-fixes/wave1-agent-A
+        commit: ea742a2
         files_changed:
             - internal/git/commands.go
             - internal/git/commands_test.go
             - pkg/protocol/cleanup_test.go
         tests_added:
             - TestInstallHooks_Success
-            - TestInstallHooks_MissingSourceHook
+            - TestInstallHooks_GeneratesTemplate
             - TestInstallHooks_InvalidWorktreePath
             - TestInstallHooks_CreatesHooksDirectory
             - TestCleanup_ForcesDeleteUnmergedBranches
             - TestCleanup_IdempotentBranchDeletion
-        verification: PASS
-    B:
-        status: complete
-        branch: develop
-        commit: 91a1176
-        files_changed:
-            - pkg/protocol/worktree.go
-            - pkg/protocol/worktree_test.go
-        tests_added:
-            - TestCreateWorktrees_InstallsHooks
-            - TestCreateWorktrees_ContinuesOnHookInstallFailure
         verification: PASS
 pre_mortem:
     overall_risk: low
@@ -376,4 +366,4 @@ pre_mortem:
           likelihood: low
           impact: low
           mitigation: Tests use temp repos with controlled state. Git worktree hooks have been stable since git 2.5 (2015). CI already runs git commands successfully.
-state: SCOUT_PENDING
+state: REVIEWED
