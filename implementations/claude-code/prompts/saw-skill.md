@@ -204,6 +204,8 @@ All operations use the `sawtools` binary. IMPL docs are YAML manifests (`.yaml`)
 - `sawtools validate-integration <manifest> --wave N` — E25 integration gap detection
 - `sawtools resume-detect` — detect interrupted SAW sessions in the repository
 - `sawtools build-retry-context <manifest> --agent <ID>` — structured failure context for agent retries
+- `sawtools check-program-conflicts <manifest> --tier N` — P1+ pre-flight: verifies no two IMPLs in the tier own the same file (blocks if conflicts found)
+- `sawtools finalize-tier <manifest> --tier N` — merges all IMPL branches for the tier to main after IMPL execution completes
 - `sawtools tier-gate <manifest> --tier N` — tier quality gate verification (E29)
 - `sawtools freeze-contracts <manifest> --tier N` — program contract freezing (E30)
 - `sawtools program-status <manifest>` — full program status report (E32)
@@ -544,6 +546,14 @@ Partition tier N IMPLs by status (E28A):
 
 - Present ALL IMPL docs (newly scouted + pre-existing) for unified human review (tier structure, file ownership, interface contracts)
 
+**P1+ Pre-flight: File Ownership Conflict Check**
+
+After human review approves the tier, run the conflict check before launching any IMPL agents:
+```bash
+sawtools check-program-conflicts "<manifest-path>" --tier N
+```
+This enforces P1+: no two IMPLs in the same tier may own the same file. If conflicts are found, enter BLOCKED — surface the conflicting IMPL/file pairs to the user and do not launch any agents until the IMPL docs are revised to resolve ownership.
+
 **Step 3b: IMPL Execution**
 - For each reviewed IMPL in tier N:
   - Execute the full IMPL lifecycle: scaffold, waves, merge
@@ -553,6 +563,14 @@ Partition tier N IMPLs by status (E28A):
     sawtools update-program-impl "<manifest>" --impl "<slug>" --status "<status>"
     ```
 - Wait for all IMPLs in the tier to reach "complete"
+
+**Step 3b.5: Tier Merge**
+
+After all IMPLs in the tier complete, merge their branches to main:
+```bash
+sawtools finalize-tier "<manifest-path>" --tier N --repo-dir "<repo-path>"
+```
+This merges all IMPL worktree branches for the tier in order, runs `RunTierGate` as a post-merge verification, and is idempotent (already-merged branches are skipped). If any merge fails, enter BLOCKED before running the quality gate.
 
 **Step 3c: Tier Gate (E29)**
 - Run: `sawtools tier-gate "<manifest>" --tier N`
