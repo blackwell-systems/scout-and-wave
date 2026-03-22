@@ -1,1 +1,1 @@
-../../prompts/saw-skill.md
+../../implementations/claude-code/prompts/saw-skill.md
