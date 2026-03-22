@@ -326,6 +326,7 @@ waves:
             - Maintain backward compatibility language throughout
           files:
             - implementations/claude-code/prompts/saw-skill.md
+      base_commit: 8cb3b36d73e749bb98f6065004ca806cee7122eb
     - number: 2
       agents:
         - id: C
@@ -654,6 +655,22 @@ quality_gates:
           command: go vet ./...
           required: false
           repo: scout-and-wave-go
+completion_reports:
+    A:
+        status: complete
+        branch: saw/program-tier-isolation/wave1-agent-A
+        commit: 2205de5
+        files_changed:
+            - protocol/execution-rules.md
+            - protocol/invariants.md
+        verification: PASS
+    B:
+        status: complete
+        branch: saw/program-tier-isolation/wave1-agent-B
+        commit: 3e95b7c
+        files_changed:
+            - implementations/claude-code/prompts/saw-skill.md
+        verification: PASS (markdown-only repo, no Go build gates apply)
 pre_mortem:
     overall_risk: medium
     rows:
@@ -677,4 +694,4 @@ pre_mortem:
           likelihood: medium
           impact: medium
           mitigation: Wave 3 agents should verify go.mod replace directives point to the correct local path before building.
-state: REVIEWED
+state: "WAVE_PENDING"
