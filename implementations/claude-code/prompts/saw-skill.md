@@ -116,17 +116,6 @@ Read the agent template at `${CLAUDE_SKILL_DIR}/agent-template.md` for the 9-fie
 | `/saw program status` | Show program-level progress (tier completion, IMPL statuses) |
 | `/saw program replan --reason "<reason>"` | Re-engage Planner to revise PROGRAM manifest (E34) |
 
-### Program Commands (Level A: Planning Only)
-
-| Command | Purpose |
-|---------|---------|
-| `/saw program plan "<project-description>"` | Analyze project and produce PROGRAM manifest |
-| `/saw program execute "<project-description>"` | Plan + tier-gated execution (Level B) |
-| `/saw program execute --auto "<project-description>"` | Full autonomous execution (Level C) |
-| `/saw program status` | Show program-level progress (tier completion, IMPL statuses) |
-| `/saw program replan --reason "<reason>"` | Re-engage Planner to revise PROGRAM manifest (E34) |
-
-**Note:** `/saw program execute` (Level B: tier-gated execution) is documented below. `/saw program execute --auto` (Level C) enables full autonomous execution without human gates between tiers.
 
 ## Pre-flight Validation
 
@@ -253,41 +242,7 @@ This returns a JSON array of `SessionState` objects for any interrupted SAW sess
 - For `wave`: If a single interrupted session is found matching the target IMPL (or the only pending IMPL), report the resume state to the user: "Detected interrupted session: {slug} at {progress_pct}% — {suggested_action}". If `can_auto_resume` is true and `--auto` is active, proceed automatically. If failed agents exist, use `sawtools build-retry-context` to get structured failure context before re-launching them (this provides error classification and fix suggestions instead of raw error dumps). If no interrupted sessions are found, proceed normally.
 
 If the argument is `bootstrap <project-description>`:
-1. **Requirements intake (Orchestrator duty).** Before launching any agent, gather requirements and write `docs/REQUIREMENTS.md` in the target project directory. This is Orchestrator work, not Scout work — it captures decisions already made by the user. Use this template:
-
-   ```markdown
-   # Requirements: <project-name>
-
-   ## Language & Ecosystem
-   <!-- e.g., TypeScript / Next.js App Router -->
-
-   ## Project Type
-   <!-- e.g., Web application (SPA with serverless API routes) -->
-
-   ## Deployment Target
-   <!-- e.g., Vercel (static + serverless) -->
-
-   ## Key Concerns (3-6 major responsibility areas)
-   <!-- These become packages/modules. Each gets its own agent. -->
-   1. ...
-   2. ...
-
-   ## Storage
-   <!-- e.g., Supabase (Postgres + Storage) -->
-
-   ## External Integrations
-   <!-- e.g., Anthropic API, Supabase Auth, Typst WASM -->
-
-   ## Source Codebase (if porting/adapting)
-   <!-- Path to existing repo the scout should analyze for domain model extraction -->
-   <!-- e.g., ~/code/rezmakr/ — Python CLI tool with collection model + AI tailoring -->
-
-   ## Architectural Decisions Already Made
-   <!-- Constraints the scout must respect, not rediscover -->
-   <!-- e.g., BYOK pricing model, Typst WASM for in-browser PDF rendering -->
-   ```
-
-   Ask the user to confirm the requirements before proceeding. If requirements were already discussed in conversation, fill in what you know and ask the user to confirm or adjust.
+1. **Requirements intake (Orchestrator duty).** Before launching any agent, gather requirements and write `docs/REQUIREMENTS.md` in the target project directory. This is Orchestrator work, not Scout work. Cover: language/ecosystem, project type, deployment target, key concerns (3-6 areas), storage, external integrations, source codebase (if porting), and architectural decisions already made. Ask the user to confirm before proceeding. The full template is in `saw-bootstrap.md`.
 
 2. Read `${CLAUDE_SKILL_DIR}/saw-bootstrap.md` from the scout-and-wave repository. Launch a **Scout agent** using the Agent tool with `subagent_type: scout` and `run_in_background: true`. The prompt must reference `docs/REQUIREMENTS.md` in the target project and include the path to `${CLAUDE_SKILL_DIR}/saw-bootstrap.md` as the procedure to follow. Inform the user the Scout is running.
 3. When the Scout completes, read `docs/IMPL/IMPL-bootstrap.yaml`.
@@ -333,8 +288,17 @@ If a `docs/IMPL/IMPL-*.yaml` file already exists:
    ```bash
    sawtools prepare-wave "<manifest-path>" --wave <N> --repo-dir "<repo-path>"
    ```
-   This atomic operation combines worktree creation and per-agent preparation (brief extraction + journal initialization) into a single command. Exit code 1 indicates failure (baseline gate failure — codebase does not pass quality gates at wave-start time; uncommitted scaffolds; freeze violations; or worktree creation errors) — do not proceed until resolved. **E21A baseline failure:** If the failure reason is `baseline_verification_failed`, the codebase was already broken before any agent started. Fix the codebase (or gate configuration) and re-run `prepare-wave`. Do not launch agents onto a broken baseline — E21 will fail after all agent work is wasted. **Interface freeze checkpoint:** interface contracts become immutable when worktrees are created. This is the last moment to revise type signatures, add fields, or restructure APIs. Returns JSON with all worktree paths and agent brief metadata.
-6. For each agent in the current wave, launch a parallel **Wave agent** using the Agent tool with `subagent_type: wave-agent`, `run_in_background: true`, and the per-agent context payload (E23) as the prompt parameter. **Journal context prepending:** Before passing the prompt to the Agent tool, prepend the content of `.saw-state/journals/wave<N>/agent-<ID>/context.md` (if it exists and is non-empty) to the agent's prompt as a `## Prior Work` section. This ensures the agent has visibility into its own execution history even after context compaction. **Use short IMPL-referencing prompts — do not copy-paste agent briefs.** Pass a ~60-token stub containing the IMPL doc path, wave number, and agent ID. The agent reads its own full brief on its first tool call via its Read tool or `sawtools extract-context`. This is 10–15× faster to generate than copy-pasting the full context, and no information is lost — the IMPL doc is already the single source of truth (I4).
+   This atomic operation combines worktree creation and per-agent preparation (brief extraction + journal initialization) into a single command. Exit code 1 = failure (baseline gate, uncommitted scaffolds, freeze violations, or worktree errors) — do not proceed until resolved.
+
+   - **E21A baseline failure:** If `baseline_verification_failed`, the codebase was already broken. Fix it and re-run `prepare-wave`.
+   - **Interface freeze checkpoint:** Contracts become immutable when worktrees are created — last moment to revise type signatures.
+   - Returns JSON with all worktree paths and agent brief metadata.
+
+6. **Agent launching.** For each agent in the current wave, launch a parallel **Wave agent** using `subagent_type: wave-agent` and `run_in_background: true`.
+
+   **Journal prepending:** If `.saw-state/journals/wave<N>/agent-<ID>/context.md` exists, prepend it as `## Prior Work`.
+
+   **Use short IMPL-referencing prompts** — pass a ~60-token stub with the IMPL doc path, wave number, and agent ID. The agent reads its full brief via `.saw-agent-brief.md`. Do not copy-paste agent briefs.
 
 For **YAML manifests** (`.yaml`/`.yml`):
 ```
@@ -352,7 +316,21 @@ Read .saw-agent-brief.md
 Follow the brief exactly.
 ```
 
-**Fallback (full context):** If the IMPL doc path is not accessible from the agent's working directory (e.g., cross-repo orchestration where the doc is in a different repo the agent cannot reach), construct the full payload by extracting: (1) the agent's 9-field prompt section, (2) Interface Contracts, (3) File Ownership table, (4) Scaffolds section, (5) Quality Gates section, (6) absolute IMPL doc path as a header comment. Use the full-context fallback only when the short stub approach is not viable. **Cross-repository orchestration:** If the orchestrator and target repository are the same, use `isolation: "worktree"` for each agent. If orchestrating repo B from repo A, do NOT use the `isolation` parameter (it creates worktrees in repo A's context, not repo B). Instead, rely on manual worktree creation (step 5) and Field 0 cd navigation (Layer 1 + Layer 3 defense-in-depth). **Async execution:** All Scout, Scaffold Agent, and Wave agent launches MUST use `run_in_background: true` so the Orchestrator remains responsive while agents work. Launch all agents in the current wave in a single message, then immediately inform the user that agents are running. **I1: Disjoint File Ownership:** no two agents in the same wave own the same file; this is a hard constraint, not a preference, and is the mechanism that makes parallel execution safe. Worktree isolation does not substitute for it; the IMPL doc's file ownership table is the enforcement mechanism. **E35: Own the caller too (wiring obligation rule).** When an agent implements function or type X that must be called from an existing aggregation function Y in file Z (e.g., a validator registry, a CLI command registration, a route table), file Z MUST be in that agent's `file_ownership`. The agent who defines X owns the responsibility to wire it in. If no single agent can own both sides (e.g., Z is modified by a different agent in the same wave), create a `wiring:` entry in the IMPL doc and assign the caller file to an integration agent in a later wave. **Wiring declarations:** For every such obligation, write a `wiring:` entry in the IMPL doc: `wiring: [{symbol: ValidateReactions, defined_in: pkg/protocol/reactions_validation.go, must_be_called_from: pkg/protocol/schema_validation.go, agent: B, wave: 1, integration_pattern: append}]`. prepare-wave pre-flight will reject if `must_be_called_from` is not in the owning agent's `file_ownership`. validate-integration will grep/AST-parse the caller file post-merge and report severity: error if the call is absent. **I2: Interface contracts precede parallel implementation.** The Scout defines all interfaces that cross agent boundaries in the IMPL doc. The Scaffold Agent implements them as type scaffold files committed to HEAD after human review, before any Wave Agent launches. Agents implement against the spec; they never coordinate directly. Verify scaffold files are committed (Scaffolds section status) before creating worktrees. **SAW tag requirement:** The `description` parameter of every Task tool call must be prefixed with a structured SAW tag in this exact format: `[SAW:wave{N}:agent-{ID}] {short description}`, where `{N}` is the 1-indexed wave number and `{ID}` is the full agent ID (matching `[A-Z][2-9]?` — a letter, or a letter plus digit 2–9). Examples: `[SAW:wave1:agent-A] implement cache layer`, `[SAW:wave2:agent-B] add MCP tools`, `[SAW:wave1:agent-A2] implement secondary cache`. This enables claudewatch to automatically parse wave timing and agent breakdown from session transcripts; structured observability with zero overhead. **Status tracking:** After each agent completes, update its status in the manifest:
+   **Fallback (full context):** If the IMPL doc is not accessible from the agent's working directory (cross-repo), construct the full payload: (1) agent's 9-field prompt, (2) Interface Contracts, (3) File Ownership, (4) Scaffolds, (5) Quality Gates, (6) IMPL doc path header.
+
+   **Cross-repository orchestration:** Same repo = use `isolation: "worktree"`. Different repo = do NOT use `isolation` (creates worktrees in wrong repo). Use manual worktree creation (step 5) instead.
+
+   **Async execution:** All agent launches MUST use `run_in_background: true`. Launch all agents in the current wave in a single message.
+
+   **I1: Disjoint File Ownership.** No two agents in the same wave own the same file — hard constraint, not a preference. The IMPL doc's file ownership table is the enforcement mechanism.
+
+   **E35: Own the caller too.** When an agent defines function X that must be called from aggregation function Y in file Z (registry, route table, main.go AddCommand), file Z MUST be in that agent's `file_ownership`. If both sides can't be in one agent, create a `wiring:` entry: `wiring: [{symbol: X, defined_in: file_a, must_be_called_from: file_z, agent: B, wave: 1, integration_pattern: append}]`.
+
+   **I2: Interface contracts precede implementation.** Scout defines interfaces; Scaffold Agent commits them to HEAD before Wave Agents launch. Verify scaffold status before creating worktrees.
+
+   **SAW tag requirement:** Agent descriptions must use: `[SAW:wave{N}:agent-{ID}] {short description}` (e.g., `[SAW:wave1:agent-A] implement cache layer`).
+
+   **Status tracking:** After each agent completes, update its status:
    ```bash
    sawtools update-status "<manifest-path>" --wave <N> --agent <ID> --status complete
    ```
@@ -391,15 +369,6 @@ Follow the brief exactly.
      fixable:
        action: send-fix-prompt
        max_attempts: 1
-     needs_replan:
-       action: pause
-     escalate:
-       action: pause
-   ```
-
-   Example for a low-risk IMPL (omit entirely, or write minimal block):
-   ```yaml
-   reactions:
      needs_replan:
        action: pause
      escalate:
@@ -736,44 +705,3 @@ Only pending and failed tiers may be revised.
   and surface validation errors to user
 - User may manually edit PROGRAM manifest or abandon re-planning
 
-## Arguments
-
-- `bootstrap <project-name>`: Design-first architecture for new projects with no
-  existing codebase. The Orchestrator writes `docs/REQUIREMENTS.md` first
-  (capturing language, deployment, integrations, and architectural decisions
-  already made), then launches a Scout agent that reads that file and designs
-  disjoint file ownership. Produces `docs/IMPL/IMPL-bootstrap.yaml` with interface
-  contracts, scaffolds, and parallel implementation waves. Use when starting from
-  scratch or from an empty repo.
-- `interview <description>`: Conduct a structured requirements interview that
-  produces `docs/REQUIREMENTS.md`. The Orchestrator runs the interview via sawtools:
-
-  If the argument is `interview <description>` (or `interview --resume <path>`):
-  1. Run the requirements interview by invoking:
-     ```bash
-     sawtools interview "<description>" --docs-dir "<project-docs-dir>" --output "<project-docs-dir>/REQUIREMENTS.md"
-     ```
-     OR conduct the interview inline using AskUserQuestion if sawtools interview is not available
-     in the current environment (fallback mode).
-  2. After sawtools interview exits 0, docs/REQUIREMENTS.md exists.
-  3. Inform the user: "Interview complete. REQUIREMENTS.md written to docs/REQUIREMENTS.md.
-     Run /saw bootstrap to design the architecture, or /saw scout <feature> to plan a feature."
-  4. Do NOT automatically launch bootstrap or scout -- wait for explicit user command.
-
-  If the argument is `interview --resume <path>`:
-  1. Run: `sawtools interview --resume "<path>"`
-  2. Same completion handling as above.
-
-- `scout <feature-description>`: The Orchestrator launches a Scout agent
-  (asynchronous) to analyze the codebase and produce the IMPL doc. The Scout
-  runs the suitability gate first; if the work is not suitable, it writes a
-  short verdict to `docs/IMPL/IMPL-<slug>.yaml` and stops without producing agent
-  prompts. The Orchestrator waits for the Scout to complete, then reports the
-  verdict and asks the user to review.
-- `wave`: Execute the next pending wave, pause for review after each wave
-- `wave --auto`: Execute all remaining waves automatically; only pause if verification fails
-- `status`: Show current progress from the IMPL doc
-- `program plan "<project-description>"`: Analyze project and produce PROGRAM manifest coordinating multiple IMPLs (Level A: planning only)
-- `program execute "<project-description>"`: Plan and execute multi-IMPL program with tier-gated progression. Extends Level A planning with automated Scout launching, IMPL execution, tier gates, and contract freezing. Pauses for human review at tier boundaries (Level B).
-- `program status`: Show program-level progress (tier completion, IMPL statuses, contract freeze status)
-- `program replan --reason "<reason>"`: Re-engage Planner to revise PROGRAM manifest after tier gate failure or user request. The reason is recorded in the manifest for audit and passed to the Planner as context.
