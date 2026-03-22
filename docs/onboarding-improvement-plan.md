@@ -714,7 +714,26 @@ In the web app, the "New Plan" button already uses "Plan" language. This makes C
 
 ---
 
-## 6. Anti-Patterns to Avoid
+## 6. Review Findings (integrated 2026-03-22)
+
+Independent review verdict: **APPROVE WITH CHANGES**. Status of each condition:
+
+### Resolved
+- **4.6 Unified binary** — REJECTED. Two binaries stay separate (sawtools = CLI, saw = web app). Rationale documented in 4.6 section.
+- **Phase vs Wave inconsistency** — FIXED. All mocks now use "Wave", not "Phase".
+- **FTUE deferral** — RESOLVED. FTUE analysis reviewed item-by-item; most items already implemented. Remaining 3 minor items tracked separately.
+- **FTUE 1.4 Approve confirmation** — REJECTED. Tooltip already explains action; double-click friction unacceptable.
+- **`go install` priority** — MOVED to Tier 2 (item 8).
+
+### Open (still to address)
+- **First-run detection reconciliation:** `saw init` checks `saw.config.json`; skill guided mode checks `docs/IMPL/`. Need single signal. Recommendation: `saw.config.json` existence is the canonical "initialized" flag.
+- **CHAT model visibility in header:** Plan proposes hiding advanced model selectors but doesn't mention CHAT. Recommendation: show SCOUT, WAVE, CHAT by default; hide CRITIC, SCAFFOLD, INTEGRATION, PLANNER behind Advanced toggle.
+- **Web onboarding wizard split:** Decouple generic wizard (no project detection dependency) from language-specific examples. Generic version can ship in Tier 2 without `saw init`.
+- **Team lead / evaluator persona:** README needs "What does it look like?" with screenshot/recording in first 20 lines. Not addressed by current plan.
+- **"Just try it" persona:** Can `saw plan "feature"` work without `saw init`? Auto-detect everything on the fly for the zero-commitment trial.
+- **Onboarding metrics:** No way to measure if improvements work. Suggest: time from init to first merge, abandonment rate per step, error frequency by type.
+
+## 7. Anti-Patterns to Avoid
 
 ### 6.1 Do Not Hide the Protocol Entirely
 
