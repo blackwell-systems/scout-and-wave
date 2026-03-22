@@ -140,6 +140,14 @@ Disjoint file ownership and worktree isolation are complementary layers that pro
 
 ---
 
+### E4a: Stale Worktree Cleanup
+
+Before creating worktrees for a wave, the orchestrator SHOULD detect and remove stale worktrees from previous failed runs of the same IMPL slug. A worktree is stale if it references a branch that has been deleted or if its parent IMPL is in a terminal state (COMPLETE or NOT_SUITABLE).
+
+This prevents prepare-wave failures caused by leftover git worktrees from crashed or interrupted previous runs.
+
+---
+
 ## E5: Worktree Naming Convention
 
 **Trigger:** Creating worktrees
@@ -161,6 +169,8 @@ Disjoint file ownership and worktree isolation are complementary layers that pro
 **Required Action:** When the orchestrator updates an agent prompt, it edits the prompt section in the IMPL doc directly. The agent reads its prompt from the IMPL doc at launch time, so the corrected version is always what runs.
 
 **Rationale:** There is no separate prompt file to keep in sync. The IMPL doc is the single source of truth.
+
+**Note:** Automated deviation propagation (reading interface_deviations from completion reports and auto-updating downstream agent prompts) is intentionally not automated. Interface deviation resolution requires human judgment to determine the correct prompt updates. The orchestrator surfaces deviations; the human applies them via `sawtools update-agent-prompt`.
 
 **Related Invariants:** See I4 (IMPL doc is single source of truth)
 
@@ -216,6 +226,8 @@ Always surface to the user regardless of `--auto` mode:
 - Re-issues prompts to all agents whose work depends on the changed contract
 - Agents that completed cleanly against unaffected contracts do not re-run
 - The wave restarts from WAVE_PENDING with the corrected contracts
+
+**Note:** The `needs_replan` failure type surfaces to the human orchestrator as a pause point. Automatic Scout re-engagement for contract revision is not implemented to prevent cascading contract changes without human review. Use `sawtools update-agent-prompt` and manual wave restart.
 
 **Relationship to E2:** E2 governs orchestrator-initiated interface changes. E8 governs the same problem from the other direction: agent-discovered contract failures.
 
@@ -486,6 +498,16 @@ The correction loop is implemented by `ScoutCorrectionLoop()` in the engine (`pk
 **Key property:** The correction loop is idempotent — running it multiple times on an already-valid IMPL doc is a no-op (validation passes on first attempt, no Scout re-invocation).
 
 **Related Rules:** See E16A (required block presence), E16B (dep graph grammar), E16C (out-of-band detection), E39 (Interview Mode — alternative requirements gathering pathway)
+
+### Scout Pre-Processing Helpers (H-series)
+
+Before launching the Scout agent, the engine runs automation tools that produce context injected into the Scout prompt:
+
+- **H1a (analyze-suitability):** Scans a requirements file against the current codebase to classify each requirement as DONE, PARTIAL, or TODO. Implemented by `sawtools analyze-suitability`.
+- **H2 (extract-commands):** Detects project toolchain and extracts build/test/lint/format commands from CI configs, Makefiles, and package manifests. Implemented by `sawtools extract-commands`.
+- **H3 (analyze-deps):** Traces import paths and type dependencies to produce a dependency graph with wave candidate assignments. Implemented by `sawtools analyze-deps`.
+
+These helpers are best-effort: failures are logged but do not block Scout execution. Their output appears in the Scout prompt under '## Automation Analysis Results'.
 
 ---
 
@@ -788,6 +810,8 @@ The overall exit code is non-zero if any required gate fails.
 - Reports `status: FAILED` in its completion report
 
 The Orchestrator reads this and halts before creating any worktrees. The user must revise the interface contracts and re-run the Scaffold Agent.
+
+**Note:** Scaffold build verification validates that each scaffold file compiles within its package (`go build ./path/to/package`), not the full project build (`go build ./...`). Full-project verification after scaffold commits is deferred to the prepare-wave baseline gate (E21A), which runs the quality gates against HEAD before worktree creation.
 
 **Rationale:** Scaffold files define types and interfaces that Wave agents import. A scaffold file with a syntax error, wrong import path, or missing dependency causes every Wave agent in the next wave to fail immediately — wasting the full wave execution.
 
@@ -1273,6 +1297,8 @@ all source files listed in file_ownership. The critic:
 **Output format:** CriticResult written to IMPL doc critic_report field (see
 interface contracts in IMPL-critic-agent.yaml). Per-agent verdict: PASS or ISSUES.
 Overall verdict: PASS (all agents pass) or ISSUES (one or more agents have errors).
+
+**Note:** Critic agents write their results to the IMPL manifest via `sawtools set-critic-review` (or equivalent SDK call), not by direct file modification. This preserves the structured `critic_report:` field format.
 
 **Failure path:** If overall verdict is ISSUES, orchestrator does NOT enter REVIEWED
 state. Instead:

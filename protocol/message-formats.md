@@ -219,7 +219,10 @@ gates:
     description: {optional human-readable description}
     repo: {optional repo short name}  # if set, gate only runs in the specified repo (multi-repo waves)
     fix: true | false                  # if true, run in fix mode (e.g. gofmt -w); default false
+    timing: pre-merge | post-merge    # optional: default is "pre-merge"
 ```
+
+Gates with `timing: post-merge` execute after MergeAgents completes (step 5 of finalize-wave). This enables content and integration gates that require the merged state. When timing is empty or absent, `pre-merge` is assumed for backward compatibility.
 
 Written by Scout between Suitability Assessment and Scaffolds. Defines verification commands that run after wave completion (E21).
 
@@ -676,6 +679,7 @@ gates:
     description: {optional human-readable description}
     repo: {optional repo short name}  # if set, gate only runs in the specified repo (multi-repo waves)
     fix: true | false                  # if true, run in fix mode (e.g. gofmt -w); default false
+    timing: pre-merge | post-merge    # optional: default is "pre-merge"
 ```
 
 Example:
@@ -693,6 +697,11 @@ gates:
     command: go vet ./...
     required: false
     description: "Check for common Go mistakes"
+  - type: test
+    command: go test ./...
+    required: true
+    timing: post-merge
+    description: "Integration test requiring merged state"
 ```
 
 Auto-detection from project marker files:
@@ -717,7 +726,10 @@ created: YYYY-MM-DD
 protocol_version: "x.y.z"
 
 architecture:
-  description: string
+  language: string           # programming language (e.g. "go", "python")
+  stack: [string]            # key frameworks/libraries (optional)
+  summary: string            # backward compatibility alias for description
+  description: string        # protocol-canonical human-readable summary
   modules:
     - name: string
       path: string
@@ -752,7 +764,7 @@ features_completed:
 
 - **created:** ISO date when this file was first created by the Orchestrator.
 - **protocol_version:** SAW protocol version in use when the file was created or last updated.
-- **architecture:** High-level description of the project's structure and its constituent modules.
+- **architecture:** High-level description of the project's structure and its constituent modules. The `language` and `stack` fields identify the project toolchain. `description` is the protocol-canonical field name; `summary` is a backward-compatibility alias — both may appear in older CONTEXT.md files and are treated as equivalent. `modules` lists named subsystems with their filesystem paths and responsibilities.
 - **decisions:** Log of architectural decisions made during SAW feature work, linked to the IMPL doc that introduced them.
 - **conventions:** Project-wide conventions established through SAW waves (naming, error handling, testing patterns).
 - **established_interfaces:** Interfaces introduced by prior waves that downstream agents may depend on.
