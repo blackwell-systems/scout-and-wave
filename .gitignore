@@ -1,0 +1,6 @@
+# SAW ephemeral state (machine-specific, per-session)
+.claude/worktrees/
+.saw-state/
+.saw-agent-brief.md
+docs/IMPL/.saw-state/
+*.bak
