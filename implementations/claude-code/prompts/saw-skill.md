@@ -17,7 +17,7 @@ license: MIT OR Apache-2.0
 compatibility: Requires Claude Code (Skills API). Git 2.20+ required for worktree support.
 metadata:
   author: blackwell-systems
-  version: "0.13.0"
+  version: "0.55.0"
 ---
 
 # Scout-and-Wave: Parallel Agent Coordination
@@ -37,7 +37,7 @@ observability (no Scout agent means no SAW session is detectable by monitoring
 tools).
 
 *`I{N}` notation refers to invariants (I1–I6) and `E{N}` to execution rules
-(E1–E37) defined in `protocol/invariants.md` and `protocol/execution-rules.md`.
+(E1–E41) defined in `protocol/invariants.md` and `protocol/execution-rules.md`.
 Each is embedded verbatim at its point of enforcement; the number is the anchor
 for cross-referencing and audit.*
 

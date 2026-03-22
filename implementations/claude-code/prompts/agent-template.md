@@ -19,12 +19,14 @@ other Wave Agents' output by the Orchestrator, and your completion report is the
 interface between your work and the next steps.
 
 `I{N}` notation refers to invariants (I1–I6) and `E{N}` to execution rules
-(E1–E26) defined in `protocol/invariants.md` and `protocol/execution-rules.md`.
+(E1–E41) defined in `protocol/invariants.md` and `protocol/execution-rules.md`.
 Each is embedded verbatim alongside its number so this prompt is self-contained;
 the number is the anchor for cross-referencing and audit. Note: E20–E23 are
 orchestrator-only rules (stub detection, quality gates, scaffold build
-verification, per-agent context extraction); E25–E26 govern integration
-validation and the Integration Agent; agents do not implement them but
+verification, per-agent context extraction); E25–E26 govern integration;
+E27–E41 cover planned integration waves, program execution, wiring obligation,
+IMPL amendment, critic gate, gate caching, interview mode, observability, and
+type collision detection. Agents do not implement them but
 may see their results referenced in the IMPL doc.
 
 Each agent prompt has 9 fields. Field 0 is a mandatory pre-flight isolation
@@ -51,7 +53,7 @@ You are Wave {N} Agent {ID}. {One-sentence summary of your task.}
 
 ```bash
 # Navigate to expected worktree location (strict - must succeed)
-cd {absolute-repo-path}/.claude/worktrees/wave{N}-agent-{ID}
+cd {absolute-repo-path}/.claude/worktrees/saw/{slug}/wave{N}-agent-{ID}
 ```
 
 **Step 2: Verify isolation (strict fail-fast after self-correction attempt)**
@@ -59,7 +61,7 @@ cd {absolute-repo-path}/.claude/worktrees/wave{N}-agent-{ID}
 ```bash
 # Check working directory
 ACTUAL_DIR=$(pwd)
-EXPECTED_DIR="{absolute-repo-path}/.claude/worktrees/wave{N}-agent-{ID}"
+EXPECTED_DIR="{absolute-repo-path}/.claude/worktrees/saw/{slug}/wave{N}-agent-{ID}"
 
 if [ "$ACTUAL_DIR" != "$EXPECTED_DIR" ]; then
   echo "ISOLATION FAILURE: Wrong directory (even after cd attempt)"
@@ -70,7 +72,7 @@ fi
 
 # Check git branch
 ACTUAL_BRANCH=$(git branch --show-current)
-EXPECTED_BRANCH="wave{N}-agent-{ID}"
+EXPECTED_BRANCH="saw/{slug}/wave{N}-agent-{ID}"
 
 if [ "$ACTUAL_BRANCH" != "$EXPECTED_BRANCH" ]; then
   echo "ISOLATION FAILURE: Wrong branch"
@@ -95,7 +97,7 @@ echo "✓ Isolation verified: $ACTUAL_DIR on $ACTUAL_BRANCH"
 
 **ISOLATION VERIFICATION FAILED**
 
-Expected: .claude/worktrees/wave{N}-agent-{ID} on branch wave{N}-agent-{ID}
+Expected: .claude/worktrees/saw/{slug}/wave{N}-agent-{ID} on branch saw/{slug}/wave{N}-agent-{ID}
 Actual: [paste output from pwd and git branch]
 
 **No work performed.** Cannot proceed without confirmed isolation.
@@ -262,8 +264,8 @@ then add free-form notes beneath it.
 status: complete | partial | blocked
 failure_type: transient | fixable | needs_replan | escalate | timeout  # Required when status is partial or blocked. Omit when status is complete.
 repo: /absolute/path/to/repo  # omit for single-repo waves
-worktree: .claude/worktrees/wave{N}-agent-{ID}
-branch: wave{N}-agent-{ID}
+worktree: .claude/worktrees/saw/{slug}/wave{N}-agent-{ID}
+branch: saw/{slug}/wave{N}-agent-{ID}
 commit: {sha}  # or "uncommitted" if commit failed
 files_changed:
   - path/to/modified/file
