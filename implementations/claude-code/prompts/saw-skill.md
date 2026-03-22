@@ -214,6 +214,9 @@ All operations use the `sawtools` binary. IMPL docs are YAML manifests (`.yaml`)
 - `sawtools update-program-state <manifest> --state <state>` — update PROGRAM manifest state field (E32)
 - `sawtools update-program-impl <manifest> --impl <slug> --status <status>` — update per-IMPL execution status in PROGRAM manifest (E32)
 - `sawtools program-replan <manifest> --reason "<reason>"` — trigger Planner re-engagement for PROGRAM manifest revision (E34)
+- `sawtools create-program-worktrees <manifest> --tier N` — create IMPL branches for a program tier (E28 branch isolation)
+- `sawtools prepare-wave <manifest> --wave N [--merge-target <branch>]` — atomic wave preparation (worktrees, briefs, journals); `--merge-target` sets baseline branch for verification (default: current HEAD)
+- `sawtools finalize-wave <manifest> --wave N [--merge-target <branch>]` — atomic post-wave pipeline (verify, merge, cleanup); `--merge-target` sets merge destination branch (default: current HEAD)
 
 ## Execution Models
 
@@ -554,10 +557,24 @@ sawtools check-program-conflicts "<manifest-path>" --tier N
 ```
 This enforces P1+: no two IMPLs in the same tier may own the same file. If conflicts are found, enter BLOCKED — surface the conflicting IMPL/file pairs to the user and do not launch any agents until the IMPL docs are revised to resolve ownership.
 
+**Step 3a.5: Create IMPL Branches**
+
+Create long-lived IMPL branches for all IMPLs in the tier:
+```bash
+sawtools create-program-worktrees "<manifest-path>" --tier N --repo-dir "<repo-path>"
+```
+Each IMPL gets a branch: `saw/program/{slug}/tier{N}-impl-{implSlug}`.
+These branches are the merge targets for all wave executions within
+the IMPL — waves merge to the IMPL branch, NOT to main.
+
 **Step 3b: IMPL Execution**
 - For each reviewed IMPL in tier N:
-  - Execute the full IMPL lifecycle: scaffold, waves, merge
-  - Use existing `/saw wave --auto` flow per IMPL
+  - Compute IMPL branch: `saw/program/{slug}/tier{N}-impl-{implSlug}`
+  - Execute the full IMPL lifecycle with IMPL branch as merge target:
+    - prepare-wave: `sawtools prepare-wave <impl-doc> --wave W --merge-target <impl-branch>`
+    - finalize-wave: `sawtools finalize-wave <impl-doc> --wave W --merge-target <impl-branch>`
+    - Waves merge to the IMPL branch, isolating each IMPL's work
+  - Use existing `/saw wave --auto` flow per IMPL (with merge target threading)
   - Update IMPL status in PROGRAM manifest as each completes (E32):
     ```bash
     sawtools update-program-impl "<manifest>" --impl "<slug>" --status "<status>"
@@ -566,11 +583,13 @@ This enforces P1+: no two IMPLs in the same tier may own the same file. If confl
 
 **Step 3b.5: Tier Merge**
 
-After all IMPLs in the tier complete, merge their branches to main:
+After all IMPLs in the tier complete, merge their IMPL branches to main:
 ```bash
 sawtools finalize-tier "<manifest-path>" --tier N --repo-dir "<repo-path>"
 ```
-This merges all IMPL worktree branches for the tier in order, runs `RunTierGate` as a post-merge verification, and is idempotent (already-merged branches are skipped). If any merge fails, enter BLOCKED before running the quality gate.
+This merges all IMPL branches (created in Step 3a.5) for the tier to main in order, runs `RunTierGate` as a post-merge verification, and is idempotent (already-merged branches are skipped). Each IMPL branch contains the accumulated work from all waves executed against it. If any merge fails, enter BLOCKED before running the quality gate.
+
+**Backward compatibility:** When running outside a program context (standard `/saw wave` flow), MergeTarget is empty and waves merge to HEAD as before. The IMPL branch model only activates during `/saw program execute`.
 
 **Step 3c: Tier Gate (E29)**
 - Run: `sawtools tier-gate "<manifest>" --tier N`
