@@ -63,6 +63,64 @@ If P1 is violated, the Planner is issued a correction prompt (analogous to Scout
 
 ---
 
+## P1+: File Disjointness Within a Tier
+
+**Formal Statement:** No two IMPLs in the same tier may list the same file
+(qualified by repo if present) in their `file_ownership` tables. Ownership
+of the same file by two co-tier IMPLs guarantees a merge conflict when both
+IMPLs complete and their branches are merged to main.
+
+**Relationship to P1:** P1 requires no same-tier *dependency relationships*
+(logical independence). P1+ requires no same-tier *file ownership overlap*
+(physical independence). Both must hold for parallel tier execution to be safe.
+A pair of IMPLs can satisfy P1 (no explicit depends_on relationship) while
+violating P1+ (both modify the same file). P1+ is the machine-enforceable
+complement to P1's logical constraint.
+
+**Enforcement:** Machine-enforced before launching any IMPL in a tier via
+`sawtools check-program-conflicts <PROGRAM.yaml> --tier N`. This command:
+1. Loads all IMPL docs for tier N
+2. Intersects their `file_ownership` tables
+3. If any file appears in two or more IMPL ownership tables: BLOCKED with
+   structured error output showing conflicting IMPLs and files
+4. If all ownership sets are disjoint: exit 0 (proceed)
+
+**When to run:**
+- Before `prepare-wave` for any IMPL in the tier (pre-flight check)
+- As part of `program-execute` auto-mode tier setup
+- Any time an IMPL is added to or re-scouted within a tier
+
+**Error message format:**
+```
+check-program-conflicts: BLOCKED — 2 conflict(s) detected in tier 1
+Conflicting IMPLs:
+  pkg/shared/types.go: [feature-a, feature-b]
+Resolve by moving conflicting IMPLs to different tiers (sawtools tier-gate
+suggestion: feature-b → tier 2).
+```
+
+**Resolution:** When P1+ is violated:
+1. Run `sawtools check-impl-conflicts --impls <slugs>` for tier suggestion
+2. Move the conflicting IMPL to the suggested tier in the PROGRAM manifest
+3. Re-run check-program-conflicts to confirm resolution
+4. Alternatively, split the conflicting IMPL into sub-IMPLs with disjoint ownership
+
+**Rationale:** P1 (dependency-graph) and P1+ (file-level) together provide the
+complete safety guarantee for parallel tier execution. P1 prevents logical
+dependency violations. P1+ prevents the physical merge failures that would occur
+even if logical dependencies are respected. Without P1+, two IMPLs that logically
+don't depend on each other may both modify the same infrastructure file (e.g.,
+`cmd/saw/main.go` for command registration), causing merge conflicts that block
+tier completion.
+
+**Related Rules:**
+- See P1 (IMPL Independence Within a Tier) above
+- See I1 (Disjoint File Ownership) in `protocol/invariants.md`
+- `sawtools check-program-conflicts` is the P1+ equivalent of `sawtools check-conflicts`
+  (which enforces I1 at the agent/wave level)
+
+---
+
 ## P2: Program Contracts Precede Tier Execution
 
 **Formal Statement:** All cross-IMPL types and APIs that a tier's IMPLs depend on must be:
@@ -244,6 +302,7 @@ Conditions that break program-level invariants and invalidate the correctness gu
 | Violation | Broken Invariant | Effect |
 |-----------|-----------------|--------|
 | Two IMPLs in the same tier have a dependency relationship | P1 | One IMPL's Scout plans against incomplete/incorrect outputs from another |
+| Two IMPLs in the same tier own the same file | P1+ | Guaranteed merge conflict when both IMPL branches complete |
 | Tier 2 Scout begins before Tier 1 program contracts are frozen | P2 | Interface drift; incompatible type definitions across IMPLs |
 | Tier 2 begins before all Tier 1 IMPLs reach COMPLETE | P3 | Cascade failures; Tier 2 builds on incomplete foundation |
 | Orchestrator infers IMPL relationships from disk scan instead of reading PROGRAM manifest | P4 | State drift; manifest becomes stale, loses value as coordination artifact |
@@ -261,9 +320,10 @@ Program invariants extend SAW's correctness guarantees from feature-level to pro
 
 ## Protocol Guarantees
 
-When all preconditions hold and all invariants (I1-I6 + P1-P4) are maintained:
+When all preconditions hold and all invariants (I1-I6 + P1-P4 including P1+) are maintained:
 
 - No two IMPLs in the same tier will have conflicting dependencies
+- No two IMPLs in the same tier own the same file; merge conflicts at tier completion are structurally impossible
 - Cross-IMPL interface drift is prevented; shared types are defined once and frozen at tier boundaries
 - Integration failures surface at tier boundaries, not at the end of all tiers
 - The Orchestrator can reconstruct full program state from the PROGRAM manifest at any time
@@ -289,6 +349,23 @@ Phase 1 of the Program Layer defines invariants and validation logic. Enforcemen
 
 **Phase 2 Implementation:**
 The Orchestrator will integrate this validation into the program execution loop.
+
+### P1+ Enforcement: File Ownership Conflict Detection
+
+**When:**
+- Before `prepare-wave` for any IMPL in a tier (pre-flight check)
+- As part of `program-execute` auto-mode tier setup
+- Any time an IMPL is added to or re-scouted within a tier
+
+**How:**
+- `sawtools check-program-conflicts <PROGRAM.yaml> --tier N` loads all IMPL docs for tier N
+- Intersects `file_ownership` tables across all IMPLs in the tier
+- If any file appears in two or more IMPL ownership tables: exit 1 with structured error
+- Reuses `protocol.ConflictReport` (from `program_conflict.go`); no new Go type needed
+
+**Phase 2 Implementation:**
+The CLI command `check-program-conflicts` is implemented by Agent D. The Orchestrator
+will call this command in the tier setup logic before launching any IMPL in the tier.
 
 ### P2 Enforcement: Program Contract Existence Check
 
