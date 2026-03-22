@@ -1,0 +1,680 @@
+title: 'Program-Tier Isolation: IMPL branch model for safe parallel IMPL execution'
+feature_slug: program-tier-isolation
+verdict: SUITABLE
+suitability_assessment: |
+    **Verdict:** SUITABLE
+
+    This feature decomposes cleanly across three repositories (protocol, engine/SDK, web app)
+    with a natural wave ordering: protocol spec leads (Wave 1), engine implements (Wave 2),
+    web app consumes (Wave 3). File ownership is fully disjoint — no two agents touch the
+    same file. Interface contracts are discoverable: the core change is threading a MergeTarget
+    string through existing function signatures. No investigation-first blockers exist; the
+    existing code is well-structured with clear extension points.
+
+    The parallelization value is high within waves: Wave 1 has 2 independent protocol doc
+    agents, Wave 2 has 3 independent engine agents working in separate packages, and Wave 3
+    has 2 independent web agents. Build/test cycles are >30s for the Go repos.
+
+    **Estimated times:**
+    - Scout phase: ~10 min
+    - Wave 1 execution: ~8 min (2 agents in parallel, protocol docs)
+    - Wave 2 execution: ~15 min (3 agents in parallel, Go engine)
+    - Wave 3 execution: ~10 min (2 agents in parallel, web app)
+    - Merge & verify: ~5 min per wave (15 min total)
+    - Total (SAW): ~48 min
+    - Sequential baseline: ~90 min (7 agents x ~13 min avg)
+    - Time savings: ~42 min (47% faster)
+
+    **Recommendation:** Proceed. Clear speedup from 3-wave parallelization across repos.
+test_command: go test ./...
+lint_command: go vet ./...
+file_ownership:
+    - file: protocol/execution-rules.md
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: protocol/invariants.md
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: implementations/claude-code/prompts/saw-skill.md
+      agent: B
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: pkg/engine/program_tier_loop.go
+      agent: C
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+      repo: scout-and-wave-go
+    - file: pkg/engine/program_tier_loop_test.go
+      agent: C
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+      repo: scout-and-wave-go
+    - file: pkg/engine/run_wave_full.go
+      agent: D
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+      repo: scout-and-wave-go
+    - file: pkg/engine/finalize.go
+      agent: D
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+      repo: scout-and-wave-go
+    - file: pkg/engine/finalize_test.go
+      agent: D
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+      repo: scout-and-wave-go
+    - file: pkg/protocol/merge_agents.go
+      agent: E
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+      repo: scout-and-wave-go
+    - file: pkg/protocol/merge_agents_test.go
+      agent: E
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+      repo: scout-and-wave-go
+    - file: cmd/saw/finalize_wave.go
+      agent: E
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+      repo: scout-and-wave-go
+    - file: cmd/saw/finalize_wave_test.go
+      agent: E
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+      repo: scout-and-wave-go
+    - file: cmd/saw/prepare_wave.go
+      agent: E
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+      repo: scout-and-wave-go
+    - file: pkg/api/program_handler.go
+      agent: F
+      wave: 3
+      action: modify
+      depends_on:
+        - C
+        - D
+      repo: scout-and-wave-web
+    - file: pkg/api/program_handler_test.go
+      agent: F
+      wave: 3
+      action: modify
+      depends_on:
+        - C
+        - D
+      repo: scout-and-wave-web
+    - file: web/src/programApi.ts
+      agent: G
+      wave: 3
+      action: modify
+      depends_on:
+        - C
+        - D
+      repo: scout-and-wave-web
+interface_contracts:
+    - name: MergeTarget field threading
+      description: |
+        The MergeTarget field flows through the wave lifecycle to control where agent
+        branches merge. Empty string means merge to current HEAD (backward compatible
+        default, equivalent to main). Non-empty means merge to the specified branch.
+      definition: |
+        // In RunWaveFullOpts (pkg/engine/run_wave_full.go):
+        type RunWaveFullOpts struct {
+            ManifestPath string
+            RepoPath     string
+            WaveNum      int
+            MergeTarget  string // target branch for merge; empty = HEAD (default)
+        }
+
+        // In FinalizeWaveOpts (pkg/engine/finalize.go):
+        type FinalizeWaveOpts struct {
+            IMPLPath   string
+            RepoPath   string
+            WaveNum    int
+            MergeTarget string // target branch for merge; empty = HEAD (default)
+            ObsEmitter *observability.Emitter
+        }
+
+        // In MergeAgents (pkg/protocol/merge_agents.go) — new signature:
+        func MergeAgents(manifestPath string, waveNum int, repoDir string, mergeTarget string) (*MergeAgentsResult, error)
+
+        // In git.MergeNoFF (internal/git/commands.go) — already merges into HEAD.
+        // When MergeTarget is non-empty, caller must checkout target branch before merge.
+      location: pkg/engine/run_wave_full.go
+    - name: E28 IMPL branch isolation
+      description: |
+        Protocol specification for how the tier execution loop creates IMPL branches
+        and threads MergeTarget through wave execution. This is the protocol-level
+        contract that the engine implements.
+      definition: |
+        E28 amendment: Before executing waves for an IMPL in a program tier, the
+        Orchestrator creates a long-lived IMPL branch using ProgramBranchName().
+        All wave merges for that IMPL target the IMPL branch instead of main.
+        After ALL IMPLs in the tier complete, finalize-tier merges IMPL branches
+        to main in sequence.
+
+        Branch lifecycle:
+        1. CreateProgramWorktrees creates IMPL branch (already exists)
+        2. RunWaveFull receives MergeTarget = IMPL branch name
+        3. FinalizeWave/MergeAgents checks out MergeTarget before merging agent branches
+        4. FinalizeTier merges IMPL branches to main (already exists)
+      location: protocol/execution-rules.md
+    - name: finalize-wave --merge-target flag
+      description: |
+        CLI flag for the finalize-wave command to specify merge target branch.
+      definition: |
+        // cmd/saw/finalize_wave.go — new flag:
+        cmd.Flags().StringVar(&mergeTarget, "merge-target", "", "Target branch for merge (default: current HEAD)")
+
+        // Passed to protocol.MergeAgents as the mergeTarget parameter.
+      location: cmd/saw/finalize_wave.go
+    - name: prepare-wave --merge-target flag
+      description: |
+        CLI flag for prepare-wave to run baseline verification against the IMPL branch.
+      definition: |
+        // cmd/saw/prepare_wave.go — new flag:
+        cmd.Flags().StringVar(&mergeTarget, "merge-target", "", "Baseline branch for verification (default: current HEAD)")
+
+        // When set, checkout merge-target before running baseline gates.
+      location: cmd/saw/prepare_wave.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## What to Implement
+
+            Update the SAW protocol specification to document IMPL branch isolation
+            for program-tier execution. This is the authoritative spec that all
+            engine implementation follows.
+
+            **Files to modify:**
+
+            1. **protocol/execution-rules.md** — Amend E28 (Tier Execution Loop):
+               - Add a new subsection "E28B: IMPL Branch Isolation" that specifies:
+                 - Before executing waves for an IMPL in a program tier, the Orchestrator
+                   MUST create a long-lived IMPL branch using `ProgramBranchName()` format:
+                   `saw/program/{slug}/tier{N}-impl-{implSlug}`
+                 - All wave merges for that IMPL target the IMPL branch (not main)
+                 - The IMPL branch is the baseline for prepare-wave verification
+                 - After ALL IMPLs in the tier complete, `finalize-tier` merges IMPL
+                   branches to main in sequence, then runs the tier gate
+               - Add the branch lifecycle diagram:
+                 ```
+                 main ──────────────────────────────────────> (tier gate) ──>
+                   \                                         /
+                    └─ IMPL-A branch ── wave1 ── wave2 ──┘
+                    └─ IMPL-B branch ── wave1 ──────────┘
+                 ```
+               - Document the MergeTarget threading: RunTierLoop -> RunWaveFull ->
+                 FinalizeWave -> MergeAgents. Default empty string = merge to HEAD
+                 (backward compatible).
+               - Document that prepare-wave baseline verification runs against the
+                 IMPL branch when inside a program context.
+
+            2. **protocol/invariants.md** — Add P5 invariant:
+               - **P5: IMPL Branch Isolation** — Within a program tier, each IMPL's
+                 wave merges target the IMPL's dedicated branch, not main. Main is
+                 only updated by finalize-tier after all IMPLs in the tier complete.
+               - Add to the Protocol Violations table: "IMPL wave merged to main
+                 during tier execution" | P5 | "Other IMPLs see partial state,
+                 potential breakage"
+               - Add to Protocol Guarantees: "No IMPL's in-progress wave merge can
+                 break another IMPL's work within the same tier"
+
+            **Constraints:**
+            - Do NOT change any existing E28/E29/E30 rule numbers or semantics
+            - E28B is a NEW subsection under E28, not a replacement
+            - P5 follows existing numbering (P1-P4 exist in program-invariants.md;
+              P5 goes in invariants.md since it's a
+              cross-cutting safety property)
+            - Keep the same prose style as existing rules
+            - Reference existing functions by name (ProgramBranchName, FinalizeTier)
+
+            ## Tests
+            - N/A (protocol documentation only)
+
+            ## Verification Gate
+            - Verify no broken markdown links
+            - Verify E28B subsection exists after E28A
+            - Verify P5 appears in invariants.md
+          files:
+            - protocol/execution-rules.md
+            - protocol/invariants.md
+        - id: B
+          task: |
+            ## What to Implement
+
+            Update the saw-skill.md orchestrator prompt to reflect IMPL branch
+            isolation in the program execute flow.
+
+            **File to modify: implementations/claude-code/prompts/saw-skill.md**
+
+            In the `/saw program execute` section, update **Step 3b: IMPL Execution**:
+
+            1. Before the "For each reviewed IMPL in tier N" loop, add:
+               ```
+               **Step 3a.5: Create IMPL Branches**
+
+               Create long-lived IMPL branches for all IMPLs in the tier:
+               ```bash
+               sawtools create-program-worktrees "<manifest-path>" --tier N --repo-dir "<repo-path>"
+               ```
+               Each IMPL gets a branch: `saw/program/{slug}/tier{N}-impl-{implSlug}`.
+               These branches are the merge targets for all wave executions within
+               the IMPL — waves merge to the IMPL branch, NOT to main.
+               ```
+
+            2. In Step 3b, update the wave execution to pass --merge-target:
+               ```
+               - For each reviewed IMPL in tier N:
+                 - Compute IMPL branch: `saw/program/{slug}/tier{N}-impl-{implSlug}`
+                 - Execute the full IMPL lifecycle with IMPL branch as merge target:
+                   - prepare-wave: `sawtools prepare-wave <impl-doc> --wave W --merge-target <impl-branch>`
+                   - finalize-wave: `sawtools finalize-wave <impl-doc> --wave W --merge-target <impl-branch>`
+                 - Waves merge to the IMPL branch, isolating each IMPL's work
+               ```
+
+            3. In Step 3b.5 (Tier Merge), clarify that finalize-tier merges IMPL
+               branches (not agent branches) to main. The existing text is close
+               but should explicitly say "IMPL branches" not "worktree branches".
+
+            4. Add a note after Step 3b.5:
+               ```
+               **Backward compatibility:** When running outside a program context
+               (standard `/saw wave` flow), MergeTarget is empty and waves merge
+               to HEAD as before. The IMPL branch model only activates during
+               `/saw program execute`.
+               ```
+
+            5. In the sawtools reference list, add entries:
+               - `sawtools create-program-worktrees <manifest> --tier N` — create
+                 IMPL branches for a program tier
+               - Update `sawtools finalize-wave` entry to mention `--merge-target` flag
+               - Update `sawtools prepare-wave` entry to mention `--merge-target` flag
+
+            **Constraints:**
+            - Do NOT change any command names or existing flag semantics
+            - Keep the existing document structure and style
+            - Maintain backward compatibility language throughout
+          files:
+            - implementations/claude-code/prompts/saw-skill.md
+    - number: 2
+      agents:
+        - id: C
+          task: |
+            ## What to Implement
+
+            Update RunTierLoop in pkg/engine/program_tier_loop.go to create IMPL
+            branches and thread MergeTarget through wave execution.
+
+            **Repo:** scout-and-wave-go (`/Users/dayna.blackwell/code/scout-and-wave-go`)
+
+            **Changes to program_tier_loop.go:**
+
+            1. In the wave execution loop (Step 8), before calling RunWaveFull,
+               compute the IMPL branch name:
+               ```go
+               implBranch := protocol.ProgramBranchName(manifest.ProgramSlug, currentTier, slug)
+               ```
+
+            2. Pass MergeTarget to RunWaveFull:
+               ```go
+               _, waveErr := RunWaveFull(ctx, RunWaveFullOpts{
+                   ManifestPath: implPath,
+                   RepoPath:     opts.RepoPath,
+                   WaveNum:      wave,
+                   MergeTarget:  implBranch,
+               })
+               ```
+
+            3. Before the wave loop for each IMPL, ensure the IMPL branch exists.
+               Use CreateProgramWorktrees if not already called, or directly create
+               the branch using git if the worktree already exists:
+               ```go
+               // Ensure IMPL branch exists before wave execution
+               implBranch := protocol.ProgramBranchName(manifest.ProgramSlug, currentTier, slug)
+               if !git.BranchExists(opts.RepoPath, implBranch) {
+                   if _, err := git.Run(opts.RepoPath, "checkout", "-b", implBranch); err != nil {
+                       // handle error
+                   }
+               }
+               ```
+
+            **Interfaces to Call:**
+            - `protocol.ProgramBranchName(programSlug, tierNumber, implSlug) string` — already exists
+            - `RunWaveFull(ctx, RunWaveFullOpts)` — Agent D adds MergeTarget field
+
+            **Tests (program_tier_loop_test.go):**
+            - TestRunTierLoop_PassesMergeTarget: verify MergeTarget is set to IMPL branch name
+            - TestRunTierLoop_CreatesIMPLBranch: verify IMPL branch is created before wave execution
+
+            ## Verification Gate
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go
+            go build ./...
+            go test ./pkg/engine/ -run TestRunTierLoop
+            go vet ./pkg/engine/
+            ```
+
+            ## Constraints
+            - Do NOT modify RunWaveFullOpts — Agent D owns that struct
+            - You may reference the MergeTarget field but Agent D creates it
+            - Keep backward compatibility: when not in program context, MergeTarget stays empty
+            - git.BranchExists and git.Run are in internal/git/commands.go (read-only for you)
+            - To create a branch use git.Run(repoDir, "checkout", "-b", branchName) — there is no git.CreateBranch
+          files:
+            - pkg/engine/program_tier_loop.go
+            - pkg/engine/program_tier_loop_test.go
+          dependencies:
+            - A
+        - id: D
+          task: |
+            ## What to Implement
+
+            Add MergeTarget field to RunWaveFullOpts and FinalizeWaveOpts, and thread
+            it through to MergeAgents.
+
+            **Repo:** scout-and-wave-go (`/Users/dayna.blackwell/code/scout-and-wave-go`)
+
+            **Changes to run_wave_full.go:**
+
+            1. Add `MergeTarget string` field to RunWaveFullOpts struct.
+
+            2. In RunWaveFull, pass MergeTarget to MergeAgents:
+               ```go
+               ma, err := protocol.MergeAgents(opts.ManifestPath, opts.WaveNum, opts.RepoPath, opts.MergeTarget)
+               ```
+
+            **Changes to finalize.go:**
+
+            1. Add `MergeTarget string` field to FinalizeWaveOpts struct.
+
+            2. In FinalizeWave, pass MergeTarget to MergeAgents:
+               ```go
+               mergeResult, err := protocol.MergeAgents(opts.IMPLPath, opts.WaveNum, opts.RepoPath, opts.MergeTarget)
+               ```
+
+            **Interfaces to Implement:**
+            - RunWaveFullOpts.MergeTarget string — new field
+            - FinalizeWaveOpts.MergeTarget string — new field
+
+            **Interfaces to Call:**
+            - `protocol.MergeAgents(manifestPath, waveNum, repoDir, mergeTarget string)` — Agent E updates this signature
+
+            **Tests (finalize_test.go):**
+            - TestFinalizeWave_MergeTargetPropagation: verify MergeTarget flows to MergeAgents
+            - TestRunWaveFull_MergeTargetDefault: verify empty MergeTarget works (backward compat)
+
+            ## Verification Gate
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go
+            go build ./...
+            go test ./pkg/engine/ -run "TestFinalizeWave|TestRunWaveFull"
+            go vet ./pkg/engine/
+            ```
+
+            ## Constraints
+            - Do NOT modify MergeAgents signature — Agent E owns that function
+            - MergeTarget empty string = merge to current HEAD (backward compatible default)
+            - Do NOT modify program_tier_loop.go — Agent C owns that file
+          files:
+            - pkg/engine/run_wave_full.go
+            - pkg/engine/finalize.go
+            - pkg/engine/finalize_test.go
+          dependencies:
+            - A
+        - id: E
+          task: |
+            ## What to Implement
+
+            Update MergeAgents to accept a mergeTarget parameter, update the CLI
+            commands (finalize-wave, prepare-wave) with --merge-target flags.
+
+            **Repo:** scout-and-wave-go (`/Users/dayna.blackwell/code/scout-and-wave-go`)
+
+            **Changes to pkg/protocol/merge_agents.go:**
+
+            1. Update MergeAgents signature to accept mergeTarget:
+               ```go
+               func MergeAgents(manifestPath string, waveNum int, repoDir string, mergeTarget string) (*MergeAgentsResult, error)
+               ```
+
+            2. In mergeAgentsSingleRepo and mergeAgentsMultiRepo, when mergeTarget
+               is non-empty:
+               - Before merging agent branches, checkout the mergeTarget branch:
+                 ```go
+                 if mergeTarget != "" {
+                     if _, err := git.Run(repoDir, "checkout", mergeTarget); err != nil {
+                         return nil, fmt.Errorf("failed to checkout merge target %s: %w", mergeTarget, err)
+                     }
+                 }
+                 ```
+               - After all merges complete, if mergeTarget was used, stay on that branch
+                 (do NOT checkout back to main — the caller manages branch state)
+
+            3. Update all internal callers of mergeAgentsSingleRepo and
+               mergeAgentsMultiRepo to pass mergeTarget through.
+
+            **Changes to cmd/saw/finalize_wave.go:**
+
+            1. Add `--merge-target` string flag (default empty).
+            2. Pass mergeTarget to protocol.MergeAgents calls in the merge step.
+            3. When mergeTarget is set, run verify-build on the merge target branch
+               (the current checkout will already be on merge target after merge).
+
+            **Changes to cmd/saw/prepare_wave.go:**
+
+            1. Add `--merge-target` string flag (default empty).
+            2. When mergeTarget is set, checkout the merge target branch before
+               running baseline quality gates (Step 0b2).
+            3. Create worktrees branching from the merge target branch instead of HEAD.
+               This requires passing the base ref to protocol.CreateWorktrees or
+               checking out the merge target before worktree creation.
+
+            **Tests:**
+            - merge_agents_test.go: TestMergeAgents_WithMergeTarget: verify checkout
+              to mergeTarget before merge
+            - merge_agents_test.go: TestMergeAgents_EmptyMergeTarget: verify backward
+              compat (no checkout)
+            - finalize_wave_test.go: TestFinalizeWave_MergeTargetFlag: verify flag parsing
+            - (prepare_wave tests if they exist): verify --merge-target flag
+
+            ## Verification Gate
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go
+            go build ./...
+            go test ./pkg/protocol/ -run TestMergeAgents
+            go test ./cmd/saw/ -run "TestFinalizeWave|TestPrepareWave"
+            go vet ./...
+            ```
+
+            ## Constraints
+            - Backward compatible: empty mergeTarget = no checkout, merge to HEAD as before
+            - Do NOT modify finalize.go or run_wave_full.go — Agent D owns those
+            - Do NOT modify program_tier_loop.go — Agent C owns that
+            - The git checkout for merge target must happen BEFORE the merge loop,
+              not inside each individual merge call
+            - After merge, do NOT checkout back to main — let the caller manage state
+          files:
+            - pkg/protocol/merge_agents.go
+            - pkg/protocol/merge_agents_test.go
+            - cmd/saw/finalize_wave.go
+            - cmd/saw/finalize_wave_test.go
+            - cmd/saw/prepare_wave.go
+          dependencies:
+            - A
+    - number: 3
+      agents:
+        - id: F
+          task: |
+            ## What to Implement
+
+            Update the web app's program handler to pass MergeTarget through the
+            tier execution API.
+
+            **Repo:** scout-and-wave-web (`/Users/dayna.blackwell/code/scout-and-wave-web`)
+
+            **Changes to pkg/api/program_handler.go:**
+
+            1. In handleExecuteTier, when calling the engine's RunTierLoop (or
+               the equivalent service function), the tier loop now automatically
+               creates IMPL branches and passes MergeTarget internally. Verify
+               the service layer passes through correctly.
+
+            2. If the web handler calls RunWaveFull or FinalizeWave directly
+               (rather than through RunTierLoop), update those calls to compute
+               and pass MergeTarget when executing within a program context:
+               ```go
+               implBranch := protocol.ProgramBranchName(programSlug, tierNum, implSlug)
+               ```
+
+            3. Add SSE event types for IMPL branch lifecycle:
+               - `impl_branch_created` — emitted when IMPL branch is created
+               - `impl_branch_merged` — emitted when IMPL branch merges to main
+               Include these in the tier execution event stream.
+
+            **Tests (program_handler_test.go):**
+            - TestHandleExecuteTier_IMPLBranchIsolation: verify MergeTarget flows
+            - TestHandleExecuteTier_BackwardCompat: verify non-program waves unaffected
+
+            ## Verification Gate
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-web
+            go build ./...
+            go test ./pkg/api/ -run TestHandleExecuteTier
+            go vet ./pkg/api/
+            ```
+
+            ## Constraints
+            - Do NOT modify engine code — only web layer
+            - The engine's RunTierLoop handles IMPL branching internally after Wave 2
+            - Web layer just needs to pass program context through and emit SSE events
+          files:
+            - pkg/api/program_handler.go
+            - pkg/api/program_handler_test.go
+          dependencies:
+            - C
+            - D
+        - id: G
+          task: |
+            ## What to Implement
+
+            Update the frontend TypeScript API client to handle new SSE events
+            for IMPL branch lifecycle.
+
+            **Repo:** scout-and-wave-web (`/Users/dayna.blackwell/code/scout-and-wave-web`)
+
+            **Changes to web/src/programApi.ts:**
+
+            1. Add TypeScript types for new SSE events:
+               ```typescript
+               interface ImplBranchCreatedEvent {
+                 type: 'impl_branch_created';
+                 payload: {
+                   tier: number;
+                   impl_slug: string;
+                   branch: string;
+                 };
+               }
+
+               interface ImplBranchMergedEvent {
+                 type: 'impl_branch_merged';
+                 payload: {
+                   tier: number;
+                   impl_slug: string;
+                   branch: string;
+                   merge_commit: string;
+                 };
+               }
+               ```
+
+            2. Update the TierExecutionEvent union type to include the new events.
+
+            3. Update SSE event handler to process impl_branch_created and
+               impl_branch_merged events and update UI state accordingly.
+
+            4. If there is a tier status display, add IMPL branch information
+               (branch name, merge status) to the tier detail view.
+
+            ## Verification Gate
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-web/web
+            npx tsc --noEmit
+            ```
+
+            ## Constraints
+            - Do NOT modify Go backend code — Agent F owns that
+            - Match existing SSE event handling patterns in the codebase
+            - TypeScript types must match the Go struct definitions Agent F creates
+          files:
+            - web/src/programApi.ts
+          dependencies:
+            - C
+            - D
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./...
+          required: true
+          repo: scout-and-wave-go
+        - type: test
+          command: go test ./...
+          required: true
+          repo: scout-and-wave-go
+        - type: lint
+          command: go vet ./...
+          required: false
+          repo: scout-and-wave-go
+pre_mortem:
+    overall_risk: medium
+    rows:
+        - scenario: Agent D adds MergeTarget to RunWaveFullOpts but Agent C references it before Agent D's wave completes
+          likelihood: low
+          impact: low
+          mitigation: Both agents are in Wave 2 and work in separate files. Agent C references the field name but Agent D defines it. The struct field addition is a compile-time dependency resolved at merge.
+        - scenario: Agent E changes MergeAgents signature but callers in other agents' files still use old 3-arg version
+          likelihood: medium
+          impact: high
+          mitigation: Agent D must update its MergeAgents calls in finalize.go and run_wave_full.go to pass mergeTarget. Both D and E are in Wave 2; after merge, go build catches any signature mismatch immediately.
+        - scenario: git checkout to merge target branch fails because branch doesn't exist
+          likelihood: medium
+          impact: medium
+          mitigation: Agent C creates IMPL branches before wave execution. Agent E's MergeAgents should validate branch existence before checkout and return a clear error if missing.
+        - scenario: Backward compatibility break — non-program waves fail because MergeAgents now requires 4 args
+          likelihood: low
+          impact: high
+          mitigation: All existing callers are updated in Wave 2. Empty string default preserves existing behavior. Post-merge test suite catches any missed callsites.
+        - scenario: Web app (Wave 3) imports updated scout-and-wave-go but go.mod replace directive points to old version
+          likelihood: medium
+          impact: medium
+          mitigation: Wave 3 agents should verify go.mod replace directives point to the correct local path before building.
+state: REVIEWED

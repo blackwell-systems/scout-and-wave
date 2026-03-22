@@ -24,6 +24,18 @@
         "cached_at": "2026-03-20T18:57:04.239555-07:00"
       }
     },
+    "1ad3e0ff178c2fb07a5459ce877682d5": {
+      "build": {
+        "gate_type": "build",
+        "command": "go build ./...",
+        "passed": false,
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "pattern ./...: directory prefix . does not contain main module or its selected dependencies\n",
+        "from_cache": true,
+        "cached_at": "2026-03-21T16:55:51.768168-07:00"
+      }
+    },
     "3538fee64250538ea62414158451c2c1": {
       "custom": {
         "gate_type": "custom",
@@ -244,6 +256,30 @@
         "cached_at": "2026-03-20T18:57:01.052808-07:00"
       }
     },
+    "a11a0ab1118080cf66df3fae9ed44861": {
+      "test": {
+        "gate_type": "test",
+        "command": "go test ./...",
+        "passed": false,
+        "exit_code": 1,
+        "stdout": "FAIL\t./... [setup failed]\nFAIL\n",
+        "stderr": "# ./...\npattern ./...: directory prefix . does not contain main module or its selected dependencies\n",
+        "from_cache": true,
+        "cached_at": "2026-03-21T16:55:51.989241-07:00"
+      }
+    },
+    "a151c374357a17f1104e7cc0979404da": {
+      "lint": {
+        "gate_type": "lint",
+        "command": "go vet ./...",
+        "passed": false,
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "pattern ./...: directory prefix . does not contain main module or its selected dependencies\n",
+        "from_cache": true,
+        "cached_at": "2026-03-21T22:09:28.619835-07:00"
+      }
+    },
     "a6351909e001dcc713fe30781e8bd7cb": {
       "custom": {
         "gate_type": "custom",
@@ -434,6 +470,18 @@
         "cached_at": "2026-03-18T14:08:54.017409-07:00"
       }
     },
+    "d25b072751006192662e517689d309c2": {
+      "lint": {
+        "gate_type": "lint",
+        "command": "go vet ./...",
+        "passed": false,
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "pattern ./...: directory prefix . does not contain main module or its selected dependencies\n",
+        "from_cache": true,
+        "cached_at": "2026-03-21T16:55:51.891641-07:00"
+      }
+    },
     "d276af43f673d5df01771cca147a6843": {
       "custom": {
         "gate_type": "custom",
@@ -444,6 +492,18 @@
         "stderr": "",
         "from_cache": true,
         "cached_at": "2026-03-19T22:59:14.727281-07:00"
+      }
+    },
+    "d508d933247b96d45292db87401aac65": {
+      "build": {
+        "gate_type": "build",
+        "command": "go build ./...",
+        "passed": false,
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "pattern ./...: directory prefix . does not contain main module or its selected dependencies\n",
+        "from_cache": true,
+        "cached_at": "2026-03-21T22:09:28.502143-07:00"
       }
     },
     "d64f32cd97f44cd0e89d32c2cb476b8b": {
@@ -476,6 +536,18 @@
         "stderr": "# ./...\npattern ./...: directory prefix . does not contain main module or its selected dependencies\n",
         "from_cache": true,
         "cached_at": "2026-03-19T14:23:09.135827-07:00"
+      }
+    },
+    "d6e41a8ba18084e14c3136034894baa6": {
+      "custom": {
+        "gate_type": "custom",
+        "command": "test -f protocol/program-invariants.md",
+        "passed": true,
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": "",
+        "from_cache": true,
+        "cached_at": "2026-03-21T22:10:49.693549-07:00"
       }
     },
     "da185ec6b135fb4e89af6393358d49e3": {
@@ -520,6 +592,18 @@
         "stderr": "",
         "from_cache": true,
         "cached_at": "2026-03-20T18:57:02.135113-07:00"
+      }
+    },
+    "e7cfa96771fc4a6ebd31f27ed1fdf464": {
+      "test": {
+        "gate_type": "test",
+        "command": "go test ./...",
+        "passed": false,
+        "exit_code": 1,
+        "stdout": "FAIL\t./... [setup failed]\nFAIL\n",
+        "stderr": "# ./...\npattern ./...: directory prefix . does not contain main module or its selected dependencies\n",
+        "from_cache": true,
+        "cached_at": "2026-03-21T22:09:28.721472-07:00"
       }
     },
     "edcc2a03c47a69cc09f2e3bb9d3c273c": {
