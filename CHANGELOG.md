@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.59.0] | 2026-03-22 | Housekeeping — deleted stale `docs/skills-best-practices-audit.md`, added `block_claire_paths` PreToolUse hook to platform hooks, ROADMAP.md trimmed (91% reduction, shipped items collapsed), determinism-roadmap.md updated (added M4 pre-commit quality gate), `.gitignore` updated for SAW artifacts |
 | [0.58.0] | 2026-03-22 | Documentation consistency fixes — 28 audit findings resolved across 14 files (version badges, E-rule ranges, broken symlinks, worktree paths); ROADMAP.md trimmed from 1044 to 98 lines; hooks.md rewritten with 3-layer enforcement model; architecture.md updated with program layer, daemon, web app sections |
 | [0.57.0] | 2026-03-22 | Program-tier isolation (E28B, P5) — IMPL branch model for safe parallel IMPL execution within program tiers; `--merge-target` flag on prepare-wave/finalize-wave; saw-skill.md updated with create-program-worktrees flow |
 | [0.56.0] | 2026-03-22 | SDK-to-main merge — `sdk` branch merged into `main`, stale branches deleted (develop, feat/*); single-branch workflow; onboarding improvement plan + competitive analyses (Agent Orchestrator, Paperclip); observability roadmap; `block_claire_paths` PreToolUse hook |
