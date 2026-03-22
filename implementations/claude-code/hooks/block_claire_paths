@@ -1,0 +1,14 @@
+#!/bin/bash
+# PreToolUse hook: block writes to .claire (should be .claude)
+# Models occasionally hallucinate .claire instead of .claude for directory paths.
+# This is a known token prediction issue where ".cla" completes to "ire" instead of "ude".
+
+input=$(cat)
+file_path=$(echo "$input" | jq -r '.tool_input.file_path // .tool_input.command // ""')
+
+if echo "$file_path" | grep -q '\.claire'; then
+  echo '{"decision":"block","reason":"BLOCKED: You wrote .claire — the correct directory is .claude. Fix the path and retry."}'
+  exit 0
+fi
+
+echo '{"decision":"approve"}'

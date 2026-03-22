@@ -7,8 +7,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HOOK_SCRIPT="$SCRIPT_DIR/check_scout_boundaries"
 VALIDATE_SCRIPT="$SCRIPT_DIR/validate_impl_on_write"
+CLAIRE_SCRIPT="$SCRIPT_DIR/block_claire_paths"
 SYMLINK_PATH="$HOME/.local/bin/check_scout_boundaries"
 VALIDATE_SYMLINK="$HOME/.local/bin/validate_impl_on_write"
+CLAIRE_SYMLINK="$HOME/.local/bin/block_claire_paths"
 SETTINGS_FILE="$HOME/.claude/settings.json"
 
 echo "🔧 Installing SAW hooks..."
@@ -43,6 +45,20 @@ else
   echo "   ✓ Created symlink: $VALIDATE_SYMLINK"
 fi
 chmod +x "$VALIDATE_SCRIPT"
+
+# block_claire_paths hook (known model hallucination: .claire instead of .claude)
+echo "   Installing block_claire_paths..."
+if [ -L "$CLAIRE_SYMLINK" ]; then
+  ln -sf "$CLAIRE_SCRIPT" "$CLAIRE_SYMLINK"
+  echo "   ✓ Symlink updated: $CLAIRE_SYMLINK"
+elif [ -e "$CLAIRE_SYMLINK" ]; then
+  echo "   ✗ Error: $CLAIRE_SYMLINK exists but is not a symlink"
+  exit 1
+else
+  ln -sf "$CLAIRE_SCRIPT" "$CLAIRE_SYMLINK"
+  echo "   ✓ Created symlink: $CLAIRE_SYMLINK"
+fi
+chmod +x "$CLAIRE_SCRIPT"
 echo
 
 # Step 2: Configure settings.json
@@ -121,6 +137,33 @@ else
   mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
   echo "   ✓ Added PostToolUse IMPL validation hook"
 fi
+
+# Add .claire path blocker hook
+CLAIRE_HOOK_CONFIG=$(cat <<'EOF'
+{
+  "matcher": "Write|Edit|Bash",
+  "hooks": [
+    {
+      "type": "command",
+      "command": "$HOME/.local/bin/block_claire_paths"
+    }
+  ]
+}
+EOF
+)
+
+CLAIRE_EXISTING=$(jq -r '.hooks.PreToolUse // [] | map(select(.hooks[]?.command | contains("block_claire_paths"))) | length' "$SETTINGS_FILE")
+
+if [ "$CLAIRE_EXISTING" -gt 0 ]; then
+  echo "   ✓ .claire path blocker already configured (skipping)"
+else
+  jq --argjson hook "$CLAIRE_HOOK_CONFIG" '
+    .hooks.PreToolUse = (.hooks.PreToolUse // []) + [$hook]
+  ' "$SETTINGS_FILE" > "$SETTINGS_FILE.tmp"
+
+  mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
+  echo "   ✓ Added PreToolUse .claire path blocker"
+fi
 echo
 
 # Step 3: Verify installation
@@ -180,8 +223,9 @@ echo "✅ Installation complete!"
 echo
 echo "Active hooks:"
 echo "  PreToolUse:  check_scout_boundaries (I6 — Scouts can only write IMPL docs)"
+echo "  PreToolUse:  block_claire_paths (blocks .claire typo, suggests .claude)"
 echo "  PostToolUse: validate_impl_on_write (E16 — IMPL docs validated on write)"
 echo
 echo "To uninstall:"
-echo "  1. Remove symlinks: rm $SYMLINK_PATH $VALIDATE_SYMLINK"
+echo "  1. Remove symlinks: rm $SYMLINK_PATH $VALIDATE_SYMLINK $CLAIRE_SYMLINK"
 echo "  2. Edit $SETTINGS_FILE and remove the PreToolUse/PostToolUse hook entries"
