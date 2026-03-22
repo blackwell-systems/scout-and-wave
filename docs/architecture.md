@@ -68,12 +68,14 @@ repo/
 ├── main branch files...
 └── .claude/
     └── worktrees/
-        ├── wave1-agent-A/    # Isolated worktree
-        │   ├── .git -> ...   # Links to main .git
-        │   └── [files]       # Agent A's workspace
-        └── wave1-agent-B/    # Isolated worktree
-            ├── .git -> ...
-            └── [files]       # Agent B's workspace
+        └── saw/
+            └── {slug}/
+                ├── wave1-agent-A/    # Isolated worktree
+                │   ├── .git -> ...   # Links to main .git
+                │   └── [files]       # Agent A's workspace
+                └── wave1-agent-B/    # Isolated worktree
+                    ├── .git -> ...
+                    └── [files]       # Agent B's workspace
 ```
 
 **Benefits:**
@@ -343,8 +345,10 @@ repo/
 ├── .git/                           # Main git directory
 ├── .claude/
 │   ├── worktrees/                  # Isolated worktrees (I3)
-│   │   ├── wave1-agent-A/
-│   │   └── wave1-agent-B/
+│   │   └── saw/
+│   │       └── {slug}/
+│   │           ├── wave1-agent-A/
+│   │           └── wave1-agent-B/
 │   └── sessions/                   # Claude Code session logs (read by journal)
 │       └── 1a2b3c4d.jsonl
 ├── .saw-state/
@@ -375,7 +379,10 @@ Project-local config at `<repo>/saw.config.json` or global default at `~/.claude
     "scout_model": "claude-sonnet-4-5",
     "wave_model": "claude-sonnet-4-5",
     "chat_model": "claude-sonnet-4-5",
-    "integration_model": "claude-sonnet-4-5"
+    "integration_model": "claude-sonnet-4-5",
+    "scaffold_model": "claude-sonnet-4-5",
+    "planner_model": "claude-sonnet-4-5",
+    "critic_model": "claude-sonnet-4-5"
   },
   "journal": {
     "enabled": true,
@@ -395,6 +402,6 @@ Project-local config at `<repo>/saw.config.json` or global default at `~/.claude
 ## See Also
 
 - [Protocol Invariants](../protocol/invariants.md) — I1-I6 formal specification
-- [Protocol Execution Rules](../protocol/execution-rules.md) — E1-E26 orchestrator rules
+- [Protocol Execution Rules](../protocol/execution-rules.md) — E1-E41 orchestrator rules
 - [Tool Journaling](./tool-journaling.md) — Compaction safety system
 - [Orchestrator Skill](../implementations/claude-code/prompts/saw-skill.md) — /saw command implementation

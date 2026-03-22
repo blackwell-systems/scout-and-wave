@@ -39,10 +39,10 @@ Do you use Claude Code?
        Do you prefer a web UI?
          |
          +-- Yes --> Set up the web server
-         |           See: QUICKSTART-WEB.md (coming soon)
+         |           See: [QUICKSTART-WEB.md](QUICKSTART-WEB.md)
          |
          +-- No --> Use the CLI directly
-                    See: QUICKSTART-CLI.md (coming soon)
+                    See: [QUICKSTART-CLI.md](QUICKSTART-CLI.md)
 ```
 
 Most users start with the Claude Code skill. You can always add the Web UI or CLI later.
