@@ -17,6 +17,7 @@ catches violations that earlier layers might miss, providing defense in depth.
 |------|-------|-----------|---------|----------------|
 | `check_scout_boundaries` | 1 (PreToolUse) | I6 | Scout calls Write or Edit | Scout writing outside `docs/IMPL/IMPL-*.yaml` |
 | `check_wave_ownership` | 1 (PreToolUse) | I1 | Wave agent calls Write, Edit, or NotebookEdit | Wave agent writing files not in its `.saw-ownership.json` |
+| `block_claire_paths` | 1 (PreToolUse) | -- | Any agent calls Write, Edit, or Bash | Operations targeting `.claire` paths (model hallucination guard) |
 | `validate_impl_on_write` | 1 (PostToolUse) | E16 | Any agent calls Write on an IMPL doc | Saving an IMPL doc that fails `sawtools validate` |
 | SAW pre-commit guard | 2 (Git hook) | I4 | `git commit` in a worktree | Commits to `main`/`master` from agent worktrees |
 | SAW go.mod guard | 2 (Git hook) | -- | `git commit` touching `go.mod` | `replace` directives with deep relative paths (`../../..`) |
@@ -45,10 +46,12 @@ It performs these steps:
 1. **Creates symlinks** in `~/.local/bin/` pointing to the hook scripts in the
    repo:
    - `~/.local/bin/check_scout_boundaries` -> `implementations/claude-code/hooks/check_scout_boundaries`
+   - `~/.local/bin/block_claire_paths` -> `implementations/claude-code/hooks/block_claire_paths`
    - `~/.local/bin/validate_impl_on_write` -> `implementations/claude-code/hooks/validate_impl_on_write`
 
 2. **Merges hook configuration** into `~/.claude/settings.json` using `jq`:
    - Adds a `PreToolUse` entry for `check_scout_boundaries` with matcher `Write|Edit`
+   - Adds a `PreToolUse` entry for `block_claire_paths` with matcher `Write|Edit|Bash`
    - Adds a `PostToolUse` entry for `validate_impl_on_write` with matcher `Write`
 
 3. **Verifies** the installation by checking symlinks are executable and
@@ -117,6 +120,29 @@ Normalized: pkg/api/routes.go
 Owned files for this agent:
   - web/src/components/Dashboard.tsx
   - web/src/types.ts
+```
+
+### block_claire_paths
+
+**File:** `implementations/claude-code/hooks/block_claire_paths`
+**Type:** PreToolUse
+**Matcher:** `Write|Edit|Bash`
+**Invariant:** None (model hallucination guard)
+
+Blocks tool calls that reference `.claire` in file paths. This is a guardrail
+against a known, widespread model hallucination where the model writes `.claire`
+instead of `.claude` for directory paths (e.g., `~/.claire/settings.json`
+instead of `~/.claude/settings.json`). This has been reported across multiple
+models and is documented on Reddit.
+
+**Logic:**
+- Inspects the tool input for any file path or command string containing `.claire`.
+- Exits 1 with a corrective message on stderr if `.claire` is found.
+- Exits 0 (allow) otherwise.
+
+**Example block output:**
+```
+BLOCKED: You wrote .claire — the correct directory is .claude. Fix the path and retry.
 ```
 
 ### validate_impl_on_write (E16)
@@ -327,6 +353,7 @@ These are used for after-the-fact auditing, not real-time blocking.
 1. **Check symlinks exist and are executable:**
    ```bash
    ls -la ~/.local/bin/check_scout_boundaries
+   ls -la ~/.local/bin/block_claire_paths
    ls -la ~/.local/bin/validate_impl_on_write
    ```
    Both should be symlinks (`l` prefix) pointing into the repo's
@@ -336,8 +363,8 @@ These are used for after-the-fact auditing, not real-time blocking.
    ```bash
    cat ~/.claude/settings.json | jq '.hooks'
    ```
-   Verify `PreToolUse` contains `check_scout_boundaries` and `PostToolUse`
-   contains `validate_impl_on_write`.
+   Verify `PreToolUse` contains `check_scout_boundaries` and
+   `block_claire_paths`, and `PostToolUse` contains `validate_impl_on_write`.
 
 3. **Check jq is installed** (required by all hook scripts):
    ```bash
