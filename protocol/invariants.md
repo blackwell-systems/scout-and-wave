@@ -117,6 +117,22 @@ The journal is agent-private working memory. It is not distributed to other agen
 
 ---
 
+## P5: IMPL Branch Isolation
+
+**Formal Statement:** Within a program tier, each IMPL's wave merges target the IMPL's dedicated branch, not main. Main is only updated by `FinalizeTier` after all IMPLs in the tier complete and the tier gate passes.
+
+**Enforcement:** The Orchestrator creates a long-lived IMPL branch using `ProgramBranchName()` before executing waves for each IMPL. The `MergeTarget` field is threaded through `RunWaveFull`, `FinalizeWave`, and `MergeAgents` to ensure all agent branch merges land on the IMPL branch. `FinalizeTier` is the sole operation that merges IMPL branches to main.
+
+**Rationale:** Without branch isolation, a wave merge from IMPL-A could land on main while IMPL-B's waves are still in progress. IMPL-B's next wave would then branch from a main that contains IMPL-A's partial work, creating implicit coupling between supposedly independent IMPLs. This violates P1 (intra-tier independence) in practice even when file ownership is disjoint, because build state, test state, and transitive dependencies can leak across IMPL boundaries.
+
+Branch isolation ensures that each IMPL develops against a stable baseline (its own branch forked from main at the start of the tier) and that main only advances when the full tier is verified.
+
+**Backward Compatibility:** When `MergeTarget` is empty (the default for non-program execution), waves merge to the current HEAD as before. P5 only applies when the Orchestrator is executing within a program tier context.
+
+**Related Rules:** See E28B (IMPL Branch Isolation) in `execution-rules.md`, E29 (Tier Gate Verification), P1 (intra-tier independence) in `program-invariants.md`
+
+---
+
 ## Protocol Violations
 
 Conditions that break invariants and invalidate the correctness guarantees:
@@ -129,6 +145,7 @@ Conditions that break invariants and invalidate the correctness guarantees:
 | Completion report written to chat only | I4 | Downstream agents get stale context |
 | Agent reports complete with uncommitted changes | I5 | Merge requires manual copy |
 | Orchestrator performs Scout, Scaffold Agent, Wave Agent, or Integration Agent duties | I6 | Context pollution, broken observability, async execution bypassed |
+| IMPL wave merged to main during tier execution | P5 | Other IMPLs see partial state, potential breakage |
 
 ---
 
@@ -141,6 +158,7 @@ When all preconditions hold and all invariants are maintained:
 - Integration failures surface at wave boundaries, not at the end of all waves
 - Downstream agents always receive accurate context (IMPL doc reflects actual state)
 - The orchestrator can detect disjoint ownership violations before touching the working tree
+- No IMPL's in-progress wave merge can break another IMPL's work within the same tier
 
 ---
 
