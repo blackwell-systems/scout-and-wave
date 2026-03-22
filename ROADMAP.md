@@ -562,15 +562,15 @@ Completion report: ✓ Written (15:25)
 
 ### Deliverables
 
-- [ ] **Core journal implementation** — `pkg/journal/journal.go` (ToolJournal, ToolEntry, JSONL persistence)
-- [ ] **Context generator** — `pkg/journal/context.go` (analyze entries, generate markdown summary)
-- [ ] **Checkpoint system** — `pkg/journal/checkpoint.go` (named snapshots at key milestones)
+- [x] **Core journal implementation** — `pkg/journal/journal.go` (ToolJournal, ToolEntry, JSONL persistence)
+- [x] **Context generator** — `pkg/journal/context.go` (analyze entries, generate markdown summary)
+- [x] **Checkpoint system** — `pkg/journal/checkpoint.go` (named snapshots at key milestones)
 - [ ] **Workshop integration** — `pkg/tools/workshop.go` (JournalingMiddleware, inject journal into context)
 - [ ] **Runner integration** — `pkg/engine/runner.go` (load journal before launch, inject context into prompt)
-- [ ] **CLI tooling** — `cmd/sawtools/debug_journal.go` (inspect, summarize, export journals)
+- [x] **CLI tooling** — `cmd/sawtools/debug_journal.go` (inspect, summarize, export journals)
 - [ ] **Archive policy** — `pkg/journal/archive.go` (compress after merge, cleanup after completion)
 - [ ] **Protocol documentation** — E23A in `protocol/execution-rules.md`, I4 clarification in `protocol/invariants.md`
-- [ ] **Tests** — `pkg/journal/journal_test.go` (append, load, checkpoint, context generation)
+- [x] **Tests** — `pkg/journal/journal_test.go` (append, load, checkpoint, context generation)
 
 ### Integration & Downstream Work
 
@@ -956,6 +956,11 @@ Agents receive only the slices relevant to them (E23 extraction becomes trivial 
 
 ## IMPL-Level Parallelism (Concurrent Feature Execution)
 
+> **Superseded by Program Layer.** The concerns in this section are now addressed
+> by program invariants (P1-P4) in `protocol/program-invariants.md` and the
+> program manifest format in `protocol/program-manifest.md`. Tier-gated execution
+> replaces the proposed meta-orchestrator and I7 invariant.
+
 **Current state:** SAW enforces disjoint file ownership within a wave (I1), but IMPL docs are always executed serially. One feature completes and merges before the next begins.
 
 **Problem:** The serial constraint is too conservative. Two features that touch completely different files could execute in parallel — their wave agents would never conflict. But today SAW has no way to express or enforce this, so everything queues.
@@ -1026,59 +1031,8 @@ The full vision: Scout is a dependency mapper, not a scheduler. The scheduler is
 
 ## SDK Branch as Generated Build Artifact
 
-**Current state:** The `scout-and-wave` repo has two long-lived branches:
-- `main` — natural language only. Refers to the `saw` CLI throughout (e.g., `saw validate`, `saw create-worktrees`).
-- `sdk` — SDK-coupled. All `saw` references replaced with `sawtools` (the Go toolkit binary). This branch is hand-maintained: every commit to `main` that touches an NL reference must be ported to `sdk` manually.
-
-**Problem:** The `main` → `sdk` substitutions are entirely mechanical. Every `saw ` becomes `sawtools `, every "run `saw`" becomes "run `sawtools`", with occasional CLI flag and path adjustments. There is no semantic difference — it is a textual transformation. Hand-maintaining two branches for a mechanical transformation means:
-- Every PR requires a parallel `sdk` version
-- Merge discipline must be enforced by convention, not tooling
-- Contributors must know about the split and remember to port changes
-
-**Proposed:** Treat the `sdk` branch as a **generated build artifact**, not a hand-edited branch. Define a substitution manifest (e.g., `sdk-substitutions.yaml`) that specifies:
-
-```yaml
-substitutions:
-  - pattern: "run `saw "
-    replace: "run `sawtools "
-  - pattern: "exec saw "
-    replace: "exec sawtools "
-  - pattern: "`saw "
-    replace: "`sawtools "
-  # ... other mechanical substitutions
-
-file_includes:
-  - "implementations/claude-code/**/*.md"
-  - "implementations/claude-code/**/*.sh"
-
-# Optionally: files that need non-mechanical edits (override substitution for specific files)
-overrides:
-  - file: "implementations/claude-code/scripts/install.sh"
-    manual: true   # This file is maintained manually in both branches
-```
-
-A CI step (GitHub Actions) generates the `sdk` branch on every push to `main`:
-1. Checkout `main`
-2. Apply all substitutions to all included files
-3. Apply any manual overrides
-4. Force-push the result to `sdk`
-
-The `sdk` branch becomes a read-only generated artifact — never committed to directly. PRs target `main` only. The substitution manifest is the diff between `main` and `sdk`.
-
-**Benefits:**
-- `main` is the only branch contributors touch
-- `sdk` is always up-to-date (generated on every push, not manually ported)
-- Substitution rules are explicit and auditable (the manifest makes the transformation inspectable)
-- Adding new binary-split variants in the future (e.g., a different package manager name) requires only a new manifest entry, not a new hand-maintained branch
-
-**Long-term extension:** If the binary split ever deepens (e.g., different config file paths, different env vars), the manifest grows but the workflow is unchanged. Multiple "flavor" branches (sdk, sdk-docker, sdk-ci) could each have their own manifest.
-
-**Implementation scope:** CI/CD only (`scout-and-wave` repo). No protocol changes required — the protocol content is unchanged; only the tooling that generates the SDK-coupled distribution changes.
-
-**Protocol changes required:** None for the protocol itself. New files:
-- `scripts/generate-sdk-branch.sh` — applies the substitution manifest and commits to `sdk`
-- `.github/workflows/generate-sdk.yml` — triggers on push to `main`
-- `sdk-substitutions.yaml` — the substitution manifest
+**RESOLVED (v0.54.0).** The `sdk` branch was merged into `main`. The dual-branch
+approach described here is no longer needed. `main` now uses `sawtools` throughout.
 
 ---
 
