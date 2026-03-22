@@ -7,7 +7,7 @@ This guide walks you through installing all Scout-and-Wave components. Most user
 | Tool | Minimum Version | Check With |
 |---|---|---|
 | Git | 2.20+ | `git --version` |
-| Go | 1.25+ | `go version` |
+| Go | 1.25+ (tested with 1.26) | `go version` |
 | Node.js | 18+ | `node --version` |
 | Claude Code | Latest | `claude --version` |
 
