@@ -10,10 +10,10 @@ Read these documents in order to understand the complete protocol:
 
 | Document | Description |
 |----------|-------------|
-| [participants.md](participants.md) | Defines the five participant roles (Orchestrator, Scout, Scaffold Agent, Wave Agent, Integration Agent), their execution modes, responsibilities, and forbidden actions |
+| [participants.md](participants.md) | Defines the seven participant roles (Orchestrator, Scout, Scaffold Agent, Wave Agent, Integration Agent, Critic Agent, Planner), their execution modes, responsibilities, and forbidden actions |
 | [preconditions.md](preconditions.md) | Lists the five preconditions that must hold before the protocol may run (file decomposition, investigation-first blockers, interface discoverability, pre-implementation scan, parallelization value) |
 | [invariants.md](invariants.md) | Specifies the six invariants that must hold throughout protocol execution (disjoint file ownership, interface contracts precede parallel implementation, wave sequencing, etc.) |
-| [execution-rules.md](execution-rules.md) | Defines twenty-six execution rules (E1–E26) governing state transitions, agent launches, completion handling, automatic failure remediation in --auto mode (E7a), merge procedures, verification gates, IMPL doc lifecycle, Scout output validation, project memory lifecycle (E17/E18), failure taxonomy (E19), stub detection (E20), post-wave quality gates (E21), scaffold build verification (E22), per-agent context extraction (E23), integration validation (E25), and integration agent (E26) |
+| [execution-rules.md](execution-rules.md) | Defines forty-one execution rules (E1–E41) governing state transitions, agent launches, completion handling, automatic failure remediation in --auto mode (E7a), merge procedures, verification gates, IMPL doc lifecycle, Scout output validation, project memory lifecycle (E17/E18), failure taxonomy (E19), stub detection (E20), post-wave quality gates (E21), scaffold build verification (E22), per-agent context extraction (E23), integration validation (E25), integration agent (E26), planned integration waves (E27), program execution tiers and invariants (E28–E34), wiring obligation (E35), IMPL amendment (E36), critic gate (E37), gate caching (E38), interview mode (E39), observability events (E40), and type collision detection (E41) |
 | [state-machine.md](state-machine.md) | Documents the protocol state machine: states, transitions, triggers, and termination conditions |
 | [message-formats.md](message-formats.md) | Specifies structured message formats for IMPL docs, agent prompts, completion reports, and merge summaries |
 | [procedures.md](procedures.md) | Step-by-step procedures for all protocol phases: Scout, Scaffold Agent, wave execution, merge, inter-wave checkpoint, and protocol completion |
@@ -49,7 +49,7 @@ See [execution-rules.md](execution-rules.md) for the formal correctness argument
 
 This protocol specification follows semantic versioning. Breaking changes to invariants, preconditions, or message formats increment the major version. New optional fields or clarifications increment the minor version.
 
-Current version: **0.14.8**
+Current version: **0.55.0**
 
 ## Reference Implementations
 

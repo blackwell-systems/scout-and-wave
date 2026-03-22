@@ -10,6 +10,11 @@ This document defines the preconditions that must hold before the Scout-and-Wave
 
 The protocol may only run when ALL of the following preconditions hold. If any precondition fails, the scout emits `NOT SUITABLE` and the protocol does not proceed.
 
+> **Note:** Precondition labels (P1-P5) in this document refer to suitability
+> preconditions, not program invariants. Program invariants P1-P4 are defined in
+> [program-invariants.md](program-invariants.md). The naming collision is
+> historical; context disambiguates.
+
 ---
 
 ## P1: File Decomposition

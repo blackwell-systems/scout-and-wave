@@ -1,6 +1,6 @@
 # Protocol Participants
 
-SAW has six participant roles. All six are agents (AI model instances running with tool access). They differ only in execution mode and responsibility.
+SAW has seven participant roles. All seven are agents (AI model instances running with tool access). They differ only in execution mode and responsibility.
 
 ## Orchestrator
 
