@@ -195,6 +195,7 @@ All operations use the `sawtools` binary. IMPL docs are YAML manifests (`.yaml`)
 - `sawtools extract-context` — E23 per-agent context extraction
 - `sawtools set-completion` — agent completion report registration
 - `sawtools mark-complete` — E15 SAW:COMPLETE marker and archive to `docs/IMPL/complete/`
+- `sawtools close-impl <manifest>` — batched IMPL close: mark-complete + archive + update-context + clean worktrees (replaces manual 3-step sequence)
 - `sawtools run-gates` — E21/E21A quality gate verification (post-merge and
   pre-wave baseline; E21B: gates run concurrently when multiple gates defined)
 - `sawtools check-conflicts` — I1 file ownership conflict detection
@@ -431,15 +432,11 @@ Follow the brief exactly.
    4. Read the integration agent's completion report from the IMPL doc (agent ID: `integrator`).
 
    In the web app, this runs automatically after `finalize-wave`. CLI users can also run `sawtools validate-integration` manually and review the integration report before proceeding to the next wave.
-9. **E15: IMPL doc completion marker.** If this was the final wave and post-merge verification passed, run:
+9. **E15: IMPL doc completion.** If this was the final wave and post-merge verification passed, run the batched close command:
    ```bash
-   sawtools mark-complete "<impl-doc-path>" --date "YYYY-MM-DD"
+   sawtools close-impl "<impl-doc-path>" --date "YYYY-MM-DD"
    ```
-   This writes the SAW:COMPLETE marker and moves the IMPL doc from `docs/IMPL/` to `docs/IMPL/complete/`, keeping the active directory focused on in-progress work. Then commit the archived IMPL doc. This is the formal close of the IMPL lifecycle. Do not write the marker if more waves remain. **E18: Update project memory.** After writing the SAW:COMPLETE marker, update project context:
-   ```bash
-   sawtools update-context "<manifest-path>" --project-root "<repo-path>"
-   ```
-   This creates or updates `docs/CONTEXT.md` in the project root using the schema in `protocol/message-formats.md`. It appends to `features_completed` (slug, impl_doc path, wave count, agent count, date), appends any new architectural decisions to `decisions`, and any scaffold-file interfaces to `established_interfaces`. Commit both the IMPL doc update and the CONTEXT.md update in the same commit.
+   This atomically: (1) writes the SAW:COMPLETE marker, (2) archives to `docs/IMPL/complete/`, (3) updates `docs/CONTEXT.md` with completion data (E18), and (4) cleans stale worktrees. Commit the results in a single commit. Do not run `close-impl` if more waves remain.
 10. **I3: Wave sequencing.** Wave N+1 does not launch until Wave N has been merged and post-merge verification has passed. If `--auto` was passed and verification passed, immediately proceed to the next wave. Otherwise, report the wave result and ask the user if they want to continue.
 11. If verification fails, report the failures and ask the user how to proceed.
 
