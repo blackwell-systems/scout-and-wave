@@ -205,18 +205,20 @@ All operations use the `sawtools` binary. IMPL docs are YAML manifests (`.yaml`)
 - `sawtools resume-detect` — detect interrupted SAW sessions in the repository
 - `sawtools build-retry-context <manifest> --agent <ID>` — structured failure context for agent retries
 - `sawtools check-program-conflicts <manifest> --tier N` — P1+ pre-flight: verifies no two IMPLs in the tier own the same file (blocks if conflicts found)
-- `sawtools finalize-tier <manifest> --tier N` — merges all IMPL branches for the tier to main after IMPL execution completes
+- `sawtools finalize-tier <manifest> --tier N [--auto]` — merges all IMPL branches for the tier to main after IMPL execution completes; `--auto` calls AdvanceTierAutomatically (gate + freeze + advance in one step)
 - `sawtools tier-gate <manifest> --tier N` — tier quality gate verification (E29)
 - `sawtools freeze-contracts <manifest> --tier N` — program contract freezing (E30)
 - `sawtools program-status <manifest>` — full program status report (E32)
-- `sawtools run-scout "<impl-title>" --program "<manifest>"` — Scout with program contract inputs (E31)
+- `sawtools run-scout "<impl-title>" [--program "<manifest>"]` — automated Scout with ScoutCorrectionLoop (auto-retries E16 up to 3 times); `--program` passes frozen program contracts (E31)
 - `sawtools mark-program-complete "<manifest>"` — mark PROGRAM manifest complete and update CONTEXT.md
 - `sawtools update-program-state <manifest> --state <state>` — update PROGRAM manifest state field (E32)
 - `sawtools update-program-impl <manifest> --impl <slug> --status <status>` — update per-IMPL execution status in PROGRAM manifest (E32)
 - `sawtools program-replan <manifest> --reason "<reason>"` — trigger Planner re-engagement for PROGRAM manifest revision (E34)
 - `sawtools create-program-worktrees <manifest> --tier N` — create IMPL branches for a program tier (E28 branch isolation)
-- `sawtools prepare-wave <manifest> --wave N [--merge-target <branch>]` — atomic wave preparation (worktrees, briefs, journals); `--merge-target` sets baseline branch for verification (default: current HEAD)
-- `sawtools finalize-wave <manifest> --wave N [--merge-target <branch>]` — atomic post-wave pipeline (verify, merge, cleanup); `--merge-target` sets merge destination branch (default: current HEAD)
+- `sawtools pre-wave-gate <manifest>` — readiness validation before wave launch (checks scaffolds, ownership, freeze, state)
+- `sawtools prepare-wave <manifest> --wave N [--merge-target <branch>]` — atomic wave preparation (worktrees, briefs, journals); runs PreWaveGate inline; `--merge-target` sets baseline branch for verification (default: current HEAD)
+- `sawtools finalize-wave <manifest> --wave N [--merge-target <branch>]` — atomic post-wave pipeline (verify, merge, cleanup); includes ClosedLoopGateRetry (auto-retries failed gates with agent fix loops up to 2 times); `--merge-target` sets merge destination branch (default: current HEAD)
+- `sawtools queue add|list|next` — queue management for daemon (add items, list pending, get next ready item)
 
 ## Execution Models
 
