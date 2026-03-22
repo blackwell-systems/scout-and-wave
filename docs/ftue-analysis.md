@@ -226,10 +226,10 @@ The repo path picker in Settings uses the native OS file picker when available, 
 
 | Priority | Issue | Effort | Status |
 |---|---|---|---|
-| Critical | 1.1 No onboarding / empty-state guidance | Low | TODO |
-| Critical | 1.2 Settings not surfaced as required | Low | TODO |
-| Critical | 1.4 Approve triggers irreversible execution without context | Low | TODO |
-| Critical | 1.5 Scout output is a firehose with no summary | Low | TODO |
+| Critical | 1.1 No onboarding / empty-state guidance | Low | DONE — WelcomeCard component shown on first launch (repos.length === 0) |
+| Critical | 1.2 Settings not surfaced as required | Low | DONE — WelcomeCard shown when repos.length === 0, prompts user to open Settings |
+| Critical | 1.4 Approve triggers irreversible execution without context | Low | REJECTED — tooltip explains action, confirmation dialog is too much friction |
+| Critical | 1.5 Scout output is a firehose with no summary | Low | DONE — ScoutLauncher already shows summaryData (agents, waves, verdict, fileCount) |
 | High | 2.1 Feature input has no quality guidance | Low | TODO |
 | High | 2.3 No explanation of what happens after Approve | Low | DONE — ActionButtons.tsx already shows "Launches Wave 1 agents in parallel..." |
 | High | 2.5 New vs. Existing project mode indistinguishable | Low | DONE — ScoutLauncher already shows mode-specific description |
