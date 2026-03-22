@@ -894,7 +894,7 @@ If no known issues exist, omit the section entirely or write:
 
 **Split strategy:**
 - Keep suitability verdict, scaffolds, dependency graph, interface contracts, file ownership, wave structure, and status in the main IMPL doc
-- Move agent prompts to separate files: `docs/IMPL/IMPL-<feature>-wave{N}-agent-{ID}.md`
+- Move agent prompts to separate files: `docs/IMPL/IMPL-<feature>-wave{N}-agent-{ID}.md` (per-agent prompt files use `.md` extension — agent task content, not IMPL schema)
 - Main IMPL doc links to per-agent files: `See [Agent A prompt](IMPL-<feature>-wave1-agent-A.md)`
 - Note: per-agent filenames use the flat `wave{N}-agent-{ID}` format (no slug prefix needed since the feature name is already in the filename).
 
