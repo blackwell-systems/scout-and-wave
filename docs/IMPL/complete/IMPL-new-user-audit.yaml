@@ -1,0 +1,806 @@
+completion_date: "2026-03-19"
+title: New User System Audit Implementation
+feature_slug: new-user-audit
+verdict: SUITABLE
+suitability_assessment: |
+    SUITABLE — The audit identifies 11 discrete improvements across 3 repos with
+    clear file boundaries. Work decomposes cleanly into 7 agents across 2 waves.
+
+    File decomposition: 15+ files across 3 repos (protocol docs, Go CLI, web app).
+    No two agents share files. Cross-repo work is naturally disjoint.
+
+    Investigation-first items: None. All gaps are documented with clear remediation.
+
+    Interface discoverability: The error translation layer extends an existing
+    errparse package with a well-defined Parser interface. The verify-install
+    command follows the established cobra CLI pattern. No interface ambiguity.
+
+    Pre-implementation status: All items are TODO — audit was just completed.
+
+    Parallelization value: High. 5 agents in Wave 1 are fully independent.
+    Go code agents (error translation, verify-install) benefit from parallel
+    build/test cycles (~30s each). Documentation agents benefit from avoiding
+    sequential context switching across 3 repos.
+
+    Estimated times:
+    - Scout phase: ~8 min (cross-repo dependency mapping)
+    - Agent execution: ~15 min (5 parallel Wave 1 agents, 2 parallel Wave 2 agents)
+    - Merge & verification: ~5 min
+    Total SAW time: ~28 min
+
+    Sequential baseline: ~50 min (7 agents x ~7 min avg sequential time)
+    Time savings: ~22 min (44% faster)
+
+    Recommendation: Clear speedup. Cross-repo independence maximizes parallelism.
+test_command: 'echo ''cross-repo: no unified test command'''
+lint_command: none
+file_ownership:
+    - file: docs/GETTING_STARTED.md
+      agent: A
+      wave: 1
+      action: new
+      repo: scout-and-wave
+    - file: docs/INSTALLATION.md
+      agent: A
+      wave: 1
+      action: new
+      repo: scout-and-wave
+    - file: implementations/claude-code/prompts/saw-skill.md
+      agent: B
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: pkg/errparse/protocol_errors.go
+      agent: C
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: pkg/errparse/protocol_errors_test.go
+      agent: C
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: cmd/saw/verify_install_cmd.go
+      agent: D
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: cmd/saw/verify_install_cmd_test.go
+      agent: D
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: docs/HOOKS.md
+      agent: E
+      wave: 1
+      action: new
+      repo: scout-and-wave
+    - file: install.sh
+      agent: E
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: docs/QUICKSTART-WEB.md
+      agent: F
+      wave: 2
+      action: new
+      repo: scout-and-wave
+    - file: docs/QUICKSTART-CLI.md
+      agent: F
+      wave: 2
+      action: new
+      repo: scout-and-wave
+    - file: docs/diagrams/three-repo-architecture.md
+      agent: G
+      wave: 2
+      action: new
+      repo: scout-and-wave
+interface_contracts:
+    - name: ProtocolErrorExplainer
+      description: |
+        Function that translates protocol error codes (E16, I1, E21A, etc.)
+        into plain-English explanations with remediation steps.
+      definition: |
+        // ExplainProtocolError returns a human-readable explanation for a
+        // SAW protocol error code. Returns nil if code is unknown.
+        func ExplainProtocolError(code string) *ProtocolErrorInfo
+
+        // ProtocolErrorInfo holds the structured explanation for a protocol error.
+        type ProtocolErrorInfo struct {
+            Code        string   // e.g. "E16", "I1", "E21A"
+            Title       string   // short name, e.g. "Validation Failure"
+            PlainText   string   // 1-2 sentence plain-English explanation
+            Remediation []string // ordered steps to fix
+            SeeAlso     string   // link to protocol doc section
+        }
+
+        // AllProtocolErrors returns all known error explanations.
+        func AllProtocolErrors() []ProtocolErrorInfo
+      location: pkg/errparse/protocol_errors.go
+    - name: VerifyInstallCmd
+      description: |
+        CLI command that checks all SAW prerequisites are met:
+        sawtools on PATH, skill files symlinked, repos cloned,
+        git version sufficient, Claude Code permissions.
+      definition: |
+        // newVerifyInstallCmd returns a cobra.Command for "sawtools verify-install".
+        // Checks:
+        //   1. sawtools binary is on PATH and executable
+        //   2. ~/.claude/skills/saw/ directory exists with expected symlinks
+        //   3. Git version >= 2.20 (worktree support)
+        //   4. saw.config.json exists and has valid repos entries
+        //   5. All configured repo paths exist on disk
+        // Output: JSON with per-check pass/fail + overall verdict.
+        func newVerifyInstallCmd() *cobra.Command
+      location: cmd/saw/verify_install_cmd.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## Agent A — Entry Point Documentation (Tier 1)
+
+            Create two new documentation files in the protocol repo at
+            /Users/dayna.blackwell/code/scout-and-wave:
+
+            ### File 1: docs/GETTING_STARTED.md
+            Decision tree entry point answering "which tool do I use?"
+
+            Content requirements:
+            - Title: "Getting Started with Scout-and-Wave"
+            - Section 1: "What is SAW?" — 3-sentence summary
+            - Section 2: "Three Ways to Use SAW" — decision tree:
+              - **Claude Code skill** (`/saw`) — for Claude Code users, most common path
+              - **Web UI** (`saw serve`) — visual IMPL review, wave monitoring, chat
+              - **CLI** (`sawtools`) — CI/CD integration, power users, scripting
+            - Section 3: "Quick Decision" — flowchart in text:
+              - "Do you use Claude Code?" → Yes → install skill, see QUICKSTART.md
+              - "Do you prefer a web UI?" → Yes → see QUICKSTART-WEB.md
+              - "Do you want CLI/CI integration?" → Yes → see QUICKSTART-CLI.md
+            - Section 4: "Installation" — link to INSTALLATION.md
+            - Section 5: "Three Repos, One System" — brief explanation:
+              - scout-and-wave: protocol spec + skill files (this repo)
+              - scout-and-wave-go: Go engine + sawtools CLI
+              - scout-and-wave-web: web UI + saw binary
+            - Keep it under 150 lines. No jargon. Write for someone who just
+              found the repo on GitHub.
+
+            ### File 2: docs/INSTALLATION.md
+            Cross-repo installation guide with dependency matrix.
+
+            Content requirements:
+            - Title: "Installation Guide"
+            - Section 1: "Prerequisites" — Go 1.25+, Node.js 18+, Git 2.20+, Claude Code
+            - Section 2: "Dependency Matrix" — table showing which repos need which tools:
+              | Component | Requires | Purpose |
+              |-----------|----------|---------|
+              | Protocol (scout-and-wave) | Git | Skill files, protocol spec |
+              | CLI (scout-and-wave-go) | Git, Go 1.25+ | sawtools binary |
+              | Web UI (scout-and-wave-web) | Git, Go 1.25+, Node.js 18+ | saw web server |
+            - Section 3: "Installation Steps" — ordered by dependency:
+              1. Clone scout-and-wave, run install.sh
+              2. Clone scout-and-wave-go, build sawtools (`go build -o ~/.local/bin/sawtools ./cmd/saw`)
+              3. (Optional) Clone scout-and-wave-web, run `make build`
+            - Section 4: "Verify Installation" — run `sawtools verify-install`
+              (mention this command exists but don't detail output — it's built by Agent D)
+            - Section 5: "Permissions" — exact JSON snippet for ~/.claude/settings.json:
+              ```json
+              { "permissions": { "allow": ["Agent"] } }
+              ```
+            - Section 6: "Troubleshooting" — common issues:
+              - "sawtools: command not found" → check PATH includes ~/.local/bin
+              - "/saw not recognized" → skill not installed, run install.sh
+              - "Git worktree error" → check Git version >= 2.20
+            - Keep it under 200 lines.
+
+            ### Conventions
+            - Match the tone and formatting of implementations/claude-code/QUICKSTART.md
+            - Use relative links for cross-references within the repo
+            - Include a "Next Steps" section at the bottom linking to the quickstarts
+
+            ### Verification
+            - All internal links resolve to existing or planned files
+            - No protocol jargon without explanation
+            - Both files render correctly as GitHub markdown
+          files:
+            - docs/GETTING_STARTED.md
+            - docs/INSTALLATION.md
+        - id: B
+          task: |
+            ## Agent B — Pre-flight Diagnostics in saw-skill.md (Tier 1)
+
+            Modify the saw-skill.md file in the protocol repo at
+            /Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/prompts/saw-skill.md
+
+            ### What to implement
+            Add a pre-flight validation section that runs when `/saw` is first invoked
+            in a session. This should appear early in the skill file, after the
+            "Invocation Modes" table.
+
+            ### Pre-flight checks to add
+            Insert a new section "## Pre-flight Validation" with these checks:
+
+            ```
+            ## Pre-flight Validation
+
+            When `/saw` is invoked for the first time in a session, run these checks
+            silently. If any fail, print the diagnostic and stop.
+
+            1. **sawtools on PATH**: Run `which sawtools` or `command -v sawtools`.
+               If missing, print:
+               "sawtools not found on PATH. Install it:
+                cd /path/to/scout-and-wave-go && go build -o ~/.local/bin/sawtools ./cmd/saw
+                Then add ~/.local/bin to your PATH."
+
+            2. **Skill files present**: Check that ${CLAUDE_SKILL_DIR}/agent-template.md exists.
+               If missing, print:
+               "Skill files not installed. Run: ./install.sh from the scout-and-wave repo root."
+
+            3. **Git version**: Run `git --version` and parse major.minor.
+               If < 2.20, print:
+               "Git 2.20+ required for worktree support. Current version: {version}."
+
+            4. **saw.config.json**: Check for saw.config.json in the project root.
+               If missing, print informational note (not a blocker):
+               "No saw.config.json found. Using defaults. See docs/INSTALLATION.md for config options."
+            ```
+
+            ### Constraints
+            - Do NOT change any existing behavior or sections of saw-skill.md
+            - The pre-flight section should be clearly delineated with markdown headers
+            - Keep checks lightweight — no network calls, no builds
+            - Only the first invocation per session should run checks (add a note:
+              "Run these checks once per session. Skip on subsequent /saw invocations.")
+            - Checks should print clear remediation steps, not just error codes
+            - Read the existing saw-skill.md fully before modifying to understand
+              the established structure and tone
+
+            ### Verification
+            - saw-skill.md still renders as valid markdown
+            - No existing sections are removed or altered
+            - Pre-flight section is placed after "Invocation Modes" table
+          files:
+            - implementations/claude-code/prompts/saw-skill.md
+        - id: C
+          task: |
+            ## Agent C — Error Message Translation Layer (Tier 2)
+
+            Create a protocol error explanation system in the Go SDK repo at
+            /Users/dayna.blackwell/code/scout-and-wave-go
+
+            ### Files to create
+
+            #### pkg/errparse/protocol_errors.go
+            Implement the error translation layer:
+
+            ```go
+            package errparse
+
+            // ProtocolErrorInfo holds the structured explanation for a protocol error.
+            type ProtocolErrorInfo struct {
+                Code        string   `json:"code"`
+                Title       string   `json:"title"`
+                PlainText   string   `json:"plain_text"`
+                Remediation []string `json:"remediation"`
+                SeeAlso     string   `json:"see_also"`
+            }
+
+            // ExplainProtocolError returns a human-readable explanation for a
+            // SAW protocol error code. Returns nil if code is unknown.
+            func ExplainProtocolError(code string) *ProtocolErrorInfo
+
+            // AllProtocolErrors returns all known error explanations.
+            func AllProtocolErrors() []ProtocolErrorInfo
+            ```
+
+            Populate with explanations for at least these codes:
+            - **I1**: Disjoint File Ownership — "Two agents tried to modify the same file."
+              Remediation: "Check file_ownership in the IMPL doc. Each file must be assigned to exactly one agent per wave."
+            - **I2**: Cross-Wave Dependencies Only — "An agent depends on another agent in the same wave."
+              Remediation: "Move the dependent agent to a later wave, or remove the dependency."
+            - **I3**: 1-Indexed Waves — "Wave numbering starts at 0 instead of 1."
+              Remediation: "Change wave numbers to start at 1."
+            - **I4**: Scout Write Boundaries — "Scout agent tried to write source code."
+              Remediation: "Scout agents only write IMPL docs (docs/IMPL/IMPL-*.yaml)."
+            - **I5**: Agent Commit Verification — "Agent did not commit its changes."
+              Remediation: "Ensure each agent commits all changes before completion."
+            - **I6**: Role Separation — "Orchestrator is performing agent work directly."
+              Remediation: "Launch the appropriate agent type instead of implementing directly."
+            - **E2**: Interface Freeze — "Interface changed after worktrees were created."
+              Remediation: "Delete worktrees, update interfaces, recreate worktrees."
+            - **E16**: IMPL Validation — "IMPL doc has structural errors."
+              Remediation: "Run sawtools validate --fix to auto-correct common issues."
+            - **E20**: Stub Scan — "Implementation contains stub/placeholder code."
+              Remediation: "Replace TODO/FIXME/stub markers with real implementation."
+            - **E21**: Quality Gate Failure — "Build, test, or lint check failed."
+              Remediation: "Fix the failing check. Run the gate command manually to see details."
+            - **E21A**: Baseline Gate — "Quality gate was already failing before agent work."
+              Remediation: "Fix pre-existing failures first, or mark as known issue."
+            - **E25**: Integration Gap — "Exported function not wired into caller code."
+              Remediation: "Add integration_connectors or create an integration wave."
+            - **E37**: Critic Review — "Pre-wave brief review found issues."
+              Remediation: "Address critic findings before launching wave agents."
+
+            Use a package-level map[string]ProtocolErrorInfo for lookup.
+            Register entries in an init() function.
+
+            #### pkg/errparse/protocol_errors_test.go
+            Write tests:
+            - TestExplainProtocolError_Known: verify each code returns non-nil with populated fields
+            - TestExplainProtocolError_Unknown: verify unknown code returns nil
+            - TestAllProtocolErrors: verify returns non-empty slice, all have Code and PlainText
+            - TestExplainProtocolError_CaseInsensitive: "e16" should match "E16"
+
+            ### Conventions
+            - Follow existing errparse package patterns (see registry.go, types.go)
+            - Use the same package name: `package errparse`
+            - Keep error descriptions under 2 sentences
+            - Remediation steps should be actionable commands, not explanations
+
+            ### Verification
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./pkg/errparse/...
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && go test ./pkg/errparse/... -run TestExplainProtocolError
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && go vet ./pkg/errparse/...
+            ```
+          files:
+            - pkg/errparse/protocol_errors.go
+            - pkg/errparse/protocol_errors_test.go
+        - id: D
+          task: |
+            ## Agent D — sawtools verify-install Command (Tier 3)
+
+            Create the `sawtools verify-install` command in the Go SDK repo at
+            /Users/dayna.blackwell/code/scout-and-wave-go
+
+            ### Files to create
+
+            #### cmd/saw/verify_install_cmd.go
+            Implement a cobra command that checks SAW prerequisites:
+
+            ```go
+            func newVerifyInstallCmd() *cobra.Command
+            ```
+
+            The command should check (in order):
+            1. **sawtools binary**: Verify the running binary itself works (always passes, but
+               confirms it's on PATH if the user ran it)
+            2. **Git version**: Run `git --version`, parse output, verify >= 2.20
+            3. **Skill directory**: Check `~/.claude/skills/saw/` exists
+            4. **Skill files**: Check these files exist in skill dir:
+               - SKILL.md (symlink to saw-skill.md)
+               - agent-template.md
+               - saw-bootstrap.md
+            5. **saw.config.json**: Check for config file (project root, then ~/.claude/)
+            6. **Configured repos**: If saw.config.json found, verify each repo path exists
+
+            Output format (JSON):
+            ```json
+            {
+              "checks": [
+                {"name": "sawtools_binary", "status": "pass", "detail": "v0.14.0 at /usr/local/bin/sawtools"},
+                {"name": "git_version", "status": "pass", "detail": "2.43.0 >= 2.20"},
+                {"name": "skill_directory", "status": "fail", "detail": "~/.claude/skills/saw/ not found"},
+                {"name": "skill_files", "status": "skip", "detail": "skipped: skill directory missing"},
+                {"name": "config_file", "status": "pass", "detail": "found at ./saw.config.json"},
+                {"name": "configured_repos", "status": "warn", "detail": "2/3 repos found on disk"}
+              ],
+              "verdict": "PARTIAL",
+              "summary": "4 passed, 1 failed, 1 warning. Run install.sh to fix skill files."
+            }
+            ```
+
+            Verdict logic:
+            - "PASS" — all checks pass
+            - "PARTIAL" — some warnings but no failures
+            - "FAIL" — any check fails
+
+            Also support `--human` flag for non-JSON human-readable output with
+            checkmarks and X marks.
+
+            #### cmd/saw/verify_install_cmd_test.go
+            Write tests:
+            - TestVerifyInstallCmd_OutputJSON: verify JSON structure is valid
+            - TestVerifyInstallCmd_GitVersion: verify git version parsing works
+            - TestVerifyInstallCmd_HumanFlag: verify human-readable output format
+
+            ### Conventions
+            - Follow the existing cobra command pattern in cmd/saw/ (see root.go, validate_cmd.go)
+            - Use `encoding/json` for output, `os/exec` for running git
+            - Do NOT import any external packages beyond cobra and stdlib
+            - The command must be registered in main.go but since Agent D cannot modify
+              main.go (owned by integration wave), just create the file with the
+              newVerifyInstallCmd function exported. Integration will wire it.
+
+            ### Verification
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./cmd/saw/
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && go test ./cmd/saw/ -run TestVerifyInstall
+            ```
+          files:
+            - cmd/saw/verify_install_cmd.go
+            - cmd/saw/verify_install_cmd_test.go
+        - id: E
+          task: |
+            ## Agent E — Hook Docs + Install Script Fix (Tier 2/3)
+
+            Work in the protocol repo at /Users/dayna.blackwell/code/scout-and-wave
+
+            ### File 1: docs/HOOKS.md (new)
+            Document the SAW safety guardrail system (hook system).
+
+            Content requirements:
+            - Title: "SAW Safety Guardrails (Hook System)"
+            - Section 1: "What are SAW hooks?" — brief explanation that SAW uses
+              PreToolUse hooks to enforce protocol invariants at tool-call time
+            - Section 2: "What hooks enforce" — table:
+              | Hook | Invariant | What it prevents |
+              |------|-----------|-----------------|
+              | Scout write boundary | I6 | Scout editing source code |
+              | File ownership check | I1 | Agent editing files not assigned to it |
+              | Worktree isolation | I4 | Agent escaping its worktree |
+            - Section 3: "How hooks are installed" — explain the install.sh symlink model,
+              reference docs/symlink-diagram.md for visual details
+            - Section 4: "Troubleshooting hooks" — common issues:
+              - "Hook not firing" → verify symlinks with `ls -la ~/.claude/skills/saw/`
+              - "Permission denied" → check file permissions on hook scripts
+              - "Hook blocking valid operation" → may be a false positive, check the
+                specific invariant and file ownership table
+            - Keep it under 100 lines
+
+            ### File 2: install.sh (modify)
+            Fix the "Next steps" output at the end of install.sh.
+
+            Current output (lines 59-62):
+            ```
+            echo "Next steps:"
+            echo "  1. Add \"Agent\" to your allow list in ~/.claude/settings.json"
+            echo "  2. Run: /saw scout \"your feature description\""
+            ```
+
+            Change to include the exact JSON permission snippet:
+            ```
+            echo "Next steps:"
+            echo "  1. Add Agent permission to ~/.claude/settings.json:"
+            echo '     { "permissions": { "allow": ["Agent"] } }'
+            echo "  2. Verify installation: sawtools verify-install"
+            echo "  3. Run your first scout: /saw scout \"your feature description\""
+            echo ""
+            echo "  Full guide: docs/GETTING_STARTED.md"
+            ```
+
+            Also add a post-install verification step before the "Done" message:
+            ```bash
+            # Verify symlinks
+            echo ""
+            echo "Verifying installation..."
+            VERIFY_OK=true
+            for entry in "${FILES[@]}"; do
+              dst="${SKILL_DIR}/${entry##*:}"
+              if [ ! -L "${dst}" ]; then
+                echo "  WARNING: ${dst} is not a symlink" >&2
+                VERIFY_OK=false
+              fi
+            done
+            if [ "${VERIFY_OK}" = true ]; then
+              echo "  All symlinks verified."
+            fi
+            ```
+
+            ### Constraints
+            - Read install.sh fully before modifying
+            - Do not change the symlink creation logic, only the output messages
+              and add the verification step
+            - HOOKS.md should reference existing docs, not duplicate content
+
+            ### Verification
+            - install.sh is still valid bash (bash -n install.sh)
+            - HOOKS.md renders as valid markdown
+            - install.sh output includes the JSON permission snippet
+          files:
+            - docs/HOOKS.md
+            - install.sh
+      base_commit: f1dc6b7d088fe4a4845eb8ad12ff85f176cbfedb
+    - number: 2
+      agents:
+        - id: F
+          task: |
+            ## Agent F — Quickstart Guides (Tier 2)
+
+            Create two quickstart guides in the protocol repo at
+            /Users/dayna.blackwell/code/scout-and-wave
+
+            ### File 1: docs/QUICKSTART-WEB.md
+            Web app walkthrough for web UI users.
+
+            Content requirements:
+            - Title: "Quickstart: Scout-and-Wave Web UI"
+            - Prerequisites: Go 1.25+, Node.js 18+, Git, scout-and-wave-web cloned
+            - Step 1: Build and start — `make build && ./saw serve`
+            - Step 2: Open http://localhost:7432
+            - Step 3: "Your First IMPL Review" — walkthrough of:
+              - IMPL Picker page (browse existing IMPLs)
+              - Review Screen (suitability, waves, file ownership, contracts)
+              - Approve or revise
+            - Step 4: "Launching a Wave" — click "Launch Wave" button, watch
+              the Wave Dashboard with live agent status cards
+            - Step 5: "Using Chat" — ask Claude about the IMPL doc
+            - Include screenshots description (text placeholders like
+              "[Screenshot: IMPL Picker showing list of IMPLs]")
+            - Troubleshooting section: port conflicts, build errors, missing deps
+            - Link back to docs/GETTING_STARTED.md and docs/INSTALLATION.md
+            - Keep under 200 lines
+
+            ### File 2: docs/QUICKSTART-CLI.md
+            CLI walkthrough for sawtools users.
+
+            Content requirements:
+            - Title: "Quickstart: Scout-and-Wave CLI (sawtools)"
+            - Prerequisites: Go 1.25+, Git, sawtools built and on PATH
+            - Step 1: Verify installation — `sawtools verify-install`
+            - Step 2: "Scout a feature" — `sawtools run-scout "add caching"`
+              - Show expected output (IMPL doc created at docs/IMPL/IMPL-*.yaml)
+            - Step 3: "Review the IMPL doc" — explain key sections to check:
+              - Suitability verdict
+              - File ownership table
+              - Wave structure
+            - Step 4: "Prepare a wave" — `sawtools prepare-wave docs/IMPL/IMPL-*.yaml --wave 1`
+              - Show expected output (worktrees created)
+            - Step 5: "Launch agents" — explain this requires Claude Code or API
+            - Step 6: "Finalize wave" — `sawtools finalize-wave docs/IMPL/IMPL-*.yaml --wave 1`
+            - Common commands reference table:
+              | Command | Purpose |
+              |---------|---------|
+              | sawtools validate | Validate IMPL doc |
+              | sawtools prepare-wave | Create worktrees |
+              | sawtools finalize-wave | Merge and verify |
+              | sawtools list-impls | Show all IMPLs |
+              | sawtools verify-install | Check prerequisites |
+            - Troubleshooting section: common errors with plain-English explanations
+              (reference the error translation from Agent C's work, link to protocol
+              error codes documentation)
+            - Link back to docs/GETTING_STARTED.md and docs/INSTALLATION.md
+            - Keep under 200 lines
+
+            ### Conventions
+            - Match tone of implementations/claude-code/QUICKSTART.md (practical,
+              shows expected output, includes troubleshooting)
+            - Use step-by-step format with numbered steps
+            - Include "What happens" explanations after each command
+
+            ### Verification
+            - Both files render as valid markdown
+            - All internal links point to existing or planned files
+            - No undocumented commands referenced
+          files:
+            - docs/QUICKSTART-WEB.md
+            - docs/QUICKSTART-CLI.md
+          dependencies:
+            - D
+            - A
+        - id: G
+          task: |
+            ## Agent G — Visual Diagram + README Quick Links (Tier 3)
+
+            Work in the protocol repo at /Users/dayna.blackwell/code/scout-and-wave
+
+            ### File 1: docs/diagrams/three-repo-architecture.md
+            Create a visual text diagram of the three-repo dependency graph.
+
+            Content requirements:
+            - Title: "Scout-and-Wave: Three-Repo Architecture"
+            - ASCII/text diagram showing:
+              ```
+              scout-and-wave (Protocol)
+              +-- Protocol specification (invariants, execution rules)
+              +-- Skill files (saw-skill.md, agent-template.md)
+              +-- Install script (install.sh)
+                       |
+                       | protocol spec defines behavior
+                       v
+              scout-and-wave-go (Engine/SDK)
+              +-- sawtools CLI binary
+              +-- Engine package (pkg/engine/)
+              +-- Protocol types (pkg/protocol/)
+              +-- Git worktree management
+                       |
+                       | Go module import
+                       v
+              scout-and-wave-web (Web Application)
+              +-- saw binary (web server)
+              +-- React web UI
+              +-- HTTP API (42 endpoints)
+              +-- SSE live streaming
+              ```
+            - Section: "Data Flow" — how data moves between repos at runtime:
+              - IMPL docs live in the target project (not in any SAW repo)
+              - sawtools reads/writes IMPL docs
+              - saw web server imports scout-and-wave-go as a Go module
+              - Skill files are symlinked from protocol repo to ~/.claude/skills/saw/
+            - Section: "Which repo do I change?" — decision guide:
+              - Protocol behavior -> scout-and-wave
+              - CLI commands or engine logic -> scout-and-wave-go
+              - Web UI or HTTP API -> scout-and-wave-web
+              - All three -> start with protocol, then SDK, then web
+            - Keep under 100 lines
+
+            ### Conventions
+            - Use UTF-8 box-drawing characters for diagrams
+            - Reference existing docs (symlink-diagram.md, ECOSYSTEM.md)
+
+            ### Verification
+            - Diagram renders correctly in GitHub markdown
+            - All repo references match actual repo names
+          files:
+            - docs/diagrams/three-repo-architecture.md
+          dependencies:
+            - A
+      base_commit: 6b28692cd617aab456d490cafe0bcf240d7fb90c
+quality_gates:
+    level: standard
+    gates:
+        - type: custom
+          command: 'echo ''docs-only: no build gate needed'''
+          required: false
+        - type: custom
+          command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./...
+          required: true
+        - type: custom
+          command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go test ./pkg/errparse/... ./cmd/saw/
+          required: true
+post_merge_checklist:
+    groups:
+        - title: Go SDK Integration
+          items:
+            - description: Register newVerifyInstallCmd in scout-and-wave-go/cmd/saw/main.go
+              command: '# Add newVerifyInstallCmd() to rootCmd.AddCommand() in main.go'
+            - description: Rebuild sawtools binary after Go changes merge
+              command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go build -o ~/.local/bin/sawtools ./cmd/saw
+        - title: End-to-End Verification
+          items:
+            - description: Run sawtools verify-install to validate the tool works end-to-end
+              command: sawtools verify-install
+            - description: Update protocol repo README.md to link to new docs (GETTING_STARTED.md, INSTALLATION.md)
+completion_reports:
+    A:
+        status: complete
+        branch: saw/new-user-audit/wave1-agent-A
+        commit: d81543c
+        files_changed:
+            - docs/GETTING_STARTED.md
+            - docs/INSTALLATION.md
+        files_created:
+            - docs/GETTING_STARTED.md
+            - docs/INSTALLATION.md
+        verification: PASS
+    B:
+        status: complete
+        branch: saw/new-user-audit/wave1-agent-B
+        commit: 2a8994f
+        files_changed:
+            - implementations/claude-code/prompts/saw-skill.md
+        verification: PASS
+    C:
+        status: complete
+        branch: saw/new-user-audit/wave1-agent-C
+        commit: be1df63
+        files_changed:
+            - pkg/errparse/protocol_errors.go
+            - pkg/errparse/protocol_errors_test.go
+        files_created:
+            - pkg/errparse/protocol_errors.go
+            - pkg/errparse/protocol_errors_test.go
+        tests_added:
+            - TestExplainProtocolError_Known
+            - TestExplainProtocolError_Unknown
+            - TestAllProtocolErrors
+            - TestExplainProtocolError_CaseInsensitive
+        verification: PASS
+    D:
+        status: complete
+        branch: saw/new-user-audit/wave1-agent-D
+        commit: "5585634"
+        files_changed:
+            - cmd/saw/verify_install_cmd.go
+            - cmd/saw/verify_install_cmd_test.go
+        files_created:
+            - cmd/saw/verify_install_cmd.go
+            - cmd/saw/verify_install_cmd_test.go
+        tests_added:
+            - TestVerifyInstallCmd_OutputJSON
+            - TestVerifyInstallCmd_GitVersion
+            - TestVerifyInstallCmd_HumanFlag
+            - TestVerifyInstallCmd_SawtoolsBinary
+            - TestVerifyInstallCmd_VerdictLogic
+        verification: PASS
+    E:
+        status: complete
+        branch: saw/new-user-audit/wave1-agent-E
+        commit: 0ec275c
+        files_changed:
+            - docs/HOOKS.md
+            - install.sh
+        files_created:
+            - docs/HOOKS.md
+        verification: PASS
+    F:
+        status: complete
+        branch: saw/new-user-audit/wave2-agent-F
+        commit: 95ceec1
+        files_changed:
+            - docs/QUICKSTART-WEB.md
+            - docs/QUICKSTART-CLI.md
+        files_created:
+            - docs/QUICKSTART-WEB.md
+            - docs/QUICKSTART-CLI.md
+        verification: PASS
+    G:
+        status: complete
+        branch: saw/new-user-audit/wave2-agent-G
+        commit: 15144ae
+        files_changed:
+            - docs/diagrams/three-repo-architecture.md
+        files_created:
+            - docs/diagrams/three-repo-architecture.md
+        verification: PASS
+integration_connectors:
+    - file: cmd/saw/main.go
+      reason: Agent D creates newVerifyInstallCmd() which must be registered in main.go's rootCmd.AddCommand() call
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: Agent D's verify-install cmd won't compile without main.go registration
+          likelihood: high
+          impact: low
+          mitigation: |
+            Agent D creates the file with the function. Integration connector
+            wires it into main.go post-merge. Build gate only needs the package
+            to compile, not the full binary link.
+        - scenario: Agent B's saw-skill.md changes conflict with other in-flight work
+          likelihood: low
+          impact: medium
+          mitigation: |
+            Check git status before wave launch. saw-skill.md is only modified
+            by Agent B in this IMPL. The file is large but changes are additive
+            (new section inserted, no existing sections modified).
+        - scenario: Cross-repo IMPL requires manual merge coordination
+          likelihood: medium
+          impact: low
+          mitigation: |
+            Each repo's changes are independent. Protocol repo docs don't depend
+            on Go code compilation. Go code doesn't depend on docs existing.
+            Order: merge Go SDK first (has tests), then protocol repo (docs only).
+        - scenario: Error code list in Agent C is incomplete or codes change
+          likelihood: low
+          impact: low
+          mitigation: |
+            The error list covers all codes referenced in the audit doc.
+            New codes can be added later — the map-based lookup is extensible.
+critic_report:
+    verdict: PASS
+    agent_reviews:
+        A:
+            agent_id: A
+            verdict: PASS
+        B:
+            agent_id: B
+            verdict: PASS
+        C:
+            agent_id: C
+            verdict: PASS
+        D:
+            agent_id: D
+            verdict: PASS
+        E:
+            agent_id: E
+            verdict: PASS
+        F:
+            agent_id: F
+            verdict: PASS
+        G:
+            agent_id: G
+            verdict: PASS
+    summary: 'All 7 agent briefs verified against both repos. File existence checks pass for all 15 files (9 new files do not yet exist, 2 modify-target files exist). Symbol references are accurate: errparse package patterns (registry.go, types.go) exist as described, cobra command pattern in cmd/saw/ matches brief descriptions, saw-skill.md Invocation Modes section found at line 92 as referenced. Interface contracts use valid Go syntax with cobra (in go.mod) and stdlib packages only. Integration connector for cmd/saw/main.go correctly identifies the registration gap for newVerifyInstallCmd. No errors or warnings.'
+    reviewed_at: "2026-03-20T05:17:03Z"
+    issue_count: 0
+state: "COMPLETE"

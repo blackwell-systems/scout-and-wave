@@ -205,7 +205,7 @@ it's simpler, more portable, and proves something worth proving.
 
 ## Further Reading
 
-- [protocol/README.md](../protocol/README.md): protocol overview and specification index (invariants I1–I6, rules E1–E23)
+- [protocol/README.md](../protocol/README.md): protocol overview and specification index (invariants I1–I6, rules E1–E26)
 - [Scout-and-Wave: A Coordination Pattern for Parallel AI Agents](https://blog.blackwell-systems.com/posts/scout-and-wave/): the pattern, the failure modes of naive parallelism, and a worked example
 - [Scout-and-Wave, Part 2: What Dogfooding Taught Us](https://blog.blackwell-systems.com/posts/scout-and-wave-part2/): overhead measurement, the audit-fix-audit loop, and the bootstrap problem
 - [Scout-and-Wave, Part 3: Five Failures, Five Fixes](https://blog.blackwell-systems.com/posts/scout-and-wave-part3/): prompt engineering evolution driven by real failures

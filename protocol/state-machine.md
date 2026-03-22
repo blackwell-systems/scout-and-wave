@@ -1,6 +1,6 @@
 # Scout-and-Wave State Machine
 
-**Version:** 0.14.0
+**Version:** 0.16.0
 
 This document defines the lifecycle states, transitions, and terminal conditions for Scout-and-Wave protocol execution.
 
@@ -20,7 +20,7 @@ SAW execution progresses through a series of states orchestrated by the synchron
 | **SCAFFOLD_PENDING** | Scaffold Agent creating type scaffold files from approved contracts. | Human approved IMPL doc, Scaffolds section non-empty | Scaffold Agent commits all files, updates IMPL doc |
 | **WAVE_PENDING** | Ready to launch wave agents. Worktrees not yet created. | Scaffolds committed (or no scaffolds needed) | Orchestrator creates worktrees, launches all agents |
 | **WAVE_EXECUTING** | Agents running in parallel. | All agents launched | All agents report completion |
-| **WAVE_MERGING** | All agents complete, orchestrator merging worktrees. | All completion reports written | All worktrees merged to main |
+| **WAVE_MERGING** | All agents complete, orchestrator merging worktrees. Integration validation (E25) and Integration Agent (E26) execute within this state, after quality gates pass and before merge. | All completion reports written | All worktrees merged to main |
 | **WAVE_VERIFIED** | Merge complete, post-merge verification passed. | Merge complete, verification passed | Next wave launches OR protocol complete |
 | **BLOCKED** | Wave failed verification or agent reported failure. | Any agent status: partial/blocked, OR verification failure | Issue resolved, verification re-run |
 | **COMPLETE** | All waves verified, feature complete. | Final wave verified, no more waves | Terminal state |
@@ -130,9 +130,11 @@ Transitions are conditional. The following guards determine whether a transition
 
 ### WAVE_PENDING → WAVE_EXECUTING
 
-**Guard:** File ownership verification passes (no file appears in multiple agents' ownership lists) AND all worktrees created successfully AND all agents launched.
+**Guard:** E21A baseline verification passes (or is exempt per E21A) AND file ownership verification passes (no file appears in multiple agents' ownership lists) AND all worktrees created successfully AND all agents launched.
 
-**Solo wave exception:** If wave contains exactly one agent, no worktrees are created. Agent runs on main branch directly. Transition still proceeds through WAVE_EXECUTING but skips WAVE_MERGING.
+**E21A baseline verification:** Before creating worktrees, `prepare-wave` runs the IMPL doc's quality gates against current HEAD. If any required gate fails, this transition does not fire — the wave enters BLOCKED with error `baseline_verification_failed`. If the IMPL doc has no quality gates, or if the wave is a solo wave, E21A is a no-op and this guard proceeds without a baseline check.
+
+**Solo wave exception:** If wave contains exactly one agent, no worktrees are created. Agent runs on main branch directly. E21A does not apply (solo wave exemption). Transition still proceeds through WAVE_EXECUTING but skips WAVE_MERGING.
 
 ### WAVE_EXECUTING → WAVE_MERGING
 
@@ -148,9 +150,11 @@ Transitions are conditional. The following guards determine whether a transition
 
 ### WAVE_MERGING → WAVE_VERIFIED
 
-**Guard:** Conflict prediction passes (E11: no file appears in multiple agents' `files_changed` or `files_created` lists) AND all worktree branches merged to main AND post-merge verification commands pass.
+**Guard:** Conflict prediction passes (E11: no file appears in multiple agents' `files_changed` or `files_created` lists) AND integration validation passes or Integration Agent completes successfully (E25/E26) AND all worktree branches merged to main AND post-merge verification commands pass.
 
-**Failure:** If merge conflicts occur OR verification fails, enter BLOCKED.
+**Integration validation (E25/E26):** Before merge, the Orchestrator runs `ValidateIntegration()` to scan for unconnected exports. If integration gaps are detected (`report.Valid == false`), the Integration Agent (E26) is launched to wire the gaps. The Integration Agent runs within WAVE_MERGING state. If the Integration Agent fails, transition to BLOCKED.
+
+**Failure:** If merge conflicts occur OR verification fails OR Integration Agent fails, enter BLOCKED.
 
 ### WAVE_VERIFIED → WAVE_PENDING (next wave)
 
@@ -192,9 +196,9 @@ These actions occur automatically when entering each state.
 | **SCOUT_VALIDATING** | Orchestrator runs validator on all `type=impl-*` blocks in IMPL doc; on failure, issues correction prompt to Scout (E16); on pass, advances to REVIEWED |
 | **REVIEWED** | Orchestrator surfaces IMPL doc to human, requests approval |
 | **SCAFFOLD_PENDING** | Orchestrator launches Scaffold Agent with absolute IMPL doc path |
-| **WAVE_PENDING** | Orchestrator runs pre-launch ownership verification (E3) |
+| **WAVE_PENDING** | Orchestrator runs E21A baseline gate verification (if gates defined and multi-agent wave); then pre-launch ownership verification (E3) |
 | **WAVE_EXECUTING** | Orchestrator monitors for completion notifications (async) |
-| **WAVE_MERGING** | Orchestrator runs conflict prediction (E11), executes merge procedure per agent |
+| **WAVE_MERGING** | Orchestrator runs integration validation (E25), launches Integration Agent if gaps detected (E26), runs conflict prediction (E11), executes merge procedure per agent |
 | **WAVE_VERIFIED** | Orchestrator runs post-merge verification (unscoped), updates IMPL doc state |
 | **BLOCKED** | Orchestrator surfaces failure details to human, awaits resolution |
 | **COMPLETE** | Orchestrator writes `<!-- SAW:COMPLETE -->` tag to IMPL doc (E15); updates `docs/CONTEXT.md` with feature summary (E18); reports final status; cleans up worktrees |
@@ -230,13 +234,76 @@ Waves execute sequentially (I3: Wave sequencing). When Wave N completes, its imp
 
 ## State Machine Correctness Properties
 
-When all invariants (I1–I6) and execution rules (E1–E23) are maintained:
+When all invariants (I1–I6) and execution rules (E1–E34, E21A, E21B) are maintained:
 
 - **Progress:** The state machine always advances or terminates. No infinite loops.
 - **Human checkpoints enforced:** REVIEWED state requires explicit approval. Suitability gate requires human review of NOT SUITABLE verdicts.
 - **Isolation enforced:** WAVE_EXECUTING → WAVE_MERGING transition verifies all agents wrote completion reports. WAVE_MERGING → WAVE_VERIFIED verifies merge conflicts resolved.
 - **Failure recovery:** BLOCKED is re-entrant. Orchestrator can resolve and retry without data loss.
 - **Observability:** Every state transition is logged. External monitoring can track progress via worktree naming convention (E5).
+
+---
+
+## Program State Machine
+
+The PROGRAM layer adds an outer state machine that coordinates multiple IMPL executions. Where the IMPL state machine governs a single feature's lifecycle (SCOUT_PENDING → REVIEWED → WAVE_EXECUTING → COMPLETE), the Program state machine governs an entire project composed of multiple features.
+
+### Program State Catalog
+
+| State | Description |
+|-------|-------------|
+| **PROGRAM_PLANNING** | Planner analyzing requirements and codebase, producing PROGRAM manifest |
+| **PROGRAM_VALIDATING** | Orchestrator validating PROGRAM manifest structure and dependencies |
+| **PROGRAM_REVIEWED** | PROGRAM manifest approved, awaiting execution launch |
+| **PROGRAM_SCAFFOLD** | Creating program-level scaffolds (program contracts) |
+| **TIER_EXECUTING** | One or more IMPLs executing in parallel within current tier |
+| **TIER_VERIFIED** | Current tier complete, all IMPLs verified |
+| **PROGRAM_COMPLETE** | All tiers complete, all IMPLs complete |
+| **PROGRAM_BLOCKED** | Program execution blocked (IMPL failure, dependency failure, etc.) |
+| **PROGRAM_NOT_SUITABLE** | Requirements not suitable for SAW program execution |
+
+### Program State Flow
+
+```
+PROGRAM_PLANNING
+    ↓ (Planner completes)
+PROGRAM_VALIDATING
+    ↓ (Validation passes)
+PROGRAM_REVIEWED
+    ↓ (Human approves)
+PROGRAM_SCAFFOLD (if program contracts exist)
+    ↓ (Scaffolds committed)
+TIER_EXECUTING (Tier 1)
+    ↓ (All Tier 1 IMPLs complete)
+TIER_VERIFIED
+    ↓ (More tiers exist)
+TIER_EXECUTING (Tier N)
+    ↓ (All tiers complete)
+PROGRAM_COMPLETE
+```
+
+### Relationship to IMPL State Machine
+
+The Program state machine is an **outer loop** containing the IMPL state machine. When the Program enters `TIER_EXECUTING`, one or more IMPLs launch concurrently. Each IMPL progresses through its own state machine (SCOUT_PENDING → REVIEWED → WAVE_EXECUTING → COMPLETE). The Program waits for all IMPLs in the current tier to reach COMPLETE before advancing to TIER_VERIFIED.
+
+**Key properties:**
+- IMPLs within the same tier execute in parallel (P1: IMPL independence within tier)
+- IMPLs in different tiers execute sequentially (tier N+1 depends on tier N outputs)
+- Program contracts defined at PROGRAM_REVIEWED freeze before any IMPL executes (interface freeze applies at program scope)
+- Each IMPL has its own Scout, Scaffold Agent, and Wave Agents — the Planner does not write IMPL docs
+
+### Phase 2 Scope
+
+Full program execution rules, invariants, and orchestrator procedures for the Program layer will be defined in **Phase 2** of the Program Layer implementation. This section provides the state catalog and conceptual model. Phase 2 will define:
+- Program state transition guards
+- Program-level invariants (P1, P2, P3, etc.)
+- Orchestrator procedures for tier execution
+- Program completion criteria
+- Cross-tier dependency validation
+
+**Related documents:**
+- `protocol/program-manifest.md` — PROGRAM manifest structure and schema
+- `protocol/program-invariants.md` — Program-level invariants (P1, P2, P3)
 
 ---
 

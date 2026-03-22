@@ -1,0 +1,578 @@
+completion_date: "2026-03-19"
+title: E21A — Pre-Wave Baseline Verification
+feature_slug: e21a-baseline-gate
+verdict: SUITABLE_WITH_CAVEATS
+suitability_assessment: |
+    This feature adds two new execution rules (E21A and E21B) to the SAW protocol.
+    All changes are documentation-only prose edits across five distinct files in the
+    scout-and-wave protocol repository. No source code is involved.
+
+    File decomposition: 4 agents own disjoint document groups —
+      Agent A: protocol/execution-rules.md (primary rule text, cross-references)
+      Agent B: protocol/state-machine.md + protocol/procedures.md (state guard + procedure step)
+      Agent C: implementations/claude-code/prompts/saw-skill.md (prepare-wave orchestration text)
+      Agent D: CHANGELOG.md (version entry)
+
+    No investigation-first blockers: E21A and E21B are fully specified in the feature
+    description. No root cause analysis is needed before writing.
+
+    Interface discoverability: These are prose documentation edits. There are no
+    code-level interface contracts that cross agent boundaries. The cross-agent
+    dependency is a rule number (E21A) that Agent A defines and Agents B, C, D
+    reference — but the rule number is fixed (E21A) and can be specified in advance.
+
+    Parallelization value: Marginal. These are small documentation edits (~20-50 lines
+    each). Sequential implementation would take one agent approximately 20-30 minutes.
+    SAW overhead (scout, worktrees, merge) reduces but does not eliminate that time.
+    However, this IMPL provides coordination value as a precise audit trail specifying
+    which sections of which documents change and in what way. This prevents agents
+    from contradicting each other's wording or missing a cross-reference.
+
+    Caveat 1: Agents B, C, D must reference E21A by the exact name and rule number
+    defined by Agent A. Since the rule number is predetermined (E21A), this is a known
+    constant — not a runtime coordination hazard.
+
+    Caveat 2: No changes are needed to participants.md (Orchestrator description already
+    covers prepare-wave duties), message-formats.md (quality_gates schema is unchanged —
+    E21A only changes when gates run, not their format), wave-agent.md (agents don't know
+    or care about pre-wave baseline), scaffold-agent.md (scaffold runs before prepare-wave),
+    program-layer.md (E21A fires per-IMPL within prepare-wave, not at tier level), or
+    saw.config.json (a skip_baseline_gate config flag belongs in the Go SDK, not the
+    protocol repo). These files were explicitly checked and confirmed out of scope.
+
+    Estimated times:
+    - Scout phase: ~10 min (dependency mapping, IMPL doc)
+    - Agent execution: ~4 min (4 agents x ~5 min avg docs-only edits, parallel)
+    - Merge and verification: ~3 min
+    - Total SAW time: ~17 min
+    - Sequential baseline: ~25 min (1 agent x 25 min)
+    - Time savings: ~8 min (32% faster)
+    Recommendation: Proceed with caveats acknowledged. Coordination value justifies SAW.
+test_command: none
+lint_command: none
+file_ownership:
+    - file: protocol/execution-rules.md
+      agent: A
+      wave: 1
+      action: modify
+    - file: protocol/state-machine.md
+      agent: B
+      wave: 1
+      action: modify
+    - file: protocol/procedures.md
+      agent: B
+      wave: 1
+      action: modify
+    - file: implementations/claude-code/prompts/saw-skill.md
+      agent: C
+      wave: 1
+      action: modify
+    - file: CHANGELOG.md
+      agent: D
+      wave: 1
+      action: modify
+interface_contracts:
+    - name: E21A rule number and location
+      description: |-
+        The rule number E21A is fixed and predetermined. All agents that reference
+        it (B, C, D) may use it without waiting for Agent A. The rule inserts
+        immediately after the E21 section in execution-rules.md.
+      definition: |
+        Rule number: E21A
+        Rule name: Pre-Wave Baseline Verification
+        Placement: Immediately after E21 in protocol/execution-rules.md
+        Cross-reference anchor: E21A
+        Trigger: prepare-wave before worktree creation
+        Condition: IMPL doc quality_gates section is non-empty AND wave has 2+ agents
+        Failure code: baseline_verification_failed
+      location: protocol/execution-rules.md
+    - name: E21B rule number and location
+      description: |-
+        E21B adds parallel gate execution. Agents C and D may reference this
+        rule by number without waiting for Agent A's text to be written.
+      definition: |
+        Rule number: E21B
+        Rule name: Parallel Gate Execution
+        Placement: Immediately after E21A in protocol/execution-rules.md
+        Cross-reference anchor: E21B
+        Applies to: both E21 (post-merge) and E21A (pre-wave baseline) invocations
+        Behavior: concurrent execution, all failures reported together
+      location: protocol/execution-rules.md
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## Agent A — Add E21A and E21B to execution-rules.md
+
+            **File you own:** `protocol/execution-rules.md`
+
+            ### What to implement
+
+            Insert two new execution rules immediately after the E21 block (which ends
+            with its "Related Rules" cross-reference line and the `---` separator).
+
+            **E21A: Pre-Wave Baseline Verification**
+
+            Insert this rule text verbatim after the E21 `---` separator:
+
+            ```
+            ## E21A: Pre-Wave Baseline Verification
+
+            **Trigger:** `prepare-wave` is about to create worktrees for a multi-agent wave
+
+            **Required Action:** Before creating any worktrees, the Orchestrator runs the
+            IMPL doc's `quality_gates` commands against the current HEAD. If any required
+            gate fails, `prepare-wave` exits with error code `baseline_verification_failed`
+            listing which gate commands failed. Wave agents do not launch until the baseline
+            is green.
+
+            **Exemptions:**
+            - If the IMPL doc defines no `quality_gates` (or the gates list is empty), E21A
+              is a no-op. The wave proceeds without a baseline check.
+            - Solo waves (exactly one agent, no worktrees) are exempt from E21A. Baseline
+              verification applies only to multi-agent waves.
+
+            **Rationale:** E21 (post-merge) runs gates after all agents have finished. If
+            the codebase is already broken at wave-start time, agents work on a broken
+            foundation and E21 fails after all parallel work is wasted. E21A catches this
+            upfront — a pre-flight check that verifies the baseline is green before
+            committing parallel agent time to a wave that will fail regardless.
+
+            **Failure handling:** On `baseline_verification_failed`, the Orchestrator surfaces
+            the failing gate commands and their output to the human. The wave does not launch.
+            The human must fix the codebase baseline (or update the gate configuration) before
+            re-running `prepare-wave`.
+
+            **E21B interaction:** When E21A runs multiple quality gates, E21B applies —
+            all gates execute concurrently and all failures are reported together before
+            the wave is blocked.
+
+            **Related Rules:** See E21 (post-merge quality gates), E21B (parallel gate
+            execution), `procedures.md` (Procedure 3, Phase 1: Pre-Launch Verification)
+
+            ---
+
+            ## E21B: Parallel Gate Execution
+
+            **Trigger:** `run-gates` is invoked with two or more quality gate commands
+
+            **Required Action:** Execute all quality gate commands concurrently rather than
+            sequentially. Collect all results before reporting. Report all failures together
+            (do not stop at the first failure). This applies to both E21 (post-merge) and
+            E21A (pre-wave baseline) invocations of `run-gates`.
+
+            **Rationale:** Sequential gate execution produces misleading failure reports: a
+            build gate failure suppresses test gate output, leaving the human uncertain whether
+            tests would have passed. Running gates concurrently reveals the full failure surface
+            in one pass, enabling faster diagnosis and fix.
+
+            **Failure reporting:** `run-gates` output lists each failing gate command with its
+            exit code and stderr/stdout excerpt, even when multiple gates fail simultaneously.
+            The overall exit code is non-zero if any required gate fails.
+
+            **Related Rules:** See E21 (post-merge quality gates), E21A (pre-wave baseline),
+            `message-formats.md` (Quality Gates Section Format)
+
+            ---
+            ```
+
+            After inserting E21A and E21B, update the **Cross-References** section at the
+            bottom of the file (the `## Cross-References` section) to add:
+            - E21A: runs pre-wave baseline gates before worktree creation — see also E21,
+              E21B, `procedures.md` (Procedure 3 Phase 1), `state-machine.md`
+              (WAVE_PENDING → WAVE_EXECUTING guard)
+            - E21B: parallel gate execution for run-gates (E21 and E21A) — see also E21,
+              E21A, `message-formats.md` (Quality Gates Section Format)
+
+            Also update the existing E21 Cross-Reference entry (line near the bottom) to
+            add references to E21A and E21B: append "See also E21A (pre-wave baseline),
+            E21B (parallel gate execution)" to the existing E21 cross-reference line.
+
+            Also update the execution-rules.md **version number** in the header from
+            `0.17.0` to `0.18.0`.
+
+            ### Verification gate
+
+            1. Read the modified file and verify:
+               - E21A block is present and correctly placed after E21's `---` separator
+               - E21B block is present and correctly placed after E21A's `---` separator
+               - Cross-References section contains entries for E21A and E21B
+               - Version number updated to 0.18.0
+               - No existing content was accidentally removed or reformatted
+            2. Confirm the rule numbers are exactly E21A and E21B (not E21.1, not E22A, etc.)
+            3. Confirm E21A exemption for empty gates and solo waves is clearly stated
+
+            ### Constraints
+
+            - Do NOT renumber existing rules (E22 stays E22, E23 stays E23, etc.)
+            - Do NOT modify the E21 rule text itself — only add new rules after it
+            - Do NOT modify any other section of the file (participants, message-formats, etc.)
+            - The E21A and E21B text above is authoritative; do not paraphrase or shorten it
+            - Preserve all existing cross-references; only add new ones
+          files:
+            - protocol/execution-rules.md
+        - id: B
+          task: |
+            ## Agent B — Update state-machine.md and procedures.md
+
+            **Files you own:**
+            - `protocol/state-machine.md`
+            - `protocol/procedures.md`
+
+            ### What to implement
+
+            #### 1. protocol/state-machine.md
+
+            **Update the WAVE_PENDING → WAVE_EXECUTING guard** (currently at line ~131):
+
+            The current guard reads:
+            ```
+            **Guard:** File ownership verification passes (no file appears in multiple agents'
+            ownership lists) AND all worktrees created successfully AND all agents launched.
+
+            **Solo wave exception:** If wave contains exactly one agent, no worktrees are
+            created. Agent runs on main branch directly. Transition still proceeds through
+            WAVE_EXECUTING but skips WAVE_MERGING.
+            ```
+
+            Update it to read:
+            ```
+            **Guard:** E21A baseline verification passes (or is exempt per E21A) AND file
+            ownership verification passes (no file appears in multiple agents' ownership
+            lists) AND all worktrees created successfully AND all agents launched.
+
+            **E21A baseline verification:** Before creating worktrees, `prepare-wave` runs
+            the IMPL doc's quality gates against current HEAD. If any required gate fails,
+            this transition does not fire — the wave enters BLOCKED with error
+            `baseline_verification_failed`. If the IMPL doc has no quality gates, or if
+            the wave is a solo wave, E21A is a no-op and this guard proceeds without a
+            baseline check.
+
+            **Solo wave exception:** If wave contains exactly one agent, no worktrees are
+            created. Agent runs on main branch directly. E21A does not apply (solo wave
+            exemption). Transition still proceeds through WAVE_EXECUTING but skips
+            WAVE_MERGING.
+            ```
+
+            **Update the State Entry Actions table** (the table in the "State Entry Actions"
+            section). Find the `WAVE_PENDING` row:
+            ```
+            | **WAVE_PENDING** | Orchestrator runs pre-launch ownership verification (E3) |
+            ```
+            Update it to:
+            ```
+            | **WAVE_PENDING** | Orchestrator runs E21A baseline gate verification (if gates
+            defined and multi-agent wave); then pre-launch ownership verification (E3) |
+            ```
+
+            **Update the State Machine Correctness Properties** section. The final paragraph
+            currently mentions rules E1–E26. Update the reference to E1–E26 to E1–E26, E21A,
+            E21B (or change to a more general "execution rules" reference so future rules
+            don't require this update). Specifically, update this line:
+            ```
+            When all invariants (I1–I6) and execution rules (E1–E26) are maintained:
+            ```
+            to:
+            ```
+            When all invariants (I1–I6) and execution rules (E1–E34, E21A, E21B) are maintained:
+            ```
+
+            Also update the state-machine.md **version number** from `0.15.0` to `0.16.0`.
+
+            #### 2. protocol/procedures.md
+
+            **Update Procedure 3, Phase 1: Pre-Launch Verification.**
+
+            Currently Phase 1 has steps:
+            1. Ownership verification (E3)
+            2. Repository context check
+
+            Insert a new **Step 0: E21A Baseline Verification** before Step 1:
+
+            ```
+            0. **Baseline verification (E21A):** For multi-agent waves with quality gates
+               defined in the IMPL doc:
+               - Run `sawtools run-gates "<manifest-path>" --baseline` to execute all quality
+                 gate commands against current HEAD.
+               - If all required gates pass (or no gates defined): proceed to Step 1.
+               - If any required gate fails: Protocol stop. Report `baseline_verification_failed`
+                 to human with the failing gate commands and their output. Do not create
+                 worktrees. The human must fix the codebase or gate configuration before
+                 re-running `prepare-wave`.
+               - E21A is a no-op for solo waves (Step 3 solo wave exception applies; skip
+                 this step if the wave has exactly one agent).
+            ```
+
+            Renumber the existing steps: Step 1 remains Step 1 (E3 ownership verification),
+            Step 2 remains Step 2 (repository context check). The new step 0 comes before
+            them — no renumbering needed, just insert step 0 at the top of Phase 1.
+
+            Also update procedures.md **version number** from `0.15.0` to `0.16.0`.
+
+            ### Verification gate
+
+            1. Read both modified files and verify:
+               - state-machine.md WAVE_PENDING guard now mentions E21A
+               - state-machine.md State Entry Actions table updated for WAVE_PENDING
+               - state-machine.md Correctness Properties updated to include E21A/E21B
+               - procedures.md Procedure 3 Phase 1 now has a Step 0 for E21A
+               - Both version numbers incremented
+            2. Verify that no existing text was accidentally removed from either file
+
+            ### Constraints
+
+            - Do NOT modify the overall state flow diagram — E21A doesn't add a new state,
+              it's a guard condition on an existing transition
+            - Do NOT add a BASELINE_FAILED state — E21A failure goes to BLOCKED (existing state)
+            - The `--baseline` flag on `run-gates` is a sawtools SDK concern; just reference
+              the command name generically as `sawtools run-gates ... --baseline` in procedures
+            - Solo wave exemption must be mentioned explicitly in both files
+          files:
+            - protocol/state-machine.md
+            - protocol/procedures.md
+        - id: C
+          task: |
+            ## Agent C — Update saw-skill.md for E21A
+
+            **File you own:** `implementations/claude-code/prompts/saw-skill.md`
+
+            ### What to implement
+
+            Find **Step 4: Wave preparation (multi-agent)** in the main execution logic section.
+            It currently reads (paraphrasing):
+            ```
+            4. **Wave preparation (multi-agent):** For waves with 2+ agents, use the batch
+               preparation command:
+               ```bash
+               sawtools prepare-wave "<manifest-path>" --wave <N> --repo-dir "<repo-path>"
+               ```
+               This atomic operation combines worktree creation and per-agent preparation
+               (brief extraction + journal initialization) into a single command. Exit code 1
+               indicates failure (uncommitted scaffolds, freeze violations, or worktree
+               creation errors) — do not proceed until resolved. **Interface freeze
+               checkpoint:** ...
+            ```
+
+            Update the failure description to include baseline gate failure:
+
+            Change:
+            ```
+            Exit code 1 indicates failure (uncommitted scaffolds, freeze violations, or
+            worktree creation errors)
+            ```
+            To:
+            ```
+            Exit code 1 indicates failure (baseline gate failure — codebase does not pass
+            quality gates at wave-start time; uncommitted scaffolds; freeze violations; or
+            worktree creation errors)
+            ```
+
+            Also update the inline explanation after the failure description. After
+            "do not proceed until resolved," add a new sentence:
+            ```
+            **E21A baseline failure:** If the failure reason is `baseline_verification_failed`,
+            the codebase was already broken before any agent started. Fix the codebase (or
+            gate configuration) and re-run `prepare-wave`. Do not launch agents onto a
+            broken baseline — E21 will fail after all agent work is wasted.
+            ```
+
+            Also find the `sawtools` commands list in the **sawtools Commands** section.
+            Currently `sawtools run-gates` appears as:
+            ```
+            - `sawtools run-gates` — E21 quality gate verification
+            ```
+            Update it to:
+            ```
+            - `sawtools run-gates` — E21/E21A quality gate verification (post-merge and
+              pre-wave baseline; E21B: gates run concurrently when multiple gates defined)
+            ```
+
+            Also update the skill metadata version in the YAML frontmatter from `"0.12.0"`
+            to `"0.13.0"`.
+
+            ### Verification gate
+
+            1. Read the modified file and verify:
+               - Step 4 exit code 1 description now mentions baseline gate failure
+               - E21A baseline failure note is present after "do not proceed until resolved"
+               - sawtools run-gates entry updated to reference E21A and E21B
+               - Frontmatter version updated to 0.13.0
+            2. Verify no other text was accidentally modified
+
+            ### Constraints
+
+            - Do NOT modify the overall flow logic or step ordering
+            - Do NOT add new steps — this is purely additive text within step 4
+            - Do NOT change the sawtools command itself — only the description text changes
+            - Do NOT modify program commands, scout flow, or wave finalization steps
+            - The change must be minimal and precisely targeted to the prepare-wave step 4
+          files:
+            - implementations/claude-code/prompts/saw-skill.md
+        - id: D
+          task: |
+            ## Agent D — Add CHANGELOG entry for E21A/E21B
+
+            **File you own:** `CHANGELOG.md`
+
+            ### What to implement
+
+            Read the CHANGELOG.md file to determine the current latest version number
+            (at the top of the Version History table). The latest version is 0.50.0
+            (as of scout analysis time). The new entry should be version 0.51.0.
+
+            #### Add to the Version History table
+
+            Insert a new row at the TOP of the Version History table (immediately after
+            the header row `| Version | Date | Headline |`):
+
+            ```
+            | [0.51.0] | 2026-03-19 | E21A: Pre-Wave Baseline Verification + E21B: Parallel
+            Gate Execution — `prepare-wave` now runs quality gates against HEAD before
+            creating worktrees; solo waves and empty gate lists are exempt; E21B makes
+            `run-gates` execute all gates concurrently and report all failures together |
+            ```
+
+            #### Add a full version section
+
+            After the `---` separator following the Version History table header section
+            (before the first full version entry `## [0.42.0] - 2026-03-17` or whatever
+            is the first full section), insert:
+
+            ```markdown
+            ## [0.51.0] - 2026-03-19
+
+            ### Added
+
+            - **E21A: Pre-Wave Baseline Verification** (`protocol/execution-rules.md`) —
+              `prepare-wave` now runs the IMPL doc's quality gates against current HEAD
+              before creating any worktrees. If any required gate fails, `prepare-wave`
+              exits with `baseline_verification_failed` and the wave does not launch.
+              Exemptions: solo waves (single agent, no worktrees) and IMPL docs with no
+              quality gates defined. Prevents agents from working on a broken baseline
+              and wasting parallel execution time on a wave that would fail E21 anyway.
+
+            - **E21B: Parallel Gate Execution** (`protocol/execution-rules.md`) —
+              `run-gates` now executes all quality gate commands concurrently rather than
+              sequentially when two or more gates are configured. All failures are
+              collected and reported together before blocking. Applies to both E21
+              (post-merge) and E21A (pre-wave baseline) invocations. Enables faster
+              failure diagnosis by revealing the full failure surface in a single pass.
+
+            ### Changed
+
+            - `protocol/state-machine.md` v0.15.0 → v0.16.0 — WAVE_PENDING →
+              WAVE_EXECUTING guard updated: E21A baseline check is now a pre-condition;
+              State Entry Actions table updated for WAVE_PENDING; Correctness Properties
+              rule reference updated.
+            - `protocol/procedures.md` v0.15.0 → v0.16.0 — Procedure 3 Phase 1 now
+              has Step 0 (E21A baseline verification) before ownership verification (E3).
+            - `implementations/claude-code/prompts/saw-skill.md` v0.12.0 → v0.13.0 —
+              Step 4 (prepare-wave) updated to document `baseline_verification_failed`
+              error; `sawtools run-gates` description updated to reference E21A and E21B.
+
+            ---
+            ```
+
+            ### Verification gate
+
+            1. Read the modified CHANGELOG.md and verify:
+               - Version 0.51.0 row is at the top of the Version History table
+               - Full `## [0.51.0]` section is present with E21A and E21B entries
+               - The date is 2026-03-19
+               - The section accurately describes what was changed in each file
+            2. Verify no existing CHANGELOG entries were accidentally modified
+
+            ### Constraints
+
+            - Do NOT modify any existing CHANGELOG entries
+            - The version number must be 0.51.0 (0.50.0 + 1)
+            - Do NOT add entries for protocol/execution-rules.md version bump in the
+              Changed section — the headline entries cover it under "Added"
+            - Date must be 2026-03-19 (today)
+          files:
+            - CHANGELOG.md
+      base_commit: 2d87e303a9b653e3d5c3ae7a0bc420f8ccb238d3
+quality_gates:
+    level: quick
+    gates: []
+completion_reports:
+    A:
+        status: complete
+        worktree: /Users/dayna.blackwell/code/scout-and-wave/.claude/worktrees/saw/e21a-baseline-gate/wave1-agent-A
+        branch: saw/e21a-baseline-gate/wave1-agent-A
+        commit: 374aa7b9dafcab1d4fd1d7f54990825b617fa854
+        files_changed:
+            - protocol/execution-rules.md
+        notes: auto-committed by orchestrator (API agent)
+    B:
+        status: complete
+        worktree: /Users/dayna.blackwell/code/scout-and-wave/.claude/worktrees/saw/e21a-baseline-gate/wave1-agent-B
+        branch: saw/e21a-baseline-gate/wave1-agent-B
+        commit: cc4e8e4e7958e840065c419a6bfeb653f47a3182
+        files_changed:
+            - protocol/procedures.md
+            - protocol/state-machine.md
+        notes: auto-committed by orchestrator (API agent)
+    C:
+        status: complete
+        worktree: /Users/dayna.blackwell/code/scout-and-wave/.claude/worktrees/saw/e21a-baseline-gate/wave1-agent-C
+        branch: saw/e21a-baseline-gate/wave1-agent-C
+        commit: 35694ac29ce4770248f004debdc5b9f4d34a4aa1
+        files_changed:
+            - implementations/claude-code/prompts/saw-skill.md
+        notes: auto-committed by orchestrator (API agent)
+    D:
+        status: complete
+        worktree: /Users/dayna.blackwell/code/scout-and-wave/.claude/worktrees/saw/e21a-baseline-gate/wave1-agent-D
+        branch: saw/e21a-baseline-gate/wave1-agent-D
+        commit: 3cb1e73eebb2078f4a68354b6f7d3d965fa888a6
+        files_changed:
+            - CHANGELOG.md
+        notes: auto-committed by orchestrator (API agent)
+integration_reports:
+    wave1:
+        wave: 1
+        gaps: []
+        valid: true
+        summary: 'Wave 1: all exports are integrated (no gaps detected)'
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: |-
+            Agent B references E21A in state-machine.md using slightly different wording than
+            Agent A defines in execution-rules.md, creating a spec inconsistency.
+          likelihood: low
+          impact: medium
+          mitigation: |-
+            The interface contract specifies the exact rule number (E21A) and key terms
+            (baseline_verification_failed, solo wave exemption). Agents B and C only need
+            to reference the rule by number, not reproduce its full text.
+        - scenario: |-
+            Agent A accidentally renumbers E22 onwards when inserting E21A and E21B,
+            breaking all cross-references in the document.
+          likelihood: low
+          impact: high
+          mitigation: |-
+            Agent A's task prompt explicitly states "Do NOT renumber existing rules."
+            The insertion location (after E21's --- separator, before E22's ## header) is
+            well-defined. Post-merge verification (reading the file) catches this.
+        - scenario: |-
+            Agent D reads an outdated version number from CHANGELOG and emits the wrong
+            version (e.g. 0.51.0 is already taken).
+          likelihood: low
+          impact: low
+          mitigation: |-
+            Agent D's task instructs it to read CHANGELOG.md first to confirm the latest
+            version before inserting. If 0.51.0 is taken, Agent D should use 0.52.0 (or
+            whatever is next). The scout analysis confirmed 0.50.0 is current as of writing.
+        - scenario: |-
+            One agent modifies a file outside its ownership (e.g., Agent B accidentally
+            edits execution-rules.md when trying to read it for reference).
+          likelihood: low
+          impact: medium
+          mitigation: |-
+            I1 disjoint ownership is enforced by worktree isolation and the pre-commit hook.
+            Each agent's task prompt lists the exact files it owns. Agents are instructed
+            to read other files for reference only.
+state: "COMPLETE"

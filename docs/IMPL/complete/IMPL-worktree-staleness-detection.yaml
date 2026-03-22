@@ -1,0 +1,331 @@
+title: Defensive Worktree Staleness Detection
+<!-- SAW:COMPLETE 2026-03-20 -->
+feature_slug: worktree-staleness-detection
+verdict: SUITABLE
+suitability_assessment: |
+    All five suitability questions resolve cleanly:
+
+    1. File decomposition: Work splits into 2 files with disjoint ownership — git
+       helpers (internal/git/commands.go) and worktree logic (pkg/protocol/worktree.go).
+
+    2. Investigation-first items: None. Problem is well-defined (worktrees reused
+       from failed sessions lack staleness checks). Fix is additive detection logic.
+
+    3. Interface discoverability: All interfaces are clear. New git helpers follow
+       existing patterns (string, error) or bool. CreateWorktrees signature unchanged.
+
+    4. Pre-implementation status: No prior implementation. Current CreateWorktrees
+       only cleans merged branches, doesn't detect stale base commits or missing hooks.
+
+    5. Parallelization value: Clear speedup. Go test cycle ~5-10s, 2 independent agents
+       with 1-2 files each, non-trivial logic with edge cases. Sequential ~26min,
+       parallel ~21min (19% faster).
+
+    Verdict: SUITABLE. Work decomposes cleanly, interfaces discoverable, parallelization
+    provides measurable time savings.
+test_command: go test ./...
+lint_command: go vet ./...
+file_ownership:
+    - file: internal/git/commands.go
+      agent: A
+      wave: 1
+      action: modify
+    - file: internal/git/commands_test.go
+      agent: A
+      wave: 1
+      action: modify
+    - file: pkg/protocol/worktree.go
+      agent: B
+      wave: 1
+      action: modify
+    - file: pkg/protocol/worktree_test.go
+      agent: B
+      wave: 1
+      action: modify
+interface_contracts:
+    - name: GetWorktreeBaseCommit
+      description: |-
+        Returns the base commit SHA that a worktree was created from. This is the
+        commit that HEAD pointed to when the worktree was created (stored as the
+        first parent of the worktree's initial commit, or HEAD if no commits yet).
+      definition: |-
+        func GetWorktreeBaseCommit(repoPath, worktreePath string) (string, error)
+
+        Parameters:
+        - repoPath: absolute path to main repository
+        - worktreePath: absolute path to worktree directory
+
+        Returns:
+        - commit SHA of base commit (40-char hex string)
+        - error if worktree doesn't exist or git command fails
+
+        Implementation notes:
+        - Read worktreePath/.git file to find gitdir pointer
+        - Run git rev-parse HEAD in worktree to get current commit
+        - If worktree has commits, get first parent via git rev-list --max-parents=0
+        - If worktree has no commits (fresh), return current HEAD
+      location: internal/git/commands.go
+    - name: WorktreeExists
+      description: |-
+        Checks if a worktree at the given path is registered in git's worktree list.
+        Does not check filesystem existence — only git's metadata.
+      definition: |-
+        func WorktreeExists(repoPath, worktreePath string) bool
+
+        Parameters:
+        - repoPath: absolute path to main repository
+        - worktreePath: absolute path to worktree directory to check
+
+        Returns:
+        - true if worktree is in `git worktree list --porcelain` output
+        - false otherwise (includes case where worktree command fails)
+
+        Implementation notes:
+        - Call WorktreeList(repoPath) to get all worktrees
+        - Compare worktreePath against first element of each [path, branch] pair
+        - Use filepath.Clean to normalize paths before comparison
+      location: internal/git/commands.go
+    - name: VerifyHookInWorktree
+      description: |-
+        Checks if pre-commit hook exists and is valid in a worktree. Wrapper around
+        existing verifyHookInstalled function in cmd/saw/verify_hook_installed.go.
+        Returns simplified bool result for use in CreateWorktrees staleness checks.
+      definition: |-
+        func VerifyHookInWorktree(worktreePath string) (bool, error)
+
+        Parameters:
+        - worktreePath: absolute path to worktree directory
+
+        Returns:
+        - true if hook exists, is executable, and contains SAW isolation logic
+        - false if hook is missing, not executable, or lacks isolation logic
+        - error only on filesystem I/O failures (not for missing/invalid hooks)
+
+        Implementation notes:
+        - Read worktreePath/.git to find gitdir pointer
+        - Check {gitdir}/hooks/pre-commit exists and is executable (mode & 0111)
+        - Verify hook contains "SAW_ALLOW_MAIN_COMMIT" or "SAW pre-commit guard"
+        - Return (false, nil) for missing/invalid hooks (not an error condition)
+      location: internal/git/commands.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            Add three new git helper functions to internal/git/commands.go for worktree
+            staleness detection. These will be called by Agent B's CreateWorktrees logic.
+
+            ## What to implement
+
+            1. **GetWorktreeBaseCommit(repoPath, worktreePath string) (string, error)**
+               - Returns the base commit SHA that a worktree was created from
+               - Algorithm:
+                 a. Read worktreePath/.git file to find gitdir pointer (same logic as InstallHooks)
+                 b. Run `git -C worktreePath rev-parse HEAD` to get current commit
+                 c. If worktree has commits, get oldest commit via `git -C worktreePath rev-list --max-parents=0 HEAD`
+                 d. If no commits yet (fresh worktree), return current HEAD
+               - Return error only on git command failures or missing .git file
+
+            2. **WorktreeExists(repoPath, worktreePath string) bool**
+               - Returns true if worktreePath is in `git worktree list --porcelain`
+               - Call existing WorktreeList(repoPath) helper
+               - Compare worktreePath against each returned path (normalize with filepath.Clean)
+               - Return false if WorktreeList fails (don't expose error — caller treats as "doesn't exist")
+
+            3. **VerifyHookInWorktree(worktreePath string) (bool, error)**
+               - Checks if pre-commit hook exists and contains SAW isolation logic
+               - Reuse logic from cmd/saw/verify_hook_installed.go (lines 61-144)
+               - Algorithm:
+                 a. Read worktreePath/.git to find gitdir pointer
+                 b. Compute hook path: {gitdir}/hooks/pre-commit
+                 c. Check file exists and is executable (stat.Mode() & 0111 != 0)
+                 d. Read hook content and verify it contains "SAW_ALLOW_MAIN_COMMIT" or "SAW pre-commit guard"
+               - Return (false, nil) for missing/invalid hooks — NOT an error
+               - Return error only for I/O failures (can't read .git file, can't stat existing file)
+
+            ## Interface contracts
+
+            See interface_contracts section above for exact signatures and implementation notes.
+            All three functions follow existing patterns in internal/git/commands.go:
+            - Use Run(repoPath, args...) for git commands
+            - Return structured errors with fmt.Errorf wrapping
+            - Keep functions stateless (no package-level state)
+
+            ## Tests
+
+            Add tests to internal/git/commands_test.go:
+
+            - **TestGetWorktreeBaseCommit**: Create temp repo, add worktree, make commit,
+              verify base commit matches original HEAD
+            - **TestWorktreeExists**: Create worktree, verify true; remove worktree (git worktree remove),
+              verify false
+            - **TestVerifyHookInWorktree**: Create worktree, install hook via InstallHooks,
+              verify returns (true, nil); corrupt hook content, verify returns (false, nil)
+
+            Test coverage target: >80% for new functions.
+
+            ## Verification gate
+
+            ```bash
+            go build ./internal/git
+            go vet ./internal/git
+            go test ./internal/git -run TestGetWorktreeBaseCommit|TestWorktreeExists|TestVerifyHookInWorktree -v
+            ```
+
+            ## Constraints
+
+            - Do NOT modify any functions outside internal/git/commands.go and internal/git/commands_test.go
+            - Follow existing code style (gofmt, variable naming conventions)
+            - All three functions must be exported (capitalized names) for use by pkg/protocol/worktree.go
+            - VerifyHookInWorktree must NOT depend on cmd/saw/* packages (avoid circular dependency)
+
+            ## Verification Gate
+
+            Run these commands to verify your implementation:
+
+            ```bash
+            go build ./...
+            go vet ./...
+            go test ./internal/git -run {test_name}
+            ```
+          files:
+            - internal/git/commands.go
+            - internal/git/commands_test.go
+        - id: B
+          task: |
+            Add staleness detection to CreateWorktrees in pkg/protocol/worktree.go. Before
+            creating each worktree, check if it already exists and handle stale/invalid cases.
+
+            ## What to implement
+
+            Insert staleness detection between lines 137-150 (the merged branch cleanup loop)
+            and line 153 (git.WorktreeAdd call). New logic runs BEFORE attempting to create worktree.
+
+            **Decision tree (for each agent's worktree path):**
+
+            1. **Check if worktree exists** via `git.WorktreeExists(agentRepoDir, worktreePath)`
+               - If false → skip to step 6 (CREATE normally)
+
+            2. **Check if base commit is stale**
+               - Get worktree base: `baseCommit, err := git.GetWorktreeBaseCommit(agentRepoDir, worktreePath)`
+               - Get current HEAD: `currentHead, err := git.RevParse(agentRepoDir, "HEAD")`
+               - If baseCommit != currentHead → worktree is stale → go to step 5 (REMOVE and recreate)
+
+            3. **Check if hooks are valid**
+               - `hookValid, err := git.VerifyHookInWorktree(worktreePath)`
+               - If err != nil → log warning, continue (don't fail on I/O errors)
+               - If !hookValid → hooks missing/broken → go to step 5 (REMOVE and recreate)
+
+            4. **Check if branch is unmerged** (already exists, reusing lines 138-139 logic)
+               - If `git.BranchExists && !git.IsAncestor` → return error (unmerged work from failed session)
+               - Error message: "worktree exists at %s but branch %s is unmerged — manual cleanup required or use --force flag"
+
+            5. **REMOVE worktree** (staleness detected)
+               - `git.WorktreeRemove(agentRepoDir, worktreePath)` (ignore errors — may already be removed)
+               - `git.DeleteBranch(agentRepoDir, branchName)` (ignore errors — may not exist)
+               - Log to stderr: "Removed stale worktree for agent %s (reason: %s)"
+               - Fall through to step 6
+
+            6. **CREATE worktree** (normal path)
+               - `git.WorktreeAdd(agentRepoDir, worktreePath, branchName)` (existing line 153)
+               - Continue with hook installation (existing line 158)
+
+            ## Edge cases
+
+            - **Worktree path exists on filesystem but not in git worktree list**
+              → WorktreeExists returns false → attempt WorktreeAdd will fail with git error
+              "worktree already exists" → surface that error to caller (existing behavior)
+
+            - **Base commit check fails** (GetWorktreeBaseCommit returns error)
+              → Log warning to stderr, treat as stale (safer to recreate than reuse broken worktree)
+
+            - **Hook verification fails** (VerifyHookInWorktree returns error)
+              → Log warning, continue (don't block worktree creation on hook check I/O failure)
+
+            - **Unmerged branch from previous IMPL** (different feature slug)
+              → Return error immediately — requires human decision (may contain valuable uncommitted work)
+
+            ## Interface contracts
+
+            Call three new git helpers from Agent A:
+            - `git.WorktreeExists(agentRepoDir, worktreePath) bool`
+            - `git.GetWorktreeBaseCommit(agentRepoDir, worktreePath) (string, error)`
+            - `git.VerifyHookInWorktree(worktreePath) (bool, error)`
+
+            See interface_contracts section for exact signatures.
+
+            ## Tests
+
+            Add test cases to pkg/protocol/worktree_test.go:
+
+            - **TestCreateWorktrees_ReuseValidWorktree**: Create worktree, call CreateWorktrees
+              again, verify worktree not recreated (no git.WorktreeAdd call)
+            - **TestCreateWorktrees_RemoveStaleBaseCommit**: Create worktree, advance main by 1 commit,
+              call CreateWorktrees, verify old worktree removed and recreated
+            - **TestCreateWorktrees_RemoveBrokenHooks**: Create worktree, delete hook file,
+              call CreateWorktrees, verify worktree recreated with hooks installed
+            - **TestCreateWorktrees_ErrorOnUnmerged**: Create worktree, make commit, call
+              CreateWorktrees, verify returns error mentioning "unmerged"
+
+            Test coverage target: >75% for CreateWorktrees function.
+
+            ## Verification gate
+
+            ```bash
+            go build ./pkg/protocol
+            go vet ./pkg/protocol
+            go test ./pkg/protocol -run TestCreateWorktrees -v
+            ```
+
+            ## Constraints
+
+            - Do NOT modify CreateWorktrees signature or return type
+            - Do NOT change behavior for fresh worktree creation (no existing worktree/branch)
+            - Log all staleness decisions to stderr via fmt.Fprintf(os.Stderr, ...) for debugging
+            - Keep existing merged branch cleanup logic (lines 138-149) unchanged
+            - Staleness checks must run BEFORE WorktreeAdd attempt (prevent "already exists" errors)
+
+            ## Verification Gate
+
+            Run these commands to verify your implementation:
+
+            ```bash
+            go build ./...
+            go vet ./...
+            go test ./pkg/protocol -run {test_name}
+            ```
+          files:
+            - pkg/protocol/worktree.go
+            - pkg/protocol/worktree_test.go
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./...
+          required: true
+        - type: lint
+          command: go vet ./...
+          required: true
+        - type: test
+          command: go test ./...
+          required: true
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: Agent A's GetWorktreeBaseCommit logic fails on worktrees with no commits (fresh worktrees)
+          likelihood: medium
+          impact: low
+          mitigation: Test explicitly covers fresh worktree case; fallback to current HEAD is safe default
+        - scenario: Agent B's staleness detection removes valid worktree due to false positive on base commit check
+          likelihood: low
+          impact: medium
+          mitigation: Base commit comparison is SHA-based (deterministic); test coverage includes "reuse valid worktree" case
+        - scenario: Hook verification fails to detect corrupted hooks (false negative)
+          likelihood: low
+          impact: high
+          mitigation: VerifyHookInWorktree checks both file existence + content markers (two-layer validation); matches prepare-wave's existing verifyHookInstalled logic
+        - scenario: Unmerged branch from failed session blocks CreateWorktrees, preventing wave start
+          likelihood: medium
+          impact: medium
+          mitigation: Error message explicitly guides user to manual cleanup; this is correct behavior (preserves potentially valuable work)
+state: COMPLETE

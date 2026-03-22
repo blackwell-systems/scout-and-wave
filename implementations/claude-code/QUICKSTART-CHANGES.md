@@ -45,7 +45,7 @@
 ### Section: Orchestrator merges (Step 5)
 - **Issue:** Showed raw git commands without sawtools wrapper
 - **Fix:** Added `sawtools verify-commits` and `sawtools merge-agents` commands
-- **Impact:** Reflects actual orchestrator behavior using SDK CLI (saw-skill.md v0.9.0)
+- **Impact:** Reflects actual orchestrator behavior using sawtools commands (saw-skill.md v0.9.0)
 
 ### Section: Post-merge verification (Step 6)
 - **Issue:** Showed verification steps without sawtools command
@@ -64,7 +64,7 @@
 
 ## Conformity Check
 
-- [x] Protocol conformance (YAML format, E1-E23)
+- [x] Protocol conformance (YAML format, E1-E26)
   - YAML manifest format throughout (message-formats.md v0.14.0)
   - References to sawtools CLI commands (execution-rules.md E15, E18, E20, E21)
   - Completion report schema matches protocol (wave-agent v0.4.1)

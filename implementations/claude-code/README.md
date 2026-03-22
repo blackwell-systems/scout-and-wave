@@ -196,7 +196,7 @@ Scout will show you the wave structure and ask for approval before any agent sta
 ## Tool Requirements
 
 This implementation uses Claude Code's tool suite:
-- **Agent:** Launch Scout, Scaffold Agent, Wave Agents
+- **Agent:** Launch Scout, Scaffold Agent, Wave Agents, Integration Agent
 - **Read/Write/Edit:** IMPL doc and source file operations
 - **Bash:** Git commands, build/test execution
 - **Glob/Grep:** Codebase analysis during scout phase
@@ -209,7 +209,7 @@ The `/saw` skill consists of several specialized prompts, all installed to `~/.c
 - **`SKILL.md`** (from `implementations/claude-code/prompts/saw-skill.md`) - Main orchestrator with YAML frontmatter
 - **`saw-bootstrap.md`** - Bootstrap mode for new projects
 - **`agent-template.md`** - Wave Agent template (Scout fills this to generate per-agent prompts)
-- **`agents/`** - Custom agent type definitions (scout, wave-agent, scaffold-agent)
+- **`agents/`** - Custom agent type definitions (scout, wave-agent, scaffold-agent, integration-agent)
 
 All orchestration operations (worktree management, merge procedures, validation, stub scanning) are handled by the `sawtools` CLI from the scout-and-wave-go SDK.
 
@@ -251,7 +251,8 @@ Edit `config/saw.config.json` in the repo to set your defaults. Changes are vers
   "agent": {
     "scout_model": "claude-sonnet-4-5",
     "wave_model": "claude-sonnet-4-5",
-    "chat_model": "claude-sonnet-4-5"
+    "chat_model": "claude-sonnet-4-5",
+    "integration_model": "claude-sonnet-4-5"
   },
   "quality": {
     "require_tests": false,
@@ -268,6 +269,7 @@ Edit `config/saw.config.json` in the repo to set your defaults. Changes are vers
 | `scout_model` | `/saw scout`, `/saw bootstrap` | Parent session model |
 | `wave_model` | `/saw wave` (all wave agents) | Parent session model |
 | `chat_model` | Web app chat panel | Parent session model |
+| `integration_model` | Integration Agent (E26) | Parent session model |
 
 **`quality` fields:**
 
@@ -281,16 +283,17 @@ If the file doesn't exist, all values fall back to defaults. The CLI skill reads
 
 ### Agent Architecture
 
-SAW uses custom Claude Code agent types for all Scout, Scaffold Agent, and Wave Agent launches:
+SAW uses custom Claude Code agent types for all Scout, Scaffold Agent, Wave Agent, and Integration Agent launches:
 
 **Directory structure:**
 ```
 prompts/
 ├── agent-template.md     # Scout's reference doc for writing agent briefs into IMPL doc
 └── agents/
-    ├── scout.md          # Custom agent type (with YAML frontmatter)
-    ├── scaffold-agent.md # Custom agent type (with YAML frontmatter)
-    └── wave-agent.md     # Custom agent type (with YAML frontmatter)
+    ├── scout.md              # Custom agent type (with YAML frontmatter)
+    ├── scaffold-agent.md     # Custom agent type (with YAML frontmatter)
+    ├── wave-agent.md         # Custom agent type (with YAML frontmatter)
+    └── integration-agent.md  # Custom agent type (with YAML frontmatter)
 ```
 
 **Wave agents use a two-layer architecture:**

@@ -1,6 +1,6 @@
 # Scout-and-Wave Procedures
 
-**Version:** 0.14.0
+**Version:** 0.16.0
 
 This document defines the operational procedures executed by the Orchestrator and other participants: suitability assessment, scaffold materialization, wave execution, and merge operations.
 
@@ -8,13 +8,14 @@ This document defines the operational procedures executed by the Orchestrator an
 
 ## Overview
 
-SAW procedures are executed by the Orchestrator (synchronous agent in the user's session) with cooperation from asynchronous agents (Scout, Scaffold Agent, Wave Agents). The Orchestrator serializes all state transitions while asynchronous agents execute work in parallel.
+SAW procedures are executed by the Orchestrator (synchronous agent in the user's session) with cooperation from asynchronous agents (Scout, Scaffold Agent, Wave Agents, Integration Agent). The Orchestrator serializes all state transitions while asynchronous agents execute work in parallel.
 
 **Participant roles:**
 - **Orchestrator:** Drives all state transitions, launches agents, reads completion reports, executes merge procedure
 - **Scout:** Analyzes codebase, produces IMPL doc, defines interface contracts
 - **Scaffold Agent:** Materializes approved interface contracts as type scaffold files
 - **Wave Agents:** Implement features in parallel against frozen interface contracts
+- **Integration Agent:** Wires new exports into caller code after wave merge (E26)
 
 ---
 
@@ -145,6 +146,12 @@ Scaffold files are committed to HEAD before worktrees are created. Once worktree
 
 ### Phase 1: Pre-Launch Verification
 
+0. **Baseline verification (E21A):** For multi-agent waves with quality gates defined in the IMPL doc:
+   - Run `sawtools run-gates "<manifest-path>" --baseline` to execute all quality gate commands against current HEAD.
+   - If all required gates pass (or no gates defined): proceed to Step 1.
+   - If any required gate fails: Protocol stop. Report `baseline_verification_failed` to human with the failing gate commands and their output. Do not create worktrees. The human must fix the codebase or gate configuration before re-running `prepare-wave`.
+   - E21A is a no-op for solo waves (Step 3 solo wave exception applies; skip this step if the wave has exactly one agent).
+
 1. **Ownership verification (E3):** Orchestrator scans wave's file ownership table in IMPL doc
    - Check: No file appears in more than one agent's Field 1 (File Ownership) list
    - If overlap found: Protocol stop, surface error to human, correct IMPL doc before continuing
@@ -180,7 +187,7 @@ Scaffold files are committed to HEAD before worktrees are created. Once worktree
        repo: "saw-web"
    ```
 
-   **CLI cross-repo support:** All sawtools commands accept `--repo-dir` parameter. Run once per repository:
+   **sawtools cross-repo support:** All sawtools commands accept `--repo-dir` parameter. Run once per repository:
    ```bash
    sawtools create-worktrees "<manifest-path>" --wave <N> --repo-dir "~/code/saw-engine"
    sawtools create-worktrees "<manifest-path>" --wave <N> --repo-dir "~/code/saw-web"
@@ -287,6 +294,18 @@ Scaffold files are committed to HEAD before worktrees are created. Once worktree
    - Run all gates with `required: true`
    - Required gate failures → enter BLOCKED
    - Optional gate failures → warn only; do not block merge
+
+6. **E25: Validate integration.** After quality gates pass, scan for unconnected exports:
+   - Run `ValidateIntegration()` on the completed wave to produce an `IntegrationReport`
+   - If `report.Valid == true`: No integration gaps detected, proceed to Phase 6 (merge)
+   - If `report.Valid == false`: Integration gaps detected, emit `integration_gaps_detected` message to IMPL doc, proceed to step 7
+
+7. **E26: Launch Integration Agent (if gaps detected).** If E25 report exists AND `report.Valid == false`:
+   - Verify `integration_connectors` field exists in IMPL manifest
+   - Emit `integration_agent_started` message
+   - Launch Integration Agent with `RunIntegrationAgent()` — agent may only modify files listed in `integration_connectors`
+   - On success: emit `integration_agent_complete` message, proceed to Phase 6 (merge)
+   - On failure: emit `integration_agent_failed` message, enter BLOCKED
 
 ### Phase 6: Failure Handling (If Blocked)
 

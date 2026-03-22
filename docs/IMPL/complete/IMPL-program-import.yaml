@@ -1,0 +1,511 @@
+completion_date: "2026-03-20"
+title: Program Layer — Pre-Existing IMPL Import Support
+feature_slug: program-import
+verdict: SUITABLE
+suitability_assessment: |
+    1. File decomposition: 11 files across 2 repos, cleanly split into 4 agents
+       with disjoint ownership. Protocol docs are independent of Go SDK files.
+    2. Investigation-first: No unknowns. The PROGRAM layer is well-defined (v0.2.0),
+       and the extension points are clear.
+    3. Interface discoverability: Yes. The ProgramIMPL struct, ValidateProgram function,
+       and run-scout command are all well-defined with stable signatures.
+    4. Pre-implementation status: All items are TODO — no partial implementations exist.
+    5. Parallelization value: High. Protocol agents (Wave 1) are fully independent of
+       SDK agents (Wave 2/3). Build/test cycle for Go SDK is >30s. 3+ files per agent.
+
+    Estimated times:
+    - Scout phase: ~8 min (dependency mapping, cross-repo interface contracts)
+    - Agent execution: ~18 min (4 agents, 3 waves, ~8 min avg per agent)
+    - Merge and verification: ~5 min
+    Total SAW time: ~31 min
+
+    Sequential baseline: ~40 min (4 agents x 10 min avg)
+    Time savings: ~9 min (23% faster)
+
+    Recommendation: Clear speedup. Protocol and SDK work is fully independent in Wave 1.
+    Wave 2 (types+validation) unblocks Wave 3 (commands).
+test_command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go test ./...
+lint_command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go vet ./...
+file_ownership:
+    - file: protocol/execution-rules.md
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: protocol/program-manifest.md
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: implementations/claude-code/prompts/saw-skill.md
+      agent: B
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: pkg/protocol/program_validation.go
+      agent: C
+      wave: 2
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/protocol/program_validation_test.go
+      agent: C
+      wave: 2
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/protocol/program_types.go
+      agent: C
+      wave: 2
+      action: modify
+      repo: scout-and-wave-go
+    - file: cmd/saw/import_impls_cmd.go
+      agent: D
+      wave: 3
+      action: new
+      repo: scout-and-wave-go
+    - file: cmd/saw/import_impls_cmd_test.go
+      agent: D
+      wave: 3
+      action: new
+      repo: scout-and-wave-go
+    - file: cmd/saw/validate_program_cmd.go
+      agent: D
+      wave: 3
+      action: modify
+      repo: scout-and-wave-go
+    - file: cmd/saw/run_scout_cmd.go
+      agent: D
+      wave: 3
+      action: modify
+      repo: scout-and-wave-go
+    - file: cmd/saw/main.go
+      agent: D
+      wave: 3
+      action: modify
+      repo: scout-and-wave-go
+interface_contracts:
+    - name: ValidateProgramImportMode
+      description: |
+        Extended validation for import mode. Checks that referenced IMPL docs
+        exist on disk, have valid states (reviewed/complete), and don't violate
+        P1 (file_ownership disjointness) or P2 (frozen contract redefinition).
+      definition: |
+        func ValidateProgramImportMode(manifest *PROGRAMManifest, repoPath string) []ValidationError
+        // Checks performed:
+        // 1. For each IMPL with status reviewed/complete, verify IMPL-<slug>.yaml exists
+        //    at repoPath/docs/IMPL/IMPL-<slug>.yaml (or docs/IMPL/complete/)
+        // 2. Parse each existing IMPL doc, verify its state field matches status
+        // 3. Check P1: file_ownership across all IMPLs in same tier is disjoint
+        // 4. Check P2: no pre-existing IMPL redefines a frozen program contract
+      location: pkg/protocol/program_validation.go
+    - name: ImportIMPLsResult
+      description: |
+        Result struct returned by the import-impls command.
+      definition: |
+        type ImportIMPLsResult struct {
+          ManifestPath    string              `json:"manifest_path"`
+          ImplsImported   []ImportedIMPL      `json:"impls_imported"`
+          ImplsDiscovered []string            `json:"impls_discovered,omitempty"`
+          TierAssignments map[string]int      `json:"tier_assignments"`
+          P1Conflicts     []string            `json:"p1_conflicts,omitempty"`
+          P2Conflicts     []string            `json:"p2_conflicts,omitempty"`
+          Created         bool                `json:"created"`
+          Updated         bool                `json:"updated"`
+        }
+
+        type ImportedIMPL struct {
+          Slug            string `json:"slug"`
+          Title           string `json:"title"`
+          Status          string `json:"status"`
+          AssignedTier    int    `json:"assigned_tier"`
+          AgentCount      int    `json:"agent_count"`
+          WaveCount       int    `json:"wave_count"`
+        }
+      location: pkg/protocol/program_types.go
+    - name: PartitionIMPLsByStatus
+      description: |
+        Used in E28A tier execution. Partitions a tier's IMPLs into those
+        needing Scout (pending) vs those to validate-only (reviewed/complete).
+      definition: |
+        // PartitionIMPLsByStatus splits a tier's IMPLs into two groups:
+        // - needsScout: IMPLs with status "pending" or "scouting"
+        // - preExisting: IMPLs with status "reviewed" or "complete"
+        func PartitionIMPLsByStatus(manifest *PROGRAMManifest, tierNumber int) (needsScout []ProgramIMPL, preExisting []ProgramIMPL)
+      location: pkg/protocol/program_validation.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## Agent A — Protocol Rules (E28A + Section 13.4)
+
+            **Repo:** /Users/dayna.blackwell/code/scout-and-wave
+            **What to implement:**
+
+            1. **E28A in protocol/execution-rules.md** — Add new rule E28A immediately
+               after E28 (Tier Execution Loop). E28A defines tier execution behavior
+               when a tier contains pre-existing IMPLs:
+               - Partition IMPLs by status: pending → Scout as normal (E31),
+                 reviewed/complete → skip Scout, validate instead (E16 + P2)
+               - Validation for pre-existing: file existence, IMPL state check,
+                 P1 compliance (file_ownership disjointness within tier),
+                 P2 compliance (no redefinition of frozen program contracts)
+               - Unified review gate: human reviews all IMPLs together (new + imported)
+               - Format: match existing E-rule style with Trigger, Required Action,
+                 Failure Handling, Related Invariants subsections
+
+            2. **Section 13.4 in protocol/program-manifest.md** — Add new section
+               "Importing Pre-Existing IMPLs" after Section 13.3. Document:
+               - Import workflow steps (discover → validate → assign tier → update manifest)
+               - Validation rules for pre-existing IMPLs (file existence, state, P1, P2)
+               - Status mapping: IMPL doc state SCOUT_COMPLETE/REVIEWED → program status "reviewed",
+                 IMPL doc state COMPLETE → program status "complete"
+               - Example YAML showing a PROGRAM manifest with mixed pending/reviewed IMPLs
+               - Relationship to E28A
+
+            **Interface contracts:** None consumed (protocol docs only).
+
+            **Verification gate:**
+            ```bash
+            grep -q "E28A" /Users/dayna.blackwell/code/scout-and-wave/protocol/execution-rules.md
+            grep -q "13.4" /Users/dayna.blackwell/code/scout-and-wave/protocol/program-manifest.md
+            ```
+
+            **Constraints:**
+            - Do not modify any existing E-rules; only add E28A
+            - Match version number and formatting conventions of existing rules
+            - Reference P1 and P2 invariants from program-invariants.md
+          files:
+            - protocol/execution-rules.md
+            - protocol/program-manifest.md
+        - id: B
+          task: |
+            ## Agent B — Skill Prompt Update (Phase 3a)
+
+            **Repo:** /Users/dayna.blackwell/code/scout-and-wave
+            **What to implement:**
+
+            Update `implementations/claude-code/prompts/saw-skill.md`, specifically
+            the "Step 3a: Parallel Scout Launching (E31)" section under Phase 3
+            (Program Execution).
+
+            **Changes to Step 3a:**
+            1. Before the existing "For each IMPL in tier N with status pending" loop,
+               add a partitioning step:
+               ```
+               Partition tier N IMPLs by status (E28A):
+               - pending/scouting → Scout as normal (existing flow)
+               - reviewed/complete → Validate only (skip Scout)
+               ```
+            2. Add validation block for pre-existing IMPLs:
+               ```
+               For each IMPL in tier N with status "reviewed" or "complete":
+                 - Verify IMPL doc exists: docs/IMPL/IMPL-<slug>.yaml
+                 - Run: sawtools validate --fix "<impl-doc-path>"
+                 - Check P2 compliance: sawtools freeze-check "<program-manifest>" --impl "<slug>"
+                 - If validation fails, enter BLOCKED
+               ```
+            3. Update the review step to say "Present ALL IMPL docs (newly scouted +
+               pre-existing) for unified human review"
+            4. Add a note about the `sawtools import-impls` command for the initial
+               import workflow before program execution begins
+
+            **Interface contracts:** None consumed (documentation only).
+
+            **Verification gate:**
+            ```bash
+            grep -q "E28A" /Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/prompts/saw-skill.md
+            grep -q "import-impls" /Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/prompts/saw-skill.md
+            ```
+
+            **Constraints:**
+            - Only modify the Phase 3 / Step 3a section and nearby text
+            - Do not change Phase 1, Phase 2, or unrelated sections
+            - Preserve the existing Step 3a flow for pending IMPLs unchanged
+            - Reference E28A by number for cross-referencing
+          files:
+            - implementations/claude-code/prompts/saw-skill.md
+      base_commit: 9bcf8e8949be66d1e3d82dee3a7811a0f02dd5a4
+    - number: 2
+      agents:
+        - id: C
+          task: |
+            ## Agent C — SDK Validation Logic (import-mode + P2 checks)
+
+            **Repo:** /Users/dayna.blackwell/code/scout-and-wave-go
+            **What to implement:**
+
+            1. **pkg/protocol/program_types.go** — Add new types:
+               ```go
+               type ImportedIMPL struct {
+                 Slug         string `json:"slug"`
+                 Title        string `json:"title"`
+                 Status       string `json:"status"`
+                 AssignedTier int    `json:"assigned_tier"`
+                 AgentCount   int    `json:"agent_count"`
+                 WaveCount    int    `json:"wave_count"`
+               }
+
+               type ImportIMPLsResult struct {
+                 ManifestPath    string            `json:"manifest_path"`
+                 ImplsImported   []ImportedIMPL    `json:"impls_imported"`
+                 ImplsDiscovered []string          `json:"impls_discovered,omitempty"`
+                 TierAssignments map[string]int    `json:"tier_assignments"`
+                 P1Conflicts     []string          `json:"p1_conflicts,omitempty"`
+                 P2Conflicts     []string          `json:"p2_conflicts,omitempty"`
+                 Created         bool              `json:"created"`
+                 Updated         bool              `json:"updated"`
+               }
+               ```
+
+            2. **pkg/protocol/program_validation.go** — Add two new exported functions:
+
+               a) `ValidateProgramImportMode(manifest *PROGRAMManifest, repoPath string) []ValidationError`
+                  - For each IMPL with status "reviewed" or "complete":
+                    - Check IMPL file exists at repoPath/docs/IMPL/IMPL-<slug>.yaml
+                      (also check docs/IMPL/complete/ directory)
+                    - Parse the IMPL doc and verify its state field is consistent
+                      (reviewed IMPL should have state SCOUT_COMPLETE or later)
+                    - Check P1: collect file_ownership from all IMPLs in same tier,
+                      verify no file overlap within a tier
+                    - Check P2: if program has frozen contracts, verify the IMPL's
+                      interface_contracts don't redefine any frozen contract names
+                  - Return ValidationErrors with codes: IMPL_FILE_MISSING,
+                    IMPL_STATE_MISMATCH, P1_FILE_OVERLAP, P2_CONTRACT_REDEFINITION
+
+               b) `PartitionIMPLsByStatus(manifest *PROGRAMManifest, tierNumber int) (needsScout []ProgramIMPL, preExisting []ProgramIMPL)`
+                  - Find all IMPLs in the given tier
+                  - Split: pending/scouting → needsScout, reviewed/complete → preExisting
+                  - Simple utility function, no side effects
+
+            3. **pkg/protocol/program_validation_test.go** — Add tests:
+               - TestValidateProgramImportMode_MissingIMPLFile
+               - TestValidateProgramImportMode_P1FileOverlap
+               - TestValidateProgramImportMode_P2ContractRedefinition
+               - TestValidateProgramImportMode_ValidPreExisting
+               - TestPartitionIMPLsByStatus
+
+            **Verification gate:**
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./pkg/protocol/...
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && go test ./pkg/protocol/ -run "TestValidateProgramImport|TestPartitionIMPLs"
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && go vet ./pkg/protocol/...
+            ```
+
+            **Constraints:**
+            - Do not modify existing ValidateProgram function signature
+            - ValidateProgramImportMode is a separate function, not integrated into ValidateProgram
+            - Use existing ValidationError type (Code, Message, Field)
+            - Use existing protocol.Load / ValidateIMPLDoc functions from the protocol package
+            - P1 overlap check: read file_ownership from parsed IMPL docs, group by tier,
+              check for duplicate files within same tier
+            - P2 check: compare IMPL interface_contract names against program_contracts
+              where freeze_at references a completed tier
+          files:
+            - pkg/protocol/program_types.go
+            - pkg/protocol/program_validation.go
+            - pkg/protocol/program_validation_test.go
+    - number: 3
+      agents:
+        - id: D
+          task: |
+            ## Agent D — SDK Commands (import-impls, validate-program --import-mode, run-scout skip)
+
+            **Repo:** /Users/dayna.blackwell/code/scout-and-wave-go
+            **What to implement:**
+
+            1. **cmd/saw/import_impls_cmd.go** (NEW) — New `sawtools import-impls` command:
+               ```
+               sawtools import-impls --program PROGRAM-slug.yaml --from-impls IMPL-a.yaml IMPL-b.yaml
+               sawtools import-impls --program PROGRAM-slug.yaml --discover
+               ```
+               Implementation:
+               - Parse program manifest (or create minimal one if --program doesn't exist yet)
+               - If --from-impls: parse each specified IMPL doc
+               - If --discover: glob docs/IMPL/IMPL-*.yaml and docs/IMPL/complete/IMPL-*.yaml
+               - For each IMPL doc found:
+                 - Extract slug, title, state, file_ownership, wave count, agent count
+                 - Map IMPL state to program status (SCOUT_COMPLETE→reviewed, COMPLETE→complete)
+                 - Analyze file_ownership overlap with other IMPLs to suggest tier assignment
+                   (IMPLs with overlapping dependencies go to later tiers)
+               - Create/update PROGRAM manifest with new IMPL entries and tier assignments
+               - Run protocol.ValidateProgramImportMode for P1/P2 conflict detection
+               - Output JSON ImportIMPLsResult (types from pkg/protocol/program_types.go)
+               - Register in main.go: add newImportImplsCmd() to rootCmd.AddCommand(...)
+
+            2. **cmd/saw/import_impls_cmd_test.go** (NEW) — Tests:
+               - TestImportImplsDiscover — create temp dir with 2 IMPL docs, run discover
+               - TestImportImplsFromFiles — specify explicit IMPL paths
+               - TestImportImplsP1Conflict — two IMPLs with overlapping files, verify warning
+
+            3. **cmd/saw/validate_program_cmd.go** — Add `--import-mode` flag:
+               - Add bool flag: `cmd.Flags().BoolVar(&importMode, "import-mode", false, ...)`
+               - When flag is set, after existing ValidateProgram call, also call
+                 `protocol.ValidateProgramImportMode(manifest, repoPath)`
+               - Add `--repo-dir` flag for specifying repo root (default: cwd)
+               - Merge import-mode errors into output
+
+            4. **cmd/saw/run_scout_cmd.go** — Add skip-Scout logic:
+               - After slug generation and before launching Scout, check if
+                 IMPL doc already exists at implPath
+               - If exists, parse it and check state: if SCOUT_COMPLETE, REVIEWED,
+                 or later state (WAVE_PENDING, WAVE_EXECUTING, COMPLETE), skip Scout
+               - Print: "Skipping Scout: IMPL doc already exists with state <state>"
+               - Return success (exit 0) with skip indication in output
+               - This prevents accidental overwrite of reviewed designs
+
+            5. **cmd/saw/main.go** — Register new command:
+               - Add `newImportImplsCmd()` to the rootCmd.AddCommand(...) block
+
+            **Verification gate:**
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./cmd/saw/...
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && go test ./cmd/saw/ -run "TestImportImpls"
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && go vet ./cmd/saw/...
+            ```
+
+            **Constraints:**
+            - Use cobra command pattern matching existing commands (see validate_program_cmd.go)
+            - Use protocol.ParseProgramManifest for reading program manifests
+            - Use protocol.protocol.Load for reading IMPL docs
+            - Import the ImportIMPLsResult and ImportedIMPL types from pkg/protocol/program_types.go
+              (defined by Agent C in Wave 2)
+            - Output JSON to stdout for all commands (match existing patterns)
+            - The skip-Scout logic must be non-destructive: never delete or overwrite existing IMPL docs
+            - For --discover mode, search both docs/IMPL/ and docs/IMPL/complete/ directories
+          files:
+            - cmd/saw/import_impls_cmd.go
+            - cmd/saw/import_impls_cmd_test.go
+            - cmd/saw/validate_program_cmd.go
+            - cmd/saw/run_scout_cmd.go
+            - cmd/saw/main.go
+          dependencies:
+            - C
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./...
+          required: true
+        - type: lint
+          command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go vet ./...
+          required: true
+        - type: test
+          command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go test ./...
+          required: true
+completion_reports:
+    A:
+        status: complete
+        branch: saw/program-import/wave1-agent-A
+        commit: 796347a
+        files_changed:
+            - protocol/execution-rules.md
+            - protocol/program-manifest.md
+        verification: PASS
+    B:
+        status: complete
+        branch: saw/program-import/wave1-agent-B
+        commit: a09f544
+        files_changed:
+            - implementations/claude-code/prompts/saw-skill.md
+        verification: PASS
+    C:
+        status: complete
+        branch: main
+        commit: "4984356"
+        files_changed:
+            - pkg/protocol/program_types.go
+            - pkg/protocol/program_validation.go
+            - pkg/protocol/program_validation_test.go
+        tests_added:
+            - TestValidateProgramImportMode_MissingIMPLFile
+            - TestValidateProgramImportMode_P1FileOverlap
+            - TestValidateProgramImportMode_P2ContractRedefinition
+            - TestValidateProgramImportMode_ValidPreExisting
+            - TestPartitionIMPLsByStatus
+        verification: PASS
+    D:
+        status: complete
+        branch: main
+        commit: 447d2bc
+        files_changed:
+            - cmd/saw/import_impls_cmd.go
+            - cmd/saw/import_impls_cmd_test.go
+            - cmd/saw/validate_program_cmd.go
+            - cmd/saw/run_scout_cmd.go
+            - cmd/saw/main.go
+        files_created:
+            - cmd/saw/import_impls_cmd.go
+            - cmd/saw/import_impls_cmd_test.go
+        tests_added:
+            - TestImportImplsDiscover
+            - TestImportImplsFromFiles
+            - TestImportImplsP1Conflict
+        verification: PASS
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: Agent D depends on Agent C's types across wave boundary
+          likelihood: low
+          impact: medium
+          mitigation: |
+            Agent C (Wave 2) defines types in program_types.go. Agent D (Wave 3)
+            imports them. The interface contract specifies exact struct definitions.
+            Wave ordering ensures C merges before D starts.
+        - scenario: Cross-repo merge coordination
+          likelihood: low
+          impact: low
+          mitigation: |
+            Wave 1 (protocol repo) and Waves 2-3 (Go SDK repo) are in different
+            repos. No merge conflicts possible across repos. Within Go SDK, agents
+            C and D are in sequential waves with disjoint files.
+        - scenario: run-scout skip logic breaks existing program execution
+          likelihood: low
+          impact: high
+          mitigation: |
+            Skip logic only activates when IMPL doc exists AND has state
+            SCOUT_COMPLETE or later. New IMPLs (status pending, no file) are
+            unaffected. Agent D must add tests verifying the skip-only-when-safe
+            behavior.
+        - scenario: P1 overlap detection false positives with cross-repo file ownership
+          likelihood: medium
+          impact: low
+          mitigation: |
+            ValidateProgramImportMode must respect repo field in file_ownership.
+            Same filename in different repos is not a conflict (per E3). Agent C's
+            tests must cover this case.
+critic_report:
+    verdict: PASS
+    agent_reviews:
+        A:
+            agent_id: A
+            verdict: PASS
+        B:
+            agent_id: B
+            verdict: PASS
+        C:
+            agent_id: C
+            verdict: PASS
+        D:
+            agent_id: D
+            verdict: PASS
+            issues:
+                - check: symbol_accuracy
+                  severity: warning
+                  description: Brief constraint says "Use protocol.protocol.Load for reading IMPL docs" — the double protocol. is a stutter. Actual function is protocol.Load (in pkg/protocol/manifest.go). Intent is clear but text is inaccurate.
+                  file: cmd/saw/import_impls_cmd.go
+                  symbol: protocol.protocol.Load
+    summary: 'All 4 agent briefs verified against both repos. File existence checks pass: 2 new files correctly absent, 9 modify-target files confirmed present. Symbol accuracy verified for all referenced functions (ValidateProgram, ParseProgramManifest, Load, ValidateIMPLDoc, FinalizeIMPL, ValidationError). One minor documentation typo in Agent D constraints (''protocol.protocol.Load'' instead of ''protocol.Load'') noted as warning but intent is unambiguous. Pattern accuracy confirmed: E28 rule location, Section 13.3 location, Step 3a skill prompt location, cobra command registration pattern, and rootCmd.AddCommand block all match actual codebase. Interface contracts reference valid existing types (PROGRAMManifest, ProgramIMPL, ValidationError). Import chains verified (cobra in go.mod, protocol package exists). Side-effect completeness confirmed: new command registration in main.go is in Agent D file_ownership.'
+    reviewed_at: "2026-03-20T05:44:44Z"
+    issue_count: 1
+state: WAVE_PENDING
+integration_reports:
+    wave3:
+        wave: 3
+        gaps: []
+        valid: true
+        summary: 'Wave 3: all exports are integrated (no gaps detected)'
+wiring_validation_reports:
+    wave3:
+        gaps: []
+        valid: true
+        summary: all 0 wiring declarations satisfied

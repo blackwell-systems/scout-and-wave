@@ -1,6 +1,6 @@
 # Scout-and-Wave Message Formats
 
-**Version:** 0.14.0
+**Version:** 0.15.0
 
 This document defines the structured data formats exchanged between participants: suitability verdicts, agent prompts, completion reports, and scaffold specifications.
 
@@ -49,7 +49,7 @@ completion_reports:
     verification: "PASS"
 ```
 
-**Markdown format deprecated:** Prior to v0.7.0, Scout agents generated markdown IMPL docs (`.md` files with `# IMPL:` headers). This format is deprecated and will be removed in a future protocol version. Scout v0.7.1+ generates YAML manifests exclusively. The parser still reads markdown format temporarily for backward compatibility with existing IMPL docs, but all new work MUST use YAML manifests.
+**Legacy markdown format (removed):** Prior to v0.7.0, Scout agents generated markdown IMPL docs (`.md` files with `# IMPL:` headers). This format is fully deprecated. Scout v0.7.1+ generates YAML manifests exclusively. The parser retains read-only backward compatibility for pre-existing markdown IMPL docs, but **no new IMPL docs may use the markdown format**. All tooling, validation (E16), and orchestrator parsing targets YAML manifests only.
 
 ---
 
@@ -89,102 +89,14 @@ scaffolds:  # optional - omit if no scaffold files needed
     status: "pending" | "committed" | "FAILED"
     # See Scaffolds section for full schema
 
-    ---
-
-    ## Pre-Mortem
-
-    {Pre-mortem risk table — see Pre-Mortem Section Format below}
-
-    ---
-
-    ## Known Issues
-
-    ```yaml type=impl-known-issues
-    {known issues — see Typed Metadata Blocks below}
-    ```
-
-    ---
-
-    ## Post-Merge Checklist
-
-    ```yaml type=impl-post-merge-checklist
-    {post-merge checklist — see Typed Metadata Blocks below. Optional — omit if no post-merge steps needed beyond quality gates.}
-    ```
-
-    ---
-
-    ## Dependency Graph
-
-    ```yaml type=impl-dep-graph
-    {dependency graph — see Typed Metadata Blocks below}
-    ```
-
-    ---
-
-    ## Interface Contracts
-
-    {Interface contracts — exact function/method/type signatures that cross agent boundaries. Prose-only, not a typed block. See ## Agent Prompt Format for field definitions.}
-
-    ---
-
-    ## File Ownership
-
-    ```yaml type=impl-file-ownership
-    {file ownership table — see Typed Metadata Blocks below}
-    ```
-
-    ---
-
-    ## Wave Structure
-
-    ```yaml type=impl-wave-structure
-    {wave structure diagram — see Typed Metadata Blocks below}
-    ```
-
-    ---
-
-    ## Wave 1
-
-    {Wave-level introduction}
-
-    ### Agent A - {Role Description}
-
-    {9-field agent prompt - see format below}
-
-    ### Agent B - {Role Description}
-
-    {9-field agent prompt}
-
-    ...
-
-    ---
-
-    ## Wave 2
-
-    {Similar structure for additional waves}
-
-    ---
-
-### Agent A - Completion Report
-    ### Agent A - Completion Report
-
-    ```yaml type=impl-completion-report
-    {Structured fields - see Typed Metadata Blocks below}
-    ```
-
-    {Free-form notes}
-
-    ### Agent B - Completion Report
-
-    ```yaml type=impl-completion-report
-    {Structured fields}
-    ```
-
-    {Free-form notes}
-
-    ## Stub Report — Wave {N}
-
-    {Written by Orchestrator after E20 stub scan — see ## Stub Report Section Format. One section per wave, placed after the last completion report for that wave.}
+waves:  # optional - omit if not using per-agent model overrides or launch ordering
+  - number: 1
+    agent_launch_order: ["A", "B"]  # optional — explicit ordering within wave
+    base_commit: "abc1234"          # recorded when worktrees are created; used for post-merge verification
+    agents:
+      - id: "A"
+        model: "claude-opus-4-5"   # optional — overrides default model for this specific agent
+```
 
 ---
 
@@ -260,7 +172,22 @@ Wave 2 (2 parallel agents — consumer files):
 Wave 1: [A] [B]                    <- 2 parallel agents (spec foundation)
               | (A+B complete)
 Wave 2: [C] [D]                    <- 2 parallel agents (consumer files)
+              | (C+D complete)
+Wave 3: {E}                        <- type: integration (wiring only, E27)
 ```
+
+**Notation:** `[brackets]` for standard wave agents, `{braces}` for integration agents (E27).
+
+**Wave `type` field (optional, default: `standard`):**
+- `standard` — normal wave agents with worktree isolation (default when omitted)
+- `integration` — wiring-only agents dispatched as Integration Agents (E27). No worktree creation, no isolation verification. Agents run on main branch and are constrained to their listed files via `AllowedPathPrefixes`.
+
+**Wave additional fields:**
+- `agent_launch_order` — Optional list of agent IDs specifying explicit launch ordering within the wave (e.g. `["A", "B", "C"]`). When omitted, agents are launched in parallel. Use when an agent requires another agent's output before starting, but they are in the same wave.
+- `base_commit` — Git commit SHA recorded when worktrees are created. Used by the Orchestrator for post-merge verification to confirm no upstream commits were missed. Set automatically by `sawtools prepare-wave`; do not set manually.
+
+**Agent additional fields:**
+- `model` — Optional model override for this specific agent (e.g. `"claude-opus-4-5"`). Overrides the default model configured in the Orchestrator. Use when an agent's task requires a different model capability level than the wave default.
 
 **`impl-completion-report` — Completion Report (written by Wave agents):**
 
@@ -268,8 +195,8 @@ Wave 2: [C] [D]                    <- 2 parallel agents (consumer files)
 status: complete | partial | blocked
 failure_type: transient | fixable | needs_replan | escalate | timeout  # required when status is partial or blocked; omit when status is complete
 repo: /absolute/path/to/repo  # omit for single-repo waves
-worktree: .claude/worktrees/wave{N}-agent-{ID}
-branch: wave{N}-agent-{ID}
+worktree: .claude/worktrees/saw/{slug}/wave{N}-agent-{ID}
+branch: saw/{slug}/wave{N}-agent-{ID}
 commit: {sha}
 files_changed:
   - path/to/file
@@ -290,7 +217,12 @@ gates:
     command: {exact shell command}
     required: true | false
     description: {optional human-readable description}
+    repo: {optional repo short name}  # if set, gate only runs in the specified repo (multi-repo waves)
+    fix: true | false                  # if true, run in fix mode (e.g. gofmt -w); default false
+    timing: pre-merge | post-merge    # optional: default is "pre-merge"
 ```
+
+Gates with `timing: post-merge` execute after MergeAgents completes (step 5 of finalize-wave). This enables content and integration gates that require the merged state. When timing is empty or absent, `pre-merge` is assumed for backward compatibility.
 
 Written by Scout between Suitability Assessment and Scaffolds. Defines verification commands that run after wave completion (E21).
 
@@ -420,13 +352,13 @@ Emitted by the Scout at the end of the suitability gate. Written to the IMPL doc
 
 **Step 1: Navigate to worktree**
 ```bash
-cd {absolute-repo-path}/.claude/worktrees/wave{N}-agent-{ID}
+cd {absolute-repo-path}/.claude/worktrees/saw/{slug}/wave{N}-agent-{ID}
 ```
 
 **Step 2: Verify isolation**
 ```bash
 ACTUAL_DIR=$(pwd)
-EXPECTED_DIR="{absolute-repo-path}/.claude/worktrees/wave{N}-agent-{ID}"
+EXPECTED_DIR="{absolute-repo-path}/.claude/worktrees/saw/{slug}/wave{N}-agent-{ID}"
 
 if [ "$ACTUAL_DIR" != "$EXPECTED_DIR" ]; then
   echo "ISOLATION FAILURE: Wrong directory"
@@ -436,7 +368,7 @@ if [ "$ACTUAL_DIR" != "$EXPECTED_DIR" ]; then
 fi
 
 ACTUAL_BRANCH=$(git branch --show-current)
-EXPECTED_BRANCH="wave{N}-agent-{ID}"
+EXPECTED_BRANCH="saw/{slug}/wave{N}-agent-{ID}"
 
 if [ "$ACTUAL_BRANCH" != "$EXPECTED_BRANCH" ]; then
   echo "ISOLATION FAILURE: Wrong branch"
@@ -463,7 +395,7 @@ Agent identifiers follow the `[Letter][Generation]` scheme:
 - **Generation 1:** The bare letter, e.g., `A`, `B`, `C`. The digit is omitted for generation 1. `A` and `A1` are NOT both valid — only `A` represents generation 1.
 - **Multi-generation:** `A2`, `B3`, `C4`, etc. Used when >26 agents are needed, or when the Scout wants to express that agents share a logical sub-domain (e.g., `A`, `A2`, `A3` for closely related work).
 - **Appears in:** file ownership tables (`Agent` column), dep graph blocks (`[A2]`), wave structure blocks, SAW tags, worktree branch names, and completion report sections.
-- **Worktree naming:** `wave{N}-agent-{ID}` — e.g., `wave1-agent-A2`, `wave2-agent-B3`.
+- **Worktree naming:** `saw/{slug}/wave{N}-agent-{ID}` — e.g., `saw/my-feature/wave1-agent-A2`, `saw/my-feature/wave2-agent-B3`. Branches created before v0.39.0 use the legacy format `wave{N}-agent-{ID}` without slug prefix; tools accept both formats.
 - **SAW tag format:** `[SAW:wave{N}:agent-{ID}]` — e.g., `[SAW:wave1:agent-A2]`.
 
 Generation-1 IDs (`A`, `B`, `C`, …) are valid wherever an agent ID appears. Multi-generation IDs are assigned by the Scout when needed; agents receive their full ID (e.g., `A2`) in Field 0 of their prompt.
@@ -499,8 +431,8 @@ status: complete | partial | blocked
 failure_type: transient | fixable | needs_replan | escalate | timeout
   # Required when status is partial or blocked.
   # Omit (or set to null) when status is complete.
-worktree: .claude/worktrees/wave{N}-agent-{ID}
-branch: wave{N}-agent-{ID}
+worktree: .claude/worktrees/saw/{slug}/wave{N}-agent-{ID}
+branch: saw/{slug}/wave{N}-agent-{ID}
 commit: {sha}  # or "uncommitted" if commit failed
 files_changed:
   - path/to/modified/file
@@ -538,9 +470,9 @@ verification: PASS | FAIL ({command} - N/N tests)
 
 - **repo:** Absolute path to the repository this agent worked in. Required for cross-repo waves so the Orchestrator knows which repo to merge in. Omit for single-repo waves.
 
-- **worktree:** Canonical worktree path. Must match E5 naming convention: `.claude/worktrees/wave{N}-agent-{ID}`
+- **worktree:** Canonical worktree path. Must match E5 naming convention: `.claude/worktrees/saw/{slug}/wave{N}-agent-{ID}`
 
-- **branch:** Branch name. Must match worktree naming: `wave{N}-agent-{ID}`
+- **branch:** Branch name. Must match worktree naming: `saw/{slug}/wave{N}-agent-{ID}`. Branches created before v0.39.0 use the legacy format `wave{N}-agent-{ID}` without slug prefix; tools accept both formats.
 
 - **commit:** Git commit SHA if changes were committed. `"uncommitted"` if no changes or commit failed. I5 requires agents commit before reporting.
 
@@ -609,7 +541,7 @@ type ToolEntry struct {
 
 **Journal persistence across retries:** If an agent fails with `failure_type: transient` or `failure_type: fixable` (E19), the Orchestrator relaunches it. The journal is preserved — entries from the failed attempt remain in `index.jsonl`. On relaunch, the agent sees what it tried before via the recovered context (E23A). This prevents retry loops where the agent repeats the same failing operation without learning from it.
 
-**Journal cleanup:** Journals are archived after wave merge (per agent completion). Archived journals are compressed and moved to `.saw-state/archives/wave{N}-agent-{ID}.tar.gz` for post-mortem debugging but are not loaded during normal execution. Only active agent journals (for in-progress waves) are read by E23A recovery.
+**Journal cleanup:** Journals are archived after wave merge (per agent completion). Archived journals are compressed and moved to `.saw-state/archives/wave{N}-agent-{ID}.tar.gz` for post-mortem debugging but are not loaded during normal execution. Only active agent journals (for in-progress waves) are read by E23A recovery. Note: archive paths remain at `.saw-state/archives/wave{N}-agent-{ID}.tar.gz` (no slug needed -- `.saw-state/` is already project-scoped).
 
 **Related Rules:** See E23A (tool journal recovery), E19 (failure type decision tree), I4 (IMPL doc and journal duality).
 
@@ -745,6 +677,9 @@ gates:
     command: {exact shell command}
     required: true | false
     description: {optional human-readable description}
+    repo: {optional repo short name}  # if set, gate only runs in the specified repo (multi-repo waves)
+    fix: true | false                  # if true, run in fix mode (e.g. gofmt -w); default false
+    timing: pre-merge | post-merge    # optional: default is "pre-merge"
 ```
 
 Example:
@@ -762,6 +697,11 @@ gates:
     command: go vet ./...
     required: false
     description: "Check for common Go mistakes"
+  - type: test
+    command: go test ./...
+    required: true
+    timing: post-merge
+    description: "Integration test requiring merged state"
 ```
 
 Auto-detection from project marker files:
@@ -786,7 +726,10 @@ created: YYYY-MM-DD
 protocol_version: "x.y.z"
 
 architecture:
-  description: string
+  language: string           # programming language (e.g. "go", "python")
+  stack: [string]            # key frameworks/libraries (optional)
+  summary: string            # backward compatibility alias for description
+  description: string        # protocol-canonical human-readable summary
   modules:
     - name: string
       path: string
@@ -821,7 +764,7 @@ features_completed:
 
 - **created:** ISO date when this file was first created by the Orchestrator.
 - **protocol_version:** SAW protocol version in use when the file was created or last updated.
-- **architecture:** High-level description of the project's structure and its constituent modules.
+- **architecture:** High-level description of the project's structure and its constituent modules. The `language` and `stack` fields identify the project toolchain. `description` is the protocol-canonical field name; `summary` is a backward-compatibility alias — both may appear in older CONTEXT.md files and are treated as equivalent. `modules` lists named subsystems with their filesystem paths and responsibilities.
 - **decisions:** Log of architectural decisions made during SAW feature work, linked to the IMPL doc that introduced them.
 - **conventions:** Project-wide conventions established through SAW waves (naming, error handling, testing patterns).
 - **established_interfaces:** Interfaces introduced by prior waves that downstream agents may depend on.
@@ -953,6 +896,7 @@ If no known issues exist, omit the section entirely or write:
 - Keep suitability verdict, scaffolds, dependency graph, interface contracts, file ownership, wave structure, and status in the main IMPL doc
 - Move agent prompts to separate files: `docs/IMPL/IMPL-<feature>-wave{N}-agent-{ID}.md`
 - Main IMPL doc links to per-agent files: `See [Agent A prompt](IMPL-<feature>-wave1-agent-A.md)`
+- Note: per-agent filenames use the flat `wave{N}-agent-{ID}` format (no slug prefix needed since the feature name is already in the filename).
 
 **When NOT to split:**
 - Documentation-only refactors (agent prompts are small)
@@ -972,7 +916,7 @@ The orchestrator constructs a per-agent context payload (E23) before launching e
 | Agent's 9-field prompt | `### Agent {ID} - {Role}` through next `### Agent` heading | Complete implementation spec |
 | Interface contracts | `## Interface Contracts` | Cross-agent boundary definitions |
 | File ownership table | `## File Ownership` typed block | Agent verifies its row; sees peers' rows for I1 reasoning |
-| Scaffolds | `## Scaffolds` | Pre-built type files the agent imports |
+| Scaffolds section | `## Scaffolds` | Pre-built scaffold files (types/interfaces) the agent imports |
 | Quality gates | `## Quality Gates` | Verification commands required before completion report |
 | IMPL doc path | Literal string preamble | Agent writes completion report here (I4, I5) |
 
@@ -995,7 +939,7 @@ The orchestrator constructs a per-agent context payload (E23) before launching e
 
 ## Scaffolds
 
-{extracted scaffolds table}
+{extracted Scaffolds section}
 
 ## Quality Gates
 
@@ -1003,6 +947,82 @@ The orchestrator constructs a per-agent context payload (E23) before launching e
 ```
 
 **Stability:** Payload format is identical across waves. Wave 2 agents receive the same structure as Wave 1 agents — their own section extracted, same shared sections included.
+
+---
+
+## Integration Messages (E25/E26)
+
+The following message formats are emitted by the Orchestrator during integration validation (E25) and Integration Agent execution (E26). These messages are written to the IMPL doc and emitted as SSE events for web UI consumption.
+
+### `integration_gaps_detected`
+
+Emitted when `ValidateIntegration()` finds unconnected exports after a wave completes.
+
+```yaml
+type: integration_gaps_detected
+payload:
+  wave: int           # wave number that was just completed
+  gaps_count: int     # number of integration gaps detected
+  report:             # full IntegrationReport
+    wave: int
+    gaps:             # list of IntegrationGap
+      - export_name: string
+        file_path: string
+        agent_id: string
+        category: string       # function_call, type_usage, field_init
+        severity: string       # high, medium, low
+        reason: string
+        suggested_fix: string
+        search_results: [string]
+    valid: bool       # always false when this message is emitted
+    summary: string
+```
+
+### `integration_agent_started`
+
+Emitted when the Orchestrator launches the Integration Agent to wire detected gaps.
+
+```yaml
+type: integration_agent_started
+payload:
+  wave: int                    # wave number
+  connectors:                  # list of IntegrationConnector — files the agent may modify
+    - file: string
+      reason: string
+```
+
+### `integration_agent_complete`
+
+Emitted when the Integration Agent finishes successfully.
+
+```yaml
+type: integration_agent_complete
+payload:
+  wave: int                    # wave number
+  files_changed: [string]      # files the Integration Agent modified
+```
+
+### `integration_agent_failed`
+
+Emitted when the Integration Agent fails to wire integration gaps.
+
+```yaml
+type: integration_agent_failed
+payload:
+  wave: int                    # wave number
+  error: string                # error description
+```
+
+### `integration_agent_output`
+
+Streaming output from the Integration Agent, emitted as the agent produces output chunks. Used by SSE consumers for real-time progress display.
+
+```yaml
+type: integration_agent_output
+payload:
+  wave: int                    # wave number
+  chunk: string                # output text chunk
+```
 
 ---
 

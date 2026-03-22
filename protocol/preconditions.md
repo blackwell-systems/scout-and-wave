@@ -1,6 +1,6 @@
 # Scout-and-Wave Protocol Preconditions
 
-**Version:** 0.14.0
+**Version:** 0.15.0
 
 This document defines the preconditions that must hold before the Scout-and-Wave protocol may execute. The scout's suitability gate checks these before producing agent prompts.
 
@@ -106,6 +106,37 @@ Suggested alternative: [sequential execution | investigate-first then re-scout |
 The `Failed preconditions` field names each precondition that blocked the verdict (by number and name) and states the specific evidence. The `Suggested alternative` field makes the verdict actionable rather than a stop sign.
 
 The IMPL doc contains only this verdict. No agent prompts are written. The protocol terminates.
+
+---
+
+## E26: Integration Agent Launch Preconditions
+
+The Integration Agent (E26) may only be launched when both of the following conditions hold:
+
+### E26-P1: Integration Report Exists and Is Invalid
+
+An `IntegrationReport` produced by `ValidateIntegration()` (E25) must exist for the current wave, AND `report.Valid` must be `false` (i.e., integration gaps were detected).
+
+If `report.Valid == true`, no Integration Agent is needed — all exports are connected. The Orchestrator proceeds directly to merge.
+
+### E26-P2: Integration Connectors Defined
+
+The IMPL manifest must contain an `integration_connectors` field listing the files the Integration Agent is permitted to modify. Each connector specifies a file path and the reason it needs modification.
+
+```yaml
+integration_connectors:
+  - file: "cmd/main.go"
+    reason: "Wire new service into application startup"
+  - file: "pkg/registry/init.go"
+    reason: "Register new handler type"
+```
+
+If `integration_connectors` is absent or empty, the Integration Agent cannot be launched — it would have no files to modify. The Orchestrator should emit `integration_agent_failed` with an error indicating missing connectors and enter BLOCKED.
+
+### Consequences if Violated
+
+- **E26-P1 violated (no report or report valid):** Integration Agent launched unnecessarily, wastes resources, may make incorrect modifications
+- **E26-P2 violated (no connectors):** Integration Agent has no file ownership, cannot make any changes, will fail or produce no output
 
 ---
 

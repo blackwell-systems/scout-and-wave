@@ -2,7 +2,8 @@
   "agent": {
     "scout_model": "",
     "wave_model": "",
-    "chat_model": ""
+    "chat_model": "",
+    "integration_model": ""
   },
   "quality": {
     "require_tests": false,

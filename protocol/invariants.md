@@ -1,6 +1,6 @@
 # Scout-and-Wave Protocol Invariants
 
-**Version:** 0.14.0
+**Version:** 0.15.0
 
 This document defines the invariants that must hold throughout the entire Scout-and-Wave protocol execution. Violations break the correctness guarantees.
 
@@ -25,6 +25,16 @@ To audit consistency, search implementation files for `I{N}` and verify the embe
 **Cross-repo scope:** In cross-repo waves, I1 applies per-repository. Files in different repositories are inherently disjoint — no two agents can conflict on a file that exists in only one repo's filesystem. The disjoint ownership constraint still applies within each repository: no two agents in the same wave may own the same file path within the same repository.
 
 **Related Rules:** See E3 (pre-launch ownership verification) and E11 (conflict prediction before merge)
+
+### I1 Amendment: Integration Agent Exemption
+
+The Integration Agent (E26) is exempt from I1's disjoint ownership constraint because it runs after all wave agents complete and after merge. It operates on the merged main branch, not a worktree. Its writes are restricted to `integration_connectors` files via the `integrator` constraint role (`AllowedPathPrefixes` enforcement).
+
+This is not an I1 violation because there is no concurrent execution — the Integration Agent is the only writer at the time it runs. The disjoint ownership invariant exists to prevent concurrent conflicting writes; when only a single agent is active and all wave agents have already committed and merged, the concurrency hazard that I1 guards against does not exist.
+
+**Constraint enforcement:** The `integrator` role restricts the Integration Agent to files explicitly listed in the IMPL manifest's `integration_connectors` field. It cannot write to agent-owned files, scaffold files, or any file outside the connector list. This is enforced mechanically via `AllowedPathPrefixes`, not by agent cooperation.
+
+**Related Rules:** See E25 (Integration Validation), E26 (Integration Agent)
 
 ---
 
@@ -91,7 +101,7 @@ The journal is agent-private working memory. It is not distributed to other agen
 
 ## I6: Role Separation
 
-**Formal Statement:** The Orchestrator does not perform Scout, Scaffold Agent, or Wave Agent duties. Codebase analysis, IMPL doc production, scaffold file creation, and source code implementation are delegated to the appropriate asynchronous agent.
+**Formal Statement:** The Orchestrator does not perform Scout, Scaffold Agent, Wave Agent, or Integration Agent duties. Codebase analysis, IMPL doc production, scaffold file creation, source code implementation, and post-merge wiring are delegated to the appropriate asynchronous agent.
 
 **Enforcement:** If the Orchestrator finds itself doing any of these, it has violated the protocol; it must stop and launch the correct agent.
 
@@ -118,7 +128,7 @@ Conditions that break invariants and invalidate the correctness guarantees:
 | Wave N+1 launched before Wave N verified | I3 | Cascade failures surface at end |
 | Completion report written to chat only | I4 | Downstream agents get stale context |
 | Agent reports complete with uncommitted changes | I5 | Merge requires manual copy |
-| Orchestrator performs Scout, Scaffold Agent, or Wave Agent duties | I6 | Context pollution, broken observability, async execution bypassed |
+| Orchestrator performs Scout, Scaffold Agent, Wave Agent, or Integration Agent duties | I6 | Context pollution, broken observability, async execution bypassed |
 
 ---
 

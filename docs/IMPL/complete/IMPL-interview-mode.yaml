@@ -1,0 +1,954 @@
+completion_date: "2026-03-20"
+title: Interview Mode for SAW Bootstrap
+feature_slug: interview-mode
+verdict: SUITABLE
+suitability_assessment: |
+    SUITABLE. The work decomposes cleanly into 4 agents across 2 repos with disjoint file
+    ownership. Cross-repo build/test cycles (go test ./...) amplify parallelization benefit.
+
+    File decomposition: 4 distinct concern areas — Go engine types/state machine (scout-and-wave-go),
+    Go engine interview manager (scout-and-wave-go), sawtools CLI command (scout-and-wave-go),
+    and protocol update (scout-and-wave). No single file is a bottleneck; types are scaffolded
+    before Wave 1 so agents share a stable contract.
+
+    Interface discoverability: All cross-agent interfaces are definable before implementation.
+    The YAML schema for InterviewDoc, the InterviewManager interface, and the CLI command
+    contract can all be specified as binding contracts.
+
+    Output contract: The interview command produces docs/INTERVIEW-<slug>.yaml (structured state
+    with full conversation history) and docs/REQUIREMENTS.md (existing bootstrap artifact).
+    The Scout reads REQUIREMENTS.md unchanged — no Scout modification needed. The orchestrator
+    extracts REQUIREMENTS.md from the interview doc at completion.
+
+    Command surface: /saw interview "<description>" as a standalone command (not a --interview
+    flag on bootstrap). Rationale: bootstrap reads a pre-existing REQUIREMENTS.md; interview
+    generates that file. The two commands are sequential steps in the same workflow but
+    separate concerns. Adding --interview to bootstrap would merge gathering and architecture
+    design into one command, violating I6 (requirements intake is orchestrator duty).
+
+    Repo placement: IMPL lives in scout-and-wave (protocol repo) since the feature spans
+    all 3 repos and the protocol spec is the source of truth. Same pattern as
+    IMPL-resumable-wave-sessions.yaml.
+
+    Pre-implementation status: No existing interview machinery in any of the 3 repos. All
+    TODO. Reference implementation studied: plan-cascade interview.rs (2411 lines, Rust/SQLite/
+    Tauri). SAW adaptation: YAML persistence (no SQLite), CLI AskUserQuestion loop (no React),
+    LLM-driven mode via orchestrator Claude (no separate LLM service). Deterministic mode
+    uses fixed question set covering all 6 phases.
+
+    Parallelization value: HIGH. Go build+test cycle >30s, 3 agents each touch 3+ files,
+    tasks involve non-trivial logic (state machine, YAML I/O, CLI parsing).
+
+    Estimated times:
+    - Scout phase: ~15 min
+    - Agent execution: ~4 agents x 20 min avg, Wave 1 parallel = ~20 min + Wave 2 ~15 min
+    - Merge and verification: ~5 min
+    Total SAW time: ~55 min
+    Sequential baseline: ~4 agents x 25 min = ~100 min
+    Time savings: ~45 min (45% faster)
+    Recommendation: Clear speedup. Proceed.
+test_command: go test ./...
+lint_command: go vet ./...
+file_ownership:
+    - file: pkg/interview/deterministic.go
+      agent: A
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: pkg/interview/deterministic_test.go
+      agent: A
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: pkg/interview/phase_questions.go
+      agent: A
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: pkg/interview/compiler.go
+      agent: B
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: pkg/interview/compiler_test.go
+      agent: B
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: pkg/interview/doc.go
+      agent: B
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: cmd/saw/interview_cmd.go
+      agent: C
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: cmd/saw/interview_cmd_test.go
+      agent: C
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: cmd/saw/main.go
+      agent: D
+      wave: 2
+      action: modify
+      depends_on:
+        - C
+      repo: scout-and-wave-go
+    - file: implementations/claude-code/prompts/saw-skill.md
+      agent: D
+      wave: 2
+      action: modify
+      repo: scout-and-wave
+interface_contracts:
+    - name: Manager
+      description: |
+        Core interface for the interview state machine. Both deterministic and
+        LLM-driven implementations satisfy this. The CLI command uses this interface;
+        it never calls concrete implementations directly.
+      definition: |
+        type Manager interface {
+            Start(cfg InterviewConfig) (*InterviewDoc, *InterviewQuestion, error)
+            Resume(docPath string) (*InterviewDoc, *InterviewQuestion, error)
+            Answer(doc *InterviewDoc, answer string) (*InterviewDoc, *InterviewQuestion, error)
+            Compile(doc *InterviewDoc, outputPath string) (string, error)
+            Save(doc *InterviewDoc, docPath string) error
+        }
+      location: pkg/interview/types.go
+    - name: DeterministicManager
+      description: |
+        Fixed question-set implementation. Covers all 6 phases with required fields
+        checked before phase advance. Works without LLM; used for testing and offline use.
+        Phase transition logic: advance when all required fields for the current phase
+        are non-empty in SpecData.
+      definition: |
+        // pkg/interview/deterministic.go
+        type DeterministicManager struct {
+            docsDir string // base dir for writing INTERVIEW-<slug>.yaml files
+        }
+
+        func NewDeterministicManager(docsDir string) *DeterministicManager
+
+        // Implements Manager interface.
+      location: pkg/interview/deterministic.go
+    - name: InterviewDoc (YAML schema)
+      description: |
+        YAML file written to docs/INTERVIEW-<slug>.yaml. Persists the full interview
+        state including history, spec_data being built, and output path.
+        This file is git-trackable and survives process restarts.
+      definition: |
+        # docs/INTERVIEW-<slug>.yaml schema
+        id: <uuid>
+        slug: <feature-slug>
+        status: in_progress | complete
+        mode: deterministic | llm
+        description: "original description string"
+        created_at: 2026-01-01T00:00:00Z
+        updated_at: 2026-01-01T00:00:00Z
+        phase: overview | scope | requirements | interfaces | stories | review | complete
+        question_cursor: 0
+        max_questions: 18
+        progress: 0.0
+        spec_data:
+          overview:
+            title: ""
+            goal: ""
+            success_metrics: []
+            non_goals: []
+          scope:
+            in_scope: []
+            out_of_scope: []
+            assumptions: []
+          requirements:
+            functional: []
+            non_functional: []
+            constraints: []
+          interfaces:
+            data_models: []
+            apis: []
+            external: []
+          stories: []
+          open_questions: []
+        history:
+          - turn_number: 1
+            phase: overview
+            question: "What is the title of this project/feature?"
+            answer: "Interview Mode for SAW Bootstrap"
+            timestamp: 2026-01-01T00:00:00Z
+        requirements_path: docs/REQUIREMENTS.md
+      location: pkg/interview/types.go
+    - name: newInterviewCmd (sawtools CLI)
+      description: |
+        CLI command: sawtools interview "<description>" [--mode deterministic|llm]
+        [--max-questions N] [--project-path <path>] [--resume <interview-doc-path>]
+        [--output <requirements-output-path>]
+
+        Drives the AskUserQuestion interaction loop: prints each question to stdout,
+        reads stdin for each answer, writes state to INTERVIEW-<slug>.yaml after each
+        turn. On completion writes docs/REQUIREMENTS.md.
+
+        Exit codes: 0 = interview complete and REQUIREMENTS.md written,
+        1 = error, 2 = interview started but not yet complete (resumable).
+      definition: |
+        // cmd/saw/interview_cmd.go
+        func newInterviewCmd() *cobra.Command
+      location: cmd/saw/interview_cmd.go
+    - name: CompileToRequirements
+      description: |
+        Converts a complete InterviewDoc into the REQUIREMENTS.md template format
+        expected by saw-bootstrap.md Phase 0. This is the output contract linking
+        /saw interview to /saw bootstrap.
+      definition: |
+        // pkg/interview/compiler.go
+        // CompileToRequirements generates a REQUIREMENTS.md-compatible markdown string
+        // from a completed InterviewDoc. The output matches the template in saw-skill.md
+        // bootstrap section exactly (Language, Project Type, Key Concerns, Storage,
+        // External Integrations, Architectural Decisions Already Made sections).
+        func CompileToRequirements(doc *InterviewDoc) (string, error)
+      location: pkg/interview/compiler.go
+    - name: /saw interview (protocol command)
+      description: |
+        Orchestrator command added to saw-skill.md. Invocation:
+          /saw interview "<description>"
+        Launches sawtools interview command as a subprocess (or uses AskUserQuestion
+        loop inline). On completion, the REQUIREMENTS.md is present and the orchestrator
+        can immediately launch /saw bootstrap or /saw scout with that file as input.
+      definition: |
+        # In saw-skill.md Invocation Modes table:
+        | /saw interview "<description>" | Conduct structured requirements interview, write docs/REQUIREMENTS.md |
+        | /saw interview --resume <path>  | Resume an in-progress interview from its YAML doc |
+      location: implementations/claude-code/prompts/saw-skill.md
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## Role
+            Implement the DeterministicManager — the fixed-question-set interview state machine.
+
+            ## What to Implement
+
+            ### pkg/interview/deterministic.go
+            Implement `DeterministicManager` satisfying the `Manager` interface from the scaffold:
+
+            ```go
+            type DeterministicManager struct {
+                docsDir string
+            }
+
+            func NewDeterministicManager(docsDir string) *DeterministicManager
+            ```
+
+            The `Start` method:
+            - Generates a slug from `cfg.Description` (lowercase, hyphenated, max 40 chars)
+            - Creates an `InterviewDoc` with status="in_progress", phase=PhaseOverview,
+              question_cursor=0, max_questions defaulting to 18 if cfg.MaxQuestions == 0
+            - Returns the doc and the first question from `generateQuestion(doc)`
+
+            The `Answer` method:
+            - Records the answer as an `InterviewTurn` appended to `doc.History`
+            - Calls `applyAnswerToSpec(doc, answer)` to update `doc.SpecData`
+            - Increments `doc.QuestionCursor`
+            - Calls `checkPhaseTransition(doc)` — if required fields for current phase
+              are all non-empty, advance `doc.Phase` to the next phase
+            - If new phase is PhaseComplete, set `doc.Status = "complete"`
+            - Sets `doc.UpdatedAt = time.Now()`
+            - Calls `generateQuestion(doc)` to get next question (nil if complete)
+            - Calls `Save` to persist state
+            - Returns updated doc and next question
+
+            The `Resume` method:
+            - Reads the YAML file at `docPath`, unmarshals into `InterviewDoc`
+            - If status == "complete", returns the doc with nil question
+            - Otherwise returns doc + `generateQuestion(doc)`
+
+            The `Save` method:
+            - Marshals doc to YAML, writes to `<docsDir>/INTERVIEW-<doc.Slug>.yaml`
+            - Creates directory if needed
+
+            The `Compile` method: delegates to `CompileToRequirements(doc)` from compiler.go.
+
+            ### pkg/interview/phase_questions.go
+            The `generateQuestion(doc *InterviewDoc) *InterviewQuestion` function.
+
+            Fixed question set per phase. Check `doc.SpecData` to determine which field
+            is missing; return the first missing required question. Pattern mirrors plan-cascade
+            gen_overview_question logic but adapted to Go/SAW context.
+
+            Phase transition requirements (all fields must be non-empty to advance):
+            - Overview: Title + Goal (success_metrics and non_goals are optional)
+            - Scope: InScope (out_of_scope and assumptions are optional)
+            - Requirements: Functional (at least 1 item)
+            - Interfaces: at least 1 of DataModels/APIs/External non-empty, OR
+              user answered "none" to skip
+            - Stories: at least 1 story, OR user answered "none" to skip
+            - Review: always advances after one turn (open_questions captured)
+
+            **Overview questions (in order):**
+            1. field=title: "What is the title of this project or feature?"
+            2. field=goal: "What is the primary goal? (one sentence)"
+            3. field=success_metrics: "What are the success metrics? (comma-separated, or 'skip')"
+            4. field=non_goals: "What is explicitly out of scope? (comma-separated, or 'skip')"
+
+            **Scope questions:**
+            1. field=in_scope: "What is in scope? List the key deliverables (comma-separated)"
+            2. field=out_of_scope: "What is out of scope? (comma-separated, or 'skip')"
+            3. field=assumptions: "What assumptions are you making? (comma-separated, or 'skip')"
+
+            **Requirements questions:**
+            1. field=functional: "List the functional requirements (one per line or comma-separated)"
+            2. field=non_functional: "Any non-functional requirements? (e.g., performance, security — or 'skip')"
+            3. field=constraints: "Any technical constraints? (e.g., Go 1.21+, no CGO — or 'skip')"
+
+            **Interfaces questions:**
+            1. field=data_models: "What are the key data models or types? (or 'skip')"
+            2. field=apis: "What are the key APIs or command interfaces? (or 'skip')"
+            3. field=external: "Any external integrations? (or 'skip')"
+
+            **Stories questions:**
+            1. field=stories: "List the key user stories or tasks (one per line, or 'skip')"
+
+            **Review questions:**
+            1. field=open_questions: "Any open questions or unresolved decisions? (or 'skip')"
+            2. field=_confirm: "Review complete. Ready to generate REQUIREMENTS.md? (yes/no)"
+
+            Answer parsing: comma-separated values are split into string slices.
+            "skip" clears the field and allows phase to advance.
+            Boolean confirmation ("yes"/"y") on _confirm transitions to Complete.
+
+            ## Interfaces to Implement
+            - `Manager` interface from `pkg/interview/types.go` (scaffold)
+
+            ## Interfaces to Call
+            - `InterviewDoc`, `InterviewQuestion`, `InterviewTurn`, `SpecData` from scaffold
+            - `CompileToRequirements` from `pkg/interview/compiler.go` (Agent B) — call via Manager.Compile delegation
+
+            ## Tests to Write (pkg/interview/deterministic_test.go)
+            1. TestDeterministicManager_Start — verifies first question is Overview/title
+            2. TestDeterministicManager_FullFlow — drives all 6 phases with minimal answers, verifies reaching Complete
+            3. TestDeterministicManager_PhaseTransition_Overview — verifies phase advances after title+goal filled
+            4. TestDeterministicManager_PhaseTransition_RequiresTitle — verifies phase does NOT advance if title empty
+            5. TestDeterministicManager_SkipOptional — verifies "skip" answers advance phase correctly
+            6. TestDeterministicManager_Resume — writes a partial doc, resumes, verifies correct question returned
+            7. TestGenerateQuestion_AllPhases — smoke test: one question generated for each phase
+
+            ## Verification Gate
+            go build ./pkg/interview/... && go vet ./pkg/interview/... && go test ./pkg/interview/... -run TestDeterministic -v
+
+            ## Constraints
+            - Do NOT import or reference cmd/ packages
+            - Do NOT read saw-skill.md or any protocol files — this is pure Go logic
+            - The scaffold file pkg/interview/types.go is already committed; read it first
+            - Slug generation: lowercase, spaces→hyphens, strip non-alphanumeric except hyphens, max 40 chars
+            - YAML persistence uses gopkg.in/yaml.v3 (check go.mod for existing import)
+            - All answers are strings from stdin; no type coercion needed beyond comma-split
+            - "skip" handling: if the answer is "skip" (case-insensitive), record empty slice and allow phase advance
+          files:
+            - pkg/interview/deterministic.go
+            - pkg/interview/deterministic_test.go
+            - pkg/interview/phase_questions.go
+        - id: B
+          task: |
+            ## Role
+            Implement the requirements compiler — converts a completed InterviewDoc into
+            a REQUIREMENTS.md file and a doc.go package documentation file.
+
+            ## What to Implement
+
+            ### pkg/interview/compiler.go
+            ```go
+            package interview
+
+            // CompileToRequirements converts a completed InterviewDoc into the
+            // REQUIREMENTS.md format expected by saw-bootstrap.md Phase 0.
+            // Returns the rendered markdown string.
+            func CompileToRequirements(doc *InterviewDoc) (string, error)
+            ```
+
+            The output REQUIREMENTS.md format must match the template in saw-skill.md
+            bootstrap section exactly:
+
+            ```markdown
+            # Requirements: <title>
+
+            ## Language & Ecosystem
+            <!-- extracted from interfaces.external or left as placeholder -->
+
+            ## Project Type
+            <!-- extracted from overview.goal context or left as placeholder -->
+
+            ## Deployment Target
+            <!-- extracted from requirements.constraints or left as placeholder -->
+
+            ## Key Concerns (3-6 major responsibility areas)
+            <!-- These become packages/modules. Each gets its own agent. -->
+            1. <from scope.in_scope items>
+            2. ...
+
+            ## Storage
+            <!-- extracted from interfaces.data_models or left as placeholder -->
+
+            ## External Integrations
+            <!-- from interfaces.external -->
+
+            ## Source Codebase (if porting/adapting)
+            <!-- left as placeholder unless doc.SpecData.Interfaces.External contains "source:" prefix -->
+
+            ## Architectural Decisions Already Made
+            <!-- from requirements.constraints + requirements.non_functional -->
+            ```
+
+            Mapping logic:
+            - `# Requirements: <title>` → `doc.SpecData.Overview.Title`
+            - Key Concerns → `doc.SpecData.Scope.InScope` items (numbered list)
+            - External Integrations → `doc.SpecData.Interfaces.External`
+            - Architectural Decisions Already Made → `doc.SpecData.Requirements.Constraints`
+              joined with `doc.SpecData.Requirements.NonFunctional`
+            - All other sections → literal `<!-- placeholder — fill in before running /saw bootstrap -->`
+              comment if the source field is empty, otherwise render the value
+
+            Additionally implement:
+            ```go
+            // WriteRequirementsFile writes the compiled REQUIREMENTS.md to disk.
+            func WriteRequirementsFile(doc *InterviewDoc, outputPath string) error
+            ```
+
+            ### pkg/interview/doc.go
+            Package-level godoc comment:
+            ```go
+            // Package interview implements the SAW requirements interview state machine.
+            // It provides a multi-turn CLI-driven conversation that elicits project
+            // requirements and produces a REQUIREMENTS.md compatible with /saw bootstrap.
+            //
+            // Two modes are supported:
+            //   - deterministic: fixed question set, no LLM required (default)
+            //   - llm: LLM-driven contextual questions (requires orchestrator integration)
+            //
+            // State is persisted to docs/INTERVIEW-<slug>.yaml after each turn.
+            // Interviews are resumable across process restarts.
+            package interview
+            ```
+
+            ## Interfaces to Implement
+            - `Manager.Compile` contract: `Compile(doc *InterviewDoc, outputPath string) (string, error)`
+
+            ## Interfaces to Call
+            - `InterviewDoc`, `SpecData` from `pkg/interview/types.go` (scaffold)
+
+            ## Tests to Write (pkg/interview/compiler_test.go)
+            1. TestCompileToRequirements_FullDoc — complete doc with all fields, verify all sections rendered
+            2. TestCompileToRequirements_EmptyFields — doc with empty optional fields, verify placeholder comments
+            3. TestCompileToRequirements_KeyConcernsFromScope — verifies InScope items become numbered Key Concerns
+            4. TestCompileToRequirements_ArchDecisionsFromConstraints — verifies constraints appear in Arch Decisions
+            5. TestWriteRequirementsFile — writes to temp dir, reads back, verifies content matches
+
+            ## Verification Gate
+            go build ./pkg/interview/... && go vet ./pkg/interview/... && go test ./pkg/interview/... -run TestCompile -v
+
+            ## Constraints
+            - Do NOT import cmd/ packages
+            - The scaffold file pkg/interview/types.go is already committed; read it first before writing any code
+            - Use text/template or direct string building — no external templating library
+            - Output must be valid markdown; verify with a string contains check in tests
+            - Placeholder comments use HTML comment syntax: <!-- ... -->
+          files:
+            - pkg/interview/compiler.go
+            - pkg/interview/compiler_test.go
+            - pkg/interview/doc.go
+        - id: C
+          task: |
+            ## Role
+            Implement the sawtools interview CLI command that drives the AskUserQuestion
+            interaction loop.
+
+            ## What to Implement
+
+            ### cmd/saw/interview_cmd.go
+            ```go
+            func newInterviewCmd() *cobra.Command
+            ```
+
+            Command signature:
+            ```
+            sawtools interview "<description>" [flags]
+
+            Flags:
+              --mode string           Question mode: deterministic or llm (default "deterministic")
+              --max-questions int     Soft cap on total questions (default 18)
+              --project-path string   Optional path to existing project for context
+              --resume string         Path to an existing INTERVIEW-<slug>.yaml to resume
+              --output string         Path for output REQUIREMENTS.md (default "docs/REQUIREMENTS.md")
+              --docs-dir string       Directory to write INTERVIEW doc (default "docs")
+              --non-interactive       Read answers from stdin without prompts (for testing/piping)
+            ```
+
+            Behavior:
+            1. If --resume is provided: load existing InterviewDoc, skip to current question
+            2. Otherwise: create InterviewConfig from flags+args, call manager.Start()
+            3. Print current question to stdout:
+               ```
+               [Phase: Overview | Q 1/18]
+               What is the title of this project or feature?
+               >
+               ```
+            4. Read one line from stdin as the answer
+            5. Call manager.Answer(doc, answer)
+            6. If next question is nil (complete): call manager.Compile + WriteRequirementsFile,
+               print completion message with output path, exit 0
+            7. Otherwise: loop to step 3
+
+            Output format for each question:
+            ```
+            [Phase: Overview | Q 1/18 | 0%]
+            What is the title of this project or feature?
+            >
+            ```
+
+            On completion:
+            ```
+            Interview complete. (18/18 questions)
+            REQUIREMENTS.md written to: docs/REQUIREMENTS.md
+            Interview doc saved to: docs/INTERVIEW-my-feature.yaml
+            Next step: /saw bootstrap or /saw scout
+            ```
+
+            Error handling:
+            - If description is empty and --resume is not set: print usage and exit 1
+            - If --resume path does not exist: print error and exit 1
+            - If stdin is closed before interview completes: save state, print resume command, exit 2
+
+            Manager construction:
+            - mode == "deterministic": `interview.NewDeterministicManager(docsDir)`
+            - mode == "llm": print "LLM mode not yet implemented, falling back to deterministic"
+              and use DeterministicManager (stub for future)
+
+            ### cmd/saw/interview_cmd_test.go
+            Use a bytes.Buffer as stdin and capture stdout. Do not start real interviews against
+            the filesystem; use a temp directory for docsDir.
+
+            ## Interfaces to Call
+            - `interview.Manager` from `pkg/interview/types.go` (scaffold)
+            - `interview.NewDeterministicManager` from `pkg/interview/deterministic.go` (Agent A)
+            - `interview.WriteRequirementsFile` from `pkg/interview/compiler.go` (Agent B)
+            - `cobra.Command` from github.com/spf13/cobra (already in go.mod)
+
+            ## Tests to Write (cmd/saw/interview_cmd_test.go)
+            1. TestInterviewCmd_Help — verify --help output includes key flags
+            2. TestInterviewCmd_MissingDescription — verify exit 1 when no args and no --resume
+            3. TestInterviewCmd_NonInteractive_ShortFlow — pipe minimal answers via stdin,
+               verify REQUIREMENTS.md written to temp dir
+            4. TestInterviewCmd_Resume_NotFound — verify error message when --resume path missing
+            5. TestInterviewCmd_LLMModeFallback — verify --mode llm falls back to deterministic with warning
+
+            ## Verification Gate
+            go build ./cmd/saw/... && go vet ./cmd/saw/... && go test ./cmd/saw/... -run TestInterviewCmd -v
+
+            ## Constraints
+            - Do NOT modify cmd/saw/main.go — Agent D handles that in Wave 2
+            - Do NOT modify any existing cmd/saw/*.go files
+            - The scaffold types.go is in pkg/interview/types.go; read it first
+            - Agents A and B work in parallel; you implement against the Manager interface
+              from the scaffold, not against their concrete implementations
+            - If pkg/interview/deterministic.go is not yet committed when you build,
+              your cmd package build may fail; use a build tag or build only cmd/saw/interview_cmd.go
+              in isolation if needed
+            - Use bufio.Scanner for stdin reading (consistent with existing CLI patterns)
+            - Progress percentage: (QuestionCursor / MaxQuestions) * 100, rounded to int
+          files:
+            - cmd/saw/interview_cmd.go
+            - cmd/saw/interview_cmd_test.go
+      base_commit: e56a1a2650a5bca0bca1bcf79ec85b716fe019fd
+    - number: 2
+      type: integration
+      agents:
+        - id: D
+          task: |
+            ## Role
+            Wire the interview command into sawtools and update the protocol.
+
+            ## What to Implement
+
+            ### cmd/saw/main.go (scout-and-wave-go)
+            Add `newInterviewCmd()` to the rootCmd.AddCommand(...) call.
+            Pattern: find the existing AddCommand block and add one line:
+            ```go
+            newInterviewCmd(),
+            ```
+            Place it near other user-facing commands (e.g., after newRunScoutCmd()).
+
+            ### implementations/claude-code/prompts/saw-skill.md (scout-and-wave)
+            Two changes:
+
+            **1. Add to Invocation Modes table** (after the existing rows):
+            ```
+            | `/saw interview "<description>"` | Conduct structured requirements interview, write docs/REQUIREMENTS.md |
+            | `/saw interview --resume <path>`  | Resume an in-progress interview |
+            ```
+
+            **2. Add interview command handling block** in the Arguments section or
+            after the bootstrap argument description. Add a new block:
+
+            ```
+            If the argument is `interview <description>` (or `interview --resume <path>`):
+            1. Run the requirements interview by invoking:
+               ```bash
+               sawtools interview "<description>" --docs-dir "<project-docs-dir>" --output "<project-docs-dir>/REQUIREMENTS.md"
+               ```
+               OR conduct the interview inline using AskUserQuestion if sawtools interview is not available
+               in the current environment (fallback mode).
+            2. After sawtools interview exits 0, docs/REQUIREMENTS.md exists.
+            3. Inform the user: "Interview complete. REQUIREMENTS.md written to docs/REQUIREMENTS.md.
+               Run /saw bootstrap to design the architecture, or /saw scout <feature> to plan a feature."
+            4. Do NOT automatically launch bootstrap or scout — wait for explicit user command.
+
+            If the argument is `interview --resume <path>`:
+            1. Run: sawtools interview --resume "<path>"
+            2. Same completion handling as above.
+            ```
+
+            **Also update argument-hint** in the YAML frontmatter:
+            Change from:
+            ```
+            argument-hint: "[bootstrap <project-name> | scout [--model <m>] <feature> | wave ...]"
+            ```
+            To include `| interview <description>`:
+            ```
+            argument-hint: "[bootstrap <project-name> | interview <description> | scout [--model <m>] <feature> | wave ...]"
+            ```
+
+            ## Interfaces to Call
+            - `newInterviewCmd()` from `cmd/saw/interview_cmd.go` (Agent C, Wave 1)
+
+            ## Tests to Write
+            No new tests required for this wiring agent. Verify by:
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./cmd/saw/... && ./saw interview --help
+            ```
+            Confirm --help output shows the interview command.
+
+            ## Verification Gate
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./cmd/saw/... && go vet ./cmd/saw/...
+
+            ## Constraints
+            - In cmd/saw/main.go: add ONLY the one AddCommand line. Do not restructure the file.
+            - In saw-skill.md: add ONLY the interview blocks described above. Do not modify any
+              existing bootstrap, scout, wave, or program command handling.
+            - The argument-hint change is a one-line edit to the YAML frontmatter.
+            - Verify saw-skill.md version comment at top stays as-is (do not bump version).
+            - Both repos have different working directories; use absolute paths in all bash commands.
+          files:
+            - cmd/saw/main.go
+            - implementations/claude-code/prompts/saw-skill.md
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./...
+          required: true
+        - type: lint
+          command: go vet ./...
+          required: true
+        - type: test
+          command: go test ./...
+          required: true
+scaffolds:
+    - file: pkg/interview/types.go
+      contents: |
+        package interview
+
+        import "time"
+
+        // InterviewPhase is the current section of the requirements being explored.
+        type InterviewPhase string
+
+        const (
+            PhaseOverview     InterviewPhase = "overview"
+            PhaseScope        InterviewPhase = "scope"
+            PhaseRequirements InterviewPhase = "requirements"
+            PhaseInterfaces   InterviewPhase = "interfaces"
+            PhaseStories      InterviewPhase = "stories"
+            PhaseReview       InterviewPhase = "review"
+            PhaseComplete     InterviewPhase = "complete"
+        )
+
+        // InterviewMode controls question generation strategy.
+        type InterviewMode string
+
+        const (
+            ModeDeterministic InterviewMode = "deterministic"
+            ModeLLM           InterviewMode = "llm"
+        )
+
+        // InterviewQuestion is a single question in the interview flow.
+        type InterviewQuestion struct {
+            ID        string         `yaml:"id"`
+            Phase     InterviewPhase `yaml:"phase"`
+            FieldName string         `yaml:"field_name"`
+            Text      string         `yaml:"text"`
+            Hint      string         `yaml:"hint,omitempty"`
+            Required  bool           `yaml:"required"`
+        }
+
+        // InterviewTurn is a recorded question-answer pair.
+        type InterviewTurn struct {
+            TurnNumber int            `yaml:"turn_number"`
+            Phase      InterviewPhase `yaml:"phase"`
+            Question   string         `yaml:"question"`
+            Answer     string         `yaml:"answer"`
+            Timestamp  time.Time      `yaml:"timestamp"`
+        }
+
+        // SpecData holds the structured output being built across all phases.
+        type SpecData struct {
+            Overview     OverviewSpec     `yaml:"overview,omitempty"`
+            Scope        ScopeSpec        `yaml:"scope,omitempty"`
+            Requirements RequirementsSpec `yaml:"requirements,omitempty"`
+            Interfaces   InterfacesSpec   `yaml:"interfaces,omitempty"`
+            Stories      []string         `yaml:"stories,omitempty"`
+            OpenQuestions []string        `yaml:"open_questions,omitempty"`
+        }
+
+        // OverviewSpec holds phase-1 answers.
+        type OverviewSpec struct {
+            Title          string   `yaml:"title,omitempty"`
+            Goal           string   `yaml:"goal,omitempty"`
+            SuccessMetrics []string `yaml:"success_metrics,omitempty"`
+            NonGoals       []string `yaml:"non_goals,omitempty"`
+        }
+
+        // ScopeSpec holds phase-2 answers.
+        type ScopeSpec struct {
+            InScope    []string `yaml:"in_scope,omitempty"`
+            OutOfScope []string `yaml:"out_of_scope,omitempty"`
+            Assumptions []string `yaml:"assumptions,omitempty"`
+        }
+
+        // RequirementsSpec holds phase-3 answers.
+        type RequirementsSpec struct {
+            Functional    []string `yaml:"functional,omitempty"`
+            NonFunctional []string `yaml:"non_functional,omitempty"`
+            Constraints   []string `yaml:"constraints,omitempty"`
+        }
+
+        // InterfacesSpec holds phase-4 answers.
+        type InterfacesSpec struct {
+            DataModels []string `yaml:"data_models,omitempty"`
+            APIs       []string `yaml:"apis,omitempty"`
+            External   []string `yaml:"external,omitempty"`
+        }
+
+        // InterviewDoc is the persisted state written to docs/INTERVIEW-<slug>.yaml.
+        // It is the single source of truth for a running or completed interview.
+        type InterviewDoc struct {
+            // Metadata
+            ID          string        `yaml:"id"`
+            Slug        string        `yaml:"slug"`
+            Status      string        `yaml:"status"` // "in_progress" | "complete"
+            Mode        InterviewMode `yaml:"mode"`
+            Description string        `yaml:"description"`
+            CreatedAt   time.Time     `yaml:"created_at"`
+            UpdatedAt   time.Time     `yaml:"updated_at"`
+
+            // Progress
+            Phase          InterviewPhase `yaml:"phase"`
+            QuestionCursor int            `yaml:"question_cursor"`
+            MaxQuestions   int            `yaml:"max_questions"`
+            Progress       float64        `yaml:"progress"`
+
+            // Accumulated data
+            SpecData SpecData       `yaml:"spec_data"`
+            History  []InterviewTurn `yaml:"history"`
+
+            // Output: path to the generated REQUIREMENTS.md (set when status=complete)
+            RequirementsPath string `yaml:"requirements_path,omitempty"`
+        }
+
+        // InterviewConfig holds parameters for starting or resuming an interview.
+        type InterviewConfig struct {
+            Description  string        `yaml:"description"`
+            Slug         string        `yaml:"slug"`
+            Mode         InterviewMode `yaml:"mode"`
+            MaxQuestions int           `yaml:"max_questions"`
+            ProjectPath  string        `yaml:"project_path,omitempty"`
+        }
+
+        // Manager is the interface for the interview state machine.
+        // Deterministic and LLM-backed implementations satisfy this interface.
+        type Manager interface {
+            // Start initializes a new interview and returns the first question.
+            Start(cfg InterviewConfig) (*InterviewDoc, *InterviewQuestion, error)
+
+            // Resume loads an existing interview from its YAML file and returns the current question.
+            Resume(docPath string) (*InterviewDoc, *InterviewQuestion, error)
+
+            // Answer records a user response, advances the state machine, and returns the next question.
+            // Returns (doc, nil, nil) when the interview reaches PhaseComplete.
+            Answer(doc *InterviewDoc, answer string) (*InterviewDoc, *InterviewQuestion, error)
+
+            // Compile generates docs/REQUIREMENTS.md from a complete InterviewDoc.
+            // Returns the path to the generated file.
+            Compile(doc *InterviewDoc, outputPath string) (string, error)
+
+            // Save persists the InterviewDoc to its YAML file.
+            Save(doc *InterviewDoc, docPath string) error
+        }
+      import_path: github.com/blackwell-systems/scout-and-wave-go/pkg/interview
+      status: committed (e56a1a2)
+completion_reports:
+    A:
+        status: complete
+        branch: saw/interview-mode/wave1-agent-A
+        commit: 29007cc
+        files_changed:
+            - pkg/interview/deterministic.go
+            - pkg/interview/deterministic_test.go
+            - pkg/interview/phase_questions.go
+        files_created:
+            - pkg/interview/deterministic.go
+            - pkg/interview/deterministic_test.go
+            - pkg/interview/phase_questions.go
+        tests_added:
+            - TestDeterministicManager_Start
+            - TestDeterministicManager_FullFlow
+            - TestDeterministicManager_PhaseTransition_Overview
+            - TestDeterministicManager_PhaseTransition_RequiresTitle
+            - TestDeterministicManager_SkipOptional
+            - TestDeterministicManager_Resume
+            - TestGenerateQuestion_AllPhases
+            - TestGenerateSlug
+            - TestDeterministicManager_SaveAndLoad
+        verification: PASS
+    B:
+        status: complete
+        branch: saw/interview-mode/wave1-agent-B
+        commit: 022d887
+        files_changed:
+            - pkg/interview/compiler.go
+            - pkg/interview/compiler_test.go
+            - pkg/interview/doc.go
+        files_created:
+            - pkg/interview/compiler.go
+            - pkg/interview/compiler_test.go
+            - pkg/interview/doc.go
+        tests_added:
+            - TestCompileToRequirements_FullDoc
+            - TestCompileToRequirements_EmptyFields
+            - TestCompileToRequirements_KeyConcernsFromScope
+            - TestCompileToRequirements_ArchDecisionsFromConstraints
+            - TestWriteRequirementsFile
+        verification: PASS
+    C:
+        status: complete
+        branch: saw/interview-mode/wave1-agent-C
+        commit: 329ba5c
+        files_changed:
+            - cmd/saw/interview_cmd.go
+            - cmd/saw/interview_cmd_test.go
+        files_created:
+            - cmd/saw/interview_cmd.go
+            - cmd/saw/interview_cmd_test.go
+        tests_added:
+            - TestInterviewCmd_Help
+            - TestInterviewCmd_MissingDescription
+            - TestInterviewCmd_Resume_NotFound
+            - TestInterviewCmd_LLMModeFallback
+            - TestInterviewCmd_NonInteractive_ShortFlow
+        verification: PASS (build, vet, 5/5 tests)
+    D:
+        status: complete
+        branch: main
+        commit: 833d323
+        files_changed:
+            - cmd/saw/main.go
+            - implementations/claude-code/prompts/saw-skill.md
+        verification: PASS
+pre_mortem:
+    overall_risk: medium
+    rows:
+        - scenario: |
+            Agent C (CLI) builds against pkg/interview interfaces before Agent A (DeterministicManager)
+            commits. The Manager interface is in the scaffold, but concrete NewDeterministicManager
+            is in Agent A's file. If C's build runs before A commits, cmd/saw/interview_cmd.go
+            will fail to link.
+          likelihood: medium
+          impact: medium
+          mitigation: |
+            Agent C implements against the Manager interface only (from scaffold), and defers
+            concrete construction to a factory function in interview_cmd.go. The build tag
+            workaround is documented in C's constraints. Alternatively, finalize-wave runs
+            after all Wave 1 agents complete — link errors are caught then, not during agent work.
+        - scenario: |
+            REQUIREMENTS.md output format drifts from what saw-bootstrap.md Phase 0 expects.
+            If the compiler section headers don't match the template exactly, the Scout will
+            fail to extract required fields (Language, Key Concerns, etc.).
+          likelihood: medium
+          impact: high
+          mitigation: |
+            Agent B's task includes the exact section headers from saw-skill.md bootstrap template.
+            Compiler tests verify specific section headings are present. Post-merge manual check:
+            run a test interview, inspect REQUIREMENTS.md, verify /saw bootstrap can launch.
+        - scenario: |
+            saw-skill.md edit in Wave 2 inadvertently breaks existing bootstrap/scout/wave
+            command parsing (e.g., regex mismatch on argument-hint or block misplacement).
+          likelihood: low
+          impact: high
+          mitigation: |
+            Agent D's constraints explicitly limit changes to additive-only lines. The saw-skill.md
+            file should be read in full before any edit. Post-merge: verify existing commands
+            still work by running /saw status in a test repo.
+        - scenario: |
+            LLM mode stub in CLI confuses users who try --mode llm and get unexpected
+            deterministic behavior without a clear error.
+          likelihood: medium
+          impact: low
+          mitigation: |
+            Agent C's task specifies printing an explicit fallback warning: "LLM mode not yet
+            implemented, falling back to deterministic". This is surfaced before the first question.
+        - scenario: |
+            Interview YAML doc format is valid YAML but sawtools validate rejects unknown
+            top-level keys if someone tries to validate it as an IMPL doc.
+          likelihood: low
+          impact: low
+          mitigation: |
+            The INTERVIEW-<slug>.yaml is a separate schema from IMPLManifest and is never
+            passed to sawtools validate. Its location (docs/, not docs/IMPL/) prevents
+            accidental confusion.
+critic_report:
+    verdict: PASS
+    agent_reviews:
+        A:
+            agent_id: A
+            verdict: PASS
+            issues:
+                - check: symbol_accuracy
+                  severity: warning
+                  description: Brief says scaffold types.go is already committed but pkg/interview/ directory does not exist. Scaffold status is pending. prepare-wave should apply it before agent execution.
+                  file: pkg/interview/types.go
+                  symbol: InterviewDoc
+        B:
+            agent_id: B
+            verdict: PASS
+            issues:
+                - check: symbol_accuracy
+                  severity: warning
+                  description: Brief says scaffold types.go is already committed but pkg/interview/ directory does not exist. Scaffold status is pending. prepare-wave should apply it before agent execution.
+                  file: pkg/interview/types.go
+                  symbol: SpecData
+        C:
+            agent_id: C
+            verdict: PASS
+            issues:
+                - check: symbol_accuracy
+                  severity: warning
+                  description: Brief says scaffold types.go is already committed but pkg/interview/ directory does not exist. Scaffold status is pending. prepare-wave should apply it before agent execution.
+                  file: pkg/interview/types.go
+                  symbol: Manager
+        D:
+            agent_id: D
+            verdict: PASS
+    summary: 'All 4 agent briefs verified against both repos. One warning: scaffold pkg/interview/types.go has status=pending but agent briefs A, B, C claim it is already committed. This is safe because prepare-wave applies scaffolds before agent execution, but the brief text is misleading. All file actions are correct (new files do not exist, modify files do exist). Symbol references (Manager interface, cobra.Command, yaml.v3) are accurate. The AddCommand pattern in main.go and Invocation Modes table in saw-skill.md match the briefs exactly. Import chains are satisfied by go.mod and stdlib. Side-effect registration (newInterviewCmd into main.go) is covered by Agent D in Wave 2.'
+    reviewed_at: "2026-03-20T16:48:57Z"
+    issue_count: 1
+state: WAVE_PENDING

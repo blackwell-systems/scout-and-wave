@@ -1,0 +1,603 @@
+completion_date: "2026-03-19"
+title: Gate Result Caching
+feature_slug: gate-result-caching
+verdict: SUITABLE_WITH_CAVEATS
+suitability_assessment: |-
+    Suitability gate passed with one caveat: Agent B (protocol rule) is documentation-only,
+    making it nearly instantaneous. The parallelization value comes from Agent A's non-trivial
+    cache-key and logging changes against the Go engine, which benefits from independent
+    worktree isolation and a separate build/test cycle.
+
+    Pre-implementation status check (analyzed against current codebase):
+
+    - Cache storage (gate-cache.json schema, disk persistence): DONE — pkg/gatecache/cache.go
+      fully implements CacheKey, CachedResult, Cache struct with BuildKey/Get/Put/Invalidate.
+    - RunGatesWithCache wiring in finalize-wave and run-gates: DONE — both commands construct
+      a gatecache.Cache and pass it through. The --no-cache flag is also already implemented.
+    - Web SSE wiring (wave_runner.go calls RunGatesWithCache): DONE.
+    - GateResult.FromCache field: DONE.
+    - Gate command included in cache key (invalidation on command change): TODO — current
+      CacheKey struct is {HeadCommit, StagedStat, UnstagedStat}; the gate command string
+      is stored in CachedResult but is not part of the lookup key. Two different gate commands
+      with the same commit SHA will collide if they have the same gate type label.
+    - "skipped (cached)" human-readable log message with SHA: TODO — FromCache=true is set
+      on the result struct but no stderr/log message is emitted.
+    - gate-cache.json gitignored: TODO — .gitignore only excludes /saw and /sawtools binaries.
+    - Protocol rule E38 documenting caching behavior: TODO.
+    - Distinct gate_cache_hit SSE event for web UI: TODO (partial — quality_gate_result with
+      from_cache: true is emitted but no separate event type for cache hits).
+
+    3 of 7 requirements already implemented. Agents A and B cover the 4 remaining TODOs.
+    Agent C (web SSE) is optional enhancement; included as wave-1 parallel agent.
+
+    Estimated times:
+    - Scout phase: ~15 min (codebase analysis complete)
+    - Agent execution: ~25 min (3 agents x ~8 min avg, accounting for parallelism: all wave 1)
+    - Merge and verification: ~5 min
+    Total SAW time: ~45 min
+
+    Sequential baseline: ~30 min (3 x 10 min sequential)
+    Time savings: marginal speed gain; primary value is isolation and audit trail.
+
+    Recommendation: SUITABLE WITH CAVEATS — parallelization value is coordination and
+    isolation, not major speed savings. Proceed with 3-agent parallel wave.
+test_command: go test ./...
+lint_command: go vet ./...
+file_ownership:
+    - file: pkg/gatecache/cache.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/gatecache/cache_test.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/protocol/gates.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: .gitignore
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: protocol/execution-rules.md
+      agent: B
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: pkg/api/wave_runner.go
+      agent: C
+      wave: 1
+      action: modify
+      repo: scout-and-wave-web
+interface_contracts:
+    - name: CacheKey
+      description: |-
+        Cache key struct extended with Command field so each gate command string participates
+        in cache key hashing. Changing a gate's command string (e.g. adding a flag) will
+        produce a different hash and trigger a cache miss, preventing stale hits.
+      definition: |
+        // CacheKey uniquely identifies a snapshot of a gate run.
+        // HeadCommit + StagedStat + UnstagedStat capture repository state.
+        // Command is the gate command string; it ensures that changing the command
+        // (e.g. "go test ./..." -> "go test -count=1 ./...") invalidates the cache.
+        type CacheKey struct {
+            HeadCommit   string `json:"head_commit"`
+            StagedStat   string `json:"staged_stat"`
+            UnstagedStat string `json:"unstaged_stat"`
+            Command      string `json:"command"`
+        }
+      location: pkg/gatecache/cache.go
+    - name: hashKey
+      description: |-
+        Updated hash function that incorporates the Command field into the MD5 digest.
+        All four fields are null-byte separated before hashing.
+      definition: |
+        func hashKey(key CacheKey) string {
+            h := md5.New()
+            _, _ = fmt.Fprintf(h, "%s\x00%s\x00%s\x00%s",
+                key.HeadCommit, key.StagedStat, key.UnstagedStat, key.Command)
+            return fmt.Sprintf("%x", h.Sum(nil))
+        }
+      location: pkg/gatecache/cache.go
+    - name: Cache.BuildKeyForGate
+      description: |-
+        New method that builds a CacheKey for a specific gate command. This replaces
+        direct use of BuildKey() in RunGatesWithCache — callers pass the gate command
+        so it is included in the key. BuildKey() (no gate command) remains for
+        backward compatibility but is no longer used by the gate runner.
+      definition: |
+        // BuildKeyForGate computes a CacheKey for the repository at repoDir
+        // combined with the given gate command string.
+        func (c *Cache) BuildKeyForGate(repoDir string, command string) (CacheKey, error)
+      location: pkg/gatecache/cache.go
+    - name: RunGatesWithCache cache-hit log message
+      description: |-
+        When a cache hit occurs in RunGatesWithCache, emit a human-readable message
+        to stderr so orchestrators and agents can see that a gate was skipped.
+        Format: "gate [TYPE]: skipped (cached at SHA <headCommit>)\n"
+        The message must be written to os.Stderr (not included in GateResult.Stdout/Stderr
+        to avoid polluting structured output). SkipReason on GateResult is also set.
+      definition: |
+        // In RunGatesWithCache, when cache.Get returns a hit:
+        fmt.Fprintf(os.Stderr, "gate [%s]: skipped (cached at SHA %s)\n",
+            gate.Type, cacheKey.HeadCommit)
+        // And set on the returned GateResult:
+        result.SkipReason = fmt.Sprintf("cached at SHA %s", cacheKey.HeadCommit)
+      location: pkg/protocol/gates.go
+    - name: E38 protocol rule
+      description: |-
+        New execution rule E38 documents the gate result caching behavior:
+        cache key scheme, TTL, --no-cache opt-out, gitignore requirement,
+        and the "skipped (cached)" log format.
+      definition: |
+        ## E38: Gate Result Caching
+
+        **Trigger:** `run-gates` or `finalize-wave` runs quality gates with caching
+        enabled (the default; opt out with --no-cache on run-gates).
+
+        **Cache key:** Each gate result is keyed on sha256(headCommit + stagedStat +
+        unstagedStat + gateCommand). Changing any component — including the gate
+        command string — produces a cache miss.
+
+        **Cache hit behavior:** When a valid (non-expired) cached result exists, the
+        gate is skipped and the result is returned immediately. A message is emitted
+        to stderr: "gate [TYPE]: skipped (cached at SHA <headCommit>)". GateResult
+        has FromCache=true and SkipReason set.
+
+        **Cache miss behavior:** The gate runs normally and the result is stored for
+        future runs. Transparent to the caller.
+
+        **TTL:** Default 5 minutes. Cache entries older than the TTL are treated as
+        misses.
+
+        **Storage:** .saw-state/gate-cache.json (runtime artifact, must be gitignored).
+
+        **Opt-out:** Pass --no-cache to sawtools run-gates to bypass caching entirely.
+        finalize-wave always uses caching for pre-merge gates; post-merge gates always
+        run fresh (RunPostMergeGates never uses cache).
+      location: protocol/execution-rules.md
+    - name: gate_cache_hit SSE event
+      description: |-
+        When quality_gate_result has from_cache=true, the web wave_runner also emits
+        a separate gate_cache_hit event for UI components that want to display a
+        distinct "skipped (cached)" indicator without parsing from_cache on every
+        quality_gate_result event.
+      definition: |
+        // In wave_runner.go, after publishing quality_gate_result:
+        if gate.FromCache {
+            publish("gate_cache_hit", map[string]interface{}{
+                "gate_type":  gate.Type,
+                "command":    gate.Command,
+                "sha":        gate.SkipReason, // "cached at SHA <sha>"
+                "wave":       waveNum,
+            })
+        }
+      location: pkg/api/wave_runner.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |-
+            ## Agent A — Gate Cache Key Enhancement + Logging + Gitignore
+
+            ### Context
+            The gate result caching infrastructure already exists and is fully wired:
+            - pkg/gatecache/cache.go — Cache struct with BuildKey/Get/Put/Invalidate
+            - pkg/protocol/gates.go — RunGatesWithCache uses the cache
+            - cmd/saw/run_gates_cmd.go — --no-cache flag already present
+
+            What is missing:
+            1. The gate command string is not part of the cache key. Two gates with the
+               same type label ("build") but different commands ("go build ./..." vs
+               "go build -race ./...") will incorrectly share a cache entry.
+            2. No human-readable "skipped (cached)" log message is emitted to stderr
+               when a cache hit occurs.
+            3. .saw-state/gate-cache.json is not gitignored.
+
+            ### Files to modify
+            - pkg/gatecache/cache.go (repo: scout-and-wave-go)
+            - pkg/gatecache/cache_test.go (repo: scout-and-wave-go)
+            - pkg/protocol/gates.go (repo: scout-and-wave-go)
+            - .gitignore (repo: scout-and-wave-go)
+
+            ### What to implement
+
+            **1. Extend CacheKey with Command field (cache.go)**
+
+            Add a Command string field to CacheKey:
+
+            ```go
+            type CacheKey struct {
+                HeadCommit   string `json:"head_commit"`
+                StagedStat   string `json:"staged_stat"`
+                UnstagedStat string `json:"unstaged_stat"`
+                Command      string `json:"command"`   // NEW: gate command string
+            }
+            ```
+
+            Update hashKey() to include Command in the digest (null-byte separated):
+
+            ```go
+            func hashKey(key CacheKey) string {
+                h := md5.New()
+                _, _ = fmt.Fprintf(h, "%s\x00%s\x00%s\x00%s",
+                    key.HeadCommit, key.StagedStat, key.UnstagedStat, key.Command)
+                return fmt.Sprintf("%x", h.Sum(nil))
+            }
+            ```
+
+            Add BuildKeyForGate method that wraps BuildKey and sets Command:
+
+            ```go
+            // BuildKeyForGate computes a CacheKey for the repository at repoDir
+            // combined with the given gate command string.
+            func (c *Cache) BuildKeyForGate(repoDir string, command string) (CacheKey, error) {
+                key, err := c.BuildKey(repoDir)
+                if err != nil {
+                    return CacheKey{}, err
+                }
+                key.Command = command
+                return key, nil
+            }
+            ```
+
+            Note: BuildKey() still exists unchanged for callers that do not yet pass
+            a command. Its Command field will be empty string, which is a valid (if
+            less discriminating) key.
+
+            **2. Update RunGatesWithCache to use per-gate keys (gates.go)**
+
+            Currently, RunGatesWithCache calls cache.BuildKey once before the loop and
+            uses the same key for all gates. Change it to call BuildKeyForGate inside
+            the loop per gate command:
+
+            ```go
+            for _, gate := range manifest.QualityGates.Gates {
+                // ... (existing repo filter and docsOnly skip) ...
+
+                // Build per-gate key including the command string
+                cacheKey, err := cache.BuildKeyForGate(repoDir, gate.Command)
+                if err != nil {
+                    // Fall back to running the gate without cache
+                    // (run it normally and skip caching for this gate)
+                    // ... existing RunGates logic for this gate ...
+                    continue
+                }
+
+                // Check cache
+                if cached, ok := cache.Get(cacheKey, gate.Type); ok {
+                    fmt.Fprintf(os.Stderr, "gate [%s]: skipped (cached at SHA %s)\n",
+                        gate.Type, cacheKey.HeadCommit)
+                    results = append(results, GateResult{
+                        Type:       gate.Type,
+                        Command:    gate.Command,
+                        Required:   gate.Required,
+                        Passed:     cached.Passed,
+                        ExitCode:   cached.ExitCode,
+                        Stdout:     cached.Stdout,
+                        Stderr:     cached.Stderr,
+                        FromCache:  true,
+                        SkipReason: fmt.Sprintf("cached at SHA %s", cacheKey.HeadCommit),
+                    })
+                    continue
+                }
+                // ... rest of existing miss path unchanged ...
+            }
+            ```
+
+            Add `"os"` to imports in gates.go if not already present.
+
+            **3. Update .gitignore (scout-and-wave-go repo)**
+
+            Append the following line to .gitignore:
+            ```
+            .saw-state/gate-cache.json
+            ```
+
+            **4. Update tests (cache_test.go)**
+
+            Update existing tests that construct CacheKey literals — add `Command: ""` to
+            preserve backward compatibility (empty command is valid). Add new tests:
+
+            - TestCache_CommandDifferentiation: same HeadCommit+staged+unstaged but
+              different Command strings should produce different cache keys (different
+              entries, not sharing results).
+            - TestBuildKeyForGate: verifies BuildKeyForGate sets the Command field and
+              that two calls with different commands produce different hashKey outputs.
+            - TestRunGatesWithCache_CommandChange: integration test in pkg/protocol
+              (add to the existing gates test file) — run a gate, cache it, then run
+              again with a modified command string, verify it is NOT served from cache.
+
+            ### Constraints
+            - Do NOT remove BuildKey() — it is public API used by existing callers.
+            - BuildKeyForGate is additive; do not break existing cache_test.go tests.
+            - The "skipped (cached)" message goes to os.Stderr only, not GateResult output
+              fields (to avoid polluting JSON output consumed by callers).
+            - Existing cache entries in .saw-state/gate-cache.json will become stale
+              (they lack the Command field in their key hash). This is acceptable — they
+              will be treated as misses on next run and re-populated.
+
+            ### Verification gate
+            ```
+            go build ./...
+            go vet ./...
+            go test ./pkg/gatecache/... ./pkg/protocol/... -v -run TestCache
+            ```
+          files:
+            - pkg/gatecache/cache.go
+            - pkg/gatecache/cache_test.go
+            - pkg/protocol/gates.go
+            - .gitignore
+        - id: B
+          task: |-
+            ## Agent B — Protocol Rule E38: Gate Result Caching
+
+            ### Context
+            Gate result caching is implemented in the Go engine (pkg/gatecache/cache.go,
+            pkg/protocol/gates.go). The protocol documentation does not yet have a rule
+            documenting this behavior. Add E38 to execution-rules.md.
+
+            ### File to modify
+            - protocol/execution-rules.md (repo: scout-and-wave)
+
+            ### What to implement
+
+            Append rule E38 after the existing E37 rule at the end of the file.
+            Follow the established rule format used by E21, E21A, E21B:
+
+            ```markdown
+            ## E38: Gate Result Caching
+
+            **Trigger:** `run-gates` or `finalize-wave` runs quality gates with caching
+            enabled (the default). Opt out with `--no-cache` on `run-gates`.
+
+            **Required Action:** For each quality gate in the manifest:
+
+            1. Compute a cache key: `hash(headCommit + stagedDiffStat + unstagedDiffStat + gateCommand)`.
+               The gate command string is part of the key, so changing a gate's command
+               (e.g. adding a flag) automatically invalidates its cached result.
+
+            2. Check `.saw-state/gate-cache.json` for a non-expired entry matching the key.
+
+            3. **Cache hit:** Return the cached result immediately without re-executing the
+               gate. Emit to stderr: `gate [TYPE]: skipped (cached at SHA <headCommit>)`.
+               Set `from_cache: true` and `skip_reason: "cached at SHA <sha>"` in the
+               GateResult.
+
+            4. **Cache miss:** Execute the gate command normally. Store the result in the
+               cache under the computed key with a timestamp.
+
+            **TTL:** Cached entries expire after 5 minutes. Expired entries are treated
+            as misses and re-executed.
+
+            **Storage:** `.saw-state/gate-cache.json` — a runtime artifact. This file
+            MUST be listed in `.gitignore` and is not committed to version control.
+
+            **Opt-out:** Pass `--no-cache` to `sawtools run-gates` to bypass caching
+            entirely for that invocation. `finalize-wave` always uses caching for
+            pre-merge gates (steps 3, 3.5). Post-merge gates (step 5.5) always execute
+            fresh via `RunPostMergeGates`, which never consults the cache.
+
+            **Rationale:** Quality gate commands on large projects (full test suites,
+            slow linters) can take minutes per run. When the underlying codebase has not
+            changed between invocations — same HEAD commit, no staged/unstaged changes,
+            same command — re-execution produces identical output. Caching eliminates
+            this redundant work at wave boundaries, especially during iterative
+            development where gates are run multiple times before merge.
+
+            **Related Rules:** See E21 (post-wave verification gates), E21A (pre-wave
+            baseline), E21B (parallel gate execution).
+            ```
+
+            ### Constraints
+            - Append after E37, not inline — do not renumber any existing rules.
+            - Use the exact section header format `## E38: Gate Result Caching`.
+            - Do not modify any existing rule text.
+
+            ### Verification gate
+            ```
+            grep -n "E38" /path/to/protocol/execution-rules.md
+            ```
+            (Verify the rule header appears once at the end of the file.)
+          files:
+            - protocol/execution-rules.md
+        - id: C
+          task: |-
+            ## Agent C — Web SSE gate_cache_hit Event
+
+            ### Context
+            The web wave runner (pkg/api/wave_runner.go in scout-and-wave-web) already
+            calls RunGatesWithCache and publishes quality_gate_result events for each
+            gate. When a gate is served from cache, GateResult.FromCache is true.
+            Currently, the UI must inspect every quality_gate_result event's from_cache
+            field to detect cache hits. Adding a distinct gate_cache_hit event allows
+            UI components to show a "skipped (cached)" indicator without parsing all
+            gate results.
+
+            ### File to modify
+            - pkg/api/wave_runner.go (repo: scout-and-wave-web)
+
+            ### What to implement
+
+            Find the loop in wave_runner.go that publishes quality_gate_result events
+            for finalize wave results (around line 265, inside the wave merge handler):
+
+            ```go
+            for _, gate := range finalizeResult.GateResults {
+                publish("quality_gate_result", gate)
+            }
+            ```
+
+            The gate result is a map (map[string][]protocol.GateResult keyed by repo).
+            The actual iteration may be over a map value ([]protocol.GateResult). Extend
+            the existing gate publishing loop to also emit gate_cache_hit when applicable:
+
+            ```go
+            for _, gate := range gateSlice {
+                publish("quality_gate_result", gate)
+                if gate.FromCache {
+                    publish("gate_cache_hit", map[string]interface{}{
+                        "gate_type": gate.Type,
+                        "command":   gate.Command,
+                        "wave":      waveNum,
+                        "sha":       gate.SkipReason, // "cached at SHA <sha>"
+                    })
+                }
+            }
+            ```
+
+            Also find the StepRunGates section (around line 467-492) which calls
+            RunGatesWithCache and publishes results directly. Add the same cache hit
+            event emission there:
+
+            ```go
+            for _, gate := range gateResults {
+                if gate.Required && !gate.Passed {
+                    // existing failure handling
+                }
+            }
+            // After the required-gate failure check, also emit cache hit events:
+            for _, gate := range gateResults {
+                publish("quality_gate_result", gate)
+                if gate.FromCache {
+                    publish("gate_cache_hit", map[string]interface{}{
+                        "gate_type": gate.Type,
+                        "command":   gate.Command,
+                        "wave":      waveNum,
+                        "sha":       gate.SkipReason,
+                    })
+                }
+            }
+            ```
+
+            Verify the exact line structure by reading the file before patching —
+            the above is approximate; adjust to match actual variable names and
+            control flow at those locations.
+
+            ### Constraints
+            - Do not change any existing publish("quality_gate_result", ...) calls —
+              only ADD the new conditional gate_cache_hit emission.
+            - gate_cache_hit is informational only; never block or error on it.
+            - The sha field will be empty string if SkipReason is not set (Agent A
+              populates it); guard with a check: only emit gate_cache_hit if
+              gate.FromCache is true, regardless of SkipReason content.
+
+            ### Verification gate
+            ```
+            go build ./...
+            go vet ./...
+            ```
+            (Full tests require the web server running; CLI build verification is sufficient.)
+          files:
+            - pkg/api/wave_runner.go
+      base_commit: e265868a472ac54666713152750cb10859057971
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./...
+          required: true
+          repo: scout-and-wave-go
+        - type: test
+          command: go test ./pkg/gatecache/... ./pkg/protocol/...
+          required: true
+          repo: scout-and-wave-go
+        - type: lint
+          command: go vet ./...
+          required: false
+          repo: scout-and-wave-go
+completion_reports:
+    A:
+        status: complete
+        branch: saw/gate-result-caching/wave1-agent-A
+        commit: 10e54f1
+        files_changed:
+            - pkg/gatecache/cache.go
+            - pkg/gatecache/cache_test.go
+            - pkg/protocol/gates.go
+            - pkg/protocol/gates_test.go
+            - .gitignore
+        tests_added:
+            - TestCache_CommandDifferentiation
+            - TestBuildKeyForGate
+            - TestRunGatesWithCache_CommandChange
+        verification: PASS
+    B:
+        status: complete
+        branch: saw/gate-result-caching/wave1-agent-B
+        commit: 029ec7b
+        files_changed:
+            - protocol/execution-rules.md
+        verification: PASS
+    C:
+        status: complete
+        branch: saw/gate-result-caching/wave1-agent-C
+        commit: abb45bb
+        files_changed:
+            - pkg/api/wave_runner.go
+        verification: PASS
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: |-
+            Existing cache_test.go tests construct CacheKey literals without the new
+            Command field. Go will fail to compile if the struct literal uses positional
+            initialization or if named fields are checked for exhaustiveness.
+          likelihood: medium
+          impact: high
+          mitigation: |-
+            Agent A must update all existing CacheKey{} struct literals in cache_test.go
+            to include Command: "" (explicit zero value). The build gate catches this
+            immediately. The CacheKey change is additive; callers using named fields
+            require only the new field added, not all literals rewritten.
+        - scenario: |-
+            Existing entries in .saw-state/gate-cache.json (live in the repo) were
+            written with the old 3-field key hash. After the Command field is added,
+            all existing entries become orphaned (new hash never matches old hash).
+            This is not a correctness bug but will cause a cold-cache restart on next
+            gate run.
+          likelihood: high
+          impact: low
+          mitigation: |-
+            This is acceptable by design — stale entries are treated as cache misses
+            and re-populated. Document in the protocol rule (E38) that adding or
+            changing gate commands invalidates all prior cache entries. No migration
+            needed.
+        - scenario: |-
+            Agent A moves BuildKey() call inside the gate loop (one BuildKey call per
+            gate instead of one per RunGatesWithCache invocation). For large manifests
+            with many gates, this adds N git subprocess calls where there was previously
+            1. If BuildKeyForGate calls BuildKey internally for each gate, performance
+            regresses.
+          likelihood: medium
+          impact: medium
+          mitigation: |-
+            Agent A should cache the repo-state portion of the key (headCommit,
+            stagedStat, unstagedStat) once per RunGatesWithCache invocation by calling
+            BuildKey once at the top, then constructing per-gate CacheKey structs by
+            appending the Command field — no need for N BuildKey calls. The interface
+            contract specifies BuildKeyForGate as a thin wrapper; the gate loop
+            implementation should call BuildKey once and set Command per iteration.
+        - scenario: |-
+            wave_runner.go (Agent C, scout-and-wave-web) publishes gate results in
+            two different places (finalize bridge path and direct StepRunGates path).
+            Agent C misses one location, causing inconsistent UI behavior.
+          likelihood: medium
+          impact: low
+          mitigation: |-
+            Agent C prompt explicitly calls out both locations (~line 265 finalize path
+            and ~line 467-492 StepRunGates path). Agent must grep for all
+            publish("quality_gate_result" occurrences and add gate_cache_hit beside
+            each one.
+state: "COMPLETE"
+integration_reports:
+    wave1:
+        wave: 1
+        gaps: []
+        valid: true
+        summary: 'Wave 1: all exports are integrated (no gaps detected)'

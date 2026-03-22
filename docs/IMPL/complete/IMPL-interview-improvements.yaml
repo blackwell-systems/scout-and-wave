@@ -1,0 +1,446 @@
+completion_date: "2026-03-20"
+title: Interview Mode Improvements — Fix P0 init() wiring gaps and P1 UX improvements
+feature_slug: interview-improvements
+verdict: SUITABLE
+suitability_assessment: |
+    All five suitability questions resolve cleanly:
+
+    1. File decomposition: 5 files across 2 packages (cmd/saw, pkg/interview).
+       P0 init() wiring is 2 files with no overlap. P1 UX changes touch 3 files
+       with distinct responsibilities (validation/state in deterministic.go,
+       question definitions in phase_questions.go, CLI display in interview_cmd.go).
+       Decomposable into 3 agents with disjoint ownership.
+
+    2. Investigation-first: No. All issues are well-characterized with clear fixes
+       identified in the review. No root cause analysis needed.
+
+    3. Interface discoverability: Yes. The Manager interface and InterviewQuestion
+       type are already defined in types.go. New behavior extends existing internal
+       methods without changing the public interface.
+
+    4. Pre-implementation status: All 7 items are TODO. Confirmed by reading:
+       - No init() in interview_cmd.go or compiler.go
+       - No validation of empty required fields in Answer()
+       - No preview in review phase
+       - No skip hints in question text
+       - No back/undo support
+       - No phase-aware progress display
+
+    5. Parallelization value: Go build/test cycle ~10s. 3 agents with 1-2 files
+       each. P1 changes involve non-trivial logic (state machine modifications,
+       validation loop). Clear speedup over sequential.
+
+    Estimated times:
+    - Scout phase: ~8 min
+    - Agent execution: ~8 min (3 agents x 8 min avg, 2 waves, wave 1 parallel)
+    - Merge and verification: ~3 min
+    Total SAW time: ~19 min
+
+    Sequential baseline: ~24 min (3 agents x 8 min avg sequential)
+    Time savings: ~5 min (21% faster)
+
+    Recommendation: Clear speedup. Proceed.
+test_command: go test ./...
+lint_command: go vet ./...
+file_ownership:
+    - file: cmd/saw/interview_cmd.go
+      agent: A
+      wave: 1
+      action: modify
+    - file: pkg/interview/compiler.go
+      agent: A
+      wave: 1
+      action: modify
+    - file: pkg/interview/deterministic.go
+      agent: B
+      wave: 1
+      action: modify
+    - file: pkg/interview/phase_questions.go
+      agent: B
+      wave: 1
+      action: modify
+    - file: pkg/interview/deterministic_test.go
+      agent: C
+      wave: 2
+      action: new
+      depends_on:
+        - B
+    - file: cmd/saw/interview_cmd_test.go
+      agent: C
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+interface_contracts:
+    - name: init() in interview_cmd.go
+      description: |
+        Package-level init function that wires newDeterministicManagerFunc
+        to interview.NewDeterministicManager, fixing the P0 nil panic.
+      definition: |
+        func init() {
+            newDeterministicManagerFunc = func(docsDir string) interview.Manager {
+                return interview.NewDeterministicManager(docsDir)
+            }
+        }
+      location: cmd/saw/interview_cmd.go
+    - name: init() in compiler.go
+      description: |
+        Package-level init function that registers CompileToRequirements
+        with the deterministic manager's compileFunc variable.
+      definition: |
+        func init() {
+            RegisterCompiler(CompileToRequirements)
+        }
+      location: pkg/interview/compiler.go
+    - name: ValidateRequiredField
+      description: |
+        Validates that a required field answer is not empty/whitespace.
+        Returns an error message string if invalid, empty string if valid.
+        Called by Answer() before recording the turn.
+      definition: |
+        func ValidateRequiredField(q *InterviewQuestion, answer string) string
+        // Returns "" if valid, or error message like
+        // "This field is required. Please provide an answer."
+        // Checks: q.Required && strings.TrimSpace(answer) == ""
+      location: pkg/interview/deterministic.go
+    - name: HandleBackCommand
+      description: |
+        Detects "back" answer and reverts to previous question by
+        removing the last history entry and decrementing cursor.
+        Returns true if back was handled (caller should re-generate question).
+      definition: |
+        func HandleBackCommand(doc *InterviewDoc, answer string) bool
+        // Returns true if answer is "back" (case-insensitive).
+        // Reverts: remove last History entry, decrement QuestionCursor,
+        // clear the SpecData field that was populated by that answer,
+        // revert Phase if needed via checkPhaseTransition logic.
+      location: pkg/interview/deterministic.go
+    - name: FormatPhaseProgress
+      description: |
+        Generates phase-aware progress string like "[Overview: 2/4 | Next: Scope]"
+        instead of naive percentage.
+      definition: |
+        func FormatPhaseProgress(doc *InterviewDoc) string
+        // Returns string like "[Overview: 2/4 | Next: Scope]"
+        // Counts questions in current phase, shows position within phase,
+        // shows next phase name (or "Done" if in review).
+      location: pkg/interview/phase_questions.go
+    - name: PreviewRequirements
+      description: |
+        Generates a preview of the compiled REQUIREMENTS.md content
+        for display before the final confirmation question.
+      definition: |
+        func PreviewRequirements(doc *InterviewDoc) (string, error)
+        // Calls CompileToRequirements and returns the content string.
+        // Used by the CLI to show preview before "Ready to generate?" prompt.
+      location: pkg/interview/compiler.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## P0 Init Wiring + P1 Preview and Progress Display
+
+            ### What to implement
+
+            **P0.1 — Add init() to cmd/saw/interview_cmd.go:**
+            Add a package-level init() function that wires `newDeterministicManagerFunc`
+            to `interview.NewDeterministicManager`. This fixes the runtime panic at line 191.
+
+            ```go
+            func init() {
+                newDeterministicManagerFunc = func(docsDir string) interview.Manager {
+                    return interview.NewDeterministicManager(docsDir)
+                }
+            }
+            ```
+
+            **P0.2 — Add init() to pkg/interview/compiler.go:**
+            Add a package-level init() function that calls RegisterCompiler:
+
+            ```go
+            func init() {
+                RegisterCompiler(CompileToRequirements)
+            }
+            ```
+
+            **P1.4 — Add PreviewRequirements to compiler.go:**
+            Add a `PreviewRequirements(doc *InterviewDoc) (string, error)` function
+            that calls `CompileToRequirements` and returns the preview content.
+
+            **P1.7 — Update progress display in interview_cmd.go:**
+            Replace the naive percentage display (lines 105-114) with a call to
+            `interview.FormatPhaseProgress(doc)` (implemented by Agent B).
+            Change the format from:
+              `[Phase: Overview | Q 1/18 | 5%]`
+            to use the return value of FormatPhaseProgress:
+              `[Overview: 2/4 | Next: Scope]`
+
+            Also, before the final confirmation question (when question.FieldName == "_confirm"),
+            call `interview.PreviewRequirements(doc)` and print the preview content
+            with a header like "--- Preview of REQUIREMENTS.md ---".
+
+            ### Interfaces to consume
+            - `interview.FormatPhaseProgress(doc *InterviewDoc) string` — from Agent B
+              (wave 1, same wave but no file conflict — this function lives in
+              phase_questions.go which Agent B owns)
+            - `interview.NewDeterministicManager` — already exists in deterministic.go
+
+            ### Tests
+            No new test files — Agent C (wave 2) handles test updates.
+            Verify manually that `go build ./cmd/saw/...` succeeds.
+
+            ### Verification gate
+            ```bash
+            go build ./cmd/saw/... && go vet ./cmd/saw/... && go vet ./pkg/interview/...
+            ```
+
+            ### Constraints
+            - Do NOT modify types.go
+            - Do NOT modify deterministic.go or phase_questions.go (owned by Agent B)
+            - The init() in interview_cmd.go must use the Manager interface return type
+              (not *DeterministicManager) to match the existing variable declaration
+            - Keep PreviewRequirements simple — just delegate to CompileToRequirements
+          files:
+            - cmd/saw/interview_cmd.go
+            - pkg/interview/compiler.go
+        - id: B
+          task: |
+            ## P1 UX Improvements — Validation, Back, Hints, Phase Progress
+
+            ### What to implement
+
+            **P1.3 — Required field validation in deterministic.go:**
+            Add a `ValidateRequiredField(q *InterviewQuestion, answer string) string`
+            function. Returns empty string if valid, error message if the answer is
+            empty/whitespace for a required question.
+
+            Modify the `Answer()` method: before recording the turn, call
+            `ValidateRequiredField`. If it returns a non-empty string, do NOT advance
+            the cursor or record the turn. Instead, return the same question again
+            with the error message prepended to the question text (or set in the
+            Hint field). The caller (CLI) will re-display the question.
+
+            The Answer() method currently returns `(*InterviewDoc, *InterviewQuestion, error)`.
+            When validation fails, return `(doc, sameQuestion, nil)` — NOT an error.
+            The question's Hint field should contain the validation error message.
+            The CLI already prints hints (line 116-118 of interview_cmd.go).
+
+            **P1.5 — Skip hints in phase_questions.go:**
+            For each question definition in `phaseQuestions` where `Required: false`,
+            append " (or type 'skip' to skip)" to the Text field if it doesn't
+            already contain that text. This can be done directly in the var declaration.
+
+            Review current questions — some already have "(or 'skip')" in their text.
+            Normalize to "(or type 'skip' to skip)" for consistency across all optional
+            questions. Remove the existing "(or 'skip')" variants and use the consistent
+            phrasing.
+
+            **P1.6 — Back/undo in deterministic.go:**
+            Add `HandleBackCommand(doc *InterviewDoc, answer string) bool`.
+            When the user types "back" (case-insensitive, trimmed):
+            1. If QuestionCursor == 0, return false (can't go back from first question)
+            2. Remove the last entry from doc.History
+            3. Decrement doc.QuestionCursor
+            4. Clear the SpecData field that was populated by the removed answer
+               (use the question's Phase and FieldName to determine which field to nil/empty)
+            5. Recalculate doc.Phase by checking phase transitions from the beginning
+            6. Return true
+
+            Integrate into Answer(): at the top of Answer(), check if answer is "back".
+            If HandleBackCommand returns true, regenerate the current question and
+            return it. Do not record a turn.
+
+            **P1.7 — Phase-aware progress in phase_questions.go:**
+            Add `FormatPhaseProgress(doc *InterviewDoc) string`.
+            Count total questions in current phase and position within that phase.
+            Format: "[Overview: 2/4 | Next: Scope]"
+            For the last phase (Review), show "Next: Done" instead of next phase name.
+
+            Helper: add `questionsInPhase(phase InterviewPhase) int` to count
+            entries in phaseQuestions matching the phase.
+            Add `nextPhase(phase InterviewPhase) string` to return the display
+            name of the next phase.
+
+            ### Interfaces to produce
+            - `ValidateRequiredField(q *InterviewQuestion, answer string) string`
+            - `HandleBackCommand(doc *InterviewDoc, answer string) bool`
+            - `FormatPhaseProgress(doc *InterviewDoc) string`
+
+            ### Tests
+            No test files — Agent C (wave 2) writes all tests.
+
+            ### Verification gate
+            ```bash
+            go build ./pkg/interview/... && go vet ./pkg/interview/...
+            ```
+
+            ### Constraints
+            - Do NOT modify types.go (no struct changes needed)
+            - Do NOT modify compiler.go or interview_cmd.go (owned by Agent A)
+            - The Answer() signature must not change
+            - HandleBackCommand must handle phase regression correctly:
+              if going back crosses a phase boundary, the Phase field must revert
+            - ValidateRequiredField must not treat "skip" as empty for optional fields
+              (but "skip" on a required field IS invalid and should show error)
+          files:
+            - pkg/interview/deterministic.go
+            - pkg/interview/phase_questions.go
+      base_commit: d8c9021aa0d79440419a1284af82c185b04b3d23
+    - number: 2
+      agents:
+        - id: C
+          task: |
+            ## Tests for All P0 and P1 Changes
+
+            ### What to implement
+
+            **New file: pkg/interview/deterministic_test.go**
+            Write comprehensive tests for the new functionality added by Agent B:
+
+            1. `TestValidateRequiredField_EmptyRejectsRequired` — empty answer on
+               required question returns error message
+            2. `TestValidateRequiredField_WhitespaceRejectsRequired` — whitespace-only
+               answer on required question returns error message
+            3. `TestValidateRequiredField_SkipOnOptionalAccepted` — "skip" on optional
+               question returns empty (valid)
+            4. `TestValidateRequiredField_SkipOnRequiredRejected` — "skip" on required
+               question returns error message
+            5. `TestValidateRequiredField_ValidAnswer` — non-empty answer returns empty
+
+            6. `TestHandleBackCommand_FirstQuestion` — returns false at cursor 0
+            7. `TestHandleBackCommand_Success` — returns true, decrements cursor,
+               removes last history entry, clears populated field
+            8. `TestHandleBackCommand_CrossPhase` — going back across phase boundary
+               reverts doc.Phase correctly
+            9. `TestHandleBackCommand_CaseInsensitive` — "BACK", "Back" all work
+
+            10. `TestAnswer_ValidationRejectsEmpty` — Answer() with empty string on
+                required field returns same question with hint
+            11. `TestAnswer_BackIntegration` — Answer() with "back" reverts state
+
+            12. `TestFormatPhaseProgress_Overview` — returns "[Overview: 1/4 | Next: Scope]"
+            13. `TestFormatPhaseProgress_Review` — returns "[Review: 1/2 | Next: Done]"
+
+            14. `TestPreviewRequirements` — returns non-empty markdown string
+
+            **Modify: cmd/saw/interview_cmd_test.go**
+            15. `TestInterviewCmd_InitWiring` — verify that newDeterministicManagerFunc
+                is non-nil after package init (confirms P0.1 fix). Note: the test file
+                uses installMockManager which overrides init(), so test init separately:
+                just assert `newDeterministicManagerFunc != nil` before any mock install.
+            16. `TestInterviewCmd_PhaseProgress` — verify output contains phase-aware
+                format like "[Overview:" instead of old "[Phase: Overview"
+
+            ### Interfaces to consume
+            - `ValidateRequiredField(q *InterviewQuestion, answer string) string`
+            - `HandleBackCommand(doc *InterviewDoc, answer string) bool`
+            - `FormatPhaseProgress(doc *InterviewDoc) string`
+            - `PreviewRequirements(doc *InterviewDoc) (string, error)`
+            - `NewDeterministicManager(docsDir string) *DeterministicManager`
+
+            ### Verification gate
+            ```bash
+            go test ./pkg/interview/... -v && go test ./cmd/saw/... -v -run "TestInterviewCmd"
+            ```
+
+            ### Constraints
+            - Do NOT modify any non-test files
+            - Use testify/assert or standard testing — match project conventions
+              (existing tests use standard testing with t.Fatalf/t.Errorf)
+            - Use t.TempDir() for any file I/O in tests
+            - Test the actual functions, not mocks — these are unit tests of real logic
+          files:
+            - pkg/interview/deterministic_test.go
+            - cmd/saw/interview_cmd_test.go
+          dependencies:
+            - A
+            - B
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./...
+          required: true
+        - type: lint
+          command: go vet ./...
+          required: true
+        - type: test
+          command: go test ./...
+          required: true
+completion_reports:
+    A:
+        status: complete
+        branch: saw/interview-improvements/wave1-agent-A
+        commit: "0956326"
+        files_changed:
+            - cmd/saw/interview_cmd.go
+            - pkg/interview/compiler.go
+        verification: PASS (pkg/interview builds; cmd/saw blocked on Agent B's FormatPhaseProgress - will pass after B merges)
+    B:
+        status: complete
+        branch: saw/interview-improvements/wave1-agent-B
+        commit: 29ad373
+        files_changed:
+            - pkg/interview/deterministic.go
+            - pkg/interview/phase_questions.go
+        verification: 'PASS: go build and go vet both pass. All interface contracts implemented.'
+    C:
+        status: complete
+        commit: 4698eb4
+        files_changed:
+            - pkg/interview/deterministic_test.go
+            - cmd/saw/interview_cmd_test.go
+        tests_added:
+            - TestValidateRequiredField_EmptyRejectsRequired
+            - TestValidateRequiredField_WhitespaceRejectsRequired
+            - TestValidateRequiredField_SkipOnOptionalAccepted
+            - TestValidateRequiredField_SkipOnRequiredRejected
+            - TestValidateRequiredField_ValidAnswer
+            - TestHandleBackCommand_FirstQuestion
+            - TestHandleBackCommand_Success
+            - TestHandleBackCommand_CrossPhase
+            - TestHandleBackCommand_CaseInsensitive
+            - TestAnswer_ValidationRejectsEmpty
+            - TestAnswer_BackIntegration
+            - TestFormatPhaseProgress_Overview
+            - TestFormatPhaseProgress_Review
+            - TestPreviewRequirements
+            - TestInterviewCmd_InitWiring
+            - TestInterviewCmd_PhaseProgress
+        verification: PASS
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: Agent A and B both consume FormatPhaseProgress across wave boundary
+          likelihood: low
+          impact: low
+          mitigation: |
+            FormatPhaseProgress is produced by Agent B and consumed by Agent A in the
+            same wave. Since they own disjoint files this is safe — Agent A just needs
+            to call the function. If Agent B's implementation differs from the contract,
+            wave 2 tests (Agent C) will catch it.
+        - scenario: HandleBackCommand phase regression logic is incorrect
+          likelihood: medium
+          impact: medium
+          mitigation: |
+            Agent C writes explicit cross-phase back tests. If phase regression is
+            wrong, tests will fail and agent can iterate. The logic is deterministic
+            (recompute phase from SpecData state) so it is testable.
+        - scenario: Answer() validation changes break existing test expectations
+          likelihood: low
+          impact: low
+          mitigation: |
+            Existing tests in interview_cmd_test.go use a mockManager that bypasses
+            Answer() validation entirely. Only Agent C's new tests exercise real
+            validation. No existing tests should break.
+        - scenario: init() ordering between compiler.go and deterministic.go
+          likelihood: low
+          impact: high
+          mitigation: |
+            Go init() functions within a package run in source file order (alphabetical).
+            compiler.go runs before deterministic.go, so RegisterCompiler will set
+            compileFunc before any code in deterministic.go could use it. The cmd/saw
+            init() runs after all pkg/interview init() functions since it imports the
+            package. No ordering issue.
+state: WAVE_PENDING

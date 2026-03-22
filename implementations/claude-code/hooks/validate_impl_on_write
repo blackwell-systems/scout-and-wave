@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# PostToolUse hook: auto-validate IMPL docs after Write
+# Reads tool input JSON from stdin, checks if file is an IMPL doc,
+# runs sawtools validate, blocks on failure.
+#
+# Install: symlink to ~/.local/bin/validate_impl_on_write
+# Config:  PostToolUse hook with matcher "Write" in ~/.claude/settings.json
+
+set -euo pipefail
+
+# Require jq for JSON parsing
+if ! command -v jq &>/dev/null; then
+  exit 0
+fi
+
+# Read the tool input JSON from stdin
+INPUT=$(cat)
+
+# Extract file_path from the JSON (tool_input.file_path)
+FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null)
+
+# Only act on IMPL doc writes
+if [[ -z "$FILE_PATH" ]]; then
+  exit 0
+fi
+
+# Match active IMPL docs only (skip archived /complete/ docs)
+case "$FILE_PATH" in
+  */docs/IMPL/complete/*)
+    exit 0
+    ;;
+  */docs/IMPL/IMPL-*.yaml|*/docs/IMPL/IMPL-*.yml)
+    ;;
+  *)
+    exit 0
+    ;;
+esac
+
+# Skip if file doesn't exist
+if [[ ! -f "$FILE_PATH" ]]; then
+  exit 0
+fi
+
+# Require sawtools for validation
+if ! command -v sawtools &>/dev/null; then
+  exit 0
+fi
+
+# Validate without --fix (Scout's own Step 16 handles --fix;
+# hook should only report errors, not modify files behind Claude Code's back)
+RESULT=$(sawtools validate "$FILE_PATH" 2>&1) || true
+VALID=$(echo "$RESULT" | jq -r '.valid // empty' 2>/dev/null)
+
+if [[ "$VALID" == "true" ]]; then
+  exit 0
+fi
+
+# Validation failed — extract errors and block
+ERROR_COUNT=$(echo "$RESULT" | jq -r '.error_count // 0' 2>/dev/null)
+ERRORS=$(echo "$RESULT" | jq -r '.errors[]?.message // empty' 2>/dev/null)
+
+echo "BLOCKED: IMPL validation failed ($ERROR_COUNT errors). Fix these before continuing:" >&2
+echo "$ERRORS" >&2
+exit 1

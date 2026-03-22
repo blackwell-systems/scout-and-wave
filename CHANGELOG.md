@@ -8,6 +8,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.55.0] | 2026-03-21 | Protocol conformity — 20 engine-to-protocol gaps closed across 7 agents, 3 waves, 2 repos: E19.1 reactions block spec, E38 gate result caching, E40 observability event schema, program contract awareness in agent prompts, `replan --reason` flag, Scout correction loop (E16 retry), comprehensive `/saw program` command documentation in saw-skill.md |
+| [0.54.0] | 2026-03-20 | Housekeeping — archive completed IMPL docs (protocol-docs-gaps, resumable-wave-sessions), remove stale roadmap/proposal docs, update CONTEXT.md |
+| [0.53.0] | 2026-03-19 | E36: IMPL Amendment (Living IMPL Docs) — three amend operations: `add-wave` (append empty wave skeleton), `redirect-agent` (re-queue uncommitted agent), `extend-scope` (re-engage Scout with current IMPL as context); common preconditions (no SAW:COMPLETE, frozen completed-wave ownership, I1 compliance); `ErrAmendBlocked` sentinel; E15 amended (amend invalid after SAW:COMPLETE); saw-skill.md updated with `/saw amend` invocation modes and per-operation orchestrator flows |
+| [0.52.0] | 2026-03-19 | E35: Wiring Obligation Rule — agents must declare `wiring:` blocks for every exported symbol that requires integration; `prepare-wave` enforces ownership pre-flight (Layer 3A), `validate-integration --wiring` verifies post-merge (Layer 3B), agent briefs inject wiring table (Layer 3C); saw-skill.md updated with E35 orchestration guidance |
+| [0.51.0] | 2026-03-19 | E21A: Pre-Wave Baseline Verification + E21B: Parallel Gate Execution — `prepare-wave` now runs quality gates against HEAD before creating worktrees; solo waves and empty gate lists are exempt; E21B makes `run-gates` execute all gates concurrently and report all failures together |
+| [0.50.0] | 2026-03-18 | E16 defense-in-depth: PostToolUse IMPL validation hook — auto-validates IMPL docs on every Write (blocks on schema errors), `validate_impl_on_write` script in hooks dir, install.sh updated for both hooks, Scout forbidden-keys list expanded (`integration_connectors`, `integration_required`, `suggested_callers`) |
+| [0.49.0] | 2026-03-18 | Scout self-validation alignment — Step 15 rewritten (self-validate primary, E16 defense-in-depth), bootstrap Scout gets mandatory self-validation, explicit failure path (SCOUT_VALIDATION_FAILED state on 3-attempt exhaustion), orchestrator retry reduced 3→1 |
+| [0.48.0] | 2026-03-18 | Scout self-validation + program-layer-v2 IMPL — Scout prompt now requires `sawtools validate --fix` before completing (catches schema errors at source), program-layer-v1 marked complete (3 waves merged across 2 repos), Phase 2 IMPL scouted (tier-gated execution: 8 agents, 3 waves) |
+| [0.47.0] | 2026-03-18 | Scout v0.12.0 — prompt trim (929→628 lines, 32% reduction): removed duplicate schema in Output Format, removed Step 0/1 duplication, condensed verification gates (kept linter check-only rule + 4-language table), condensed suitability Q4 (removed tool output examples), condensed integration connectors legacy section. No information loss. |
+| [0.46.0] | 2026-03-18 | Scout v0.11.0 — integration completeness audit (step 9): Scout must verify every new artifact has its registration/wiring file assigned in file_ownership before writing agent prompts. Catches CLI registration, API route, agent type, and scaffold ownership gaps. Program Layer v1 IMPL patched (5 audit fixes). |
+| [0.45.0] | 2026-03-17 | Program Layer Phase 1 IMPL — PROGRAM manifest schema Scout (8 agents, 3 waves, 2 repos), `PROGRAMManifest` type scaffold, P1-P4 invariants spec, Planner agent prompt, `validate-program` + `list-programs` CLI commands |
+| [0.44.0] | 2026-03-17 | SAW protocol gaps v1 — Scout prompt schema key reference (24 valid keys + "do not invent" warning), synced `knownKeys` map with `types.go`, `StripUnknownKeys` auto-strip in `validate --fix`, DependencyGraphPanel structured-data fallback, duplicate confirm dialog fix, `git worktree prune` in cleanup |
+| [0.43.0] | 2026-03-17 | Review-agent IMPL validation fix — added missing `repo: "scout-and-wave"` tags to waves 1-2 file_ownership, removed invalid `integration_connectors` key that blocked E16 schema validation (preventing `validateMultiRepoConsistency` from catching the missing tags) |
+| [0.42.0] | 2026-03-17 | Program Layer roadmap + Formic competitive analysis + Review Agent IMPL — multi-IMPL orchestration design (PROGRAM manifest, Planner agent, tiers, P1-P4 invariants), competitive analysis vs Formic, review-agent-protocol IMPL (E28, SCOUT_REVIEWING state, 6th participant role) |
+| [0.41.0] | 2026-03-16 | Failure recovery wiring — resume detection + structured retry context integrated into `/saw` skill (E7a), `resume-detect` and `build-retry-context` in sawtools commands list |
+| [0.40.0] | 2026-03-16 | E27: Planned Integration Waves — Scout can mark wiring-only waves as `type: integration`, orchestrator dispatches integration-agent (no worktree), `{braces}` notation in wave diagrams |
+| [0.39.0] | 2026-03-16 | Wave Agent v0.4.2 — go.mod replace directive guidance (do not modify worktree-relative paths) |
+| [0.38.0] | 2026-03-16 | Integration Agent (E25/E26) — fifth participant role, protocol text, agent type definition, skill orchestration, all docs updated |
 | [0.37.0] | 2026-03-14 | H7 wave agent integration + Scout prompt cleanup — build failure diagnosis integrated into wave agent workflow, 168 lines of obsolete automation instructions removed from Scout prompt |
 | [0.36.0] | 2026-03-14 | Scout automation integration — H1a-H4 tools integrated into SDK engine and CLI skill (automated suitability analysis + dependency mapping) |
 | [0.35.0] | 2026-03-13 | I6 enforcement — Scout role separation (prevents Scout from writing source code) |
@@ -19,6 +37,82 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.30.1] | 2026-03-12 | Scout v0.8.1 — format ambiguity fix prevents markdown section headers in YAML output |
 | [0.30.0] | 2026-03-12 | Scout v0.8.0 — analyze-deps now PRIMARY METHOD for Go dependency mapping (determinism improvement H3) |
 | [0.29.0] | 2026-03-11 | mark-complete simplification — removed --archive flag from all docs, always archives to complete/ |
+
+---
+## [0.54.0] - 2026-03-20
+
+### Removed
+- `docs/IMPL/IMPL-protocol-docs-gaps.yaml` — archived (IMPL complete)
+- `docs/IMPL/IMPL-resumable-wave-sessions.yaml` — archived (IMPL complete)
+- `docs/program-layer-roadmap.md` — stale, superseded by PROGRAM manifest spec
+- `docs/saw-pipeline-proposal.md` — stale, superseded by autonomy layer
+
+### Changed
+- `docs/CONTEXT.md` — updated with latest completed features
+
+---
+## [0.51.0] - 2026-03-19
+
+### Added
+
+- **E21A: Pre-Wave Baseline Verification** (`protocol/execution-rules.md`) —
+  `prepare-wave` now runs the IMPL doc's quality gates against current HEAD
+  before creating any worktrees. If any required gate fails, `prepare-wave`
+  exits with `baseline_verification_failed` and the wave does not launch.
+  Exemptions: solo waves (single agent, no worktrees) and IMPL docs with no
+  quality gates defined. Prevents agents from working on a broken baseline
+  and wasting parallel execution time on a wave that would fail E21 anyway.
+
+- **E21B: Parallel Gate Execution** (`protocol/execution-rules.md`) —
+  `run-gates` now executes all quality gate commands concurrently rather than
+  sequentially when two or more gates are configured. All failures are
+  collected and reported together before blocking. Applies to both E21
+  (post-merge) and E21A (pre-wave baseline) invocations. Enables faster
+  failure diagnosis by revealing the full failure surface in a single pass.
+
+### Changed
+
+- `protocol/state-machine.md` v0.15.0 → v0.16.0 — WAVE_PENDING →
+  WAVE_EXECUTING guard updated: E21A baseline check is now a pre-condition;
+  State Entry Actions table updated for WAVE_PENDING; Correctness Properties
+  rule reference updated.
+- `protocol/procedures.md` v0.15.0 → v0.16.0 — Procedure 3 Phase 1 now
+  has Step 0 (E21A baseline verification) before ownership verification (E3).
+- `implementations/claude-code/prompts/saw-skill.md` v0.12.0 → v0.13.0 —
+  Step 4 (prepare-wave) updated to document `baseline_verification_failed`
+  error; `sawtools run-gates` description updated to reference E21A and E21B.
+
+---
+## [0.42.0] - 2026-03-17
+
+### Added
+- **Program Layer roadmap** (`docs/program-layer-roadmap.md`) — multi-IMPL orchestration design for greenfield projects: PROGRAM manifest schema, Planner agent role, tier-based IMPL sequencing, cross-IMPL interface contracts, program invariants P1-P4, three autonomy levels (plan-only, tier-gated, full autonomous), 4-phase implementation plan
+- **Formic competitive analysis** (`docs/competitive/formic-comparison.md`) — SAW vs Formic: architecture, parallel execution, provider support, QA, strengths/weaknesses, ideas to borrow
+- **Review Agent IMPL** (`docs/IMPL/IMPL-review-agent-protocol.yaml`) — E28 Pre-Review Semantic Validation, SCOUT_REVIEWING state, Review Agent as 6th participant role, Generator-Critic pattern for IMPL quality assurance
+
+---
+## [0.41.0] - 2026-03-16
+
+### Added
+
+- **Resume detection in `/saw` skill** — `wave` and `status` commands now run `sawtools resume-detect` before execution, surfacing interrupted sessions (progress %, failed agents, orphaned worktrees, suggested action)
+- **Structured retry context in E7a** — `sawtools build-retry-context` classifies errors (import/type/test/build/lint) and provides targeted fix suggestions for automatic agent retries
+- **`sawtools` commands list** — Added `resume-detect` and `build-retry-context` to the saw-skill.md command reference
+
+---
+## [0.38.0] - 2026-03-16
+
+### Added
+
+- **Integration Agent (E25/E26)** — Fifth participant role in the SAW protocol
+  - **E25: Integration Validation** — AST-scans merged wave files for unconnected exports, reports gaps
+  - **E26: Integration Agent** — Automatically wires detected gaps into connector files via LLM agent
+  - **`integration-agent.md`** — Custom `subagent_type` definition with tool/file restrictions
+  - **Protocol updates** — `execution-rules.md` (E25+E26), `invariants.md` (I1 exemption), `participants.md` (5th role), `procedures.md`, `state-machine.md`, `message-formats.md` (5 new message types), `preconditions.md` (E26 preconditions)
+  - **Skill orchestration** — `saw-skill.md` updated with `validate-integration` command and post-wave integration step
+  - **Agent prompts** — Scout, Wave Agent, and agent template updated with integration awareness
+  - **`integration_model`** — Added to config examples across all docs
+  - **All docs audited** — README, architecture, ECOSYSTEM, hooks, saw-teams all updated for E1-E26 and 5 participants
 
 ---
 ## [0.37.0] - 2026-03-14
@@ -44,6 +138,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - H3 section: 73 lines → 7 lines (removed manual `sawtools analyze-deps` invocation)
   - H2 section: 41 lines → 6 lines (removed manual `sawtools extract-commands` invocation)
   - Rationale: v0.36.0 automated these tools via `runScoutAutomation()` — Scout now reads pre-computed results instead of running tools
+- **Scout prompt — H3 language support documentation** — Updated to reflect v0.32.0 multi-language implementation
+  - Removed outdated "planned for Phase 2" text
+  - Added supported languages list: Go (native), Rust (rust-parser binary), JavaScript/TypeScript (js-parser.js), Python (python-parser.py)
+  - Clarified cascade detection (M2) is Go-only; other languages use manual fallback
+  - Changed section header from "Go projects" to "multi-language support"
 
 ### Fixed
 

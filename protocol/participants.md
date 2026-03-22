@@ -1,6 +1,6 @@
 # Protocol Participants
 
-SAW has four participant roles. All four are agents (AI model instances running with tool access). They differ only in execution mode and responsibility.
+SAW has six participant roles. All six are agents (AI model instances running with tool access). They differ only in execution mode and responsibility.
 
 ## Orchestrator
 
@@ -43,6 +43,8 @@ The orchestrator must not implement feature logic itself. All source file modifi
 - Merge conflicts are impossible (orchestrator doesn't compete with agents for file ownership)
 
 The orchestrator may modify orchestrator-owned files (append-only shared files like config registries) post-merge, but must not touch any file in any agent's ownership list.
+
+At program scope, the orchestrator launches the Planner role to analyze requirements and produce the PROGRAM manifest. The Planner operates at project scope, identifying feature boundaries and cross-feature dependencies, while Scouts operate at feature scope within individual IMPLs.
 
 **Required capabilities:**
 
@@ -127,9 +129,103 @@ An asynchronous agent launched by the orchestrator. Owns a disjoint set of files
 - Launch other agents
 - Merge changes to HEAD (delegated to Orchestrator)
 
+## Integration Agent
+
+**Execution mode:** Asynchronous (serial, after wave agents)
+
+**Responsibilities:**
+
+An asynchronous agent launched by the orchestrator after wave agents complete and merge succeeds. Reads the `IntegrationReport` produced by E25 (Integration Validation), reads completion reports from wave agents, and modifies `integration_connectors` files to wire new exports into caller code. Runs on the main branch (no worktree) because it operates on the merged result. Exits after wiring gaps and verifying the build passes.
+
+The Integration Agent is the only participant that runs after merge but before the next wave starts. It bridges the gap between wave agents producing new exports and the existing codebase consuming them. Its scope is strictly limited to wiring — it does not implement new features or modify agent-owned code.
+
+**Constraint role:** `integrator`
+
+The `integrator` constraint restricts the Integration Agent to files listed in the IMPL manifest's `integration_connectors` field. This is enforced mechanically via `AllowedPathPrefixes`, not by agent cooperation.
+
+**Required capabilities:**
+
+- Read source files (merged codebase, completion reports, IntegrationReport)
+- Write source files (only `integration_connectors` files)
+- Execute build commands (verification gate: `go build ./...`)
+- Execute git commands (add, commit) on the main branch
+- Parse IMPL docs (integration_connectors, completion reports)
+
+**Forbidden actions:**
+
+- Modify agent-owned files (files listed in any agent's ownership table)
+- Modify scaffold files
+- Modify files not listed in `integration_connectors`
+- Launch other agents
+- Implement new features (wiring only — connecting existing exports to existing callers)
+
+**Launches:** After wave merge + E21 verification + E25 integration validation, before the next wave starts.
+
+**Failure behavior:** Non-fatal. If the Integration Agent fails, gaps are reported to the human via the orchestrator. The pipeline does not block.
+
+**Related Rules:** See E25 (Integration Validation), E26 (Integration Agent), I1 Amendment (Integration Agent Exemption)
+
+## Critic Agent
+
+**Execution mode:** Asynchronous
+
+**Responsibilities:**
+
+An asynchronous agent launched by the orchestrator after IMPL doc validation (E16)
+and before REVIEWED state (E37). Reads every agent brief in the IMPL doc, reads
+every source file in the file_ownership table, and verifies briefs against the
+actual codebase. Produces a structured CriticResult with per-agent verdicts and
+an overall PASS/ISSUES decision. Writes the result to the IMPL doc critic_report
+field using WriteCriticReview. Never modifies source files. Exits after writing
+the review.
+
+The critic closes the gap between schema validation (E16, which checks structure)
+and human review (which checks intent). It catches semantic errors: wrong function
+names, missing files, patterns that do not exist as described, interfaces incompatible
+with existing types, and missing registration wiring.
+
+**Required capabilities:**
+- Read IMPL docs and source files
+- Execute read-only commands (grep, find, list directories)
+- Write structured review results to IMPL doc (WriteCriticReview)
+- Parse Go/TypeScript/Markdown source files
+
+**Forbidden actions:**
+- Modify any source files
+- Modify IMPL doc fields other than critic_report
+- Launch other agents
+- Participate in wave execution
+- Apply corrections to briefs (correction is orchestrator's responsibility)
+
+## Planner
+
+**Execution mode:** Asynchronous
+
+**Responsibilities:**
+
+An asynchronous agent launched by the orchestrator at program scope. Analyzes REQUIREMENTS.md and the existing codebase, identifies feature boundaries, defines cross-feature dependencies and program contracts, produces the PROGRAM manifest. Functions as a "super-Scout" at project scope rather than feature scope — where the Scout analyzes a single feature and produces an IMPL doc, the Planner analyzes the entire project and produces a PROGRAM manifest that coordinates multiple IMPL docs into tiered execution.
+
+The Planner identifies which features can execute in parallel (same tier) and which must execute sequentially (dependencies across tiers). It defines program-level interface contracts that span multiple features, ensuring that IMPLs can depend on each other's outputs without circular dependencies. The Planner runs a program-level suitability assessment to determine if the requirements can be decomposed into parallelizable features under SAW constraints.
+
+**Required capabilities:**
+
+- Read REQUIREMENTS.md and source files
+- Analyze project structure and identify feature boundaries
+- Identify cross-feature dependencies and execution order constraints
+- Define program contracts (cross-IMPL interface contracts)
+- Produce PROGRAM manifest with tier structure, IMPL listings, and contracts
+- Run program-level suitability assessment (determine if requirements fit SAW execution model)
+
+**Forbidden actions:**
+
+- Write IMPL docs (delegated to Scout agents for each feature)
+- Write source code (delegated to Wave Agents)
+- Launch agents (delegated to Orchestrator)
+- Modify existing source files
+
 ## Correctness Rationale
 
-The protocol's correctness guarantees flow from this structure: the synchronous orchestrator serializes all state transitions while asynchronous agents execute in parallel. Agents can run concurrently precisely because they never write to shared state; only the orchestrator does.
+The protocol's correctness guarantees flow from this structure: the synchronous orchestrator serializes all state transitions while asynchronous agents execute in parallel. Agents can run concurrently precisely because they never write to shared state; only the orchestrator does. The Integration Agent extends this model by running serially after merge — it is the only writer at its execution time, preserving the single-writer guarantee without worktree isolation.
 
 **Key architectural constraints:**
 

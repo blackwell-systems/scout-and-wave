@@ -29,7 +29,7 @@ Most frameworks try to solve this with better prompts. SAW solves it with struct
 - **Human review before execution.** You see the full plan - file assignments, interface contracts, wave structure - and approve it before any agent launches. This is the last point where changing the architecture is cheap.
 - **Suitability gate.** SAW says "no" when the work doesn't decompose cleanly. A poor-fit assessment prevents bad decompositions from producing expensive failures.
 
-Four participants coordinate within a single session: the **Orchestrator** (your Claude Code session), **Scout** (analyzes codebase, assigns files to agents), **Scaffold Agent** (creates shared types before parallel work begins), and **Wave Agents** (implement their assigned files in parallel worktrees, one wave at a time). The scout enforces disjoint ownership at planning time, the scaffold agent creates interface contracts before parallelization, and wave agents work in isolated worktrees. Everything is coordinated by a single orchestrator that holds full state.
+Five participants coordinate within a single session: the **Orchestrator** (your Claude Code session), **Scout** (analyzes codebase, assigns files to agents), **Scaffold Agent** (creates shared types before parallel work begins), **Wave Agents** (implement their assigned files in parallel worktrees, one wave at a time), and **Integration Agent** (wires new exports into caller code after wave merge). The scout enforces disjoint ownership at planning time, the scaffold agent creates interface contracts before parallelization, wave agents work in isolated worktrees, and the integration agent connects the pieces post-merge. Everything is coordinated by a single orchestrator that holds full state.
 
 ## How
 
@@ -50,6 +50,8 @@ Four participants coordinate within a single session: the **Orchestrator** (your
 - **Scaffold Agent:** Asynchronous agent. Runs once before Wave 1 if the IMPL doc specifies shared types that multiple agents need (e.g., interface definitions). Creates shared type files (called "scaffolds") from IMPL doc contracts, verifies compilation, commits to HEAD. Runs once before any Wave Agent launches. If compilation fails, wave stops before worktrees are created.
 
 - **Wave Agents:** Asynchronous agents running in parallel. Each owns disjoint files, implements against frozen interface contracts, runs verification gate, commits work, writes completion report.
+
+- **Integration Agent:** Asynchronous agent running after wave merge. Wires new exports from wave agents into caller code. Restricted to `integration_connectors` files. Non-fatal — gaps are reported to the human if wiring fails.
 
 The protocol has a built-in **suitability gate** that answers five questions before producing any agent prompts. If preconditions don't hold, the scout emits NOT SUITABLE and stops. **SAW isn't for everything.** A poor-fit assessment prevents bad decompositions.
 
@@ -124,10 +126,10 @@ Both implement the same SAW protocol and produce identical IMPL docs. Use the Cl
 The protocol is defined independent of any implementation. Read these to understand how SAW works:
 
 - **[protocol/README.md](protocol/README.md)** - Protocol overview and navigation guide
-- **[protocol/participants.md](protocol/participants.md)** - Four participant roles and their responsibilities
+- **[protocol/participants.md](protocol/participants.md)** - Five participant roles and their responsibilities
 - **[protocol/preconditions.md](protocol/preconditions.md)** - Five preconditions for suitability gate
 - **[protocol/invariants.md](protocol/invariants.md)** - Six invariants (I1–I6) — formal correctness rules that every implementation must satisfy (e.g., I1: disjoint file ownership, I2: interface contracts precede parallel implementation)
-- **[protocol/execution-rules.md](protocol/execution-rules.md)** - Execution rules (E1–E23) governing state transitions, agent launches, completion handling, merge procedures, verification gates, IMPL doc lifecycle, Scout output validation (E16A/B/C), project memory lifecycle (E17/E18), failure taxonomy (E19), stub detection (E20), post-wave quality gates (E21), scaffold build verification (E22), and per-agent context extraction (E23)
+- **[protocol/execution-rules.md](protocol/execution-rules.md)** - Execution rules (E1–E26) governing state transitions, agent launches, completion handling, merge procedures, verification gates, IMPL doc lifecycle, Scout output validation (E16A/B/C), project memory lifecycle (E17/E18), failure taxonomy (E19), stub detection (E20), post-wave quality gates (E21), scaffold build verification (E22), per-agent context extraction (E23), integration validation (E25), and integration agent (E26)
 - **[protocol/state-machine.md](protocol/state-machine.md)** - Protocol states and transitions
 - **[protocol/message-formats.md](protocol/message-formats.md)** - IMPL doc and completion report schemas
 - **[protocol/procedures.md](protocol/procedures.md)** - Step-by-step merge and verification procedures

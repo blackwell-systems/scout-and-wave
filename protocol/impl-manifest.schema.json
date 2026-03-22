@@ -1,0 +1,563 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/blackwell-systems/scout-and-wave/protocol/impl-manifest.schema.json",
+  "title": "SAW IMPL Manifest",
+  "description": "Schema for the Scout-and-Wave IMPL manifest document. Describes the full structure of a parallel implementation plan including waves, agents, file ownership, and completion reports.",
+  "type": "object",
+  "required": ["title", "feature_slug", "verdict"],
+  "additionalProperties": false,
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Human-readable title of the feature being implemented."
+    },
+    "feature_slug": {
+      "type": "string",
+      "description": "URL-safe identifier for the feature (used in branch names and file paths)."
+    },
+    "verdict": {
+      "type": "string",
+      "enum": ["SUITABLE", "NOT_SUITABLE", "SUITABLE_WITH_CAVEATS"],
+      "description": "Scout's assessment of whether the feature is suitable for parallel implementation."
+    },
+    "suitability_assessment": {
+      "type": "string",
+      "description": "Prose explanation of the suitability verdict."
+    },
+    "test_command": {
+      "type": "string",
+      "description": "Command to run the project's test suite."
+    },
+    "lint_command": {
+      "type": "string",
+      "description": "Command to run the project's linter."
+    },
+    "file_ownership": {
+      "type": "array",
+      "description": "Maps each file to the agent and wave responsible for it.",
+      "items": { "$ref": "#/$defs/FileOwnership" }
+    },
+    "interface_contracts": {
+      "type": "array",
+      "description": "Contracts defining expected interfaces between agents.",
+      "items": { "$ref": "#/$defs/InterfaceContract" }
+    },
+    "waves": {
+      "type": "array",
+      "description": "Ordered list of execution waves. Agents within a wave run in parallel; waves execute sequentially.",
+      "items": { "$ref": "#/$defs/Wave" }
+    },
+    "quality_gates": {
+      "$ref": "#/$defs/QualityGates",
+      "description": "Quality checks that must pass before a wave is considered complete."
+    },
+    "post_merge_checklist": {
+      "$ref": "#/$defs/PostMergeChecklist",
+      "description": "Verification steps to run after merging all waves."
+    },
+    "scaffolds": {
+      "type": "array",
+      "description": "Type scaffold files created before wave execution for shared references.",
+      "items": { "$ref": "#/$defs/ScaffoldFile" }
+    },
+    "completion_reports": {
+      "type": "object",
+      "description": "Completion reports keyed by agent ID.",
+      "additionalProperties": { "$ref": "#/$defs/CompletionReport" },
+      "propertyNames": {
+        "pattern": "^[A-Z][2-9]?$"
+      }
+    },
+    "stub_reports": {
+      "type": "object",
+      "description": "Stub scan results keyed by agent ID.",
+      "additionalProperties": { "$ref": "#/$defs/ScanStubsResult" },
+      "propertyNames": {
+        "pattern": "^[A-Z][2-9]?$"
+      }
+    },
+    "pre_mortem": {
+      "$ref": "#/$defs/PreMortem",
+      "description": "Risk analysis of potential failure modes identified during scouting."
+    },
+    "known_issues": {
+      "type": "array",
+      "description": "Issues discovered during scouting with status and workarounds.",
+      "items": { "$ref": "#/$defs/KnownIssue" }
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "SCOUT_PENDING",
+        "SCOUT_VALIDATING",
+        "REVIEWED",
+        "SCAFFOLD_PENDING",
+        "WAVE_PENDING",
+        "WAVE_EXECUTING",
+        "WAVE_MERGING",
+        "WAVE_VERIFIED",
+        "BLOCKED",
+        "COMPLETE",
+        "NOT_SUITABLE"
+      ],
+      "description": "Current protocol state of this IMPL manifest."
+    },
+    "merge_state": {
+      "type": "string",
+      "enum": ["idle", "in_progress", "completed", "failed"],
+      "description": "Current state of the merge operation for the active wave."
+    },
+    "worktrees_created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp when worktrees were created (used for E2/I2-02 freeze enforcement)."
+    },
+    "frozen_contracts_hash": {
+      "type": "string",
+      "description": "Hash of interface contracts at freeze time for drift detection."
+    },
+    "frozen_scaffolds_hash": {
+      "type": "string",
+      "description": "Hash of scaffolds at freeze time for drift detection."
+    },
+    "completion_date": {
+      "type": "string",
+      "description": "Date when the IMPL was completed (YYYY-MM-DD format)."
+    }
+  },
+  "$defs": {
+    "FileOwnership": {
+      "type": "object",
+      "description": "Maps a file to its owning agent and wave.",
+      "required": ["file", "agent", "wave"],
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "type": "string",
+          "description": "Relative file path from repo root."
+        },
+        "agent": {
+          "type": "string",
+          "pattern": "^[A-Z][2-9]?$",
+          "description": "Agent ID (single uppercase letter, optionally followed by digit 2-9)."
+        },
+        "wave": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Wave number this file belongs to."
+        },
+        "action": {
+          "type": "string",
+          "enum": ["new", "modify", "delete"],
+          "description": "What the agent will do with this file."
+        },
+        "depends_on": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "List of file paths this file depends on."
+        },
+        "repo": {
+          "type": "string",
+          "description": "Repository name for cross-repo waves."
+        }
+      }
+    },
+    "Wave": {
+      "type": "object",
+      "description": "A concurrent execution phase containing multiple agents.",
+      "required": ["number", "agents"],
+      "additionalProperties": false,
+      "properties": {
+        "number": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Sequential wave number (1-based)."
+        },
+        "agents": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Agent" },
+          "description": "Agents executing in parallel within this wave."
+        },
+        "agent_launch_order": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Preferred order for launching agents (advisory)."
+        },
+        "base_commit": {
+          "type": "string",
+          "description": "Git commit SHA recorded when worktrees were created."
+        }
+      }
+    },
+    "Agent": {
+      "type": "object",
+      "description": "A single concurrent task within a wave.",
+      "required": ["id", "task", "files"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Z][2-9]?$",
+          "description": "Unique agent identifier (e.g., A, B, C2)."
+        },
+        "task": {
+          "type": "string",
+          "description": "Description of what this agent should implement."
+        },
+        "files": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Files this agent owns and may modify."
+        },
+        "dependencies": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Agent IDs this agent depends on (from prior waves)."
+        },
+        "model": {
+          "type": "string",
+          "description": "Preferred model for this agent (optional override)."
+        }
+      }
+    },
+    "CompletionReport": {
+      "type": "object",
+      "description": "Records the outcome of an agent's work.",
+      "required": ["status"],
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["complete", "partial", "blocked"],
+          "description": "Final status of the agent's work."
+        },
+        "worktree": {
+          "type": "string",
+          "description": "Path to the agent's worktree."
+        },
+        "branch": {
+          "type": "string",
+          "description": "Git branch name used by the agent."
+        },
+        "commit": {
+          "type": "string",
+          "description": "Final commit SHA of the agent's work."
+        },
+        "files_changed": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Files modified by the agent."
+        },
+        "files_created": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Files newly created by the agent."
+        },
+        "interface_deviations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/InterfaceDeviation" },
+          "description": "Any deviations from the planned interface contracts."
+        },
+        "out_of_scope_deps": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Dependencies discovered outside the agent's scope."
+        },
+        "tests_added": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Test names added by the agent."
+        },
+        "verification": {
+          "type": "string",
+          "description": "Verification gate result (e.g., PASS, FAIL with details)."
+        },
+        "failure_type": {
+          "type": "string",
+          "enum": ["transient", "fixable", "needs_replan", "escalate", "timeout"],
+          "description": "Type of failure when status is partial or blocked."
+        },
+        "notes": {
+          "type": "string",
+          "description": "Free-form notes about decisions, surprises, or warnings."
+        },
+        "repo": {
+          "type": "string",
+          "description": "Repository name for cross-repo agents."
+        }
+      }
+    },
+    "InterfaceDeviation": {
+      "type": "object",
+      "description": "Records a deviation from a planned interface contract.",
+      "required": ["description", "downstream_action_required"],
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string",
+          "description": "What changed from the planned interface."
+        },
+        "downstream_action_required": {
+          "type": "boolean",
+          "description": "Whether downstream agents need to adapt to this change."
+        },
+        "affects": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Agent IDs affected by this deviation."
+        }
+      }
+    },
+    "InterfaceContract": {
+      "type": "object",
+      "description": "Defines an expected interface between agents.",
+      "required": ["name", "definition", "location"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Name of the interface or API."
+        },
+        "description": {
+          "type": "string",
+          "description": "What this interface does."
+        },
+        "definition": {
+          "type": "string",
+          "description": "The interface definition (e.g., function signature, type definition)."
+        },
+        "location": {
+          "type": "string",
+          "description": "File path where this interface is defined."
+        }
+      }
+    },
+    "QualityGates": {
+      "type": "object",
+      "description": "Quality checks configuration.",
+      "required": ["level", "gates"],
+      "additionalProperties": false,
+      "properties": {
+        "level": {
+          "type": "string",
+          "enum": ["quick", "standard", "full"],
+          "description": "Quality check thoroughness level."
+        },
+        "gates": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/QualityGate" },
+          "description": "Individual quality gates to run."
+        }
+      }
+    },
+    "QualityGate": {
+      "type": "object",
+      "description": "A single quality check.",
+      "required": ["type", "command", "required"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["build", "lint", "test", "typecheck", "custom"],
+          "description": "Category of quality check."
+        },
+        "command": {
+          "type": "string",
+          "description": "Shell command to execute."
+        },
+        "required": {
+          "type": "boolean",
+          "description": "Whether this gate must pass for the wave to succeed."
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable description of what this gate checks."
+        },
+        "repo": {
+          "type": "string",
+          "description": "If set, this gate only runs when finalize-wave processes this repo."
+        }
+      }
+    },
+    "ScaffoldFile": {
+      "type": "object",
+      "description": "A type scaffold file for shared references across agents.",
+      "required": ["file_path"],
+      "additionalProperties": false,
+      "properties": {
+        "file_path": {
+          "type": "string",
+          "description": "Relative path for the scaffold file."
+        },
+        "contents": {
+          "type": "string",
+          "description": "File contents of the scaffold."
+        },
+        "import_path": {
+          "type": "string",
+          "description": "Import path for the scaffold (e.g., Go package path)."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "committed"],
+          "description": "Whether the scaffold has been committed to the repo."
+        },
+        "commit": {
+          "type": "string",
+          "description": "Commit SHA when scaffold was committed."
+        }
+      }
+    },
+    "PreMortem": {
+      "type": "object",
+      "description": "Risk analysis of potential failure modes.",
+      "required": ["overall_risk", "rows"],
+      "additionalProperties": false,
+      "properties": {
+        "overall_risk": {
+          "type": "string",
+          "enum": ["low", "medium", "high"],
+          "description": "Overall risk level for this implementation."
+        },
+        "rows": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/PreMortemRow" },
+          "description": "Individual risk scenarios."
+        }
+      }
+    },
+    "PreMortemRow": {
+      "type": "object",
+      "description": "A single failure scenario and its mitigation.",
+      "required": ["scenario", "likelihood", "impact", "mitigation"],
+      "additionalProperties": false,
+      "properties": {
+        "scenario": {
+          "type": "string",
+          "description": "What could go wrong."
+        },
+        "likelihood": {
+          "type": "string",
+          "enum": ["low", "medium", "high"],
+          "description": "Probability of this scenario occurring."
+        },
+        "impact": {
+          "type": "string",
+          "enum": ["low", "medium", "high"],
+          "description": "Severity if this scenario occurs."
+        },
+        "mitigation": {
+          "type": "string",
+          "description": "How to prevent or handle this scenario."
+        }
+      }
+    },
+    "KnownIssue": {
+      "type": "object",
+      "description": "An issue discovered during scouting.",
+      "required": ["description"],
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Short title for the issue."
+        },
+        "description": {
+          "type": "string",
+          "description": "Detailed description of the issue."
+        },
+        "status": {
+          "type": "string",
+          "description": "Current status of the issue."
+        },
+        "workaround": {
+          "type": "string",
+          "description": "Known workaround if available."
+        }
+      }
+    },
+    "PostMergeChecklist": {
+      "type": "object",
+      "description": "Verification steps to run after merging all waves.",
+      "required": ["groups"],
+      "additionalProperties": false,
+      "properties": {
+        "groups": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ChecklistGroup" },
+          "description": "Logical groupings of checklist items."
+        }
+      }
+    },
+    "ChecklistGroup": {
+      "type": "object",
+      "description": "A logical grouping of related checklist items.",
+      "required": ["title", "items"],
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Group heading."
+        },
+        "items": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ChecklistItem" },
+          "description": "Checklist items in this group."
+        }
+      }
+    },
+    "ChecklistItem": {
+      "type": "object",
+      "description": "A single verification step.",
+      "required": ["description"],
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string",
+          "description": "What to verify."
+        },
+        "command": {
+          "type": "string",
+          "description": "Optional command to run for verification."
+        }
+      }
+    },
+    "ScanStubsResult": {
+      "type": "object",
+      "description": "Results from scanning agent files for stub patterns.",
+      "required": ["hits"],
+      "additionalProperties": false,
+      "properties": {
+        "hits": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/StubHit" },
+          "description": "Stub patterns found in agent files."
+        }
+      }
+    },
+    "StubHit": {
+      "type": "object",
+      "description": "A single stub pattern match.",
+      "required": ["file", "line", "pattern", "context"],
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "type": "string",
+          "description": "File path containing the stub."
+        },
+        "line": {
+          "type": "integer",
+          "description": "Line number of the stub."
+        },
+        "pattern": {
+          "type": "string",
+          "description": "Stub pattern that matched (e.g., TODO, FIXME)."
+        },
+        "context": {
+          "type": "string",
+          "description": "Source line containing the stub."
+        }
+      }
+    }
+  }
+}

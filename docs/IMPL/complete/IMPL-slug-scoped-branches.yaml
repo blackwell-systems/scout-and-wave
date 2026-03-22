@@ -1,0 +1,937 @@
+title: Slug-scoped branch naming - eliminate agent ID collision across IMPLs
+feature_slug: slug-scoped-branches
+verdict: SUITABLE
+suitability_assessment: |
+    Cross-repo feature touching Go SDK (engine), web app (UI/API), and protocol docs.
+    Branch name construction is duplicated across ~25 call sites in 3 repos.
+    The fix is mechanical but widespread: introduce a centralized BranchName(slug, wave, agent)
+    helper in the Go SDK, propagate to all callers, update protocol docs, and update
+    the field validation regex to accept the new format.
+
+    Key design decisions:
+    - New format: saw/<slug>/wave{N}-agent-{ID} (branch) and .claude/worktrees/saw/<slug>/wave{N}-agent-{ID} (worktree path)
+    - The saw/ prefix keeps SAW branches visually distinct in git branch listings
+    - Backward compatibility: field validation regex accepts BOTH old and new formats during transition
+    - .saw-state paths (.saw-state/wave{N}/agent-{ID}/) do NOT need slug-scoping because they are
+      already scoped by the manifest directory, not global git namespace. Changing them would break
+      journal recovery. Leave them as-is.
+    - Journal archive names (wave{N}-agent-{ID}.tar.gz) are already under .saw-state/archive/
+      which is per-project. No change needed.
+test_command: go test ./...
+lint_command: go vet ./...
+file_ownership:
+    - file: protocol/execution-rules.md
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: protocol/message-formats.md
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: implementations/claude-code/prompts/saw-skill.md
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: implementations/claude-code/prompts/agents/wave-agent.md
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: implementations/claude-code/prompts/agents/scout.md
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: pkg/protocol/branchname.go
+      agent: B
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: pkg/protocol/branchname_test.go
+      agent: B
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: pkg/protocol/worktree.go
+      agent: C
+      wave: 2
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/protocol/worktree_test.go
+      agent: C
+      wave: 2
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/protocol/worktree_resolve.go
+      agent: C
+      wave: 2
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/protocol/worktree_resolve_test.go
+      agent: C
+      wave: 2
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/protocol/cleanup.go
+      agent: C
+      wave: 2
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/protocol/cleanup_test.go
+      agent: C
+      wave: 2
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/protocol/merge_agents.go
+      agent: D
+      wave: 2
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/protocol/merge_agents_test.go
+      agent: D
+      wave: 2
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/protocol/commit_verify.go
+      agent: D
+      wave: 2
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/protocol/commit_verify_test.go
+      agent: D
+      wave: 2
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/protocol/fieldvalidation.go
+      agent: E
+      wave: 2
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/protocol/fieldvalidation_test.go
+      agent: E
+      wave: 2
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/resume/detect.go
+      agent: E
+      wave: 2
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/resume/detect_test.go
+      agent: E
+      wave: 2
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/worktree/manager.go
+      agent: E
+      wave: 2
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/worktree/manager_test.go
+      agent: E
+      wave: 2
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/orchestrator/orchestrator.go
+      agent: F
+      wave: 2
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/orchestrator/merge.go
+      agent: F
+      wave: 2
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/orchestrator/structured_wave.go
+      agent: F
+      wave: 2
+      action: modify
+      repo: scout-and-wave-go
+    - file: cmd/saw/prepare_agent.go
+      agent: F
+      wave: 2
+      action: modify
+      repo: scout-and-wave-go
+    - file: cmd/saw/prepare_wave.go
+      agent: F
+      wave: 2
+      action: modify
+      repo: scout-and-wave-go
+    - file: cmd/saw/journal_init.go
+      agent: F
+      wave: 2
+      action: modify
+      repo: scout-and-wave-go
+    - file: cmd/saw/journal_context.go
+      agent: F
+      wave: 2
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/journal/archive.go
+      agent: F
+      wave: 2
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/git/activity.go
+      agent: F
+      wave: 2
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/api/wave_status_disk.go
+      agent: G
+      wave: 3
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/api/wave_runner.go
+      agent: G
+      wave: 3
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/api/diff_handler.go
+      agent: G
+      wave: 3
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/api/worktree_handler.go
+      agent: G
+      wave: 3
+      action: modify
+      repo: scout-and-wave-web
+interface_contracts:
+    - name: BranchName
+      description: |
+        Central function for constructing slug-scoped branch names.
+        All call sites that currently use fmt.Sprintf("wave%d-agent-%s", ...) must
+        migrate to this function.
+      definition: |
+        func BranchName(slug string, waveNum int, agentID string) string
+      location: pkg/protocol/branchname.go
+    - name: LegacyBranchName
+      description: |
+        Returns the old-format branch name for backward compatibility checks.
+        Used by code that needs to detect or clean up old-format branches.
+      definition: |
+        func LegacyBranchName(waveNum int, agentID string) string
+      location: pkg/protocol/branchname.go
+    - name: WorktreeDir
+      description: |
+        Central function for constructing slug-scoped worktree directory paths.
+        Replaces filepath.Join(repoDir, ".claude", "worktrees", fmt.Sprintf("wave%d-agent-%s", ...))
+      definition: |
+        func WorktreeDir(repoDir, slug string, waveNum int, agentID string) string
+      location: pkg/protocol/branchname.go
+    - name: ScopedBranchRegex
+      description: |
+        Regex that matches BOTH old-format (wave1-agent-A) and new-format
+        (saw/my-slug/wave1-agent-A) branch names. Used by field validation
+        and resume detection. Captures wave number and agent ID groups.
+      definition: |
+        var ScopedBranchRegex = regexp.MustCompile(`^(?:saw/[a-z0-9-]+/)?wave(\d+)-agent-([A-Z][2-9]?)$`)
+      location: pkg/protocol/branchname.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## What to Implement
+            Update all protocol documentation and agent prompts in the scout-and-wave
+            repo to reflect the new slug-scoped branch naming convention.
+
+            ## Changes Required
+
+            ### protocol/execution-rules.md
+            Update E5 worktree naming rule (line 147) from:
+            `.claude/worktrees/wave{N}-agent-{ID}` to
+            `.claude/worktrees/saw/{slug}/wave{N}-agent-{ID}`
+
+            Update branch naming from `wave{N}-agent-{ID}` to `saw/{slug}/wave{N}-agent-{ID}`.
+
+            Add a backward compatibility note: "Branches created before v0.39.0 use the
+            legacy format wave{N}-agent-{ID} without slug prefix. Tools accept both formats."
+
+            ### protocol/message-formats.md
+            Update ALL references to branch/worktree naming (lines 279-280, 431, 437, 447,
+            474, 510-511, 549, 551, 620, 962). Change pattern from `wave{N}-agent-{ID}` to
+            `saw/{slug}/wave{N}-agent-{ID}` in branch fields, and worktree paths to
+            `.claude/worktrees/saw/{slug}/wave{N}-agent-{ID}`.
+
+            Update the completion report example fields and the verify-isolation example.
+            Update the journal archive path reference on line 620 to note archives remain
+            at `.saw-state/archives/wave{N}-agent-{ID}.tar.gz` (no slug needed - already project-scoped).
+
+            ### implementations/claude-code/prompts/saw-skill.md
+            Update the worktree creation and verify-isolation examples (lines 236, 239-240)
+            to use slug-scoped paths. The slug comes from the IMPL doc's feature_slug field.
+
+            ### implementations/claude-code/prompts/agents/wave-agent.md
+            Update verify-isolation example (line 27), worktree path note (line 114),
+            and completion report branch example (line 197) to slug-scoped format.
+            Update the example completion report (line 34) branch field.
+
+            ### implementations/claude-code/prompts/agents/scout.md
+            Update the worktree branch naming reference (line 514) from
+            `wave1-agent-A2`, `wave2-agent-B3` to `saw/{slug}/wave1-agent-A2`, etc.
+
+            ## Tests to Write
+            No code tests - these are documentation files. Verify by reading each file
+            after changes to confirm all instances of old format are updated.
+
+            ## Verification Gate
+            ```bash
+            # Verify no remaining old-format references in modified files
+            grep -rn 'wave{N}-agent-{ID}' protocol/execution-rules.md protocol/message-formats.md && echo "FAIL: old format remains" || echo "PASS"
+            ```
+
+            ## Constraints
+            - Do NOT change .saw-state/ directory structure references - those are project-scoped, not git-scoped
+            - Do NOT change journal archive naming - already under .saw-state/archive/
+            - Add backward compatibility notes wherever the format change is documented
+            - Use {slug} as the placeholder in templates, matching IMPL doc feature_slug field
+          files:
+            - protocol/execution-rules.md
+            - protocol/message-formats.md
+            - implementations/claude-code/prompts/saw-skill.md
+            - implementations/claude-code/prompts/agents/wave-agent.md
+            - implementations/claude-code/prompts/agents/scout.md
+        - id: B
+          task: |
+            ## What to Implement
+            Create the centralized branch naming helper in the Go SDK. This is the scaffold
+            that all other Go agents depend on.
+
+            ## File: pkg/protocol/branchname.go
+            Create a new file with these functions:
+
+            ```go
+            package protocol
+
+            import (
+              "fmt"
+              "path/filepath"
+              "regexp"
+            )
+
+            // BranchName returns the slug-scoped branch name for an agent.
+            // Format: saw/<slug>/wave{N}-agent-{ID}
+            func BranchName(slug string, waveNum int, agentID string) string {
+              return fmt.Sprintf("saw/%s/wave%d-agent-%s", slug, waveNum, agentID)
+            }
+
+            // LegacyBranchName returns the old-format branch name for backward compat.
+            func LegacyBranchName(waveNum int, agentID string) string {
+              return fmt.Sprintf("wave%d-agent-%s", waveNum, agentID)
+            }
+
+            // WorktreeDir returns the slug-scoped worktree directory path.
+            func WorktreeDir(repoDir, slug string, waveNum int, agentID string) string {
+              return filepath.Join(repoDir, ".claude", "worktrees", "saw", slug,
+                fmt.Sprintf("wave%d-agent-%s", waveNum, agentID))
+            }
+
+            // ScopedBranchRegex matches both old and new branch name formats.
+            // Group 1: wave number, Group 2: agent ID
+            // Accepts: "wave1-agent-A" (legacy) or "saw/my-slug/wave1-agent-A" (new)
+            var ScopedBranchRegex = regexp.MustCompile(
+              `^(?:saw/[a-z0-9][-a-z0-9]*/)?wave(\d+)-agent-([A-Z][2-9]?)$`)
+
+            // ParseBranch extracts wave number and agent ID from either format.
+            // Returns (wave, agentID, ok).
+            func ParseBranch(branch string) (int, string, bool) {
+              m := ScopedBranchRegex.FindStringSubmatch(branch)
+              if m == nil {
+                return 0, "", false
+              }
+              var wave int
+              fmt.Sscanf(m[1], "%d", &wave)
+              return wave, m[2], true
+            }
+
+            // ExtractSlug extracts the slug from a scoped branch name.
+            // Returns empty string for legacy format branches.
+            func ExtractSlug(branch string) string {
+              // Pattern: saw/<slug>/wave...-agent-...
+              if len(branch) > 4 && branch[:4] == "saw/" {
+                rest := branch[4:]
+                for i, c := range rest {
+                  if c == '/' {
+                    return rest[:i]
+                  }
+                }
+              }
+              return ""
+            }
+            ```
+
+            ## File: pkg/protocol/branchname_test.go
+            Write comprehensive tests:
+
+            1. TestBranchName - verify format "saw/{slug}/wave{N}-agent-{ID}"
+            2. TestLegacyBranchName - verify format "wave{N}-agent-{ID}"
+            3. TestWorktreeDir - verify path construction with slug subdirectory
+            4. TestScopedBranchRegex_NewFormat - matches saw/slug/wave1-agent-A
+            5. TestScopedBranchRegex_LegacyFormat - matches wave1-agent-A
+            6. TestScopedBranchRegex_Invalid - rejects malformed strings
+            7. TestParseBranch_NewFormat - extracts wave+agent from new format
+            8. TestParseBranch_LegacyFormat - extracts wave+agent from legacy
+            9. TestParseBranch_Invalid - returns false for bad input
+            10. TestExtractSlug_NewFormat - extracts slug correctly
+            11. TestExtractSlug_LegacyFormat - returns empty for legacy
+            12. TestBranchName_SpecialSlugs - slugs with hyphens, numbers
+
+            ## Verification Gate
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go
+            go build ./pkg/protocol/...
+            go vet ./pkg/protocol/...
+            go test ./pkg/protocol/ -run TestBranchName -v
+            go test ./pkg/protocol/ -run TestParseBranch -v
+            go test ./pkg/protocol/ -run TestExtractSlug -v
+            go test ./pkg/protocol/ -run TestScopedBranchRegex -v
+            go test ./pkg/protocol/ -run TestWorktreeDir -v
+            go test ./pkg/protocol/ -run TestLegacyBranchName -v
+            ```
+
+            ## Constraints
+            - slug must be validated: lowercase alphanumeric with hyphens, no leading/trailing hyphens
+            - ScopedBranchRegex MUST accept both old and new formats (backward compat is critical)
+            - Do not modify any existing files - only create the two new files
+          files:
+            - pkg/protocol/branchname.go
+            - pkg/protocol/branchname_test.go
+    - number: 2
+      agents:
+        - id: C
+          task: |
+            ## What to Implement
+            Migrate worktree creation, cleanup, and path resolution in pkg/protocol/ to use
+            the centralized BranchName() and WorktreeDir() helpers.
+
+            ## Key Requirement
+            All functions now need the IMPL slug to construct branch names. The slug is
+            available from the manifest (doc.FeatureSlug) which is already loaded in each function.
+
+            ## Files to Modify
+
+            ### pkg/protocol/worktree.go
+            - CreateWorktrees(): Change line 120-121 from:
+              ```go
+              worktreePath := filepath.Join(agentRepoDir, ".claude", "worktrees", fmt.Sprintf("wave%d-agent-%s", waveNum, agent.ID))
+              branchName := fmt.Sprintf("wave%d-agent-%s", waveNum, agent.ID)
+              ```
+              To use BranchName(doc.FeatureSlug, waveNum, agent.ID) and
+              WorktreeDir(agentRepoDir, doc.FeatureSlug, waveNum, agent.ID).
+            - Also check for legacy branches during stale cleanup (line 126-136):
+              check BOTH BranchName() and LegacyBranchName() when detecting stale branches.
+
+            ### pkg/protocol/worktree_resolve.go
+            - ResolveWorktreePath(): Update to accept slug parameter and construct path as
+              .claude/worktrees/saw/{slug}/wave{N}-agent-{ID}. Also check legacy path as fallback.
+            - Update IsWorktreePath() to handle the deeper nesting (saw/{slug}/ subdirectory).
+
+            ### pkg/protocol/cleanup.go
+            - Cleanup(): Change lines 67 and 87 to use BranchName(manifest.FeatureSlug, ...).
+            - Also attempt cleanup of legacy branch names as fallback (try new format first,
+              then legacy if new format not found).
+
+            ## Tests to Update
+            Update existing tests in worktree_test.go, worktree_resolve_test.go, cleanup_test.go
+            to verify slug-scoped paths are created. Add backward-compat tests verifying
+            legacy paths are still found by ResolveWorktreePath.
+
+            ## Verification Gate
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go
+            go build ./pkg/protocol/...
+            go vet ./pkg/protocol/...
+            go test ./pkg/protocol/ -run TestCreateWorktrees -v
+            go test ./pkg/protocol/ -run TestResolveWorktree -v
+            go test ./pkg/protocol/ -run TestCleanup -v
+            go test ./pkg/protocol/ -run TestIsWorktreePath -v
+            ```
+
+            ## Constraints
+            - ResolveWorktreePath MUST check legacy paths as fallback for existing worktrees
+            - Cleanup MUST try both new and legacy branch names
+            - Do NOT change .saw-state/ paths - only git branch names and worktree directory paths
+            - The slug comes from manifest.FeatureSlug (already loaded in all these functions)
+          files:
+            - pkg/protocol/worktree.go
+            - pkg/protocol/worktree_test.go
+            - pkg/protocol/worktree_resolve.go
+            - pkg/protocol/worktree_resolve_test.go
+            - pkg/protocol/cleanup.go
+            - pkg/protocol/cleanup_test.go
+          dependencies:
+            - B
+        - id: D
+          task: |
+            ## What to Implement
+            Migrate merge and commit verification in pkg/protocol/ to use BranchName().
+
+            ## Files to Modify
+
+            ### pkg/protocol/merge_agents.go
+            - mergeAgentsSingleRepo(): Change line 157 and 173 to use
+              BranchName(manifest.FeatureSlug, waveNum, agent.ID).
+            - mergeAgentsMultiRepo(): Change line 267 and 281 similarly.
+            - Update merge commit message prefix to include slug:
+              "Merge saw/{slug}/wave{N}-agent-{ID}: ..."
+            - For idempotency checks (IsAncestor), also check LegacyBranchName as fallback
+              so partially-merged old-format branches are still detected.
+
+            ### pkg/protocol/commit_verify.go
+            - VerifyCommits(): Change line 115 to use BranchName(manifest.FeatureSlug, ...).
+            - For rev-list checks, also fall back to LegacyBranchName if new-format branch
+              doesn't exist (backward compat for in-progress migrations).
+
+            ## Tests to Update
+            Update merge_agents_test.go and commit_verify_test.go to create branches with
+            new naming format. Add tests verifying backward compat with legacy branch names.
+
+            ## Verification Gate
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go
+            go build ./pkg/protocol/...
+            go vet ./pkg/protocol/...
+            go test ./pkg/protocol/ -run TestMergeAgents -v
+            go test ./pkg/protocol/ -run TestVerifyCommits -v
+            ```
+
+            ## Constraints
+            - Merge commit messages should include the full scoped branch name
+            - IsAncestor checks MUST try both new and legacy format for backward compat
+            - The slug comes from manifest.FeatureSlug
+          files:
+            - pkg/protocol/merge_agents.go
+            - pkg/protocol/merge_agents_test.go
+            - pkg/protocol/commit_verify.go
+            - pkg/protocol/commit_verify_test.go
+          dependencies:
+            - B
+        - id: E
+          task: |
+            ## What to Implement
+            Migrate field validation, resume detection, and worktree manager to use
+            the new branch naming helpers.
+
+            ## Files to Modify
+
+            ### pkg/protocol/fieldvalidation.go
+            - Replace worktreeBranchRegex (line 11) with ScopedBranchRegex from branchname.go.
+              The new regex accepts BOTH old and new formats.
+            - Update ValidateWorktreeNames() to use ScopedBranchRegex for branch validation.
+            - Update the worktree path segment check (line 94) to accept both
+              `saw/{slug}/wave{N}-agent-{ID}` and legacy `wave{N}-agent-{ID}` segments.
+
+            ### pkg/resume/detect.go
+            - Replace worktreePattern (line 247) with protocol.ScopedBranchRegex or a local
+              copy that also handles lowercase (the current regex allows lowercase).
+            - Update detectOrphanedWorktrees() to match both branch name formats when
+              scanning git worktree list output.
+
+            ### pkg/worktree/manager.go
+            - Manager.Create(): Change line 38 to use the slug-scoped format.
+              Since Manager doesn't currently have access to the slug, add a slug field
+              to the Manager struct and update New() to accept it:
+              `func New(repoPath, slug string) *Manager`
+            - Update worktree path construction on line 45.
+            - Update all callers of New() (check pkg/orchestrator/ and cmd/saw/).
+
+            ## Tests to Update
+            - fieldvalidation_test.go: Add tests for new-format branch names passing validation
+            - detect_test.go: Add tests for detecting orphaned worktrees with new-format branches
+            - manager_test.go: Update to pass slug to New(), verify new path format
+
+            ## Verification Gate
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go
+            go build ./...
+            go vet ./...
+            go test ./pkg/protocol/ -run TestValidateWorktree -v
+            go test ./pkg/resume/ -run Test -v
+            go test ./pkg/worktree/ -run Test -v
+            ```
+
+            ## Constraints
+            - Field validation MUST accept both old and new formats (IMPLs in progress use old)
+            - Resume detection MUST detect orphaned worktrees in both formats
+            - worktree.Manager.New() signature change will require updating callers - check
+              that orchestrator.go and any cmd/ files that call worktree.New() are updated.
+              If those files are owned by Agent F, coordinate via the interface contract:
+              New(repoPath, slug string) *Manager
+          files:
+            - pkg/protocol/fieldvalidation.go
+            - pkg/protocol/fieldvalidation_test.go
+            - pkg/resume/detect.go
+            - pkg/resume/detect_test.go
+            - pkg/worktree/manager.go
+            - pkg/worktree/manager_test.go
+          dependencies:
+            - B
+        - id: F
+          task: |
+            ## What to Implement
+            Migrate orchestrator, CLI commands, journal archive, and git activity poller
+            to use slug-scoped branch names.
+
+            ## Files to Modify
+
+            ### pkg/orchestrator/orchestrator.go
+            - launchAgent() (line 559): Change branch name construction to use
+              protocol.BranchName(o.implSlug(), waveNum, agentSpec.Letter).
+            - The Orchestrator needs access to the slug. It already loads the IMPL doc
+              (o.IMPLDoc()), so use o.IMPLDoc().FeatureSlug or add a method o.implSlug().
+            - autoCommitWorktree() (line 782): Update commit message to include slug.
+            - Update worktree path construction (line 560).
+            - Update worktree.New() calls to pass slug (coordinate with Agent E's
+              Manager.New(repoPath, slug) signature change).
+
+            ### pkg/orchestrator/merge.go
+            - executeMergeWave() (line 126): Use protocol.BranchName() for branch construction.
+            - Update merge commit message (line 152).
+
+            ### pkg/orchestrator/structured_wave.go
+            - Line 130: Use protocol.BranchName() for branch construction.
+
+            ### cmd/saw/prepare_agent.go
+            - Line 131: Use protocol.WorktreeDir() for worktree path.
+            - Line 176: Use protocol.BranchName() for fullAgentID passed to journal.NewObserver.
+              NOTE: journal.NewObserver uses this to construct .saw-state paths which are
+              wave{N}/agent-{ID} format. The observer parses the branch name to extract
+              wave and agent. Ensure the new format is parseable or pass wave/agent separately.
+
+            ### cmd/saw/prepare_wave.go
+            - Line 192: Use protocol.BranchName() for fullAgentID.
+
+            ### cmd/saw/journal_init.go and cmd/saw/journal_context.go
+            - Lines 45/47: Update fullAgentID construction. Same caveat as prepare_agent:
+              journal paths use .saw-state/wave{N}/agent-{ID} format, NOT slug-scoped.
+              These should continue to use the wave{N}-agent-{ID} format for the journal
+              directory identifier, since journals are already project-scoped.
+
+            ### pkg/journal/archive.go
+            - Lines 61/63: Archive filenames use wave{N}-agent-{ID}.tar.gz format.
+              These are under .saw-state/archive/ which is project-scoped.
+              Do NOT change archive naming - only update if archive.go constructs git
+              branch names (it doesn't - it only uses the naming for archive files).
+
+            ### pkg/git/activity.go
+            - agentBranchRe (line 16): Replace with a regex that matches both old and new
+              format branch names. Currently only matches lowercase: `wave(\d+)-agent-([a-z])$`.
+              Update to match `(?:saw/[a-z0-9-]+/)?wave(\d+)-agent-([a-zA-Z][2-9]?)$`.
+            - Snapshot() method: Update branch parsing to handle new format.
+
+            ## Verification Gate
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go
+            go build ./...
+            go vet ./...
+            go test ./pkg/orchestrator/ -v
+            go test ./pkg/git/ -v
+            go test ./cmd/saw/ -v
+            ```
+
+            ## Constraints
+            - .saw-state/ paths (journal dirs, archive files) do NOT get slug-scoped.
+              They are already project-local. Only git branch names and worktree dirs change.
+            - journal.NewObserver parses "wave{N}-agent-{ID}" to construct directory paths.
+              If you pass it a slug-scoped branch name, it will break the directory structure.
+              Either: (a) keep passing LegacyBranchName format to journal functions, or
+              (b) update journal.NewObserver to handle both formats.
+              Option (a) is safer and recommended.
+            - The Orchestrator accesses the manifest via o.IMPLDoc() - use .FeatureSlug
+          files:
+            - pkg/orchestrator/orchestrator.go
+            - pkg/orchestrator/merge.go
+            - pkg/orchestrator/structured_wave.go
+            - cmd/saw/prepare_agent.go
+            - cmd/saw/prepare_wave.go
+            - cmd/saw/journal_init.go
+            - cmd/saw/journal_context.go
+            - pkg/journal/archive.go
+            - pkg/git/activity.go
+          dependencies:
+            - B
+    - number: 3
+      agents:
+        - id: G
+          task: |
+            ## What to Implement
+            Migrate the web app's branch name construction to use slug-scoped format.
+            The web app imports scout-and-wave-go as a dependency, so it can call
+            protocol.BranchName() directly after the Go SDK is updated.
+
+            ## Files to Modify
+
+            ### pkg/api/wave_status_disk.go
+            - handleWaveDiskStatus(): Lines 89 and 140 construct branch names with
+              fmt.Sprintf("wave%d-agent-%s", ...). Replace with protocol.BranchName(slug, ...).
+              The slug is available from the manifest (already loaded at line 49).
+            - Line 107: worktree path check uses `filepath.Join(repoPath, ".claude", "worktrees", branch)`.
+              Replace with protocol.WorktreeDir() or construct using the slug-scoped path.
+            - For backward compat in diskBranchHasCommits/diskBranchExists/diskBranchMerged:
+              these take a branch string parameter so they work with any format. No changes needed
+              to the helper functions themselves.
+
+            ### pkg/api/wave_runner.go
+            - waveAgentsHaveCommits() (line 850): Replace branch name construction with
+              protocol.BranchName(). The function needs the slug - add it as a parameter
+              or extract from context.
+            - Search the entire file for other fmt.Sprintf("wave%d-agent-%s", ...) patterns
+              and update all of them.
+
+            ### pkg/api/diff_handler.go
+            - handleImplDiff() (line 44): Replace branch construction with protocol.BranchName().
+              The handler needs the slug - extract it from the URL path parameter (already
+              available as the {slug} path value from the route).
+
+            ### pkg/api/worktree_handler.go (CRITICAL — found by audit)
+            - waveAgentBranchRe regex (line 15-16): Currently `^wave\d+-agent-[A-Z]\d*$` which
+              REJECTS all slug-scoped branches. Update to accept both formats:
+              `^(saw/[a-z0-9-]+/)?wave\d+-agent-[A-Z]\d*$` or import protocol.ScopedBranchRegex.
+            - parseWorktreePorcelain() (line 220): Uses the regex to filter SAW branches from
+              git worktree list output. Will silently DROP slug-scoped branches if not fixed.
+            - detectStaleBranchesFromRefs() (line 367): Uses the regex to find orphaned branches.
+              Will miss all slug-scoped stale branches if not fixed.
+
+            ## Tests to Write
+            - Add a test for wave_status_disk that verifies slug-scoped branch names are
+              constructed correctly.
+            - Add a test for diff_handler that verifies the branch name includes the slug.
+            - Add a test for worktree_handler that verifies the regex matches both legacy
+              and slug-scoped branch formats.
+
+            ## Verification Gate
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-web
+            go build ./...
+            go vet ./...
+            go test ./pkg/api/ -v
+            ```
+
+            ## Constraints
+            - The web app imports scout-and-wave-go. After Wave 2 merges, go.sum may need
+              updating. Use `go mod tidy` if needed.
+            - For backward compat, check BOTH new and legacy branch names when detecting
+              existing branches in wave_status_disk.go.
+            - The slug is already available in most handlers via the URL path or manifest.
+          files:
+            - pkg/api/wave_status_disk.go
+            - pkg/api/wave_runner.go
+            - pkg/api/diff_handler.go
+            - pkg/api/worktree_handler.go
+          dependencies:
+            - C
+            - D
+            - E
+            - F
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./...
+          required: true
+        - type: lint
+          command: go vet ./...
+          required: true
+        - type: test
+          command: go test ./...
+          required: true
+scaffolds:
+    - file_path: pkg/protocol/branchname.go
+      contents: |
+        package protocol
+
+        import (
+          "fmt"
+          "path/filepath"
+          "regexp"
+        )
+
+        // BranchName returns the slug-scoped branch name for an agent.
+        // Format: saw/<slug>/wave{N}-agent-{ID}
+        func BranchName(slug string, waveNum int, agentID string) string {
+          return fmt.Sprintf("saw/%s/wave%d-agent-%s", slug, waveNum, agentID)
+        }
+
+        // LegacyBranchName returns the old-format branch name (for backward compat).
+        // Format: wave{N}-agent-{ID}
+        func LegacyBranchName(waveNum int, agentID string) string {
+          return fmt.Sprintf("wave%d-agent-%s", waveNum, agentID)
+        }
+
+        // WorktreeDir returns the slug-scoped worktree directory path.
+        // Format: {repoDir}/.claude/worktrees/saw/{slug}/wave{N}-agent-{ID}
+        func WorktreeDir(repoDir, slug string, waveNum int, agentID string) string {
+          return filepath.Join(repoDir, ".claude", "worktrees", "saw", slug, fmt.Sprintf("wave%d-agent-%s", waveNum, agentID))
+        }
+
+        // ScopedBranchRegex matches both old and new branch name formats.
+        var ScopedBranchRegex = regexp.MustCompile(`^(?:saw/[a-z0-9-]+/)?wave(\d+)-agent-([A-Z][2-9]?)$`)
+      import_path: github.com/blackwell-systems/scout-and-wave-go/pkg/protocol
+      status: committed (fcbc0ce)
+completion_reports:
+    A:
+        status: complete
+        branch: wave1-agent-A
+        commit: "1701106"
+        files_changed:
+            - protocol/execution-rules.md
+            - protocol/message-formats.md
+            - implementations/claude-code/prompts/saw-skill.md
+            - implementations/claude-code/prompts/agents/wave-agent.md
+            - implementations/claude-code/prompts/agents/scout.md
+        verification: PASS
+    B:
+        status: complete
+        branch: wave1-agent-B
+        commit: fcbc0ce
+        files_changed:
+            - pkg/protocol/branchname.go
+            - pkg/protocol/branchname_test.go
+        files_created:
+            - pkg/protocol/branchname.go
+            - pkg/protocol/branchname_test.go
+        tests_added:
+            - TestBranchName
+            - TestLegacyBranchName
+            - TestWorktreeDir
+            - TestScopedBranchRegex_NewFormat
+            - TestScopedBranchRegex_LegacyFormat
+            - TestScopedBranchRegex_Invalid
+            - TestParseBranch_NewFormat
+            - TestParseBranch_LegacyFormat
+            - TestParseBranch_Invalid
+            - TestExtractSlug_NewFormat
+            - TestExtractSlug_LegacyFormat
+            - TestBranchName_SpecialSlugs
+        verification: PASS
+    C:
+        status: complete
+        branch: wave2-agent-C
+        commit: 24610c4
+        files_changed:
+            - pkg/protocol/worktree.go
+            - pkg/protocol/worktree_test.go
+            - pkg/protocol/worktree_resolve.go
+            - pkg/protocol/worktree_resolve_test.go
+            - pkg/protocol/cleanup.go
+            - pkg/protocol/cleanup_test.go
+        tests_added:
+            - TestResolveWorktreePath_slugScoped
+            - TestResolveWorktreePath_slugScoped_legacyFallback
+            - TestResolveWorktreePathWithSlug
+            - TestResolveWorktreePathWithSlug_legacyFallback
+            - TestResolveWorktreePathWithSlug_canonicalFallback
+            - TestCleanup_LegacyBranchFallback
+        verification: PASS
+    D:
+        status: complete
+        branch: wave2-agent-D
+        commit: c21f80d
+        files_changed:
+            - pkg/protocol/merge_agents.go
+            - pkg/protocol/merge_agents_test.go
+            - pkg/protocol/commit_verify.go
+            - pkg/protocol/commit_verify_test.go
+        tests_added:
+            - TestMergeAgents_LegacyBranchFallback
+            - TestVerifyCommits_LegacyBranchFallback
+        verification: PASS
+    E:
+        status: complete
+        branch: wave2-agent-E
+        commit: 28f8838
+        files_changed:
+            - pkg/protocol/fieldvalidation.go
+            - pkg/protocol/fieldvalidation_test.go
+            - pkg/resume/detect.go
+            - pkg/resume/detect_test.go
+            - pkg/worktree/manager.go
+            - pkg/worktree/manager_test.go
+        tests_added:
+            - TestValidateWorktreeNames_ScopedBranch
+            - TestValidateWorktreeNames_ScopedBranchAbsolutePath
+            - TestDetectOrphanedWorktrees_ScopedBranch
+            - TestDetectOrphanedWorktrees_LegacyAndScopedMixed
+        verification: PASS
+    F:
+        status: complete
+        branch: wave2-agent-F
+        commit: f6b986d
+        files_changed:
+            - pkg/orchestrator/orchestrator.go
+            - pkg/orchestrator/merge.go
+            - pkg/orchestrator/structured_wave.go
+            - cmd/saw/prepare_agent.go
+            - pkg/git/activity.go
+        verification: PASS (pkg/git builds clean; orchestrator worktree.New mismatch pending Agent E merge)
+    G:
+        status: complete
+        branch: main
+        commit: aa409d2
+        files_changed:
+            - pkg/api/wave_status_disk.go
+            - pkg/api/wave_runner.go
+            - pkg/api/diff_handler.go
+            - pkg/api/worktree_handler.go
+        verification: PASS
+integration_reports:
+    wave3:
+        wave: 3
+        gaps: []
+        valid: true
+        summary: 'Wave 3: all exports are integrated (no gaps detected)'
+pre_mortem:
+    overall_risk: medium
+    rows:
+        - scenario: journal.NewObserver breaks when passed slug-scoped branch name
+          likelihood: high
+          impact: high
+          mitigation: |
+            Agent F must NOT pass slug-scoped branch names to journal functions.
+            Journal paths are .saw-state/wave{N}/agent-{ID} (no slug). Use
+            LegacyBranchName() format for journal identifiers. This is explicitly
+            called out in Agent F's constraints.
+        - scenario: In-flight IMPL branches use old naming and break after upgrade
+          likelihood: medium
+          impact: high
+          mitigation: |
+            All validation and detection code accepts BOTH old and new formats via
+            ScopedBranchRegex. Cleanup and merge functions try new format first,
+            fall back to legacy. This is a hard requirement for every Wave 2 agent.
+        - scenario: worktree.Manager.New() signature change breaks compilation in agent F's files
+          likelihood: medium
+          impact: medium
+          mitigation: |
+            Agents E and F both modify files that create/use worktree.Manager. The slug
+            parameter is added by Agent E; Agent F must use the new signature. Both agents
+            have this dependency documented. If builds break, the slug parameter is trivially
+            available from the manifest.
+        - scenario: git branch names with slashes cause issues on Windows
+          likelihood: low
+          impact: low
+          mitigation: |
+            Git natively supports slashes in branch names (they map to directories in
+            .git/refs/heads/). The saw/ prefix is a standard convention (like feature/,
+            release/). No Windows-specific issues expected.
+        - scenario: Web app go.sum drift after Go SDK changes
+          likelihood: medium
+          impact: low
+          mitigation: |
+            Wave 3 (web app) runs after Go SDK waves merge. Agent G runs go mod tidy
+            as part of verification. If the Go SDK is a local replace directive, no
+            go.sum change is needed.
+known_issues:
+    - title: agentBranchRe in pkg/git/activity.go only matches lowercase single letters
+      description: |
+        The regex `wave(\d+)-agent-([a-z])$` does not match multi-gen agent IDs like A2
+        or uppercase letters. This is a pre-existing bug that should be fixed as part of
+        this work (Agent F).
+      status: Pre-existing, will be fixed by Agent F
+      workaround: None needed - fix is included in scope
+state: COMPLETE
+completed_date: "2026-03-17"

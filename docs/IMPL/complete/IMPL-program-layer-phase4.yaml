@@ -1,0 +1,725 @@
+completion_date: "2026-03-18"
+title: 'Program Layer Phase 4: Full Autonomous + Polish (Level C)'
+feature_slug: program-layer-phase4
+verdict: SUITABLE
+suitability_assessment: |
+    Phase 4 completes the Program Layer with full autonomous execution (`--auto` mode)
+    and automatic re-planning on failure. 6 deliverables decompose into 6 agents
+    across 3 waves.
+
+    **Suitability:**
+    1. File decomposition: 6 agents with disjoint file ownership across 3 repos
+    2. Investigation-first: None - all work builds on Phases 1-3 foundation
+    3. Interface discoverability: All interfaces can be defined upfront
+    4. Pre-implementation status: Phase 1-3 deliverables confirmed complete
+    5. Parallelization value: Medium - 3 waves with dependencies, but high coordination value
+
+    **Wave structure:**
+    - Wave 1 (2 agents): Protocol docs (E33-E34 execution rules, replan command doc) - independent
+    - Wave 2 (3 agents): SDK implementation (auto-advance engine function, mark-program-complete CLI, replan CLI) - depend on Wave 1 contracts
+    - Wave 3 (1 agent): Orchestrator integration (saw-skill.md update for --auto mode)
+
+    **Cross-repo coordination:**
+    Protocol docs (scout-and-wave) define semantics. Go SDK (scout-and-wave-go)
+    implements engine functions and CLI commands. No web app changes.
+
+    **Time-to-value estimate:**
+    - Scout phase: ~8 min (dependency mapping, interface contracts, IMPL doc)
+    - Agent execution: ~24 min (6 agents × 4 min avg, 3 waves with wave overhead)
+    - Merge & verification: ~6 min
+    Total SAW time: ~38 min
+
+    Sequential baseline: ~42 min (6 agents × 7 min avg sequential time)
+    Time savings: ~4 min (10% faster)
+
+    Recommendation: Marginal speed gains, but coordination value is high. The IMPL
+    doc captures the full --auto mode and re-planning semantics as a reviewable
+    artifact. Proceed.
+test_command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go test ./...
+lint_command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go vet ./...
+file_ownership:
+    - file: protocol/execution-rules.md
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: protocol/program-manifest.md
+      agent: B
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: pkg/engine/program_auto.go
+      agent: C
+      wave: 2
+      action: new
+      depends_on:
+        - A
+      repo: scout-and-wave-go
+    - file: pkg/engine/program_auto_test.go
+      agent: C
+      wave: 2
+      action: new
+      depends_on:
+        - A
+      repo: scout-and-wave-go
+    - file: cmd/saw/mark_program_complete_cmd.go
+      agent: D
+      wave: 2
+      action: new
+      repo: scout-and-wave-go
+    - file: cmd/saw/mark_program_complete_cmd_test.go
+      agent: D
+      wave: 2
+      action: new
+      repo: scout-and-wave-go
+    - file: cmd/saw/program_replan_cmd.go
+      agent: E
+      wave: 2
+      action: new
+      depends_on:
+        - B
+      repo: scout-and-wave-go
+    - file: cmd/saw/program_replan_cmd_test.go
+      agent: E
+      wave: 2
+      action: new
+      depends_on:
+        - B
+      repo: scout-and-wave-go
+    - file: implementations/claude-code/prompts/saw-skill.md
+      agent: F
+      wave: 3
+      action: modify
+      depends_on:
+        - A
+        - C
+        - D
+        - E
+      repo: scout-and-wave
+interface_contracts:
+    - name: AdvanceTierAutomatically
+      description: |
+        Engine function that implements automatic tier advancement logic for --auto mode.
+        Checks tier gate success, freezes contracts, updates PROGRAM state, and returns
+        whether to proceed to next tier or enter human review gate.
+      definition: |
+        // AdvanceTierAutomatically checks tier gate, freezes contracts, and advances
+        // to next tier if --auto mode is active. Returns true if advanced, false if
+        // human review required.
+        func AdvanceTierAutomatically(manifest *PROGRAMManifest, completedTier int, repoPath string, autoMode bool) (*TierAdvanceResult, error)
+      location: pkg/engine/program_auto.go
+    - name: TierAdvanceResult
+      description: |
+        Result struct returned by AdvanceTierAutomatically. Contains tier gate status,
+        contract freeze status, decision on whether to advance, and any errors.
+      definition: |
+        type TierAdvanceResult struct {
+          TierNumber       int                         `json:"tier_number"`
+          GateResult       *TierGateResult             `json:"gate_result"`
+          FreezeResult     *FreezeContractsResult      `json:"freeze_result,omitempty"`
+          AdvancedToNext   bool                        `json:"advanced_to_next"`
+          RequiresReview   bool                        `json:"requires_review"`
+          NextTier         int                         `json:"next_tier,omitempty"`
+          ProgramComplete  bool                        `json:"program_complete"`
+          Errors           []string                    `json:"errors,omitempty"`
+        }
+      location: pkg/engine/program_auto.go
+    - name: ReplanProgramOpts
+      description: |
+        Options struct for re-engaging the Planner agent to revise a PROGRAM manifest.
+        Used when tier gate fails or user explicitly requests re-planning.
+      definition: |
+        type ReplanProgramOpts struct {
+          ProgramManifestPath string // path to existing PROGRAM manifest to revise
+          Reason              string // why re-planning was triggered
+          FailedTier          int    // tier number that failed (0 if user-initiated)
+          PlannerModel        string // optional: model override for Planner agent
+        }
+      location: pkg/engine/program_auto.go
+    - name: ReplanProgram
+      description: |
+        Engine function that re-engages the Planner agent to revise a PROGRAM manifest.
+        Reads current manifest, constructs revision prompt with failure context, launches
+        Planner, and returns updated manifest path.
+      definition: |
+        // ReplanProgram launches Planner agent to revise PROGRAM manifest based on
+        // execution feedback (tier gate failure, blocked IMPL, etc.).
+        func ReplanProgram(opts ReplanProgramOpts) (*ReplanResult, error)
+      location: pkg/engine/program_auto.go - cmd/saw/program_replan_cmd.go
+    - name: ReplanResult
+      description: |
+        Result struct returned by ReplanProgram. Contains path to revised manifest,
+        validation status, and Planner agent metadata.
+      definition: |
+        type ReplanResult struct {
+          RevisedManifestPath string `json:"revised_manifest_path"`
+          ValidationPassed    bool   `json:"validation_passed"`
+          ChangesSummary      string `json:"changes_summary,omitempty"`
+          PlannerAgentID      string `json:"planner_agent_id"`
+          Errors              []string `json:"errors,omitempty"`
+        }
+      location: pkg/engine/program_auto.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## What to Implement
+
+            Add execution rules E33-E34 to `protocol/execution-rules.md` in the
+            scout-and-wave repo. These define automatic tier advancement and
+            Planner re-engagement for Level C (full autonomous) execution.
+
+            ## Content to Write
+
+            Append two new execution rules after E32, following the exact style
+            and format of existing rules:
+
+            **E33: Automatic Tier Advancement (--auto mode)**
+            - Trigger: All IMPLs in a tier reach "complete" and tier gate passes (E29)
+            - Required Action: When `--auto` flag is active, orchestrator automatically
+              advances to the next tier without human review gate. Run
+              `sawtools freeze-contracts` (E30), update PROGRAM manifest state to
+              next TIER_EXECUTING, and launch Scout agents for next tier (E31).
+              If `--auto` is NOT active, pause for human review as normal.
+            - Enforcement of P3: Tier N+1 still waits for tier gate to pass
+            - Human gate override: PROGRAM_REVIEWED state (initial plan approval)
+              is NEVER skipped, even in --auto mode. Only tier boundary gates are
+              skipped on success.
+            - Failure handling: If tier gate fails (E29), enter PROGRAM_BLOCKED
+              regardless of --auto mode. Failures always surface to human.
+
+            **E34: Planner Re-Engagement on Failure**
+            - Trigger: Tier gate fails (E29) OR user explicitly requests re-plan
+            - Required Action: Launch Planner agent with revision prompt containing:
+              (a) current PROGRAM manifest
+              (b) failure reason (which tier, which IMPL, what gate failed)
+              (c) completion reports from all IMPLs in failed tier
+              (d) instruction to revise program contracts or tier structure
+              Planner produces revised PROGRAM manifest. Orchestrator validates (E16)
+              and presents for human review (PROGRAM_REVIEWED). Execution does NOT
+              resume automatically — human must approve revised plan.
+            - Relationship to E8: Same-wave interface revision pattern, elevated to
+              program scope
+            - Non-destructive: Completed tiers are NOT re-run. Only the failed tier
+              and subsequent tiers may be revised.
+
+            Also update the Cross-References section at the bottom of the file to
+            reference E33-E34.
+
+            Update the version number in the file header (increment minor version).
+
+            ## Verification Gate
+            - File is valid markdown
+            - E33-E34 sections exist with trigger, required action, and related rules
+            - Cross-references section updated
+            - Version number incremented
+
+            ## Constraints
+            - Do NOT modify any existing E1-E32 rules
+            - Only APPEND new sections and update cross-references/version
+            - Follow the exact formatting pattern of existing rules
+            - Each rule must reference related P-invariants
+            - E33 must specify that PROGRAM_REVIEWED is never skipped
+          files:
+            - protocol/execution-rules.md
+        - id: B
+          task: |
+            ## What to Implement
+
+            Update `protocol/program-manifest.md` to document the `/saw program replan`
+            command and the ReplanProgramOpts schema.
+
+            ## Content to Add
+
+            1. **Add new section: "Re-Planning"** after the "State Machine" section:
+
+            ```markdown
+            ## Re-Planning
+
+            When a tier gate fails (E29) or the user explicitly requests it, the
+            Planner agent can be re-engaged to revise the PROGRAM manifest.
+
+            **Triggers:**
+            - Tier gate failure (required gates fail, tier cannot advance)
+            - Cross-IMPL interface mismatch detected
+            - User request (`/saw program replan`)
+
+            **Planner receives:**
+            - Current PROGRAM manifest
+            - Failure context (tier number, gate results, IMPL completion reports)
+            - Instruction to revise program contracts or tier structure
+
+            **Planner may revise:**
+            - Program contracts (add/remove/modify shared types)
+            - Tier structure (reorder IMPLs, add/remove tiers)
+            - IMPL decomposition (split/merge features)
+
+            **Planner may NOT revise:**
+            - Completed tiers (already executed and merged)
+            - Frozen program contracts (used by completed IMPLs)
+
+            **Output:**
+            Revised PROGRAM manifest with updated state: PROGRAM_REVIEWED.
+            Human must approve revised plan before execution resumes.
+
+            **Non-destructive guarantee:**
+            Re-planning does not discard completed work. Completed IMPLs remain
+            in the manifest with status "complete". Only pending and failed IMPLs
+            may be revised.
+            ```
+
+            2. **Update the "Orchestrator Commands" section** to add:
+            - `/saw program replan` — re-engage Planner to revise PROGRAM manifest
+
+            3. **Update version number** in the file header (increment minor version).
+
+            ## Verification Gate
+            - File is valid markdown
+            - Re-Planning section exists
+            - Orchestrator Commands table updated
+            - Version number incremented
+
+            ## Constraints
+            - Do NOT modify existing sections except to add command reference
+            - Only APPEND new Re-Planning section
+            - Follow the exact markdown formatting style of existing sections
+          files:
+            - protocol/program-manifest.md
+      base_commit: 34dc4ddf92550b9fa0a5bda1349ad83d82ca24cc
+    - number: 2
+      agents:
+        - id: C
+          task: |
+            ## What to Implement
+
+            Create `pkg/engine/program_auto.go` and its test file — engine functions
+            for automatic tier advancement and Planner re-engagement.
+
+            ## Interfaces to Implement
+
+            ```go
+            func AdvanceTierAutomatically(manifest *PROGRAMManifest, completedTier int, repoPath string, autoMode bool) (*TierAdvanceResult, error)
+
+            func ReplanProgram(opts ReplanProgramOpts) (*ReplanResult, error)
+            ```
+
+            Plus the result structs and opts struct from interface contracts.
+
+            ## Implementation Details
+
+            **AdvanceTierAutomatically:**
+            1. Run RunTierGate(manifest, completedTier, repoPath) to verify tier completion
+            2. If gate fails, return TierAdvanceResult with AdvancedToNext=false, RequiresReview=true
+            3. If gate passes and autoMode=false, return RequiresReview=true (human gate)
+            4. If gate passes and autoMode=true:
+               a. Run FreezeContracts(manifest, completedTier, repoPath)
+               b. If freeze fails, return errors (RequiresReview=true)
+               c. If freeze succeeds, check if this was the final tier
+               d. If final tier, set ProgramComplete=true, AdvancedToNext=false
+               e. If not final tier, set AdvancedToNext=true, NextTier=completedTier+1
+            5. Return complete TierAdvanceResult
+
+            **ReplanProgram:**
+            1. Read existing PROGRAM manifest from opts.ProgramManifestPath
+            2. Construct revision prompt:
+               - "You are re-engaging to revise this PROGRAM manifest."
+               - "Reason: [opts.Reason]"
+               - "Failed tier: [opts.FailedTier]" (if non-zero)
+               - Include current manifest content
+               - "Revise the program contracts or tier structure to address the failure."
+               - "Do NOT modify completed tiers or frozen contracts."
+            3. Launch Planner agent using the Agent SDK (placeholder for now — return
+               mock result in tests)
+            4. After Planner completes, read revised manifest
+            5. Run ValidateProgram(revised manifest path)
+            6. Return ReplanResult with validation status
+
+            **Note on Agent SDK:** For now, stub out the Planner launch with a
+            TODO comment and return error "not yet implemented". Tests will mock
+            the Planner completion. Full integration happens when saw-skill.md
+            wires the command (Wave 3).
+
+            ## Interfaces to Call
+            - RunTierGate from pkg/protocol/program_tier_gate.go (Phase 2)
+            - FreezeContracts from pkg/protocol/program_freeze.go (Phase 2)
+            - ValidateProgram from pkg/protocol/program_validation.go (Phase 1)
+            - PROGRAMManifest types from pkg/protocol/program_types.go (Phase 1)
+
+            ## Tests to Write
+            1. TestAdvanceTierAutomatically_AutoMode_AdvanceToNext
+            2. TestAdvanceTierAutomatically_AutoMode_FinalTier
+            3. TestAdvanceTierAutomatically_ManualMode_HumanGate
+            4. TestAdvanceTierAutomatically_GateFails
+            5. TestAdvanceTierAutomatically_FreezeFails
+            6. TestReplanProgram_ValidRevision (mock Planner completion)
+            7. TestReplanProgram_ValidationFails (mock invalid revision)
+
+            ## Verification Gate
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./...
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && go vet ./...
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && go test ./pkg/engine/ -run "TestAdvanceTierAutomatically|TestReplanProgram"
+            ```
+
+            ## Constraints
+            - Follow the coding style of existing pkg/engine/ files
+            - Use os/exec for running commands (if needed)
+            - Stub out Planner agent launch for now (full integration in Wave 3)
+            - Return all errors with descriptive messages
+          files:
+            - pkg/engine/program_auto.go
+            - pkg/engine/program_auto_test.go
+          dependencies:
+            - A
+        - id: D
+          task: |
+            ## What to Implement
+
+            Create `cmd/saw/mark_program_complete_cmd.go` and its test file — CLI
+            command for marking a PROGRAM manifest as complete and updating CONTEXT.md.
+
+            ## Command Specification
+
+            **Cobra command:** `mark-program-complete`
+            - Takes one positional arg: path to PROGRAM manifest
+            - Optional flag: `--date YYYY-MM-DD` (default: today)
+            - Optional flag: `--repo-dir <path>` (default: current working directory)
+
+            **Behavior:**
+            1. Parse PROGRAM manifest
+            2. Verify all tiers are complete (all IMPLs have status "complete")
+            3. Update manifest state to PROGRAM_COMPLETE
+            4. Set completion_date field to specified date
+            5. Write SAW:PROGRAM:COMPLETE marker at end of manifest
+            6. Update CONTEXT.md in repo-dir/docs/ with program-level completion entry:
+               - Add to features_completed section (if it exists) OR create new section
+               - Entry format: "Program: <title> (<slug>) — <N> tiers, <M> IMPLs, <date>"
+            7. Commit both files with message: "chore: mark PROGRAM <slug> complete"
+
+            **Output:** JSON with completion status and paths
+            **Exit codes:**
+            - 0: Success
+            - 1: Not all tiers complete
+            - 2: Parse error
+
+            ## Interfaces to Call
+            - ParseProgramManifest from pkg/protocol/program_parser.go (Phase 1)
+            - UpdateContext from pkg/protocol/context_update.go (existing, or implement inline)
+
+            ## Tests to Write
+            1. TestMarkProgramComplete_AllComplete
+            2. TestMarkProgramComplete_NotComplete_TierPending
+            3. TestMarkProgramComplete_UpdatesContext
+            4. TestMarkProgramComplete_InvalidManifest
+
+            Use t.TempDir() with git init for filesystem/git tests.
+
+            ## Verification Gate
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./...
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && go vet ./...
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && go test ./cmd/saw/ -run TestMarkProgramComplete
+            ```
+
+            ## Constraints
+            - Follow existing command patterns: cobra, JSON output, structured errors
+            - Export a newMarkProgramCompleteCmd() function
+            - Do NOT register in main.go (Wave 3 does that)
+            - SAW:PROGRAM:COMPLETE marker format: exactly "SAW:PROGRAM:COMPLETE"
+          files:
+            - cmd/saw/mark_program_complete_cmd.go
+            - cmd/saw/mark_program_complete_cmd_test.go
+        - id: E
+          task: |
+            ## What to Implement
+
+            Create `cmd/saw/program_replan_cmd.go` and its test file — CLI command
+            for re-engaging the Planner agent to revise a PROGRAM manifest.
+
+            ## Command Specification
+
+            **Cobra command:** `program-replan`
+            - Takes one positional arg: path to PROGRAM manifest
+            - Required flag: `--reason <string>` (why re-planning)
+            - Optional flag: `--tier <N>` (failed tier number, 0 if user-initiated)
+            - Optional flag: `--model <string>` (Planner model override)
+
+            **Behavior:**
+            1. Parse PROGRAM manifest
+            2. Construct ReplanProgramOpts from arguments
+            3. Call ReplanProgram(opts) from pkg/engine/program_auto.go
+            4. Output JSON ReplanResult
+            5. If validation passes, report success and path to revised manifest
+            6. If validation fails, report errors and exit 1
+
+            **Output:** JSON ReplanResult
+            **Exit codes:**
+            - 0: Re-planning succeeded, revised manifest validated
+            - 1: Re-planning failed or validation failed
+            - 2: Parse error
+
+            ## Interfaces to Call
+            - ParseProgramManifest from pkg/protocol/program_parser.go (Phase 1)
+            - ReplanProgram from pkg/engine/program_auto.go (Agent C, Wave 2)
+
+            ## Tests to Write
+            1. TestProgramReplan_ValidRevision (mock ReplanProgram)
+            2. TestProgramReplan_ValidationFails
+            3. TestProgramReplan_MissingReason
+            4. TestProgramReplan_WithTierNumber
+
+            ## Verification Gate
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./...
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && go vet ./...
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && go test ./cmd/saw/ -run TestProgramReplan
+            ```
+
+            ## Constraints
+            - Follow existing command patterns: cobra, JSON output, structured errors
+            - Export a newProgramReplanCmd() function
+            - Do NOT register in main.go (Wave 3 does that)
+            - --reason flag is required (no default)
+          files:
+            - cmd/saw/program_replan_cmd.go
+            - cmd/saw/program_replan_cmd_test.go
+          dependencies:
+            - B
+      base_commit: 1996bb96073f70acbb8c8f9b430a9d18f2b29fd1
+    - number: 3
+      agents:
+        - id: F
+          task: |
+            ## What to Implement
+
+            Update `implementations/claude-code/prompts/saw-skill.md` to document
+            the `--auto` mode for `/saw program execute` and add the
+            `/saw program replan` command.
+
+            ## Content to Update
+
+            1. **Update the Invocation Modes table:**
+            Change the note under `/saw program execute --auto` from "future, Phase 4"
+            to "Full autonomous execution (Level C)".
+
+            2. **Update the sawtools Commands list:**
+            - Add: `sawtools mark-program-complete` — mark PROGRAM manifest complete and update CONTEXT.md
+            - (program-replan is orchestrator-only, not a sawtools command)
+
+            3. **Update `/saw program execute` section (Step 3e: Tier Boundary Review):**
+            Replace "Pause for human review (unless --auto active, Phase 4)" with:
+            ```
+            - If --auto flag is active:
+              - Run AdvanceTierAutomatically() to check gate, freeze contracts, advance
+              - If gate passed, automatically proceed to next tier (no human review)
+              - If gate failed, enter PROGRAM_BLOCKED and surface failure
+            - If --auto flag is NOT active:
+              - Pause for human review as normal
+              - Human approves to advance to next tier
+            ```
+
+            4. **Add new section: `/saw program replan`**
+            Place this after `/saw program status`. Content:
+
+            ```markdown
+            ### `/saw program replan`
+
+            Re-engage the Planner agent to revise a PROGRAM manifest after a tier
+            gate failure or when the user explicitly requests it.
+
+            **Orchestrator flow:**
+
+            1. Parse existing PROGRAM manifest.
+
+            2. Construct revision prompt with failure context:
+               - Current PROGRAM manifest content
+               - Reason for re-planning (tier gate failure, user request, etc.)
+               - Failed tier number (if applicable)
+               - Completion reports from IMPLs in failed tier
+
+            3. Launch Planner agent with revision prompt:
+               - Use Agent tool with `subagent_type: planner` and `run_in_background: true`
+               - Pass revision prompt as parameter
+               - If `subagent_type: planner` fails, fall back to `subagent_type: general-purpose`
+                 with full Planner prompt from `${CLAUDE_SKILL_DIR}/agents/planner.md`
+
+            4. Wait for Planner completion. Planner produces revised PROGRAM manifest.
+
+            5. Validate revised manifest:
+               ```bash
+               sawtools validate-program "<revised-manifest-path>"
+               ```
+               If validation fails, send errors back to Planner as correction prompt
+               using resume (up to 3 attempts).
+
+            6. Present revised PROGRAM manifest for human review:
+               - Show what changed (tiers added/removed, contracts revised, IMPLs reordered)
+               - Surface the changes summary
+               - Ask user to approve revised plan
+
+            7. If approved, update manifest state to PROGRAM_REVIEWED and resume execution
+               from the failed tier (or next pending tier).
+
+            **Non-destructive guarantee:** Re-planning does not discard completed work.
+            Completed tiers and their IMPLs remain in the manifest with status "complete".
+            Only pending and failed tiers may be revised.
+
+            **Error handling:**
+            - If Planner fails to produce valid revision after 3 attempts, enter BLOCKED
+              and surface validation errors to user
+            - User may manually edit PROGRAM manifest or abandon re-planning
+            ```
+
+            5. **Update the Arguments section:**
+            Add: `program replan` — re-engage Planner to revise PROGRAM manifest
+
+            6. **Increment version number** in the file header metadata.
+
+            ## Interfaces to Call
+            - Read existing saw-skill.md to understand current structure
+            - Reference E33-E34 from execution-rules.md (Agent A, Wave 1)
+            - Reference AdvanceTierAutomatically, ReplanProgram (Agent C, Wave 2)
+            - Reference mark-program-complete command (Agent D, Wave 2)
+
+            ## Verification Gate
+            - File is valid markdown
+            - Contains updated /saw program execute --auto semantics
+            - Contains /saw program replan section
+            - References E33-E34 by number
+            - References mark-program-complete command
+            - Version number incremented
+
+            ## Constraints
+            - Do NOT remove or rewrite existing sections
+            - Only UPDATE and ADD content as specified
+            - Follow the exact formatting style of existing /saw command sections
+            - The --auto mode logic must reference AdvanceTierAutomatically by name
+          files:
+            - implementations/claude-code/prompts/saw-skill.md
+          dependencies:
+            - A
+            - C
+            - D
+            - E
+      base_commit: fb7dbeef43c8cad668ec2ee344b58c0dd9841077
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./...
+          required: true
+        - type: test
+          command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go test ./...
+          required: true
+        - type: lint
+          command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go vet ./...
+          required: false
+completion_reports:
+    A:
+        status: complete
+        branch: wave1-agent-A
+        commit: d10b4f9
+        files_changed:
+            - protocol/execution-rules.md
+        verification: PASS
+    B:
+        status: complete
+        branch: wave1-agent-B
+        commit: caa7dcb
+        files_changed:
+            - protocol/program-manifest.md
+        verification: PASS
+    C:
+        status: complete
+        branch: wave2-agent-C
+        commit: feefaaa
+        files_changed:
+            - pkg/engine/program_auto.go
+            - pkg/engine/program_auto_test.go
+        files_created:
+            - pkg/engine/program_auto.go
+            - pkg/engine/program_auto_test.go
+        tests_added:
+            - TestAdvanceTierAutomatically_AutoMode_AdvanceToNext
+            - TestAdvanceTierAutomatically_AutoMode_FinalTier
+            - TestAdvanceTierAutomatically_ManualMode_HumanGate
+            - TestAdvanceTierAutomatically_GateFails
+            - TestAdvanceTierAutomatically_FreezeFails
+            - TestReplanProgram_ValidRevision
+            - TestReplanProgram_ValidationFails
+        verification: PASS
+    D:
+        status: complete
+        branch: wave2-agent-D
+        commit: 41e1ebf
+        files_changed:
+            - cmd/saw/mark_program_complete_cmd.go
+            - cmd/saw/mark_program_complete_cmd_test.go
+        files_created:
+            - cmd/saw/mark_program_complete_cmd.go
+            - cmd/saw/mark_program_complete_cmd_test.go
+        tests_added:
+            - TestMarkProgramComplete_AllComplete
+            - TestMarkProgramComplete_NotComplete_TierPending
+            - TestMarkProgramComplete_UpdatesContext
+            - TestMarkProgramComplete_InvalidManifest
+        verification: PASS
+    E:
+        status: complete
+        branch: wave2-agent-E
+        commit: 046a6ed652b572333ab8e0b8dd4ea291ead47597
+        files_changed:
+            - cmd/saw/program_replan_cmd.go
+            - cmd/saw/program_replan_cmd_test.go
+        verification: build and tests pass
+    F:
+        status: complete
+        branch: saw/program-layer-phase4/wave3-agent-F
+        commit: 338f7fe
+        files_changed:
+            - implementations/claude-code/prompts/saw-skill.md
+        verification: PASS
+integration_reports:
+    wave1:
+        wave: 1
+        gaps: []
+        valid: true
+        summary: 'Wave 1: all exports are integrated (no gaps detected)'
+pre_mortem:
+    overall_risk: medium
+    rows:
+        - scenario: AdvanceTierAutomatically logic has edge case with final tier handling
+          likelihood: medium
+          impact: medium
+          mitigation: |
+            Tests cover final tier case explicitly (TestAdvanceTierAutomatically_AutoMode_FinalTier).
+            Logic checks if completedTier == manifest.Completion.TiersTotal before advancing.
+        - scenario: ReplanProgram Planner launch is stubbed, full integration unclear
+          likelihood: low
+          impact: low
+          mitigation: |
+            Wave 3 Agent F documents the full orchestrator flow in saw-skill.md.
+            The stub in program_auto.go has a TODO comment for Agent SDK integration.
+            Tests mock the Planner completion to verify prompt construction logic.
+        - scenario: mark-program-complete CONTEXT.md update format inconsistent with UpdateContext
+          likelihood: medium
+          impact: low
+          mitigation: |
+            Agent D uses existing UpdateContext function if available, or implements
+            inline following the schema in protocol/message-formats.md. The CONTEXT.md
+            format is well-documented and stable.
+        - scenario: saw-skill.md merge conflict with concurrent skill updates
+          likelihood: medium
+          impact: low
+          mitigation: |
+            Agent F only updates specific sections (tier boundary review, new replan command).
+            Append-only changes to tables/lists. Low conflict risk.
+        - scenario: --auto mode skips human review too aggressively
+          likelihood: low
+          impact: high
+          mitigation: |
+            E33 explicitly states that PROGRAM_REVIEWED (initial plan approval) is
+            NEVER skipped, even in --auto mode. Only tier boundary gates are skipped
+            on success. Failures always surface to human.
+state: "COMPLETE"

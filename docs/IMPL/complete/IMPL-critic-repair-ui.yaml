@@ -1,0 +1,422 @@
+completion_date: "2026-03-19"
+title: Critic Repair UI
+feature_slug: critic-repair-ui
+verdict: SUITABLE
+suitability_assessment: |
+    1. File decomposition: 6 files across backend (Go) and frontend (TypeScript/React),
+       cleanly split into 3 agents with disjoint ownership. No file conflicts.
+    2. Investigation-first items: None. All endpoints and types are well-understood;
+       the existing critic handler and CriticReviewPanel provide clear extension points.
+    3. Interface discoverability: Yes. The CriticFix Go struct and PATCH endpoint
+       contract can be fully specified. TypeScript types mirror Go types 1:1.
+    4. Pre-implementation status: CriticReviewPanel exists but is display-only (no
+       repair flow). Backend has GET/POST critic endpoints but no PATCH fix endpoint.
+       TypeScript types exist for CriticResult but not CriticFix. All work is TODO.
+    5. Parallelization value: High. 3 agents, each touching 2 files. Build+test
+       cycle is ~15s (go build) + ~8s (tsc). Frontend and backend are fully
+       independent in wave 1. Integration wave wires them together.
+
+    Estimated times:
+    - Scout phase: ~8 min
+    - Agent execution: ~12 min (3 agents, 2 waves, wave 1 parallel)
+    - Merge & verification: ~4 min
+    Total SAW time: ~24 min
+
+    Sequential baseline: ~30 min (3 agents x 10 min avg)
+    Time savings: ~6 min (20% faster)
+
+    Recommendation: Clear speedup. Backend and frontend are independent; wave 1
+    parallelizes well. Integration wave is small (wiring only).
+test_command: go build ./... && cd web && npx tsc --noEmit
+lint_command: go vet ./...
+file_ownership:
+    - file: pkg/api/critic_handler.go
+      agent: A
+      wave: 1
+      action: modify
+    - file: pkg/api/impl.go
+      agent: A
+      wave: 1
+      action: modify
+    - file: web/src/types.ts
+      agent: B
+      wave: 1
+      action: modify
+    - file: web/src/lib/apiClient.ts
+      agent: B
+      wave: 1
+      action: modify
+    - file: web/src/components/CriticReviewPanel.tsx
+      agent: C
+      wave: 2
+      action: modify
+    - file: web/src/components/ReviewScreen.tsx
+      agent: C
+      wave: 2
+      action: modify
+interface_contracts:
+    - name: CriticFix
+      description: |
+        Go struct for the PATCH /api/impl/{slug}/fix-critic request body.
+        Defines the shape of a single auto-fix operation.
+      definition: |
+        type CriticFix struct {
+            Type         string `json:"type"`           // "add_file_ownership", "update_contract", "add_integration_connector"
+            AgentID      string `json:"agent_id"`
+            Wave         int    `json:"wave"`
+            File         string `json:"file,omitempty"`
+            Action       string `json:"action,omitempty"`       // "modify", "new", "delete"
+            ContractName string `json:"contract_name,omitempty"`
+            OldSymbol    string `json:"old_symbol,omitempty"`
+            NewSymbol    string `json:"new_symbol,omitempty"`
+        }
+      location: pkg/api/critic_handler.go
+    - name: handleFixCritic
+      description: |
+        PATCH /api/impl/{slug}/fix-critic handler. Accepts a CriticFix JSON body,
+        applies the fix to the IMPL manifest YAML, re-validates with sawtools validate --fix,
+        and returns the updated CriticResult. Emits impl_updated SSE event.
+      definition: |
+        func (s *Server) handleFixCritic(w http.ResponseWriter, r *http.Request)
+        // Request: CriticFix JSON
+        // Response 200: updated CriticResult JSON (re-read from manifest after fix)
+        // Response 400: {"error": "..."} for invalid fix type or missing fields
+        // Response 404: {"error": "IMPL doc not found"}
+        // Response 500: {"error": "..."} for save/validate failures
+      location: pkg/api/critic_handler.go
+    - name: CriticFixRequest (TypeScript)
+      description: |
+        TypeScript interface mirroring the Go CriticFix struct. Used by the
+        frontend to construct PATCH requests.
+      definition: |
+        export interface CriticFixRequest {
+          type: 'add_file_ownership' | 'update_contract' | 'add_integration_connector'
+          agent_id: string
+          wave: number
+          file?: string
+          action?: string
+          contract_name?: string
+          old_symbol?: string
+          new_symbol?: string
+        }
+      location: web/src/types.ts
+    - name: SawClient.impl.applyCriticFix
+      description: |
+        New method on the SawClient impl namespace for applying a critic fix.
+      definition: |
+        applyCriticFix(slug: string, fix: CriticFixRequest): Promise<CriticResult>
+        // Calls PATCH /api/impl/{slug}/fix-critic with JSON body
+        // Returns the updated CriticResult after fix is applied
+      location: web/src/lib/apiClient.ts
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## Agent A — Backend: PATCH fix-critic endpoint
+
+            ### What to implement
+            Add the PATCH /api/impl/{slug}/fix-critic endpoint to critic_handler.go and
+            register it in RegisterCriticRoutes (in impl.go).
+
+            **In pkg/api/critic_handler.go:**
+
+            1. Define the `CriticFix` struct (see interface contract above).
+
+            2. Implement `handleFixCritic(w, r)`:
+               - Parse slug from path, find IMPL doc via `s.findImplPath(slug)`.
+               - Decode JSON body into CriticFix.
+               - Load manifest via `protocol.Load(implPath)`.
+               - Switch on fix.Type:
+                 - `"add_file_ownership"`: Append a FileOwnership entry with File=fix.File,
+                   Agent=fix.AgentID, Wave=fix.Wave, Action=fix.Action (default "modify").
+                 - `"update_contract"`: Find the InterfaceContract by fix.ContractName,
+                   replace occurrences of fix.OldSymbol with fix.NewSymbol in the Definition field.
+                 - `"add_integration_connector"`: Append an IntegrationConnector entry with
+                   the file and agent fields from the fix.
+               - Save manifest via `protocol.Save(manifest, implPath)`.
+               - Run `exec.Command("sawtools", "validate", "--fix", implPath)` to re-validate.
+               - Reload manifest and return the CriticReport as JSON (or null if no report).
+               - Broadcast `s.globalBroker.broadcastJSON("impl_updated", map[string]interface{}{"slug": slug})`
+                 so other panels refresh.
+
+            3. Add a helper `EmitImplUpdated(slug string)` to global_events.go if it does not exist,
+               or inline the broadcast in the handler.
+
+            **In pkg/api/impl.go:**
+            4. In `RegisterCriticRoutes()`, add:
+               `s.mux.HandleFunc("PATCH /api/impl/{slug}/fix-critic", s.handleFixCritic)`
+
+            ### Interface contracts
+            - CriticFix struct: see contract definition above
+            - handleFixCritic: see contract definition above
+
+            ### Tests
+            - No unit test file needed; the endpoint will be verified via the build gate.
+            - Verify `go build ./...` passes.
+            - Verify `go vet ./...` passes.
+
+            ### Verification gate
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-web && go build ./... && go vet ./...
+            ```
+
+            ### Constraints
+            - Do NOT modify any frontend files (web/ directory).
+            - Do NOT modify the existing handleGetCriticReview or handleRunCriticReview functions.
+            - Use the same error response patterns as existing handlers (JSON with "error" key).
+            - The CriticFix struct lives in critic_handler.go, not in the protocol package.
+          files:
+            - pkg/api/critic_handler.go
+            - pkg/api/impl.go
+        - id: B
+          task: |
+            ## Agent B — Frontend: TypeScript types + API client method
+
+            ### What to implement
+            Add CriticFixRequest type and applyCriticFix API client method.
+
+            **In web/src/types.ts:**
+
+            1. Add the `CriticFixRequest` interface after the existing `CriticIssue` interface:
+               ```typescript
+               export interface CriticFixRequest {
+                 type: 'add_file_ownership' | 'update_contract' | 'add_integration_connector'
+                 agent_id: string
+                 wave: number
+                 file?: string
+                 action?: string
+                 contract_name?: string
+                 old_symbol?: string
+                 new_symbol?: string
+               }
+               ```
+
+            **In web/src/lib/apiClient.ts:**
+
+            2. Add import of `CriticFixRequest` from `'../types'` (add to existing import list).
+
+            3. Add `applyCriticFix` method to the `impl` namespace of the `SawClient` interface:
+               ```typescript
+               applyCriticFix(slug: string, fix: CriticFixRequest): Promise<CriticResult>
+               ```
+
+            4. Implement in `createHttpClient()` impl namespace:
+               ```typescript
+               async applyCriticFix(slug: string, fix: CriticFixRequest): Promise<CriticResult> {
+                 const r = await fetch(`/api/impl/${enc(slug)}/fix-critic`, {
+                   method: 'PATCH',
+                   headers: { 'Content-Type': 'application/json' },
+                   body: JSON.stringify(fix),
+                 })
+                 await check(r)
+                 return r.json() as Promise<CriticResult>
+               },
+               ```
+
+            ### Interface contracts
+            - CriticFixRequest: see contract definition above
+            - SawClient.impl.applyCriticFix: see contract definition above
+
+            ### Tests
+            - No test files; verified via TypeScript type checking.
+
+            ### Verification gate
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-web/web && npx tsc --noEmit
+            ```
+
+            ### Constraints
+            - Do NOT modify any Go files.
+            - Do NOT modify CriticReviewPanel.tsx or ReviewScreen.tsx.
+            - Follow existing patterns in apiClient.ts (use enc(), check(), same style).
+            - Add CriticFixRequest import to apiClient.ts import block alongside CriticResult.
+          files:
+            - web/src/types.ts
+            - web/src/lib/apiClient.ts
+      base_commit: 3b84ed1a60ebae83dba3da97ebe9009b38c3c3f8
+    - number: 2
+      agents:
+        - id: C
+          task: |
+            ## Agent C — CriticReviewPanel repair flow + ReviewScreen integration
+
+            ### What to implement
+            Enhance CriticReviewPanel with auto-fix suggestions and action buttons.
+            Update ReviewScreen to block approve on unresolved critic errors and
+            support auto-trigger + re-run.
+
+            **In web/src/components/CriticReviewPanel.tsx:**
+
+            1. Update the component props to accept callbacks:
+               ```typescript
+               interface CriticReviewPanelProps {
+                 result: CriticResultType
+                 onApplyFix?: (fix: CriticFixRequest) => Promise<void>
+                 onRerunCritic?: () => void
+                 criticRunning?: boolean
+               }
+               ```
+               Import `CriticFixRequest` from `'../types'`.
+
+            2. For each issue in the per-agent accordion, add an auto-fix suggestion
+               based on the issue's `check` field:
+               - `file_existence` or `side_effect_completeness` with severity `error`:
+                 Show "Add {file} to Agent {agent_id}'s file_ownership (wave {wave})"
+                 with an "Apply Fix" button that calls `onApplyFix` with type `"add_file_ownership"`.
+               - `symbol_accuracy` with severity `warning`:
+                 Show "Contract says {symbol}, codebase may differ" as informational text.
+                 If the issue description contains a pattern like "expected X, found Y",
+                 show an "Apply Fix" button with type `"update_contract"`.
+               - `import_chains`:
+                 Show informational text only: "Package not in go.mod — manual fix required".
+                 No apply button.
+               - For all other check types: show description only, no auto-fix.
+
+            3. Add a "Re-run Critic" button at the bottom of the panel (next to the
+               reviewed_at timestamp). Disable it while `criticRunning` is true.
+               Show a spinner/loading indicator when running.
+
+            4. When an "Apply Fix" button is clicked:
+               - Set a per-issue loading state.
+               - Call `onApplyFix(fix)`.
+               - On success, show a green checkmark replacing the button.
+               - On error, show the error message inline.
+
+            5. Add a count of unresolved errors vs total errors at the top of the panel
+               (e.g., "3 errors, 2 warnings" or "All issues resolved").
+
+            **In web/src/components/ReviewScreen.tsx:**
+
+            6. Import `CriticFixRequest` from `'../types'` and `sawClient` from `'../lib/apiClient'`.
+
+            7. Add an `applyCriticFix` callback that:
+               - Calls `sawClient.impl.applyCriticFix(slug, fix)`.
+               - On success, updates `criticReport` state with the returned CriticResult.
+               - On error, re-throws so the panel can display it.
+
+            8. Pass new props to CriticReviewPanel:
+               ```tsx
+               <CriticReviewPanel
+                 result={criticReport}
+                 onApplyFix={applyCriticFix}
+                 onRerunCritic={runCriticReview}
+                 criticRunning={criticRunning}
+               />
+               ```
+
+            9. Add approve-blocking logic: if `criticReport` exists and has unresolved
+               errors (verdict === 'ISSUES' AND any issue has severity === 'error'),
+               disable the approve flow. Show a tooltip/message: "Resolve critic errors
+               before approving." Warnings do NOT block approval.
+
+            10. Listen for `impl_updated` SSE event (via useGlobalEvents) to refresh
+                the IMPL doc when a fix is applied. Add handler:
+                ```typescript
+                const handleImplUpdated = useCallback((e: MessageEvent) => {
+                  try {
+                    const data = JSON.parse(e.data)
+                    if (data?.slug === slug) onRefreshImpl?.(slug)
+                  } catch {}
+                }, [slug, onRefreshImpl])
+                ```
+                Add `impl_updated: handleImplUpdated` to the useGlobalEvents call.
+
+            11. Add auto-trigger banner: when criticReport is null and criticThresholdMet
+                conditions are met (wave 1 has 3+ agents OR 2+ repos in file ownership),
+                show: "This IMPL has {N} wave-1 agents — critic review recommended"
+                and auto-run critic on mount. Compute threshold client-side from impl data:
+                ```typescript
+                const wave1AgentCount = impl.waves.find(w => w.number === 1)?.agents.length ?? 0
+                const repoCount = new Set(impl.file_ownership.map(fo => fo.repo).filter(Boolean)).size
+                const shouldAutoRunCritic = wave1AgentCount >= 3 || repoCount >= 2
+                ```
+
+            ### Interface contracts
+            - CriticFixRequest: imported from '../types' (created by Agent B)
+            - sawClient.impl.applyCriticFix: imported from '../lib/apiClient' (created by Agent B)
+
+            ### Tests
+            - No test files; verified via TypeScript type checking.
+
+            ### Verification gate
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-web/web && npx tsc --noEmit
+            ```
+
+            ### Constraints
+            - Do NOT modify any Go files.
+            - Do NOT modify types.ts or apiClient.ts (owned by Agent B, wave 1).
+            - Use the existing CriticResult/CriticIssue types from types.ts (or the local
+              CriticResultType/CriticIssueType aliases already in the file — consolidate to
+              use the canonical types from '../types' and remove local duplicates).
+            - Follow existing panel patterns: rounded-lg border, bg-card, consistent spacing.
+            - The approve-blocking check should be in ReviewScreen, not in ActionButtons.
+          files:
+            - web/src/components/CriticReviewPanel.tsx
+            - web/src/components/ReviewScreen.tsx
+          dependencies:
+            - B
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./...
+          required: true
+        - type: lint
+          command: go vet ./...
+          required: true
+        - type: typecheck
+          command: cd web && npx tsc --noEmit
+          required: true
+completion_reports:
+    A:
+        status: complete
+        branch: saw/critic-repair-ui/wave1-agent-A
+        commit: 98cbda2
+        files_changed:
+            - pkg/api/critic_handler.go
+            - pkg/api/impl.go
+        verification: PASS
+    B:
+        status: complete
+        branch: saw/critic-repair-ui/wave1-agent-B
+        commit: c37ab7a
+        files_changed:
+            - web/src/types.ts
+            - web/src/lib/apiClient.ts
+        verification: PASS
+    C:
+        status: complete
+        branch: main
+        commit: 6d2882e
+        files_changed:
+            - web/src/components/CriticReviewPanel.tsx
+            - web/src/components/ReviewScreen.tsx
+        verification: PASS
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: PATCH endpoint modifies IMPL YAML incorrectly, causing validation failure
+          likelihood: low
+          impact: medium
+          mitigation: |
+            The handler runs sawtools validate --fix after every modification, which
+            auto-corrects minor issues. If validation still fails, the endpoint returns
+            500 and the YAML is already saved (but the user can re-run validation or
+            edit raw YAML).
+        - scenario: CriticReviewPanel local type aliases diverge from canonical types.ts
+          likelihood: medium
+          impact: low
+          mitigation: |
+            Agent C is instructed to consolidate local CriticResultType/CriticIssueType
+            aliases to use canonical imports from types.ts. TypeScript compiler will
+            catch any type mismatches.
+        - scenario: impl_updated SSE event not yet broadcast by any existing handler
+          likelihood: medium
+          impact: low
+          mitigation: |
+            Agent A creates the impl_updated broadcast in the fix-critic handler.
+            If the event name conflicts with an existing event, Agent C's listener
+            will still work — it just filters by slug.
+state: WAVE_PENDING

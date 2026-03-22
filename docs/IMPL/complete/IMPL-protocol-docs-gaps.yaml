@@ -1,0 +1,463 @@
+completion_date: "2026-03-20"
+title: Protocol-Implementation Documentation Gaps
+feature_slug: protocol-docs-gaps
+verdict: SUITABLE_WITH_CAVEATS
+suitability_assessment: |
+    **Suitability Gate Analysis:**
+
+    1. **File decomposition**: ✅ YES — Work spans 3 distinct areas with disjoint file ownership:
+       - E35 Layer 3C implementation (Go code: prepare_wave.go, wiring code)
+       - E28A P1 validation (Go code: program_validation.go, import_impls_cmd.go)
+       - Interview mode documentation (Markdown: protocol specs, execution-rules.md)
+
+    2. **Investigation vs implementation**: ✅ IMPLEMENTATION-READY
+       - Audit identified specific gaps with clear implementation requirements
+       - E35 Layer 3C: Protocol spec (E35 lines 1135) says "inject wiring entries into brief"; implementation has FormatWiringBriefSection but integration unclear
+       - E28A P1: Code shows validateP1Independence for PROGRAM-level but cross-tier IMPL file overlap check missing
+       - Interview mode: CLI implementation complete; documentation gap only
+
+    3. **Interface discoverability**: ✅ CLEAR CONTRACTS
+       - E35: protocol.FormatWiringBriefSection already exists; just needs integration into prepare-wave brief generation
+       - E28A: ValidateImportedIMPLs function exists; needs P1 file overlap logic added
+       - Interview: Pure documentation work; no cross-agent interfaces
+
+    4. **Pre-implementation status**: Mixed (3 items assessed)
+       - E35 Layer 3C: PARTIAL — FormatWiringBriefSection exists (line 260 in prepare_wave.go) but integration into brief output unclear
+       - E28A P1: PARTIAL — P1_VIOLATION validation exists for PROGRAM IMPL dependencies but not for cross-tier file ownership disjointness
+       - Interview mode: TODO — No protocol documentation found
+
+    5. **Parallelization value**: ✅ HIGH VALUE
+       - Build/test cycle: Go test suite >2min (66+ protocol packages)
+       - Files per agent: 2-3 files each (good granularity)
+       - Agent independence: Wave 1 has 3 fully independent agents (documentation, validation, wiring injection)
+       - Task complexity: Non-trivial logic (AST validation, brief injection, spec writing)
+
+    **Verdict: SUITABLE WITH CAVEATS**
+
+    Caveats:
+    1. **Cross-repo work**: Agents work in both scout-and-wave (protocol docs) and scout-and-wave-go (implementation)
+    2. **Documentation vs code mix**: Agent A is pure documentation; Agents B and C are pure Go implementation
+    3. **E35 clarification needed**: Audit says Layer 3C is "incomplete" but code shows FormatWiringBriefSection exists and is called. Agent B will verify actual gap vs audit assumption.
+
+    **Estimated times:**
+    - Scout phase: ~8 min (3-repo dependency mapping, cross-repo contracts, IMPL doc)
+    - Agent execution: ~18 min (3 agents × 6 min avg, accounting for parallelism)
+    - Merge & verification: ~4 min
+    Total SAW time: ~30 min
+
+    Sequential baseline: ~45 min (3 agents × 15 min sequential with context switching)
+    Time savings: ~15 min (33% faster)
+
+    Recommendation: Clear speedup with strong coordination value (audit findings → structured implementation plan).
+test_command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go test ./pkg/protocol/... ./cmd/saw/... -v
+lint_command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go vet ./...
+file_ownership:
+    - file: protocol/execution-rules.md
+      agent: A
+      wave: 1
+      action: modify
+    - file: protocol/interview-mode.md
+      agent: A
+      wave: 1
+      action: new
+    - file: pkg/protocol/wiring_injection.go
+      agent: B
+      wave: 1
+      action: new
+    - file: pkg/protocol/wiring_injection_test.go
+      agent: B
+      wave: 1
+      action: new
+    - file: cmd/saw/prepare_wave.go
+      agent: B
+      wave: 1
+      action: modify
+    - file: pkg/protocol/program_validation.go
+      agent: C
+      wave: 1
+      action: modify
+    - file: pkg/protocol/program_validation_test.go
+      agent: C
+      wave: 1
+      action: modify
+    - file: cmd/saw/import_impls_cmd.go
+      agent: C
+      wave: 1
+      action: modify
+interface_contracts:
+    - name: ValidateP1FileDisjointness
+      description: Validates that IMPLs in the same tier do not have overlapping file_ownership entries
+      definition: |
+        func ValidateP1FileDisjointness(tier int, impls []IMPLManifest) []ValidationError
+
+        Returns:
+        - ValidationError with Code "P1_FILE_OVERLAP" if same file appears in multiple IMPLs in tier
+        - Empty slice if all file_ownership entries are disjoint within tier
+
+        Called by: ValidateImportedIMPLs during import-impls command (Layer 3A pre-flight)
+      location: pkg/protocol/program_validation.go
+    - name: InjectWiringInstructions
+      description: Formats wiring obligations for an agent into markdown for injection into .saw-agent-brief.md
+      definition: |
+        func InjectWiringInstructions(doc *IMPLManifest, agentID string, waveNum int) string
+
+        Returns:
+        - Markdown section with wiring obligations for agentID in waveNum
+        - Empty string if no wiring entries for agent
+        - Format matches E35 Layer 3C spec (symbol, defined_in, must_be_called_from, integration_pattern)
+
+        Called by: prepare-wave during brief generation (step 2, line ~260)
+
+        Note: protocol.FormatWiringBriefSection already exists but may not match E35 spec exactly.
+        Agent B will verify and refactor if needed.
+      location: pkg/protocol/wiring_injection.go
+    - name: InterviewModeSpec
+      description: Formal protocol specification for interview mode (deterministic requirements gathering)
+      definition: |
+        ## E39: Interview Mode (Deterministic Requirements Gathering)
+
+        **Trigger:** User invokes `/saw interview "<description>"` or `sawtools interview "<description>"`
+
+        **Rule:** Orchestrator enters INTERVIEWING state and conducts structured Q&A:
+        1. Phases: overview, scope, requirements, interfaces, stories, review (6 phases)
+        2. State persistence: After each answer, write INTERVIEW-<slug>.yaml to docs/
+        3. Resume capability: `--resume docs/INTERVIEW-<slug>.yaml` continues from last question
+        4. Output: On completion, generate REQUIREMENTS.md suitable for /saw bootstrap or /saw scout
+
+        **State machine:**
+        - SCOUTING → INTERVIEWING (on `/saw interview` command)
+        - INTERVIEWING → SCOUT_PENDING (on interview completion, REQUIREMENTS.md written)
+
+        **INTERVIEW doc schema:**
+        ```yaml
+        slug: <feature-slug>
+        description: <user input>
+        status: in_progress | complete
+        current_phase: overview | scope | requirements | interfaces | stories | review
+        phases:
+          - phase: overview
+            questions: [{id, text, answer, timestamp}]
+          - phase: scope
+            questions: [{id, text, answer, timestamp}]
+        requirements_path: docs/REQUIREMENTS.md (populated on completion)
+        ```
+
+        **Related Rules:** Scout Agent (Scout.md), E16 (IMPL Doc Validation)
+      location: protocol/interview-mode.md
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            **Goal:** Document interview mode in protocol specs (E39) and update execution-rules.md cross-references.
+
+            **Scope:** Pure documentation work. No code changes. Write formal protocol specification for the interview mode feature that is already implemented in scout-and-wave-go/cmd/saw/interview_cmd.go.
+
+            **Context from audit:**
+            - Interview mode is fully implemented (CLI command, state persistence, resume, REQUIREMENTS.md output)
+            - Implementation found in: cmd/saw/interview_cmd.go, pkg/interview/ package
+            - No protocol documentation exists; this is an Implementation → Protocol gap
+
+            **Files to modify/create:**
+            1. **protocol/interview-mode.md** (NEW) — Create formal E39 specification
+            2. **protocol/execution-rules.md** (MODIFY) — Add cross-reference to E39 in Scout section
+
+            **E39 Specification Requirements:**
+            - Rule number: E39 (next available number in execution-rules series)
+            - Title: "Interview Mode (Deterministic Requirements Gathering)"
+            - Trigger: User invokes `/saw interview "<description>"`
+            - State machine: SCOUTING → INTERVIEWING → SCOUT_PENDING
+            - Phases: overview, scope, requirements, interfaces, stories, review
+            - State persistence: INTERVIEW-<slug>.yaml schema (document all fields)
+            - Resume capability: `--resume` flag semantics
+            - Output contract: REQUIREMENTS.md format suitable for /saw bootstrap or /saw scout
+            - Error handling: Max questions limit, invalid phase transitions
+            - Related rules: Cross-reference Scout Agent, E16 (IMPL validation)
+
+            **INTERVIEW-<slug>.yaml Schema (document in E39):**
+            ```yaml
+            slug: string
+            description: string
+            status: in_progress | complete
+            current_phase: overview | scope | requirements | interfaces | stories | review
+            phases:
+              - phase: string
+                questions:
+                  - id: string
+                    text: string
+                    answer: string
+                    timestamp: RFC3339
+            requirements_path: string (populated on completion)
+            ```
+
+            **Tests:**
+            - Verify protocol/interview-mode.md exists and includes E39 rule
+            - Verify execution-rules.md cross-references E39 in Scout section (around E12-E16)
+            - Verify all 6 phases are documented (overview, scope, requirements, interfaces, stories, review)
+            - Verify state machine diagram shows INTERVIEWING state
+
+            **Verification gate:**
+            - Read protocol/interview-mode.md and verify E39 rule is complete
+            - Grep execution-rules.md for "E39" cross-reference in Scout section
+            - No build/test needed (pure documentation)
+
+            **Constraints:**
+            - Do NOT modify implementation code (scout-and-wave-go repo)
+            - Do NOT invent new interview features; document only what exists in cmd/saw/interview_cmd.go
+            - Match protocol documentation style (see protocol/execution-rules.md for reference)
+            - Use E-rule numbering convention (E39 follows E38 gate caching)
+          files:
+            - protocol/execution-rules.md
+            - protocol/interview-mode.md
+        - id: B
+          task: |
+            **Goal:** Complete E35 Layer 3C implementation (inject wiring obligations into agent briefs during prepare-wave).
+
+            **Scope:** Verify that protocol.FormatWiringBriefSection is correctly integrated into prepare-wave brief generation. If integration is incomplete, refactor to ensure wiring section appears in .saw-agent-brief.md.
+
+            **Context from audit:**
+            - E35 protocol spec (execution-rules.md lines 1135-1143) says prepare-wave must inject wiring entries into agent briefs
+            - Implementation shows FormatWiringBriefSection exists and is called at line 260 in prepare_wave.go
+            - Audit claims Layer 3C is "incomplete" but code suggests it may be implemented
+            - GAP 1 severity: HIGH (wiring obligations not visible to agents means they won't implement integration)
+
+            **Files to modify/create:**
+            1. **pkg/protocol/wiring_injection.go** (NEW) — Extract wiring formatting logic if needed
+            2. **pkg/protocol/wiring_injection_test.go** (NEW) — Unit tests for wiring brief injection
+            3. **cmd/saw/prepare_wave.go** (MODIFY) — Verify brief includes wiring section; refactor if needed
+
+            **Implementation Requirements:**
+
+            **Step 1: Verify current state**
+            - Read prepare_wave.go line 260 context: is wiringSection variable actually included in brief output?
+            - Check if FormatWiringBriefSection returns empty string when no wiring entries exist for agent
+            - Trace brief variable construction (line ~263-275) to confirm wiringSection is interpolated
+
+            **Step 2: Fix integration if broken**
+            If wiringSection is not included in brief output:
+            - Add wiringSection to brief template at line ~274 (after task, before gates section)
+            - Format: `## Wiring Obligations\n\n%s` (only if wiringSection non-empty)
+
+            **Step 3: Extract and test formatting logic**
+            - Move FormatWiringBriefSection from protocol package to wiring_injection.go (or verify it's already there)
+            - Signature: `func FormatWiringBriefSection(doc *IMPLManifest, agentID string) string`
+            - Returns markdown with E35 wiring entries for agentID:
+              ```markdown
+              ## Wiring Obligations (E35)
+
+              You must wire the following exports into existing aggregation points:
+
+              - **Symbol:** `FunctionName` (defined in `pkg/new/feature.go`)
+                **Must be called from:** `cmd/main.go`
+                **Integration pattern:** register
+                **Instruction:** Add registration call in main() function
+              ```
+
+            **Step 4: Write tests**
+            Create wiring_injection_test.go:
+            - Test case 1: Agent with wiring entries → returns formatted section
+            - Test case 2: Agent with no wiring entries → returns empty string
+            - Test case 3: Multiple wiring entries for same agent → all included in section
+            - Test case 4: Wiring entry for different agent → not included
+
+            **Tests:**
+            - `go test ./pkg/protocol/wiring_injection_test.go -v`
+            - `go test ./cmd/saw/prepare_wave.go -run TestPrepareWave -v` (if exists)
+            - Manual: Create test IMPL with wiring entries, run prepare-wave, verify .saw-agent-brief.md includes wiring section
+
+            **Verification gate:**
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go
+            go build ./cmd/saw/...
+            go test ./pkg/protocol/wiring_injection_test.go -v
+            go vet ./pkg/protocol/wiring_injection.go ./cmd/saw/prepare_wave.go
+            ```
+
+            **Constraints:**
+            - Do NOT modify wiring validation logic (wiring_validation.go is out of scope)
+            - Do NOT change WiringDeclaration struct schema (already correct per audit)
+            - Keep existing Layer 3A (pre-flight) and Layer 3B (post-merge) logic unchanged
+            - Only fix Layer 3C (brief injection) if broken
+          files:
+            - pkg/protocol/wiring_injection.go
+            - pkg/protocol/wiring_injection_test.go
+            - cmd/saw/prepare_wave.go
+        - id: C
+          task: |
+            **Goal:** Implement E28A P1 validation for cross-tier IMPL file ownership disjointness.
+
+            **Scope:** Add validation check to import-impls command that ensures IMPLs imported into the same tier do not have overlapping file_ownership entries (P1 invariant enforcement).
+
+            **Context from audit:**
+            - E28A protocol spec says imported IMPLs must satisfy P1 (file ownership disjointness within tier)
+            - Implementation has P1_VIOLATION validation for PROGRAM-level IMPL dependencies (same-tier deps)
+            - Missing: P1_FILE_OVERLAP validation for file_ownership conflicts across IMPLs in same tier
+            - GAP 4 severity: HIGH (violating P1 leads to merge conflicts when multiple IMPLs modify same file)
+
+            **Files to modify:**
+            1. **pkg/protocol/program_validation.go** (MODIFY) — Add ValidateP1FileDisjointness function
+            2. **pkg/protocol/program_validation_test.go** (MODIFY) — Add test cases for P1 file overlap
+            3. **cmd/saw/import_impls_cmd.go** (MODIFY) — Call ValidateP1FileDisjointness during import
+
+            **Implementation Requirements:**
+
+            **Step 1: Add ValidateP1FileDisjointness function**
+            Location: pkg/protocol/program_validation.go (after validateP1Independence, around line 145)
+
+            ```go
+            // ValidateP1FileDisjointness checks that IMPLs in the same tier do not have
+            // overlapping file_ownership entries (P1 invariant). Returns ValidationError
+            // with Code "P1_FILE_OVERLAP" if the same file appears in multiple IMPLs.
+            func ValidateP1FileDisjointness(tier int, impls []*IMPLManifest) []ValidationError {
+                var errs []ValidationError
+                fileToIMPL := make(map[string]string) // file path -> IMPL slug
+
+                for _, impl := range impls {
+                    for _, fo := range impl.FileOwnership {
+                        if existingIMPL, exists := fileToIMPL[fo.File]; exists {
+                            errs = append(errs, ValidationError{
+                                Code:    "P1_FILE_OVERLAP",
+                                Message: fmt.Sprintf("File %s owned by both %s and %s in tier %d (violates P1 disjoint ownership)",
+                                    fo.File, existingIMPL, impl.FeatureSlug, tier),
+                                Section: "file_ownership",
+                            })
+                        } else {
+                            fileToIMPL[fo.File] = impl.FeatureSlug
+                        }
+                    }
+                }
+                return errs
+            }
+            ```
+
+            **Step 2: Integrate into ValidateImportedIMPLs**
+            Location: pkg/protocol/program_validation.go, ValidateImportedIMPLs function (around line 358)
+
+            After collecting file ownership for each tier (line ~411), add P1 check:
+            ```go
+            // After line 418: collect file ownership for tier
+            tierFileOwnership[tier] = append(tierFileOwnership[tier], impl)
+
+            // NEW: After collecting all IMPLs for tier, validate P1 disjointness
+            for tier, implsInTier := range tierFileOwnership {
+                p1Errs := ValidateP1FileDisjointness(tier, implsInTier)
+                errs = append(errs, p1Errs...)
+            }
+            ```
+
+            **Step 3: Add test cases**
+            Location: pkg/protocol/program_validation_test.go (after TestValidateProgramImportMode_P1FileOverlap, around line 805)
+
+            Add test case:
+            ```go
+            func TestValidateP1FileDisjointness_SameTier(t *testing.T) {
+                impl1 := &IMPLManifest{
+                    FeatureSlug: "feature-a",
+                    FileOwnership: []FileOwnership{{File: "pkg/shared.go", Agent: "A"}},
+                }
+                impl2 := &IMPLManifest{
+                    FeatureSlug: "feature-b",
+                    FileOwnership: []FileOwnership{{File: "pkg/shared.go", Agent: "B"}},
+                }
+
+                errs := ValidateP1FileDisjointness(1, []*IMPLManifest{impl1, impl2})
+
+                if len(errs) != 1 {
+                    t.Fatalf("expected 1 error, got %d", len(errs))
+                }
+                if errs[0].Code != "P1_FILE_OVERLAP" {
+                    t.Errorf("expected P1_FILE_OVERLAP, got %s", errs[0].Code)
+                }
+            }
+            ```
+
+            **Step 4: Update import-impls command**
+            Location: cmd/saw/import_impls_cmd.go (verify ValidateImportedIMPLs is called, around line 80-100)
+
+            No changes needed if ValidateImportedIMPLs already called (it should be). Verify error handling:
+            - If P1_FILE_OVERLAP errors returned, command should exit with non-zero status
+            - Error message should be clear: "Cannot import IMPLs: file ownership conflicts detected (P1 violation)"
+
+            **Tests:**
+            - `go test ./pkg/protocol/program_validation_test.go -run TestValidateP1FileDisjointness -v`
+            - `go test ./pkg/protocol/program_validation_test.go -run TestValidateProgramImportMode_P1FileOverlap -v` (existing test should still pass)
+            - Manual: Create 2 IMPL docs with same file in file_ownership, import into same tier → should fail with P1_FILE_OVERLAP
+
+            **Verification gate:**
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go
+            go build ./cmd/saw/...
+            go test ./pkg/protocol/program_validation_test.go -v
+            go vet ./pkg/protocol/program_validation.go ./cmd/saw/import_impls_cmd.go
+            ```
+
+            **Constraints:**
+            - Do NOT modify existing P1_VIOLATION validation (program-level IMPL dependencies)
+            - Do NOT change PROGRAM manifest schema or PROGRAMManifest struct
+            - Keep validation errors consistent with existing format (Code, Message, Section)
+            - Function must work with both import-impls and validate-program commands
+          files:
+            - pkg/protocol/program_validation.go
+            - pkg/protocol/program_validation_test.go
+            - cmd/saw/import_impls_cmd.go
+      base_commit: 5763b19f50875731aa423b5f0bf341b889c39ed7
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./cmd/saw/...
+          required: true
+        - type: test
+          command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go test ./pkg/protocol/... ./cmd/saw/...
+          required: true
+        - type: lint
+          command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go vet ./...
+          required: true
+completion_reports:
+    A:
+        status: complete
+        branch: sdk
+        commit: d84436a
+        files_changed:
+            - protocol/execution-rules.md
+        files_created:
+            - protocol/interview-mode.md
+        verification: PASS - E39 specification complete with all 6 phases documented
+    B:
+        status: complete
+        branch: saw/protocol-docs-gaps/wave1-agent-B
+        commit: a8c850e
+        files_changed:
+            - cmd/saw/prepare_wave.go
+        files_created:
+            - pkg/protocol/wiring_injection.go
+            - pkg/protocol/wiring_injection_test.go
+        verification: PASS - E35 Layer 3C wiring injection implemented with wave-aware filtering
+    C:
+        status: complete
+        branch: saw/protocol-docs-gaps/wave1-agent-C
+        commit: d397b85
+        files_changed:
+            - pkg/protocol/program_validation.go
+            - pkg/protocol/program_validation_test.go
+        verification: PASS - E28A P1 file disjointness validation implemented
+pre_mortem:
+    overall_risk: medium
+    rows:
+        - scenario: E35 Layer 3C may already be fully implemented; audit assessment could be incorrect
+          likelihood: medium
+          impact: low
+          mitigation: Agent B will verify actual state first before refactoring. If FormatWiringBriefSection is already integrated correctly, mark task as "verified complete" with no changes needed.
+        - scenario: Cross-repo coordination overhead (scout-and-wave vs scout-and-wave-go)
+          likelihood: high
+          impact: low
+          mitigation: Agents A and B/C work in different repos with no file conflicts. Agent A (docs) has no dependencies on B/C (code). No merge conflicts possible.
+        - scenario: P1 validation logic may conflict with existing validation in ValidateImportedIMPLs
+          likelihood: low
+          impact: medium
+          mitigation: Agent C will call ValidateP1FileDisjointness as a separate function, not inline. Integration point is clear (after collecting tier IMPLs, before returning errors). Existing tests provide regression safety.
+        - scenario: Test discovery for wiring_injection.go may fail if protocol package test discovery is broken
+          likelihood: low
+          impact: low
+          mitigation: Agent B will use explicit test command with file path. If package-level test discovery fails, individual test file execution is fallback.
+state: "COMPLETE"

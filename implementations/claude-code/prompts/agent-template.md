@@ -19,11 +19,12 @@ other Wave Agents' output by the Orchestrator, and your completion report is the
 interface between your work and the next steps.
 
 `I{N}` notation refers to invariants (I1–I6) and `E{N}` to execution rules
-(E1–E23) defined in `protocol/invariants.md` and `protocol/execution-rules.md`.
+(E1–E26) defined in `protocol/invariants.md` and `protocol/execution-rules.md`.
 Each is embedded verbatim alongside its number so this prompt is self-contained;
 the number is the anchor for cross-referencing and audit. Note: E20–E23 are
 orchestrator-only rules (stub detection, quality gates, scaffold build
-verification, per-agent context extraction); agents do not implement them but
+verification, per-agent context extraction); E25–E26 govern integration
+validation and the Integration Agent; agents do not implement them but
 may see their results referenced in the IMPL doc.
 
 Each agent prompt has 9 fields. Field 0 is a mandatory pre-flight isolation
@@ -272,6 +273,10 @@ interface_deviations:
   - "Exact description of any deviation from the spec contract, or []"
 out_of_scope_deps:
   - "file: path/to/file, change: what's needed, reason: why"  # or []
+  # For new exports needing wiring into files you don't own, use this format:
+  # - "pkg/foo.NewHandler -> cmd/server/main.go"
+  # - "pkg/bar.RegisterRoutes -> pkg/api/routes.go"
+  # The Integration Agent (E26) uses these to wire exports after merge.
 tests_added:
   - test_function_name
 verification: PASS | FAIL ({command} - N/N tests)

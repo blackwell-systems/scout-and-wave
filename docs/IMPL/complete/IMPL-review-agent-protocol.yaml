@@ -1,0 +1,1526 @@
+# IMPL: review-agent-protocol
+title: "Review Agent Protocol (E28) + Web GUI Integration"
+feature_slug: review-agent-protocol
+verdict: SUITABLE
+test_command: "cd /Users/dayna.blackwell/code/scout-and-wave-go && go test ./... && cd /Users/dayna.blackwell/code/scout-and-wave-web && go test ./pkg/api/... && cd web && npx tsc --noEmit"
+lint_command: "cd /Users/dayna.blackwell/code/scout-and-wave-go && go vet ./... && cd /Users/dayna.blackwell/code/scout-and-wave-web && go vet ./pkg/api/..."
+state: ARCHIVED_SUPERSEDED
+archive_reason: |
+  E28 naming collision — program-layer evolution (E28-E34: tier execution, contract
+  freezing, gate verification) already fills the validation/gate need. Review Agent
+  concept predates program-layer; the planned E28 Pre-Review Semantic Validation rule
+  conflicts with the existing E28 Tier Execution Loop. Archiving rather than renumbering.
+  If lightweight review-impl command is wanted in future, scope separately.
+
+suitability_assessment: |
+  Verdict: SUITABLE
+
+  1. File decomposition: YES — 18+ distinct files across 3 repositories (protocol,
+     Go SDK, web app backend, web app frontend). Clear separation: protocol docs
+     (6 files), Go SDK (2 files), web backend (4 files), web frontend (6 files).
+     No file appears in multiple agents' scope within the same wave.
+
+  2. Investigation-first: NO — All design decisions are already made. The Review Agent
+     protocol is fully specified. The web GUI integration follows established patterns
+     visible in existing handlers (scout.go, wave_runner.go) and frontend components
+     (waveEventsReducer.ts, useWaveEvents.ts, WaveBoard.tsx).
+
+  3. Interface discoverability: YES — The cross-agent interfaces are well-defined:
+     SSE event names, API endpoint signatures, reducer action types, and Go function
+     signatures can all be specified upfront from the existing patterns.
+
+  4. Pre-implementation status check:
+     Total items: 18 files across 4 waves
+     Already implemented (DONE): 0
+     Partially implemented (PARTIAL): 0
+     Not implemented (TO-DO): 18
+
+  5. Parallelization value: HIGH — Waves 1-2 are documentation (fast, 6 parallel agents).
+     Wave 3 involves Go compilation across 2 repos (go build + go test cycles > 30s).
+     Wave 4 involves TypeScript compilation (tsc --noEmit > 10s). Each wave has 2-4
+     parallel agents touching 1-3 files each. Total 12 agents across 4 waves.
+
+  Estimated times:
+  - Scout phase: ~10 min (dependency mapping across 3 repos)
+  - Agent execution: ~25 min (4 waves, 2-4 agents per wave, ~5 min avg)
+  - Merge & verification: ~10 min (4 merge cycles)
+  Total SAW time: ~45 min
+
+  Sequential baseline: ~90 min (12 agents x 7.5 min avg)
+  Time savings: ~45 min (~50% faster)
+  Recommendation: Clear speedup. Proceed with SAW.
+
+# Quality Gates
+quality_gates:
+  level: standard
+  gates:
+    - type: custom
+      command: "test -f protocol/participants.md && test -f protocol/execution-rules.md && test -f protocol/state-machine.md && test -f protocol/procedures.md && test -f implementations/claude-code/prompts/agents/review-agent.md && test -f docs/architecture.md"
+      required: true
+      description: "Verify all 6 protocol target files exist after modifications"
+    - type: build
+      command: "cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./..."
+      required: true
+      description: "Go SDK builds successfully"
+    - type: test
+      command: "cd /Users/dayna.blackwell/code/scout-and-wave-go && go test ./..."
+      required: true
+      description: "Go SDK tests pass"
+    - type: build
+      command: "cd /Users/dayna.blackwell/code/scout-and-wave-web && go build ./..."
+      required: true
+      description: "Web app backend builds successfully"
+    - type: test
+      command: "cd /Users/dayna.blackwell/code/scout-and-wave-web && go test ./pkg/api/..."
+      required: true
+      description: "Web app backend tests pass"
+    - type: typecheck
+      command: "cd /Users/dayna.blackwell/code/scout-and-wave-web/web && npx tsc --noEmit"
+      required: true
+      description: "Frontend TypeScript typechecks"
+
+# Scaffolds
+scaffolds: []
+
+# Interface Contracts
+# These define the exact terminology, names, and cross-references that all agents
+# must use consistently. This is the primary coordination mechanism for this feature.
+interface_contracts:
+  - name: "Review Agent Participant"
+    description: |
+      The Review Agent is the 6th participant role in SAW. It runs as a Generator-Critic
+      pattern: Scout generates the IMPL (optimistic), Review Agent critiques against
+      ground truth (adversarial, verification-focused). It is read-only with respect to
+      source code and produces a structured review document.
+    definition: |
+      Participant name: Review Agent
+      Execution mode: Asynchronous
+      Subagent type: review-agent
+      Constraint: Read-only (no source code modification, no IMPL doc modification)
+      Output: Structured review document written to IMPL doc under review_report field
+      Launches: After SCOUT_VALIDATING passes (E16), before REVIEWED state
+      Failure behavior: Non-fatal after retry limit. If review fails after 2 revision
+        rounds, orchestrator enters REVIEWED with review findings attached for human review.
+    location: "protocol/participants.md"
+
+  - name: "E28 Execution Rule"
+    description: |
+      E28 defines the Pre-Review Semantic Validation rule. It governs the orchestrator's
+      behavior when launching the Review Agent and handling the Scout revision loop.
+    definition: |
+      Rule number: E28
+      Rule name: Pre-Review Semantic Validation
+      Trigger: E16 validation passes (SCOUT_VALIDATING -> structural validation complete)
+      Required action: Orchestrator launches Review Agent to cross-reference IMPL doc
+        against actual codebase. Review Agent reads all source files referenced in IMPL
+        and verifies: function signatures match, referenced types exist, routes are
+        registered, SSE events match between emitter/listener, pipeline steps are complete.
+      Output: Structured review with categories: signature_mismatch, missing_type,
+        unwired_connection, missing_edge_case, architectural_gap
+      Severity levels: critical, high, medium, low
+      Revision loop: If review finds critical or high issues, orchestrator feeds review
+        back to Scout. Scout revises IMPL doc. Review Agent re-reviews. Max 2 rounds.
+      On loop exhaustion: Enter REVIEWED with review findings attached. Human decides
+        whether to proceed or revise further.
+      Retry limit: 2 revision rounds (Scout -> Review -> Scout revision -> Review verify)
+    location: "protocol/execution-rules.md"
+
+  - name: "SCOUT_REVIEWING State"
+    description: |
+      New state in the SAW state machine, inserted between SCOUT_VALIDATING and REVIEWED.
+      The Review Agent executes during this state.
+    definition: |
+      State name: SCOUT_REVIEWING
+      Position in flow: SCOUT_VALIDATING -> SCOUT_REVIEWING -> REVIEWED
+      Entry condition: E16 validation passes
+      Exit condition: Review Agent finds no critical/high issues, OR revision loop
+        exhausted (max 2 rounds)
+      Entry actions: Orchestrator launches Review Agent with IMPL doc path and list
+        of source files to verify
+      Self-loop: SCOUT_REVIEWING -> SCOUT_REVIEWING when review finds critical/high
+        issues and revision rounds remain. Orchestrator feeds review to Scout, Scout
+        revises, Review Agent re-reviews.
+      Transition to REVIEWED: Review passes (no critical/high issues) OR revision
+        limit reached (findings attached for human review)
+      Transition to BLOCKED: Review Agent itself fails (not review findings, but
+        agent execution failure)
+    location: "protocol/state-machine.md"
+
+  - name: "Review Agent Procedure"
+    description: |
+      Operational procedure for Review Agent execution, following the same pattern
+      as existing procedures in procedures.md (Scout, Scaffold Agent, Wave Execution,
+      Merge, Inter-Wave Checkpoint, Protocol Completion).
+    definition: |
+      Procedure number: Procedure 1.5 (between Scout and Scaffold Agent)
+      Procedure name: Review Agent (Pre-Review Semantic Validation)
+      Entry state: SCOUT_REVIEWING
+      Exit state: REVIEWED (if review passes or revision limit reached) or
+        BLOCKED (if agent execution fails)
+      Executor: Review Agent (asynchronous)
+    location: "protocol/procedures.md"
+
+  - name: "Review Document Structure"
+    description: |
+      The structured review output format that the Review Agent produces and that
+      gets written to the IMPL doc.
+    definition: |
+      YAML structure written to IMPL doc under review_report field:
+        review_report:
+          status: pass | issues_found | revision_requested
+          round: 1 | 2
+          findings:
+            - id: R1
+              category: signature_mismatch | missing_type | unwired_connection |
+                        missing_edge_case | architectural_gap | naming_mismatch
+              severity: critical | high | medium | low
+              location: "path/to/file.go:function_name"
+              impl_reference: "Agent A task, Interface Contract X"
+              description: "What is wrong"
+              evidence: "What the codebase actually shows"
+              recommendation: "How to fix it in the IMPL doc"
+          summary:
+            critical: N
+            high: N
+            medium: N
+            low: N
+            verdict: "pass | revise | escalate"
+    location: "protocol/message-formats.md (informational, not a file ownership target)"
+
+  - name: "SSE Review Events"
+    description: |
+      SSE event names used by the web backend to stream review progress to the frontend.
+      These names are the binding contract between backend emitters and frontend listeners.
+    definition: |
+      Event names (snake_case, matching existing SSE event pattern):
+        review_started:    { slug: string, round: number }
+        review_finding:    { slug: string, finding: ReviewFinding }
+        review_complete:   { slug: string, status: "pass"|"issues_found", summary: ReviewSummary }
+        review_revision_started:  { slug: string, round: number }
+        review_revision_complete: { slug: string, round: number }
+        review_skipped:    { slug: string }
+        review_failed:     { slug: string, error: string }
+    location: "scout-and-wave-web/pkg/api/review_handler.go"
+
+  - name: "Review API Endpoints"
+    description: |
+      HTTP API endpoints for review agent operations.
+    definition: |
+      GET  /api/wave/{slug}/review      -> ReviewFindingsResponse (JSON)
+      POST /api/wave/{slug}/review/skip  -> 204 No Content
+      Patterns: Follow existing handleWaveStart/handleWaveMerge patterns in wave_runner.go
+    location: "scout-and-wave-web/pkg/api/review_handler.go"
+
+  - name: "ReviewModel Config Field"
+    description: |
+      New field in AgentConfig struct and SAWConfig for the review agent model.
+    definition: |
+      Go: AgentConfig.ReviewModel string `json:"review_model"`
+      TypeScript: SAWConfig.agent.review_model: string
+      Default: same as scout_model if unset
+    location: "scout-and-wave-web/pkg/api/types.go"
+
+  - name: "Reducer Review Actions"
+    description: |
+      New action types for the frontend waveEventsReducer to handle review SSE events.
+    definition: |
+      Action types (TypeScript union members):
+        | { type: 'REVIEW_STARTED'; round: number }
+        | { type: 'REVIEW_FINDING'; finding: ReviewFinding }
+        | { type: 'REVIEW_COMPLETE'; status: string; summary: ReviewSummary }
+        | { type: 'REVIEW_REVISION_STARTED'; round: number }
+        | { type: 'REVIEW_REVISION_COMPLETE'; round: number }
+        | { type: 'REVIEW_SKIPPED' }
+        | { type: 'REVIEW_FAILED'; error: string }
+
+      State additions to AppWaveState:
+        reviewStatus: 'idle' | 'running' | 'passed' | 'failed' | 'skipped'
+        reviewRound: number
+        reviewFindings: ReviewFinding[]
+        reviewSummary?: ReviewSummary
+        reviewError?: string
+    location: "scout-and-wave-web/web/src/hooks/waveEventsReducer.ts"
+
+  - name: "sawtools review-impl Command"
+    description: |
+      CLI command for deterministic/mechanical review checks (Phase 2 of hybrid approach).
+      Fast, cheap checks that run before the full Review Agent.
+    definition: |
+      Command: sawtools review-impl <impl-doc-path> [--repo-root <path>]
+      Output: JSON with check results
+        {
+          "checks": [
+            { "check": "function_signature_match", "status": "pass"|"fail", "details": "..." },
+            { "check": "file_exists", "status": "pass"|"fail", "details": "..." },
+            { "check": "route_wiring", "status": "pass"|"fail", "details": "..." },
+            { "check": "sse_event_match", "status": "pass"|"fail", "details": "..." }
+          ],
+          "summary": { "pass": N, "fail": N },
+          "verdict": "pass"|"issues_found"
+        }
+      Checks performed:
+        1. All files in file_ownership with action:"modify" exist on disk
+        2. Interface contract function signatures match actual source (regex-based)
+        3. SSE event names in agent tasks match between emitter and listener references
+        4. Route paths in agent tasks match registered routes in server.go
+    location: "scout-and-wave-go/cmd/saw/review_impl_cmd.go"
+
+# File Ownership
+file_ownership:
+  # Wave 1 — Protocol docs (scout-and-wave repo)
+  - file: "protocol/participants.md"
+    agent: "A"
+    wave: 1
+    action: "modify"
+    repo: "scout-and-wave"
+  - file: "protocol/execution-rules.md"
+    agent: "B"
+    wave: 1
+    action: "modify"
+    repo: "scout-and-wave"
+  - file: "protocol/state-machine.md"
+    agent: "C"
+    wave: 1
+    action: "modify"
+    repo: "scout-and-wave"
+  - file: "implementations/claude-code/prompts/agents/review-agent.md"
+    agent: "D"
+    wave: 1
+    action: "new"
+    repo: "scout-and-wave"
+  # Wave 2 — Protocol docs that depend on Wave 1
+  - file: "protocol/procedures.md"
+    agent: "E"
+    wave: 2
+    action: "modify"
+    repo: "scout-and-wave"
+    depends_on: ["A", "B", "C", "D"]
+  - file: "docs/architecture.md"
+    agent: "F"
+    wave: 2
+    action: "modify"
+    repo: "scout-and-wave"
+    depends_on: ["A", "B", "C", "D"]
+  # Wave 3 — Go SDK + Web backend (cross-repo)
+  - file: "cmd/saw/review_impl_cmd.go"
+    agent: "G"
+    wave: 3
+    action: "new"
+    repo: "scout-and-wave-go"
+  - file: "cmd/saw/review_impl_cmd_test.go"
+    agent: "G"
+    wave: 3
+    action: "new"
+    repo: "scout-and-wave-go"
+  - file: "pkg/api/review_handler.go"
+    agent: "H"
+    wave: 3
+    action: "new"
+    repo: "scout-and-wave-web"
+  - file: "pkg/api/review_handler_test.go"
+    agent: "H"
+    wave: 3
+    action: "new"
+    repo: "scout-and-wave-web"
+  - file: "pkg/api/types.go"
+    agent: "I"
+    wave: 3
+    action: "modify"
+    repo: "scout-and-wave-web"
+  - file: "pkg/api/server.go"
+    agent: "I"
+    wave: 3
+    action: "modify"
+    repo: "scout-and-wave-web"
+  - file: "pkg/api/stage_state.go"
+    agent: "I"
+    wave: 3
+    action: "modify"
+    repo: "scout-and-wave-web"
+  # Wave 4 — Frontend (scout-and-wave-web)
+  - file: "web/src/hooks/waveEventsReducer.ts"
+    agent: "J"
+    wave: 4
+    action: "modify"
+    repo: "scout-and-wave-web"
+  - file: "web/src/hooks/useWaveEvents.ts"
+    agent: "J"
+    wave: 4
+    action: "modify"
+    repo: "scout-and-wave-web"
+  - file: "web/src/components/review/ReviewFindingsPanel.tsx"
+    agent: "K"
+    wave: 4
+    action: "new"
+    repo: "scout-and-wave-web"
+  - file: "web/src/components/ReviewScreen.tsx"
+    agent: "K"
+    wave: 4
+    action: "modify"
+    repo: "scout-and-wave-web"
+  - file: "web/src/api.ts"
+    agent: "L"
+    wave: 4
+    action: "modify"
+    repo: "scout-and-wave-web"
+  - file: "web/src/types.ts"
+    agent: "L"
+    wave: 4
+    action: "modify"
+    repo: "scout-and-wave-web"
+
+# Waves
+waves:
+  - number: 1
+    agents:
+      - id: "A"
+        task: |
+          ## What to Implement
+
+          Add the Review Agent as the 6th participant role in `protocol/participants.md`.
+          Insert the new section AFTER the Integration Agent section and BEFORE the
+          "Correctness Rationale" section.
+
+          ## Exact Content to Add
+
+          Add a new `## Review Agent` section following the exact pattern of existing
+          participants (Orchestrator, Scout, Scaffold Agent, Wave Agent, Integration Agent).
+          The section must include:
+
+          1. **Execution mode:** Asynchronous
+
+          2. **Responsibilities paragraph:** An asynchronous agent launched by the orchestrator
+             after E16 validation passes and before entering REVIEWED state. Reads the IMPL doc
+             and ALL source files referenced in agent tasks, interface contracts, and file
+             ownership table. Cross-references the IMPL against the actual codebase to find:
+             function signature mismatches, missing types, unwired connections, missing pipeline
+             steps, and architectural gaps. Produces a structured review document (not IMPL
+             modifications). The orchestrator feeds review findings back to Scout for revision.
+             Runs up to 2 review rounds (Scout -> Review -> Scout revision -> Review verification).
+             Never modifies source files or the IMPL doc directly.
+
+          3. **Constraint role:** `reviewer`
+             The `reviewer` constraint restricts the Review Agent to read-only operations on
+             source files and produces output only as a review document appended to the IMPL doc.
+
+          4. **Required capabilities:**
+             - Read source files (all files referenced in IMPL doc)
+             - Read IMPL docs (full manifest including agent tasks, interface contracts,
+               file ownership, scaffolds)
+             - Execute read-only analysis commands (grep, find, AST queries)
+             - Write structured review document to IMPL doc
+             - Parse function signatures and type definitions from source code
+
+          5. **Forbidden actions:**
+             - Modify any source files
+             - Modify the IMPL doc (except appending review report)
+             - Create or delete files
+             - Execute build or test commands that modify state
+             - Launch other agents
+             - Implement features or fix code
+
+          ## Interfaces to Implement
+
+          Use the exact terminology from interface contracts:
+          - Participant name: Review Agent
+          - Execution mode: Asynchronous
+          - Constraint role: reviewer
+          - Subagent type: review-agent
+
+          ## Interfaces to Call
+
+          Reference existing participants:
+          - Integration Agent — predecessor participant (Review Agent comes after)
+          - Correctness Rationale — section to insert before
+
+          ## Tests to Write
+
+          No tests (documentation-only work).
+
+          ## Verification Gate
+
+          ```bash
+          grep -q "## Review Agent" protocol/participants.md
+          grep -q "reviewer" protocol/participants.md
+          grep -q "E28" protocol/participants.md
+          ```
+
+          ## Constraints
+
+          - Do NOT modify any existing participant section. Only ADD the Review Agent section.
+          - Follow the exact formatting pattern of the Integration Agent section.
+          - Place the section AFTER Integration Agent and BEFORE Correctness Rationale.
+          - Preserve all existing content verbatim.
+        files:
+          - "protocol/participants.md"
+        dependencies: []
+
+      - id: "B"
+        task: |
+          ## What to Implement
+
+          Add E28 (Pre-Review Semantic Validation) to `protocol/execution-rules.md`.
+          Insert the new rule AFTER E27 and BEFORE the Cross-References section.
+
+          ## Exact Content to Add
+
+          Add a `## E28: Pre-Review Semantic Validation` section following the pattern
+          of E27 (most recent rule). Include:
+
+          - **Trigger:** E16 validation passes (SCOUT_VALIDATING -> structural valid)
+          - **Required action:** Orchestrator launches Review Agent to cross-reference IMPL
+            against codebase. Checks: function signatures match, types exist, routes
+            registered, SSE events match emitter/listener, pipeline steps complete.
+          - **Review categories:** signature_mismatch, missing_type, unwired_connection,
+            missing_edge_case, architectural_gap, naming_mismatch
+          - **Severity levels:** critical, high, medium, low
+          - **Revision loop:** max 2 rounds. Scout -> Review -> Scout revision -> Review verify.
+          - **On loop exhaustion:** Enter REVIEWED with findings attached.
+          - **Skip flag:** --skip-review bypasses E28 entirely.
+
+          Also update:
+          - "E1-E26"/"E1-E27" references to "E1-E28"
+          - Cross-References section: add E28 entry
+
+          ## Interfaces to Implement
+
+          - Rule number: E28
+          - Rule name: Pre-Review Semantic Validation
+          - State reference: SCOUT_REVIEWING
+          - Review categories and severity levels per interface contract
+
+          ## Interfaces to Call
+
+          - E16 (Scout Output Validation) — E28 runs after E16 passes
+          - E25 (Integration Validation) — E28 is the proactive counterpart
+          - E27 (Planned Integration Waves) — E28 is the next rule
+
+          ## Tests to Write
+
+          No tests (documentation-only work).
+
+          ## Verification Gate
+
+          ```bash
+          grep -q "## E28: Pre-Review Semantic Validation" protocol/execution-rules.md
+          grep -q "SCOUT_REVIEWING" protocol/execution-rules.md
+          grep -q "E28.*Review Agent" protocol/execution-rules.md
+          ```
+
+          ## Constraints
+
+          - Do NOT modify existing rules (E1-E27). Only ADD E28 and update range references.
+          - Follow E27 formatting pattern.
+          - Place AFTER E27, BEFORE Cross-References.
+        files:
+          - "protocol/execution-rules.md"
+        dependencies: []
+
+      - id: "C"
+        task: |
+          ## What to Implement
+
+          Add the SCOUT_REVIEWING state to `protocol/state-machine.md`. This requires
+          modifications in multiple sections of the file.
+
+          ## Exact Changes to Make
+
+          ### 1. State Catalog Table
+          Add SCOUT_REVIEWING between SCOUT_VALIDATING and REVIEWED.
+
+          ### 2. Primary Flow (Success Path)
+          Update the ASCII flow diagram:
+          SCOUT_VALIDATING -> SCOUT_REVIEWING -> REVIEWED
+
+          ### 3. Add New Failure Path — Review Revision Loop
+          SCOUT_REVIEWING self-loop when critical/high findings + revisions remain.
+
+          ### 4. State Transition Guards
+          Add: SCOUT_VALIDATING -> SCOUT_REVIEWING, SCOUT_REVIEWING -> REVIEWED,
+          SCOUT_REVIEWING -> SCOUT_REVIEWING (self-loop), SCOUT_REVIEWING -> BLOCKED.
+
+          ### 5. State Entry Actions Table
+          Add SCOUT_REVIEWING entry.
+
+          ### 6. Correctness Properties
+          Update rule range to E1-E28.
+
+          ### 7. Backward Compatibility Note
+          --skip-review causes SCOUT_VALIDATING -> REVIEWED directly.
+
+          ## Interfaces to Implement
+
+          - State name: SCOUT_REVIEWING
+          - Rule: E28
+          - Transitions per interface contract
+
+          ## Tests to Write
+
+          No tests (documentation-only work).
+
+          ## Verification Gate
+
+          ```bash
+          grep -q "SCOUT_REVIEWING" protocol/state-machine.md
+          grep -q "E28" protocol/state-machine.md
+          grep -q "SCOUT_VALIDATING.*SCOUT_REVIEWING" protocol/state-machine.md
+          ```
+
+          ## Constraints
+
+          - Do NOT modify existing state definitions. Only ADD SCOUT_REVIEWING.
+          - The SCOUT_VALIDATING -> REVIEWED transition must still exist (guarded by --skip-review).
+          - Update correctness properties rule range to E1-E28.
+        files:
+          - "protocol/state-machine.md"
+        dependencies: []
+
+      - id: "D"
+        task: |
+          ## What to Implement
+
+          Create a new Review Agent prompt file at
+          `implementations/claude-code/prompts/agents/review-agent.md`.
+
+          Follow the pattern of existing agent prompts (integration-agent.md, scaffold-agent.md,
+          wave-agent.md) for frontmatter and structure.
+
+          ## Exact Content to Create
+
+          ### Frontmatter
+          ```
+          ---
+          name: review-agent
+          description: Scout-and-Wave review agent (E28) that cross-references IMPL docs against the actual codebase
+          tools: Read, Grep, Glob, Bash
+          color: orange
+          background: true
+          ---
+          ```
+
+          ### Agent Prompt Body — 5-Phase Review Workflow:
+          1. Header: `# Review Agent: Pre-Review Semantic Validation (E28)`
+          2. Identity: Generator-Critic pattern (Scout = optimistic, Review = adversarial)
+          3. Input: IMPL doc path, wave number
+          4. Phase 1 (Inventory): Extract file paths from IMPL
+          5. Phase 2 (Ground Truth): Read all files, extract signatures/types
+          6. Phase 3 (Cross-Reference): Verify IMPL matches codebase
+          7. Phase 4 (Gap Analysis): Find unwired connections, missing steps
+          8. Phase 5 (Report): Produce structured review_report YAML
+          9. Severity guide: critical/high/medium/low per interface contract
+          10. Verdict logic: pass/revise/escalate
+          11. Completion: sawtools set-completion with agent id "reviewer"
+          12. Rules: NEVER modify source, read-only, evidence-based
+
+          ## Verification Gate
+
+          ```bash
+          test -f implementations/claude-code/prompts/agents/review-agent.md
+          grep -q "name: review-agent" implementations/claude-code/prompts/agents/review-agent.md
+          grep -q "E28" implementations/claude-code/prompts/agents/review-agent.md
+          grep -q "Phase 1" implementations/claude-code/prompts/agents/review-agent.md
+          ```
+
+          ## Constraints
+
+          - Tools list: Read, Grep, Glob, Bash — NO Write or Edit (read-only agent).
+          - Review document format must match "Review Document Structure" interface contract.
+          - Include version comment `<!-- review-agent v0.1.0 -->`.
+        files:
+          - "implementations/claude-code/prompts/agents/review-agent.md"
+        dependencies: []
+
+  - number: 2
+    agents:
+      - id: "E"
+        task: |
+          ## What to Implement
+
+          Add "Procedure 1.5: Review Agent (Pre-Review Semantic Validation)" to
+          `protocol/procedures.md`. Insert AFTER Procedure 1 (Scout) and BEFORE
+          Procedure 2 (Scaffold Agent).
+
+          Include: entry/exit states, 7-step workflow (Launch, Inventory, Ground truth,
+          Cross-reference, Gap analysis, Report, Completion), orchestrator actions after
+          review (pass -> REVIEWED, revise -> Scout revision loop, limit reached -> REVIEWED
+          with findings, agent failure -> BLOCKED).
+
+          Update the Overview section to include Review Agent in participant roles list.
+
+          ## Interfaces to Implement
+
+          - Procedure 1.5, SCOUT_REVIEWING, E28, Review Agent, max 2 rounds, --skip-review
+
+          ## Verification Gate
+
+          ```bash
+          grep -q "Procedure 1.5" protocol/procedures.md
+          grep -q "Review Agent" protocol/procedures.md
+          grep -q "E28" protocol/procedures.md
+          grep -q "SCOUT_REVIEWING" protocol/procedures.md
+          ```
+
+          ## Constraints
+
+          - Do NOT modify existing procedures (1-6). Only ADD 1.5 and update Overview.
+          - Follow Procedure 1 (Scout) formatting pattern.
+        files:
+          - "protocol/procedures.md"
+        dependencies:
+          - "A"
+          - "B"
+          - "C"
+          - "D"
+
+      - id: "F"
+        task: |
+          ## What to Implement
+
+          Update `docs/architecture.md` to include the Review Agent in the architecture
+          diagram, execution flow, and configuration sections.
+
+          Changes:
+          1. System Overview Diagram: Add Review Agent box between Scout and Scaffold
+          2. Execution Flow Phase 1: Add review step (E28) after E16 validation
+          3. Configuration: Add review_model to agent config
+          4. Core Components: Add Review Agent subsection
+          5. Error Handling: Note review agent failure is non-blocking
+          6. See Also: Add E28 and review-agent.md references
+
+          ## Interfaces to Implement
+
+          - Review Agent, E28, SCOUT_REVIEWING, review-agent, review_model
+
+          ## Verification Gate
+
+          ```bash
+          grep -q "Review Agent" docs/architecture.md
+          grep -q "E28" docs/architecture.md
+          grep -q "review_model" docs/architecture.md
+          ```
+
+          ## Constraints
+
+          - Do NOT restructure existing document. Only ADD Review Agent references.
+          - Preserve all existing content verbatim.
+        files:
+          - "docs/architecture.md"
+        dependencies:
+          - "A"
+          - "B"
+          - "C"
+          - "D"
+
+  - number: 3
+    agents:
+      - id: "G"
+        task: |
+          ## What to Implement
+
+          Create `sawtools review-impl` command in the scout-and-wave-go repository.
+          This is the deterministic/mechanical subset of review checks — fast, cheap
+          checks that run before the full Review Agent.
+
+          Repository: /Users/dayna.blackwell/code/scout-and-wave-go
+
+          ## Files to Create
+
+          1. `cmd/saw/review_impl_cmd.go` — Cobra command implementation
+          2. `cmd/saw/review_impl_cmd_test.go` — Unit tests
+
+          ## Command Design
+
+          ```
+          sawtools review-impl <impl-doc-path> [--repo-root <path>] [--format json|text]
+          ```
+
+          Follow the existing command pattern from `cmd/saw/validate_cmd.go` and
+          `cmd/saw/finalize_impl_cmd.go`. Use cobra.Command with RunE.
+
+          ## Checks to Implement
+
+          1. **File existence check:** For each entry in file_ownership with action:"modify",
+             verify the file exists on disk relative to repo-root.
+
+          2. **Interface contract signature match:** For each interface_contract with a
+             `location` field, read that file and regex-search for the function/type name.
+             Report pass if found, fail if not.
+
+          3. **Scaffold file check:** For each scaffold entry, verify the file either
+             exists (if status is "committed") or does not yet exist (if status is "pending").
+
+          Use `pkg/protocol.Load()` to parse the IMPL doc (same as validate_cmd.go).
+
+          ## Output Format
+
+          JSON to stdout:
+          ```json
+          {
+            "checks": [
+              { "check": "file_exists", "file": "pkg/api/server.go", "status": "pass" },
+              { "check": "signature_match", "name": "HandleReview", "file": "pkg/api/review.go", "status": "fail", "details": "function not found" }
+            ],
+            "summary": { "pass": 5, "fail": 1 },
+            "verdict": "issues_found"
+          }
+          ```
+
+          ## Interfaces to Implement
+
+          - `newReviewImplCmd() *cobra.Command` — registered in root.go AddCommand
+          - JSON output matching "sawtools review-impl Command" interface contract
+
+          ## Interfaces to Call
+
+          - `protocol.Load(path)` — parse IMPL doc
+          - `os.Stat()` — file existence
+          - `os.ReadFile()` + `regexp.MatchString()` — signature matching
+
+          ## Tests to Write
+
+          1. TestReviewImplCmd_AllFilesExist — IMPL with existing files, expect all pass
+          2. TestReviewImplCmd_MissingFile — IMPL referencing nonexistent file, expect fail
+          3. TestReviewImplCmd_SignatureMatch — IMPL with interface contract, verify match
+          4. TestReviewImplCmd_EmptyImpl — minimal IMPL with no files, expect pass
+
+          ## Verification Gate
+
+          ```bash
+          cd /Users/dayna.blackwell/code/scout-and-wave-go
+          go build ./...
+          go vet ./...
+          go test ./cmd/saw/ -run TestReviewImpl -count=1
+          ```
+
+          ## Constraints
+
+          - Follow existing command patterns (validate_cmd.go for structure).
+          - Register in root.go via rootCmd.AddCommand(newReviewImplCmd()).
+          - Use protocol.Load() not manual YAML parsing.
+          - Output JSON to stdout (not stderr).
+          - Exit code 0 on pass, 1 on issues_found.
+        files:
+          - "cmd/saw/review_impl_cmd.go"
+          - "cmd/saw/review_impl_cmd_test.go"
+        dependencies:
+          - "E"
+          - "F"
+
+      - id: "H"
+        task: |
+          ## What to Implement
+
+          Create the review handler for the web app backend. This file handles the
+          review agent execution flow during scout runs and provides API endpoints
+          for review data.
+
+          Repository: /Users/dayna.blackwell/code/scout-and-wave-web
+
+          ## Files to Create
+
+          1. `pkg/api/review_handler.go` — Review agent handler + SSE events
+          2. `pkg/api/review_handler_test.go` — Unit tests
+
+          ## API Endpoints
+
+          ### GET /api/wave/{slug}/review
+          Returns the current review findings for a slug. Read from the IMPL doc's
+          review_report field using protocol.Load().
+
+          Response (200):
+          ```json
+          {
+            "status": "pass|issues_found|revision_requested",
+            "round": 1,
+            "findings": [...],
+            "summary": { "critical": 0, "high": 0, "medium": 0, "low": 0, "verdict": "pass" }
+          }
+          ```
+          Response (404): No review report exists yet.
+
+          ### POST /api/wave/{slug}/review/skip
+          Marks the review as skipped. Sets a flag in the stage state so the
+          wave runner skips the review step.
+          Response: 204 No Content.
+
+          ## SSE Events
+
+          Emit the following events through the slug's SSE broker (s.broker.Publish):
+          - `review_started`:    { slug, round }
+          - `review_finding`:    { slug, finding: { id, category, severity, location, description, evidence, recommendation } }
+          - `review_complete`:   { slug, status, summary: { critical, high, medium, low, verdict } }
+          - `review_revision_started`:  { slug, round }
+          - `review_revision_complete`: { slug, round }
+          - `review_skipped`:    { slug }
+          - `review_failed`:     { slug, error }
+
+          ## Review Execution Function
+
+          Create `func (s *Server) runReviewAgent(ctx context.Context, slug, implPath, repoPath, reviewModel string, publish func(string, interface{})) error`
+
+          This function:
+          1. Publishes review_started event
+          2. Launches review-agent subagent (same pattern as engine.RunScaffold)
+          3. Streams findings as review_finding events
+          4. On completion, publishes review_complete
+          5. If critical/high findings found AND round < 2:
+             - Publishes review_revision_started
+             - Feeds findings back to Scout for revision (reuses revise flow)
+             - Publishes review_revision_complete
+             - Re-runs review
+          6. Returns nil on success (pass or revision limit reached)
+
+          Follow the patterns in:
+          - `scout.go` (runScoutAgent) for agent launching and SSE event flow
+          - `wave_runner.go` (runWaveLoop) for stage transitions and publish pattern
+
+          ## Interfaces to Implement
+
+          - `handleGetReview(w, r)` — GET /api/wave/{slug}/review
+          - `handleSkipReview(w, r)` — POST /api/wave/{slug}/review/skip
+          - `runReviewAgent(ctx, slug, implPath, repoPath, reviewModel, publish) error`
+          - SSE events matching "SSE Review Events" interface contract
+
+          ## Interfaces to Call
+
+          - `s.broker.Publish(slug, SSEEvent{...})` — SSE publishing
+          - `s.resolveIMPLPath(slug)` — resolve IMPL path
+          - `protocol.Load(implPath)` — read review report
+          - `s.makePublisher(slug)` — create publish function
+          - `engine.RunReviewAgent()` — if it exists, or shell out to claude with review-agent prompt
+
+          ## Tests to Write
+
+          1. TestHandleGetReview_NoReport — 404 when no review exists
+          2. TestHandleGetReview_WithReport — 200 with review data
+          3. TestHandleSkipReview — 204 response
+          4. TestReviewSSEEvents — verify event names match contract
+
+          ## Verification Gate
+
+          ```bash
+          cd /Users/dayna.blackwell/code/scout-and-wave-web
+          go build ./...
+          go vet ./...
+          go test ./pkg/api/ -run TestHandleGetReview -count=1
+          go test ./pkg/api/ -run TestHandleSkipReview -count=1
+          ```
+
+          ## Constraints
+
+          - Follow existing handler patterns exactly (see handleWaveStart, handleScoutRun).
+          - SSE event names must be snake_case matching the interface contract.
+          - The review agent launch should use the same claude invocation pattern as
+            scout.go's runScoutAgent (exec.Command with claude CLI).
+          - Do NOT modify server.go or types.go — Agent I handles route registration
+            and type additions.
+        files:
+          - "pkg/api/review_handler.go"
+          - "pkg/api/review_handler_test.go"
+        dependencies:
+          - "E"
+          - "F"
+
+      - id: "I"
+        task: |
+          ## What to Implement
+
+          Wire up the review agent into the web app's server infrastructure: register
+          routes, add types, add the review stage to the stage state machine.
+
+          Repository: /Users/dayna.blackwell/code/scout-and-wave-web
+
+          ## Files to Modify
+
+          ### 1. pkg/api/server.go — Route Registration
+
+          Add these routes in the New() function, after the existing scout routes
+          (around line 112, after handleScoutCancel):
+
+          ```go
+          // Review Agent (E28)
+          s.mux.HandleFunc("GET /api/wave/{slug}/review", s.handleGetReview)
+          s.mux.HandleFunc("POST /api/wave/{slug}/review/skip", s.handleSkipReview)
+          ```
+
+          Also add `reviewRuns sync.Map` field to the Server struct (same pattern as
+          scoutRuns, scaffoldRuns).
+
+          ### 2. pkg/api/types.go — AgentConfig Update
+
+          Add `ReviewModel` field to AgentConfig struct:
+          ```go
+          type AgentConfig struct {
+              ScoutModel       string `json:"scout_model"`
+              ReviewModel      string `json:"review_model"`
+              WaveModel        string `json:"wave_model"`
+              ChatModel        string `json:"chat_model"`
+              ScaffoldModel    string `json:"scaffold_model"`
+              IntegrationModel string `json:"integration_model"`
+          }
+          ```
+
+          ### 3. pkg/api/stage_state.go — Review Stage
+
+          Add a new execution stage constant:
+          ```go
+          StageReview ExecutionStage = "review"
+          ```
+
+          This goes between StageScaffold and StageWaveExecute in the const block.
+
+          ### 4. pkg/api/wave_runner.go — Review Integration
+
+          In runWaveLoop(), after E16/scaffold and before the wave execution loop,
+          add the review step:
+
+          ```go
+          // Read review model from config
+          reviewModel := ""
+          // (add to the existing config reading block around line 101-114)
+
+          // Run review agent (E28) if not skipped
+          onStage(StageReview, StageStatusRunning, 0, "")
+          if err := s.runReviewAgent(ctx, slug, implPath, repoPath, reviewModel, publish); err != nil {
+              onStage(StageReview, StageStatusFailed, 0, err.Error())
+              publish("run_failed", map[string]string{"error": "review failed: " + err.Error()})
+              return
+          }
+          onStage(StageReview, StageStatusComplete, 0, "")
+          ```
+
+          Note: runWaveLoop is a package-level function, not a Server method. The review
+          agent integration needs to either:
+          (a) Accept the review function as a parameter, or
+          (b) Use engine.RunReviewAgent() if available
+
+          Look at how engine.RunScaffold() is called at line 131 for the pattern. The
+          review step should follow the same pattern: call an engine function that handles
+          the agent execution, passing in a publish callback.
+
+          ## Interfaces to Implement
+
+          - Route registration for review endpoints
+          - ReviewModel in AgentConfig
+          - StageReview execution stage
+          - Review step in wave_runner.go
+
+          ## Interfaces to Call
+
+          - handleGetReview, handleSkipReview from review_handler.go (Agent H creates these)
+          - engine.RunReviewAgent or s.runReviewAgent (Agent H creates the implementation)
+
+          ## Tests to Write
+
+          No new test file — the existing server_test.go patterns cover route registration.
+          Agent H's tests cover the handler logic.
+
+          ## Verification Gate
+
+          ```bash
+          cd /Users/dayna.blackwell/code/scout-and-wave-web
+          go build ./...
+          go vet ./...
+          ```
+
+          ## Constraints
+
+          - Add routes in the EXACT pattern of existing routes (method path handler).
+          - The ReviewModel field goes between ScoutModel and WaveModel in AgentConfig.
+          - StageReview constant goes between StageScaffold and StageWaveExecute.
+          - The review step in wave_runner must be skippable (check for --skip-review
+            flag or review_skipped stage state).
+          - Do NOT create review_handler.go — Agent H owns that file.
+          - Read reviewModel from saw.config.json alongside other model reads (line ~103).
+        files:
+          - "pkg/api/server.go"
+          - "pkg/api/types.go"
+          - "pkg/api/stage_state.go"
+        dependencies:
+          - "E"
+          - "F"
+
+  - number: 4
+    agents:
+      - id: "J"
+        task: |
+          ## What to Implement
+
+          Add review agent SSE event handling to the frontend reducer and SSE listener.
+
+          Repository: /Users/dayna.blackwell/code/scout-and-wave-web
+
+          ## Files to Modify
+
+          ### 1. web/src/hooks/waveEventsReducer.ts
+
+          #### Add to AppWaveState interface (after fixBuildError field):
+          ```typescript
+          reviewStatus: 'idle' | 'running' | 'passed' | 'failed' | 'skipped'
+          reviewRound: number
+          reviewFindings: ReviewFinding[]
+          reviewSummary?: ReviewSummary
+          reviewError?: string
+          ```
+
+          #### Add ReviewFinding and ReviewSummary types:
+          ```typescript
+          export interface ReviewFinding {
+            id: string
+            category: string
+            severity: 'critical' | 'high' | 'medium' | 'low'
+            location: string
+            impl_reference: string
+            description: string
+            evidence: string
+            recommendation: string
+          }
+
+          export interface ReviewSummary {
+            critical: number
+            high: number
+            medium: number
+            low: number
+            verdict: 'pass' | 'revise' | 'escalate'
+          }
+          ```
+
+          #### Add to WaveAction union type:
+          ```typescript
+          | { type: 'REVIEW_STARTED'; round: number }
+          | { type: 'REVIEW_FINDING'; finding: ReviewFinding }
+          | { type: 'REVIEW_COMPLETE'; status: string; summary: ReviewSummary }
+          | { type: 'REVIEW_REVISION_STARTED'; round: number }
+          | { type: 'REVIEW_REVISION_COMPLETE'; round: number }
+          | { type: 'REVIEW_SKIPPED' }
+          | { type: 'REVIEW_FAILED'; error: string }
+          ```
+
+          #### Add to initialWaveState:
+          ```typescript
+          reviewStatus: 'idle',
+          reviewRound: 0,
+          reviewFindings: [],
+          ```
+
+          #### Add reducer cases:
+          Follow the exact pattern of existing cases (SCAFFOLD_STARTED, FIX_BUILD_STARTED):
+
+          - REVIEW_STARTED: set reviewStatus='running', reviewRound=action.round, clear findings
+          - REVIEW_FINDING: append finding to reviewFindings array
+          - REVIEW_COMPLETE: set reviewStatus='passed' if action.status==='pass' else 'failed',
+            set reviewSummary=action.summary
+          - REVIEW_REVISION_STARTED: set reviewRound=action.round, reviewStatus='running'
+          - REVIEW_REVISION_COMPLETE: (no state change, next REVIEW_STARTED resets)
+          - REVIEW_SKIPPED: set reviewStatus='skipped'
+          - REVIEW_FAILED: set reviewStatus='failed', reviewError=action.error
+
+          ### 2. web/src/hooks/useWaveEvents.ts
+
+          Add SSE event listeners for each review event. Follow the exact pattern of
+          existing listeners (e.g., scaffold_started, fix_build_started):
+
+          ```typescript
+          es.addEventListener('review_started', (event: MessageEvent) => {
+            const data = JSON.parse(event.data) as { slug: string; round: number }
+            dispatch({ type: 'REVIEW_STARTED', round: data.round })
+          })
+
+          es.addEventListener('review_finding', (event: MessageEvent) => {
+            const data = JSON.parse(event.data) as { slug: string; finding: ReviewFinding }
+            dispatch({ type: 'REVIEW_FINDING', finding: data.finding })
+          })
+
+          es.addEventListener('review_complete', (event: MessageEvent) => {
+            const data = JSON.parse(event.data) as { slug: string; status: string; summary: ReviewSummary }
+            dispatch({ type: 'REVIEW_COMPLETE', status: data.status, summary: data.summary })
+          })
+
+          es.addEventListener('review_revision_started', (event: MessageEvent) => {
+            const data = JSON.parse(event.data) as { slug: string; round: number }
+            dispatch({ type: 'REVIEW_REVISION_STARTED', round: data.round })
+          })
+
+          es.addEventListener('review_revision_complete', (event: MessageEvent) => {
+            const data = JSON.parse(event.data) as { slug: string; round: number }
+            dispatch({ type: 'REVIEW_REVISION_COMPLETE', round: data.round })
+          })
+
+          es.addEventListener('review_skipped', () => {
+            dispatch({ type: 'REVIEW_SKIPPED' })
+          })
+
+          es.addEventListener('review_failed', (event: MessageEvent) => {
+            const data = JSON.parse(event.data) as { slug: string; error: string }
+            dispatch({ type: 'REVIEW_FAILED', error: data.error })
+          })
+          ```
+
+          Also import ReviewFinding and ReviewSummary from waveEventsReducer and
+          re-export them.
+
+          ## Interfaces to Implement
+
+          - ReviewFinding type, ReviewSummary type
+          - 7 new WaveAction union members
+          - 7 new reducer cases
+          - 7 new SSE event listeners
+          - AppWaveState review fields
+
+          ## Interfaces to Call
+
+          - dispatch() — existing reducer dispatch
+          - SSE event names from "SSE Review Events" interface contract
+
+          ## Tests to Write
+
+          No separate test file. The existing reducer pattern does not have unit tests.
+          TypeScript typecheck (tsc --noEmit) is the verification.
+
+          ## Verification Gate
+
+          ```bash
+          cd /Users/dayna.blackwell/code/scout-and-wave-web/web
+          npx tsc --noEmit
+          ```
+
+          ## Constraints
+
+          - SSE event names must be snake_case matching backend: review_started, review_finding, etc.
+          - Follow exact patterns of existing listeners (scaffold_started, fix_build_started).
+          - Do NOT modify any existing reducer cases or SSE listeners.
+          - Export ReviewFinding and ReviewSummary types for use by other components.
+        files:
+          - "web/src/hooks/waveEventsReducer.ts"
+          - "web/src/hooks/useWaveEvents.ts"
+        dependencies:
+          - "G"
+          - "H"
+          - "I"
+
+      - id: "K"
+        task: |
+          ## What to Implement
+
+          Create the ReviewFindingsPanel component and integrate it into ReviewScreen.
+
+          Repository: /Users/dayna.blackwell/code/scout-and-wave-web
+
+          ## Files to Create/Modify
+
+          ### 1. web/src/components/review/ReviewFindingsPanel.tsx (NEW)
+
+          A panel that displays review findings grouped by severity. Follows the
+          exact visual pattern of existing review panels (PreMortemPanel, KnownIssuesPanel).
+
+          Props:
+          ```typescript
+          interface ReviewFindingsPanelProps {
+            findings: ReviewFinding[]
+            summary?: ReviewSummary
+            status: 'idle' | 'running' | 'passed' | 'failed' | 'skipped'
+            round: number
+            error?: string
+            onSkip?: () => void
+          }
+          ```
+
+          Layout:
+          - Header with review status badge (color-coded: green=passed, red=failed,
+            yellow=running, gray=skipped/idle)
+          - Round indicator: "Round 1/2" or "Round 2/2"
+          - Summary bar showing counts by severity (critical:red, high:orange,
+            medium:yellow, low:gray)
+          - Findings list grouped by severity (critical first, then high, medium, low)
+          - Each finding is an expandable card showing:
+            - Severity badge (color-coded)
+            - Category badge
+            - Location (monospace)
+            - Description (summary)
+            - Expandable: evidence, recommendation, impl_reference
+          - "Skip Review" button when status is 'running' or 'idle'
+          - Error display when status is 'failed'
+
+          Follow the styling patterns of:
+          - PreMortemPanel.tsx for the table/card layout
+          - KnownIssuesPanel.tsx for expandable items
+          - SuitabilityBadge.tsx for color-coded status badges
+
+          Use Tailwind classes matching the existing dark/light theme support
+          (dark:bg-gray-900, dark:text-gray-100, etc.).
+
+          ### 2. web/src/components/ReviewScreen.tsx (MODIFY)
+
+          Add the review findings panel to the ReviewScreen:
+
+          1. Import ReviewFindingsPanel from './review/ReviewFindingsPanel'
+          2. Import ReviewFinding, ReviewSummary from hooks/waveEventsReducer
+          3. Add 'review-findings' to the PanelKey type union
+          4. Add { key: 'review-findings', label: 'Review' } to the panels array
+             (place it in the "Quality" group, before 'quality-gates')
+          5. Add the panel rendering in the active panels section:
+             ```tsx
+             {activePanels.includes('review-findings') && (
+               <div className="panel-animate">
+                 <ReviewFindingsPanel
+                   findings={reviewFindings}
+                   summary={reviewSummary}
+                   status={reviewStatus}
+                   round={reviewRound}
+                   error={reviewError}
+                   onSkip={() => skipReview(slug)}
+                 />
+               </div>
+             )}
+             ```
+          6. The review data comes from useWaveEvents hook state — add it to the
+             destructured state or pass it through props
+
+          Note: The ReviewScreen currently doesn't use useWaveEvents directly for the
+          review panel data. You'll need to either:
+          - Subscribe to the slug's SSE stream for review events, OR
+          - Fetch review data from GET /api/wave/{slug}/review on mount and on panel open
+
+          The simplest approach: use the fetch-on-mount pattern (like fetchDiskWaveStatus)
+          and add a `fetchReviewFindings` call from api.ts (Agent L adds this function).
+
+          ## Interfaces to Implement
+
+          - ReviewFindingsPanel component
+          - Review panel integration in ReviewScreen
+
+          ## Interfaces to Call
+
+          - ReviewFinding, ReviewSummary types from waveEventsReducer (Agent J exports these)
+          - fetchReviewFindings from api.ts (Agent L creates this)
+          - skipReview from api.ts (Agent L creates this)
+
+          ## Tests to Write
+
+          No tests needed — TypeScript typecheck covers the integration.
+
+          ## Verification Gate
+
+          ```bash
+          cd /Users/dayna.blackwell/code/scout-and-wave-web/web
+          npx tsc --noEmit
+          ```
+
+          ## Constraints
+
+          - Follow EXACT styling patterns of existing review panels (PreMortemPanel, KnownIssuesPanel).
+          - Use Tailwind dark mode classes (dark: prefix) consistently.
+          - The panel should work with empty findings (show "No review findings" message).
+          - Do NOT modify waveEventsReducer.ts or useWaveEvents.ts (Agent J owns those).
+          - Do NOT modify api.ts or types.ts (Agent L owns those).
+        files:
+          - "web/src/components/review/ReviewFindingsPanel.tsx"
+          - "web/src/components/ReviewScreen.tsx"
+        dependencies:
+          - "G"
+          - "H"
+          - "I"
+
+      - id: "L"
+        task: |
+          ## What to Implement
+
+          Add review-related API functions and TypeScript types to the frontend.
+
+          Repository: /Users/dayna.blackwell/code/scout-and-wave-web
+
+          ## Files to Modify
+
+          ### 1. web/src/api.ts
+
+          Add these functions following the exact pattern of existing API functions
+          (e.g., fetchDiskWaveStatus, rerunAgent):
+
+          ```typescript
+          // Review Agent API
+          export interface ReviewFindingsResponse {
+            status: string
+            round: number
+            findings: Array<{
+              id: string
+              category: string
+              severity: string
+              location: string
+              impl_reference: string
+              description: string
+              evidence: string
+              recommendation: string
+            }>
+            summary: {
+              critical: number
+              high: number
+              medium: number
+              low: number
+              verdict: string
+            }
+          }
+
+          export async function fetchReviewFindings(slug: string): Promise<ReviewFindingsResponse> {
+            const r = await fetch(`/api/wave/${encodeURIComponent(slug)}/review`)
+            if (!r.ok) throw new Error(`HTTP ${r.status}`)
+            return r.json()
+          }
+
+          export async function skipReview(slug: string): Promise<void> {
+            const r = await fetch(`/api/wave/${encodeURIComponent(slug)}/review/skip`, {
+              method: 'POST',
+            })
+            if (!r.ok) throw new Error(`HTTP ${r.status}`)
+          }
+          ```
+
+          ### 2. web/src/types.ts
+
+          Add the ReviewModel to the SAWConfig TypeScript type. Find the existing
+          SAWConfig interface (or the agent config section) and add:
+
+          ```typescript
+          review_model?: string
+          ```
+
+          This goes in the agent config object alongside scout_model, wave_model, etc.
+          Look for the existing SAWConfig type definition and add the field there.
+
+          Also add review-related types that may be needed by components:
+
+          ```typescript
+          export interface ReviewFinding {
+            id: string
+            category: string
+            severity: 'critical' | 'high' | 'medium' | 'low'
+            location: string
+            impl_reference: string
+            description: string
+            evidence: string
+            recommendation: string
+          }
+
+          export interface ReviewSummary {
+            critical: number
+            high: number
+            medium: number
+            low: number
+            verdict: 'pass' | 'revise' | 'escalate'
+          }
+          ```
+
+          Note: These types are also defined in waveEventsReducer.ts by Agent J.
+          Having them in types.ts is fine — the canonical types are in the reducer,
+          these serve as convenience re-exports for components that import from types.ts.
+
+          ## Interfaces to Implement
+
+          - fetchReviewFindings(slug) — GET /api/wave/{slug}/review
+          - skipReview(slug) — POST /api/wave/{slug}/review/skip
+          - ReviewFindingsResponse interface
+          - ReviewFinding, ReviewSummary types in types.ts
+          - review_model in SAWConfig
+
+          ## Interfaces to Call
+
+          - fetch() — standard browser fetch API
+          - Existing api.ts patterns for error handling
+
+          ## Tests to Write
+
+          No tests — TypeScript typecheck covers the type correctness.
+
+          ## Verification Gate
+
+          ```bash
+          cd /Users/dayna.blackwell/code/scout-and-wave-web/web
+          npx tsc --noEmit
+          ```
+
+          ## Constraints
+
+          - Follow EXACT patterns of existing API functions (see fetchDiskWaveStatus, rerunAgent).
+          - Use encodeURIComponent for slug in URL paths.
+          - Error handling: throw new Error with HTTP status.
+          - Do NOT modify waveEventsReducer.ts (Agent J owns it).
+          - Do NOT modify ReviewScreen.tsx (Agent K owns it).
+        files:
+          - "web/src/api.ts"
+          - "web/src/types.ts"
+        dependencies:
+          - "G"
+          - "H"
+          - "I"
+
+# Pre-Mortem
+# NOTE: integration_connectors was removed — not a valid schema key.
+# Integration wiring info is captured in agent tasks for Wave 3 Agent I.
+pre_mortem:
+  overall_risk: medium
+  rows:
+    - scenario: "Cross-reference inconsistency between protocol files"
+      likelihood: medium
+      impact: high
+      mitigation: |
+        Interface contracts define exact terminology (E28, SCOUT_REVIEWING, Review Agent,
+        review-agent). All agents use these exact terms. Post-merge grep verification
+        confirms all 6 files use identical names.
+    - scenario: "Review Agent prompt too long or unfocused"
+      likelihood: medium
+      impact: medium
+      mitigation: |
+        Agent D has detailed guidance on the 5-phase workflow structure. The prompt
+        follows existing agent prompt patterns (integration-agent.md as template).
+    - scenario: "SSE event name mismatch between backend and frontend"
+      likelihood: medium
+      impact: high
+      mitigation: |
+        Interface contract "SSE Review Events" defines exact event names. Both Agent H
+        (backend) and Agent J (frontend) reference this contract. Post-merge grep
+        verification confirms event names match.
+    - scenario: "TypeScript type duplication between reducer and types.ts"
+      likelihood: high
+      impact: low
+      mitigation: |
+        Both Agent J and Agent L define ReviewFinding/ReviewSummary types. This is
+        intentional — reducer types are canonical, types.ts are convenience re-exports.
+        If they drift, tsc --noEmit catches it at type-check time.
+    - scenario: "wave_runner.go review integration conflicts with Agent H handler"
+      likelihood: medium
+      impact: medium
+      mitigation: |
+        Agent I (wave_runner.go changes) and Agent H (review_handler.go) are in the
+        same wave with disjoint file ownership. Agent I only adds the call site;
+        Agent H creates the implementation. The function signature is defined in the
+        interface contract.
+    - scenario: "root.go AddCommand registration missed for review-impl"
+      likelihood: medium
+      impact: medium
+      mitigation: |
+        Listed as integration_connector. Integration Agent will wire this after Wave 3.
+
+# Known Issues
+known_issues:
+  - title: "Protocol README.md references 'five participant roles'"
+    description: |
+      protocol/README.md line 13 says "five participant roles" and lists only 5.
+      This will need updating but is NOT in any agent's file ownership.
+    status: "Pre-existing, will be stale after this feature"
+    workaround: "Manual update of protocol/README.md after merge"
+  - title: "message-formats.md needs review_report schema"
+    description: |
+      The review_report YAML structure is defined in interface contracts and the
+      Review Agent prompt, but message-formats.md should also document it. Deferred
+      to avoid scope creep.
+    status: "Deferred"
+    workaround: "The Review Agent prompt contains the authoritative format definition"
+  - title: "engine.RunReviewAgent may not exist yet"
+    description: |
+      Agent H references engine.RunReviewAgent() which does not exist in
+      scout-and-wave-go yet. The handler may need to shell out to claude directly
+      (same pattern as runScoutAgent in scout.go) until an engine function is added.
+    status: "Known gap — Agent H should use claude CLI directly as fallback"
+    workaround: "Use exec.Command claude invocation pattern from scout.go"
+
+# Completion Reports (empty at scout time)
+completion_reports: {}

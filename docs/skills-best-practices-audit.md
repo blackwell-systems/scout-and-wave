@@ -64,7 +64,7 @@ Claude's agent skills documentation emphasizes:
 - Clear command documentation with exact syntax
 
 **Effective cross-referencing:**
-- Invariant/execution rule numbering (I1-I6, E1-E23) for audit trail
+- Invariant/execution rule numbering (I1-I6, E1-E26) for audit trail
 - Typed-block syntax for structured sections
 - Links to protocol documentation files
 
@@ -313,7 +313,7 @@ Record `test_command` and `lint_command` in IMPL doc header.
 **Gap:** Mixed usage of terms across skills creates ambiguity:
 - "IMPL doc" vs "manifest" vs "coordination artifact" (all mean the same thing)
 - "Wave agent" vs "implementation agent" vs "agent"
-- "Scaffolds section" vs "Scaffolds table" vs "scaffold file list"
+- "Scaffolds section" (YAML section in IMPL doc) vs "scaffold files" (actual source code .go/.rs files)
 
 **Recommendation:**
 Pick canonical terms and use consistently:
@@ -322,8 +322,10 @@ Pick canonical terms and use consistently:
 |---------|---------------|-------|
 | YAML file in docs/IMPL/ | IMPL doc | manifest, coordination artifact |
 | Agent executing in Wave 1/2/3 | Wave agent | implementation agent |
-| Scaffolds section of IMPL doc | Scaffolds section | scaffolds table, scaffold list |
-| sawtools CLI | sawtools | Protocol SDK CLI, SDK commands |
+| YAML section listing files to create | Scaffolds section | scaffolds table, scaffold list |
+| Actual source code files created | scaffold files | scaffolds (ambiguous without "files") |
+| SDK toolkit binary | sawtools | Protocol SDK CLI, SDK commands |
+| Web app orchestration binary | saw | saw CLI (ambiguous) |
 | Main orchestrator (this skill) | Orchestrator | main agent, parent agent |
 
 **Impact:** Reduced cognitive load, clearer when agents reference the same concept, easier onboarding.
