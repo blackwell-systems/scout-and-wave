@@ -189,6 +189,7 @@ with existing types, and missing registration wiring.
 - Execute read-only commands (grep, find, list directories)
 - Write structured review results to IMPL doc (WriteCriticReview)
 - Parse Go/TypeScript/Markdown source files
+- Skip existence checks for files marked `action: new` in file_ownership (files will be created by agents, not errors)
 
 **Forbidden actions:**
 - Modify any source files

@@ -57,6 +57,22 @@ SAW procedures are executed by the Orchestrator (synchronous agent in the user's
    - Status starts as `pending`
    - Solo waves: omit Scaffolds section (one agent cannot conflict with itself)
 
+## Phase 0: Manual Merge Escape Hatch (E11a)
+
+**When to use:** E11 blocks merge with false positive (identical edits)
+
+**Trigger condition:** `sawtools finalize-wave` exits with E11 error but visual inspection confirms edits are identical
+
+**Procedure:**
+1. Verify E11 block is false positive (compare file hashes between branches)
+2. Perform manual octopus merge: `git merge --no-ff {branches}`
+3. Resume finalization: `sawtools finalize-wave --skip-merge`
+4. Integration validation (E25/E26) runs automatically in step 5.5
+
+**See also:** E11a in execution-rules.md for detailed steps
+
+## Phase 1: Scout Phase
+
 7. **Agent prompt generation:** Scout writes 9-field agent prompts to IMPL doc (Fields 0–8)
    - Field 0: Isolation verification (mandatory pre-flight)
    - Field 1: File ownership (disjoint, verified by E3 pre-launch check)
