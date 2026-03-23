@@ -511,6 +511,37 @@ from a PROGRAM manifest. These contracts are IMMUTABLE — the Scout must:
    cascade section with their `reason` and `type` fields. These files are not in any
    agent's ownership but may break if interface contracts change semantically.
 
+   **Cross-wave migration safety.** When a feature removes, renames, or
+   consolidates a module/package (e.g., migrating `pkg/types` into
+   `pkg/protocol`), apply these rules to prevent intermediate build breaks:
+
+   **Rule 1 — Single-wave preference.** If ALL files importing the old module
+   fit in one wave (<=6 agents), put them in the same wave as the signature
+   changes. This eliminates the cross-wave break entirely.
+
+   **Rule 2 — Re-export bridge pattern.** When too many callers exist for a
+   single wave, use a 3-wave approach:
+   - Wave 1: Make signature changes in the target package AND add re-export
+     bridges (type aliases, wrapper functions, re-exports) in the old package
+     that forward to the new signatures.
+   - Wave 2: Update callers to import from the new package directly.
+   - Wave 3: Remove the re-export bridges (cleanup wave).
+
+   The bridge keeps the codebase buildable between waves because old import
+   paths still resolve.
+
+   **Rule 3 — Detection heuristic.** Before finalizing wave assignments, check:
+   if file_ownership puts files from the same directory/package in different
+   waves AND any agent changes exported function signatures or type definitions,
+   flag it as a potential migration boundary. Either consolidate into one wave
+   (Rule 1) or ensure re-export bridges are planned (Rule 2).
+
+   Language-specific bridge mechanisms:
+   - Go: type alias (`type OldName = newpkg.NewName`), var alias, wrapper function
+   - TypeScript/JavaScript: `export { NewName as OldName } from './new-module'`
+   - Python: `from new_module import NewName as OldName` in `__init__.py`
+   - Rust: `pub use new_crate::NewType as OldType;`
+
 9. **Integration completeness audit.** Before writing agent prompts, verify
    every new artifact has its full wiring chain assigned. For each file in
    file_ownership, check: does it define something (CLI command, API handler,
