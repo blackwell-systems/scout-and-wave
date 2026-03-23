@@ -1,0 +1,368 @@
+completion_date: "2026-03-23"
+title: File Read Dedup Cache Integration
+feature_slug: file-read-dedup-integration
+verdict: SUITABLE
+suitability_assessment: |
+    This work completes the file-read dedup cache feature by integrating existing,
+    tested middleware into the remaining backends and wiring stats collection through
+    the runner to the orchestrator.
+
+    **Decomposition**: 3 files to modify (bedrock/client.go, openai/client.go,
+    runner.go), each can be assigned to different agents. The orchestrator.go change
+    depends on runner.go exposing stats, so it goes in Wave 2.
+
+    **Investigation**: None needed. All patterns exist in api/client.go. This is
+    pure copy-paste integration following established middleware patterns.
+
+    **Interfaces**: DedupStats struct already exists in protocol/types.go. Runner
+    needs one new method: `DedupStats() *dedup.Stats`. No new types.
+
+    **Implementation status**: Core dedup logic (cache.go, middleware.go) is complete
+    and tested. API backend already uses dedup. Bedrock and OpenAI backends need
+    integration. Stats collection chain (Runner → Orchestrator) is missing.
+
+    **Parallelization value**: 3 independent backend integrations (Bedrock, OpenAI,
+    Runner stats) can run in parallel. Orchestrator integration depends on Runner,
+    so goes in Wave 2. Build/test cycle for Go is ~5-10s. Estimated time savings:
+    - Wave 1: 3 agents × 8 min avg = 24 min sequential vs ~10 min parallel
+    - Wave 2: 1 agent × 5 min
+    - Total SAW: ~15 min vs ~29 min sequential → 48% faster
+
+    Estimated times:
+    - Scout phase: ~5 min (dependency mapping, interface contracts, IMPL doc)
+    - Agent execution: ~15 min (4 agents, 2 waves with parallelism)
+    - Merge & verification: ~3 min
+    Total SAW time: ~23 min
+
+    Sequential baseline: ~29 min (4 agents × 7 min avg sequential time)
+    Time savings: ~6 min (21% faster)
+
+    Recommendation: Clear speedup. Work is highly parallelizable and follows
+    established patterns.
+test_command: go test ./...
+lint_command: go vet ./...
+file_ownership:
+    - file: pkg/agent/backend/bedrock/client.go
+      agent: A
+      wave: 1
+      action: modify
+    - file: pkg/agent/backend/openai/client.go
+      agent: B
+      wave: 1
+      action: modify
+    - file: pkg/agent/runner.go
+      agent: C
+      wave: 1
+      action: modify
+    - file: pkg/orchestrator/orchestrator.go
+      agent: D
+      wave: 2
+      action: modify
+      depends_on:
+        - C
+interface_contracts:
+    - name: Runner.DedupStats
+      description: Exposes dedup stats from the backend after agent execution
+      definition: |
+        // DedupStats returns dedup metrics from the most recent agent execution.
+        // Returns nil if no execution has occurred or backend does not support dedup.
+        func (r *Runner) DedupStats() *dedup.Stats
+      location: pkg/agent/runner.go
+    - name: Backend.DedupStats
+      description: Backend interface method for retrieving dedup stats (already exists in API backend)
+      definition: |
+        // DedupStats returns dedup metrics from the most recent Run call.
+        // Returns nil if no run has been made yet or dedup is not configured.
+        func (c *Client) DedupStats() *dedup.Stats
+      location: pkg/agent/backend/*/client.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            # Agent A: Integrate Dedup Cache into Bedrock Backend
+
+            ## What to Implement
+            Add dedup cache middleware to the Bedrock backend client, following the
+            exact pattern already implemented in `pkg/agent/backend/api/client.go`.
+
+            ## Interfaces to Consume
+            - `dedup.WithDedup(w)` — wraps a Workshop to add dedup middleware
+            - `dedup.Cache.Stats()` — returns dedup metrics
+
+            ## Implementation Steps
+            1. Import `github.com/blackwell-systems/scout-and-wave-go/pkg/agent/dedup`
+            2. Add `dedupCache *dedup.Cache` field to `Client` struct (after `commitTracker`)
+            3. In `buildWorkshop()` method (line ~236):
+               - After creating base workshop `w`, wrap it: `w, c.dedupCache = dedup.WithDedup(w)`
+               - Place this BEFORE the `WithConstraints` middleware (same order as api/client.go)
+            4. Add `DedupStats()` method to Client (mirror api/client.go lines 117-125):
+               ```go
+               func (c *Client) DedupStats() *dedup.Stats {
+                   if c.dedupCache == nil {
+                       return nil
+                   }
+                   stats := c.dedupCache.Stats()
+                   return &stats
+               }
+               ```
+
+            ## Tests
+            - `go test ./pkg/agent/backend/bedrock` — verify existing tests still pass
+            - No new tests needed (dedup is tested in pkg/agent/dedup/cache_test.go)
+
+            ## Verification Gate
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go
+            go build ./...
+            go vet ./pkg/agent/backend/bedrock
+            go test ./pkg/agent/backend/bedrock -timeout 30s
+            ```
+
+            ## Constraints
+            - Do NOT modify any dedup package files (cache.go, middleware.go)
+            - Follow api/client.go pattern exactly (lines 18, 40, 84-94, 117-125)
+            - Preserve all existing Bedrock backend functionality
+            - DedupStats() must return nil if dedupCache is nil (thread-safe)
+
+            ## Files
+            - Modify: `pkg/agent/backend/bedrock/client.go`
+            - Reference: `pkg/agent/backend/api/client.go` (dedup integration pattern)
+          files:
+            - pkg/agent/backend/bedrock/client.go
+        - id: B
+          task: |
+            # Agent B: Integrate Dedup Cache into OpenAI Backend
+
+            ## What to Implement
+            Add dedup cache middleware to the OpenAI backend client, following the
+            exact pattern already implemented in `pkg/agent/backend/api/client.go`.
+
+            ## Interfaces to Consume
+            - `dedup.WithDedup(w)` — wraps a Workshop to add dedup middleware
+            - `dedup.Cache.Stats()` — returns dedup metrics
+
+            ## Implementation Steps
+            1. Import `github.com/blackwell-systems/scout-and-wave-go/pkg/agent/dedup`
+            2. Add `dedupCache *dedup.Cache` field to `Client` struct (after line 33)
+            3. In `buildWorkshop()` method (line ~73):
+               - After creating base workshop `w`, wrap it: `w, c.dedupCache = dedup.WithDedup(w)`
+               - Place this BEFORE the `WithTiming` middleware (if present)
+            4. Add `DedupStats()` method to Client (mirror api/client.go lines 117-125):
+               ```go
+               // DedupStats returns dedup metrics from the most recent Run call.
+               // Returns nil if no run has been made yet.
+               func (c *Client) DedupStats() *dedup.Stats {
+                   if c.dedupCache == nil {
+                       return nil
+                   }
+                   stats := c.dedupCache.Stats()
+                   return &stats
+               }
+               ```
+
+            ## Tests
+            - `go test ./pkg/agent/backend/openai` — verify existing tests still pass
+            - No new tests needed (dedup is tested in pkg/agent/dedup/cache_test.go)
+
+            ## Verification Gate
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go
+            go build ./...
+            go vet ./pkg/agent/backend/openai
+            go test ./pkg/agent/backend/openai -timeout 30s
+            ```
+
+            ## Constraints
+            - Do NOT modify any dedup package files (cache.go, middleware.go)
+            - Follow api/client.go pattern exactly (lines 18, 40, 84-94, 117-125)
+            - Preserve all existing OpenAI backend functionality
+            - DedupStats() must return nil if dedupCache is nil (thread-safe)
+
+            ## Files
+            - Modify: `pkg/agent/backend/openai/client.go`
+            - Reference: `pkg/agent/backend/api/client.go` (dedup integration pattern)
+          files:
+            - pkg/agent/backend/openai/client.go
+        - id: C
+          task: |
+            # Agent C: Expose DedupStats from Runner
+
+            ## What to Implement
+            Add a `DedupStats()` method to the Runner that retrieves dedup stats from
+            the backend after agent execution. This enables the orchestrator to collect
+            and persist stats in completion reports.
+
+            ## Interfaces to Consume
+            - `backend.Backend.DedupStats()` — backend interface method (implemented by
+              api, bedrock, openai clients)
+
+            ## Implementation Steps
+            1. Add `DedupStats()` method to Runner (after line 109):
+               ```go
+               // DedupStats returns dedup metrics from the most recent agent execution.
+               // Returns nil if the backend does not implement DedupStats or no execution occurred.
+               func (r *Runner) DedupStats() *dedup.Stats {
+                   type dedupStatsProvider interface {
+                       DedupStats() *dedup.Stats
+                   }
+                   if provider, ok := r.client.(dedupStatsProvider); ok {
+                       return provider.DedupStats()
+                   }
+                   return nil
+               }
+               ```
+            2. Import `github.com/blackwell-systems/scout-and-wave-go/pkg/agent/dedup`
+               at the top of the file
+
+            ## Tests
+            - `go test ./pkg/agent` — verify existing runner tests still pass
+            - The method uses type assertion to avoid breaking backends that don't
+              implement DedupStats yet
+
+            ## Verification Gate
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go
+            go build ./...
+            go vet ./pkg/agent
+            go test ./pkg/agent -timeout 30s
+            ```
+
+            ## Constraints
+            - Do NOT modify backend interface (backend.Backend) — use type assertion
+            - Method must return nil for backends without DedupStats (backward compatible)
+            - Do NOT modify Execute/ExecuteStreaming methods — this is stats retrieval only
+
+            ## Files
+            - Modify: `pkg/agent/runner.go`
+          files:
+            - pkg/agent/runner.go
+      base_commit: b36aa7c1366e4e7faa7cdb0405dc7271bdce3ef2
+    - number: 2
+      agents:
+        - id: D
+          task: |
+            # Agent D: Collect DedupStats in Orchestrator
+
+            ## What to Implement
+            In the orchestrator's `launchAgent()` function, retrieve dedup stats from
+            the runner after agent execution and populate the completion report before
+            saving to the IMPL doc. This is the critical missing integration point.
+
+            ## Interfaces to Consume
+            - `Runner.DedupStats()` — returns dedup metrics (implemented by Agent C)
+            - `protocol.CompletionReport.DedupStats` field — already exists in types.go
+
+            ## Implementation Steps
+            1. Locate the completion report creation in `launchAgent()` (around line 844)
+            2. After the `report` variable is created or populated (line 844-851), add:
+               ```go
+               // Populate dedup stats if available
+               if r.runner != nil {
+                   if stats := r.runner.DedupStats(); stats != nil {
+                       report.DedupStats = stats
+                   }
+               }
+               ```
+            3. Place this BEFORE the report persistence block (lines 857-869) so the
+               stats are included when saved to the IMPL doc
+
+            ## Tests
+            - `go test ./pkg/orchestrator` — verify existing orchestrator tests pass
+            - Integration test: Run a wave with API backend and verify DedupStats appear
+              in the saved completion report
+
+            ## Verification Gate
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go
+            go build ./...
+            go vet ./pkg/orchestrator
+            go test ./pkg/orchestrator -timeout 60s
+            ```
+
+            ## Constraints
+            - Only modify lines 844-856 (completion report creation block)
+            - Do NOT modify report persistence logic (lines 857-869)
+            - Handle nil runner gracefully (orchestrator may not always have runner set)
+            - Preserve all existing completion report fields
+
+            ## Files
+            - Modify: `pkg/orchestrator/orchestrator.go`
+          files:
+            - pkg/orchestrator/orchestrator.go
+          dependencies:
+            - C
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./...
+          required: true
+        - type: lint
+          command: go vet ./...
+          required: true
+        - type: test
+          command: go test ./... -timeout 120s
+          required: true
+completion_reports:
+    A:
+        status: complete
+        branch: saw/file-read-dedup-integration/wave1-agent-A
+        commit: abe6115
+        files_changed:
+            - pkg/agent/backend/bedrock/client.go
+        verification: PASS
+    B:
+        status: complete
+        branch: saw/file-read-dedup-integration/wave1-agent-B
+        commit: cb362a4
+        files_changed:
+            - pkg/agent/backend/openai/client.go
+        verification: 'PASS: build, vet, and tests all passing'
+    C:
+        status: complete
+        branch: saw/file-read-dedup-integration/wave1-agent-C
+        commit: d1c60d9
+        files_changed:
+            - pkg/agent/runner.go
+        verification: PASS
+    D:
+        status: complete
+        branch: main
+        commit: 7b52702
+        files_changed:
+            - pkg/orchestrator/orchestrator.go
+        verification: PASS
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: Bedrock or OpenAI backend tests fail after dedup integration
+          likelihood: low
+          impact: medium
+          mitigation: |
+            Follow api/client.go pattern exactly. Dedup middleware is transparent and
+            doesn't modify tool semantics — only intercepts Read results. If tests fail,
+            verify middleware order matches api/client.go (dedup before constraints/timing).
+        - scenario: Runner.DedupStats() returns nil unexpectedly in orchestrator
+          likelihood: low
+          impact: low
+          mitigation: |
+            Type assertion in Runner.DedupStats() provides backward compatibility. If
+            backend doesn't implement DedupStats, method returns nil gracefully. Orchestrator
+            checks for nil before populating report field.
+        - scenario: Stats not persisted to IMPL doc after agent completion
+          likelihood: medium
+          impact: high
+          mitigation: |
+            This is the primary integration gap being fixed. Agent D must place stats
+            collection BEFORE report persistence (lines 857-869). Test by running a
+            wave with API backend and verifying completion_reports[agent].dedup_stats
+            field is populated in the saved IMPL doc.
+        - scenario: OpenAI backend has different buildWorkshop structure than API backend
+          likelihood: low
+          impact: low
+          mitigation: |
+            Current openai/client.go shows buildWorkshop at line 73 with standard pattern.
+            If structure differs, adapt dedup wrapper placement to occur after base
+            workshop creation and before other middleware (WithTiming).
+state: WAVE_PENDING

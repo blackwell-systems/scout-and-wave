@@ -29,3 +29,9 @@
   - IMPL doc: docs/IMPL/complete/IMPL-documentation-fixes.yaml
 - **program-tier-isolation**: completed 2026-03-22, 3 waves, 7 agents
   - IMPL doc: docs/IMPL/complete/IMPL-program-tier-isolation.yaml
+- **bedrock-sso-device-auth**: completed 2026-03-23, 2 waves, 4 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-bedrock-sso-device-auth.yaml
+- **h5-prelaunch-validation-gate**: completed 2026-03-23, 2 waves, 3 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-h5-prelaunch-validation-gate.yaml
+- **file-read-dedup-integration**: completed 2026-03-23, 2 waves, 4 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-file-read-dedup-integration.yaml
