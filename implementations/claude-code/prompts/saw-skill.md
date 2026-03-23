@@ -1,10 +1,6 @@
 ---
 name: saw
-description: |
-  Scout-and-Wave protocol for parallel agent coordination. Use when implementing
-  features that can be decomposed into multiple independent work units with clear
-  interfaces. Suitable for: multi-package architectures, parallel refactors,
-  coordinated feature additions across modules.
+description: "Parallel agent coordination: Scout analyzes your code and produces a plan; Wave agents implement in parallel. Use for multi-package features, parallel refactors, coordinated changes."
 argument-hint: "[bootstrap <project-name> | interview <description> | scout [--model <m>] <feature> | wave [--impl <id>] [--auto] [--model <m>] | status [--impl <id>]]"
 disable-model-invocation: true
 user-invocable: true
