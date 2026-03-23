@@ -48,21 +48,7 @@ for cross-referencing and audit.*
    1. `<project-root>/saw.config.json` (per-project, same file the web app uses)
    2. `~/.claude/saw.config.json` (global default for all projects)
 
-   The config uses per-role model fields:
-   ```json
-   {
-     "agent": {
-       "scout_model": "claude-sonnet-4-5",
-       "wave_model": "claude-sonnet-4-5",
-       "chat_model": "claude-sonnet-4-5",
-       "integration_model": "claude-sonnet-4-5",
-       "scaffold_model": "claude-sonnet-4-5",
-       "planner_model": "claude-sonnet-4-5",
-       "critic_model": "claude-sonnet-4-5"
-     }
-   }
-   ```
-   For `/saw scout`, read `agent.scout_model`. For `/saw wave`, read `agent.wave_model`. For `/saw program execute`, read `agent.planner_model` for the Planner agent. For Scaffold agents, read `agent.scaffold_model`. For critic-agent runs, read `agent.critic_model`. Empty string or missing field means "inherit parent model." If neither config file exists, fall through to level 3.
+   The config uses per-role model fields under `agent`: `scout_model`, `wave_model`, `chat_model`, `integration_model`, `scaffold_model`, `planner_model`, `critic_model`. For `/saw scout`, read `agent.scout_model`. For `/saw wave`, read `agent.wave_model`. For `/saw program execute`, read `agent.planner_model` for the Planner agent. For Scaffold agents, read `agent.scaffold_model`. For critic-agent runs, read `agent.critic_model`. Empty string or missing field means "inherit parent model." If neither config file exists, fall through to level 3.
 3. **Parent model** — If neither arg nor config specifies a model, agents inherit the parent session's model (no `model:` in frontmatter = inherit).
 
 **Implementation:** The Agent tool does not expose a model parameter, so model override works indirectly. Custom `subagent_type` values (`scout`, `wave-agent`, `scaffold-agent`) inherit the parent session's model. When `--model` is specified explicitly and the custom subagent_type's inherited model doesn't match (e.g., parent is Opus but `--model sonnet` requested), apply the Fallback Rule above.
@@ -86,6 +72,19 @@ in the `CLAUDE_SKILL_DIR` environment variable; if unset, fall back to `~/.claud
 - **agents/critic-agent.md** - Critic subagent definition (E37 pre-wave brief review).
 
 Read the agent template at `${CLAUDE_SKILL_DIR}/agent-template.md` for the 9-field agent prompt format.
+
+## On-Demand References
+
+Load these files ONLY when the matching subcommand is invoked:
+
+| Subcommand | Reference file |
+|------------|----------------|
+| `/saw program *` | Read `${CLAUDE_SKILL_DIR}/references/program-flow.md` |
+| `/saw amend *` | Read `${CLAUDE_SKILL_DIR}/references/amend-flow.md` |
+| Agent failure or post-merge integration | Read `${CLAUDE_SKILL_DIR}/references/failure-routing.md` |
+
+Do not pre-load these files. The core wave loop below handles `/saw scout`,
+`/saw wave`, `/saw status`, `/saw bootstrap`, and `/saw interview` directly.
 
 ## Invocation Modes
 
@@ -123,50 +122,6 @@ Run once per session on first `/saw` invocation. Skip on subsequent invocations.
 4. **saw.config.json** (informational): Check project root for config — not a blocker
 
 If checks 1-3 fail, print what's missing and how to install it (see `docs/INSTALLATION.md`), then stop.
-
-## sawtools Commands
-
-All operations use the `sawtools` binary. IMPL docs are YAML manifests (`.yaml`).
-
-- `sawtools create-worktrees` — worktree setup for a wave
-- `sawtools verify-commits` — commit verification before merge
-- `sawtools scan-stubs` — E20 stub detection
-- `sawtools merge-agents` — merge wave worktrees to main
-- `sawtools verify-build` — post-merge build verification
-- `sawtools cleanup` — worktree cleanup after merge
-- `sawtools update-status` — update agent/wave status
-- `sawtools update-context` — E18 project memory update
-- `sawtools list-impls` — IMPL doc discovery
-- `sawtools run-wave` — fully automated wave execution
-- `sawtools validate` — E16 manifest validation
-- `sawtools extract-context` — E23 per-agent context extraction
-- `sawtools set-completion` — agent completion report registration
-- `sawtools mark-complete` — E15 SAW:COMPLETE marker and archive to `docs/IMPL/complete/`
-- `sawtools close-impl <manifest>` — batched IMPL close: mark-complete + archive + update-context + clean worktrees (replaces manual 3-step sequence)
-- `sawtools run-gates` — E21/E21A quality gate verification (post-merge and
-  pre-wave baseline; E21B: gates run concurrently when multiple gates defined)
-- `sawtools check-conflicts` — I1 file ownership conflict detection
-- `sawtools validate-scaffolds` — scaffold commit status verification
-- `sawtools freeze-check` — I2 interface contract freeze enforcement
-- `sawtools update-agent-prompt` — E8 downstream prompt updates
-- `sawtools validate-integration <manifest> --wave N` — E25 integration gap detection
-- `sawtools resume-detect` — detect interrupted SAW sessions in the repository
-- `sawtools build-retry-context <manifest> --agent <ID>` — structured failure context for agent retries
-- `sawtools check-program-conflicts <manifest> --tier N` — P1+ pre-flight: verifies no two IMPLs in the tier own the same file (blocks if conflicts found)
-- `sawtools finalize-tier <manifest> --tier N [--auto]` — merges all IMPL branches for the tier to main after IMPL execution completes; `--auto` calls AdvanceTierAutomatically (gate + freeze + advance in one step)
-- `sawtools tier-gate <manifest> --tier N` — tier quality gate verification (E29)
-- `sawtools freeze-contracts <manifest> --tier N` — program contract freezing (E30)
-- `sawtools program-status <manifest>` — full program status report (E32)
-- `sawtools run-scout "<impl-title>" [--program "<manifest>"]` — automated Scout with ScoutCorrectionLoop (auto-retries E16 up to 3 times); `--program` passes frozen program contracts (E31)
-- `sawtools mark-program-complete "<manifest>"` — mark PROGRAM manifest complete and update CONTEXT.md
-- `sawtools update-program-state <manifest> --state <state>` — update PROGRAM manifest state field (E32)
-- `sawtools update-program-impl <manifest> --impl <slug> --status <status>` — update per-IMPL execution status in PROGRAM manifest (E32)
-- `sawtools program-replan <manifest> --reason "<reason>"` — trigger Planner re-engagement for PROGRAM manifest revision (E34)
-- `sawtools create-program-worktrees <manifest> --tier N` — create IMPL branches for a program tier (E28 branch isolation)
-- `sawtools pre-wave-gate <manifest>` — readiness validation before wave launch (checks scaffolds, ownership, freeze, state)
-- `sawtools prepare-wave <manifest> --wave N [--merge-target <branch>]` — atomic wave preparation (worktrees, briefs, journals); runs PreWaveGate inline; `--merge-target` sets baseline branch for verification (default: current HEAD)
-- `sawtools finalize-wave <manifest> --wave N [--merge-target <branch>]` — atomic post-wave pipeline (verify, merge, cleanup); includes ClosedLoopGateRetry (auto-retries failed gates with agent fix loops up to 2 times); `--merge-target` sets merge destination branch (default: current HEAD)
-- `sawtools queue add|list|next` — queue management for daemon (add items, list pending, get next ready item)
 
 ## Execution Models
 
