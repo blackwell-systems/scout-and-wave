@@ -21,6 +21,8 @@ GIT_OWNERSHIP_SYMLINK="$HOME/.local/bin/check_git_ownership"
 CHECK_IMPL_PATH_SYMLINK="$HOME/.local/bin/check_impl_path"
 WARN_STUBS_SYMLINK="$HOME/.local/bin/warn_stubs"
 CHECK_BRANCH_DRIFT_SYMLINK="$HOME/.local/bin/check_branch_drift"
+VALIDATE_LAUNCH_SCRIPT="$SCRIPT_DIR/validate_agent_launch"
+VALIDATE_LAUNCH_SYMLINK="$HOME/.local/bin/validate_agent_launch"
 SETTINGS_FILE="$HOME/.claude/settings.json"
 
 echo "🔧 Installing SAW hooks..."
@@ -139,6 +141,20 @@ else
   echo "   ✓ Created symlink: $CHECK_BRANCH_DRIFT_SYMLINK"
 fi
 chmod +x "$CHECK_BRANCH_DRIFT_SCRIPT"
+
+# validate_agent_launch hook (H5: full pre-launch validation gate)
+echo "   Installing validate_agent_launch..."
+if [ -L "$VALIDATE_LAUNCH_SYMLINK" ]; then
+  ln -sf "$VALIDATE_LAUNCH_SCRIPT" "$VALIDATE_LAUNCH_SYMLINK"
+  echo "   ✓ Symlink updated: $VALIDATE_LAUNCH_SYMLINK"
+elif [ -e "$VALIDATE_LAUNCH_SYMLINK" ]; then
+  echo "   ✗ Error: $VALIDATE_LAUNCH_SYMLINK exists but is not a symlink"
+  exit 1
+else
+  ln -sf "$VALIDATE_LAUNCH_SCRIPT" "$VALIDATE_LAUNCH_SYMLINK"
+  echo "   ✓ Created symlink: $VALIDATE_LAUNCH_SYMLINK"
+fi
+chmod +x "$VALIDATE_LAUNCH_SCRIPT"
 echo
 
 # Step 2: Configure settings.json
@@ -380,6 +396,33 @@ else
   mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
   echo "   ✓ Added PostToolUse branch drift detection hook (H4)"
 fi
+
+# Add validate_agent_launch hook (H5: PreToolUse on Agent for full pre-launch validation)
+VALIDATE_LAUNCH_HOOK_CONFIG=$(cat <<EOF
+{
+  "matcher": "Agent",
+  "hooks": [
+    {
+      "type": "command",
+      "command": "$HOME/.local/bin/validate_agent_launch"
+    }
+  ]
+}
+EOF
+)
+
+VALIDATE_LAUNCH_EXISTING=$(jq -r '.hooks.PreToolUse // [] | map(select(.hooks[]?.command | contains("validate_agent_launch"))) | length' "$SETTINGS_FILE")
+
+if [ "$VALIDATE_LAUNCH_EXISTING" -gt 0 ]; then
+  echo "   ✓ Pre-launch validation hook already configured (skipping)"
+else
+  jq --argjson hook "$VALIDATE_LAUNCH_HOOK_CONFIG" '
+    .hooks.PreToolUse = (.hooks.PreToolUse // []) + [$hook]
+  ' "$SETTINGS_FILE" > "$SETTINGS_FILE.tmp"
+
+  mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
+  echo "   ✓ Added PreToolUse pre-launch validation hook (H5)"
+fi
 echo
 
 # Step 3: Verify installation
@@ -435,6 +478,13 @@ else
   exit 1
 fi
 
+if [ -x "$VALIDATE_LAUNCH_SYMLINK" ]; then
+  echo "   ✓ Pre-launch validation hook executable: $VALIDATE_LAUNCH_SYMLINK"
+else
+  echo "   ✗ Pre-launch validation hook not executable"
+  exit 1
+fi
+
 # Check settings.json
 if jq -e '.hooks.PreToolUse[]?.hooks[]? | select(.command | contains("check_scout_boundaries"))' "$SETTINGS_FILE" &> /dev/null; then
   echo "   ✓ PreToolUse hook configured in settings.json"
@@ -472,16 +522,17 @@ fi
 echo
 echo "✅ Installation complete!"
 echo
-echo "Active hooks (9 total):"
+echo "Active hooks (10 total):"
 echo "  PreToolUse:  check_scout_boundaries (I6 — Scouts can only write IMPL docs)"
 echo "  PreToolUse:  block_claire_paths (blocks .claire typo, suggests .claude)"
 echo "  PreToolUse:  check_wave_ownership (I1 — Wave agents can only write owned files)"
 echo "  PreToolUse:  check_impl_path (H2 — validates IMPL doc path before agent launch)"
+echo "  PreToolUse:  validate_agent_launch (H5 — full pre-launch validation gate)"
 echo "  PostToolUse: validate_impl_on_write (E16 — IMPL docs validated on write)"
 echo "  PostToolUse: check_git_ownership (I1 layer 2 — catch git-level ownership violations)"
 echo "  PostToolUse: warn_stubs (H3 — warns on stub patterns in written code)"
 echo "  PostToolUse: check_branch_drift (H4 — detects commits on wrong branch)"
 echo
 echo "To uninstall:"
-echo "  1. Remove symlinks: rm $SYMLINK_PATH $VALIDATE_SYMLINK $CLAIRE_SYMLINK $WAVE_OWNERSHIP_SYMLINK $GIT_OWNERSHIP_SYMLINK $CHECK_IMPL_PATH_SYMLINK $WARN_STUBS_SYMLINK $CHECK_BRANCH_DRIFT_SYMLINK"
+echo "  1. Remove symlinks: rm $SYMLINK_PATH $VALIDATE_SYMLINK $CLAIRE_SYMLINK $WAVE_OWNERSHIP_SYMLINK $GIT_OWNERSHIP_SYMLINK $CHECK_IMPL_PATH_SYMLINK $WARN_STUBS_SYMLINK $CHECK_BRANCH_DRIFT_SYMLINK $VALIDATE_LAUNCH_SYMLINK"
 echo "  2. Edit $SETTINGS_FILE and remove the PreToolUse/PostToolUse hook entries"

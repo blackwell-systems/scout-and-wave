@@ -1,6 +1,6 @@
 # SAW Claude Code Hooks
 
-Enforcement hooks for CLI-based SAW agents. 9 hooks across PreToolUse and PostToolUse events.
+Enforcement hooks for CLI-based SAW agents. 10 hooks across PreToolUse and PostToolUse events.
 
 ## Hook Summary
 
@@ -13,6 +13,7 @@ Enforcement hooks for CLI-based SAW agents. 9 hooks across PreToolUse and PostTo
 | validate_impl_on_write | PostToolUse | Write | E16 | Validates IMPL schema after write |
 | check_git_ownership | PostToolUse | Bash | I1 | Catches git-level ownership violations |
 | warn_stubs | PostToolUse | Write\|Edit | H3 | Warns on stub patterns in written code |
+| validate_agent_launch | PreToolUse | Agent | H5 | Full pre-launch validation gate (subsumes H2) |
 | check_branch_drift | PostToolUse | Bash | H4 | Detects commits on wrong branch |
 
 ## Installation
@@ -25,7 +26,7 @@ cd ~/code/scout-and-wave/implementations/claude-code/hooks
 ```
 
 The installer:
-- Creates symlinks in `~/.local/bin/` for all 9 hook scripts
+- Creates symlinks in `~/.local/bin/` for all 10 hook scripts
 - Merges hook configs into `~/.claude/settings.json` (preserves existing hooks)
 - Verifies installation and runs basic tests
 
@@ -453,6 +454,67 @@ echo $?  # 0
 # Git commit on correct branch — should exit 0
 echo '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"test\""}}' | check_branch_drift
 echo $?  # 0 (if on expected branch)
+```
+
+---
+
+## Hook 9: Pre-Launch Validation Gate (H5)
+
+**PreToolUse** — Full pre-launch validation gate that checks all SAW agent launch preconditions before dispatching a subagent. Subsumes H2 (IMPL path validation) with 7 additional checks.
+
+### Checks Performed
+
+1. **IMPL path extraction** — Extracts `docs/IMPL/IMPL-*.yaml` path from agent prompt
+2. **IMPL file exists** — Verifies the IMPL doc exists on disk
+3. **Wave number extraction** — Extracts wave number from SAW tag (`[SAW:wave{N}:agent-{ID}]`)
+4. **Agent ID extraction** — Extracts agent ID from SAW tag
+5. **Ownership verification** — Finds `.saw-ownership.json` and verifies agent ID and wave match
+6. **Branch verification** — Verifies worktree branch matches expected pattern (`saw/{slug}/wave{N}-agent-{ID}`)
+7. **Scaffold check** — Checks scaffolds are committed (if any exist in IMPL doc)
+8. **I1 conflict check** — Verifies no file ownership conflicts via `.saw-ownership.json`
+
+Non-SAW agents (no SAW tag in description) are allowed through without checks (exit 0).
+
+### Manual Installation
+
+1. Symlink:
+   ```bash
+   ln -sf ~/code/scout-and-wave/implementations/claude-code/hooks/validate_agent_launch ~/.local/bin/validate_agent_launch
+   ```
+
+2. Add to `~/.claude/settings.json`:
+   ```json
+   {
+     "hooks": {
+       "PreToolUse": [
+         {
+           "matcher": "Agent",
+           "hooks": [
+             {
+               "type": "command",
+               "command": "$HOME/.local/bin/validate_agent_launch"
+             }
+           ]
+         }
+       ]
+     }
+   }
+   ```
+
+### Testing
+
+```bash
+# Non-SAW agent launch — should exit 0 (allowed through)
+echo '{"tool_name":"Agent","tool_input":{"prompt":"Do some work","description":"helper agent"}}' | validate_agent_launch
+echo $?  # 0
+
+# SAW agent launch with valid context — should exit 0
+echo '{"tool_name":"Agent","agent_type":"wave-agent","tool_input":{"prompt":"IMPL doc: docs/IMPL/IMPL-feature.yaml","description":"[SAW:wave1:agent-A] implement feature"}}' | validate_agent_launch
+echo $?  # 0 (if all preconditions met)
+
+# SAW agent launch with missing IMPL — should exit 1
+echo '{"tool_name":"Agent","agent_type":"wave-agent","tool_input":{"prompt":"no impl path here","description":"[SAW:wave1:agent-A] implement feature"}}' | validate_agent_launch 2>&1
+echo $?  # 1 (blocked: no IMPL path found)
 ```
 
 ---
