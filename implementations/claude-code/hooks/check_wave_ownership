@@ -116,4 +116,4 @@ If this file needs to change as part of your task:
    so the Orchestrator can assign a follow-up task or revise the IMPL doc.
 3. Do NOT write to files owned by other agents." >&2
 
-exit 1  # Block
+exit 2  # Block

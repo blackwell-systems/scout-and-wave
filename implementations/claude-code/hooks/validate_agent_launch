@@ -12,15 +12,15 @@
 #     | bash implementations/claude-code/hooks/validate_agent_launch
 #   echo $?  # 0
 #
-#   # SAW agent missing IMPL path — should exit 1
+#   # SAW agent missing IMPL path — should exit 2 (block)
 #   echo '{"tool_name":"Agent","tool_input":{"prompt":"do stuff","description":"[SAW:wave1:agent-A] implement feature"}}' \
 #     | bash implementations/claude-code/hooks/validate_agent_launch
-#   echo $?  # 1
+#   echo $?  # 2
 #
-#   # SAW agent with IMPL path but missing file — should exit 1
+#   # SAW agent with IMPL path but missing file — should exit 2 (block)
 #   echo '{"tool_name":"Agent","tool_input":{"prompt":"IMPL doc: docs/IMPL/IMPL-nonexistent.yaml","description":"[SAW:wave1:agent-A] implement feature"}}' \
 #     | bash implementations/claude-code/hooks/validate_agent_launch
-#   echo $?  # 1
+#   echo $?  # 2
 
 set -euo pipefail
 
@@ -56,7 +56,7 @@ impl_path=$(echo "$prompt" | grep -oE 'docs/IMPL/IMPL-[a-z0-9-]+\.yaml' | head -
 
 if [[ -z "$impl_path" ]]; then
   echo "H5: No IMPL doc path found in agent prompt. Agent ${agent_id} (wave ${wave_num}) cannot launch without an IMPL doc reference in the prompt." >&2
-  exit 1
+  exit 2
 fi
 
 # --- Check 3: IMPL file exists ---
@@ -90,14 +90,14 @@ fi
 
 if [[ -z "$impl_full_path" || ! -f "$impl_full_path" ]]; then
   echo "H5: IMPL doc not found at ${impl_path}. Ensure the IMPL doc exists before launching agent ${agent_id}." >&2
-  exit 1
+  exit 2
 fi
 
 # --- Check 4: IMPL validation ---
 if command -v sawtools &>/dev/null; then
   if ! sawtools validate "$impl_full_path" &>/dev/null; then
     echo "H5: IMPL doc validation failed. The IMPL doc at ${impl_path} did not pass sawtools validate." >&2
-    exit 1
+    exit 2
   fi
 fi
 
@@ -120,7 +120,7 @@ fi
 
 if [[ "$agent_found" != "true" ]]; then
   echo "H5: Agent ${agent_id} not found in wave ${wave_num} of ${impl_path}." >&2
-  exit 1
+  exit 2
 fi
 
 # --- Check 6: .saw-ownership.json check ---
@@ -144,12 +144,12 @@ if [[ -n "$ownership_file" ]]; then
 
   if [[ -n "$own_agent" && "$own_agent" != "$agent_id" ]]; then
     echo "H5: Ownership file mismatch. SAW tag says agent ${agent_id} but .saw-ownership.json says agent ${own_agent}." >&2
-    exit 1
+    exit 2
   fi
 
   if [[ -n "$own_wave" && "$own_wave" != "$wave_num" ]]; then
     echo "H5: Ownership file mismatch. SAW tag says wave ${wave_num} but .saw-ownership.json says wave ${own_wave}." >&2
-    exit 1
+    exit 2
   fi
 
   # --- Check 7: Worktree branch check ---
@@ -160,7 +160,7 @@ if [[ -n "$ownership_file" ]]; then
     # Accept saw/{slug}/wave{N}-agent-{ID} or legacy wave{N}-agent-{ID}
     if [[ ! "$current_branch" =~ wave${wave_num}-agent-${agent_id}$ ]]; then
       echo "H5: Worktree branch mismatch. Expected branch ending in wave${wave_num}-agent-${agent_id} but found ${current_branch}." >&2
-      exit 1
+      exit 2
     fi
   fi
 fi
@@ -173,7 +173,7 @@ if command -v yq &>/dev/null; then
     while IFS= read -r status; do
       if [[ -n "$status" && "$status" != "committed" ]]; then
         echo "H5: Scaffold not committed. All scaffolds must have status 'committed' before agent launch. Found status: ${status}." >&2
-        exit 1
+        exit 2
       fi
     done <<< "$scaffold_statuses"
   fi
@@ -184,7 +184,7 @@ else
     non_committed=$(echo "$scaffold_block" | grep -E 'status:' | grep -vE 'committed' || true)
     if [[ -n "$non_committed" ]]; then
       echo "H5: Scaffold not committed. All scaffolds must have status 'committed' before agent launch." >&2
-      exit 1
+      exit 2
     fi
   fi
 fi

@@ -61,4 +61,4 @@ ERRORS=$(echo "$RESULT" | jq -r '.errors[]?.message // empty' 2>/dev/null)
 
 echo "BLOCKED: IMPL validation failed ($ERROR_COUNT errors). Fix these before continuing:" >&2
 echo "$ERRORS" >&2
-exit 1
+exit 2

@@ -55,4 +55,4 @@ Scout's role is reconnaissance (analyze, plan, document).
 If you need to create source code, write agent prompts in the IMPL doc
 that instruct Wave agents to create those files." >&2
 
-exit 1  # Block
+exit 2  # Block
