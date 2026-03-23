@@ -293,72 +293,15 @@ Follow the brief exactly.
    sawtools update-status "<manifest-path>" --wave <N> --agent <ID> --status complete
    ```
    For partial or blocked agents, use `--status partial` or `--status blocked` respectively.
-7. After all Wave agents in the wave complete, read each agent's completion report from their named section in the IMPL doc (`### Agent {ID} - Completion Report`). **I4: IMPL doc is the single source of truth.** Completion reports, interface contract updates, and status are written to the IMPL doc. Chat output is not the record. If a completion report is missing from the IMPL doc, do not proceed; the agent has not completed the protocol. Agents register completion via `sawtools set-completion "<absolute-path>" --agent "<agent-id>" --status <status> --commit <sha> --branch <branch> --files-changed "<file1,file2>" --verification "<result>"`. **I5: Agents commit before reporting.** Each agent commits its changes to its worktree branch before writing a completion report. If a report is present but the agent's worktree branch has no commits, flag this as a protocol deviation before merging. **E7: Agent failure handling.** If any agent reports `status: partial` or `status: blocked`, the wave does not merge; it goes to BLOCKED. Resolve the failing agent (re-run, manually fix, or descope) before the merge step proceeds. Agents that completed successfully are not re-run, but their worktrees are not merged until the full wave is resolved. Partial merges are not permitted. **E7a: Automatic failure remediation (all modes).** When an agent fails with a correctable issue, build structured retry context before re-launching:
-   ```bash
-   sawtools build-retry-context "<manifest-path>" --agent "<ID>"
-   ```
-   This classifies the error (import/type/test/build/lint), provides targeted fix suggestions, formats a retry prompt, and surfaces the `failure_type` field from the agent's completion report. Read the `failure_type` from the JSON output to determine the retry path before relaunching. Prepend the `prompt_text` field to the agent's prompt on relaunch. **E19: Failure type routing (applies in all modes, not just --auto).** The `failure_type` field on any non-complete completion report drives the orchestrator response automatically:
-   - `transient` → retry automatically, no human gate, up to 2 retries; after 2 exhausted retries, escalate to user
-   - `fixable` → read agent notes, apply the fix described in the notes, relaunch once (1 retry max); if retry fails, escalate to user
-   - `needs_replan` → re-engage Scout with the agent's completion report as additional context; the resulting revised IMPL doc requires human review before re-launching
-   - `escalate` → surface to human immediately (no automatic retry)
-   - `timeout` → retry once with a scope-reduction note prepended to the agent prompt; if retry fails, escalate to user
-   - absent → treat as `escalate` (backward compatibility)
-
-   **E19.1: Per-IMPL reactions override.** If the IMPL doc contains a `reactions:` block, use it to override the E19 defaults above. Each entry maps a failure type to an action and optional max_attempts. Absent entries fall back to E19 defaults. Valid actions: `retry`, `send-fix-prompt`, `pause`, `auto-scout` (treat as `pause` if not implemented). See E19.1 in `protocol/execution-rules.md` for the full schema.
-
-   **reactions block (optional):** Write a `reactions:` block based on the pre-mortem risk assessment and codebase context. Use this to customize failure routing per failure type, overriding the E19 global defaults.
-
-   Write reactions when:
-   - `pre_mortem.overall_risk` is `high` → set transient max_attempts: 3
-   - CI is known to be flaky (detected from .github/workflows or test patterns) → increase timeout retries
-   - Codebase has strict review/merge policies → prefer `pause` over auto-retry
-   - needs_replan and escalate: always set action: pause
-
-   Example for a high-risk IMPL:
-   ```yaml
-   reactions:
-     transient:
-       action: retry
-       max_attempts: 3
-     timeout:
-       action: retry
-       max_attempts: 2
-     fixable:
-       action: send-fix-prompt
-       max_attempts: 1
-     needs_replan:
-       action: pause
-     escalate:
-       action: pause
-   ```
-
-   Correctable failures (transient/fixable): (a) isolation failures (wrong directory/branch) - re-launch with explicit repository context including absolute IMPL doc path; (b) missing dependencies - install and re-launch; (c) transient build errors - retry automatically. Non-correctable failures (`needs_replan`, `escalate`) always surface to the user. Track retries per agent; after retry limits are exhausted, escalate to user. **E8: Same-wave interface failure.** If any agent reports `status: blocked` due to an interface contract being unimplementable as specified, the wave does not merge. Mark the wave BLOCKED, revise the affected contracts in the IMPL doc, and re-issue prompts to all agents whose work depends on the changed contract. Use `sawtools update-agent-prompt "<manifest-path>" --agent "<id>" < new-prompt.txt` to update affected agent prompts and `sawtools check-conflicts "<manifest-path>"` to verify no ownership conflicts before re-launching. Agents that completed cleanly against unaffected contracts do not re-run. The wave restarts from WAVE_PENDING with the corrected contracts.
-   **E20: Stub scan.** Collect the union of all `files_changed` and `files_created` from agent completion reports. Run:
-   ```bash
-   sawtools scan-stubs <file1> <file2> ...
-   ```
-   Append the output to the IMPL doc under `## Stub Report — Wave {N}` (after the last agent completion report for this wave). Exit code is always 0 — stub detection is informational. Surface stubs at the review checkpoint.
-
-   **E21: Quality gate verification.** Quality gates are run automatically by `finalize-wave` in the next step.
+7. After all Wave agents in the wave complete, read each agent's completion report from their named section in the IMPL doc (`### Agent {ID} - Completion Report`). **I4: IMPL doc is the single source of truth.** Completion reports, interface contract updates, and status are written to the IMPL doc. Chat output is not the record. If a completion report is missing from the IMPL doc, do not proceed; the agent has not completed the protocol. Agents register completion via `sawtools set-completion "<absolute-path>" --agent "<agent-id>" --status <status> --commit <sha> --branch <branch> --files-changed "<file1,file2>" --verification "<result>"`. **I5: Agents commit before reporting.** Each agent commits its changes to its worktree branch before writing a completion report. If a report is present but the agent's worktree branch has no commits, flag this as a protocol deviation before merging. **E7: Agent failure handling.** If any agent reports `status: partial` or `status: blocked`, the wave does not merge; it goes to BLOCKED. Resolve the failing agent (re-run, manually fix, or descope) before the merge step proceeds. Agents that completed successfully are not re-run, but their worktrees are not merged until the full wave is resolved. Partial merges are not permitted. 
+   **Failure handling and integration:** If any agent reports non-complete status, read `${CLAUDE_SKILL_DIR}/references/failure-routing.md` for E7a retry context, E19 failure type routing, E19.1 reactions override, E8 interface failures, and E20 stub scanning.
 
 8. **Wave finalization:** Use the batch finalization command to verify, merge, and cleanup:
    ```bash
    sawtools finalize-wave "<absolute-manifest-path>" --wave <N> --repo-dir "<repo-path>"
    ```
    **Always pass an absolute path for `<manifest-path>`.** If the manifest lives in a different repo than the one pointed to by `--repo-dir` (cross-repo IMPL), a relative path will silently fail with "file not found" before any git checks run. Use `$(realpath <path>)` or construct the absolute path from the project root. This atomic operation combines the 6-step post-wave pipeline: (1) verify-commits (E7 check), (2) scan-stubs (E20), (3) run-gates (E21), (4) merge-agents, (5) verify-build, (6) cleanup. The command stops on first failure and returns comprehensive JSON with all verification results. Exit code 1 indicates failure at any step. Returns `Success: true` only if all steps pass. For solo agents (no worktrees), run the individual commands manually: `verify-build` to run tests, then proceed to step 8a. For `type: integration` waves, skip merge-agents (no worktree branches to merge) and run only verify-build + cleanup.
-8a. **E25/E26/E35: Integration gap detection and wiring (post-merge).** After wave finalization succeeds, run integration validation to detect unconnected exports:
-   ```bash
-   sawtools validate-integration "<manifest-path>" --wave <N>
-   ```
-   This scans the merged codebase for exported symbols flagged as `integration_required` or detected via heuristics (e.g., `New*`, `Build*`, `Register*` functions with no callers), and also checks all `wiring:` declarations from the IMPL doc (E35). **Integration completeness audit:** For each declared `wiring:` entry, validate-integration verifies that `symbol` appears as a call expression in `must_be_called_from`. Missing calls are reported as severity: error. Checklist items: New exported validator/handler/command → `wiring:` entry written and `must_be_called_from` file in agent ownership? If gaps are found, launch an **Integration Agent** to wire them:
-
-   1. Read `agent.integration_model` from `saw.config.json` (same two-level lookup as other models). If empty or missing, inherit the parent model.
-   2. Launch the integration agent via the Agent tool with `subagent_type: integration-agent` and `run_in_background: true`. Pass the IMPL doc path, wave number, and the integration report JSON as the prompt. Use `[SAW:wave{N}:integrator] wire integration gaps` as the description.
-   3. After the integration agent completes, verify the build: `go build ./...`. If it fails, surface the error to the user.
-   4. Read the integration agent's completion report from the IMPL doc (agent ID: `integrator`).
-
-   In the web app, this runs automatically after `finalize-wave`. CLI users can also run `sawtools validate-integration` manually and review the integration report before proceeding to the next wave.
+8a. **E25/E26/E35: Integration gap detection (post-merge).** After wave finalization succeeds, read `${CLAUDE_SKILL_DIR}/references/failure-routing.md` § E25/E26/E35 for the full integration validation and wiring flow.
 9. **E15: IMPL doc completion.** If this was the final wave and post-merge verification passed, run the batched close command:
    ```bash
    sawtools close-impl "<impl-doc-path>" --date "YYYY-MM-DD"
