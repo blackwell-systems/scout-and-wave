@@ -150,7 +150,7 @@ Transitions are conditional. The following guards determine whether a transition
 
 ### WAVE_MERGING → WAVE_VERIFIED
 
-**Guard:** Conflict prediction passes (E11: no file appears in multiple agents' `files_changed` or `files_created` lists) AND integration validation passes or Integration Agent completes successfully (E25/E26) AND all worktree branches merged to main AND post-merge verification commands pass.
+**Guard:** Conflict prediction passes (E11) OR manual merge completed (E11a) AND integration validation passes or Integration Agent completes successfully (E25/E26) AND all worktree branches merged to main AND post-merge verification commands pass.
 
 **Integration validation (E25/E26):** Before merge, the Orchestrator runs `ValidateIntegration()` to scan for unconnected exports. If integration gaps are detected (`report.Valid == false`), the Integration Agent (E26) is launched to wire the gaps. The Integration Agent runs within WAVE_MERGING state. If the Integration Agent fails, transition to BLOCKED.
 

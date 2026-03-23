@@ -269,7 +269,80 @@ The scout must specify exact verification commands in Field 6 of each agent prom
 
 **Merge Order:** Within a valid wave, merge order is arbitrary. Same-wave agents are independent by construction: any agent whose work depends on a file created by another agent belongs in a later wave. If merge order appears to matter, the wave structure is wrong, not the merge sequence.
 
-**Related Invariants:** See I1 (disjoint file ownership)
+**Related Invariants:** See I1 (disjoint file ownership). For false positive handling, see E11a.
+
+---
+
+## E11a: Manual Merge Escape Hatch
+
+**Trigger:** E11 blocks merge with false positive (identical edits across agents)
+
+**Required Action:** The orchestrator may bypass E11 block via manual merge + finalize-wave resumption.
+
+### When to Use Manual Merge
+
+Use this escape hatch when:
+- E11 blocks merge due to file overlap
+- Visual inspection confirms edits are identical (no semantic conflict)
+- Git octopus merge would auto-resolve without conflict
+
+Do NOT use when:
+- Edits differ semantically (content hashes differ)
+- Multiple agents modified same function with different logic
+- Test coverage is insufficient to catch semantic conflicts
+
+### Manual Merge Procedure
+
+1. Verify E11 block is false positive:
+   ```bash
+   # Compare file content between agent branches
+   git show saw/{slug}/wave{N}-agent-A:path/to/file.go > /tmp/agent-A.txt
+   git show saw/{slug}/wave{N}-agent-B:path/to/file.go > /tmp/agent-B.txt
+   diff /tmp/agent-A.txt /tmp/agent-B.txt
+   # If diff is empty: identical edits, safe to merge
+   ```
+
+2. Perform manual octopus merge:
+   ```bash
+   git checkout main
+   git merge --no-ff saw/{slug}/wave{N}-agent-A saw/{slug}/wave{N}-agent-B ... \
+       -m "Merge wave {N}: {description}"
+   # Git auto-resolves identical edits
+   ```
+
+3. Resume finalize-wave from verify-build:
+   ```bash
+   sawtools finalize-wave docs/IMPL/IMPL-{slug}.yaml --wave {N} --skip-merge
+   ```
+
+4. Integration validation runs automatically in step 5.5 (RunPostMergeGates)
+
+### Resumption Pipeline (--skip-merge)
+
+When --skip-merge flag is used:
+- Step 1: VerifyCommits - SKIP
+- Step 2: ScanStubs - SKIP
+- Step 3: RunPreMergeGates - SKIP
+- Step 4: MergeAgents - SKIP (already merged manually)
+- Step 5: VerifyBuild - RUN (catches semantic conflicts)
+- Step 5.5: RunPostMergeGates - RUN (includes E25/E26/E35)
+- Step 6: Cleanup - RUN
+
+### Safety Guarantees
+
+- VerifyBuild (step 5) catches semantic conflicts missed by hash comparison
+- Integration validation (step 5.5) detects unconnected exports
+- Full test suite runs post-merge (catches cross-package breakage)
+
+### Alternative: Standalone Integration Validation
+
+If --skip-merge is not used, integration validation can be run separately:
+```bash
+sawtools detect-integration-gaps docs/IMPL/IMPL-{slug}.yaml --wave {N}
+sawtools wire-integration docs/IMPL/IMPL-{slug}.yaml --wave {N} [--dry-run]
+```
+
+**Related Rules:** See E11 (conflict prediction), E7 (agent failure handling)
 
 ---
 
@@ -1325,6 +1398,23 @@ all source files listed in file_ownership. The critic:
 4. Writes a structured CriticResult to the IMPL doc under critic_report field
 5. Emits overall verdict: PASS or ISSUES
 
+### Enforcement Point (Added in P5)
+
+After critic writes verdict to IMPL doc, `prepare-wave` checks the verdict before creating worktrees:
+
+- **Verdict: PASS** → proceed with worktree creation
+- **Verdict: WARNING** → emit warning, proceed (orchestrator can override with --no-review)
+- **Verdict: ISSUES** → exit code 1, block worktree creation
+
+Error message format:
+```
+Error: E37 blocking: Critic found errors in agent briefs.
+Fix via: sawtools amend-impl --redirect-agent <ID> --wave <N>
+Agent IDs with errors: [C, D]
+```
+
+This ensures agents cannot launch with inaccurate briefs.
+
 **Verification checks per agent brief:**
 - file_existence: Every file marked action=modify must exist in the repo; every file
   marked action=new must NOT exist (would cause conflict)
@@ -1342,6 +1432,9 @@ all source files listed in file_ownership. The critic:
 - side_effect_completeness: If a brief creates a new exported symbol that must be
   registered (CLI command in root.go, HTTP route in server.go, React component in
   a page), verify the registration file is also in the file_ownership table
+- action_new_awareness: For files marked `action: new` in file_ownership, skip
+  existence checks. The file WILL be created by the agent - flagging "file does
+  not exist" is a false positive.
 
 **Output format:** CriticResult written to IMPL doc critic_report field (see
 interface contracts in IMPL-critic-agent.yaml). Per-agent verdict: PASS or ISSUES.

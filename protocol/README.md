@@ -49,7 +49,11 @@ See [execution-rules.md](execution-rules.md) for the formal correctness argument
 
 This protocol specification follows semantic versioning. Breaking changes to invariants, preconditions, or message formats increment the major version. New optional fields or clarifications increment the minor version.
 
-Current version: **0.55.0**
+Current version: **0.56.0**
+
+**Changelog:**
+- **0.56.0** — E11a manual merge escape hatch, E37 enforcement in prepare-wave, critic action:new awareness
+- **0.55.0** — Previous release
 
 ## Reference Implementations
 
