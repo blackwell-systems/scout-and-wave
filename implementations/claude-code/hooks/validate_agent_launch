@@ -1,0 +1,193 @@
+#!/usr/bin/env bash
+# H5 pre-launch validation gate for SAW Wave agents
+# PreToolUse hook with matcher "Agent"
+#
+# Fires before every Agent tool call. Validates SAW agent launch preconditions.
+# Non-SAW agents (no [SAW:waveN:agent-ID] tag in description) pass through.
+#
+# Manual test commands:
+#
+#   # Non-SAW agent — should exit 0 (allow)
+#   echo '{"tool_name":"Agent","tool_input":{"prompt":"hello","description":"general task"}}' \
+#     | bash implementations/claude-code/hooks/validate_agent_launch
+#   echo $?  # 0
+#
+#   # SAW agent missing IMPL path — should exit 1
+#   echo '{"tool_name":"Agent","tool_input":{"prompt":"do stuff","description":"[SAW:wave1:agent-A] implement feature"}}' \
+#     | bash implementations/claude-code/hooks/validate_agent_launch
+#   echo $?  # 1
+#
+#   # SAW agent with IMPL path but missing file — should exit 1
+#   echo '{"tool_name":"Agent","tool_input":{"prompt":"IMPL doc: docs/IMPL/IMPL-nonexistent.yaml","description":"[SAW:wave1:agent-A] implement feature"}}' \
+#     | bash implementations/claude-code/hooks/validate_agent_launch
+#   echo $?  # 1
+
+set -euo pipefail
+
+# Hook receives JSON input on stdin with fields:
+# - tool_name: string
+# - tool_input: object (contains prompt and description)
+# - agent_type: string
+
+input=$(cat)
+
+# Extract fields from JSON
+tool_name=$(echo "$input" | jq -r '.tool_name // empty')
+description=$(echo "$input" | jq -r '.tool_input.description // empty')
+prompt=$(echo "$input" | jq -r '.tool_input.prompt // empty')
+
+# Only enforce on Agent tool calls
+if [[ "$tool_name" != "Agent" ]]; then
+  exit 0
+fi
+
+# --- Check 1: SAW tag extraction ---
+# Parse [SAW:wave{N}:agent-{ID}] from description
+if [[ "$description" =~ \[SAW:wave([0-9]+):agent-([A-Za-z0-9]+)\] ]]; then
+  wave_num="${BASH_REMATCH[1]}"
+  agent_id="${BASH_REMATCH[2]}"
+else
+  # Not a SAW agent — allow through
+  exit 0
+fi
+
+# --- Check 2: IMPL path extraction ---
+impl_path=$(echo "$prompt" | grep -oE 'docs/IMPL/IMPL-[a-z0-9-]+\.yaml' | head -1 || true)
+
+if [[ -z "$impl_path" ]]; then
+  echo "H5: No IMPL doc path found in agent prompt. Agent ${agent_id} (wave ${wave_num}) cannot launch without an IMPL doc reference in the prompt." >&2
+  exit 1
+fi
+
+# --- Check 3: IMPL file exists ---
+# Try to resolve IMPL path relative to repo root
+# Walk up from CWD to find repo root (look for .git)
+repo_root=""
+search_dir="$PWD"
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  if [[ -d "$search_dir/.git" || -f "$search_dir/.git" ]]; then
+    repo_root="$search_dir"
+    break
+  fi
+  parent=$(dirname "$search_dir")
+  if [[ "$parent" == "$search_dir" ]]; then
+    break
+  fi
+  search_dir="$parent"
+done
+
+# If we found a repo root, resolve IMPL path relative to it
+impl_full_path=""
+if [[ -n "$repo_root" ]]; then
+  impl_full_path="$repo_root/$impl_path"
+fi
+
+# Also check if the prompt contains an absolute path
+abs_impl_path=$(echo "$prompt" | grep -oE '/[^ ]*docs/IMPL/IMPL-[a-z0-9-]+\.yaml' | head -1 || true)
+if [[ -n "$abs_impl_path" && -f "$abs_impl_path" ]]; then
+  impl_full_path="$abs_impl_path"
+fi
+
+if [[ -z "$impl_full_path" || ! -f "$impl_full_path" ]]; then
+  echo "H5: IMPL doc not found at ${impl_path}. Ensure the IMPL doc exists before launching agent ${agent_id}." >&2
+  exit 1
+fi
+
+# --- Check 4: IMPL validation ---
+if command -v sawtools &>/dev/null; then
+  if ! sawtools validate "$impl_full_path" &>/dev/null; then
+    echo "H5: IMPL doc validation failed. The IMPL doc at ${impl_path} did not pass sawtools validate." >&2
+    exit 1
+  fi
+fi
+
+# --- Check 5: Agent exists in wave ---
+# Try yq first (YAML-native), fall back to grep
+agent_found=false
+if command -v yq &>/dev/null; then
+  # Use yq to check if agent ID exists in the specified wave
+  agent_match=$(yq -r ".waves[] | select(.wave == ${wave_num}) | .agents[] | select(.id == \"${agent_id}\") | .id" "$impl_full_path" 2>/dev/null || true)
+  if [[ "$agent_match" == "$agent_id" ]]; then
+    agent_found=true
+  fi
+else
+  # Fall back to grep-based detection
+  # Look for the agent ID in the context of the wave section
+  if grep -qE "id:\s*\"?${agent_id}\"?" "$impl_full_path" 2>/dev/null; then
+    agent_found=true
+  fi
+fi
+
+if [[ "$agent_found" != "true" ]]; then
+  echo "H5: Agent ${agent_id} not found in wave ${wave_num} of ${impl_path}." >&2
+  exit 1
+fi
+
+# --- Check 6: .saw-ownership.json check ---
+ownership_file=""
+search_dir="$PWD"
+for _ in 1 2 3 4 5; do
+  if [[ -f "$search_dir/.saw-ownership.json" ]]; then
+    ownership_file="$search_dir/.saw-ownership.json"
+    break
+  fi
+  parent=$(dirname "$search_dir")
+  if [[ "$parent" == "$search_dir" ]]; then
+    break
+  fi
+  search_dir="$parent"
+done
+
+if [[ -n "$ownership_file" ]]; then
+  own_agent=$(jq -r '.agent // empty' "$ownership_file")
+  own_wave=$(jq -r '.wave // empty' "$ownership_file")
+
+  if [[ -n "$own_agent" && "$own_agent" != "$agent_id" ]]; then
+    echo "H5: Ownership file mismatch. SAW tag says agent ${agent_id} but .saw-ownership.json says agent ${own_agent}." >&2
+    exit 1
+  fi
+
+  if [[ -n "$own_wave" && "$own_wave" != "$wave_num" ]]; then
+    echo "H5: Ownership file mismatch. SAW tag says wave ${wave_num} but .saw-ownership.json says wave ${own_wave}." >&2
+    exit 1
+  fi
+
+  # --- Check 7: Worktree branch check ---
+  worktree_root=$(dirname "$ownership_file")
+  current_branch=$(git -C "$worktree_root" branch --show-current 2>/dev/null || true)
+
+  if [[ -n "$current_branch" ]]; then
+    # Accept saw/{slug}/wave{N}-agent-{ID} or legacy wave{N}-agent-{ID}
+    if [[ ! "$current_branch" =~ wave${wave_num}-agent-${agent_id}$ ]]; then
+      echo "H5: Worktree branch mismatch. Expected branch ending in wave${wave_num}-agent-${agent_id} but found ${current_branch}." >&2
+      exit 1
+    fi
+  fi
+fi
+
+# --- Check 8: Scaffold check ---
+# If IMPL has scaffolds section, check all have status "committed"
+if command -v yq &>/dev/null; then
+  scaffold_statuses=$(yq -r '.scaffolds[]?.status // empty' "$impl_full_path" 2>/dev/null || true)
+  if [[ -n "$scaffold_statuses" ]]; then
+    while IFS= read -r status; do
+      if [[ -n "$status" && "$status" != "committed" ]]; then
+        echo "H5: Scaffold not committed. All scaffolds must have status 'committed' before agent launch. Found status: ${status}." >&2
+        exit 1
+      fi
+    done <<< "$scaffold_statuses"
+  fi
+else
+  # Grep fallback: look for scaffold status lines that aren't "committed"
+  scaffold_block=$(sed -n '/^scaffolds:/,/^[a-z]/p' "$impl_full_path" 2>/dev/null || true)
+  if [[ -n "$scaffold_block" ]]; then
+    non_committed=$(echo "$scaffold_block" | grep -E 'status:' | grep -vE 'committed' || true)
+    if [[ -n "$non_committed" ]]; then
+      echo "H5: Scaffold not committed. All scaffolds must have status 'committed' before agent launch." >&2
+      exit 1
+    fi
+  fi
+fi
+
+# All checks passed
+exit 0
