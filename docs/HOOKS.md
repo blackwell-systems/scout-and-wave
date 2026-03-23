@@ -11,27 +11,49 @@ catches violations that earlier layers might miss, providing defense in depth.
 - **Layer 3** (SDK Constraint Middleware) enforces invariants in-process when
   the Go engine/web app drives tool execution.
 
+## Exit Code Semantics (Layer 1)
+
+Claude Code hooks use exit codes to signal disposition:
+
+| Exit code | Meaning |
+|-----------|---------|
+| `0` | Allow — tool execution proceeds |
+| `1` | Non-blocking error — logged, but execution continues |
+| `2` | Block — tool execution is prevented; message on stderr shown to model |
+
+Most SAW enforcement hooks use **exit 2** to block. `check_git_ownership` is an
+intentional exception: it runs PostToolUse (the git command has already
+executed), so it uses exit 0 with a warning message instead of blocking.
+
+`block_claire_paths` uses a separate JSON-response protocol: it writes
+`{"decision":"block","reason":"..."}` to stdout and exits 0. Claude Code reads
+this JSON to determine whether to block.
+
 ## Overview Table
 
-| Hook | Layer | Invariant | Trigger | What it blocks |
+| Hook | Layer | Invariant | Trigger | Blocks / Warns |
 |------|-------|-----------|---------|----------------|
-| `check_scout_boundaries` | 1 (PreToolUse) | I6 | Scout calls Write or Edit | Scout writing outside `docs/IMPL/IMPL-*.yaml` |
-| `check_wave_ownership` | 1 (PreToolUse) | I1 | Wave agent calls Write, Edit, or NotebookEdit | Wave agent writing files not in its `.saw-ownership.json` |
-| `block_claire_paths` | 1 (PreToolUse) | -- | Any agent calls Write, Edit, or Bash | Operations targeting `.claire` paths (model hallucination guard) |
-| `validate_impl_on_write` | 1 (PostToolUse) | E16 | Any agent calls Write on an IMPL doc | Saving an IMPL doc that fails `sawtools validate` |
-| SAW pre-commit guard | 2 (Git hook) | I4 | `git commit` in a worktree | Commits to `main`/`master` from agent worktrees |
-| SAW go.mod guard | 2 (Git hook) | -- | `git commit` touching `go.mod` | `replace` directives with deep relative paths (`../../..`) |
-| Ownership middleware | 3 (SDK) | I1 | Engine Write/Edit tool execution | Agent writing files outside `OwnedFiles` map |
-| Freeze middleware | 3 (SDK) | I2 | Engine Write/Edit tool execution | Agent writing to frozen interface paths after freeze time |
-| Role path middleware | 3 (SDK) | I6 | Engine Write/Edit tool execution | Agent writing outside `AllowedPathPrefixes` |
+| `check_scout_boundaries` | 1 (PreToolUse) | I6 | Scout calls Write or Edit | Blocks Scout writing outside `docs/IMPL/IMPL-*.yaml` |
+| `check_wave_ownership` | 1 (PreToolUse) | I1 | Wave agent calls Write, Edit, or NotebookEdit | Blocks Wave agent writing files not in its `.saw-ownership.json` |
+| `block_claire_paths` | 1 (PreToolUse) | -- | Any agent calls Write, Edit, or Bash | Blocks operations targeting `.claire` paths (model hallucination guard) |
+| `validate_agent_launch` | 1 (PreToolUse) | H5 | Any Agent tool call with `[SAW:waveN:agent-ID]` tag | Blocks agent launch if IMPL doc is missing, invalid, agent not found, or scaffold not committed |
+| `validate_impl_on_write` | 1 (PostToolUse) | E16 | Any agent calls Write on an IMPL doc | Blocks saving an IMPL doc that fails `sawtools validate` |
+| `check_git_ownership` | 1 (PostToolUse) | I1 | Wave agent calls Bash with git checkout/merge/rebase/etc. | Warns (non-blocking) when git operations modify files outside ownership list |
+| SAW pre-commit guard | 2 (Git hook) | I4 | `git commit` in a worktree | Blocks commits to `main`/`master` from agent worktrees |
+| SAW go.mod guard | 2 (Git hook) | -- | `git commit` touching `go.mod` | Blocks `replace` directives with deep relative paths (`../../..`) |
+| Ownership middleware | 3 (SDK) | I1 | Engine Write/Edit tool execution | Blocks agent writing files outside `OwnedFiles` map |
+| Freeze middleware | 3 (SDK) | I2 | Engine Write/Edit tool execution | Blocks agent writing to frozen interface paths after freeze time |
+| Role path middleware | 3 (SDK) | I6 | Engine Write/Edit tool execution | Blocks agent writing outside `AllowedPathPrefixes` |
 
 ---
 
 ## Layer 1: Claude Code Hooks
 
 Claude Code hooks are bash scripts registered in `~/.claude/settings.json`.
-They receive JSON on stdin describing the tool call and exit 0 (allow) or 1
-(block, with error message on stderr).
+They receive JSON on stdin describing the tool call. PreToolUse hooks exit 2 to
+block (with an error message on stderr) or exit 0 to allow. PostToolUse hooks
+exit 2 to surface a blocking error to the model, exit 1 for a non-blocking log,
+or exit 0 to pass silently.
 
 ### Installation
 
@@ -45,14 +67,23 @@ It performs these steps:
 
 1. **Creates symlinks** in `~/.local/bin/` pointing to the hook scripts in the
    repo:
-   - `~/.local/bin/check_scout_boundaries` -> `implementations/claude-code/hooks/check_scout_boundaries`
-   - `~/.local/bin/block_claire_paths` -> `implementations/claude-code/hooks/block_claire_paths`
-   - `~/.local/bin/validate_impl_on_write` -> `implementations/claude-code/hooks/validate_impl_on_write`
+   - `~/.local/bin/check_scout_boundaries`
+   - `~/.local/bin/block_claire_paths`
+   - `~/.local/bin/validate_impl_on_write`
+   - `~/.local/bin/check_wave_ownership`
+   - `~/.local/bin/check_git_ownership`
+   - `~/.local/bin/validate_agent_launch`
+   - (plus `check_impl_path`, `warn_stubs`, `check_branch_drift` — referenced
+     in the installer but scripts not yet present in repo; these steps fail
+     silently if scripts are missing)
 
 2. **Merges hook configuration** into `~/.claude/settings.json` using `jq`:
-   - Adds a `PreToolUse` entry for `check_scout_boundaries` with matcher `Write|Edit`
-   - Adds a `PreToolUse` entry for `block_claire_paths` with matcher `Write|Edit|Bash`
-   - Adds a `PostToolUse` entry for `validate_impl_on_write` with matcher `Write`
+   - `PreToolUse`: `check_scout_boundaries` (matcher `Write|Edit`)
+   - `PreToolUse`: `block_claire_paths` (matcher `Write|Edit|Bash`)
+   - `PreToolUse`: `check_wave_ownership` (matcher `Write|Edit|NotebookEdit`)
+   - `PreToolUse`: `validate_agent_launch` (matcher `Agent`)
+   - `PostToolUse`: `validate_impl_on_write` (matcher `Write`)
+   - `PostToolUse`: `check_git_ownership` (matcher `Bash`)
 
 3. **Verifies** the installation by checking symlinks are executable and
    settings.json contains the hook entries, then runs a smoke test (valid and
@@ -68,18 +99,19 @@ without re-running the installer.
 **File:** `implementations/claude-code/hooks/check_scout_boundaries`
 **Type:** PreToolUse
 **Matcher:** `Write|Edit`
+**Exit to block:** 2
 **Invariant:** I6 (role-based path boundaries)
 
 Restricts Scout agents to writing only IMPL planning documents. Reads JSON
 from stdin and extracts `tool_name`, `agent_type`, and `tool_input.file_path`.
 
 **Logic:**
-- Exits 0 (allow) if `agent_type` is not `"scout"` -- only Scouts are constrained.
+- Exits 0 (allow) if `agent_type` is not `"scout"` — only Scouts are constrained.
 - Exits 0 if `tool_name` is not `Write` or `Edit`.
 - Normalizes the file path and checks: directory must be exactly `docs/IMPL`
   and filename must match `IMPL-*.yaml`. Subdirectories (e.g., `docs/IMPL/complete/`)
   are rejected.
-- Exits 1 with an `I6 VIOLATION` message on stderr for anything else.
+- Exits 2 with an `I6 VIOLATION` message on stderr for anything else.
 
 **Example block output:**
 ```
@@ -93,7 +125,8 @@ Allowed: docs/IMPL/IMPL-<feature-slug>.yaml
 
 **File:** `implementations/claude-code/hooks/check_wave_ownership`
 **Type:** PreToolUse
-**Matcher:** Not currently registered in `settings.json` or the installer (see Known Gaps)
+**Matcher:** `Write|Edit|NotebookEdit`
+**Exit to block:** 2
 **Invariant:** I1 (disjoint file ownership)
 
 Restricts Wave agents to writing only files listed in their ownership manifest.
@@ -108,7 +141,7 @@ Restricts Wave agents to writing only files listed in their ownership manifest.
   absolute and relative paths).
 - Checks exact match against `owned_files`, then checks if any owned path is
   a directory prefix of the target.
-- Exits 1 with an `I1 VIOLATION` message on stderr if the file is not owned.
+- Exits 2 with an `I1 VIOLATION` message on stderr if the file is not owned.
 
 **Example block output:**
 ```
@@ -127,22 +160,62 @@ Owned files for this agent:
 **File:** `implementations/claude-code/hooks/block_claire_paths`
 **Type:** PreToolUse
 **Matcher:** `Write|Edit|Bash`
+**Exit to block:** JSON response (`{"decision":"block","reason":"..."}`) + exit 0
 **Invariant:** None (model hallucination guard)
 
 Blocks tool calls that reference `.claire` in file paths. This is a guardrail
 against a known, widespread model hallucination where the model writes `.claire`
 instead of `.claude` for directory paths (e.g., `~/.claire/settings.json`
-instead of `~/.claude/settings.json`). This has been reported across multiple
-models and is documented on Reddit.
+instead of `~/.claude/settings.json`).
+
+**Note on exit code:** Unlike other SAW hooks, this hook uses the JSON-response
+protocol: it writes `{"decision":"block","reason":"..."}` to stdout and exits
+0. Claude Code reads the JSON `decision` field to decide whether to block. The
+exit code itself does not drive the block decision here.
 
 **Logic:**
-- Inspects the tool input for any file path or command string containing `.claire`.
-- Exits 1 with a corrective message on stderr if `.claire` is found.
-- Exits 0 (allow) otherwise.
+- Inspects `tool_input.file_path` or `tool_input.command` for any string
+  containing `.claire`.
+- Returns `{"decision":"block","reason":"BLOCKED: ..."}` if `.claire` is found.
+- Returns `{"decision":"approve"}` otherwise.
+
+**Example block output (stdout JSON):**
+```json
+{"decision":"block","reason":"BLOCKED: You wrote .claire — the correct directory is .claude. Fix the path and retry."}
+```
+
+### validate_agent_launch (H5)
+
+**File:** `implementations/claude-code/hooks/validate_agent_launch`
+**Type:** PreToolUse
+**Matcher:** `Agent`
+**Exit to block:** 2
+**Invariant:** H5 (pre-launch validation gate)
+
+Fires before every `Agent` tool call. Non-SAW agents (no `[SAW:waveN:agent-ID]`
+tag in the description field) pass through immediately. For SAW agents, runs
+up to 8 validation checks before allowing the agent to launch.
+
+**Logic:**
+1. Parses `[SAW:wave{N}:agent-{ID}]` from the Agent tool's `description` field.
+   Exits 0 (pass) if the tag is absent.
+2. Extracts the IMPL doc path from the prompt (`docs/IMPL/IMPL-*.yaml` pattern).
+   Exits 2 if not found.
+3. Verifies the IMPL file exists on disk. Exits 2 if not found.
+4. Runs `sawtools validate <impl>` if `sawtools` is on `$PATH`. Exits 2 if
+   validation fails. (Skips silently if `sawtools` is unavailable.)
+5. Verifies the agent ID exists in the specified wave using `yq` (with grep
+   fallback). Exits 2 if not found.
+6. If `.saw-ownership.json` is found in the worktree: verifies `agent` and
+   `wave` fields match the SAW tag. Exits 2 on mismatch.
+7. Checks that the worktree's current git branch ends in
+   `wave{N}-agent-{ID}`. Exits 2 on branch mismatch.
+8. Verifies all scaffolds in the IMPL doc have `status: committed` (using `yq`
+   with grep fallback). Exits 2 if any scaffold is uncommitted.
 
 **Example block output:**
 ```
-BLOCKED: You wrote .claire — the correct directory is .claude. Fix the path and retry.
+H5: No IMPL doc path found in agent prompt. Agent A (wave 1) cannot launch without an IMPL doc reference in the prompt.
 ```
 
 ### validate_impl_on_write (E16)
@@ -150,6 +223,7 @@ BLOCKED: You wrote .claire — the correct directory is .claude. Fix the path an
 **File:** `implementations/claude-code/hooks/validate_impl_on_write`
 **Type:** PostToolUse
 **Matcher:** `Write`
+**Exit to block:** 2
 **Invariant:** E16 (IMPL document validation)
 
 Automatically validates IMPL documents after they are written, catching schema
@@ -163,7 +237,7 @@ errors immediately rather than at wave-preparation time.
 - Exits 0 if the file does not exist or `sawtools` is not on `$PATH`.
 - Runs `sawtools validate <file>` and parses the JSON output.
 - If `valid` is `true`, exits 0.
-- If validation fails, exits 1 with the error count and messages on stderr.
+- If validation fails, exits 2 with the error count and messages on stderr.
 
 **Example block output:**
 ```
@@ -173,12 +247,58 @@ wave 1 agent A has no owned_files
 gates[0] missing agent_id
 ```
 
+### check_git_ownership (I1 layer 2)
+
+**File:** `implementations/claude-code/hooks/check_git_ownership`
+**Type:** PostToolUse
+**Matcher:** `Bash`
+**Exit to block:** N/A — non-blocking warning (always exits 0)
+**Invariant:** I1 (disjoint file ownership)
+
+A second layer of I1 enforcement that catches ownership violations that bypass
+the Write/Edit hooks — specifically git operations like `git checkout --theirs`,
+`git merge`, `git rebase`, and `git restore` that can modify files without going
+through the Write or Edit tools.
+
+Because the Bash command has already executed by the time this PostToolUse hook
+fires, it cannot undo the file modification. Instead it warns the agent and
+instructs it to revert the unowned changes before committing.
+
+**Logic:**
+- Only fires for `wave-agent` agents using the `Bash` tool.
+- Skips commands that don't match `git (checkout|merge|rebase|cherry-pick|stash|reset|restore)`.
+- Walks up from `$PWD` looking for `.saw-ownership.json`. Exits 0 if not found
+  (not a SAW context).
+- Runs `git diff --name-only HEAD` and `git diff --name-only --cached` to list
+  all changed files.
+- Checks each changed file against `owned_files` (exact match and directory
+  prefix).
+- If any unowned files are found, prints a `WARNING:` block to stdout listing
+  the violations and instructing the agent to `git checkout HEAD -- <file>`
+  for each.
+- Always exits 0 (non-blocking).
+
+**Example warning output:**
+```
+WARNING: Git operation modified files outside your ownership list.
+
+Agent: B (wave 1)
+Files outside ownership:
+  - pkg/api/routes.go
+
+These changes likely came from a merge conflict resolution. Do NOT commit them.
+Instead:
+1. Run: git checkout HEAD -- <file> for each file listed above
+2. Only commit files in your ownership list
+3. If a conflict blocks your work, report status: blocked
+```
+
 ---
 
 ## Layer 2: Git Pre-Commit Hook
 
 A bash pre-commit hook installed into each Wave agent worktree. This is the
-last line of defense before code is committed -- it cannot be bypassed by
+last line of defense before code is committed — it cannot be bypassed by
 agent prompt manipulation.
 
 ### Hook Content
@@ -230,7 +350,7 @@ SAW go.mod guard: replace directive has deep relative path (../../../...)
 This function is called automatically during worktree creation in
 `pkg/protocol/worktree.go` (standard waves) and `pkg/protocol/program_worktree.go`
 (program-tier waves). If installation fails, a warning is printed to stderr
-but worktree creation is not aborted -- the `prepare-wave` verification step
+but worktree creation is not aborted — the `prepare-wave` verification step
 catches missing hooks.
 
 ### Verification
@@ -271,9 +391,9 @@ This layer enforces invariants without relying on external scripts or git hooks.
 
 The middleware system is defined across two files in `pkg/tools/`:
 
-- **`constraints.go`** -- Defines the `Constraints` struct that configures
+- **`constraints.go`** — Defines the `Constraints` struct that configures
   enforcement per-agent.
-- **`constraint_enforcer.go`** -- Implements the three middleware functions
+- **`constraint_enforcer.go`** — Implements the three middleware functions
   and registers them via `init()`.
 
 The `Constraints` struct carries all enforcement configuration:
@@ -314,7 +434,7 @@ If `OwnedFiles` is empty (nil map), no restriction is applied.
 
 Blocks Write/Edit to paths listed in `Constraints.FrozenPaths`, but only when
 `Constraints.FreezeTime` is non-nil. This enforces interface stability after
-worktree creation -- shared interface files cannot be modified by agents once
+worktree creation — shared interface files cannot be modified by agents once
 the wave begins.
 
 ### Role path middleware (I6)
@@ -335,11 +455,11 @@ Typical configuration:
 The `pkg/hooks/` package in `scout-and-wave-go` provides a Go-native
 post-execution boundary check:
 
-- **`ValidateScoutWrites(repoPath, expectedIMPLPath, startTime)`** -- Walks
+- **`ValidateScoutWrites(repoPath, expectedIMPLPath, startTime)`** — Walks
   `docs/` looking for files modified after `startTime` that are not the
   expected IMPL doc or a valid `docs/IMPL/IMPL-*.yaml` path. Returns an
   `I6 VIOLATION` error listing unauthorized writes.
-- **`IsValidScoutPath(filePath)`** -- Pure predicate: returns true only for
+- **`IsValidScoutPath(filePath)`** — Pure predicate: returns true only for
   paths matching `docs/IMPL/IMPL-*.yaml` (not subdirectories, not `.yml`).
 
 These are used for after-the-fact auditing, not real-time blocking.
@@ -355,18 +475,22 @@ These are used for after-the-fact auditing, not real-time blocking.
    ls -la ~/.local/bin/check_scout_boundaries
    ls -la ~/.local/bin/block_claire_paths
    ls -la ~/.local/bin/validate_impl_on_write
+   ls -la ~/.local/bin/check_wave_ownership
+   ls -la ~/.local/bin/check_git_ownership
+   ls -la ~/.local/bin/validate_agent_launch
    ```
-   Both should be symlinks (`l` prefix) pointing into the repo's
+   All should be symlinks (`l` prefix) pointing into the repo's
    `implementations/claude-code/hooks/` directory.
 
 2. **Check settings.json registration:**
    ```bash
    cat ~/.claude/settings.json | jq '.hooks'
    ```
-   Verify `PreToolUse` contains `check_scout_boundaries` and
-   `block_claire_paths`, and `PostToolUse` contains `validate_impl_on_write`.
+   Verify `PreToolUse` contains `check_scout_boundaries`, `block_claire_paths`,
+   `check_wave_ownership`, and `validate_agent_launch`; and `PostToolUse`
+   contains `validate_impl_on_write` and `check_git_ownership`.
 
-3. **Check jq is installed** (required by all hook scripts):
+3. **Check jq is installed** (required by most hook scripts):
    ```bash
    which jq
    ```
@@ -391,7 +515,7 @@ These are used for after-the-fact auditing, not real-time blocking.
    ls -la /path/to/repo/.git/worktrees/<name>/hooks/pre-commit
    ```
 
-3. **Re-install by running `prepare-wave`** -- it calls `InstallHooks`
+3. **Re-install by running `prepare-wave`** — it calls `InstallHooks`
    automatically during worktree creation.
 
 ### Layer 3: SDK middleware not enforcing
@@ -407,27 +531,28 @@ enforced:
 
 ## Known Gaps
 
-### check_wave_ownership not registered in installer or settings.json
+### check_impl_path, warn_stubs, check_branch_drift not yet implemented
 
-The `check_wave_ownership` script exists at
-`implementations/claude-code/hooks/check_wave_ownership` and is fully
-implemented, but:
+`install.sh` references three hooks that do not yet exist in the repository:
+- `check_impl_path` — H2 PreToolUse on `Agent` for IMPL path validation
+- `warn_stubs` — H3 PostToolUse on `Write|Edit` for stub pattern warnings
+- `check_branch_drift` — H4 PostToolUse on `Bash` for branch drift detection
 
-- **`install.sh` does not create a symlink** for it in `~/.local/bin/`.
-- **`install.sh` does not add a `PreToolUse` entry** for it in `settings.json`.
-- It is **not present** in the current `~/.claude/settings.json` hooks
-  configuration.
-
-This means I1 enforcement for Wave agents in the CLI (Claude Code) environment
-relies entirely on Layer 3 (SDK middleware) or agent-prompt compliance. To
-activate this hook, `install.sh` would need to be updated to symlink the script
-and register it as a PreToolUse hook with an appropriate matcher.
+The installer will fail when attempting to `chmod +x` these missing scripts.
+These are planned hooks; until implemented, the relevant checks are not
+enforced at the Claude Code layer.
 
 ### validate_impl_on_write depends on sawtools availability
 
 The PostToolUse validation hook silently exits 0 if `sawtools` is not on
 `$PATH`. This is intentional graceful degradation, but means IMPL validation
 is silently skipped if the binary is not built or not in the path.
+
+### validate_agent_launch H5 checks 4–8 depend on external tools
+
+- Check 4 (IMPL validation) requires `sawtools` — skipped if not on `$PATH`.
+- Checks 5 and 8 (agent existence, scaffold status) use `yq` with a grep
+  fallback — the grep fallback is less precise and may produce false negatives.
 
 ### Pre-commit hook installation is non-fatal
 
