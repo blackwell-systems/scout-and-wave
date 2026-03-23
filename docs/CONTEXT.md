@@ -35,3 +35,5 @@
   - IMPL doc: docs/IMPL/complete/IMPL-h5-prelaunch-validation-gate.yaml
 - **file-read-dedup-integration**: completed 2026-03-23, 2 waves, 4 agents
   - IMPL doc: docs/IMPL/complete/IMPL-file-read-dedup-integration.yaml
+- **wave-finalization-robustness**: completed 2026-03-23, 3 waves, 7 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-wave-finalization-robustness.yaml

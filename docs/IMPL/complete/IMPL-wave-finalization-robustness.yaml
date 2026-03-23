@@ -1,0 +1,1268 @@
+completion_date: "2026-03-23"
+title: Wave Finalization Robustness Enhancements
+feature_slug: wave-finalization-robustness
+verdict: SUITABLE
+suitability_assessment: |
+    ## Suitability Gate Results
+
+    1. **File decomposition:** YES - Work decomposes into 7 agents with disjoint ownership:
+       - E11 enhancement: conflict_predict.go (hash-based detection)
+       - Finalize-wave resumption: finalize_wave.go, finalize.go (new flags)
+       - Standalone integration commands: new CLI command files
+       - Critic verdict enforcement: prepare_wave.go (E37 gate check)
+       - Critic false positive fix: critic.go (action:new awareness)
+       - Protocol documentation: execution-rules.md updates
+
+    2. **Investigation-first items:** NO - All problems are well-understood from dogfooding.
+       Wave 2 of result-types-unification exposed gaps; root causes documented.
+       P5 and P6 discovered during critic execution on this IMPL (dogfooding errors).
+
+    3. **Interface discoverability:** YES - All interfaces definable upfront:
+       - New CLI flags: --skip-merge, --post-merge-only (bool flags)
+       - E11 function: PredictConflictsFromReports signature unchanged, internal logic enhanced
+       - New commands: detect-integration-gaps, wire-integration (standard CLI signature)
+       - Critic verdict check: reads doc.CriticReport.Verdict field (already exists)
+       - Critic action:new check: reads file_ownership[].action field (already exists)
+
+    4. **Pre-implementation status:** All items are TODO. No existing partial implementations.
+       P5 and P6 are new gaps discovered during critic run on this IMPL.
+
+    5. **Parallelization value:** MEDIUM - Good parallelization benefit:
+       - Build/test cycle: ~30s (go test ./... -timeout 120s)
+       - Agents: 7, each touching 1-2 files
+       - Independence: Wave 1 (E11 + flags) independent; Wave 2 (commands + docs) depends on Wave 1; Wave 3 (critic fixes) depends on Wave 1-2
+       - Task complexity: Non-trivial - hash comparison logic, CLI flag plumbing, integration validation decoupling, critic validation logic
+
+    **Estimated times:**
+    - Scout phase: ~10 min (expanded scope: 7 agents, 3 waves, additional file analysis)
+    - Agent execution: ~24 min (7 agents × 4 min avg, 3 waves → ~8 min wave1 + 10 min wave2 + 6 min wave3)
+    - Merge & verification: ~6 min (3 waves)
+    Total SAW time: ~40 min
+
+    Sequential baseline: ~35 min (7 agents × 5 min avg sequential time)
+    Time savings: Marginal (~5 min), but primary value is coordination audit trail
+
+    **Recommendation:** Proceed. Parallelization gains are modest, but the IMPL doc provides value as:
+    - Audit trail for dogfooding-discovered gaps (including meta-gaps discovered while dogfooding)
+    - Interface contracts for cross-repo coordination (protocol + Go SDK + web app)
+    - Progress tracking for multi-phase rollout
+    - Demonstrates SAW's ability to handle scope expansion discovered during execution
+
+    **Scope expansion rationale:**
+    P5 (critic verdict enforcement) and P6 (critic false positives) were discovered during
+    critic execution on this IMPL itself. These are HIGH priority blocking gaps - without P5,
+    E37 critic system provides no safety (orchestrator can ignore ISSUES verdict and launch
+    agents anyway). Without P6, critic produces false positives that devalue E37.
+
+    Adding 2 agents (F, G) in Wave 3 keeps the work atomic while addressing critical gaps.
+    Alternative would be separate IMPL, but these fixes are tightly coupled to the finalization
+    workflow (prepare-wave is the enforcement point, critic is the verification point).
+
+    **Verdict:** SUITABLE
+test_command: go test ./... -timeout 120s
+lint_command: go vet ./...
+file_ownership:
+    - file: pkg/protocol/conflict_predict.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/protocol/conflict_predict_test.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: cmd/saw/finalize_wave.go
+      agent: B
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/engine/finalize.go
+      agent: B
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: cmd/saw/detect_integration_gaps_cmd.go
+      agent: C
+      wave: 2
+      action: new
+      depends_on:
+        - A
+        - B
+      repo: scout-and-wave-go
+    - file: cmd/saw/wire_integration_cmd.go
+      agent: D
+      wave: 2
+      action: new
+      depends_on:
+        - A
+        - B
+      repo: scout-and-wave-go
+    - file: protocol/execution-rules.md
+      agent: E
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+        - B
+      repo: scout-and-wave
+    - file: protocol/procedures.md
+      agent: E
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+        - B
+      repo: scout-and-wave
+    - file: protocol/state-machine.md
+      agent: E
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+        - B
+      repo: scout-and-wave
+    - file: protocol/participants.md
+      agent: E
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+        - B
+      repo: scout-and-wave
+    - file: protocol/README.md
+      agent: E
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+        - B
+      repo: scout-and-wave
+    - file: cmd/saw/prepare_wave.go
+      agent: F
+      wave: 3
+      action: modify
+      depends_on:
+        - A
+        - B
+        - C
+        - D
+      repo: scout-and-wave-go
+    - file: pkg/protocol/critic.go
+      agent: G
+      wave: 3
+      action: modify
+      depends_on:
+        - A
+        - B
+      repo: scout-and-wave-go
+interface_contracts:
+    - name: PredictConflictsFromReports (enhanced)
+      description: |-
+        E11 conflict prediction with hash-based identical edit detection.
+        Signature unchanged; internal logic enhanced to compare file content hashes.
+      definition: |
+        // Go SDK: scout-and-wave-go/pkg/protocol/conflict_predict.go
+        func PredictConflictsFromReports(manifest *IMPLManifest, waveNum int) error
+
+        Enhanced behavior:
+        - For each file appearing in multiple agents' completion reports, compute content hash
+        - If all agents' versions of the file are identical (same hash), allow merge
+        - Only block merge if hashes differ (actual conflict)
+        - Return error only for real conflicts, not identical edits
+      location: scout-and-wave-go/pkg/protocol/conflict_predict.go
+    - name: finalize-wave --skip-merge flag
+      description: |-
+        New CLI flag to skip merge step and resume from verify-build.
+        Allows finalize-wave to run integration validation after manual merge.
+      definition: |
+        // Go SDK: scout-and-wave-go/cmd/saw/finalize_wave.go
+        cmd.Flags().BoolVar(&skipMerge, "skip-merge", false, "Skip merge step (merge already done manually); start from verify-build")
+
+        Pipeline when --skip-merge=true:
+        1. VerifyCommits - SKIP (no branches to verify)
+        2. ScanStubs - SKIP
+        3. RunPreMergeGates - SKIP
+        4. MergeAgents - SKIP (manual merge already done)
+        5. VerifyBuild - RUN
+        6. RunPostMergeGates - RUN
+        7. Cleanup - RUN (remove worktrees if they still exist)
+      location: scout-and-wave-go/cmd/saw/finalize_wave.go
+    - name: FinalizeWaveOpts.SkipMerge field
+      description: Engine-level flag to skip merge step in FinalizeWave function
+      definition: |
+        // Go SDK: scout-and-wave-go/pkg/engine/finalize.go
+        type FinalizeWaveOpts struct {
+            IMPLPath    string
+            RepoPath    string
+            WaveNum     int
+            MergeTarget string
+            ObsEmitter  *observability.Emitter
+            EnforceIntegrationValidation bool
+            RequireNoStubs bool
+            SkipMerge   bool  // NEW: when true, skip steps 1-4 and start from verify-build
+        }
+
+        FinalizeWave logic when SkipMerge=true:
+        - goto postMerge label immediately (line 343 in current code)
+        - Run only steps 5-7: VerifyBuild, RunPostMergeGates, Cleanup
+      location: scout-and-wave-go/pkg/engine/finalize.go
+    - name: detect-integration-gaps command
+      description: |-
+        Standalone CLI command to run E25/E26/E35 integration validation.
+        Can be invoked post-merge without full finalize-wave.
+      definition: |
+        // Go SDK: scout-and-wave-go/cmd/saw/detect_integration_gaps_cmd.go
+        sawtools detect-integration-gaps <manifest-path> --wave N [--repo-dir DIR]
+
+        Output: JSON IntegrationReport (same structure as finalize-wave's integration_report field)
+        Exit code: 0 if no gaps, 1 if gaps detected
+
+        Implementation:
+        - Call protocol.ValidateIntegration(manifest, waveNum, repoPath)
+        - Call protocol.ValidateWiringDeclarations(manifest, repoPath) if manifest.Wiring is non-empty
+        - Combine results into single JSON output
+      location: scout-and-wave-go/cmd/saw/detect_integration_gaps_cmd.go
+    - name: wire-integration command
+      description: |-
+        Interactive CLI command to apply integration gap fixes.
+        Reads IntegrationReport, generates file edits, applies them.
+      definition: |
+        // Go SDK: scout-and-wave-go/cmd/saw/wire_integration_cmd.go
+        sawtools wire-integration <manifest-path> --wave N [--repo-dir DIR] [--dry-run]
+
+        Output: JSON with files modified and edits applied
+        Exit code: 0 if successful, 1 if errors
+
+        Implementation:
+        - Run detect-integration-gaps to get IntegrationReport
+        - For each gap with severity "error" or "warning":
+          - Use SuggestedFix to generate code edit
+          - Apply edit to suggested_callers files
+        - --dry-run: print edits without applying
+      location: scout-and-wave-go/cmd/saw/wire_integration_cmd.go
+    - name: Critic verdict enforcement in prepare-wave
+      description: |-
+        P5: E37 critic verdict enforcement gate.
+        prepare-wave must check critic_report.verdict before creating worktrees.
+        Exit 1 if verdict is ISSUES (blocks wave launch).
+      definition: |
+        // Go SDK: scout-and-wave-go/cmd/saw/prepare_wave.go
+        // Add after line 122 (after loading manifest):
+
+        // Step 0a3: E37 critic verdict enforcement
+        if doc.CriticReport != nil && doc.CriticReport.Verdict == "ISSUES" {
+            fmt.Fprintf(os.Stderr, "prepare-wave: E37 blocking - Critic found errors in agent briefs\n")
+
+            // List agents with issues
+            for agentID, review := range doc.CriticReport.AgentReviews {
+                if review.Verdict == "ISSUES" {
+                    fmt.Fprintf(os.Stderr, "  Agent %s: %d issue(s)\n", agentID, len(review.Issues))
+                    for _, issue := range review.Issues {
+                        fmt.Fprintf(os.Stderr, "    - %s: %s\n", issue.Severity, issue.Description)
+                    }
+                }
+            }
+
+            return fmt.Errorf("E37: critic verdict is ISSUES - fix briefs via 'sawtools amend-impl --redirect-agent' before launching wave")
+        }
+
+        Placement: After manifest load (line 122), before stale worktree cleanup (line 125).
+        This ensures critic check runs early, before any worktree operations.
+      location: scout-and-wave-go/cmd/saw/prepare_wave.go
+    - name: Critic action:new awareness
+      description: |-
+        P6: Critic must skip existence checks for files marked action:new.
+        Prevents false positives when agent will create the file.
+      definition: |
+        // Current critic.go has no implementation - this is the validation logic spec
+
+        Critic validation heuristics (to be implemented):
+        1. When validating file existence:
+           - Check file_ownership for matching entry
+           - If entry.action == "new", skip "file does not exist" error
+           - If entry.action == "modify", enforce existence check
+
+        2. When validating symbol/function existence:
+           - If symbol is in a file with action:new, skip "symbol does not exist" error
+           - If symbol is in existing file (action:modify or external), enforce existence check
+
+        3. When validating cross-file references:
+           - If reference is to external file (not in file_ownership), enforce existence
+           - If reference is to same-wave agent's file, defer to agent coordination (no check)
+
+        Example false positive from wave-finalization-robustness critic:
+        - Agent C creates detect_integration_gaps_cmd.go (action: new)
+        - Agent C brief says "register newDetectIntegrationGapsCmd in main.go"
+        - Critic flags: "main.go does not contain this command registration"
+        - FIX: Check that detect_integration_gaps_cmd.go is action:new, function will be created
+
+        Note: Critic implementation doesn't exist yet in critic.go (file is just type defs).
+        This contract defines the BEHAVIOR that a future critic agent must implement.
+      location: scout-and-wave-go/pkg/protocol/critic.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## E11 Enhancement: Hash-Based Identical Edit Detection
+
+            **Objective:** Enhance PredictConflictsFromReports to allow identical edits across agents.
+
+            **Current behavior:** E11 blocks merge when a file appears in multiple agents' completion reports,
+            even if the edits are identical (auto-resolvable by git octopus merge).
+
+            **Desired behavior:** Compare file content hashes between agent branches. If all agents produced
+            identical final content for a file, allow the merge (no conflict). Only block if hashes differ.
+
+            **Implementation:**
+
+            1. In PredictConflictsFromReports (pkg/protocol/conflict_predict.go):
+               - After detecting file overlap (line 54: len(agents) > 1), add hash comparison step
+               - For each overlapping file, read content from each agent's branch worktree
+               - Compute SHA256 hash of file content
+               - If all hashes match: skip adding to conflicts list (identical edits are safe)
+               - If hashes differ: add to conflicts list (real conflict)
+
+            2. Add helper function:
+               ```go
+               func computeFileHashInBranch(repoPath, branchName, relFile string) (string, error) {
+                   // Use git show {branch}:{file} to read content without checking out
+                   // Compute SHA256 hash of content
+                   // Return hex-encoded hash
+               }
+               ```
+
+            3. Update error message format when blocking:
+               - Old: "E11 conflict prediction: pkg/file.go (agents: [D F])"
+               - New: "E11 conflict prediction: pkg/file.go has differing edits (agents: [D F])"
+
+            4. Add test cases in conflict_predict_test.go:
+               - TestPredictConflictsFromReports_IdenticalEditsAllowed
+               - TestPredictConflictsFromReports_DifferingEditsBlocked
+
+            **Constraints:**
+            - Do NOT change function signature of PredictConflictsFromReports
+            - Hash comparison requires manifest.FeatureSlug to construct branch names
+            - Use internal/git package for git operations (git show command)
+            - Maintain backward compatibility: if hash computation fails, fall back to blocking (safe default)
+
+            **Files to modify:**
+            - scout-and-wave-go/pkg/protocol/conflict_predict.go (add hash comparison logic)
+            - scout-and-wave-go/pkg/protocol/conflict_predict_test.go (add test cases)
+
+            **Verification gate:**
+            ```bash
+            cd scout-and-wave-go
+            go test ./pkg/protocol -run TestPredictConflicts -v
+            go vet ./pkg/protocol/conflict_predict.go
+            ```
+          files:
+            - pkg/protocol/conflict_predict.go
+            - pkg/protocol/conflict_predict_test.go
+        - id: B
+          task: |
+            ## Finalize-Wave Resumption: --skip-merge Flag
+
+            **Objective:** Add --skip-merge flag to finalize-wave to support manual merge escape hatch.
+
+            **Use case:** When E11 blocks merge with false positive, orchestrator manually merges using
+            git octopus. Need way to continue finalize-wave pipeline from verify-build step without
+            re-running merge (already done) or pre-merge gates (stale after manual merge).
+
+            **Implementation:**
+
+            1. Add --skip-merge flag to CLI (cmd/saw/finalize_wave.go):
+               ```go
+               var skipMerge bool
+               cmd.Flags().BoolVar(&skipMerge, "skip-merge", false, "Skip merge step (merge already done manually); start from verify-build")
+               ```
+
+            2. Update FinalizeWaveOpts struct (pkg/engine/finalize.go line 18):
+               ```go
+               type FinalizeWaveOpts struct {
+                   IMPLPath    string
+                   RepoPath    string
+                   WaveNum     int
+                   MergeTarget string
+                   ObsEmitter  *observability.Emitter
+                   EnforceIntegrationValidation bool
+                   RequireNoStubs bool
+                   SkipMerge   bool  // NEW: when true, skip pre-merge steps
+               }
+               ```
+
+            3. Update FinalizeWave function logic (pkg/engine/finalize.go):
+               - After loading manifest (line 72), check if opts.SkipMerge is true
+               - If true, skip steps 1-4: VerifyCommits, ScanStubs, RunPreMergeGates, MergeAgents
+               - Jump directly to postMerge: label (line 343 in current code)
+               - Run steps 5-7: VerifyBuild, RunPostMergeGates, Cleanup
+               - Result structure: populate MergeResult with {Success: true, Wave: waveNum} synthetic entry
+
+            4. Update CLI command (cmd/saw/finalize_wave.go):
+               - Pass skipMerge flag value to engine.FinalizeWave via FinalizeWaveOpts
+               - For cross-repo waves, apply --skip-merge to all repos (synthetic merge result per repo)
+
+            5. Add safety check: if --skip-merge is true but worktrees still exist, emit warning:
+               "Warning: --skip-merge used but worktrees detected; cleanup will remove them"
+
+            **Constraints:**
+            - Do NOT change FinalizeWaveResult struct (backward compatibility)
+            - Maintain idempotency: --skip-merge can be used multiple times (steps 5-7 are idempotent)
+            - Integration validation (E25/E26/E35) MUST still run in step 5.5 (RunPostMergeGates)
+
+            **Files to modify:**
+            - scout-and-wave-go/cmd/saw/finalize_wave.go (add CLI flag, pass to engine)
+            - scout-and-wave-go/pkg/engine/finalize.go (add SkipMerge field, implement skip logic)
+
+            **Verification gate:**
+            ```bash
+            cd scout-and-wave-go
+            go test ./cmd/saw -run TestFinalizeWave -v
+            go test ./pkg/engine -run TestFinalizeWave -v
+            go build ./cmd/saw
+            ```
+          files:
+            - cmd/saw/finalize_wave.go
+            - pkg/engine/finalize.go
+      base_commit: fbc94d3aa350a2feadf17d522df9eb10457debff
+    - number: 2
+      agents:
+        - id: C
+          task: |-
+            ## Standalone Command: detect-integration-gaps
+
+            **Objective:** Create standalone CLI command to run E25/E26/E35 integration validation
+            without full finalize-wave pipeline.
+
+            **Use case:** After manual merge bypass (via --skip-merge), need way to verify integration
+            gaps were addressed. Also useful for ad-hoc integration checks during development.
+
+            **Implementation:**
+
+            1. Create new file: cmd/saw/detect_integration_gaps_cmd.go
+
+            2. Command signature:
+               ```go
+               sawtools detect-integration-gaps <manifest-path> --wave N [--repo-dir DIR]
+               ```
+
+            3. Command logic:
+               ```go
+               func newDetectIntegrationGapsCmd() *cobra.Command {
+                   var waveNum int
+                   var repoDir string
+
+                   cmd := &cobra.Command{
+                       Use:   "detect-integration-gaps <manifest-path>",
+                       Short: "Detect unconnected exports and wiring gaps (E25/E26/E35)",
+                       Args:  cobra.ExactArgs(1),
+                       RunE: func(cmd *cobra.Command, args []string) error {
+                           manifestPath := args[0]
+                           manifest, _ := protocol.Load(manifestPath)
+
+                           // E25: Heuristic integration scan
+                           integrationReport, err := protocol.ValidateIntegration(manifest, waveNum, repoDir)
+
+                           // E35: Wiring declaration check
+                           var wiringReport *protocol.WiringValidationResult
+                           if len(manifest.Wiring) > 0 {
+                               wiringReport, _ = protocol.ValidateWiringDeclarations(manifest, repoDir)
+                           }
+
+                           // Combine into single output
+                           output := map[string]interface{}{
+                               "wave": waveNum,
+                               "integration_report": integrationReport,
+                               "wiring_report": wiringReport,
+                           }
+                           json.NewEncoder(os.Stdout).Encode(output)
+
+                           // Exit 1 if gaps detected
+                           if (integrationReport != nil && !integrationReport.Valid) ||
+                              (wiringReport != nil && !wiringReport.Valid) {
+                               return fmt.Errorf("integration gaps detected")
+                           }
+                           return nil
+                       },
+                   }
+                   cmd.Flags().IntVar(&waveNum, "wave", 0, "Wave number (required)")
+                   cmd.MarkFlagRequired("wave")
+                   cmd.Flags().StringVar(&repoDir, "repo-dir", ".", "Repository directory")
+                   return cmd
+               }
+               ```
+
+            4. **CRITICAL: Register command in main.go:**
+               In `scout-and-wave-go/cmd/saw/main.go`, add to the AddCommand list (around line 30-86):
+               ```go
+               rootCmd.AddCommand(newDetectIntegrationGapsCmd())
+               ```
+
+            5. Add test file: cmd/saw/detect_integration_gaps_cmd_test.go
+               - Test with mock IMPL manifest
+               - Verify JSON output structure
+               - Verify exit code behavior
+
+            **Files to create:**
+            - scout-and-wave-go/cmd/saw/detect_integration_gaps_cmd.go
+
+            **Files to modify:**
+            - scout-and-wave-go/cmd/saw/main.go (add command registration)
+
+            **Verification gate:**
+            ```bash
+            cd scout-and-wave-go
+            go build ./cmd/saw
+            ./cmd/saw/saw detect-integration-gaps --help
+            go test ./cmd/saw -run TestDetectIntegrationGaps -v
+            ```
+          files:
+            - cmd/saw/detect_integration_gaps_cmd.go
+          dependencies:
+            - A
+            - B
+        - id: D
+          task: |-
+            ## Standalone Command: wire-integration
+
+            **Objective:** Create interactive CLI command to apply integration gap fixes.
+
+            **Use case:** After detect-integration-gaps surfaces unconnected exports, orchestrator
+            needs way to apply suggested fixes without re-running full finalize-wave pipeline.
+
+            **Implementation:**
+
+            1. Create new file: cmd/saw/wire_integration_cmd.go
+
+            2. Command signature:
+               ```go
+               sawtools wire-integration <manifest-path> --wave N [--repo-dir DIR] [--dry-run]
+               ```
+
+            3. Command logic:
+               ```go
+               func newWireIntegrationCmd() *cobra.Command {
+                   var waveNum int
+                   var repoDir string
+                   var dryRun bool
+
+                   cmd := &cobra.Command{
+                       Use:   "wire-integration <manifest-path>",
+                       Short: "Apply integration gap fixes (import statements, call-sites)",
+                       Args:  cobra.ExactArgs(1),
+                       RunE: func(cmd *cobra.Command, args []string) error {
+                           manifestPath := args[0]
+
+                           // Step 1: Detect gaps using detect-integration-gaps logic
+                           manifest, _ := protocol.Load(manifestPath)
+                           integrationReport, _ := protocol.ValidateIntegration(manifest, waveNum, repoDir)
+
+                           if integrationReport.Valid {
+                               fmt.Println("No integration gaps detected")
+                               return nil
+                           }
+
+                           // Step 2: For each gap with severity error/warning, apply fix
+                           fixes := []map[string]string{}
+                           for _, gap := range integrationReport.Gaps {
+                               if gap.Severity != "error" && gap.Severity != "warning" {
+                                   continue
+                               }
+
+                               // Use SearchResults field to find target files (from ValidateIntegration)
+                               for _, callerFile := range gap.SearchResults {
+                                   edit := generateImportEdit(gap.ExportName, gap.FilePath, callerFile)
+                                   if !dryRun {
+                                       applyEdit(filepath.Join(repoDir, callerFile), edit)
+                                   }
+                                   fixes = append(fixes, map[string]string{
+                                       "file": callerFile,
+                                       "edit": edit,
+                                   })
+                               }
+                           }
+
+                           // Step 3: Output JSON with fixes applied
+                           output := map[string]interface{}{
+                               "wave": waveNum,
+                               "dry_run": dryRun,
+                               "fixes": fixes,
+                           }
+                           json.NewEncoder(os.Stdout).Encode(output)
+                           return nil
+                       },
+                   }
+                   cmd.Flags().IntVar(&waveNum, "wave", 0, "Wave number (required)")
+                   cmd.MarkFlagRequired("wave")
+                   cmd.Flags().StringVar(&repoDir, "repo-dir", ".", "Repository directory")
+                   cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Print fixes without applying")
+                   return cmd
+               }
+               ```
+
+            4. **Helper functions to implement (in same file):**
+               ```go
+               // generateImportEdit creates an import statement for the exported symbol
+               func generateImportEdit(exportName, exportFile, targetFile string) string {
+                   // Implementation: construct import statement based on export package
+                   // Example: return `import "github.com/blackwell-systems/scout-and-wave-go/pkg/result"`
+               }
+
+               // applyEdit inserts the import statement into the target file
+               func applyEdit(targetFilePath, importStatement string) error {
+                   // Implementation: read file, insert import after package declaration, write back
+                   // Handle duplicate imports (skip if already present)
+               }
+               ```
+
+            5. **CRITICAL: Register command in main.go:**
+               In `scout-and-wave-go/cmd/saw/main.go`, add to the AddCommand list (around line 30-86):
+               ```go
+               rootCmd.AddCommand(newWireIntegrationCmd())
+               ```
+
+            6. Add test file: cmd/saw/wire_integration_cmd_test.go
+
+            **Constraints:**
+            - Only apply fixes for gaps with severity "error" or "warning"
+            - Skip "info" severity gaps (informational only)
+            - --dry-run must print fixes without modifying files
+            - Use gap.SearchResults field (from ValidateIntegration) to find target files
+
+            **Files to create:**
+            - scout-and-wave-go/cmd/saw/wire_integration_cmd.go
+
+            **Files to modify:**
+            - scout-and-wave-go/cmd/saw/main.go (add command registration)
+
+            **Verification gate:**
+            ```bash
+            cd scout-and-wave-go
+            go build ./cmd/saw
+            ./cmd/saw/saw wire-integration --help
+            go test ./cmd/saw -run TestWireIntegration -v
+            ```
+          files:
+            - cmd/saw/wire_integration_cmd.go
+          dependencies:
+            - A
+            - B
+        - id: E
+          task: |
+            ## Protocol Documentation: E11a + E37 Updates
+
+            **Objective:** Document manual merge escape hatch (E11a) and update protocol docs for E37 enforcement and action:new awareness across 5 protocol files.
+
+            **Implementation:**
+
+            ### 1. execution-rules.md — Add E11a Manual Merge Escape Hatch
+
+            Add new section after E11 (around line 274):
+
+            ```markdown
+            ## E11a: Manual Merge Escape Hatch
+
+            **Trigger:** E11 blocks merge with false positive (identical edits across agents)
+
+            **Required Action:** The orchestrator may bypass E11 block via manual merge + finalize-wave resumption.
+
+            ### When to Use Manual Merge
+
+            Use this escape hatch when:
+            - E11 blocks merge due to file overlap
+            - Visual inspection confirms edits are identical (no semantic conflict)
+            - Git octopus merge would auto-resolve without conflict
+
+            Do NOT use when:
+            - Edits differ semantically (content hashes differ)
+            - Multiple agents modified same function with different logic
+            - Test coverage is insufficient to catch semantic conflicts
+
+            ### Manual Merge Procedure
+
+            1. Verify E11 block is false positive:
+               ```bash
+               # Compare file content between agent branches
+               git show saw/{slug}/wave{N}-agent-A:path/to/file.go > /tmp/agent-A.txt
+               git show saw/{slug}/wave{N}-agent-B:path/to/file.go > /tmp/agent-B.txt
+               diff /tmp/agent-A.txt /tmp/agent-B.txt
+               # If diff is empty: identical edits, safe to merge
+               ```
+
+            2. Perform manual octopus merge:
+               ```bash
+               git checkout main
+               git merge --no-ff saw/{slug}/wave{N}-agent-A saw/{slug}/wave{N}-agent-B ... \
+                   -m "Merge wave {N}: {description}"
+               # Git auto-resolves identical edits
+               ```
+
+            3. Resume finalize-wave from verify-build:
+               ```bash
+               sawtools finalize-wave docs/IMPL/IMPL-{slug}.yaml --wave {N} --skip-merge
+               ```
+
+            4. Integration validation runs automatically in step 5.5 (RunPostMergeGates)
+
+            ### Resumption Pipeline (--skip-merge)
+
+            When --skip-merge flag is used:
+            - Step 1: VerifyCommits - SKIP
+            - Step 2: ScanStubs - SKIP
+            - Step 3: RunPreMergeGates - SKIP
+            - Step 4: MergeAgents - SKIP (already merged manually)
+            - Step 5: VerifyBuild - RUN (catches semantic conflicts)
+            - Step 5.5: RunPostMergeGates - RUN (includes E25/E26/E35)
+            - Step 6: Cleanup - RUN
+
+            ### Safety Guarantees
+
+            - VerifyBuild (step 5) catches semantic conflicts missed by hash comparison
+            - Integration validation (step 5.5) detects unconnected exports
+            - Full test suite runs post-merge (catches cross-package breakage)
+
+            ### Alternative: Standalone Integration Validation
+
+            If --skip-merge is not used, integration validation can be run separately:
+            ```bash
+            sawtools detect-integration-gaps docs/IMPL/IMPL-{slug}.yaml --wave {N}
+            sawtools wire-integration docs/IMPL/IMPL-{slug}.yaml --wave {N} [--dry-run]
+            ```
+
+            **Related Rules:** See E11 (conflict prediction), E7 (agent failure handling)
+            ```
+
+            Update E11 description (line 264-274) to reference E11a:
+            - Add sentence at end: "For false positive handling, see E11a."
+
+            ### 2. execution-rules.md — Update E37 for Enforcement Point and action:new
+
+            Find E37 section (lines 1306-1370), update:
+
+            **Add "Enforcement Point" subsection after "Trigger Conditions":**
+            ```markdown
+            ### Enforcement Point (Added in P5)
+
+            After critic writes verdict to IMPL doc, `prepare-wave` checks the verdict before creating worktrees:
+
+            - **Verdict: PASS** → proceed with worktree creation
+            - **Verdict: WARNING** → emit warning, proceed (orchestrator can override with --no-review)
+            - **Verdict: ISSUES** → exit code 1, block worktree creation
+
+            Error message format:
+            ```
+            Error: E37 blocking: Critic found errors in agent briefs.
+            Fix via: sawtools amend-impl --redirect-agent <ID> --wave <N>
+            Agent IDs with errors: [C, D]
+            ```
+
+            This ensures agents cannot launch with inaccurate briefs.
+            ```
+
+            **Update "Verification Checks" subsection (lines 1328-1345):**
+            Add new bullet point at end of checks list:
+            ```markdown
+            7. **Action-new awareness (P6 fix):** For files marked `action: new` in file_ownership, skip existence checks. The file WILL be created by the agent - flagging "file does not exist" is a false positive.
+            ```
+
+            ### 3. procedures.md — Add Phase 0 (E11a Escape Hatch)
+
+            Find "Phase 1: Scout Phase" section (around line 55), insert new Phase 0 section BEFORE it:
+
+            ```markdown
+            ## Phase 0: Manual Merge Escape Hatch (E11a)
+
+            **When to use:** E11 blocks merge with false positive (identical edits)
+
+            **Trigger condition:** `sawtools finalize-wave` exits with E11 error but visual inspection confirms edits are identical
+
+            **Procedure:**
+            1. Verify E11 block is false positive (compare file hashes between branches)
+            2. Perform manual octopus merge: `git merge --no-ff {branches}`
+            3. Resume finalization: `sawtools finalize-wave --skip-merge`
+            4. Integration validation (E25/E26) runs automatically in step 5.5
+
+            **See also:** E11a in execution-rules.md for detailed steps
+            ```
+
+            ### 4. state-machine.md — Update WAVE_MERGING Guard Condition
+
+            Find WAVE_MERGING → WAVE_VERIFIED transition (around line 151).
+
+            Change guard from:
+            ```
+            Guard: Conflict prediction passes (E11)
+            ```
+
+            To:
+            ```
+            Guard: Conflict prediction passes (E11) OR manual merge completed (E11a)
+            ```
+
+            ### 5. participants.md — Update Critic Agent Responsibilities
+
+            Find Critic Agent section (lines 168-197), update "Responsibilities" list.
+
+            Add bullet:
+            ```markdown
+            - Skip existence checks for files marked `action: new` in file_ownership (files will be created by agents, not errors)
+            ```
+
+            ### 6. README.md — Update Protocol Version
+
+            Find protocol version line (line 52):
+            - Change from `0.55.0` to `0.56.0`
+            - Add changelog entry:
+              ```markdown
+              - **0.56.0** — E11a manual merge escape hatch, E37 enforcement in prepare-wave, critic action:new awareness
+              ```
+
+            **Constraints:**
+            - Match existing markdown style in each file
+            - Use placeholder {slug}, {N} values in example commands
+            - Cross-reference related rules using "See E{N}" format
+            - Do NOT modify any Go code — protocol docs only
+
+            **Files to modify:**
+            - scout-and-wave/protocol/execution-rules.md (E11a section + E37 updates)
+            - scout-and-wave/protocol/procedures.md (Phase 0)
+            - scout-and-wave/protocol/state-machine.md (guard condition)
+            - scout-and-wave/protocol/participants.md (Critic responsibilities)
+            - scout-and-wave/protocol/README.md (version bump)
+
+            **Verification gate:**
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave
+            grep -n "## E11a" protocol/execution-rules.md
+            grep -n "Phase 0: Manual Merge Escape Hatch" protocol/procedures.md
+            grep -n "manual merge completed (E11a)" protocol/state-machine.md
+            grep -n "action: new" protocol/participants.md
+            grep -n "0.56.0" protocol/README.md
+            ```
+          files:
+            - protocol/execution-rules.md
+            - protocol/procedures.md
+            - protocol/state-machine.md
+            - protocol/participants.md
+            - protocol/README.md
+          dependencies:
+            - A
+            - B
+      base_commit: aae704e672dca950e8bb06a7dbc1b0086f1ad596
+    - number: 3
+      agents:
+        - id: F
+          task: |
+            ## P5: E37 Critic Verdict Enforcement in prepare-wave
+
+            **Objective:** Block wave launch when critic verdict is ISSUES.
+
+            **Problem:** After running critic agent (E37), nothing prevents prepare-wave from launching
+            agents on bad briefs. Critic writes verdict to IMPL doc, but orchestrator can still run
+            prepare-wave without checking critic_report.verdict.
+
+            **Desired behavior:**
+            - prepare-wave checks critic_report.verdict after loading manifest
+            - If verdict is "ISSUES", exit code 1 with clear error message
+            - If verdict is "PASS" or absent, proceed normally
+            - If verdict is "WARNING", emit warning but proceed (orchestrator override possible)
+
+            **Implementation:**
+
+            1. In prepare_wave.go, add critic verdict check after line 122 (after `doc, err := protocol.Load(manifestPath)`):
+
+            ```go
+            // Step 0a3: E37 critic verdict enforcement
+            // Check if critic review has been run and found issues.
+            // This prevents launching agents with inaccurate briefs.
+            if doc.CriticReport != nil {
+                switch doc.CriticReport.Verdict {
+                case protocol.CriticVerdictIssues:
+                    // BLOCK: critic found blocking errors
+                    fmt.Fprintf(os.Stderr, "prepare-wave: E37 blocking - Critic found errors in agent briefs\n")
+
+                    // List agents with issues for transparency
+                    for agentID, review := range doc.CriticReport.AgentReviews {
+                        if review.Verdict == protocol.CriticVerdictIssues {
+                            fmt.Fprintf(os.Stderr, "  Agent %s: %d issue(s)\n", agentID, len(review.Issues))
+                            for _, issue := range review.Issues {
+                                fmt.Fprintf(os.Stderr, "    - [%s] %s\n", issue.Severity, issue.Description)
+                                if issue.File != "" {
+                                    fmt.Fprintf(os.Stderr, "      File: %s\n", issue.File)
+                                }
+                                if issue.Symbol != "" {
+                                    fmt.Fprintf(os.Stderr, "      Symbol: %s\n", issue.Symbol)
+                                }
+                            }
+                        }
+                    }
+
+                    return fmt.Errorf("E37: critic verdict is ISSUES - fix briefs via 'sawtools amend-impl --redirect-agent' before launching wave")
+
+                case protocol.CriticVerdictSkipped:
+                    // ALLOW: operator explicitly skipped critic review (--no-review flag)
+                    fmt.Fprintf(os.Stderr, "prepare-wave: critic review was skipped (--no-review flag)\n")
+
+                case protocol.CriticVerdictPass:
+                    // ALLOW: critic verified all briefs
+                    fmt.Fprintf(os.Stderr, "prepare-wave: critic review passed ✓\n")
+
+                default:
+                    // ALLOW: unknown verdict (future-proof)
+                    fmt.Fprintf(os.Stderr, "prepare-wave: critic verdict: %s (proceeding)\n", doc.CriticReport.Verdict)
+                }
+            } else {
+                // ALLOW: no critic report present (older IMPL docs, or critic not yet run)
+                // This is not an error - critic is optional for backwards compatibility
+            }
+            ```
+
+            2. Placement: Insert this block immediately after line 122 (after manifest load), before
+               the stale worktree cleanup (line 125). This ensures critic check runs early, before
+               any worktree operations.
+
+            3. Use protocol package constants:
+               - `protocol.CriticVerdictIssues` (value: "ISSUES")
+               - `protocol.CriticVerdictPass` (value: "PASS")
+               - `protocol.CriticVerdictSkipped` (value: "SKIPPED")
+
+            **Testing:**
+            1. Test with IMPL doc that has critic_report.verdict = "ISSUES"
+               - Should exit 1 with clear error message listing agents with issues
+            2. Test with critic_report.verdict = "PASS"
+               - Should proceed normally
+            3. Test with no critic_report field (nil)
+               - Should proceed normally (backward compatibility)
+
+            **Constraints:**
+            - Do NOT change function signature of newPrepareWaveCmd
+            - Do NOT add new flags (enforcement is automatic, not optional)
+            - Maintain backward compatibility: absence of critic_report is not an error
+            - Use stderr for diagnostic output, stdout reserved for JSON result
+
+            **Files to modify:**
+            - scout-and-wave-go/cmd/saw/prepare_wave.go (add critic verdict check after line 122)
+
+            **Verification gate:**
+            ```bash
+            cd scout-and-wave-go
+            go build ./cmd/saw
+            go test ./cmd/saw -run TestPrepareWave -v
+            go vet ./cmd/saw/prepare_wave.go
+            ```
+          files:
+            - cmd/saw/prepare_wave.go
+          dependencies:
+            - A
+            - B
+            - C
+            - D
+        - id: G
+          task: |
+            ## P6: Critic action:new Awareness (False Positive Fix)
+
+            **Objective:** Prevent critic from flagging "file does not exist" and "symbol does not exist"
+            errors for files marked `action: new` in file_ownership.
+
+            **Problem:** Critic validation produces false positives when agent briefs reference files
+            or symbols that will be created by the agent. Example from wave-finalization-robustness:
+
+            ```
+            Agent C: ISSUES
+            - ERROR: Function newDetectIntegrationGapsCmd must be registered in main.go,
+              but main.go does not contain this command registration
+              (File will be created: action: new)
+            ```
+
+            The file `detect_integration_gaps_cmd.go` is marked `action: new`, so the function
+            `newDetectIntegrationGapsCmd` WILL be created by Agent C. Critic should not flag this
+            as an error.
+
+            **Desired behavior:**
+            - For files with `action: new`: Skip "file does not exist" checks (expected)
+            - For symbols in `action: new` files: Skip "symbol does not exist" checks (will be created)
+            - For external dependencies: STILL enforce existence checks (must exist before agent runs)
+
+            **Implementation:**
+
+            **IMPORTANT NOTE:** The current `critic.go` file contains only type definitions (CriticResult,
+            AgentCriticReview, CriticIssue). There is NO validation logic implemented yet - the file
+            is just structs and helper functions (WriteCriticReview, GetCriticReview).
+
+            This task defines the VALIDATION LOGIC that must be added when a critic agent is implemented.
+            You are NOT implementing the critic agent itself - you are adding HELPER FUNCTIONS that
+            future critic implementations can use.
+
+            1. Add helper function to check if a file is marked action:new:
+
+            ```go
+            // IsNewFile returns true if the file is marked action:new in file_ownership.
+            // Used by critic validation to skip existence checks for files that will be created.
+            func IsNewFile(manifest *IMPLManifest, filePath string) bool {
+                for _, fo := range manifest.FileOwnership {
+                    if fo.File == filePath {
+                        return fo.Action == "new"
+                    }
+                }
+                return false
+            }
+            ```
+
+            2. Add helper function to check if a symbol is in an action:new file:
+
+            ```go
+            // IsSymbolInNewFile returns true if the symbol's defining file is marked action:new.
+            // Used by critic validation to skip existence checks for symbols that will be created.
+            func IsSymbolInNewFile(manifest *IMPLManifest, symbolFile string) bool {
+                return IsNewFile(manifest, symbolFile)
+            }
+            ```
+
+            3. Add helper function to get agent's action:new files:
+
+            ```go
+            // GetAgentNewFiles returns all files owned by an agent marked action:new.
+            // Used by critic validation to understand which files/symbols agent will create.
+            func GetAgentNewFiles(manifest *IMPLManifest, agentID string) []string {
+                var newFiles []string
+                for _, fo := range manifest.FileOwnership {
+                    if fo.Agent == agentID && fo.Action == "new" {
+                        newFiles = append(newFiles, fo.File)
+                    }
+                }
+                return newFiles
+            }
+            ```
+
+            4. Add validation guidance in godoc comment at top of critic.go:
+
+            ```go
+            // Package protocol provides critic validation types and helpers.
+            //
+            // Critic Validation Rules (for future critic agent implementations):
+            //
+            // 1. File Existence Checks:
+            //    - If file is in file_ownership with action:new, skip "file does not exist" error
+            //    - If file is in file_ownership with action:modify, enforce existence check
+            //    - If file is NOT in file_ownership (external), enforce existence check
+            //
+            // 2. Symbol/Function Existence Checks:
+            //    - If symbol is defined in a file with action:new, skip "symbol does not exist" error
+            //    - If symbol is in existing file (action:modify or external), enforce existence check
+            //    - Use GetAgentNewFiles() to determine which symbols agent will create
+            //
+            // 3. Cross-File References:
+            //    - If reference is to external file (not in file_ownership), enforce existence
+            //    - If reference is to same-wave agent's file, defer (coordination, not verification)
+            //
+            // Use IsNewFile() and IsSymbolInNewFile() helpers to implement these rules.
+            ```
+
+            5. Add test file: pkg/protocol/critic_test.go
+
+            ```go
+            package protocol
+
+            import (
+                "testing"
+            )
+
+            func TestIsNewFile(t *testing.T) {
+                manifest := &IMPLManifest{
+                    FileOwnership: []FileOwnershipEntry{
+                        {File: "pkg/new.go", Agent: "A", Action: "new"},
+                        {File: "pkg/existing.go", Agent: "B", Action: "modify"},
+                    },
+                }
+
+                if !IsNewFile(manifest, "pkg/new.go") {
+                    t.Error("expected pkg/new.go to be marked as new")
+                }
+
+                if IsNewFile(manifest, "pkg/existing.go") {
+                    t.Error("expected pkg/existing.go to NOT be marked as new")
+                }
+
+                if IsNewFile(manifest, "pkg/missing.go") {
+                    t.Error("expected missing file to NOT be marked as new")
+                }
+            }
+
+            func TestGetAgentNewFiles(t *testing.T) {
+                manifest := &IMPLManifest{
+                    FileOwnership: []FileOwnershipEntry{
+                        {File: "pkg/new1.go", Agent: "A", Action: "new"},
+                        {File: "pkg/new2.go", Agent: "A", Action: "new"},
+                        {File: "pkg/existing.go", Agent: "A", Action: "modify"},
+                        {File: "pkg/other.go", Agent: "B", Action: "new"},
+                    },
+                }
+
+                newFiles := GetAgentNewFiles(manifest, "A")
+                if len(newFiles) != 2 {
+                    t.Errorf("expected 2 new files for agent A, got %d", len(newFiles))
+                }
+            }
+            ```
+
+            **Constraints:**
+            - Do NOT implement full critic validation logic (out of scope - that's a future agent)
+            - Only add HELPER FUNCTIONS that critic implementations can use
+            - Maintain backward compatibility: existing CriticResult/AgentCriticReview structs unchanged
+            - Add godoc comments explaining validation rules for future implementers
+
+            **Files to modify:**
+            - scout-and-wave-go/pkg/protocol/critic.go (add helper functions and validation guidance)
+
+            **Files to create:**
+            - scout-and-wave-go/pkg/protocol/critic_test.go (tests for new helper functions)
+
+            **Verification gate:**
+            ```bash
+            cd scout-and-wave-go
+            go test ./pkg/protocol -run TestIsNewFile -v
+            go test ./pkg/protocol -run TestGetAgentNewFiles -v
+            go vet ./pkg/protocol/critic.go
+            go build ./pkg/protocol
+            ```
+          files:
+            - pkg/protocol/critic.go
+          dependencies:
+            - A
+            - B
+      base_commit: aae704e672dca950e8bb06a7dbc1b0086f1ad596
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./...
+          required: true
+        - type: test
+          command: go test ./... -timeout 120s
+          required: true
+        - type: lint
+          command: go vet ./...
+          required: true
+completion_reports:
+    A:
+        status: complete
+        branch: saw/wave-finalization-robustness/wave1-agent-A
+        commit: 80a2644
+        files_changed:
+            - pkg/protocol/conflict_predict.go
+            - pkg/protocol/conflict_predict_test.go
+        tests_added:
+            - TestPredictConflictsFromReports_IdenticalEditsAllowed
+            - TestPredictConflictsFromReports_DifferingEditsBlocked
+        verification: PASS
+    B:
+        status: complete
+        branch: saw/wave-finalization-robustness/wave1-agent-B
+        commit: 9f5deb3
+        files_changed:
+            - cmd/saw/finalize_wave.go
+            - pkg/engine/finalize.go
+        verification: 'PASS: All tests passing (12 cmd/saw + 8 pkg/engine). Fixed compilation errors from previous attempt.'
+    C:
+        status: complete
+        branch: saw/wave-finalization-robustness/wave2-agent-C
+        commit: 107f47e
+        files_created:
+            - cmd/saw/detect_integration_gaps_cmd.go
+            - cmd/saw/detect_integration_gaps_cmd_test.go
+        tests_added:
+            - TestDetectIntegrationGapsCmd_InvalidManifestPath
+            - TestDetectIntegrationGapsCmd_WaveFlagRequired
+            - TestDetectIntegrationGapsCmd_JSONOutput
+            - TestDetectIntegrationGapsCmd_WithWiringDeclarations
+            - TestDetectIntegrationGapsCmd_NoWiringDeclarations
+        verification: 'PASS - All tests passing. NOTE: Command requires registration in cmd/saw/main.go (line ~86) with: rootCmd.AddCommand(newDetectIntegrationGapsCmd()). This file is outside my ownership per I1 - Integration Agent will wire during merge.'
+    D:
+        status: complete
+        branch: saw/wave-finalization-robustness/wave2-agent-D
+        commit: f9cf43d
+        files_changed:
+            - cmd/saw/wire_integration_cmd.go
+            - cmd/saw/wire_integration_cmd_test.go
+        files_created:
+            - cmd/saw/wire_integration_cmd.go
+            - cmd/saw/wire_integration_cmd_test.go
+        tests_added:
+            - TestWireIntegrationCmd_FlagParsing
+            - TestGenerateImportEdit_SamePackage
+            - TestGenerateImportEdit_DifferentPackage
+            - TestApplyEdit_SkipsDuplicateImport
+            - TestApplyEdit_AddsNewImport
+            - TestGetModuleName
+            - TestWireIntegrationCmd_JSONOutput
+        verification: PASS
+    E:
+        status: complete
+        branch: saw/wave-finalization-robustness/wave2-agent-E
+        commit: 7499ab4
+        files_changed:
+            - protocol/execution-rules.md
+            - protocol/procedures.md
+            - protocol/state-machine.md
+            - protocol/participants.md
+            - protocol/README.md
+        verification: PASS
+    F:
+        status: complete
+        branch: saw/wave-finalization-robustness/wave3-agent-F
+        commit: ece0f6d
+        files_changed:
+            - cmd/saw/prepare_wave.go
+        verification: PASS
+    G:
+        status: complete
+        branch: saw/wave-finalization-robustness/wave3-agent-G
+        commit: 6acf404
+        files_changed:
+            - pkg/protocol/critic.go
+            - pkg/protocol/critic_test.go
+        tests_added:
+            - TestIsNewFile
+            - TestGetAgentNewFiles
+        verification: PASS
+pre_mortem:
+    overall_risk: medium
+    rows:
+        - scenario: E11 hash comparison fails silently, falls back to blocking merge
+          likelihood: low
+          impact: medium
+          mitigation: Add explicit error logging when hash computation fails; add test case for hash failure path
+        - scenario: --skip-merge used on wave that wasn't actually merged yet (user error)
+          likelihood: medium
+          impact: high
+          mitigation: Add safety check - if worktrees exist, emit warning; verify branch merge status before resuming
+        - scenario: Manual merge creates semantic conflict that passes VerifyBuild
+          likelihood: low
+          impact: high
+          mitigation: Document in E11a that manual merge is only for identical edits; VerifyBuild runs full test suite to catch semantic issues
+        - scenario: Integration validation (E25/E26) doesn't run after manual merge
+          likelihood: medium
+          impact: high
+          mitigation: --skip-merge MUST preserve step 5.5 (RunPostMergeGates) which includes integration validation; add test case
+        - scenario: Backward compatibility break - existing finalize-wave callers break
+          likelihood: low
+          impact: medium
+          mitigation: New --skip-merge flag is opt-in (default false); FinalizeWaveOpts.SkipMerge defaults to false; no behavior change for existing code
+        - scenario: Cross-repo waves don't handle --skip-merge correctly
+          likelihood: medium
+          impact: medium
+          mitigation: CLI applies --skip-merge to all repos; synthetic MergeResult per repo; test with multi-repo IMPL
+        - scenario: E37 enforcement too strict - blocks legitimate workflows
+          likelihood: low
+          impact: medium
+          mitigation: Critic verdict check allows PASS, SKIPPED, and absent verdicts; only blocks on ISSUES; orchestrator can skip critic with --no-review flag
+        - scenario: Critic false positive fix incomplete - still flags valid patterns
+          likelihood: medium
+          impact: low
+          mitigation: Implementation adds helper functions only (not full validation); future critic agents use helpers to implement rules; test coverage for helper logic
+        - scenario: Agent G scope creep - implements full critic instead of just helpers
+          likelihood: low
+          impact: low
+          mitigation: Brief explicitly states "do NOT implement full critic validation logic" - only add helper functions; verification gate is go build, not end-to-end critic run
+state: "COMPLETE"
