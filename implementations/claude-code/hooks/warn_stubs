@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+# PostToolUse hook: warn when written/edited code contains stub patterns (H3)
+# Non-blocking — emits a JSON additionalContext warning and exits 0.
+#
+# Stub patterns detected:
+#   - TODO, FIXME, HACK, XXX comments
+#   - panic("not implemented") / panic("TODO")
+#   - raise NotImplementedError (Python)
+#   - unimplemented!() (Rust)
+#   - throw new Error("not implemented") (JS/TS)
+#   - pass as a lone statement (Python)
+#   - PLACEHOLDER / STUB string literals
+#
+# Install: symlink to ~/.local/bin/warn_stubs
+# Config:  PostToolUse hook with matcher "Write|Edit" in ~/.claude/settings.json
+
+set -euo pipefail
+
+# Require jq for JSON parsing
+if ! command -v jq &>/dev/null; then
+  exit 0
+fi
+
+input=$(cat)
+
+tool_name=$(echo "$input" | jq -r '.tool_name // empty')
+file_path=$(echo "$input" | jq -r '.tool_input.file_path // empty')
+
+# Only act on Write or Edit tool events
+if [[ "$tool_name" != "Write" && "$tool_name" != "Edit" ]]; then
+  exit 0
+fi
+
+if [[ -z "$file_path" ]]; then
+  exit 0
+fi
+
+# For Write: content is embedded in tool_input.content
+# For Edit:  content was written to disk — read the file
+if [[ "$tool_name" == "Write" ]]; then
+  content=$(echo "$input" | jq -r '.tool_input.content // empty')
+else
+  # Edit tool — read file from disk
+  if [[ ! -f "$file_path" ]]; then
+    exit 0
+  fi
+  content=$(cat "$file_path")
+fi
+
+if [[ -z "$content" ]]; then
+  exit 0
+fi
+
+# Scan for stub patterns; collect one representative match per pattern category
+warnings=()
+
+# TODO / FIXME / HACK / XXX comments (language-agnostic)
+while IFS= read -r line; do
+  warnings+=("$line")
+done < <(echo "$content" | grep -nE '(//|#|--|/\*|\*)\s*(TODO|FIXME|HACK|XXX)\b' | head -5 | \
+  sed "s|^|${file_path}:|")
+
+# panic("not implemented") / panic("TODO") — Go
+while IFS= read -r line; do
+  warnings+=("$line")
+done < <(echo "$content" | grep -nE 'panic\("(not implemented|TODO|todo)"\)' | head -3 | \
+  sed "s|^|${file_path}:|")
+
+# raise NotImplementedError — Python
+while IFS= read -r line; do
+  warnings+=("$line")
+done < <(echo "$content" | grep -nE 'raise NotImplementedError' | head -3 | \
+  sed "s|^|${file_path}:|")
+
+# unimplemented!() — Rust
+while IFS= read -r line; do
+  warnings+=("$line")
+done < <(echo "$content" | grep -nE 'unimplemented!\(\)' | head -3 | \
+  sed "s|^|${file_path}:|")
+
+# throw new Error("not implemented") — JavaScript / TypeScript
+while IFS= read -r line; do
+  warnings+=("$line")
+done < <(echo "$content" | grep -niE 'throw new Error\("not implemented"\)' | head -3 | \
+  sed "s|^|${file_path}:|")
+
+# Bare `pass` statement (Python — only the word on its own line, possibly indented)
+while IFS= read -r line; do
+  warnings+=("$line")
+done < <(echo "$content" | grep -nE '^\s*pass\s*(#.*)?$' | head -3 | \
+  sed "s|^|${file_path}:|")
+
+# PLACEHOLDER or STUB string literals
+while IFS= read -r line; do
+  warnings+=("$line")
+done < <(echo "$content" | grep -nE '"(PLACEHOLDER|STUB)"' | head -3 | \
+  sed "s|^|${file_path}:|")
+
+if [[ ${#warnings[@]} -eq 0 ]]; then
+  exit 0
+fi
+
+# Build a single-line summary of all stub matches
+summary=$(printf '%s\n' "${warnings[@]}" | head -10 | paste -sd ' | ' -)
+
+# Emit non-blocking JSON additionalContext on stdout (Claude Code surfaces this to the agent)
+jq -cn --arg fp "$file_path" --arg detail "$summary" --argjson count "${#warnings[@]}" \
+  '{"additionalContext": ("[warn_stubs] \($count) stub(s) detected in \($fp). Complete these before committing. Matches: \($detail)")}'
+
+exit 0

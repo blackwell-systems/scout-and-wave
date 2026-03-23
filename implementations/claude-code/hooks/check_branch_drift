@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# PostToolUse hook: block git commits on main/master branch (H4)
+# Detects when a Wave agent accidentally commits to main or master instead of
+# their assigned worktree branch, which violates branch isolation (I1/I5).
+#
+# Exit codes:
+#   0 — not a git commit, or commit is on a valid (non-main) branch
+#   2 — committed directly to main or master → BLOCK with error message
+#
+# Install: symlink to ~/.local/bin/check_branch_drift
+# Config:  PostToolUse hook with matcher "Bash" in ~/.claude/settings.json
+
+set -euo pipefail
+
+# Require jq for JSON parsing
+if ! command -v jq &>/dev/null; then
+  exit 0
+fi
+
+input=$(cat)
+
+tool_name=$(echo "$input" | jq -r '.tool_name // empty')
+command=$(echo "$input" | jq -r '.tool_input.command // empty')
+
+# Only act on Bash tool events
+if [[ "$tool_name" != "Bash" ]]; then
+  exit 0
+fi
+
+# Only act when the command contains a git commit (not log, status, etc.)
+# Match "git commit" with optional flags — but not "git commit --amend" used
+# for reviews or "git log" which contains neither.
+# Use a precise pattern: the word "commit" must appear as a git subcommand.
+# We intentionally match: git commit, git commit -m, git commit --all, etc.
+# We do NOT match: git log, git status, git reset, git rebase.
+if ! echo "$command" | grep -qE '(^|[;&|[:space:]])git\s+((-[A-Za-z]+|--[a-z-]+)\s+)*commit(\s|$)'; then
+  exit 0
+fi
+
+# Determine the current branch by running git in the working directory.
+# We use 'git branch --show-current' (git >= 2.22); fall back to symbolic-ref.
+current_branch=$(git branch --show-current 2>/dev/null || \
+  git symbolic-ref --short HEAD 2>/dev/null || \
+  echo "")
+
+if [[ -z "$current_branch" ]]; then
+  # Cannot determine branch — allow (fail open to avoid blocking valid work)
+  exit 0
+fi
+
+if [[ "$current_branch" == "main" || "$current_branch" == "master" ]]; then
+  echo "BLOCKED [check_branch_drift / H4]: Direct commit to '${current_branch}' detected." >&2
+  echo "" >&2
+  echo "Wave agents must commit to their assigned worktree branch, not to ${current_branch}." >&2
+  echo "Expected branch pattern: saw/<slug>/wave<N>-agent-<ID>" >&2
+  echo "" >&2
+  echo "To fix:" >&2
+  echo "  1. Undo the commit:  git reset --soft HEAD~1" >&2
+  echo "  2. Switch to your worktree branch" >&2
+  echo "  3. Commit there instead" >&2
+  echo "" >&2
+  echo "If you are not a Wave agent, verify you are working in the correct" >&2
+  echo "repository and branch before committing." >&2
+  exit 2
+fi
+
+exit 0
