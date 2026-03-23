@@ -9,10 +9,12 @@ HOOK_SCRIPT="$SCRIPT_DIR/check_scout_boundaries"
 VALIDATE_SCRIPT="$SCRIPT_DIR/validate_impl_on_write"
 CLAIRE_SCRIPT="$SCRIPT_DIR/block_claire_paths"
 WAVE_OWNERSHIP_SCRIPT="$SCRIPT_DIR/check_wave_ownership"
+GIT_OWNERSHIP_SCRIPT="$SCRIPT_DIR/check_git_ownership"
 SYMLINK_PATH="$HOME/.local/bin/check_scout_boundaries"
 VALIDATE_SYMLINK="$HOME/.local/bin/validate_impl_on_write"
 CLAIRE_SYMLINK="$HOME/.local/bin/block_claire_paths"
 WAVE_OWNERSHIP_SYMLINK="$HOME/.local/bin/check_wave_ownership"
+GIT_OWNERSHIP_SYMLINK="$HOME/.local/bin/check_git_ownership"
 SETTINGS_FILE="$HOME/.claude/settings.json"
 
 echo "🔧 Installing SAW hooks..."
@@ -75,6 +77,20 @@ else
   echo "   ✓ Created symlink: $WAVE_OWNERSHIP_SYMLINK"
 fi
 chmod +x "$WAVE_OWNERSHIP_SCRIPT"
+
+# check_git_ownership hook (I1 layer 2: catch git-level modifications outside ownership)
+echo "   Installing check_git_ownership..."
+if [ -L "$GIT_OWNERSHIP_SYMLINK" ]; then
+  ln -sf "$GIT_OWNERSHIP_SCRIPT" "$GIT_OWNERSHIP_SYMLINK"
+  echo "   ✓ Symlink updated: $GIT_OWNERSHIP_SYMLINK"
+elif [ -e "$GIT_OWNERSHIP_SYMLINK" ]; then
+  echo "   ✗ Error: $GIT_OWNERSHIP_SYMLINK exists but is not a symlink"
+  exit 1
+else
+  ln -sf "$GIT_OWNERSHIP_SCRIPT" "$GIT_OWNERSHIP_SYMLINK"
+  echo "   ✓ Created symlink: $GIT_OWNERSHIP_SYMLINK"
+fi
+chmod +x "$GIT_OWNERSHIP_SCRIPT"
 echo
 
 # Step 2: Configure settings.json
@@ -209,6 +225,34 @@ else
 fi
 echo
 
+# Add git ownership hook (I1 layer 2: PostToolUse on Bash for git operations)
+GIT_OWNERSHIP_HOOK_CONFIG=$(cat <<EOF
+{
+  "matcher": "Bash",
+  "hooks": [
+    {
+      "type": "command",
+      "command": "$HOME/.local/bin/check_git_ownership"
+    }
+  ]
+}
+EOF
+)
+
+GIT_OWNERSHIP_EXISTING=$(jq -r '.hooks.PostToolUse // [] | map(select(.hooks[]?.command | contains("check_git_ownership"))) | length' "$SETTINGS_FILE")
+
+if [ "$GIT_OWNERSHIP_EXISTING" -gt 0 ]; then
+  echo "   ✓ Git ownership hook already configured (skipping)"
+else
+  jq --argjson hook "$GIT_OWNERSHIP_HOOK_CONFIG" '
+    .hooks.PostToolUse = (.hooks.PostToolUse // []) + [$hook]
+  ' "$SETTINGS_FILE" > "$SETTINGS_FILE.tmp"
+
+  mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
+  echo "   ✓ Added PostToolUse git ownership hook (I1 layer 2)"
+fi
+echo
+
 # Step 3: Verify installation
 echo "3. Verifying installation..."
 
@@ -231,6 +275,13 @@ if [ -x "$WAVE_OWNERSHIP_SYMLINK" ]; then
   echo "   ✓ Wave ownership hook executable: $WAVE_OWNERSHIP_SYMLINK"
 else
   echo "   ✗ Wave ownership hook not executable"
+  exit 1
+fi
+
+if [ -x "$GIT_OWNERSHIP_SYMLINK" ]; then
+  echo "   ✓ Git ownership hook executable: $GIT_OWNERSHIP_SYMLINK"
+else
+  echo "   ✗ Git ownership hook not executable"
   exit 1
 fi
 
@@ -276,7 +327,8 @@ echo "  PreToolUse:  check_scout_boundaries (I6 — Scouts can only write IMPL d
 echo "  PreToolUse:  block_claire_paths (blocks .claire typo, suggests .claude)"
 echo "  PreToolUse:  check_wave_ownership (I1 — Wave agents can only write owned files)"
 echo "  PostToolUse: validate_impl_on_write (E16 — IMPL docs validated on write)"
+echo "  PostToolUse: check_git_ownership (I1 layer 2 — catch git-level ownership violations)"
 echo
 echo "To uninstall:"
-echo "  1. Remove symlinks: rm $SYMLINK_PATH $VALIDATE_SYMLINK $CLAIRE_SYMLINK $WAVE_OWNERSHIP_SYMLINK"
+echo "  1. Remove symlinks: rm $SYMLINK_PATH $VALIDATE_SYMLINK $CLAIRE_SYMLINK $WAVE_OWNERSHIP_SYMLINK $GIT_OWNERSHIP_SYMLINK"
 echo "  2. Edit $SETTINGS_FILE and remove the PreToolUse/PostToolUse hook entries"

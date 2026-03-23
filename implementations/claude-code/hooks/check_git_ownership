@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+# I1 enforcement layer 2: catch git-level file modifications outside ownership
+# PostToolUse hook (matcher: Bash) that detects when a wave agent's git commands
+# modify files not in their ownership list. Catches merge conflict resolutions,
+# git checkout --theirs, and other git operations that bypass Write/Edit hooks.
+
+set -euo pipefail
+
+input=$(cat)
+
+tool_name=$(echo "$input" | jq -r '.tool_name // empty')
+agent_type=$(echo "$input" | jq -r '.agent_type // empty')
+tool_input=$(echo "$input" | jq -r '.tool_input.command // empty')
+
+# Only enforce on wave agents using Bash
+if [[ "$agent_type" != "wave-agent" ]]; then
+  exit 0
+fi
+if [[ "$tool_name" != "Bash" ]]; then
+  exit 0
+fi
+
+# Only check after git commands that can modify files
+if ! echo "$tool_input" | grep -qE 'git (checkout|merge|rebase|cherry-pick|stash|reset|restore)'; then
+  exit 0
+fi
+
+# Find .saw-ownership.json
+ownership_file=""
+search_dir="$PWD"
+for _ in 1 2 3 4 5; do
+  if [[ -f "$search_dir/.saw-ownership.json" ]]; then
+    ownership_file="$search_dir/.saw-ownership.json"
+    break
+  fi
+  parent=$(dirname "$search_dir")
+  if [[ "$parent" == "$search_dir" ]]; then
+    break
+  fi
+  search_dir="$parent"
+done
+
+if [[ -z "$ownership_file" ]]; then
+  exit 0  # Not in a SAW context
+fi
+
+worktree_root=$(dirname "$ownership_file")
+agent_id=$(jq -r '.agent // "unknown"' "$ownership_file")
+wave=$(jq -r '.wave // "unknown"' "$ownership_file")
+owned_files_json=$(jq -r '.owned_files // []' "$ownership_file")
+
+# Get files modified in working tree + staged (relative to worktree root)
+cd "$worktree_root"
+modified_files=$(git diff --name-only HEAD 2>/dev/null || true)
+staged_files=$(git diff --name-only --cached 2>/dev/null || true)
+all_changed=$(echo -e "${modified_files}\n${staged_files}" | sort -u | grep -v '^$' || true)
+
+if [[ -z "$all_changed" ]]; then
+  exit 0  # No files changed
+fi
+
+# Check each changed file against ownership list
+violations=""
+while IFS= read -r file; do
+  is_owned=$(echo "$owned_files_json" | jq --arg f "$file" 'map(. == $f) | any')
+  if [[ "$is_owned" != "true" ]]; then
+    # Check directory prefix ownership
+    is_owned_dir=$(echo "$owned_files_json" | jq --arg f "$file" 'map(. as $pat | ($f | startswith($pat + "/"))) | any')
+    if [[ "$is_owned_dir" != "true" ]]; then
+      violations="${violations}  - ${file}\n"
+    fi
+  fi
+done <<< "$all_changed"
+
+if [[ -z "$violations" ]]; then
+  exit 0  # All changed files are owned
+fi
+
+# Non-blocking warning via additionalContext (not exit 2 — the git command already ran)
+# We warn so the agent can revert the unowned changes before committing.
+cat <<WARN
+WARNING: Git operation modified files outside your ownership list.
+
+Agent: ${agent_id} (wave ${wave})
+Files outside ownership:
+$(echo -e "$violations")
+These changes likely came from a merge conflict resolution. Do NOT commit them.
+Instead:
+1. Run: git checkout HEAD -- <file> for each file listed above
+2. Only commit files in your ownership list
+3. If a conflict blocks your work, report status: blocked
+
+Committing changes to files you don't own can silently revert other agents' work.
+WARN
+
+exit 0  # Non-blocking — warn, don't block (git command already executed)
