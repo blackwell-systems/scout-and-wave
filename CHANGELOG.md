@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Headline |
 |---------|------|----------|
+| [0.60.0] | 2026-03-22 | Hooks hardening — `check_wave_ownership` (I1 enforcement for Wave agents) wired into `settings.json` and `install.sh`; `install.sh` updated for all 4 hooks (symlink + settings merge + verify); `$HOME` expansion bug fixed in hook config heredocs (was using `<<'EOF'`, now `<<EOF`); onboarding improvement plan added |
 | [0.59.0] | 2026-03-22 | Housekeeping — deleted stale `docs/skills-best-practices-audit.md`, added `block_claire_paths` PreToolUse hook to platform hooks, ROADMAP.md trimmed (91% reduction, shipped items collapsed), determinism-roadmap.md updated (added M4 pre-commit quality gate), `.gitignore` updated for SAW artifacts |
 | [0.58.0] | 2026-03-22 | Documentation consistency fixes — 28 audit findings resolved across 14 files (version badges, E-rule ranges, broken symlinks, worktree paths); ROADMAP.md trimmed from 1044 to 98 lines; hooks.md rewritten with 3-layer enforcement model; architecture.md updated with program layer, daemon, web app sections |
 | [0.57.0] | 2026-03-22 | Program-tier isolation (E28B, P5) — IMPL branch model for safe parallel IMPL execution within program tiers; `--merge-target` flag on prepare-wave/finalize-wave; saw-skill.md updated with create-program-worktrees flow |
@@ -41,6 +42,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | [0.30.1] | 2026-03-12 | Scout v0.8.1 — format ambiguity fix prevents markdown section headers in YAML output |
 | [0.30.0] | 2026-03-12 | Scout v0.8.0 — analyze-deps now PRIMARY METHOD for Go dependency mapping (determinism improvement H3) |
 | [0.29.0] | 2026-03-11 | mark-complete simplification — removed --archive flag from all docs, always archives to complete/ |
+
+---
+## [0.60.0] - 2026-03-22
+
+### Added
+- `implementations/claude-code/hooks/check_wave_ownership` — I1 enforcement hook for Wave agents; blocks `Write|Edit|NotebookEdit` on files not in `.saw-ownership.json`; wired into `~/.claude/settings.json` PreToolUse
+- `docs/onboarding-improvement-plan.md` — competitive analysis (AO, Paperclip), progressive disclosure levels (0–3), concrete proposals for `saw init`, guided first run, error message templates, `saw plan` alias, concept renaming audit
+
+### Changed
+- `implementations/claude-code/hooks/install.sh` — now installs all 4 hooks (`check_scout_boundaries`, `validate_impl_on_write`, `block_claire_paths`, `check_wave_ownership`); fixed `$HOME` expansion bug in hook config heredocs (was `<<'EOF'`, now `<<EOF`); added symlink creation, settings.json merge, and verification for `check_wave_ownership`
 
 ---
 ## [0.54.0] - 2026-03-20

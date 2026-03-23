@@ -8,9 +8,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HOOK_SCRIPT="$SCRIPT_DIR/check_scout_boundaries"
 VALIDATE_SCRIPT="$SCRIPT_DIR/validate_impl_on_write"
 CLAIRE_SCRIPT="$SCRIPT_DIR/block_claire_paths"
+WAVE_OWNERSHIP_SCRIPT="$SCRIPT_DIR/check_wave_ownership"
 SYMLINK_PATH="$HOME/.local/bin/check_scout_boundaries"
 VALIDATE_SYMLINK="$HOME/.local/bin/validate_impl_on_write"
 CLAIRE_SYMLINK="$HOME/.local/bin/block_claire_paths"
+WAVE_OWNERSHIP_SYMLINK="$HOME/.local/bin/check_wave_ownership"
 SETTINGS_FILE="$HOME/.claude/settings.json"
 
 echo "🔧 Installing SAW hooks..."
@@ -59,6 +61,20 @@ else
   echo "   ✓ Created symlink: $CLAIRE_SYMLINK"
 fi
 chmod +x "$CLAIRE_SCRIPT"
+
+# check_wave_ownership hook (I1 enforcement for Wave agents)
+echo "   Installing check_wave_ownership..."
+if [ -L "$WAVE_OWNERSHIP_SYMLINK" ]; then
+  ln -sf "$WAVE_OWNERSHIP_SCRIPT" "$WAVE_OWNERSHIP_SYMLINK"
+  echo "   ✓ Symlink updated: $WAVE_OWNERSHIP_SYMLINK"
+elif [ -e "$WAVE_OWNERSHIP_SYMLINK" ]; then
+  echo "   ✗ Error: $WAVE_OWNERSHIP_SYMLINK exists but is not a symlink"
+  exit 1
+else
+  ln -sf "$WAVE_OWNERSHIP_SCRIPT" "$WAVE_OWNERSHIP_SYMLINK"
+  echo "   ✓ Created symlink: $WAVE_OWNERSHIP_SYMLINK"
+fi
+chmod +x "$WAVE_OWNERSHIP_SCRIPT"
 echo
 
 # Step 2: Configure settings.json
@@ -83,7 +99,7 @@ cp "$SETTINGS_FILE" "$SETTINGS_FILE.backup"
 echo "   Backed up to: $SETTINGS_FILE.backup"
 
 # Define the hook configuration to merge
-HOOK_CONFIG=$(cat <<'EOF'
+HOOK_CONFIG=$(cat <<EOF
 {
   "matcher": "Write|Edit",
   "hooks": [
@@ -112,7 +128,7 @@ else
 fi
 
 # Add PostToolUse validation hook
-VALIDATE_HOOK_CONFIG=$(cat <<'EOF'
+VALIDATE_HOOK_CONFIG=$(cat <<EOF
 {
   "matcher": "Write",
   "hooks": [
@@ -139,7 +155,7 @@ else
 fi
 
 # Add .claire path blocker hook
-CLAIRE_HOOK_CONFIG=$(cat <<'EOF'
+CLAIRE_HOOK_CONFIG=$(cat <<EOF
 {
   "matcher": "Write|Edit|Bash",
   "hooks": [
@@ -164,6 +180,33 @@ else
   mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
   echo "   ✓ Added PreToolUse .claire path blocker"
 fi
+
+# Add wave ownership hook (I1 enforcement for Wave agents)
+WAVE_OWNERSHIP_HOOK_CONFIG=$(cat <<EOF
+{
+  "matcher": "Write|Edit|NotebookEdit",
+  "hooks": [
+    {
+      "type": "command",
+      "command": "$HOME/.local/bin/check_wave_ownership"
+    }
+  ]
+}
+EOF
+)
+
+WAVE_OWNERSHIP_EXISTING=$(jq -r '.hooks.PreToolUse // [] | map(select(.hooks[]?.command | contains("check_wave_ownership"))) | length' "$SETTINGS_FILE")
+
+if [ "$WAVE_OWNERSHIP_EXISTING" -gt 0 ]; then
+  echo "   ✓ Wave ownership hook already configured (skipping)"
+else
+  jq --argjson hook "$WAVE_OWNERSHIP_HOOK_CONFIG" '
+    .hooks.PreToolUse = (.hooks.PreToolUse // []) + [$hook]
+  ' "$SETTINGS_FILE" > "$SETTINGS_FILE.tmp"
+
+  mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
+  echo "   ✓ Added PreToolUse wave ownership hook (I1)"
+fi
 echo
 
 # Step 3: Verify installation
@@ -181,6 +224,13 @@ if [ -x "$VALIDATE_SYMLINK" ]; then
   echo "   ✓ IMPL validation hook executable: $VALIDATE_SYMLINK"
 else
   echo "   ✗ IMPL validation hook not executable"
+  exit 1
+fi
+
+if [ -x "$WAVE_OWNERSHIP_SYMLINK" ]; then
+  echo "   ✓ Wave ownership hook executable: $WAVE_OWNERSHIP_SYMLINK"
+else
+  echo "   ✗ Wave ownership hook not executable"
   exit 1
 fi
 
@@ -224,8 +274,9 @@ echo
 echo "Active hooks:"
 echo "  PreToolUse:  check_scout_boundaries (I6 — Scouts can only write IMPL docs)"
 echo "  PreToolUse:  block_claire_paths (blocks .claire typo, suggests .claude)"
+echo "  PreToolUse:  check_wave_ownership (I1 — Wave agents can only write owned files)"
 echo "  PostToolUse: validate_impl_on_write (E16 — IMPL docs validated on write)"
 echo
 echo "To uninstall:"
-echo "  1. Remove symlinks: rm $SYMLINK_PATH $VALIDATE_SYMLINK $CLAIRE_SYMLINK"
+echo "  1. Remove symlinks: rm $SYMLINK_PATH $VALIDATE_SYMLINK $CLAIRE_SYMLINK $WAVE_OWNERSHIP_SYMLINK"
 echo "  2. Edit $SETTINGS_FILE and remove the PreToolUse/PostToolUse hook entries"
