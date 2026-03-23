@@ -10,11 +10,17 @@ VALIDATE_SCRIPT="$SCRIPT_DIR/validate_impl_on_write"
 CLAIRE_SCRIPT="$SCRIPT_DIR/block_claire_paths"
 WAVE_OWNERSHIP_SCRIPT="$SCRIPT_DIR/check_wave_ownership"
 GIT_OWNERSHIP_SCRIPT="$SCRIPT_DIR/check_git_ownership"
+CHECK_IMPL_PATH_SCRIPT="$SCRIPT_DIR/check_impl_path"
+WARN_STUBS_SCRIPT="$SCRIPT_DIR/warn_stubs"
+CHECK_BRANCH_DRIFT_SCRIPT="$SCRIPT_DIR/check_branch_drift"
 SYMLINK_PATH="$HOME/.local/bin/check_scout_boundaries"
 VALIDATE_SYMLINK="$HOME/.local/bin/validate_impl_on_write"
 CLAIRE_SYMLINK="$HOME/.local/bin/block_claire_paths"
 WAVE_OWNERSHIP_SYMLINK="$HOME/.local/bin/check_wave_ownership"
 GIT_OWNERSHIP_SYMLINK="$HOME/.local/bin/check_git_ownership"
+CHECK_IMPL_PATH_SYMLINK="$HOME/.local/bin/check_impl_path"
+WARN_STUBS_SYMLINK="$HOME/.local/bin/warn_stubs"
+CHECK_BRANCH_DRIFT_SYMLINK="$HOME/.local/bin/check_branch_drift"
 SETTINGS_FILE="$HOME/.claude/settings.json"
 
 echo "🔧 Installing SAW hooks..."
@@ -91,6 +97,48 @@ else
   echo "   ✓ Created symlink: $GIT_OWNERSHIP_SYMLINK"
 fi
 chmod +x "$GIT_OWNERSHIP_SCRIPT"
+
+# check_impl_path hook (H2: IMPL path validation before agent launch)
+echo "   Installing check_impl_path..."
+if [ -L "$CHECK_IMPL_PATH_SYMLINK" ]; then
+  ln -sf "$CHECK_IMPL_PATH_SCRIPT" "$CHECK_IMPL_PATH_SYMLINK"
+  echo "   ✓ Symlink updated: $CHECK_IMPL_PATH_SYMLINK"
+elif [ -e "$CHECK_IMPL_PATH_SYMLINK" ]; then
+  echo "   ✗ Error: $CHECK_IMPL_PATH_SYMLINK exists but is not a symlink"
+  exit 1
+else
+  ln -sf "$CHECK_IMPL_PATH_SCRIPT" "$CHECK_IMPL_PATH_SYMLINK"
+  echo "   ✓ Created symlink: $CHECK_IMPL_PATH_SYMLINK"
+fi
+chmod +x "$CHECK_IMPL_PATH_SCRIPT"
+
+# warn_stubs hook (H3: stub detection warning after writes)
+echo "   Installing warn_stubs..."
+if [ -L "$WARN_STUBS_SYMLINK" ]; then
+  ln -sf "$WARN_STUBS_SCRIPT" "$WARN_STUBS_SYMLINK"
+  echo "   ✓ Symlink updated: $WARN_STUBS_SYMLINK"
+elif [ -e "$WARN_STUBS_SYMLINK" ]; then
+  echo "   ✗ Error: $WARN_STUBS_SYMLINK exists but is not a symlink"
+  exit 1
+else
+  ln -sf "$WARN_STUBS_SCRIPT" "$WARN_STUBS_SYMLINK"
+  echo "   ✓ Created symlink: $WARN_STUBS_SYMLINK"
+fi
+chmod +x "$WARN_STUBS_SCRIPT"
+
+# check_branch_drift hook (H4: branch drift detection after bash commands)
+echo "   Installing check_branch_drift..."
+if [ -L "$CHECK_BRANCH_DRIFT_SYMLINK" ]; then
+  ln -sf "$CHECK_BRANCH_DRIFT_SCRIPT" "$CHECK_BRANCH_DRIFT_SYMLINK"
+  echo "   ✓ Symlink updated: $CHECK_BRANCH_DRIFT_SYMLINK"
+elif [ -e "$CHECK_BRANCH_DRIFT_SYMLINK" ]; then
+  echo "   ✗ Error: $CHECK_BRANCH_DRIFT_SYMLINK exists but is not a symlink"
+  exit 1
+else
+  ln -sf "$CHECK_BRANCH_DRIFT_SCRIPT" "$CHECK_BRANCH_DRIFT_SYMLINK"
+  echo "   ✓ Created symlink: $CHECK_BRANCH_DRIFT_SYMLINK"
+fi
+chmod +x "$CHECK_BRANCH_DRIFT_SCRIPT"
 echo
 
 # Step 2: Configure settings.json
@@ -251,6 +299,87 @@ else
   mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
   echo "   ✓ Added PostToolUse git ownership hook (I1 layer 2)"
 fi
+
+# Add check_impl_path hook (H2: PreToolUse on Agent for IMPL path validation)
+CHECK_IMPL_PATH_HOOK_CONFIG=$(cat <<EOF
+{
+  "matcher": "Agent",
+  "hooks": [
+    {
+      "type": "command",
+      "command": "$HOME/.local/bin/check_impl_path"
+    }
+  ]
+}
+EOF
+)
+
+CHECK_IMPL_PATH_EXISTING=$(jq -r '.hooks.PreToolUse // [] | map(select(.hooks[]?.command | contains("check_impl_path"))) | length' "$SETTINGS_FILE")
+
+if [ "$CHECK_IMPL_PATH_EXISTING" -gt 0 ]; then
+  echo "   ✓ IMPL path validation hook already configured (skipping)"
+else
+  jq --argjson hook "$CHECK_IMPL_PATH_HOOK_CONFIG" '
+    .hooks.PreToolUse = (.hooks.PreToolUse // []) + [$hook]
+  ' "$SETTINGS_FILE" > "$SETTINGS_FILE.tmp"
+
+  mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
+  echo "   ✓ Added PreToolUse IMPL path validation hook (H2)"
+fi
+
+# Add warn_stubs hook (H3: PostToolUse on Write|Edit for stub warnings)
+WARN_STUBS_HOOK_CONFIG=$(cat <<EOF
+{
+  "matcher": "Write|Edit",
+  "hooks": [
+    {
+      "type": "command",
+      "command": "$HOME/.local/bin/warn_stubs"
+    }
+  ]
+}
+EOF
+)
+
+WARN_STUBS_EXISTING=$(jq -r '.hooks.PostToolUse // [] | map(select(.hooks[]?.command | contains("warn_stubs"))) | length' "$SETTINGS_FILE")
+
+if [ "$WARN_STUBS_EXISTING" -gt 0 ]; then
+  echo "   ✓ Stub warning hook already configured (skipping)"
+else
+  jq --argjson hook "$WARN_STUBS_HOOK_CONFIG" '
+    .hooks.PostToolUse = (.hooks.PostToolUse // []) + [$hook]
+  ' "$SETTINGS_FILE" > "$SETTINGS_FILE.tmp"
+
+  mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
+  echo "   ✓ Added PostToolUse stub warning hook (H3)"
+fi
+
+# Add check_branch_drift hook (H4: PostToolUse on Bash for branch drift detection)
+CHECK_BRANCH_DRIFT_HOOK_CONFIG=$(cat <<EOF
+{
+  "matcher": "Bash",
+  "hooks": [
+    {
+      "type": "command",
+      "command": "$HOME/.local/bin/check_branch_drift"
+    }
+  ]
+}
+EOF
+)
+
+CHECK_BRANCH_DRIFT_EXISTING=$(jq -r '.hooks.PostToolUse // [] | map(select(.hooks[]?.command | contains("check_branch_drift"))) | length' "$SETTINGS_FILE")
+
+if [ "$CHECK_BRANCH_DRIFT_EXISTING" -gt 0 ]; then
+  echo "   ✓ Branch drift detection hook already configured (skipping)"
+else
+  jq --argjson hook "$CHECK_BRANCH_DRIFT_HOOK_CONFIG" '
+    .hooks.PostToolUse = (.hooks.PostToolUse // []) + [$hook]
+  ' "$SETTINGS_FILE" > "$SETTINGS_FILE.tmp"
+
+  mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
+  echo "   ✓ Added PostToolUse branch drift detection hook (H4)"
+fi
 echo
 
 # Step 3: Verify installation
@@ -282,6 +411,27 @@ if [ -x "$GIT_OWNERSHIP_SYMLINK" ]; then
   echo "   ✓ Git ownership hook executable: $GIT_OWNERSHIP_SYMLINK"
 else
   echo "   ✗ Git ownership hook not executable"
+  exit 1
+fi
+
+if [ -x "$CHECK_IMPL_PATH_SYMLINK" ]; then
+  echo "   ✓ IMPL path validation hook executable: $CHECK_IMPL_PATH_SYMLINK"
+else
+  echo "   ✗ IMPL path validation hook not executable"
+  exit 1
+fi
+
+if [ -x "$WARN_STUBS_SYMLINK" ]; then
+  echo "   ✓ Stub warning hook executable: $WARN_STUBS_SYMLINK"
+else
+  echo "   ✗ Stub warning hook not executable"
+  exit 1
+fi
+
+if [ -x "$CHECK_BRANCH_DRIFT_SYMLINK" ]; then
+  echo "   ✓ Branch drift detection hook executable: $CHECK_BRANCH_DRIFT_SYMLINK"
+else
+  echo "   ✗ Branch drift detection hook not executable"
   exit 1
 fi
 
@@ -322,13 +472,16 @@ fi
 echo
 echo "✅ Installation complete!"
 echo
-echo "Active hooks:"
+echo "Active hooks (9 total):"
 echo "  PreToolUse:  check_scout_boundaries (I6 — Scouts can only write IMPL docs)"
 echo "  PreToolUse:  block_claire_paths (blocks .claire typo, suggests .claude)"
 echo "  PreToolUse:  check_wave_ownership (I1 — Wave agents can only write owned files)"
+echo "  PreToolUse:  check_impl_path (H2 — validates IMPL doc path before agent launch)"
 echo "  PostToolUse: validate_impl_on_write (E16 — IMPL docs validated on write)"
 echo "  PostToolUse: check_git_ownership (I1 layer 2 — catch git-level ownership violations)"
+echo "  PostToolUse: warn_stubs (H3 — warns on stub patterns in written code)"
+echo "  PostToolUse: check_branch_drift (H4 — detects commits on wrong branch)"
 echo
 echo "To uninstall:"
-echo "  1. Remove symlinks: rm $SYMLINK_PATH $VALIDATE_SYMLINK $CLAIRE_SYMLINK $WAVE_OWNERSHIP_SYMLINK $GIT_OWNERSHIP_SYMLINK"
+echo "  1. Remove symlinks: rm $SYMLINK_PATH $VALIDATE_SYMLINK $CLAIRE_SYMLINK $WAVE_OWNERSHIP_SYMLINK $GIT_OWNERSHIP_SYMLINK $CHECK_IMPL_PATH_SYMLINK $WARN_STUBS_SYMLINK $CHECK_BRANCH_DRIFT_SYMLINK"
 echo "  2. Edit $SETTINGS_FILE and remove the PreToolUse/PostToolUse hook entries"
