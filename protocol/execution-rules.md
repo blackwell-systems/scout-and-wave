@@ -1675,6 +1675,46 @@ The following checklist enumerates ALL lifecycle events that must be emitted. Ev
 
 ---
 
+## E42: SubagentStop Validation
+
+**Trigger:** SubagentStop lifecycle event fires for any SAW agent (wave, critic, scout, or scaffold).
+
+**Required Action:** A SubagentStop lifecycle hook validates that the completing agent has fulfilled its protocol obligations before the agent session closes. The hook reads the SubagentStop JSON payload from stdin, identifies SAW agents by parsing the `[SAW:...]` tag from `agent_description`, and runs agent-type-specific validation checks. Non-SAW agents pass through immediately (exit 0).
+
+**Validation matrix:**
+
+| Agent Type | Required Checks |
+|-----------|----------------|
+| Wave (`[SAW:wave*:agent-*]`) | I1 ownership verification, I5 commit verification, completion report in IMPL doc |
+| Critic (`[SAW:critic:*]`) | `critic_report:` field present with `verdict`, `agents_reviewed`, and `issues` keys |
+| Scout (`[SAW:scout]` or `[SAW:scout:*]`) | IMPL doc exists at expected path and passes `sawtools validate` |
+| Scaffold (`[SAW:scaffold:*]`) | All scaffold entries have `status: committed (...)` |
+| Other SAW tags | Pass through (exit 0) |
+
+**Validation sequence (wave agents):**
+
+1. **Parse SAW tag** from `agent_description`. If no `[SAW:...]` tag, exit 0 (not a SAW agent).
+2. **Find IMPL doc** via `.saw-state/active-impl` or extraction from `agent_description`.
+3. **I1 ownership verification:** Run `git diff --name-only` in the worktree. Compare changed files against the agent's file ownership from `.saw-ownership.json`. Any unowned modified file triggers exit 2 with "I1 violation: agent modified unowned file(s): \<list\>".
+4. **I5 commit verification:** Check that the worktree branch has at least 1 commit ahead of the merge base. If zero commits but a completion report exists, exit 2 with "I5 violation: completion report written but no commits found".
+5. **Protocol report validation:** Verify the agent's completion report exists in the IMPL doc's `completion_reports:` section. Uses `sawtools check-completion` if available, otherwise falls back to grep-based detection.
+
+**Exit code convention:**
+- Exit 0: Pass (agent fulfilled obligations, or is not a SAW agent)
+- Exit 2: Block (agent has unfulfilled protocol obligations)
+- Stderr: Human-readable error message explaining what is missing
+- Stdout: JSON observability event on success (non-blocking, emitted by separate async hook)
+
+**Observability:** On successful validation, a separate async hook (`emit_agent_completion`) emits a structured JSON event containing agent_id, wave, status, files_changed, validation results, and timestamp. This event is consumed by claudewatch hooks and the web app SSE system. The async hook also handles journal archival. Because it runs with `async: true`, it never blocks the agent lifecycle.
+
+**Rationale:** Without E42, agents can "complete" without fulfilling their protocol obligations. I1 ownership violations and I5 commit violations are only detected at wave finalization time (E21), creating a delayed feedback loop. E42 catches these violations at the agent boundary — the earliest possible point — enabling faster feedback and reducing wasted orchestrator time on agents that failed to comply.
+
+**Failure Handling:** If the hook cannot locate the IMPL doc for a SAW-tagged agent, it exits 2 with an actionable error message. If `sawtools` is not on PATH, the hook degrades gracefully to grep-based validation. Performance is critical: non-SAW agents must exit 0 within milliseconds, and SAW agent validation should complete in under 2 seconds.
+
+**Related Rules:** See I1 (disjoint file ownership — verified at agent completion), I4 (IMPL doc as single source of truth — completion reports verified), I5 (agents commit before reporting — commit existence verified), E3 (pre-launch ownership verification — E42 is the post-completion counterpart), E21 (post-wave verification gates — E42 provides earlier feedback), E40 (observability event emission — E42 emits agent_complete events)
+
+---
+
 ## Cross-References
 
 - See `preconditions.md` for conditions that must hold before execution begins
@@ -1706,3 +1746,4 @@ The following checklist enumerates ALL lifecycle events that must be emitted. Ev
 - E39: Interview Mode (Deterministic Requirements Gathering) — /saw interview command; 6-phase structured Q&A; state persistence in INTERVIEW-<slug>.yaml; resume capability; outputs REQUIREMENTS.md for bootstrap/scout — see also E16, E17, Scout Agent, `interview-mode.md`, `state-machine.md` (INTERVIEWING state)
 - E40: Observability Event Emission — orchestrator emits cost, agent_performance, and activity events at lifecycle transitions; non-blocking; batch writes preferred; stored as JSONB — see also E19, E21, E28, E29, E33, `observability-events.md`
 - E41: Type Collision Detection — pre-flight check during prepare-wave; AST-based detection of duplicate type/function/const names across agents in same package; blocks wave launch on collision — see also E3, E22, I1
+- E42: SubagentStop Validation — SubagentStop lifecycle hook validates protocol obligations before agent session closes; checks I1 ownership, I5 commit, and completion reports for wave agents; agent-type-specific validation matrix; exit 2 blocks completion — see also I1, I4, I5, E3, E21, E40
