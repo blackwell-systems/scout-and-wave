@@ -20,9 +20,30 @@
       "enum": ["SUITABLE", "NOT_SUITABLE", "SUITABLE_WITH_CAVEATS"],
       "description": "Scout's assessment of whether the feature is suitable for parallel implementation."
     },
+    "feature": {
+      "type": "string",
+      "description": "Short one-line description of what this IMPL implements."
+    },
+    "repository": {
+      "type": "string",
+      "description": "Absolute path to the repository root (single-repo waves)."
+    },
+    "repositories": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Absolute paths for multi-repo waves (omit if single-repo)."
+    },
+    "plan_reference": {
+      "type": "string",
+      "description": "Optional path to the original plan document."
+    },
     "suitability_assessment": {
       "type": "string",
       "description": "Prose explanation of the suitability verdict."
+    },
+    "suitability_reasoning": {
+      "type": "string",
+      "description": "Additional reasoning for the suitability verdict."
     },
     "test_command": {
       "type": "string",
@@ -84,6 +105,39 @@
       "type": "array",
       "description": "Issues discovered during scouting with status and workarounds.",
       "items": { "$ref": "#/$defs/KnownIssue" }
+    },
+    "wiring": {
+      "type": "array",
+      "description": "E35 wiring obligation declarations: exported symbols that must be called from aggregation points.",
+      "items": { "$ref": "#/$defs/WiringDeclaration" }
+    },
+    "wiring_validation_reports": {
+      "type": "object",
+      "description": "E35 wiring validation reports per wave, persisted by validate-integration --wiring.",
+      "additionalProperties": { "$ref": "#/$defs/WiringValidationData" }
+    },
+    "integration_reports": {
+      "type": "object",
+      "description": "E25 integration validation reports per wave.",
+      "additionalProperties": { "$ref": "#/$defs/IntegrationReport" }
+    },
+    "integration_connectors": {
+      "type": "array",
+      "description": "Files the integration agent (E26) is allowed to modify.",
+      "items": { "$ref": "#/$defs/IntegrationConnector" }
+    },
+    "integration_gap_severity_threshold": {
+      "type": "string",
+      "enum": ["error", "warning", "info"],
+      "description": "Minimum severity level for ValidateIntegration to treat as a gap. Defaults to 'warning'."
+    },
+    "reactions": {
+      "$ref": "#/$defs/ReactionsConfig",
+      "description": "E19.1 per-IMPL failure reaction overrides."
+    },
+    "critic_report": {
+      "$ref": "#/$defs/CriticData",
+      "description": "E37 structured output of critic-agent review run."
     },
     "state": {
       "type": "string",
@@ -172,6 +226,11 @@
           "type": "integer",
           "minimum": 1,
           "description": "Sequential wave number (1-based)."
+        },
+        "type": {
+          "type": "string",
+          "enum": ["standard", "integration"],
+          "description": "Wave type: standard (default) or integration (E27: wiring-only, no worktree)."
         },
         "agents": {
           "type": "array",
@@ -281,6 +340,10 @@
           "type": "string",
           "description": "Free-form notes about decisions, surprises, or warnings."
         },
+        "dedup_stats": {
+          "$ref": "#/$defs/DedupStats",
+          "description": "File-read dedup metrics for the agent's session."
+        },
         "repo": {
           "type": "string",
           "description": "Repository name for cross-repo agents."
@@ -358,7 +421,7 @@
       "properties": {
         "type": {
           "type": "string",
-          "enum": ["build", "lint", "test", "typecheck", "custom"],
+          "enum": ["build", "lint", "test", "typecheck", "format", "custom"],
           "description": "Category of quality check."
         },
         "command": {
@@ -376,6 +439,15 @@
         "repo": {
           "type": "string",
           "description": "If set, this gate only runs when finalize-wave processes this repo."
+        },
+        "fix": {
+          "type": "boolean",
+          "description": "If true, run in fix mode (e.g., gofmt -w). Default false."
+        },
+        "timing": {
+          "type": "string",
+          "enum": ["pre-merge", "post-merge"],
+          "description": "When the gate executes: pre-merge (default) or post-merge."
         }
       }
     },
@@ -556,6 +628,254 @@
         "context": {
           "type": "string",
           "description": "Source line containing the stub."
+        }
+      }
+    },
+    "WiringDeclaration": {
+      "type": "object",
+      "description": "E35 wiring obligation: an exported symbol that must be called from an aggregation point.",
+      "required": ["symbol", "defined_in", "must_be_called_from", "agent", "wave"],
+      "additionalProperties": false,
+      "properties": {
+        "symbol": {
+          "type": "string",
+          "description": "Exported function or type name."
+        },
+        "defined_in": {
+          "type": "string",
+          "description": "Relative path to implementing file."
+        },
+        "must_be_called_from": {
+          "type": "string",
+          "description": "Relative path to caller/aggregator file."
+        },
+        "agent": {
+          "type": "string",
+          "description": "Agent ID that owns both sides."
+        },
+        "wave": {
+          "type": "integer",
+          "description": "Wave number."
+        },
+        "integration_pattern": {
+          "type": "string",
+          "enum": ["append", "register", "inject", "call"],
+          "description": "How the symbol is integrated into the caller."
+        }
+      }
+    },
+    "WiringValidationData": {
+      "type": "object",
+      "description": "Result of E35 wiring validation for a wave.",
+      "required": ["gaps", "valid", "summary"],
+      "additionalProperties": false,
+      "properties": {
+        "gaps": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/WiringGap" },
+          "description": "Missing wiring declarations."
+        },
+        "valid": {
+          "type": "boolean",
+          "description": "True if all wiring declarations are satisfied."
+        },
+        "summary": {
+          "type": "string",
+          "description": "Human-readable summary."
+        }
+      }
+    },
+    "WiringGap": {
+      "type": "object",
+      "description": "A single missing wiring: declared symbol not found in caller file.",
+      "required": ["declaration", "reason", "severity"],
+      "additionalProperties": false,
+      "properties": {
+        "declaration": {
+          "$ref": "#/$defs/WiringDeclaration",
+          "description": "The wiring declaration that was not satisfied."
+        },
+        "reason": {
+          "type": "string",
+          "description": "Why the wiring is missing."
+        },
+        "severity": {
+          "type": "string",
+          "description": "Always 'error' for declared but missing wiring."
+        }
+      }
+    },
+    "IntegrationReport": {
+      "type": "object",
+      "description": "E25 integration validation results for a wave.",
+      "required": ["wave", "gaps", "valid", "summary"],
+      "additionalProperties": false,
+      "properties": {
+        "wave": {
+          "type": "integer",
+          "description": "Wave number."
+        },
+        "gaps": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/IntegrationGap" },
+          "description": "Detected unconnected exports."
+        },
+        "valid": {
+          "type": "boolean",
+          "description": "True if no gaps detected."
+        },
+        "summary": {
+          "type": "string",
+          "description": "Human-readable summary."
+        }
+      }
+    },
+    "IntegrationGap": {
+      "type": "object",
+      "description": "A detected unconnected export.",
+      "required": ["export_name", "file_path", "agent_id", "category", "severity", "reason", "suggested_fix"],
+      "additionalProperties": false,
+      "properties": {
+        "export_name": {
+          "type": "string",
+          "description": "Name of the unconnected export."
+        },
+        "file_path": {
+          "type": "string",
+          "description": "File where the export is defined."
+        },
+        "agent_id": {
+          "type": "string",
+          "description": "Agent that created the export."
+        },
+        "category": {
+          "type": "string",
+          "enum": ["function_call", "type_usage", "field_init"],
+          "description": "Type of integration gap."
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["error", "warning", "info"],
+          "description": "Gap severity."
+        },
+        "reason": {
+          "type": "string",
+          "description": "Why this is a gap."
+        },
+        "suggested_fix": {
+          "type": "string",
+          "description": "Suggested fix for the gap."
+        },
+        "search_results": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Files that might need to call this export."
+        }
+      }
+    },
+    "IntegrationConnector": {
+      "type": "object",
+      "description": "A file the integration agent (E26) is allowed to modify.",
+      "required": ["file", "reason"],
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "type": "string",
+          "description": "File path."
+        },
+        "reason": {
+          "type": "string",
+          "description": "Why this file needs modification."
+        }
+      }
+    },
+    "ReactionsConfig": {
+      "type": "object",
+      "description": "E19.1 per-IMPL failure reaction overrides.",
+      "additionalProperties": false,
+      "properties": {
+        "transient": { "$ref": "#/$defs/ReactionEntry" },
+        "timeout": { "$ref": "#/$defs/ReactionEntry" },
+        "fixable": { "$ref": "#/$defs/ReactionEntry" },
+        "needs_replan": { "$ref": "#/$defs/ReactionEntry" },
+        "escalate": { "$ref": "#/$defs/ReactionEntry" }
+      }
+    },
+    "ReactionEntry": {
+      "type": "object",
+      "description": "Action and retry cap for one failure type.",
+      "required": ["action"],
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": ["retry", "send-fix-prompt", "pause", "auto-scout"],
+          "description": "What the orchestrator should do."
+        },
+        "max_attempts": {
+          "type": "integer",
+          "description": "Maximum launch attempts (including the first). 0 = use E19 default."
+        }
+      }
+    },
+    "CriticData": {
+      "type": "object",
+      "description": "E37 structured output of critic-agent review.",
+      "required": ["verdict"],
+      "additionalProperties": false,
+      "properties": {
+        "verdict": {
+          "type": "string",
+          "enum": ["PASS", "ISSUES", "SKIPPED"],
+          "description": "Overall decision."
+        },
+        "agent_reviews": {
+          "type": "object",
+          "description": "Per-agent verdicts indexed by agent ID.",
+          "additionalProperties": { "$ref": "#/$defs/AgentCriticReview" }
+        },
+        "summary": {
+          "type": "string",
+          "description": "Human-readable summary."
+        },
+        "reviewed_at": {
+          "type": "string",
+          "description": "ISO 8601 timestamp."
+        },
+        "issue_count": {
+          "type": "integer",
+          "description": "Total issues found."
+        }
+      }
+    },
+    "AgentCriticReview": {
+      "type": "object",
+      "description": "Per-agent critic verdict.",
+      "additionalProperties": true,
+      "properties": {
+        "verdict": {
+          "type": "string",
+          "description": "PASS or ISSUES."
+        }
+      }
+    },
+    "DedupStats": {
+      "type": "object",
+      "description": "File-read dedup metrics for an agent's session.",
+      "required": ["hits", "misses", "tokens_saved_estimate"],
+      "additionalProperties": false,
+      "properties": {
+        "hits": {
+          "type": "integer",
+          "description": "Number of cache hits."
+        },
+        "misses": {
+          "type": "integer",
+          "description": "Number of cache misses."
+        },
+        "tokens_saved_estimate": {
+          "type": "integer",
+          "description": "Estimated tokens saved by dedup."
         }
       }
     }

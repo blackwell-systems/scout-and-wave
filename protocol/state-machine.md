@@ -1,6 +1,6 @@
 # Scout-and-Wave State Machine
 
-**Version:** 0.16.0
+**Version:** 0.21.0
 
 This document defines the lifecycle states, transitions, and terminal conditions for Scout-and-Wave protocol execution.
 
@@ -54,6 +54,27 @@ WAVE_PENDING (next wave)
 COMPLETE
 ```
 
+### Alternate Success Paths
+
+**Solo wave skip (no merge needed):**
+```
+REVIEWED → WAVE_EXECUTING (solo wave: skip WAVE_PENDING worktree creation)
+SCAFFOLD_PENDING → WAVE_EXECUTING (solo wave after scaffold)
+WAVE_EXECUTING → WAVE_VERIFIED (solo wave: skip WAVE_MERGING)
+WAVE_EXECUTING → COMPLETE (solo wave on final wave: direct completion)
+```
+
+**Direct REVIEWED skip (structured output mode):**
+```
+SCOUT_PENDING → REVIEWED (when structured output enforcement makes E16 validation a no-op — the output is already schema-validated, so SCOUT_VALIDATING is bypassed)
+```
+
+**Next-wave loop:**
+```
+WAVE_VERIFIED → WAVE_EXECUTING (solo next-wave: skip WAVE_PENDING)
+WAVE_VERIFIED → WAVE_PENDING (multi-agent next-wave)
+```
+
 ### Failure Paths
 
 **Validation Failure Path:**
@@ -81,6 +102,15 @@ BLOCKED
 WAVE_VERIFIED (resume success path)
 ```
 
+**Post-Verification Failure:**
+```
+WAVE_VERIFIED
+    ↓ (Post-verification issue discovered, e.g. integration gap)
+BLOCKED
+    ↓ (Orchestrator resolves issue)
+WAVE_VERIFIED (resume success path)
+```
+
 **Interface Contract Revision:**
 ```
 WAVE_EXECUTING
@@ -88,6 +118,13 @@ WAVE_EXECUTING
 BLOCKED
     ↓ (Orchestrator revises contracts in IMPL doc, updates affected prompts)
 WAVE_PENDING (wave restarts with corrected contracts)
+```
+
+**BLOCKED Recovery to REVIEWED (contract revision requiring re-review):**
+```
+BLOCKED
+    ↓ (Orchestrator determines contracts must be revised and re-reviewed)
+REVIEWED (re-enter plan review before restarting waves)
 ```
 
 ---
@@ -100,7 +137,13 @@ Transitions are conditional. The following guards determine whether a transition
 
 **Guard:** Scout completion notification received AND IMPL doc written to disk.
 
-**Note:** SCOUT_VALIDATING is now interposed between SCOUT_PENDING and REVIEWED. The previous direct transition from SCOUT_PENDING to REVIEWED no longer fires on Scout completion; validation must pass first.
+**Note:** SCOUT_VALIDATING is typically interposed between SCOUT_PENDING and REVIEWED.
+
+### SCOUT_PENDING → REVIEWED (direct)
+
+**Guard:** Scout completion notification received AND IMPL doc written to disk AND structured output enforcement is active (API-backend runs where the output is already schema-validated).
+
+**When this fires:** In structured output mode, the validator always passes on first attempt because the output was already schema-validated by the API. The SCOUT_VALIDATING state is effectively skipped. This transition is also valid when the engine determines that validation is unnecessary (e.g., the IMPL doc was produced by a trusted pipeline).
 
 ### SCOUT_VALIDATING → REVIEWED
 
@@ -122,11 +165,27 @@ Transitions are conditional. The following guards determine whether a transition
 
 **Skip condition:** If Scaffolds section is empty (solo wave or no shared types), skip directly to WAVE_PENDING.
 
+### REVIEWED → WAVE_EXECUTING (solo wave skip)
+
+**Guard:** Human approval received AND Scaffolds section empty AND wave contains exactly one agent. The orchestrator skips WAVE_PENDING (no worktrees to create) and launches the solo agent directly on the main branch.
+
+### REVIEWED → BLOCKED
+
+**Guard:** Human approval received but pre-launch validation fails (E3 ownership conflict, E21A baseline failure, or other pre-wave check failure).
+
 ### SCAFFOLD_PENDING → WAVE_PENDING
 
 **Guard:** Scaffold Agent completion notification received AND all scaffold files in IMPL doc Scaffolds section show `status: committed (sha)`.
 
 **Failure:** If any scaffold file shows `FAILED: {reason}`, enter BLOCKED. Orchestrator must surface the failure to the human. Human revises interface contracts in IMPL doc and re-runs Scaffold Agent.
+
+### SCAFFOLD_PENDING → WAVE_EXECUTING (solo wave skip)
+
+**Guard:** Scaffold Agent completes AND wave contains exactly one agent. Skips WAVE_PENDING (no worktrees) and launches the solo agent directly.
+
+### SCAFFOLD_PENDING → BLOCKED
+
+**Guard:** Scaffold Agent fails (compilation error, scaffold file creation failure).
 
 ### WAVE_PENDING → WAVE_EXECUTING
 
@@ -146,7 +205,11 @@ Transitions are conditional. The following guards determine whether a transition
 - Agent failed isolation verification (Field 0) → enter BLOCKED
 - E21 required quality gate fails → enter BLOCKED
 
-**Solo wave exception:** Skip WAVE_MERGING entirely. Proceed directly to WAVE_VERIFIED for post-wave verification.
+**Solo wave exception:** Skip WAVE_MERGING entirely. Proceed directly to WAVE_VERIFIED for post-wave verification. If this is the final wave, may proceed directly to COMPLETE.
+
+### WAVE_EXECUTING → COMPLETE (direct completion)
+
+**Guard:** Solo wave on the final wave (no more waves defined) AND all verification passes. The orchestrator skips both WAVE_MERGING and WAVE_VERIFIED, transitioning directly to COMPLETE. This is valid because a solo wave has nothing to merge and nothing to verify beyond the agent's own verification gate.
 
 ### WAVE_MERGING → WAVE_VERIFIED
 
@@ -156,23 +219,44 @@ Transitions are conditional. The following guards determine whether a transition
 
 **Failure:** If merge conflicts occur OR verification fails OR Integration Agent fails, enter BLOCKED.
 
-### WAVE_VERIFIED → WAVE_PENDING (next wave)
+### WAVE_VERIFIED → WAVE_PENDING (next wave, multi-agent)
 
-**Guard:** IMPL doc specifies additional waves AND human approval granted (or `--auto` mode active).
+**Guard:** IMPL doc specifies additional waves AND next wave has multiple agents AND human approval granted (or `--auto` mode active).
+
+### WAVE_VERIFIED → WAVE_EXECUTING (next wave, solo agent)
+
+**Guard:** IMPL doc specifies additional waves AND next wave has exactly one agent AND human approval granted (or `--auto` mode active). Skips WAVE_PENDING because solo waves do not need worktree creation.
 
 ### WAVE_VERIFIED → COMPLETE
 
 **Guard:** No additional waves defined in IMPL doc AND orchestrator has written `<!-- SAW:COMPLETE YYYY-MM-DD -->` to the IMPL doc (E15).
 
+### WAVE_VERIFIED → BLOCKED
+
+**Guard:** Post-verification discovers an issue (e.g., integration gap that cannot be auto-resolved, post-merge test failure discovered after initial verification passed, or inter-wave dependency problem).
+
 ### BLOCKED → WAVE_VERIFIED
 
 **Guard:** Orchestrator resolves the blocking issue AND re-runs verification AND verification passes.
 
-**Resolution paths:**
-- Agent failure: re-run failing agent with corrections
-- Interface contract unimplementable: revise contracts, update prompts, restart wave from WAVE_PENDING
-- Merge conflict: correct ownership table in IMPL doc, recreate worktrees, restart wave
-- Verification failure: fix root cause, re-run verification
+### BLOCKED → WAVE_EXECUTING
+
+**Guard:** Orchestrator resolves the blocking issue by re-launching an agent (e.g., after fixing a correctable failure per E7a/E19). The wave transitions directly to WAVE_EXECUTING without going through WAVE_PENDING because worktrees already exist.
+
+### BLOCKED → WAVE_PENDING
+
+**Guard:** Orchestrator resolves the blocking issue but worktrees must be recreated (e.g., ownership table corrected, interface contracts revised). The wave restarts from WAVE_PENDING.
+
+### BLOCKED → REVIEWED
+
+**Guard:** Orchestrator determines that the blocking issue requires re-review of the IMPL doc (e.g., fundamental contract revision, scope change requiring human re-approval). Transitions back to REVIEWED for human re-approval before any waves restart.
+
+**Resolution paths (summary):**
+- Agent failure (correctable): re-run agent → BLOCKED → WAVE_EXECUTING
+- Agent failure (worktrees invalid): recreate worktrees → BLOCKED → WAVE_PENDING
+- Interface contract unimplementable: revise contracts, update prompts → BLOCKED → REVIEWED or BLOCKED → WAVE_PENDING
+- Merge conflict: correct ownership table in IMPL doc, recreate worktrees → BLOCKED → WAVE_PENDING
+- Verification failure: fix root cause, re-run verification → BLOCKED → WAVE_VERIFIED
 
 ---
 
@@ -234,7 +318,7 @@ Waves execute sequentially (I3: Wave sequencing). When Wave N completes, its imp
 
 ## State Machine Correctness Properties
 
-When all invariants (I1–I6) and execution rules (E1–E41, E21A, E21B) are maintained:
+When all invariants (I1–I6, P5) and execution rules (E1–E42, E21A, E21B) are maintained:
 
 - **Progress:** The state machine always advances or terminates. No infinite loops.
 - **Human checkpoints enforced:** REVIEWED state requires explicit approval. Suitability gate requires human review of NOT SUITABLE verdicts.
@@ -304,6 +388,26 @@ Full program execution rules, invariants, and orchestrator procedures for the Pr
 **Related documents:**
 - `protocol/program-manifest.md` — PROGRAM manifest structure and schema
 - `protocol/program-invariants.md` — Program-level invariants (P1, P2, P3)
+
+---
+
+### Canonical Allowed Transitions Table
+
+The following table is the canonical reference for all allowed state transitions, matching the Go engine's `allowedTransitions` map in `pkg/protocol/state_transition.go`:
+
+| From State | Allowed Targets |
+|-----------|----------------|
+| **SCOUT_PENDING** | REVIEWED, NOT_SUITABLE |
+| **SCOUT_VALIDATING** | REVIEWED, NOT_SUITABLE |
+| **REVIEWED** | SCAFFOLD_PENDING, WAVE_PENDING, WAVE_EXECUTING, BLOCKED |
+| **SCAFFOLD_PENDING** | WAVE_PENDING, WAVE_EXECUTING, BLOCKED |
+| **WAVE_PENDING** | WAVE_EXECUTING, BLOCKED |
+| **WAVE_EXECUTING** | WAVE_MERGING, WAVE_VERIFIED, BLOCKED, COMPLETE |
+| **WAVE_MERGING** | WAVE_VERIFIED, BLOCKED |
+| **WAVE_VERIFIED** | WAVE_PENDING, WAVE_EXECUTING, COMPLETE, BLOCKED |
+| **BLOCKED** | REVIEWED, WAVE_EXECUTING, WAVE_PENDING |
+| **COMPLETE** | *(terminal — no transitions)* |
+| **NOT_SUITABLE** | *(terminal — no transitions)* |
 
 ---
 

@@ -1,6 +1,6 @@
 # Scout-and-Wave Procedures
 
-**Version:** 0.16.0
+**Version:** 0.21.0
 
 This document defines the operational procedures executed by the Orchestrator and other participants: suitability assessment, scaffold materialization, wave execution, and merge operations.
 
@@ -13,9 +13,11 @@ SAW procedures are executed by the Orchestrator (synchronous agent in the user's
 **Participant roles:**
 - **Orchestrator:** Drives all state transitions, launches agents, reads completion reports, executes merge procedure
 - **Scout:** Analyzes codebase, produces IMPL doc, defines interface contracts
+- **Critic Agent:** Reviews agent briefs against the actual codebase before REVIEWED state (E37)
 - **Scaffold Agent:** Materializes approved interface contracts as type scaffold files
 - **Wave Agents:** Implement features in parallel against frozen interface contracts
 - **Integration Agent:** Wires new exports into caller code after wave merge (E26)
+- **Planner:** Analyzes requirements and produces PROGRAM manifests at project scope
 
 ---
 
@@ -231,10 +233,10 @@ Scaffold files are committed to HEAD before worktrees are created. Once worktree
 
 1. **Create worktrees:** For each agent in wave (excluding solo waves):
    ```
-   git worktree add .claude/worktrees/wave{N}-agent-{ID} -b wave{N}-agent-{ID}
+   git worktree add .claude/worktrees/saw/{slug}/wave{N}-agent-{ID} -b saw/{slug}/wave{N}-agent-{ID}
    ```
-   - **E5: Naming convention:** `.claude/worktrees/wave{N}-agent-{ID}` is mandatory (observability requirement)
-   - Branch name: `wave{N}-agent-{ID}` (matches worktree name)
+   - **E5: Naming convention:** `.claude/worktrees/saw/{slug}/wave{N}-agent-{ID}` is mandatory (observability requirement)
+   - Branch name: `saw/{slug}/wave{N}-agent-{ID}` (matches worktree name)
    - All worktrees branch from current HEAD (includes committed scaffolds from Scaffold Agent)
 
 2. **Install pre-commit hook (Layer 0 isolation):** Installed automatically by `sawtools create-worktrees`
@@ -360,7 +362,7 @@ Scaffold files are committed to HEAD before worktrees are created. Once worktree
    - Resolution: Correct IMPL doc ownership table, recreate worktrees, re-run wave
 
 3. **Verify commits exist:** For each agent branch, verify it has commits beyond base
-   - `git log main..wave{N}-agent-{ID} --oneline`
+   - `git log main..saw/{slug}/wave{N}-agent-{ID} --oneline`
    - Empty branch = isolation failure (agent committed to main instead of worktree)
    - Layer 4 trip wire: catches isolation failures regardless of cause
 
@@ -372,7 +374,7 @@ For each agent (in any order):
 
 1. **Switch to main:** `git checkout main`
 
-2. **Merge agent branch:** `git merge --no-ff wave{N}-agent-{ID} -m "Merge wave{N}-agent-{ID}: {description}"`
+2. **Merge agent branch:** `git merge --no-ff saw/{slug}/wave{N}-agent-{ID} -m "Merge saw/{slug}/wave{N}-agent-{ID}: {description}"`
    - `--no-ff` preserves branch history for observability
 
 3. **Handle conflicts:**
@@ -406,12 +408,12 @@ For each agent (in any order):
 
 1. **Remove worktrees:** For each agent:
    ```
-   git worktree remove .claude/worktrees/wave{N}-agent-{ID}
+   git worktree remove .claude/worktrees/saw/{slug}/wave{N}-agent-{ID}
    ```
 
 2. **Delete branches (optional):**
    ```
-   git branch -d wave{N}-agent-{ID}
+   git branch -d saw/{slug}/wave{N}-agent-{ID}
    ```
    - Keep branches if history preservation desired
 

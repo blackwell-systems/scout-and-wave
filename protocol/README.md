@@ -63,9 +63,10 @@ See [execution-rules.md](execution-rules.md) for the formal correctness argument
 
 This protocol specification follows semantic versioning. Breaking changes to invariants, preconditions, or message formats increment the major version. New optional fields or clarifications increment the minor version.
 
-Current version: **0.56.0**
+Current version: **0.57.0**
 
 **Changelog:**
+- **0.57.0** — Comprehensive protocol-to-engine audit: state-machine.md aligned with Go allowedTransitions (8 gaps fixed: REVIEWED->WAVE_EXECUTING, SCAFFOLD_PENDING->WAVE_EXECUTING, WAVE_EXECUTING->COMPLETE, WAVE_VERIFIED->WAVE_EXECUTING, WAVE_VERIFIED->BLOCKED, BLOCKED->REVIEWED, SCOUT_PENDING->REVIEWED direct); impl-manifest.schema.json aligned with Go types (added wiring, wiring_validation_reports, integration_reports, integration_connectors, integration_gap_severity_threshold, reactions, critic_report, dedup_stats, feature, repository, repositories, plan_reference, suitability_reasoning; QualityGate gains fix/timing/format; Wave gains type field); procedures.md worktree paths updated to slug-based E5 naming; message-formats.md adds missing root-level manifest fields; program-manifest.md REPLANNING state marked as not-yet-implemented in SDK
 - **0.56.0** — E11a manual merge escape hatch, E37 enforcement in prepare-wave, critic action:new awareness
 - **0.55.0** — Previous release
 

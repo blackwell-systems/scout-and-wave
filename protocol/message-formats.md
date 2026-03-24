@@ -1,6 +1,6 @@
 # Scout-and-Wave Message Formats
 
-**Version:** 0.15.0
+**Version:** 0.21.0
 
 This document defines the structured data formats exchanged between participants: suitability verdicts, agent prompts, completion reports, and scaffold specifications.
 
@@ -77,9 +77,12 @@ suitability_assessment:
 
 quality_gates:  # optional - omit if no build toolchain
   level: "quick" | "standard" | "full"
-  commands:
-    build:
+  gates:
+    - type: "build"
       command: "go build ./..."
+      required: true
+      fix: false                     # optional — fix mode for format gates
+      timing: "pre-merge"            # optional — "pre-merge" (default) or "post-merge"
     # See Quality Gates section for full schema
 
 scaffolds:  # optional - omit if no scaffold files needed
@@ -89,10 +92,36 @@ scaffolds:  # optional - omit if no scaffold files needed
     status: "pending" | "committed" | "FAILED"
     # See Scaffolds section for full schema
 
+wiring:  # optional - E35 wiring obligation declarations
+  - symbol: "RegisterHandler"
+    defined_in: "pkg/handler/register.go"
+    must_be_called_from: "cmd/main.go"
+    agent: "A"
+    wave: 1
+    integration_pattern: "register"  # append | register | inject | call
+
+reactions:  # optional - E19.1 per-IMPL failure reaction overrides
+  transient:
+    action: retry
+    max_attempts: 3
+  # See E19.1 in execution-rules.md for full schema
+
+integration_connectors:  # optional - files the integration agent (E26) may modify
+  - file: "cmd/main.go"
+    reason: "Wire new service into startup"
+
+integration_gap_severity_threshold: "warning"  # optional - minimum severity for E25 gaps
+
+critic_report:  # optional - E37 critic-agent review output (written by critic, not Scout)
+  verdict: "PASS" | "ISSUES" | "SKIPPED"
+  agent_reviews: {}
+  summary: "..."
+
 waves:  # optional - omit if not using per-agent model overrides or launch ordering
   - number: 1
-    agent_launch_order: ["A", "B"]  # optional — explicit ordering within wave
-    base_commit: "abc1234"          # recorded when worktrees are created; used for post-merge verification
+    type: "standard"                 # optional — "standard" (default) or "integration" (E27)
+    agent_launch_order: ["A", "B"]   # optional — explicit ordering within wave
+    base_commit: "abc1234"           # recorded when worktrees are created; used for post-merge verification
     agents:
       - id: "A"
         model: "claude-opus-4-5"   # optional — overrides default model for this specific agent
@@ -489,6 +518,10 @@ verification: PASS | FAIL ({command} - N/N tests)
 - **tests_added:** List of test function names added. Should correspond to Field 5 (Tests to Write).
 
 - **verification:** `PASS` if all Field 6 commands passed. `FAIL` with details if any command failed.
+
+- **notes:** Free-form text for context that doesn't fit structured fields: key decisions, surprises, warnings, recommendations for downstream agents.
+
+- **dedup_stats:** (written by engine, not by agents) File-read dedup metrics for the agent's session. Contains `hits` (cache hits), `misses` (cache misses), and `tokens_saved_estimate` (estimated tokens saved by dedup). This field is populated automatically by the SDK when file-read dedup is active.
 
 **Free-form notes section:** After the structured YAML block, agents may add free-form notes for context that doesn't fit structured fields: key decisions, surprises, warnings, recommendations for downstream agents.
 

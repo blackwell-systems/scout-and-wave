@@ -355,7 +355,7 @@ The `state` field tracks the program's current execution phase.
 | `TIER_VERIFIED` | Current tier complete, gates passed |
 | `COMPLETE` | All tiers complete |
 | `BLOCKED` | Tier failed, cross-IMPL issue detected |
-| `REPLANNING` | Planner re-engaged to revise manifest after failure (E34) |
+| `REPLANNING` | Planner re-engaged to revise manifest after failure (E34). **Not yet implemented in SDK** — the Go engine does not define this state constant. Orchestrator implementations should treat REPLANNING as BLOCKED until SDK support is added. |
 | `NOT_SUITABLE` | Planner determined project not suitable for multi-IMPL orchestration |
 
 ### 9.2 State Transitions
