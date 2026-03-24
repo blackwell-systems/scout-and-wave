@@ -24,7 +24,7 @@ To audit consistency, search implementation files for `I{N}` and verify the embe
 
 **Cross-repo scope:** In cross-repo waves, I1 applies per-repository. Files in different repositories are inherently disjoint — no two agents can conflict on a file that exists in only one repo's filesystem. The disjoint ownership constraint still applies within each repository: no two agents in the same wave may own the same file path within the same repository.
 
-**Related Rules:** See E3 (pre-launch ownership verification) and E11 (conflict prediction before merge)
+**Related Rules:** See E3 (pre-launch ownership verification), E11 (conflict prediction before merge), and E42 (post-completion I1 ownership verification at SubagentStop time)
 
 ### I1 Amendment: Integration Agent Exemption
 
@@ -83,7 +83,9 @@ This is not an I1 violation because there is no concurrent execution — the Int
 
 The journal is agent-private working memory. It is not distributed to other agents. Only the completion report (written to the IMPL doc) becomes visible cross-agent. The IMPL doc remains the coordination point; the journal is the execution trace that enables agent recovery and context reconstruction across sessions.
 
-**Related Rules:** See E14 (IMPL doc write discipline), E23A (tool journal recovery)
+E42 enforces I4 at agent completion time by verifying that completion reports exist in the IMPL doc before the agent session closes. This catches agents that "complete" without writing their completion report — a violation that would otherwise only be detected at wave finalization.
+
+**Related Rules:** See E14 (IMPL doc write discipline), E23A (tool journal recovery), E42 (SubagentStop validation)
 
 ---
 
@@ -95,7 +97,9 @@ The journal is agent-private working memory. It is not distributed to other agen
 
 **Rationale:** The orchestrator merges from agent branch commits. If work is uncommitted, the merge step cannot proceed without manual intervention.
 
-**Related Rules:** See E4 (worktree isolation) and completion report format in [message-formats.md](message-formats.md)
+E42 performs post-hoc I5 commit verification at SubagentStop time, checking that the agent's worktree branch has at least one commit ahead of the merge base before the agent session closes.
+
+**Related Rules:** See E4 (worktree isolation), completion report format in [message-formats.md](message-formats.md), and E42 (SubagentStop I5 commit verification)
 
 ---
 
