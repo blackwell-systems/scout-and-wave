@@ -224,7 +224,7 @@ External observer pattern that preserves agent execution context across Claude C
 - `pkg/journal/context.go` — Context generator (analyze history, produce markdown)
 - `pkg/journal/checkpoint.go` — Checkpoint manager (create/restore snapshots)
 - `pkg/journal/archive.go` — Archive policy (compress, retain, cleanup)
-- `cmd/saw/debug_journal.go` — CLI for debugging failed agents
+- `cmd/sawtools/debug_journal.go` — CLI for debugging failed agents
 
 **Integration points:**
 - Orchestrator: `runner.go` calls `observer.Sync()` + `observer.GenerateContext()` before agent launch

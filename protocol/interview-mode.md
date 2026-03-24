@@ -195,7 +195,7 @@ If the CLI detects EOF on stdin before the interview is complete, it:
 
 **CLI Implementation:**
 - Command: `sawtools interview "<description>"` (in scout-and-wave-go repo)
-- Located in: `cmd/saw/interview_cmd.go`
+- Located in: `cmd/sawtools/interview_cmd.go`
 - Uses: `pkg/interview` package (Manager interface, DeterministicManager implementation)
 
 **Claude Code Integration:**

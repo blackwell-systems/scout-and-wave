@@ -13,7 +13,7 @@
 A new user who discovers SAW and wants to try it goes through these steps:
 
 1. **Read the README** (206 lines). Encounters seven participant roles, six invariants, five preconditions, 41 execution rules, worktree isolation layers, scaffold agents, interface contracts, and wave sequencing — before seeing `Quick Start`.
-2. **Follow Quick Start** — must clone one repo, run `install.sh`, clone a second repo (`scout-and-wave-go`), build a Go binary (`go build -o ~/.local/bin/sawtools ./cmd/saw`), ensure `~/.local/bin` is on PATH, edit `~/.claude/settings.json` to add Agent permissions, optionally create `saw.config.json`.
+2. **Follow Quick Start** — must clone one repo, run `install.sh`, clone a second repo (`scout-and-wave-go`), build a Go binary (`go build -o ~/.local/bin/sawtools ./cmd/sawtools`), ensure `~/.local/bin` is on PATH, edit `~/.claude/settings.json` to add Agent permissions, optionally create `saw.config.json`.
 3. **Run `sawtools verify-install`** to check the setup.
 4. **Navigate to GETTING_STARTED.md** to understand the three interfaces (skill, web, CLI).
 5. **Navigate to `implementations/claude-code/QUICKSTART.md`** for a step-by-step walkthrough.
@@ -300,11 +300,11 @@ saw init [--repo <path>] [--force]
 4. **If sawtools is missing**, print install instructions:
    ```
    sawtools not found. Install it:
-     go install github.com/blackwell-systems/scout-and-wave-go/cmd/saw@latest
+     go install github.com/blackwell-systems/scout-and-wave-go/cmd/sawtools@latest
 
    Or build from source:
      git clone https://github.com/blackwell-systems/scout-and-wave-go.git
-     cd scout-and-wave-go && go build -o ~/.local/bin/sawtools ./cmd/saw
+     cd scout-and-wave-go && go build -o ~/.local/bin/sawtools ./cmd/sawtools
    ```
 
 5. **Print next steps:**
@@ -321,7 +321,7 @@ saw init [--repo <path>] [--force]
    ```
 
 **Implementation:**
-- **Repo:** scout-and-wave-go (`cmd/saw/init_cmd.go`)
+- **Repo:** scout-and-wave-go (`cmd/sawtools/init_cmd.go`)
 - **Effort:** Medium (new command, project detection heuristics, config generation)
 - **Dependencies:** None
 
@@ -512,11 +512,11 @@ The skill prompt tells the orchestrator to "print what's missing and how to inst
 SAW needs the 'sawtools' command-line tool, but it's not installed.
 
 Install it (choose one):
-  go install github.com/blackwell-systems/scout-and-wave-go/cmd/saw@latest
+  go install github.com/blackwell-systems/scout-and-wave-go/cmd/sawtools@latest
 
   Or build from source:
     git clone https://github.com/blackwell-systems/scout-and-wave-go.git
-    cd scout-and-wave-go && go build -o ~/.local/bin/sawtools ./cmd/saw
+    cd scout-and-wave-go && go build -o ~/.local/bin/sawtools ./cmd/sawtools
 
 Then add to your PATH if needed:
   export PATH="$HOME/.local/bin:$PATH"
@@ -785,7 +785,7 @@ Key files that would be modified by these proposals:
 - `/Users/dayna.blackwell/code/scout-and-wave/README.md` — simplify Quick Start to `saw init` + `saw plan`
 
 **scout-and-wave-go (Go engine):**
-- `/Users/dayna.blackwell/code/scout-and-wave-go/cmd/saw/` — new `init_cmd.go`, aliases for `plan`/`build`
+- `/Users/dayna.blackwell/code/scout-and-wave-go/cmd/sawtools/` — new `init_cmd.go`, aliases for `plan`/`build`
 - `/Users/dayna.blackwell/code/scout-and-wave-go/pkg/protocol/validate.go` — add `UserMessage` to validation errors
 - `/Users/dayna.blackwell/code/scout-and-wave-go/pkg/engine/runner.go` — enhanced error context in `RunScout`, `RunSingleWave`
 

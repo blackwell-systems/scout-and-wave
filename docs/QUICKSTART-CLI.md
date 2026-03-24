@@ -34,7 +34,7 @@ sawtools verify-install
 }
 ```
 
-If any check fails, the output includes a plain-English explanation and remediation steps.
+If any check fails, the output includes a plain-English explanation and remediation steps. For a human-readable version instead of JSON, pass `--human`.
 
 ## Step 2: Scout a Feature
 
@@ -166,11 +166,11 @@ If any step fails, the output includes diagnostics and the merge is not finalize
 
 ### "sawtools: command not found"
 
-Build and install: `cd scout-and-wave-go && go build -o sawtools ./cmd/saw && cp sawtools ~/.local/bin/`. Ensure `~/.local/bin` is in your PATH.
+Build and install: `cd scout-and-wave-go && go build -o ~/.local/bin/sawtools ./cmd/sawtools`. Ensure `~/.local/bin` is in your PATH.
 
 ### "verify-install: skill_symlinks: FAIL"
 
-Symlink the skill file: `mkdir -p ~/.claude/skills/saw && ln -sf /path/to/scout-and-wave/implementations/claude-code/prompts/saw-skill.md ~/.claude/skills/saw/saw-skill.md`
+Run the skill installer from the protocol repo root: `./install.sh`. This creates `~/.claude/skills/saw/` and symlinks all required prompt files. See the [Installation Guide](INSTALLATION.md) for the full skill directory structure.
 
 ### "prepare-wave: config_file: not found"
 
@@ -193,3 +193,7 @@ Each code maps to a protocol rule. See the [protocol documentation](../protocol/
 - [Getting Started Guide](GETTING_STARTED.md) -- Overview of all three SAW interfaces
 - [Installation Guide](INSTALLATION.md) -- Full installation walkthrough for all components
 - [Claude Code Quickstart](../implementations/claude-code/QUICKSTART.md) -- Using SAW via the `/saw` skill
+
+---
+
+Last reviewed: 2026-03-24

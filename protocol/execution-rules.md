@@ -1023,7 +1023,7 @@ waves:
     agents:
       - id: D
         task: "Wire new packages into main.go and finalize.go"
-        files: [cmd/saw/main.go, pkg/engine/finalize.go]
+        files: [cmd/sawtools/main.go, pkg/engine/finalize.go]
 ```
 
 **Orchestrator behavior for `type: integration` waves:**

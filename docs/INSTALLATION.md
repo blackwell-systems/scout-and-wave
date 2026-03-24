@@ -101,7 +101,7 @@ Clone the Go engine repo and build the binary:
 ```bash
 git clone https://github.com/blackwell-systems/scout-and-wave-go.git
 cd scout-and-wave-go
-go build -o ~/.local/bin/sawtools ./cmd/saw
+go build -o ~/.local/bin/sawtools ./cmd/sawtools
 ```
 
 Make sure `~/.local/bin` is on your PATH. Add this to your shell profile if needed:
@@ -224,7 +224,7 @@ If you cloned all three repos into the same parent directory, the default paths 
 ### "sawtools: command not found"
 
 The `sawtools` binary is not on your PATH. Either:
-- Move it to a directory on your PATH: `go build -o ~/.local/bin/sawtools ./cmd/saw`
+- Move it to a directory on your PATH: `go build -o ~/.local/bin/sawtools ./cmd/sawtools`
 - Or add its location to PATH: `export PATH="$HOME/.local/bin:$PATH"`
 
 Verify with: `which sawtools`

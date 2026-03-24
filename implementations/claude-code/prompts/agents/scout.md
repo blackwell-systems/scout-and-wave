@@ -483,7 +483,7 @@ from a PROGRAM manifest. These contracts are IMMUTABLE — the Scout must:
        agents:
          - id: D
            task: "Wire new packages into main.go and finalize.go"
-           files: [cmd/saw/main.go, pkg/engine/finalize.go]
+           files: [cmd/sawtools/main.go, pkg/engine/finalize.go]
    ```
 
    Integration waves differ from standard waves:

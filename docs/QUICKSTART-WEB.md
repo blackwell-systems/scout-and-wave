@@ -94,10 +94,10 @@ Example prompts:
 
 ### Port 7432 already in use
 
-Another process is using the default port. Either stop that process or specify a different port:
+Another process is using the default port. Either stop that process or specify a different address:
 
 ```bash
-./saw serve --port 8080
+./saw serve --addr localhost:8080
 ```
 
 ### Build fails during `make build`
@@ -125,3 +125,7 @@ The web UI reads IMPL docs from disk. Refresh the browser page after saving chan
 - [Getting Started Guide](GETTING_STARTED.md) -- Overview of all three SAW interfaces
 - [Installation Guide](INSTALLATION.md) -- Full installation walkthrough for all components
 - [Claude Code Quickstart](../implementations/claude-code/QUICKSTART.md) -- Using SAW via the `/saw` skill in Claude Code
+
+---
+
+Last reviewed: 2026-03-24

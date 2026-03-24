@@ -73,8 +73,8 @@ Each item specifies SDK (engine function in `scout-and-wave-go`), CLI (`sawtools
 
 | Layer | Scope |
 |-------|-------|
-| **SDK** | No engine-level `PrepareWave` function exists yet — the logic is in the CLI command. Either: (a) extract `PrepareWave` into `pkg/engine/wave_prepare.go` with branch save/restore built in, or (b) fix directly in `cmd/saw/prepare_wave.go` lines 222-226 (the `--merge-target` checkout path). Save `git branch --show-current` before checkout, restore with `git checkout <saved>` in a `defer` after baseline verification completes (success or failure). Add `OriginalBranch string` to the CLI's `PrepareWaveResult` for observability. |
-| **CLI** | `cmd/saw/prepare_wave.go` — primary fix location. The checkout + restore logic lives here. |
+| **SDK** | No engine-level `PrepareWave` function exists yet — the logic is in the CLI command. Either: (a) extract `PrepareWave` into `pkg/engine/wave_prepare.go` with branch save/restore built in, or (b) fix directly in `cmd/sawtools/prepare_wave.go` lines 222-226 (the `--merge-target` checkout path). Save `git branch --show-current` before checkout, restore with `git checkout <saved>` in a `defer` after baseline verification completes (success or failure). Add `OriginalBranch string` to the CLI's `PrepareWaveResult` for observability. |
+| **CLI** | `cmd/sawtools/prepare_wave.go` — primary fix location. The checkout + restore logic lives here. |
 | **Web** | `pkg/api/wave_runner.go` — if SDK extraction (option a), web calls the same function. If CLI-only fix (option b), web's `runPrepareWave` needs the same save/restore pattern. Add `original_branch` field to SSE `wave_prepare_complete` event. |
 
 ### P2: Cross-Repo Build in `finalize-wave`
@@ -84,7 +84,7 @@ Each item specifies SDK (engine function in `scout-and-wave-go`), CLI (`sawtools
 | Layer | Scope |
 |-------|-------|
 | **SDK** | `pkg/engine/wave_finalize.go` — add `CrossRepoVerify bool` to `FinalizeWaveOpts`. When true, after primary repo merge + verify-build, run `RunCrossRepoBaselineGates` on all repos from the IMPL's `file_ownership`. Add `CrossRepoResults map[string]*BaselineData` to `FinalizeWaveResult`. |
-| **CLI** | `cmd/saw/finalize_wave.go` — add `--cross-repo-verify` flag, pass to SDK. Include cross-repo results in JSON output. |
+| **CLI** | `cmd/sawtools/finalize_wave.go` — add `--cross-repo-verify` flag, pass to SDK. Include cross-repo results in JSON output. |
 | **Web** | `pkg/api/wave_runner.go` — always enable cross-repo verify in web flows (web users can't easily fix post-merge). Emit `cross_repo_verify` SSE event with per-repo pass/fail status. Add red/green indicators to wave finalization UI. |
 
 ### P3: Brief Re-Validation at `prepare-wave` Time
@@ -94,7 +94,7 @@ IMPL briefs scouted before prerequisite tiers run go stale. Tier 1 changes funct
 | Layer | Scope |
 |-------|-------|
 | **SDK** | `pkg/protocol/brief_validate.go` (new) — `ValidateBriefSymbols(briefPath, repoDir string) []BriefWarning`. Parse the brief markdown for Go symbol references (function names, type names, import paths). Verify each exists in the codebase via `go doc` or grep. Return warnings for missing symbols. Non-blocking (informational). |
-| **CLI** | `cmd/saw/prepare_wave.go` — add `--revalidate-briefs` flag. When set, run `ValidateBriefSymbols` on each extracted brief before creating worktrees. Print warnings but don't block (briefs may reference symbols the agent will create). |
+| **CLI** | `cmd/sawtools/prepare_wave.go` — add `--revalidate-briefs` flag. When set, run `ValidateBriefSymbols` on each extracted brief before creating worktrees. Print warnings but don't block (briefs may reference symbols the agent will create). |
 | **Web** | `pkg/api/wave_runner.go` — always run brief validation before wave launch. Display warnings in the wave preparation UI panel. User can dismiss and proceed. |
 | **Alternative** | Add `sawtools revalidate-briefs <impl-doc> --wave N` standalone command for manual use. Re-scout Tier 2 IMPLs after Tier 1 completes (heavier but more accurate). |
 
@@ -105,7 +105,7 @@ Tier 1 created `config/state.go` importing `protocol`, making `protocol → conf
 | Layer | Scope |
 |-------|-------|
 | **SDK** | `pkg/protocol/tier_deps.go` (new) — `CheckTierDependencyGraph(manifest *PROGRAMManifest, repoDir string) result.Result[*TierDepsData]`. For each tier boundary, analyze Go import graphs: collect packages modified by Tier N IMPLs, check if Tier N+1 IMPL files can import them without cycles. Uses `go list -json ./...` to build the import graph. Returns cycle details if found. |
-| **CLI** | `cmd/saw/check_tier_deps_cmd.go` (new) — `sawtools check-tier-deps <program-manifest> --repo-dir <path>`. Integrate into `prepare-tier` as a pre-flight step (after P1+ conflict check, before IMPL validation). |
+| **CLI** | `cmd/sawtools/check_tier_deps_cmd.go` (new) — `sawtools check-tier-deps <program-manifest> --repo-dir <path>`. Integrate into `prepare-tier` as a pre-flight step (after P1+ conflict check, before IMPL validation). |
 | **Web** | `pkg/api/program_handler.go` — add `POST /api/program/{slug}/check-tier-deps` endpoint. Call `CheckTierDependencyGraph`. Display cycle warnings in program status panel (no graph library currently in web app — use text/table format, not directed graph visualization). |
 
 ### P5: Critic Verdict "ISSUES" with 0 Errors Should Auto-Pass
@@ -114,12 +114,12 @@ Tier 1 created `config/state.go` importing `protocol`, making `protocol → conf
 
 **Two code paths need the same fix:**
 1. `pkg/protocol/program_tier_prepare.go` — `criticPassed()` at line 166 (PROGRAM flow)
-2. `cmd/saw/prepare_wave.go` — E37 enforcement at lines 116-138 (standalone wave flow, blocks on ANY "ISSUES" verdict)
+2. `cmd/sawtools/prepare_wave.go` — E37 enforcement at lines 116-138 (standalone wave flow, blocks on ANY "ISSUES" verdict)
 
 | Layer | Scope |
 |-------|-------|
 | **SDK** | `pkg/protocol/program_tier_prepare.go` — update `criticPassed()` to return true when `CriticReport.Verdict == "PASS"` OR (`Verdict == "ISSUES"` AND all `AgentReviews[*].Issues[*].Severity == "warning"`). Note: issues are nested per-agent in `CriticData.AgentReviews`, not at the top level. Add `AutoMode bool` to `PrepareTierOpts` — when true, auto-pass warnings. |
-| **CLI** | `cmd/saw/prepare_wave.go` lines 116-138 — apply the same severity-aware logic. Currently blocks on any ISSUES verdict without checking severity. `cmd/saw/prepare_tier_cmd.go` — add `--auto` flag that sets `AutoMode: true`. |
+| **CLI** | `cmd/sawtools/prepare_wave.go` lines 116-138 — apply the same severity-aware logic. Currently blocks on any ISSUES verdict without checking severity. `cmd/sawtools/prepare_tier_cmd.go` — add `--auto` flag that sets `AutoMode: true`. |
 | **Web** | `pkg/api/program_handler.go` — web always presents warnings to user with "proceed anyway?" dialog. On user confirmation, re-run `prepare-tier` with `AutoMode: true`. |
 | **Protocol** | Update `execution-rules.md` E37 to explicitly state: "ISSUES verdict with 0 errors (warnings only) does not block `prepare-tier --auto`. Warnings are surfaced to the orchestrator but do not require correction." |
 
@@ -139,14 +139,14 @@ Rate-limited agents lose all uncommitted work when the worktree is cleaned up fo
 
 `finalize-wave` skips merge when worktree branches exist but worktree directories are gone. **Depends on P1** — if P1 leaves HEAD on the wrong branch, P7's detection logic runs against the wrong base.
 
-The code at `cmd/saw/finalize_wave.go` has two checks: `WorktreesAbsent()` (line 111) and `AllBranchesAbsent()` (line 129). The bug is ordering: `WorktreesAbsent` runs first and short-circuits — if worktree directories were cleaned up but branches still exist, merge is skipped. The `AllBranchesAbsent` path only handles the idempotent re-run case (already merged AND cleaned), not the "worktrees gone, branches remain" case.
+The code at `cmd/sawtools/finalize_wave.go` has two checks: `WorktreesAbsent()` (line 111) and `AllBranchesAbsent()` (line 129). The bug is ordering: `WorktreesAbsent` runs first and short-circuits — if worktree directories were cleaned up but branches still exist, merge is skipped. The `AllBranchesAbsent` path only handles the idempotent re-run case (already merged AND cleaned), not the "worktrees gone, branches remain" case.
 
 **Fix:** Check branches first, worktree directories second. If `git branch --list 'saw/{slug}/wave{N}-agent-*'` returns any branches, proceed to merge regardless of worktree directory state.
 
 | Layer | Scope |
 |-------|-------|
 | **SDK** | `pkg/engine/wave_finalize.go` — reorder: branch check before worktree check. If branches exist, merge them. If branches don't exist AND worktrees don't exist, skip (idempotent). |
-| **CLI** | `cmd/saw/finalize_wave.go` — same reorder at lines 109-143. |
+| **CLI** | `cmd/sawtools/finalize_wave.go` — same reorder at lines 109-143. |
 | **Web** | `pkg/api/wave_runner.go` — no changes (SDK fix). |
 
 ### P8: `finalize-tier` Auto-Update IMPL Statuses

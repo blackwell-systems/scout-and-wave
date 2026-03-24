@@ -570,7 +570,7 @@ Re-engage the Planner to revise the PROGRAM manifest after a tier gate failure o
 
 ## 7. sawtools Commands
 
-All program-related `sawtools` commands are registered in the Go SDK (`cmd/saw/`).
+All program-related `sawtools` commands are registered in the Go SDK (`cmd/sawtools/`).
 
 ### `sawtools validate-program <program-manifest>`
 
@@ -777,7 +777,7 @@ Marks a PROGRAM manifest as complete and updates `CONTEXT.md`.
 
 ### `sawtools program-replan <manifest>`
 
-Re-engages the Planner agent to revise a PROGRAM manifest. Implemented in `cmd/saw/program_replan_cmd.go`.
+Re-engages the Planner agent to revise a PROGRAM manifest. Implemented in `cmd/sawtools/program_replan_cmd.go`.
 
 **Flags:**
 - `<manifest>`: Path to PROGRAM manifest

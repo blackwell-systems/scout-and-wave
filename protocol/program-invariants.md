@@ -169,7 +169,7 @@ complete safety guarantee for parallel tier execution. P1 prevents logical
 dependency violations. P1+ prevents the physical merge failures that would occur
 even if logical dependencies are respected. Without P1+, two IMPLs that logically
 don't depend on each other may both modify the same infrastructure file (e.g.,
-`cmd/saw/main.go` for command registration), causing merge conflicts that block
+`cmd/sawtools/main.go` for command registration), causing merge conflicts that block
 tier completion.
 
 **Related Rules:**
@@ -399,7 +399,7 @@ When all preconditions hold and all invariants (I1-I6 + P1-P5 including P1+) are
 
 ## Enforcement Mechanisms
 
-All enforcement mechanisms described below are implemented in the Go SDK (`pkg/protocol/`) and CLI (`cmd/saw/`).
+All enforcement mechanisms described below are implemented in the Go SDK (`pkg/protocol/`) and CLI (`cmd/sawtools/`).
 
 ### P1 Enforcement: IMPL Independence Validation
 
@@ -431,7 +431,7 @@ All enforcement mechanisms described below are implemented in the Go SDK (`pkg/p
 - If conflicts found, `PrepareTier()` aborts with `Success=false` before any branches are created
 - CLI `check-program-conflicts` exits 1 with structured `ConflictReport` JSON and human-readable BLOCKED message on stderr
 
-**Implementation:** `pkg/protocol/program_tier_prepare.go` — `PrepareTier()` Step 3; `pkg/protocol/program_validation.go` — `ValidateP1FileDisjointness()`, `ValidateProgramImportMode()`; `cmd/saw/check_program_conflicts_cmd.go`
+**Implementation:** `pkg/protocol/program_tier_prepare.go` — `PrepareTier()` Step 3; `pkg/protocol/program_validation.go` — `ValidateP1FileDisjointness()`, `ValidateProgramImportMode()`; `cmd/sawtools/check_program_conflicts_cmd.go`
 
 ### P2 Enforcement: Program Contract Freeze and Redefinition Check
 
@@ -446,7 +446,7 @@ All enforcement mechanisms described below are implemented in the Go SDK (`pkg/p
 - If any contract file is missing or uncommitted, returns partial result with `Success=false`
 - `ValidateProgramImportMode()` checks P2 redefinition: if an IMPL doc's `interface_contracts` redefines a frozen program contract name → `P2_CONTRACT_REDEFINITION`
 
-**Implementation:** `pkg/protocol/program_freeze.go` — `FreezeContracts()`, `matchesSlugInFreezeAt()`; `pkg/protocol/program_validation.go` — `ValidateProgramImportMode()`; `cmd/saw/freeze_contracts_cmd.go`
+**Implementation:** `pkg/protocol/program_freeze.go` — `FreezeContracts()`, `matchesSlugInFreezeAt()`; `pkg/protocol/program_validation.go` — `ValidateProgramImportMode()`; `cmd/sawtools/freeze_contracts_cmd.go`
 
 ### P3 Enforcement: Tier Completion and Gate Check
 
@@ -557,14 +557,14 @@ IMPL branches follow the naming convention: `saw/program/{program-slug}/tier{N}-
 | `pkg/protocol/program_prioritizer.go` | `UnblockingScore()`, `PrioritizeIMPLs()` |
 | `pkg/engine/program_auto.go` | `AdvanceTierAutomatically()`, `ReplanProgram()`, `ScoreTierIMPLs()` |
 | `pkg/engine/program_tier_loop.go` | `RunTierLoop()`, `AutoTriggerReplan()` |
-| `cmd/saw/prepare_tier_cmd.go` | CLI: `sawtools prepare-tier` |
-| `cmd/saw/finalize_tier_cmd.go` | CLI: `sawtools finalize-tier` (with `--auto` flag) |
-| `cmd/saw/check_program_conflicts_cmd.go` | CLI: `sawtools check-program-conflicts` |
-| `cmd/saw/freeze_contracts_cmd.go` | CLI: `sawtools freeze-contracts` |
-| `cmd/saw/mark_program_complete_cmd.go` | CLI: `sawtools mark-program-complete` |
-| `cmd/saw/update_program_state_cmd.go` | CLI: `sawtools update-program-state` |
-| `cmd/saw/update_program_impl_cmd.go` | CLI: `sawtools update-program-impl` |
-| `cmd/saw/program_status_cmd.go` | CLI: `sawtools program-status` |
+| `cmd/sawtools/prepare_tier_cmd.go` | CLI: `sawtools prepare-tier` |
+| `cmd/sawtools/finalize_tier_cmd.go` | CLI: `sawtools finalize-tier` (with `--auto` flag) |
+| `cmd/sawtools/check_program_conflicts_cmd.go` | CLI: `sawtools check-program-conflicts` |
+| `cmd/sawtools/freeze_contracts_cmd.go` | CLI: `sawtools freeze-contracts` |
+| `cmd/sawtools/mark_program_complete_cmd.go` | CLI: `sawtools mark-program-complete` |
+| `cmd/sawtools/update_program_state_cmd.go` | CLI: `sawtools update-program-state` |
+| `cmd/sawtools/update_program_impl_cmd.go` | CLI: `sawtools update-program-impl` |
+| `cmd/sawtools/program_status_cmd.go` | CLI: `sawtools program-status` |
 
 ---
 
