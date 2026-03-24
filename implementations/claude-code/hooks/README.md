@@ -1,6 +1,6 @@
 # SAW Claude Code Hooks
 
-Enforcement hooks for CLI-based SAW agents. 10 hooks across PreToolUse and PostToolUse events.
+Enforcement hooks for CLI-based SAW agents. 11 hooks across PreToolUse, PostToolUse, and SubagentStop events.
 
 ## Hook Summary
 
@@ -15,6 +15,7 @@ Enforcement hooks for CLI-based SAW agents. 10 hooks across PreToolUse and PostT
 | warn_stubs | PostToolUse | Write\|Edit | H3 | Warns on stub patterns in written code |
 | validate_agent_launch | PreToolUse | Agent | H5 | Full pre-launch validation gate (subsumes H2) |
 | check_branch_drift | PostToolUse | Bash | H4 | Detects commits on wrong branch |
+| validate_agent_completion | SubagentStop | - | E42/I1/I4/I5 | Validates protocol compliance at agent completion |
 
 ## Installation
 
@@ -26,7 +27,7 @@ cd ~/code/scout-and-wave/implementations/claude-code/hooks
 ```
 
 The installer:
-- Creates symlinks in `~/.local/bin/` for all 10 hook scripts
+- Creates symlinks in `~/.local/bin/` for all 11 hook scripts
 - Merges hook configs into `~/.claude/settings.json` (preserves existing hooks)
 - Verifies installation and runs basic tests
 

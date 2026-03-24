@@ -41,6 +41,7 @@ this JSON to determine whether to block.
 | `check_git_ownership` | 1 (PostToolUse) | I1 | Wave agent calls Bash with git checkout/merge/rebase/etc. | Warns (non-blocking) when git operations modify files outside ownership list |
 | SAW pre-commit guard | 2 (Git hook) | I4 | `git commit` in a worktree | Blocks commits to `main`/`master` from agent worktrees |
 | SAW go.mod guard | 2 (Git hook) | -- | `git commit` touching `go.mod` | Blocks `replace` directives with deep relative paths (`../../..`) |
+| `validate_agent_completion` | 1 (SubagentStop) | E42/I1/I4/I5 | SAW agent session ends | Blocks completion if protocol obligations unfulfilled |
 | Ownership middleware | 3 (SDK) | I1 | Engine Write/Edit tool execution | Blocks agent writing files outside `OwnedFiles` map |
 | Freeze middleware | 3 (SDK) | I2 | Engine Write/Edit tool execution | Blocks agent writing to frozen interface paths after freeze time |
 | Role path middleware | 3 (SDK) | I6 | Engine Write/Edit tool execution | Blocks agent writing outside `AllowedPathPrefixes` |
@@ -73,6 +74,8 @@ It performs these steps:
    - `~/.local/bin/check_wave_ownership`
    - `~/.local/bin/check_git_ownership`
    - `~/.local/bin/validate_agent_launch`
+   - `~/.local/bin/validate_agent_completion`
+   - `~/.local/bin/emit_agent_completion`
    - (plus `check_impl_path`, `warn_stubs`, `check_branch_drift` — referenced
      in the installer but scripts not yet present in repo; these steps fail
      silently if scripts are missing)
@@ -84,6 +87,7 @@ It performs these steps:
    - `PreToolUse`: `validate_agent_launch` (matcher `Agent`)
    - `PostToolUse`: `validate_impl_on_write` (matcher `Write`)
    - `PostToolUse`: `check_git_ownership` (matcher `Bash`)
+   - `SubagentStop`: `validate_agent_completion` (blocking, timeout 10s) + `emit_agent_completion` (async)
 
 3. **Verifies** the installation by checking symlinks are executable and
    settings.json contains the hook entries, then runs a smoke test (valid and
@@ -295,6 +299,133 @@ Instead:
 
 ---
 
+## Hook 10: Agent Completion Validation (E42)
+
+**SubagentStop** — Validates protocol compliance when a SAW agent session ends.
+Blocks agent completion if protocol obligations are unfulfilled. Fires two
+hooks in sequence: a blocking validator and an async observability emitter.
+
+### File
+
+- `implementations/claude-code/hooks/validate_agent_completion` (blocking)
+- `implementations/claude-code/hooks/emit_agent_completion` (async)
+
+### Type
+
+SubagentStop (fires when an agent subprocess completes)
+
+### Exit Codes
+
+| Exit code | Meaning |
+|-----------|---------|
+| `0` | Pass — agent fulfilled obligations or is not a SAW agent |
+| `2` | Block — agent has unfulfilled protocol obligations |
+
+Stderr contains human-readable error message explaining what is missing.
+Stdout contains JSON observability event on success (from the async emitter).
+
+### Validation Sequence
+
+The blocking hook (`validate_agent_completion`) runs the following checks based
+on agent type, parsed from the `agent_description` field's `[SAW:waveN:agent-ID]`
+tag:
+
+1. **SAW agent detection** — Parses `[SAW:wave{N}:agent-{ID}]` from
+   `agent_description`. Non-SAW agents pass through immediately (exit 0).
+2. **IMPL doc discovery** — Locates the IMPL doc from `.saw-agent-brief.md`
+   or the worktree's `.saw-state/` directory.
+3. **I5: Commit verification** — Checks that the agent's worktree branch has
+   commits (agents must commit before reporting complete).
+4. **I4: Completion report verification** — Uses `sawtools check-completion`
+   to verify the agent wrote a completion report to the IMPL doc.
+5. **I1: Ownership verification** — Cross-references committed files against
+   the agent's `.saw-ownership.json` to confirm no out-of-scope writes.
+
+If any check fails, the hook exits 2 with a descriptive error on stderr,
+blocking the agent from completing until obligations are fulfilled.
+
+The async hook (`emit_agent_completion`) runs after the blocking hook passes:
+
+1. **Journal archival** — Archives the agent's tool journal for post-session
+   analysis.
+2. **Observability event** — Emits a structured JSON event to stdout for
+   consumption by claudewatch and the web app SSE pipeline.
+
+The async hook uses `"async": true` in the hook configuration so it never
+slows down agent lifecycle. Failures in the async hook are logged but not
+fatal.
+
+### Observability Event Schema
+
+```json
+{
+  "event": "agent_complete",
+  "agent_id": "A",
+  "wave": 1,
+  "agent_type": "wave",
+  "status": "complete",
+  "files_changed": ["file1.go", "file2.go"],
+  "validation_checks": {
+    "i1_ownership": "pass",
+    "i5_commit": "pass",
+    "protocol_report": "pass",
+    "journal_archived": true
+  },
+  "duration_ms": 45000,
+  "timestamp": "2026-03-23T12:00:00Z"
+}
+```
+
+### Manual Installation
+
+1. Symlinks:
+   ```bash
+   ln -sf ~/code/scout-and-wave/implementations/claude-code/hooks/validate_agent_completion ~/.local/bin/validate_agent_completion
+   ln -sf ~/code/scout-and-wave/implementations/claude-code/hooks/emit_agent_completion ~/.local/bin/emit_agent_completion
+   ```
+
+2. Add to `~/.claude/settings.json`:
+   ```json
+   {
+     "hooks": {
+       "SubagentStop": [
+         {
+           "hooks": [
+             {
+               "type": "command",
+               "command": "$HOME/.local/bin/validate_agent_completion",
+               "timeout": 10
+             },
+             {
+               "type": "command",
+               "command": "$HOME/.local/bin/emit_agent_completion",
+               "async": true
+             }
+           ]
+         }
+       ]
+     }
+   }
+   ```
+
+### Testing
+
+```bash
+# Non-SAW agent — should exit 0 (pass through)
+echo '{"session_id":"abc","agent_name":"helper","agent_description":"general helper","exit_reason":"completed"}' | validate_agent_completion
+echo $?  # 0
+
+# SAW agent with fulfilled obligations — should exit 0
+echo '{"session_id":"abc","agent_name":"wave-A","agent_description":"[SAW:wave1:agent-A] implement feature","exit_reason":"completed"}' | validate_agent_completion
+echo $?  # 0 (if all obligations met)
+
+# SAW agent with missing completion report — should exit 2
+echo '{"session_id":"abc","agent_name":"wave-A","agent_description":"[SAW:wave1:agent-A] implement feature","exit_reason":"completed"}' | validate_agent_completion 2>&1
+echo $?  # 2 (if completion report missing)
+```
+
+---
+
 ## Layer 2: Git Pre-Commit Hook
 
 A bash pre-commit hook installed into each Wave agent worktree. This is the
@@ -478,6 +609,8 @@ These are used for after-the-fact auditing, not real-time blocking.
    ls -la ~/.local/bin/check_wave_ownership
    ls -la ~/.local/bin/check_git_ownership
    ls -la ~/.local/bin/validate_agent_launch
+   ls -la ~/.local/bin/validate_agent_completion
+   ls -la ~/.local/bin/emit_agent_completion
    ```
    All should be symlinks (`l` prefix) pointing into the repo's
    `implementations/claude-code/hooks/` directory.
@@ -487,8 +620,9 @@ These are used for after-the-fact auditing, not real-time blocking.
    cat ~/.claude/settings.json | jq '.hooks'
    ```
    Verify `PreToolUse` contains `check_scout_boundaries`, `block_claire_paths`,
-   `check_wave_ownership`, and `validate_agent_launch`; and `PostToolUse`
-   contains `validate_impl_on_write` and `check_git_ownership`.
+   `check_wave_ownership`, and `validate_agent_launch`; `PostToolUse`
+   contains `validate_impl_on_write` and `check_git_ownership`; and
+   `SubagentStop` contains `validate_agent_completion` and `emit_agent_completion`.
 
 3. **Check jq is installed** (required by most hook scripts):
    ```bash

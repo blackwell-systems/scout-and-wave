@@ -258,6 +258,8 @@ Follow the brief exactly.
 
    **SAW tag requirement:** Agent descriptions must use: `[SAW:wave{N}:agent-{ID}] {short description}` (e.g., `[SAW:wave1:agent-A] implement cache layer`).
 
+   **E42: SubagentStop validation.** Agent completion is now automatically validated via the `validate_agent_completion` SubagentStop hook. The hook blocks agents that skip protocol obligations (I5 commit, I4 completion report, I1 ownership). The Orchestrator does not need to manually verify these obligations but should still read completion reports per I4 for decision-making (wave progression, failure routing, integration planning).
+
    **Status tracking:** After each agent completes, update its status:
    ```bash
    sawtools update-status "<manifest-path>" --wave <N> --agent <ID> --status complete
