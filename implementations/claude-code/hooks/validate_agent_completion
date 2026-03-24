@@ -1,0 +1,343 @@
+#!/usr/bin/env bash
+# E42 SubagentStop validation hook for SAW agents
+# SubagentStop lifecycle hook — validates protocol compliance before agent session closes
+#
+# Fires when any agent session ends. Validates SAW agent protocol obligations.
+# Non-SAW agents (no [SAW:...] tag in agent_description) pass through immediately.
+#
+# Exit codes:
+#   0 — Pass (agent fulfilled obligations or is not a SAW agent)
+#   2 — Block (agent has unfulfilled protocol obligations)
+#
+# Manual test commands:
+#
+#   # Non-SAW agent — should exit 0 (allow)
+#   echo '{"session_id":"abc","agent_name":"helper","agent_description":"general task","exit_reason":"completed"}' \
+#     | bash implementations/claude-code/hooks/validate_agent_completion
+#   echo $?  # 0
+#
+#   # SAW wave agent with completion report present — should exit 0
+#   echo '{"session_id":"abc","agent_name":"wave-A","agent_description":"[SAW:wave1:agent-A] implement feature","exit_reason":"completed"}' \
+#     | bash implementations/claude-code/hooks/validate_agent_completion
+#   echo $?  # depends on IMPL doc state
+#
+#   # SAW wave agent missing completion report — should exit 2 (block)
+#   echo '{"session_id":"abc","agent_name":"wave-A","agent_description":"[SAW:wave1:agent-A] implement feature","exit_reason":"completed"}' \
+#     | bash implementations/claude-code/hooks/validate_agent_completion
+#   echo $?  # 2
+#
+#   # SAW critic agent — should validate critic_report field
+#   echo '{"session_id":"abc","agent_name":"critic","agent_description":"[SAW:critic:wave1] review agents","exit_reason":"completed"}' \
+#     | bash implementations/claude-code/hooks/validate_agent_completion
+#   echo $?  # depends on IMPL doc state
+#
+#   # SAW scaffold agent — should validate scaffold statuses
+#   echo '{"session_id":"abc","agent_name":"scaffold","agent_description":"[SAW:scaffold:types] create types","exit_reason":"completed"}' \
+#     | bash implementations/claude-code/hooks/validate_agent_completion
+#   echo $?  # depends on IMPL doc state
+
+set -euo pipefail
+
+# Read JSON from stdin
+input=$(cat)
+
+# --- Parse fields ---
+description=$(echo "$input" | jq -r '.agent_description // empty' 2>/dev/null || true)
+
+# Fast path: no description means not a SAW agent
+if [[ -z "$description" ]]; then
+  exit 0
+fi
+
+# --- Step 1: Parse SAW tag ---
+# Supported formats:
+#   [SAW:wave{N}:agent-{ID}] — wave agent
+#   [SAW:critic:{label}]     — critic agent
+#   [SAW:scout]              — scout agent
+#   [SAW:scout:{label}]      — scout agent with label
+#   [SAW:scaffold:{label}]   — scaffold agent
+agent_type=""
+wave_num=""
+agent_id=""
+saw_label=""
+
+if [[ "$description" =~ \[SAW:wave([0-9]+):agent-([A-Za-z0-9]+)\] ]]; then
+  agent_type="wave"
+  wave_num="${BASH_REMATCH[1]}"
+  agent_id="${BASH_REMATCH[2]}"
+elif [[ "$description" =~ \[SAW:critic:([A-Za-z0-9_-]+)\] ]]; then
+  agent_type="critic"
+  saw_label="${BASH_REMATCH[1]}"
+elif [[ "$description" =~ \[SAW:scout\] ]] || [[ "$description" =~ \[SAW:scout:([A-Za-z0-9_-]+)\] ]]; then
+  agent_type="scout"
+  saw_label="${BASH_REMATCH[1]:-}"
+elif [[ "$description" =~ \[SAW:scaffold:([A-Za-z0-9_-]+)\] ]]; then
+  agent_type="scaffold"
+  saw_label="${BASH_REMATCH[1]}"
+else
+  # No SAW tag found — not a SAW agent, pass through
+  exit 0
+fi
+
+# --- Step 2: Find IMPL doc ---
+impl_path=""
+
+# Check .saw-state/active-impl first
+if [[ -f ".saw-state/active-impl" ]]; then
+  impl_path=$(cat .saw-state/active-impl 2>/dev/null || true)
+fi
+
+# Try extracting from agent_description if not found
+if [[ -z "$impl_path" || ! -f "$impl_path" ]]; then
+  impl_path=$(echo "$description" | grep -oE '/[^ ]*docs/IMPL/IMPL-[a-z0-9-]+\.yaml' | head -1 || true)
+fi
+
+if [[ -z "$impl_path" || ! -f "$impl_path" ]]; then
+  # Walk up to find repo root and try relative path
+  repo_root=""
+  search_dir="$PWD"
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    if [[ -d "$search_dir/.git" || -f "$search_dir/.git" ]]; then
+      repo_root="$search_dir"
+      break
+    fi
+    parent=$(dirname "$search_dir")
+    if [[ "$parent" == "$search_dir" ]]; then
+      break
+    fi
+    search_dir="$parent"
+  done
+
+  if [[ -n "$repo_root" ]]; then
+    # Check for active-impl at repo root
+    if [[ -f "$repo_root/.saw-state/active-impl" ]]; then
+      candidate=$(cat "$repo_root/.saw-state/active-impl" 2>/dev/null || true)
+      if [[ -n "$candidate" && -f "$candidate" ]]; then
+        impl_path="$candidate"
+      elif [[ -n "$candidate" && -f "$repo_root/$candidate" ]]; then
+        impl_path="$repo_root/$candidate"
+      fi
+    fi
+
+    # Try extracting relative path from description
+    if [[ -z "$impl_path" || ! -f "$impl_path" ]]; then
+      rel_path=$(echo "$description" | grep -oE 'docs/IMPL/IMPL-[a-z0-9-]+\.yaml' | head -1 || true)
+      if [[ -n "$rel_path" && -f "$repo_root/$rel_path" ]]; then
+        impl_path="$repo_root/$rel_path"
+      fi
+    fi
+  fi
+fi
+
+if [[ -z "$impl_path" || ! -f "$impl_path" ]]; then
+  echo "E42: Cannot locate IMPL doc for SAW ${agent_type} agent. Checked .saw-state/active-impl and agent_description." >&2
+  exit 2
+fi
+
+# --- Step 3: I1 ownership verification (wave agents only) ---
+if [[ "$agent_type" == "wave" ]]; then
+  # Find ownership file
+  ownership_file=""
+  search_dir="$PWD"
+  for _ in 1 2 3 4 5; do
+    if [[ -f "$search_dir/.saw-ownership.json" ]]; then
+      ownership_file="$search_dir/.saw-ownership.json"
+      break
+    fi
+    parent=$(dirname "$search_dir")
+    if [[ "$parent" == "$search_dir" ]]; then break; fi
+    search_dir="$parent"
+  done
+
+  if [[ -n "$ownership_file" ]]; then
+    worktree_root=$(dirname "$ownership_file")
+    # Get merge base
+    current_branch=$(git -C "$worktree_root" branch --show-current 2>/dev/null || true)
+    if [[ -n "$current_branch" ]]; then
+      merge_base=$(git -C "$worktree_root" merge-base "$current_branch" HEAD 2>/dev/null || true)
+      if [[ -n "$merge_base" ]]; then
+        changed_files=$(git -C "$worktree_root" diff --name-only "$merge_base" HEAD 2>/dev/null || true)
+      else
+        changed_files=$(git -C "$worktree_root" diff --name-only HEAD 2>/dev/null || true)
+      fi
+
+      if [[ -n "$changed_files" ]]; then
+        # Get owned files from ownership JSON
+        owned_files=$(jq -r '.files[]? // empty' "$ownership_file" 2>/dev/null || true)
+
+        violations=""
+        while IFS= read -r file; do
+          [[ -z "$file" ]] && continue
+          found=false
+          while IFS= read -r owned; do
+            [[ -z "$owned" ]] && continue
+            if [[ "$file" == "$owned" ]]; then
+              found=true
+              break
+            fi
+          done <<< "$owned_files"
+          if [[ "$found" != "true" ]]; then
+            violations="${violations:+$violations, }$file"
+          fi
+        done <<< "$changed_files"
+
+        if [[ -n "$violations" ]]; then
+          echo "E42/I1 violation: agent ${agent_id} modified unowned file(s): ${violations}" >&2
+          exit 2
+        fi
+      fi
+    fi
+  fi
+fi
+
+# --- Step 4: I5 commit verification (wave agents only) ---
+if [[ "$agent_type" == "wave" ]]; then
+  ownership_file=""
+  search_dir="$PWD"
+  for _ in 1 2 3 4 5; do
+    if [[ -f "$search_dir/.saw-ownership.json" ]]; then
+      ownership_file="$search_dir/.saw-ownership.json"
+      break
+    fi
+    parent=$(dirname "$search_dir")
+    if [[ "$parent" == "$search_dir" ]]; then break; fi
+    search_dir="$parent"
+  done
+
+  if [[ -n "$ownership_file" ]]; then
+    worktree_root=$(dirname "$ownership_file")
+    current_branch=$(git -C "$worktree_root" branch --show-current 2>/dev/null || true)
+
+    if [[ -n "$current_branch" ]]; then
+      # Count commits ahead of merge base
+      merge_base=$(git -C "$worktree_root" merge-base "$current_branch" HEAD 2>/dev/null || true)
+      if [[ -n "$merge_base" ]]; then
+        commit_count=$(git -C "$worktree_root" rev-list --count "$merge_base..HEAD" 2>/dev/null || echo "0")
+      else
+        commit_count=$(git -C "$worktree_root" rev-list --count HEAD 2>/dev/null || echo "0")
+      fi
+
+      if [[ "$commit_count" -eq 0 ]]; then
+        # Check if completion report exists despite no commits
+        report_found=false
+        if command -v sawtools &>/dev/null; then
+          if sawtools check-completion "$impl_path" --agent "$agent_id" &>/dev/null; then
+            report_found=true
+          fi
+        else
+          if grep -qE "^\s+${agent_id}:" "$impl_path" 2>/dev/null; then
+            # Check if it's in completion_reports section
+            in_reports=$(sed -n '/^completion_reports:/,/^[a-z]/p' "$impl_path" 2>/dev/null | grep -c "${agent_id}:" || true)
+            if [[ "$in_reports" -gt 0 ]]; then
+              report_found=true
+            fi
+          fi
+        fi
+
+        if [[ "$report_found" == "true" ]]; then
+          echo "E42/I5 violation: completion report written but no commits found for agent ${agent_id} (wave ${wave_num})." >&2
+          exit 2
+        fi
+      fi
+    fi
+  fi
+fi
+
+# --- Step 5: Protocol report validation ---
+case "$agent_type" in
+  wave)
+    # Verify agent ID appears in completion_reports section
+    report_valid=false
+    if command -v sawtools &>/dev/null; then
+      if sawtools check-completion "$impl_path" --agent "$agent_id" &>/dev/null; then
+        report_valid=true
+      fi
+    else
+      # Grep fallback: look for agent ID in completion_reports section
+      reports_section=$(sed -n '/^completion_reports:/,/^[a-z_]*:/p' "$impl_path" 2>/dev/null || true)
+      if [[ -n "$reports_section" ]] && echo "$reports_section" | grep -qE "^\s+${agent_id}:" 2>/dev/null; then
+        report_valid=true
+      fi
+    fi
+
+    if [[ "$report_valid" != "true" ]]; then
+      echo "E42: Agent ${agent_id} (wave ${wave_num}) has no completion report in IMPL doc. Use 'sawtools set-completion' before completing." >&2
+      exit 2
+    fi
+    ;;
+
+  critic)
+    # Verify IMPL doc has non-empty critic_report field
+    critic_valid=false
+    if command -v yq &>/dev/null; then
+      verdict=$(yq -r '.critic_report.verdict // empty' "$impl_path" 2>/dev/null || true)
+      agents_reviewed=$(yq -r '.critic_report.agents_reviewed // empty' "$impl_path" 2>/dev/null || true)
+      issues=$(yq -r '.critic_report.issues // empty' "$impl_path" 2>/dev/null || true)
+      if [[ -n "$verdict" && -n "$agents_reviewed" ]]; then
+        critic_valid=true
+      fi
+    else
+      # Grep fallback
+      if grep -q 'critic_report:' "$impl_path" 2>/dev/null; then
+        has_verdict=$(grep -c 'verdict:' "$impl_path" 2>/dev/null || true)
+        has_agents=$(grep -c 'agents_reviewed:' "$impl_path" 2>/dev/null || true)
+        if [[ "$has_verdict" -gt 0 && "$has_agents" -gt 0 ]]; then
+          critic_valid=true
+        fi
+      fi
+    fi
+
+    if [[ "$critic_valid" != "true" ]]; then
+      echo "E42: Critic agent has no valid critic_report in IMPL doc. Must include verdict, agents_reviewed, and issues." >&2
+      exit 2
+    fi
+    ;;
+
+  scout)
+    # Verify IMPL doc exists and passes validation
+    # We already verified existence above. Run sawtools validate if available.
+    if command -v sawtools &>/dev/null; then
+      if ! sawtools validate "$impl_path" &>/dev/null; then
+        echo "E42: Scout IMPL doc failed validation: ${impl_path}" >&2
+        exit 2
+      fi
+    fi
+    ;;
+
+  scaffold)
+    # Verify all scaffold entries have status "committed"
+    scaffold_valid=true
+    if command -v yq &>/dev/null; then
+      scaffold_statuses=$(yq -r '.scaffolds[]?.status // empty' "$impl_path" 2>/dev/null || true)
+      if [[ -n "$scaffold_statuses" ]]; then
+        while IFS= read -r status; do
+          if [[ -n "$status" && ! "$status" =~ ^committed ]]; then
+            scaffold_valid=false
+            break
+          fi
+        done <<< "$scaffold_statuses"
+      fi
+    else
+      scaffold_block=$(sed -n '/^scaffolds:/,/^[a-z]/p' "$impl_path" 2>/dev/null || true)
+      if [[ -n "$scaffold_block" ]]; then
+        non_committed=$(echo "$scaffold_block" | grep -E 'status:' | grep -vE 'committed' || true)
+        if [[ -n "$non_committed" ]]; then
+          scaffold_valid=false
+        fi
+      fi
+    fi
+
+    if [[ "$scaffold_valid" != "true" ]]; then
+      echo "E42: Scaffold agent has uncommitted scaffold entries. All scaffolds must have status 'committed (...)' before completing." >&2
+      exit 2
+    fi
+    ;;
+
+  *)
+    # Unknown SAW tag type — pass through
+    exit 0
+    ;;
+esac
+
+# All checks passed
+exit 0

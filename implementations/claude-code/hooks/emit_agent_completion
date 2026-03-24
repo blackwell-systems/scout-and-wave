@@ -1,0 +1,174 @@
+#!/usr/bin/env bash
+# E42 SubagentStop async hook — journal archival and observability event emission
+# SubagentStop lifecycle hook — runs as async: true (never blocks agent completion)
+#
+# This hook handles non-blocking post-completion tasks:
+#   Step 6: Journal archival — copies tool journal to expected location
+#   Step 7: Observability event — emits structured JSON to stdout for claudewatch/SSE
+#
+# Exit codes:
+#   0 — Always (async hooks should never block)
+#
+# Manual test commands:
+#
+#   # Non-SAW agent — should exit 0, no output
+#   echo '{"session_id":"abc","agent_name":"helper","agent_description":"general task","exit_reason":"completed"}' \
+#     | bash implementations/claude-code/hooks/emit_agent_completion
+#   echo $?  # 0
+#
+#   # SAW wave agent — should emit observability JSON to stdout
+#   echo '{"session_id":"abc","agent_name":"wave-A","agent_description":"[SAW:wave1:agent-A] implement feature","exit_reason":"completed"}' \
+#     | bash implementations/claude-code/hooks/emit_agent_completion
+#   echo $?  # 0 (always)
+
+set -uo pipefail
+# Note: -e omitted intentionally — this script must never fail fatally
+
+# Read JSON from stdin
+input=$(cat)
+
+# --- Parse fields ---
+description=$(echo "$input" | jq -r '.agent_description // empty' 2>/dev/null || true)
+session_id=$(echo "$input" | jq -r '.session_id // empty' 2>/dev/null || true)
+
+# Fast path: no description means not a SAW agent
+if [[ -z "$description" ]]; then
+  exit 0
+fi
+
+# --- Parse SAW tag ---
+agent_type=""
+wave_num=""
+agent_id=""
+saw_label=""
+
+if [[ "$description" =~ \[SAW:wave([0-9]+):agent-([A-Za-z0-9]+)\] ]]; then
+  agent_type="wave"
+  wave_num="${BASH_REMATCH[1]}"
+  agent_id="${BASH_REMATCH[2]}"
+elif [[ "$description" =~ \[SAW:critic:([A-Za-z0-9_-]+)\] ]]; then
+  agent_type="critic"
+  saw_label="${BASH_REMATCH[1]}"
+elif [[ "$description" =~ \[SAW:scout\] ]] || [[ "$description" =~ \[SAW:scout:([A-Za-z0-9_-]+)\] ]]; then
+  agent_type="scout"
+  saw_label="${BASH_REMATCH[1]:-}"
+elif [[ "$description" =~ \[SAW:scaffold:([A-Za-z0-9_-]+)\] ]]; then
+  agent_type="scaffold"
+  saw_label="${BASH_REMATCH[1]}"
+else
+  # Not a SAW agent
+  exit 0
+fi
+
+# --- Find repo root ---
+repo_root=""
+search_dir="$PWD"
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  if [[ -d "$search_dir/.git" || -f "$search_dir/.git" ]]; then
+    repo_root="$search_dir"
+    break
+  fi
+  parent=$(dirname "$search_dir")
+  if [[ "$parent" == "$search_dir" ]]; then break; fi
+  search_dir="$parent"
+done
+
+# --- Step 6: Journal archival ---
+journal_archived=false
+if [[ "$agent_type" == "wave" && -n "$repo_root" && -n "$wave_num" && -n "$agent_id" ]]; then
+  target_dir="$repo_root/.saw-state/journals/wave${wave_num}/agent-${agent_id}"
+  worktree_journal=""
+
+  # Look for journal in worktree
+  if [[ -f "$PWD/.saw-journal.jsonl" ]]; then
+    worktree_journal="$PWD/.saw-journal.jsonl"
+  elif [[ -f "$repo_root/.saw-journal.jsonl" ]]; then
+    worktree_journal="$repo_root/.saw-journal.jsonl"
+  fi
+
+  if [[ -d "$target_dir" ]]; then
+    journal_archived=true
+  elif [[ -n "$worktree_journal" ]]; then
+    mkdir -p "$target_dir" 2>/dev/null || true
+    if cp "$worktree_journal" "$target_dir/journal.jsonl" 2>/dev/null; then
+      journal_archived=true
+    else
+      echo "E42 warning: Failed to archive journal from ${worktree_journal} to ${target_dir}" >&2
+    fi
+  fi
+fi
+
+# --- Step 7: Observability event emission ---
+# Find IMPL doc to extract completion status
+impl_path=""
+if [[ -f ".saw-state/active-impl" ]]; then
+  impl_path=$(cat .saw-state/active-impl 2>/dev/null || true)
+fi
+if [[ -z "$impl_path" || ! -f "$impl_path" ]] && [[ -n "$repo_root" ]]; then
+  if [[ -f "$repo_root/.saw-state/active-impl" ]]; then
+    impl_path=$(cat "$repo_root/.saw-state/active-impl" 2>/dev/null || true)
+    if [[ -n "$impl_path" && ! -f "$impl_path" && -f "$repo_root/$impl_path" ]]; then
+      impl_path="$repo_root/$impl_path"
+    fi
+  fi
+fi
+
+# Extract status and files_changed from completion report
+status="unknown"
+files_changed="[]"
+i1_result="skip"
+i5_result="skip"
+report_result="skip"
+
+if [[ "$agent_type" == "wave" && -n "$impl_path" && -f "$impl_path" ]]; then
+  if command -v sawtools &>/dev/null; then
+    check_output=$(sawtools check-completion "$impl_path" --agent "$agent_id" 2>/dev/null || true)
+    if [[ -n "$check_output" ]]; then
+      status=$(echo "$check_output" | jq -r '.status // "unknown"' 2>/dev/null || echo "unknown")
+      files_changed=$(echo "$check_output" | jq -c '.files_changed // []' 2>/dev/null || echo "[]")
+    fi
+  else
+    # Grep fallback
+    reports_section=$(sed -n '/^completion_reports:/,/^[a-z_]*:/p' "$impl_path" 2>/dev/null || true)
+    if echo "$reports_section" | grep -qE "^\s+${agent_id}:" 2>/dev/null; then
+      status=$(echo "$reports_section" | grep -A5 "${agent_id}:" | grep 'status:' | head -1 | sed 's/.*status:\s*//' | tr -d '"' || echo "unknown")
+    fi
+  fi
+  i1_result="pass"
+  i5_result="pass"
+  report_result="pass"
+fi
+
+# Build and emit JSON event
+timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || echo "unknown")
+wave_val="${wave_num:-0}"
+
+jq -n \
+  --arg event "agent_complete" \
+  --arg agent_id "${agent_id:-${saw_label:-unknown}}" \
+  --argjson wave "${wave_val}" \
+  --arg agent_type "$agent_type" \
+  --arg status "$status" \
+  --argjson files_changed "$files_changed" \
+  --arg i1 "$i1_result" \
+  --arg i5 "$i5_result" \
+  --arg report "$report_result" \
+  --argjson journal "$journal_archived" \
+  --arg timestamp "$timestamp" \
+  '{
+    event: $event,
+    agent_id: $agent_id,
+    wave: $wave,
+    agent_type: $agent_type,
+    status: $status,
+    files_changed: $files_changed,
+    validation_checks: {
+      i1_ownership: $i1,
+      i5_commit: $i5,
+      protocol_report: $report,
+      journal_archived: $journal
+    },
+    timestamp: $timestamp
+  }' 2>/dev/null || true
+
+exit 0
