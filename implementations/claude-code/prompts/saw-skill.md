@@ -109,6 +109,7 @@ Do not pre-load these files. The core wave loop below handles `/saw scout`,
 | `/saw interview "<description>"` | Conduct structured requirements interview, write docs/REQUIREMENTS.md |
 | `/saw interview --resume <path>` | Resume an in-progress interview |
 | `/saw program status` | Show program-level progress (tier completion, IMPL statuses) |
+| `/saw program --impl <s1> <s2> ...` | Create PROGRAM manifest from existing IMPLs with auto-tiering |
 | `/saw program replan --reason "<reason>"` | Re-engage Planner to revise PROGRAM manifest (E34) |
 
 
@@ -153,6 +154,20 @@ sawtools resume-detect --repo-dir "<repo-path>"
 This returns a JSON array of `SessionState` objects for any interrupted SAW sessions. If the array is non-empty:
 - For `status`: Include the resume state in the status report (progress %, failed agents, suggested action, resume command).
 - For `wave`: If a single interrupted session is found matching the target IMPL (or the only pending IMPL), report the resume state to the user: "Detected interrupted session: {slug} at {progress_pct}% — {suggested_action}". If `can_auto_resume` is true and `--auto` is active, proceed automatically. If failed agents exist, use `sawtools build-retry-context` to get structured failure context before re-launching them (this provides error classification and fix suggestions instead of raw error dumps). If no interrupted sessions are found, proceed normally.
+
+**On-demand reference routing:** Before executing bootstrap/scout/wave flows, check if the command matches an on-demand reference from the routing table (lines 76-84):
+
+If the argument starts with `program `:
+- If the argument contains `--impl`, parse the IMPL slugs from the argument string (all tokens after `--impl` that are not other flags). Read `${CLAUDE_SKILL_DIR}/references/program-flow.md` and follow the `/saw program --impl` section.
+- Otherwise, read `${CLAUDE_SKILL_DIR}/references/program-flow.md` and follow the instructions for the specific subcommand (plan/execute/status/replan).
+- Do not continue to bootstrap/scout/wave logic below.
+
+If the argument starts with `amend `:
+- Read `${CLAUDE_SKILL_DIR}/references/amend-flow.md`
+- Follow the instructions for the specific subcommand (--add-wave/--redirect-agent/--extend-scope)
+- Do not continue to bootstrap/scout/wave logic below
+
+If no routing match, continue with the execution flows below:
 
 If the argument is `bootstrap <project-description>`:
 1. **Requirements intake (Orchestrator duty).** Before launching any agent, gather requirements and write `docs/REQUIREMENTS.md` in the target project directory. This is Orchestrator work, not Scout work. Cover: language/ecosystem, project type, deployment target, key concerns (3-6 areas), storage, external integrations, source codebase (if porting), and architectural decisions already made. Ask the user to confirm before proceeding. The full template is in `saw-bootstrap.md`.

@@ -2,6 +2,43 @@
 
 **Wave execution:** Program tiers execute IMPLs using the standard wave loop from the core SKILL.md (steps 3-11 of Execution Logic). Do not duplicate that logic here — when Step 3b says "use existing `/saw wave --auto` flow", follow the wave loop in the core file.
 
+## /saw program --impl — Create PROGRAM from Existing IMPLs
+
+Create a PROGRAM manifest from pre-existing IMPL docs with automatic tiering based on file ownership disjointness.
+
+**Orchestrator flow:**
+
+1. **Parse `--impl` flag values.** Extract all IMPL slugs from the argument string. Each value after `--impl` that is not a recognized flag (`--slug`, `--title`) is an IMPL slug. Also parse optional flags:
+   - `--slug <name>` — override the auto-generated program slug
+   - `--title <name>` — override the auto-generated program title
+
+2. **Resolve slugs to IMPL doc paths.** Run:
+   ```bash
+   sawtools list-impls --dir "<repo-path>/docs/IMPL"
+   ```
+   Match each provided slug against the returned IMPL metadata. If any slug cannot be resolved, report the missing slug(s) to the user and stop.
+
+3. **Create PROGRAM manifest.** Run:
+   ```bash
+   sawtools create-program --from-impls <slug1> --from-impls <slug2> ... --repo-dir "<repo-path>"
+   ```
+   If `--slug` was provided, append `--slug <name>`. If `--title` was provided, append `--title <name>`.
+
+   This command internally:
+   - Runs `check-impl-conflicts` to detect file ownership overlaps
+   - Auto-assigns tiers based on file disjointness (P1+): IMPLs with disjoint file ownership are placed in the same tier; IMPLs with overlapping files are placed in sequential tiers
+   - Generates a PROGRAM manifest at `docs/PROGRAM-<auto-slug>.yaml`
+
+4. **Report results to the user:**
+   - **Tier assignments** — which IMPLs were placed in which tier, and why
+   - **File ownership conflicts** — any overlaps detected between IMPLs (these drive tier separation)
+   - **Generated manifest path** — the absolute path to the new PROGRAM manifest
+   - **Suggested next step** — `/saw program execute` to begin tier-gated execution, or `/saw program status` to review the manifest
+
+5. **Does NOT auto-execute.** This is a planning-only command. The user must explicitly invoke `/saw program execute` or `/saw program status` to proceed.
+
+---
+
 ## Program Commands (Level A: Planning Only)
 
 ### `/saw program plan "<project-description>"`
