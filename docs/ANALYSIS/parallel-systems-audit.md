@@ -30,13 +30,11 @@
 
 ### 2. Configuration Management — MEDIUM PRIORITY
 
-**Status:** Unaddressed. Config loading logic still duplicated in 2 packages.
+**Status:** Partially addressed. `pkg/config` package exists and is used by the web app (`pkg/api/`, `pkg/service/`), but old duplicate implementations remain active callers:
+- `pkg/agent/backend/configfile.go`: `LoadProvidersFromConfig()` — still called by `pkg/agent/backend/bedrock/client.go` and `pkg/agent/backend/api/client.go`
+- `pkg/autonomy/config.go`: `LoadConfig()` — still called by `cmd/sawtools/daemon_cmd.go`
 
-**Problem:** Two separate config loading implementations exist:
-- `pkg/agent/backend/configfile.go`: `LoadProvidersFromConfig()` — walks filesystem for `saw.config.json`
-- `pkg/autonomy/config.go`: `LoadConfig()` — reads `saw.config.json` from a given path (no walking)
-
-No unified `pkg/config` package exists.
+**Problem:** Two separate config loading implementations still exist alongside `pkg/config`:
 
 **Impact:**
 - Different behavior (one walks filesystem, the other does not)
@@ -82,7 +80,7 @@ Answering "what is the current state of wave N?" requires checking all 3 sources
 
 ### 5. Logging / Observability Cleanup — LOW PRIORITY
 
-**Status:** Partially addressed. Observability system (`pkg/observability`) is unified, but 282 occurrences of `fmt.Fprintf(os.Stderr, ...)` remain across 67 files in scout-and-wave-go (count has grown since initial audit).
+**Status:** Partially addressed. Observability system (`pkg/observability`) is unified, but 138 occurrences of `fmt.Fprintf(os.Stderr, ...)` remain in non-test source files in scout-and-wave-go (down from 282 at initial audit).
 
 **Problem:** Errors and warnings written directly to stderr bypass the observability system and are not queryable or analyzable.
 
@@ -114,4 +112,4 @@ Answering "what is the current state of wave N?" requires checking all 3 sources
 
 ---
 
-**Last reviewed:** 2026-03-24
+**Last reviewed:** 2026-03-24 (re-verified — no items fully complete; #2 and #5 status notes updated)
