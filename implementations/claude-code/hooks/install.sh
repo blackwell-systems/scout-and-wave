@@ -104,20 +104,6 @@ else
 fi
 chmod +x "$GIT_OWNERSHIP_SCRIPT"
 
-# check_impl_path hook (H2: IMPL path validation before agent launch)
-echo "   Installing check_impl_path..."
-if [ -L "$CHECK_IMPL_PATH_SYMLINK" ]; then
-  ln -sf "$CHECK_IMPL_PATH_SCRIPT" "$CHECK_IMPL_PATH_SYMLINK"
-  echo "   ✓ Symlink updated: $CHECK_IMPL_PATH_SYMLINK"
-elif [ -e "$CHECK_IMPL_PATH_SYMLINK" ]; then
-  echo "   ✗ Error: $CHECK_IMPL_PATH_SYMLINK exists but is not a symlink"
-  exit 1
-else
-  ln -sf "$CHECK_IMPL_PATH_SCRIPT" "$CHECK_IMPL_PATH_SYMLINK"
-  echo "   ✓ Created symlink: $CHECK_IMPL_PATH_SYMLINK"
-fi
-chmod +x "$CHECK_IMPL_PATH_SCRIPT"
-
 # warn_stubs hook (H3: stub detection warning after writes)
 echo "   Installing warn_stubs..."
 if [ -L "$WARN_STUBS_SYMLINK" ]; then
@@ -328,7 +314,8 @@ GIT_OWNERSHIP_HOOK_CONFIG=$(cat <<EOF
   "hooks": [
     {
       "type": "command",
-      "command": "$HOME/.local/bin/check_git_ownership"
+      "command": "$HOME/.local/bin/check_git_ownership",
+      "async": true
     }
   ]
 }
@@ -346,33 +333,6 @@ else
 
   mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
   echo "   ✓ Added PostToolUse git ownership hook (I1 layer 2)"
-fi
-
-# Add check_impl_path hook (H2: PreToolUse on Agent for IMPL path validation)
-CHECK_IMPL_PATH_HOOK_CONFIG=$(cat <<EOF
-{
-  "matcher": "Agent",
-  "hooks": [
-    {
-      "type": "command",
-      "command": "$HOME/.local/bin/check_impl_path"
-    }
-  ]
-}
-EOF
-)
-
-CHECK_IMPL_PATH_EXISTING=$(jq -r '.hooks.PreToolUse // [] | map(select(.hooks[]?.command | contains("check_impl_path"))) | length' "$SETTINGS_FILE")
-
-if [ "$CHECK_IMPL_PATH_EXISTING" -gt 0 ]; then
-  echo "   ✓ IMPL path validation hook already configured (skipping)"
-else
-  jq --argjson hook "$CHECK_IMPL_PATH_HOOK_CONFIG" '
-    .hooks.PreToolUse = (.hooks.PreToolUse // []) + [$hook]
-  ' "$SETTINGS_FILE" > "$SETTINGS_FILE.tmp"
-
-  mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
-  echo "   ✓ Added PreToolUse IMPL path validation hook (H2)"
 fi
 
 # Add warn_stubs hook (H3: PostToolUse on Write|Edit for stub warnings)
@@ -521,13 +481,6 @@ else
   exit 1
 fi
 
-if [ -x "$CHECK_IMPL_PATH_SYMLINK" ]; then
-  echo "   ✓ IMPL path validation hook executable: $CHECK_IMPL_PATH_SYMLINK"
-else
-  echo "   ✗ IMPL path validation hook not executable"
-  exit 1
-fi
-
 if [ -x "$WARN_STUBS_SYMLINK" ]; then
   echo "   ✓ Stub warning hook executable: $WARN_STUBS_SYMLINK"
 else
@@ -600,17 +553,17 @@ fi
 echo
 echo "✅ Installation complete!"
 echo
-echo "Active hooks (11 total):"
+echo "Active hooks (10 total):"
 echo "  PreToolUse:    check_scout_boundaries (I6 — Scouts can only write IMPL docs)"
 echo "  PreToolUse:    block_claire_paths (blocks .claire typo, suggests .claude)"
 echo "  PreToolUse:    check_wave_ownership (I1 — Wave agents can only write owned files)"
-echo "  PreToolUse:    check_impl_path (H2 — validates IMPL doc path before agent launch)"
 echo "  PreToolUse:    validate_agent_launch (H5 — full pre-launch validation gate)"
 echo "  PostToolUse:   validate_impl_on_write (E16 — IMPL docs validated on write)"
-echo "  PostToolUse:   check_git_ownership (I1 layer 2 — catch git-level ownership violations)"
+echo "  PostToolUse:   check_git_ownership [async] (I1 layer 2 — catch git-level ownership violations)"
 echo "  PostToolUse:   warn_stubs (H3 — warns on stub patterns in written code)"
 echo "  PostToolUse:   check_branch_drift (H4 — detects commits on wrong branch)"
 echo "  SubagentStop:  validate_agent_completion (E42 — protocol compliance at agent completion)"
+echo "  SubagentStop:  emit_agent_completion [async] (E42 — observability event emission)"
 echo
 echo "To uninstall:"
 echo "  1. Remove symlinks: rm $SYMLINK_PATH $VALIDATE_SYMLINK $CLAIRE_SYMLINK $WAVE_OWNERSHIP_SYMLINK $GIT_OWNERSHIP_SYMLINK $CHECK_IMPL_PATH_SYMLINK $WARN_STUBS_SYMLINK $CHECK_BRANCH_DRIFT_SYMLINK $VALIDATE_LAUNCH_SYMLINK $VALIDATE_COMPLETION_SYMLINK $EMIT_COMPLETION_SYMLINK"

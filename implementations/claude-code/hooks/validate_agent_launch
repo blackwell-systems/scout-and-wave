@@ -106,7 +106,7 @@ fi
 agent_found=false
 if command -v yq &>/dev/null; then
   # Use yq to check if agent ID exists in the specified wave
-  agent_match=$(yq -r ".waves[] | select(.wave == ${wave_num}) | .agents[] | select(.id == \"${agent_id}\") | .id" "$impl_full_path" 2>/dev/null || true)
+  agent_match=$(yq -r ".waves[] | select(.number == ${wave_num}) | .agents[] | select(.id == \"${agent_id}\") | .id" "$impl_full_path" 2>/dev/null || true)
   if [[ "$agent_match" == "$agent_id" ]]; then
     agent_found=true
   fi

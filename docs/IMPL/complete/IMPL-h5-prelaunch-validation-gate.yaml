@@ -1,0 +1,480 @@
+completion_date: "2026-03-23"
+title: H5 - Full Pre-Launch Validation Gate for SAW Agent Launches
+feature_slug: h5-prelaunch-validation-gate
+verdict: SUITABLE
+suitability_assessment: |
+    SUITABLE. H5 requires implementation in two separate repositories with disjoint
+    concerns: (1) a CLI bash hook in scout-and-wave (protocol repo) and (2) a Go
+    engine-level validation function in scout-and-wave-go (Go SDK repo). The work
+    decomposes cleanly into 3 agents across 2 waves.
+
+    File decomposition: 3 agents with fully disjoint file ownership across 2 repos.
+    No shared files within a wave.
+
+    Investigation-first items: None. The validation checks are well-defined in the
+    hooks-determinism-roadmap.md and the existing code patterns (check_wave_ownership,
+    PreWaveGate, VerifyIsolation) provide clear templates.
+
+    Interface discoverability: The interface between CLI hook and Go engine is the
+    .saw-ownership.json file and IMPL doc YAML — both already standardized.
+
+    Pre-implementation status: H2 (basic IMPL path check) exists only as a roadmap
+    item, not implemented. PreWaveGate exists in pkg/protocol/pre_wave_gate.go but
+    runs at prepare-wave time, not at agent launch time. The CLI hooks directory has
+    5 existing hooks but none for the Agent tool matcher. All H5 checks are TODO.
+
+    Parallelization value: High. Two repos, independent file sets, Go test suite
+    takes >30s. Wave 1 agents (CLI hook + Go engine) are fully independent.
+    Wave 2 wires installer updates.
+
+    Estimated times:
+    - Scout phase: ~8 min (dependency mapping, interface contracts, IMPL doc)
+    - Agent execution: ~10 min (3 agents, 2 waves, ~5 min avg per agent)
+    - Merge and verification: ~3 min
+    Total SAW time: ~21 min
+    Sequential baseline: ~25 min (3 agents x ~8 min avg)
+    Time savings: ~4 min (16% faster)
+    Recommendation: Clear speedup plus coordination value across 2 repos.
+test_command: go test ./...
+lint_command: go vet ./...
+file_ownership:
+    - file: implementations/claude-code/hooks/validate_agent_launch
+      agent: A
+      wave: 1
+      action: new
+      repo: scout-and-wave
+    - file: pkg/hooks/prelaunch_gate.go
+      agent: B
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: pkg/hooks/prelaunch_gate_test.go
+      agent: B
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: implementations/claude-code/hooks/install.sh
+      agent: C
+      wave: 2
+      action: modify
+      repo: scout-and-wave
+    - file: implementations/claude-code/hooks/README.md
+      agent: C
+      wave: 2
+      action: modify
+      repo: scout-and-wave
+interface_contracts:
+    - name: validate_agent_launch CLI hook
+      description: |
+        Bash script that runs as a PreToolUse hook with matcher "Agent".
+        Reads JSON from stdin, validates SAW agent launch preconditions,
+        exits 1 to block or 0 to allow.
+      definition: |
+        Input (stdin JSON):
+          {
+            "tool_name": "Agent",
+            "tool_input": {
+              "prompt": "<agent prompt text>",
+              "description": "<agent description with SAW tag>"
+            },
+            "agent_type": "wave-agent" | "scout" | "integration-agent" | "scaffold-agent"
+          }
+
+        Validation checks (in order):
+          1. Extract IMPL path from prompt (regex: docs/IMPL/IMPL-[a-z0-9-]+\.yaml)
+          2. Verify IMPL file exists on disk
+          3. Extract wave number from SAW tag in description ([SAW:wave{N}:agent-{ID}])
+          4. Extract agent ID from SAW tag
+          5. Find .saw-ownership.json — verify agent ID and wave match
+          6. Verify worktree branch matches expected pattern (saw/{slug}/wave{N}-agent-{ID})
+          7. Check scaffolds committed (if any exist in IMPL doc, via sawtools validate)
+          8. Verify no I1 ownership conflicts with .saw-ownership.json
+
+        Exit codes:
+          0 — allow launch
+          1 — block with diagnostic on stderr
+
+        Non-SAW agents (no SAW tag in description): exit 0 (allow)
+      location: implementations/claude-code/hooks/validate_agent_launch
+    - name: PreLaunchGate
+      description: |
+        Go function for engine-level pre-launch validation. Called by the
+        orchestrator before dispatching each agent. Returns structured result
+        with per-check pass/fail status.
+      definition: |
+        package hooks
+
+        // PreLaunchCheck is a single pre-launch validation result.
+        type PreLaunchCheck struct {
+            Name    string `json:"name"`
+            Status  string `json:"status"`  // "pass", "fail", "warn"
+            Message string `json:"message"`
+        }
+
+        // PreLaunchResult is the aggregate pre-launch validation result.
+        type PreLaunchResult struct {
+            Ready  bool              `json:"ready"`
+            Checks []PreLaunchCheck  `json:"checks"`
+        }
+
+        // PreLaunchGate validates all preconditions before launching a wave agent.
+        // Parameters:
+        //   manifest  — parsed IMPL manifest
+        //   waveNum   — wave number being launched
+        //   agentID   — agent letter/ID being launched
+        //   repoRoot  — absolute path to repository root
+        //   wtPath    — absolute path to agent's worktree (empty for integration waves)
+        //
+        // Checks performed:
+        //   1. IMPL doc validates (calls protocol.Validate)
+        //   2. Wave exists and is not already completed
+        //   3. Agent ID exists in the specified wave
+        //   4. Worktree path exists and is on correct branch
+        //   5. Scaffolds are committed (I2 defense-in-depth)
+        //   6. File ownership has no I1 conflicts
+        //   7. Critic report exists if E37 threshold met
+        func PreLaunchGate(
+            manifest *protocol.IMPLManifest,
+            waveNum int,
+            agentID string,
+            repoRoot string,
+            wtPath string,
+        ) *PreLaunchResult
+      location: pkg/hooks/prelaunch_gate.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## CLI Hook: validate_agent_launch
+
+            Create a new bash script at `implementations/claude-code/hooks/validate_agent_launch`
+            that implements the H5 pre-launch validation gate as a Claude Code PreToolUse hook
+            with matcher "Agent".
+
+            **Context**: This hook fires before every Agent tool call. It must be fast (<100ms)
+            and only enforce on SAW agents (identified by [SAW:wave{N}:agent-{ID}] tag in the
+            description field). Non-SAW agents must pass through (exit 0).
+
+            **Follow the existing hook pattern** in `check_wave_ownership` and `check_scout_boundaries`:
+            - `set -euo pipefail`
+            - Read JSON from stdin via `cat` + `jq`
+            - Extract `tool_name`, `agent_type`, `tool_input.prompt`, `tool_input.description`
+            - Early exit 0 for non-matching conditions
+
+            **Validation checks to implement (in order, fail-fast)**:
+
+            1. **SAW tag extraction**: Parse `[SAW:wave{N}:agent-{ID}]` from `tool_input.description`.
+               If no SAW tag found, exit 0 (not a SAW agent, allow).
+
+            2. **IMPL path extraction**: Grep the prompt for `docs/IMPL/IMPL-[a-z0-9-]+\.yaml`.
+               If not found, exit 1: "H5: No IMPL doc path found in agent prompt."
+
+            3. **IMPL file exists**: Check file exists on disk.
+               If missing, exit 1: "H5: IMPL doc not found at {path}." (subsumes H2)
+
+            4. **Wave state check**: Use `sawtools validate` to verify IMPL parses.
+               If invalid, exit 1: "H5: IMPL doc validation failed."
+
+            5. **Agent exists in wave**: Use `jq` to check the IMPL YAML for the agent ID
+               in the specified wave. Parse with `yq` if available, fall back to grep pattern.
+               If not found, exit 1: "H5: Agent {ID} not found in wave {N}."
+
+            6. **.saw-ownership.json check**: Walk up from CWD to find `.saw-ownership.json`.
+               If found, verify agent ID and wave number match the SAW tag.
+               If mismatch, exit 1: "H5: Ownership file mismatch."
+
+            7. **Worktree branch check**: If `.saw-ownership.json` exists, verify current
+               git branch matches expected pattern `saw/{slug}/wave{N}-agent-{ID}` or
+               legacy `wave{N}-agent-{ID}`.
+
+            8. **Scaffold check**: If IMPL has scaffolds section, check all have status "committed"
+               via simple yaml/grep parsing.
+
+            **Error output format**: All errors to stderr, diagnostic message includes check name.
+            Exit 1 to block, exit 0 to allow.
+
+            **Testing**: Add a comment block at the top with manual test commands, similar
+            to the README test examples for check_scout_boundaries.
+
+            **File**: `implementations/claude-code/hooks/validate_agent_launch`
+            Make it executable (chmod +x).
+
+            **Verification gate**:
+            ```bash
+            # Verify script is syntactically valid bash
+            bash -n implementations/claude-code/hooks/validate_agent_launch
+            # Verify non-SAW agent passes through
+            echo '{"tool_name":"Agent","tool_input":{"prompt":"hello","description":"general task"}}' | bash implementations/claude-code/hooks/validate_agent_launch
+            echo $?  # Should be 0
+            ```
+          files:
+            - implementations/claude-code/hooks/validate_agent_launch
+        - id: B
+          task: |
+            ## Go Engine: PreLaunchGate
+
+            Create `pkg/hooks/prelaunch_gate.go` and `pkg/hooks/prelaunch_gate_test.go` in
+            the scout-and-wave-go repository.
+
+            **Context**: The existing `pkg/hooks/` package has `scout_boundaries.go` (I6 enforcement).
+            Add a new `PreLaunchGate` function that validates all preconditions before launching
+            a wave agent from the Go orchestrator.
+
+            **Follow the existing pattern** in `pkg/protocol/pre_wave_gate.go`:
+            - Return a structured result with per-check pass/fail
+            - Use `PreLaunchCheck` and `PreLaunchResult` types (see interface contract)
+            - Ready = true only if no check has status "fail"
+
+            **Types to define** (in prelaunch_gate.go):
+
+            ```go
+            type PreLaunchCheck struct {
+                Name    string `json:"name"`
+                Status  string `json:"status"`  // "pass", "fail", "warn"
+                Message string `json:"message"`
+            }
+
+            type PreLaunchResult struct {
+                Ready  bool              `json:"ready"`
+                Checks []PreLaunchCheck  `json:"checks"`
+            }
+            ```
+
+            **PreLaunchGate function signature**:
+
+            ```go
+            func PreLaunchGate(
+                manifest *protocol.IMPLManifest,
+                waveNum int,
+                agentID string,
+                repoRoot string,
+                wtPath string,
+            ) *PreLaunchResult
+            ```
+
+            **Validation checks to implement (in order)**:
+
+            1. **validation** — Call `protocol.Validate(manifest)` and check for errors.
+               Status "fail" if any validation errors.
+
+            2. **wave_exists** — Verify the wave number exists in manifest.Waves and is not
+               already complete (check completion_reports for all agents in that wave).
+
+            3. **agent_exists** — Verify agentID exists in the specified wave's agents list.
+
+            4. **worktree_branch** — If wtPath is non-empty, verify:
+               a. The directory exists
+               b. Current git branch matches expected pattern using `git.Run(wtPath, "rev-parse", "--abbrev-ref", "HEAD")`
+               Expected branch: `saw/{slug}/wave{N}-agent-{ID}` or legacy `wave{N}-agent-{ID}`
+               Import `internal/git` for git operations.
+
+            5. **scaffolds_committed** — Call `protocol.AllScaffoldsCommitted(manifest)`.
+               Status "fail" if scaffolds exist but not all committed.
+
+            6. **ownership_disjoint** — Filter `protocol.Validate(manifest)` errors for
+               code "I1_VIOLATION". Status "fail" if any I1 violations found.
+
+            7. **critic_review** — Reuse logic from `protocol.PreWaveGate` checkCriticReview.
+               Count total agents; if >= 3 or multi-repo, require critic report.
+               Status "fail" if required but missing/failed.
+
+            **Import requirements**:
+            - `github.com/blackwell-systems/scout-and-wave-go/pkg/protocol`
+            - `github.com/blackwell-systems/scout-and-wave-go/internal/git`
+            - `fmt`, `os`, `strings`
+
+            **Tests** (in prelaunch_gate_test.go):
+
+            Write table-driven tests covering:
+            - Valid manifest with all checks passing
+            - Missing wave number (wave_exists fails)
+            - Missing agent ID (agent_exists fails)
+            - Uncommitted scaffolds (scaffolds_committed fails)
+            - All agents completed (wave_exists warns about re-launch)
+            - I1 violation (ownership_disjoint fails)
+
+            Use `protocol.IMPLManifest` struct literals for test fixtures (no file I/O needed
+            for most tests). For worktree_branch test, use t.TempDir() with a git init.
+
+            **Verification gate**:
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go
+            go build ./pkg/hooks/...
+            go vet ./pkg/hooks/...
+            go test ./pkg/hooks/... -v -run TestPreLaunchGate
+            ```
+          files:
+            - pkg/hooks/prelaunch_gate.go
+            - pkg/hooks/prelaunch_gate_test.go
+      base_commit: 0088b1b343ed9a5cc651eb74336c4dc842b08e05
+    - number: 2
+      agents:
+        - id: C
+          task: |
+            ## Installer and Documentation Update
+
+            Update the existing `install.sh` and `README.md` in the scout-and-wave protocol
+            repo to include the new `validate_agent_launch` hook.
+
+            **install.sh changes**:
+
+            1. Add a new variable for the script and symlink:
+               ```bash
+               VALIDATE_LAUNCH_SCRIPT="$SCRIPT_DIR/validate_agent_launch"
+               VALIDATE_LAUNCH_SYMLINK="$HOME/.local/bin/validate_agent_launch"
+               ```
+
+            2. Add symlink creation block (follow the exact pattern of check_wave_ownership):
+               ```bash
+               echo "   Installing validate_agent_launch..."
+               if [ -L "$VALIDATE_LAUNCH_SYMLINK" ]; then
+                 ln -sf "$VALIDATE_LAUNCH_SCRIPT" "$VALIDATE_LAUNCH_SYMLINK"
+                 echo "   ✓ Symlink updated: $VALIDATE_LAUNCH_SYMLINK"
+               elif [ -e "$VALIDATE_LAUNCH_SYMLINK" ]; then
+                 echo "   ✗ Error: $VALIDATE_LAUNCH_SYMLINK exists but is not a symlink"
+                 exit 1
+               else
+                 ln -sf "$VALIDATE_LAUNCH_SCRIPT" "$VALIDATE_LAUNCH_SYMLINK"
+                 echo "   ✓ Created symlink: $VALIDATE_LAUNCH_SYMLINK"
+               fi
+               chmod +x "$VALIDATE_LAUNCH_SCRIPT"
+               ```
+
+            3. Add PreToolUse hook configuration for the Agent matcher:
+               ```json
+               {
+                 "matcher": "Agent",
+                 "hooks": [
+                   {
+                     "type": "command",
+                     "command": "$HOME/.local/bin/validate_agent_launch"
+                   }
+                 ]
+               }
+               ```
+
+            4. Add verification check for the new symlink.
+
+            5. Add the new hook to the "Active hooks" summary at the end:
+               ```
+               echo "  PreToolUse:  validate_agent_launch (H5 — full pre-launch validation gate)"
+               ```
+
+            6. Update the uninstall instructions to include the new symlink.
+
+            **README.md changes**:
+
+            Add a new section "Hook 6: Pre-Launch Validation Gate (H5)" after the existing
+            hook documentation. Include:
+            - Description of what H5 validates (7 checks)
+            - That it subsumes H2 (IMPL path validation)
+            - Manual installation instructions
+            - Test commands
+            - How it works (numbered steps)
+
+            **Dependencies**: Agent A must have completed (the validate_agent_launch script
+            must exist for the installer to reference it).
+
+            **Verification gate**:
+            ```bash
+            bash -n implementations/claude-code/hooks/install.sh
+            # Verify README has H5 section
+            grep -q "validate_agent_launch" implementations/claude-code/hooks/README.md
+            grep -q "validate_agent_launch" implementations/claude-code/hooks/install.sh
+            ```
+          files:
+            - implementations/claude-code/hooks/install.sh
+            - implementations/claude-code/hooks/README.md
+          dependencies:
+            - A
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./...
+          required: true
+          repo: scout-and-wave-go
+        - type: lint
+          command: go vet ./...
+          required: true
+          repo: scout-and-wave-go
+        - type: test
+          command: go test ./pkg/hooks/... ./pkg/protocol/...
+          required: true
+          repo: scout-and-wave-go
+        - type: custom
+          command: bash -c 'echo "{\"tool_name\":\"Agent\",\"agent_type\":\"wave-agent\",\"tool_input\":{\"prompt\":\"test\"}}" | bash implementations/claude-code/hooks/validate_agent_launch 2>&1; exit 0'
+          required: false
+          description: Smoke test CLI hook (non-blocking — hook needs SAW context to pass)
+          repo: scout-and-wave
+completion_reports:
+    A:
+        status: complete
+        branch: saw/h5-prelaunch-validation-gate/wave1-agent-A
+        commit: 71338a3
+        files_changed:
+            - implementations/claude-code/hooks/validate_agent_launch
+        files_created:
+            - implementations/claude-code/hooks/validate_agent_launch
+        tests_added:
+            - manual-nonsaw-passthrough
+            - manual-missing-impl-path
+            - manual-missing-impl-file
+        verification: PASS
+    B:
+        status: complete
+        branch: saw/h5-prelaunch-validation-gate/wave1-agent-B
+        commit: "1376254"
+        files_changed:
+            - pkg/hooks/prelaunch_gate.go
+            - pkg/hooks/prelaunch_gate_test.go
+        files_created:
+            - pkg/hooks/prelaunch_gate.go
+            - pkg/hooks/prelaunch_gate_test.go
+        tests_added:
+            - TestPreLaunchGate_AllPass
+            - TestPreLaunchGate_MissingWave
+            - TestPreLaunchGate_MissingAgent
+            - TestPreLaunchGate_UncommittedScaffolds
+            - TestPreLaunchGate_AllAgentsCompleted
+            - TestPreLaunchGate_I1Violation
+            - TestPreLaunchGate_CriticRequired
+            - TestPreLaunchGate_CriticPassed
+            - TestPreLaunchGate_WorktreeBranch
+            - TestPreLaunchGate_WorktreeBranchMismatch
+            - TestPreLaunchGate_WorktreeNonexistent
+            - TestPreLaunchGate_ReadyOnlyFalseOnFail
+            - TestPreLaunchGate_CheckNames
+            - TestPreLaunchGate_CommittedScaffoldsPass
+            - TestPreLaunchGate_MultiRepo_CriticRequired
+            - TestPreLaunchGate_AgentExistsWhenWaveMissing
+        verification: PASS
+    C:
+        status: complete
+        branch: develop
+        commit: 8de16f9
+        files_changed:
+            - implementations/claude-code/hooks/install.sh
+            - implementations/claude-code/hooks/README.md
+        verification: PASS
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: CLI hook too slow (>100ms) due to sawtools validate call
+          likelihood: medium
+          impact: medium
+          mitigation: Make sawtools validate optional — only call if available. Use grep/jq for fast checks. sawtools validate is defense-in-depth, not primary.
+        - scenario: yq not available on all systems for YAML parsing in bash
+          likelihood: high
+          impact: low
+          mitigation: Use jq with yaml2json conversion or grep-based pattern matching as fallback. Do not require yq.
+        - scenario: Hook blocks legitimate non-SAW Agent tool calls
+          likelihood: low
+          impact: high
+          mitigation: Exit 0 early if no SAW tag in description. Only enforce on agents with [SAW:wave{N}:agent-{ID}] pattern.
+        - scenario: Git operations in hook fail in non-git directories
+          likelihood: medium
+          impact: low
+          mitigation: Wrap git commands in conditionals. If not in a git repo, skip branch checks (exit 0).
+state: WAVE_PENDING

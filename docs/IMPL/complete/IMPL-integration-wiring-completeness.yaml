@@ -1,0 +1,216 @@
+completion_date: "2026-03-23"
+title: "Wire Integration Validation into Automated Workflows and Web UI"
+feature_slug: integration-wiring-completeness
+verdict: SUITABLE_WITH_CAVEATS
+state: COMPLETE
+
+suitability_assessment: |
+  Analysis of the four requested changes against the current codebase:
+
+  1. finalize-wave batch (SDK): ALREADY DONE. finalize_wave.go lines 311-326 already
+     call protocol.ValidateIntegration as Step 3.5a (pre-merge, informational). Lines
+     328-354 also run ValidateWiringDeclarations as Step 3.5b. The web wave_runner.go
+     lines 548-597 also runs both checks with SSE events. No new work needed here.
+
+  2. Web API endpoint: ALREADY DONE. validation_handlers.go already serves
+     GET /api/impl/{slug}/validate-integration?wave=N and
+     GET /api/impl/{slug}/validate-wiring. Routes registered in server.go line 186.
+     Tests exist in validation_handlers_test.go. No new work needed here.
+
+  3. Frontend component: PARTIAL. ValidationPanel.tsx exists with full UI for both
+     integration and wiring validation results. Tests exist. BUT the component is NOT
+     imported or rendered in any parent component (ReviewScreen.tsx does not import it).
+     The apiClient.ts already has validateIntegration() and validateWiring() methods.
+
+  4. Skill routing: ALREADY DONE. saw-skill.md line 276 references E25/E26/E35 and
+     directs the orchestrator to read failure-routing.md. The failure-routing.md reference
+     has the full validate-integration flow documented.
+
+  5. extractConnectors stub: PARTIAL. integration_runner.go line 229 has extractConnectors
+     always returning nil with a TODO comment, despite IntegrationConnectors being a real
+     field on IMPLManifest (types.go line 45). This breaks the integration agent prompt.
+
+  Summary: 2 of 4 items are fully done, 2 are partial. The remaining work is:
+  - Wire ValidationPanel into ReviewScreen.tsx (frontend integration)
+  - Fix extractConnectors to read manifest.IntegrationConnectors (SDK bug fix)
+  Both are small, independent changes.
+
+  CAVEAT: This is low parallelization value — only 2 small changes across 2 repos.
+  The IMPL doc provides coordination value (tracking, audit trail) but SAW overhead
+  exceeds parallelization benefit for this scope. Recommend sequential implementation
+  if speed is the priority.
+
+  Estimated times:
+  - Scout phase: ~5 min
+  - Agent execution: ~5 min (2 agents x 3 min avg, single wave)
+  - Merge and verification: ~3 min
+  Total SAW time: ~13 min
+  Sequential baseline: ~8 min (2 changes x 4 min avg)
+  Time savings: -5 min (slower due to SAW overhead)
+  Recommendation: Marginal gains. Value is coordination/audit, not speed.
+
+test_command: "go test ./..."
+lint_command: "go vet ./..."
+
+quality_gates:
+  level: standard
+  gates:
+    - type: build
+      command: "go build ./..."
+      required: true
+    - type: lint
+      command: "go vet ./..."
+      required: true
+    - type: test
+      command: "go test ./..."
+      required: true
+
+scaffolds: []
+
+file_ownership:
+  - file: web/src/components/ReviewScreen.tsx
+    agent: A
+    wave: 1
+    action: modify
+    repo: scout-and-wave-web
+    depends_on: []
+  - file: pkg/engine/integration_runner.go
+    agent: B
+    wave: 1
+    action: modify
+    repo: scout-and-wave-go
+    depends_on: []
+
+interface_contracts:
+  - name: extractConnectors
+    description: |
+      Fix extractConnectors to return manifest.IntegrationConnectors instead of nil.
+      This is an existing unexported function in integration_runner.go that currently
+      has a stub implementation returning nil.
+    definition: |
+      func extractConnectors(manifest *protocol.IMPLManifest) []protocol.IntegrationConnector {
+          return manifest.IntegrationConnectors
+      }
+    location: pkg/engine/integration_runner.go
+  - name: ValidationPanel rendering
+    description: |
+      Import and render ValidationPanel in ReviewScreen.tsx within the wave execution
+      view section, after the agent cards and before the chat panel.
+    definition: |
+      import ValidationPanel from './ValidationPanel'
+      // Render: <ValidationPanel slug={slug} currentWave={currentWave} />
+    location: web/src/components/ReviewScreen.tsx
+
+waves:
+  - number: 1
+    agents:
+      - id: A
+        task: |
+          ## What to implement
+
+          Wire the existing ValidationPanel component into ReviewScreen.tsx so users
+          can see integration validation results during wave execution.
+
+          ## Files to modify
+
+          - `web/src/components/ReviewScreen.tsx` — import and render ValidationPanel
+
+          ## Steps
+
+          1. Add `import ValidationPanel from './ValidationPanel'` to ReviewScreen.tsx
+          2. Find the section after CriticReviewPanel / agent cards where validation
+             results would be contextually appropriate (near wave execution controls)
+          3. Render `<ValidationPanel slug={slug} currentWave={currentWave} />` where
+             `slug` is the current IMPL slug and `currentWave` is the active wave number
+          4. Ensure the component only renders when an IMPL is selected (guard with slug check)
+
+          ## Interface contracts
+
+          ValidationPanel already accepts `{ slug: string; currentWave?: number }` props.
+          The apiClient already has validateIntegration() and validateWiring() methods.
+          No new interfaces needed.
+
+          ## Tests
+
+          Verify the existing ValidationPanel.test.tsx tests still pass. Add a check
+          that ReviewScreen renders the ValidationPanel when a slug and wave are present.
+
+          ## Verification gate
+
+          ```bash
+          cd web && npm test -- --passWithNoTests ValidationPanel
+          ```
+
+          ## Constraints
+
+          - Do NOT modify ValidationPanel.tsx itself — only wire it into ReviewScreen
+          - Use the existing slug and currentWave values already available in ReviewScreen
+          - Follow the existing component composition pattern in ReviewScreen
+        files:
+          - web/src/components/ReviewScreen.tsx
+        dependencies: []
+
+      - id: B
+        task: |
+          ## What to implement
+
+          Fix the extractConnectors function in integration_runner.go to actually read
+          IntegrationConnectors from the manifest instead of returning nil.
+
+          ## Files to modify
+
+          - `pkg/engine/integration_runner.go` — fix extractConnectors function
+
+          ## Steps
+
+          1. Find the `extractConnectors` function (around line 225)
+          2. Replace the nil return with `return manifest.IntegrationConnectors`
+          3. Remove the TODO comment about Agent G adding the field (it already exists)
+          4. The IntegrationConnectors field is already on IMPLManifest at types.go line 45
+
+          ## Interface contracts
+
+          The function signature stays the same:
+          ```go
+          func extractConnectors(manifest *protocol.IMPLManifest) []protocol.IntegrationConnector
+          ```
+
+          The IntegrationConnector type already exists in protocol/integration_types.go:
+          ```go
+          type IntegrationConnector struct {
+              File   string `yaml:"file" json:"file"`
+              Reason string `yaml:"reason,omitempty" json:"reason,omitempty"`
+          }
+          ```
+
+          ## Tests
+
+          Add a test in integration_runner_test.go that verifies extractConnectors
+          returns the manifest's IntegrationConnectors slice (non-nil case and nil case).
+
+          ## Verification gate
+
+          ```bash
+          go test ./pkg/engine/ -run TestExtractConnectors -v
+          ```
+
+          ## Constraints
+
+          - Do NOT change the function signature
+          - Do NOT modify any other functions in integration_runner.go
+          - The fix is a one-line change plus removing the stale comment
+        files:
+          - pkg/engine/integration_runner.go
+        dependencies: []
+
+pre_mortem:
+  overall_risk: low
+  rows:
+    - scenario: "ReviewScreen.tsx has changed since last read and ValidationPanel insertion point is wrong"
+      likelihood: medium
+      impact: low
+      mitigation: "Agent reads the current file and finds the appropriate insertion point dynamically"
+    - scenario: "extractConnectors has callers that depend on nil behavior"
+      likelihood: low
+      impact: medium
+      mitigation: "buildIntegrationPrompt already handles empty connectorList with a fallback message; returning actual data is strictly better"

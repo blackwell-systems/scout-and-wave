@@ -1,0 +1,1108 @@
+completion_date: "2026-03-24"
+title: Config & State Unification
+feature_slug: config-state-unification
+verdict: SUITABLE
+suitability_assessment: |
+    Suitability gate analysis:
+
+    1. File decomposition: YES. Work spans 2 repos (SDK + web), ~25 files across
+       config loading, state tracking, resume detection, CLI commands, web handlers,
+       and tests. Clean separation into config-package creation (SDK), state-query
+       consolidation (SDK), caller migration (SDK CLI), and web migration (web app).
+
+    2. Investigation-first items: NONE. Both config loaders and state tracking paths
+       are fully mapped. No unknown crash sources or race conditions.
+
+    3. Interface discoverability: YES. The new pkg/config package has a clear contract:
+       Load(startDir) returns SAWConfig, GetWaveState(manifest, wave) returns WaveState.
+       All signatures can be defined before implementation.
+
+    4. Pre-implementation status: No prior implementation. pkg/config/ does not exist.
+       Two parallel config loaders exist (backend/configfile.go, autonomy/config.go)
+       plus a third in the web app (service/config_service.go). State is scattered
+       across IMPL manifest + .saw-state/ + web in-memory.
+
+    5. Parallelization value: HIGH. Build/test cycle for scout-and-wave-go is >30s.
+       4 agents in wave 1 with 3-5 files each, fully independent. Clear speedup.
+
+    Estimated times:
+    - Scout phase: ~10 min
+    - Agent execution: ~25 min (7 agents, ~8 min avg, 3 waves with parallelism)
+    - Merge & verification: ~5 min
+    Total SAW time: ~40 min
+
+    Sequential baseline: ~56 min (7 agents x 8 min avg)
+    Time savings: ~16 min (29% faster)
+
+    Recommendation: Clear speedup. Proceed.
+test_command: go test ./...
+lint_command: go vet ./...
+file_ownership:
+    - file: pkg/config/config.go
+      agent: A
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: pkg/config/config_test.go
+      agent: A
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: pkg/config/state.go
+      agent: B
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: pkg/config/state_test.go
+      agent: B
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: pkg/result/codes.go
+      agent: B
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/agent/backend/configfile.go
+      agent: C
+      wave: 2
+      action: delete
+      depends_on:
+        - A
+      repo: scout-and-wave-go
+    - file: pkg/agent/backend/api/client.go
+      agent: C
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+      repo: scout-and-wave-go
+    - file: pkg/agent/backend/bedrock/client.go
+      agent: C
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+      repo: scout-and-wave-go
+    - file: pkg/autonomy/config.go
+      agent: D
+      wave: 2
+      action: delete
+      depends_on:
+        - A
+      repo: scout-and-wave-go
+    - file: pkg/autonomy/config_test.go
+      agent: D
+      wave: 2
+      action: delete
+      depends_on:
+        - A
+      repo: scout-and-wave-go
+    - file: pkg/autonomy/autonomy.go
+      agent: D
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+      repo: scout-and-wave-go
+    - file: cmd/saw/daemon_cmd.go
+      agent: D
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+      repo: scout-and-wave-go
+    - file: cmd/saw/prepare_wave.go
+      agent: D
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+      repo: scout-and-wave-go
+    - file: cmd/saw/verify_install_cmd.go
+      agent: D
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+      repo: scout-and-wave-go
+    - file: pkg/resume/detect.go
+      agent: E
+      wave: 2
+      action: modify
+      depends_on:
+        - B
+      repo: scout-and-wave-go
+    - file: pkg/resume/sessions.go
+      agent: E
+      wave: 2
+      action: modify
+      depends_on:
+        - B
+      repo: scout-and-wave-go
+    - file: pkg/service/config_service.go
+      agent: F
+      wave: 3
+      action: modify
+      depends_on:
+        - A
+      repo: scout-and-wave-web
+    - file: pkg/service/config_service_test.go
+      agent: F
+      wave: 3
+      action: modify
+      depends_on:
+        - A
+      repo: scout-and-wave-web
+    - file: pkg/service/service.go
+      agent: F
+      wave: 3
+      action: modify
+      depends_on:
+        - A
+      repo: scout-and-wave-web
+    - file: pkg/api/config_handler.go
+      agent: G
+      wave: 3
+      action: modify
+      depends_on:
+        - A
+      repo: scout-and-wave-web
+    - file: pkg/api/config_handler_test.go
+      agent: G
+      wave: 3
+      action: modify
+      depends_on:
+        - A
+      repo: scout-and-wave-web
+    - file: pkg/api/server.go
+      agent: G
+      wave: 3
+      action: modify
+      depends_on:
+        - A
+      repo: scout-and-wave-web
+    - file: pkg/api/types.go
+      agent: G
+      wave: 3
+      action: modify
+      depends_on:
+        - A
+      repo: scout-and-wave-web
+interface_contracts:
+    - name: config.SAWConfig
+      description: Unified config type replacing backend.SAWProviders, autonomy.Config, and web SAWConfig
+      definition: |
+        type SAWConfig struct {
+            Providers ProvidersConfig `json:"providers,omitempty"`
+            Autonomy  AutonomyConfig `json:"autonomy,omitempty"`
+            Repos     []RepoEntry    `json:"repos,omitempty"`
+            Agent     AgentConfig    `json:"agent,omitempty"`
+            Quality   QualityConfig  `json:"quality,omitempty"`
+            Appear    AppearConfig   `json:"appearance,omitempty"`
+            Notifications any       `json:"notifications,omitempty"`
+            CodeReview    any       `json:"code_review,omitempty"`
+        }
+
+        type ProvidersConfig struct {
+            Anthropic AnthropicProvider `json:"anthropic,omitempty"`
+            Bedrock   BedrockProvider   `json:"bedrock,omitempty"`
+            OpenAI    OpenAIProvider    `json:"openai,omitempty"`
+        }
+
+        type AnthropicProvider struct {
+            APIKey string `json:"api_key,omitempty"`
+        }
+
+        type BedrockProvider struct {
+            Region         string `json:"region,omitempty"`
+            AccessKeyID    string `json:"access_key_id,omitempty"`
+            SecretAccessKey string `json:"secret_access_key,omitempty"`
+            SessionToken   string `json:"session_token,omitempty"`
+            Profile        string `json:"profile,omitempty"`
+        }
+
+        type OpenAIProvider struct {
+            APIKey string `json:"api_key,omitempty"`
+        }
+
+        type AutonomyConfig struct {
+            Level          string `json:"level,omitempty"`
+            MaxAutoRetries int    `json:"max_auto_retries,omitempty"`
+            MaxQueueDepth  int    `json:"max_queue_depth,omitempty"`
+        }
+
+        type RepoEntry struct {
+            Name string `json:"name"`
+            Path string `json:"path"`
+        }
+
+        type AgentConfig struct {
+            ScoutModel       string `json:"scout_model,omitempty"`
+            WaveModel        string `json:"wave_model,omitempty"`
+            ChatModel        string `json:"chat_model,omitempty"`
+            ScaffoldModel    string `json:"scaffold_model,omitempty"`
+            IntegrationModel string `json:"integration_model,omitempty"`
+            PlannerModel     string `json:"planner_model,omitempty"`
+            ReviewModel      string `json:"review_model,omitempty"`
+        }
+
+        type QualityConfig struct {
+            RequireTests   bool           `json:"require_tests,omitempty"`
+            RequireLint    bool           `json:"require_lint,omitempty"`
+            BlockOnFailure bool           `json:"block_on_failure,omitempty"`
+            CodeReview     CodeReviewCfg  `json:"code_review,omitempty"`
+        }
+
+        type CodeReviewCfg struct {
+            Enabled   bool   `json:"enabled,omitempty"`
+            Blocking  bool   `json:"blocking,omitempty"`
+            Model     string `json:"model,omitempty"`
+            Threshold int    `json:"threshold,omitempty"`
+        }
+
+        type AppearConfig struct {
+            Theme               string   `json:"theme,omitempty"`
+            Contrast            string   `json:"contrast,omitempty"`
+            ColorTheme          string   `json:"color_theme,omitempty"`
+            ColorThemeDark      string   `json:"color_theme_dark,omitempty"`
+            ColorThemeLight     string   `json:"color_theme_light,omitempty"`
+            FavoriteThemesDark  []string `json:"favorite_themes_dark,omitempty"`
+            FavoriteThemesLight []string `json:"favorite_themes_light,omitempty"`
+        }
+      location: pkg/config/config.go
+    - name: config.Load
+      description: Single config loader replacing findConfigFile + LoadProvidersFromConfig + autonomy.LoadConfig
+      definition: |
+        // Load finds saw.config.json starting from startDir, walking up to 10
+        // parent directories. Parses the full config into SAWConfig.
+        // Returns N013_CONFIG_NOT_FOUND if no config file exists.
+        // Returns N014_CONFIG_INVALID if JSON parsing fails.
+        func Load(startDir string) result.Result[*SAWConfig]
+      location: pkg/config/config.go
+    - name: config.Save
+      description: Atomic config writer replacing autonomy.SaveConfig
+      definition: |
+        // Save atomically writes cfg to saw.config.json at repoPath.
+        // Uses temp-file + rename pattern. Preserves unknown top-level keys.
+        func Save(repoPath string, cfg *SAWConfig) result.Result[bool]
+      location: pkg/config/config.go
+    - name: config.FindConfigPath
+      description: Walks up directories to find saw.config.json
+      definition: |
+        // FindConfigPath walks up from startDir looking for saw.config.json.
+        // Returns the absolute path if found, empty string if not.
+        func FindConfigPath(startDir string) string
+      location: pkg/config/config.go
+    - name: config.GetWaveState
+      description: Single query for wave state from IMPL manifest
+      definition: |
+        // WaveState consolidates all state for a wave from the IMPL manifest.
+        type WaveState struct {
+            WaveNum         int                     `json:"wave_num"`
+            TotalAgents     int                     `json:"total_agents"`
+            CompletedAgents []string                `json:"completed_agents"`
+            FailedAgents    []string                `json:"failed_agents"`
+            PendingAgents   []string                `json:"pending_agents"`
+            GateResults     map[string]GateResult   `json:"gate_results,omitempty"`
+            IsComplete      bool                    `json:"is_complete"`
+            MergeState      string                  `json:"merge_state,omitempty"`
+        }
+
+        // GateResult is a cached gate execution outcome.
+        type GateResult struct {
+            GateType string `json:"gate_type"`
+            Command  string `json:"command"`
+            Passed   bool   `json:"passed"`
+            ExitCode int    `json:"exit_code"`
+        }
+
+        // GetWaveState derives the complete state of a wave from the IMPL manifest.
+        // This is the single query function — no .saw-state/ directory needed.
+        func GetWaveState(manifest *protocol.IMPLManifest, waveNum int) result.Result[*WaveState]
+      location: pkg/config/state.go
+    - name: Error codes N013-N014
+      description: New error codes for config operations
+      definition: |
+        CodeConfigNotFound = "N013_CONFIG_NOT_FOUND"
+        CodeConfigInvalid  = "N014_CONFIG_INVALID"
+      location: pkg/result/codes.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## Agent A — Unified Config Package (pkg/config)
+
+            **What to implement:**
+
+            Create `pkg/config/` in scout-and-wave-go with the unified config loader.
+
+            **Files:**
+            - `pkg/config/config.go` (NEW)
+            - `pkg/config/config_test.go` (NEW)
+
+            **Implementation details:**
+
+            1. Define `SAWConfig` struct that is the SUPERSET of all fields from:
+               - `backend.SAWProviders` (providers section only)
+               - `autonomy.Config` (autonomy section only)
+               - `service.SAWConfig` in web app (full config: repos, agent, quality, appearance, providers, notifications, code_review)
+
+               The unified type must include ALL fields from the web app's SAWConfig since that
+               is the most complete. See interface contract for `config.SAWConfig` for exact fields.
+
+            2. Define sub-types: `ProvidersConfig`, `AnthropicProvider`, `BedrockProvider`,
+               `OpenAIProvider`, `AutonomyConfig`, `RepoEntry`, `AgentConfig`, `QualityConfig`,
+               `CodeReviewCfg`, `AppearConfig`.
+
+               IMPORTANT: `RepoEntry` here REPLACES `protocol.RepoEntry` from `pkg/protocol/repo_resolve.go`.
+               For now, keep both — wave 2 agents will update callers. The struct fields are identical
+               (Name string, Path string).
+
+            3. Implement `FindConfigPath(startDir string) string`:
+               - Walk up from startDir, checking for `saw.config.json` at each level
+               - Max 10 levels (same as current `findConfigFile`)
+               - Return absolute path if found, empty string if not
+
+            4. Implement `Load(startDir string) result.Result[*SAWConfig]`:
+               - Call FindConfigPath to locate the file
+               - If not found, return error with code `N013_CONFIG_NOT_FOUND`
+               - Read and parse JSON
+               - If JSON invalid, return error with code `N014_CONFIG_INVALID`
+               - Handle backward compat: if `repos` is empty but `repo.path` exists,
+                 migrate to repos array (same logic as web app's GetConfig)
+               - Return `result.NewSuccess(&cfg)`
+
+            5. Implement `Save(repoPath string, cfg *SAWConfig) result.Result[bool]`:
+               - Read existing file to preserve unknown top-level keys (use map[string]json.RawMessage)
+               - Marshal cfg fields into the map
+               - Atomic write: temp file + os.Rename
+               - Return `result.NewSuccess(true)` on success
+
+            6. Implement `LoadOrDefault(startDir string) *SAWConfig`:
+               - Convenience function that returns default config if Load fails
+               - Default: empty providers, autonomy level "gated", max_auto_retries 2, max_queue_depth 10
+
+            **Error handling:**
+            - Use `result.Result[T]` for all return types
+            - Use `result.SAWError` with codes `N013_CONFIG_NOT_FOUND` and `N014_CONFIG_INVALID`
+              (use string literals directly: `Code: "N013_CONFIG_NOT_FOUND"` — do NOT reference
+              `result.CodeConfigNotFound` or `result.CodeConfigInvalid`; those constants are
+              defined by Agent B in parallel and won't exist in your worktree at compile time)
+            - No bare `error` returns, no `fmt.Errorf`
+
+            **Tests:**
+            - TestLoad_NoFile (returns N013 error)
+            - TestLoad_ValidFile (parses all sections)
+            - TestLoad_InvalidJSON (returns N014 error)
+            - TestLoad_BackwardCompat (repo.path migrated to repos array)
+            - TestSave_AtomicWrite (temp file + rename)
+            - TestSave_PreservesUnknownKeys
+            - TestFindConfigPath_WalksUp
+            - TestLoadOrDefault_FallsBack
+
+            **Verification gate:**
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./pkg/config/... && go test ./pkg/config/... -count=1
+            ```
+
+            **Constraints:**
+            - No imports from `pkg/agent/backend`, `pkg/autonomy`, or web app
+            - Import only `pkg/result` from the SAW codebase
+            - No backward-compat aliases or adapters — clean types only
+          files:
+            - pkg/config/config.go
+            - pkg/config/config_test.go
+        - id: B
+          task: |
+            ## Agent B — Wave State Query + Error Codes
+
+            **What to implement:**
+
+            1. Add error codes to `pkg/result/codes.go`
+            2. Create `pkg/config/state.go` with wave state query function
+
+            **Files:**
+            - `pkg/result/codes.go` (MODIFY — add 2 constants)
+            - `pkg/config/state.go` (NEW)
+            - `pkg/config/state_test.go` (NEW)
+
+            **Implementation details:**
+
+            1. In `pkg/result/codes.go`, add to the Engine error codes section:
+               ```go
+               CodeConfigNotFound = "N013_CONFIG_NOT_FOUND"
+               CodeConfigInvalid  = "N014_CONFIG_INVALID"
+               ```
+
+            2. Create `pkg/config/state.go` with:
+
+               ```go
+               package config
+
+               type WaveState struct {
+                   WaveNum         int                   `json:"wave_num"`
+                   TotalAgents     int                   `json:"total_agents"`
+                   CompletedAgents []string              `json:"completed_agents"`
+                   FailedAgents    []string              `json:"failed_agents"`
+                   PendingAgents   []string              `json:"pending_agents"`
+                   GateResults     map[string]GateResult `json:"gate_results,omitempty"`
+                   IsComplete      bool                  `json:"is_complete"`
+                   MergeState      string                `json:"merge_state,omitempty"`
+               }
+
+               type GateResult struct {
+                   GateType string `json:"gate_type"`
+                   Command  string `json:"command"`
+                   Passed   bool   `json:"passed"`
+                   ExitCode int    `json:"exit_code"`
+               }
+               ```
+
+            3. Implement `GetWaveState(manifest *protocol.IMPLManifest, waveNum int) result.Result[*WaveState]`:
+               - Find the wave in manifest.Waves by number
+               - If wave not found, return error
+               - Count agents from the wave definition
+               - Determine completed/failed/pending by checking manifest.CompletionReports
+                 (agents with reports = completed, agents with failure reports = failed, rest = pending)
+               - Leave GateResults as nil/empty (gate execution results are not stored in the manifest; they are runtime outputs only)
+               - Set IsComplete = true if all agents have completion reports and no failures
+               - Set MergeState from manifest.MergeState if wave matches
+
+            4. Implement `GetAllWaveStates(manifest *protocol.IMPLManifest) result.Result[[]WaveState]`:
+               - Iterate all waves, call GetWaveState for each
+               - Return slice of all wave states
+
+            **Error handling:**
+            - Use `result.Result[T]` for returns
+            - Use `result.SAWError` for errors (e.g., wave not found)
+
+            **Tests:**
+            - TestGetWaveState_ValidWave
+            - TestGetWaveState_WaveNotFound
+            - TestGetWaveState_AllComplete
+            - TestGetWaveState_PartialComplete
+            - TestGetWaveState_WithFailures
+            - TestGetAllWaveStates
+
+            **Verification gate:**
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./pkg/config/... && go build ./pkg/result/... && go test ./pkg/config/... ./pkg/result/... -count=1
+            ```
+
+            **Constraints:**
+            - Import `pkg/protocol` for IMPLManifest type
+            - Import `pkg/result` for Result type and error codes
+            - No imports from `pkg/resume`, `pkg/engine`, or `pkg/gatecache`
+            - The state.go file is in `pkg/config` but does NOT depend on config.go types
+              (it operates on protocol.IMPLManifest, not SAWConfig)
+          files:
+            - pkg/result/codes.go
+            - pkg/config/state.go
+            - pkg/config/state_test.go
+      base_commit: 2d4320135317e739cdc5a9bd619e1fb371b88b1a
+    - number: 2
+      agents:
+        - id: C
+          task: |
+            ## Agent C — Backend Config Caller Migration
+
+            **What to implement:**
+
+            Delete `pkg/agent/backend/configfile.go` and update its two callers to use
+            `pkg/config.Load` instead.
+
+            **Files:**
+            - `pkg/agent/backend/configfile.go` (DELETE)
+            - `pkg/agent/backend/api/client.go` (MODIFY)
+            - `pkg/agent/backend/bedrock/client.go` (MODIFY)
+
+            **Implementation details:**
+
+            1. DELETE `pkg/agent/backend/configfile.go` entirely. This removes:
+               - `SAWProviders` struct
+               - `LoadProvidersFromConfig()` function
+               - `findConfigFile()` function
+
+            2. In `pkg/agent/backend/api/client.go`:
+               - Remove import of `backend` (if it was importing parent package)
+               - Add import of `github.com/blackwell-systems/scout-and-wave-go/pkg/config`
+               - Find the line `providers := backend.LoadProvidersFromConfig(cwd)` (around line 55)
+               - Replace with:
+                 ```go
+                 cfg := config.LoadOrDefault(cwd)
+                 // Then access cfg.Providers.Anthropic.APIKey, cfg.Providers.OpenAI.APIKey, etc.
+                 ```
+               - Update field access: `providers.Anthropic.APIKey` becomes `cfg.Providers.Anthropic.APIKey`
+               - Same for OpenAI fields
+
+            3. In `pkg/agent/backend/bedrock/client.go`:
+               - **IMPORT ALIAS REQUIRED**: this file already imports `github.com/aws/aws-sdk-go-v2/config`
+                 under the default identifier `config` (line 14). You MUST alias the SAW config import:
+                 ```go
+                 sawconfig "github.com/blackwell-systems/scout-and-wave-go/pkg/config"
+                 ```
+               - Replace `backend.LoadProvidersFromConfig(cwd)` with `sawconfig.LoadOrDefault(cwd)`
+               - Update field access for Bedrock credentials using `sawconfig.`:
+                 `providers.Bedrock.Region` becomes `cfg.Providers.Bedrock.Region`, etc.
+               - All `sawconfig.` call sites use the alias, NOT bare `config.`
+
+            **Error handling:**
+            - `LoadOrDefault` never fails (returns defaults), so no error handling changes needed
+            - The callers currently ignore errors from LoadProvidersFromConfig (it returns zero value)
+
+            **Tests:**
+            - Verify `go build ./pkg/agent/...` compiles without `configfile.go`
+            - Existing tests in `api/` and `bedrock/` should still pass
+
+            **Verification gate:**
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./pkg/agent/... && go test ./pkg/agent/... -count=1
+            ```
+
+            **Constraints:**
+            - No backward compat. No type aliases for SAWProviders.
+            - `configfile.go` is fully deleted, not emptied.
+          files:
+            - pkg/agent/backend/configfile.go
+            - pkg/agent/backend/api/client.go
+            - pkg/agent/backend/bedrock/client.go
+          dependencies:
+            - A
+        - id: D
+          task: |
+            ## Agent D — Autonomy + CLI Config Migration
+
+            **What to implement:**
+
+            Delete `pkg/autonomy/config.go` and its tests, update all CLI commands and
+            autonomy.go to use `pkg/config` instead.
+
+            **Files:**
+            - `pkg/autonomy/config.go` (DELETE)
+            - `pkg/autonomy/config_test.go` (DELETE)
+            - `pkg/autonomy/autonomy.go` (MODIFY)
+            - `cmd/saw/daemon_cmd.go` (MODIFY)
+            - `cmd/saw/prepare_wave.go` (MODIFY)
+            - `cmd/saw/verify_install_cmd.go` (MODIFY)
+
+            **Implementation details:**
+
+            1. DELETE `pkg/autonomy/config.go` — removes `LoadConfig()` and `SaveConfig()`.
+            2. DELETE `pkg/autonomy/config_test.go` — tests moved to pkg/config.
+
+            3. In `pkg/autonomy/autonomy.go`:
+               - The `Config` struct (Level, MaxAutoRetries, MaxQueueDepth) stays in autonomy.go
+                 as it defines autonomy-specific behavior
+               - BUT: remove the `Config` type definition and import it from `pkg/config` instead:
+                 `type Config = config.AutonomyConfig`
+               - Or simpler: keep the autonomy.Config struct as-is but update `DefaultConfig()`
+                 to be the only way to get defaults (no LoadConfig dependency)
+               - Actually, the cleanest approach: Keep `autonomy.Config` struct, `DefaultConfig()`,
+                 `ShouldAutoApprove()`, and `Level`/`Stage` types exactly as they are.
+                 Just delete the config loading functions. The autonomy package becomes purely
+                 about autonomy decision logic, not config I/O.
+
+            4. In `cmd/saw/daemon_cmd.go` (around line 32):
+               - Replace `cfg, err := autonomy.LoadConfig(repoDir)` with:
+                 ```go
+                 sawCfg := config.LoadOrDefault(repoDir)
+                 cfg := autonomy.Config{
+                     Level:          autonomy.Level(sawCfg.Autonomy.Level),
+                     MaxAutoRetries: sawCfg.Autonomy.MaxAutoRetries,
+                     MaxQueueDepth:  sawCfg.Autonomy.MaxQueueDepth,
+                 }
+                 if cfg.Level == "" {
+                     cfg = autonomy.DefaultConfig()
+                 }
+                 ```
+
+            5. In `cmd/saw/prepare_wave.go`:
+               - Replace `loadSAWConfigRepos()` function (lines 39-54) with:
+                 ```go
+                 func loadSAWConfigRepos(configPath string) []protocol.RepoEntry {
+                     dir := filepath.Dir(configPath)
+                     cfg := config.LoadOrDefault(dir)
+                     var repos []protocol.RepoEntry
+                     for _, r := range cfg.Repos {
+                         repos = append(repos, protocol.RepoEntry{Name: r.Name, Path: r.Path})
+                     }
+                     return repos
+                 }
+                 ```
+               - This preserves the return type ([]protocol.RepoEntry) for now since
+                 protocol.RepoEntry is used throughout. Full RepoEntry migration is a
+                 separate concern.
+
+            6. In `cmd/saw/verify_install_cmd.go`:
+               - `checkConfigFile()` (line 277): Replace manual path scanning with
+                 `config.FindConfigPath(cwd)`. If empty, report not found.
+               - `checkConfiguredRepos()` (line 308): Use `config.Load()` to get repos,
+                 then iterate.
+
+            **Tests:**
+            - Run full `go test ./pkg/autonomy/... ./cmd/saw/...`
+            - Verify daemon_cmd_test.go still passes (it tests DefaultConfig fallback)
+            - Verify prepare_wave_test.go still passes
+
+            **Verification gate:**
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./... && go test ./pkg/autonomy/... ./cmd/saw/... -count=1
+            ```
+
+            **Constraints:**
+            - No backward compat. autonomy.LoadConfig and autonomy.SaveConfig are deleted.
+            - Keep autonomy.Config struct, DefaultConfig(), ShouldAutoApprove() — these are
+              autonomy logic, not config I/O.
+          files:
+            - pkg/autonomy/config.go
+            - pkg/autonomy/config_test.go
+            - pkg/autonomy/autonomy.go
+            - cmd/saw/daemon_cmd.go
+            - cmd/saw/prepare_wave.go
+            - cmd/saw/verify_install_cmd.go
+          dependencies:
+            - A
+        - id: E
+          task: |
+            ## Agent E — Resume State Migration
+
+            **What to implement:**
+
+            Update resume detection to use `config.GetWaveState()` as primary state source,
+            with .saw-state/ as fallback cache only.
+
+            **Files:**
+            - `pkg/resume/detect.go` (MODIFY)
+            - `pkg/resume/sessions.go` (MODIFY)
+
+            **Implementation details:**
+
+            1. In `pkg/resume/detect.go`:
+               - Add import of `github.com/blackwell-systems/scout-and-wave-go/pkg/config`
+               - In the `DetectWithConfig` function, after loading the IMPL manifest,
+                 use `config.GetWaveState(manifest, waveNum)` to get wave state instead
+                 of manually computing completed/failed/pending from git worktree scanning
+               - The function currently (around line 180-188) loads agent sessions from
+                 `.saw-state/sessions/`. Change this to:
+                 1. First try to derive state from IMPL manifest via GetWaveState
+                 2. Fall back to .saw-state/sessions/ only if IMPL data is incomplete
+               - Update SessionState population to use WaveState fields:
+                 ```go
+                 ws := config.GetWaveState(manifest, currentWave)
+                 if ws.IsSuccess() {
+                     state := ws.GetData()
+                     ss.CompletedAgents = state.CompletedAgents
+                     ss.FailedAgents = state.FailedAgents
+                     ss.PendingAgents = state.PendingAgents
+                 }
+                 ```
+               - Keep the existing worktree scanning as supplementary data (orphaned worktrees,
+                 dirty worktrees are git-level concerns not in IMPL manifest)
+
+            2. In `pkg/resume/sessions.go`:
+               - Add a comment documenting that .saw-state/sessions/ is now cache-only
+               - Add `LoadAgentSessionsFromManifest(manifest *protocol.IMPLManifest, slug string) map[string]AgentSession`
+                 that extracts session data from IMPL manifest completion reports
+               - Update `SaveAgentSession` to ALSO write session data back to the IMPL manifest
+                 if the manifest path is known (add optional manifestPath parameter or use a
+                 context/options pattern)
+               - Actually, simpler approach: keep SaveAgentSession writing to .saw-state/ (it's
+                 cache), but add a new function `SyncSessionsToManifest(stateDir, manifestPath, slug string) error`
+                 that reads .saw-state/sessions/ and writes the data into the IMPL manifest.
+                 This can be called by finalize-wave.
+
+            **Tests:**
+            - Existing detect tests should still pass (behavior compatible)
+            - Add test for IMPL-first state derivation
+            - Add test for fallback to .saw-state/ when IMPL data incomplete
+
+            **Verification gate:**
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./pkg/resume/... && go test ./pkg/resume/... -count=1
+            ```
+
+            **Constraints:**
+            - Do NOT delete .saw-state/ session files or change their format
+            - .saw-state/ remains as cache; IMPL manifest becomes primary
+            - Import pkg/config for GetWaveState, pkg/protocol for IMPLManifest
+          files:
+            - pkg/resume/detect.go
+            - pkg/resume/sessions.go
+          dependencies:
+            - B
+      base_commit: 35d316229141c53a0a4202171ddebf6a95556acb
+    - number: 3
+      agents:
+        - id: F
+          task: |
+            ## Agent F — Web App Config Service Migration
+
+            **What to implement:**
+
+            Update the web app's config service to import `config.SAWConfig` from the SDK
+            instead of defining its own duplicate types.
+
+            **Files:**
+            - `pkg/service/config_service.go` (MODIFY)
+            - `pkg/service/config_service_test.go` (MODIFY)
+            - `pkg/service/service.go` (MODIFY)
+
+            **Important:** This is in the scout-and-wave-web repo, which imports
+            scout-and-wave-go as a Go module dependency.
+
+            **Implementation details:**
+
+            1. In `pkg/service/config_service.go`:
+               - DELETE the following type definitions (they are now in SDK pkg/config):
+                 - `RepoEntry`
+                 - `RepoConfig`
+                 - `ProvidersConfig`
+                 - `AnthropicProviderConfig`
+                 - `BedrockProviderConfig`
+                 - `OpenAIProviderConfig`
+                 - `SAWConfig`
+                 - `AgentConfig`
+                 - `QualityConfig`
+                 - `CodeReviewCfg`
+                 - `AppearConfig`
+               - Add import of `github.com/blackwell-systems/scout-and-wave-go/pkg/config`
+               - Replace all references to local types with `config.SAWConfig`, `config.RepoEntry`,
+                 `config.ProvidersConfig`, etc.
+               - Rewrite `GetConfig(deps Deps)` to delegate to `config.Load(deps.RepoPath)`:
+                 ```go
+                 func GetConfig(deps Deps) (*config.SAWConfig, error) {
+                     res := config.Load(deps.RepoPath)
+                     if res.IsSuccess() {
+                         return res.GetData(), nil
+                     }
+                     // If not found, return default with repo from deps
+                     if len(res.Errors) > 0 && res.Errors[0].Code == result.CodeConfigNotFound {
+                         repoName := filepath.Base(deps.RepoPath)
+                         return &config.SAWConfig{
+                             Repos: []config.RepoEntry{{Name: repoName, Path: deps.RepoPath}},
+                         }, nil
+                     }
+                     return nil, fmt.Errorf("config load failed: %s", res.Errors[0].Message)
+                 }
+                 ```
+               - Rewrite `SaveConfig(deps Deps, cfg *config.SAWConfig)` to delegate to `config.Save`:
+                 ```go
+                 func SaveConfig(deps Deps, cfg *config.SAWConfig) error {
+                     res := config.Save(deps.RepoPath, cfg)
+                     if !res.IsSuccess() {
+                         return fmt.Errorf("config save failed: %s", res.Errors[0].Message)
+                     }
+                     return nil
+                 }
+                 ```
+               - Keep `ValidateModelName`, `ValidateAnthropicCredentials`,
+                 `ValidateOpenAICredentials`, `ValidateBedrockCredentials` — these are
+                 web-specific validation functions that call external APIs
+               - Keep `GetConfiguredRepos` but update return type to `[]config.RepoEntry`
+
+            2. In `pkg/service/service.go`:
+               - The `Deps.ConfigPath` function field may become unnecessary since
+                 `config.Load` handles path discovery internally
+               - Keep ConfigPath for now but document it as deprecated (removing it
+                 would cascade to every test file creating Deps)
+
+            3. In `pkg/service/config_service_test.go`:
+               - Update type references from local `SAWConfig` to `config.SAWConfig`
+               - Update `RepoEntry` to `config.RepoEntry`
+               - Tests should be functionally identical
+
+            **Tests:**
+            - All existing config_service_test.go tests must pass
+            - Verify `go build ./...` in web repo compiles
+
+            **Verification gate:**
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-web && go build ./... && go test ./pkg/service/... -count=1
+            ```
+
+            **Constraints:**
+            - No duplicate type definitions. If SDK has the type, web imports it.
+            - Keep credential validation functions in web (they have HTTP dependencies
+              the SDK should not pull in)
+            - The web app's go.mod will need `go get` to pull the updated SDK version.
+              Run `go get github.com/blackwell-systems/scout-and-wave-go@develop` before building.
+          files:
+            - pkg/service/config_service.go
+            - pkg/service/config_service_test.go
+            - pkg/service/service.go
+          dependencies:
+            - A
+        - id: G
+          task: |
+            ## Agent G — Web App Handler Migration
+
+            **What to implement:**
+
+            Update web app API handlers and server.go to use SDK config types instead of
+            inline saw.config.json parsing.
+
+            **Files:**
+            - `pkg/api/config_handler.go` (MODIFY)
+            - `pkg/api/config_handler_test.go` (MODIFY)
+            - `pkg/api/server.go` (MODIFY)
+
+            **Important:** This is in the scout-and-wave-web repo.
+
+            **Implementation details:**
+
+            1. In `pkg/api/config_handler.go`:
+               - The GET handler currently calls `service.GetConfig(deps)` — update the
+                 type references to use `config.SAWConfig` from SDK
+               - The POST handler currently calls `service.SaveConfig(deps, &cfg)` —
+                 update to accept `config.SAWConfig`
+               - Remove the `Deps.ConfigPath` lambda usage if Agent F deprecated it;
+                 otherwise keep for now
+
+            2. In `pkg/api/server.go`:
+               - `getConfiguredRepos()` (line 99-130) currently reads saw.config.json
+                 inline. Replace with:
+                 ```go
+                 func (s *Server) getConfiguredRepos() []config.RepoEntry {
+                     return service.GetConfiguredRepos(s.deps)
+                 }
+                 ```
+               - Remove the duplicate `SAWConfig` reference in `pkg/api/types.go` if it
+                 exists (line 289 shows `SAWConfig` defined there too — DELETE it, use SDK type)
+               - Update the server initialization (line 131, 151-152) to use
+                 `config.LoadOrDefault` instead of inline JSON parsing
+               - The fallback config logic (lines 148-152) that reads saw.config.json
+                 for cross-repo defaults should use `config.LoadOrDefault(cfg.RepoPath)`
+
+            3. In `pkg/api/config_handler_test.go`:
+               - Update type references to `config.SAWConfig`, `config.RepoEntry`
+               - Tests should be functionally identical
+
+            **Note on cascade:** Many other handlers in the web app read saw.config.json
+            inline (chat_handler.go, planner.go, resume_action.go, scaffold_handler.go,
+            wave_runner.go, etc.). These are NOT in this agent's scope. They will continue
+            working because saw.config.json format is unchanged. A follow-up IMPL can
+            migrate remaining inline readers to use the config package.
+
+            **Tests:**
+            - All existing config_handler_test.go tests must pass
+            - Verify `go build ./...` in web repo compiles
+
+            **Verification gate:**
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-web && go build ./... && go test ./pkg/api/... -run TestConfig -count=1
+            ```
+
+            **Constraints:**
+            - No duplicate type definitions
+            - Update go.mod: `go get github.com/blackwell-systems/scout-and-wave-go@develop`
+            - Only modify the 3 assigned files. Do NOT touch wave_runner.go, chat_handler.go, etc.
+          files:
+            - pkg/api/config_handler.go
+            - pkg/api/config_handler_test.go
+            - pkg/api/server.go
+          dependencies:
+            - A
+      base_commit: 74541ddf31b7ccf41c8d266315d5c9070965f53e
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./...
+          required: true
+        - type: lint
+          command: go vet ./...
+          required: true
+        - type: test
+          command: go test ./...
+          required: true
+scaffolds:
+    - file: pkg/config/config.go
+      contents: |
+        package config
+
+        // SAWConfig is the unified configuration type for saw.config.json.
+        // Placeholder — Agent A implements full type.
+        type SAWConfig struct{}
+
+        // Load finds and parses saw.config.json starting from startDir,
+        // walking up the directory tree. Returns result.Result[*SAWConfig].
+        func Load(startDir string) {}
+      import_path: github.com/blackwell-systems/scout-and-wave-go/pkg/config
+      status: committed (f8ee308)
+completion_reports:
+    A:
+        status: complete
+        branch: saw/config-state-unification/wave1-agent-A
+        commit: 972de70
+        files_changed:
+            - pkg/config/config.go
+            - pkg/config/config_test.go
+        files_created:
+            - pkg/config/config.go
+            - pkg/config/config_test.go
+        tests_added:
+            - TestLoad_NoFile
+            - TestLoad_ValidFile
+            - TestLoad_InvalidJSON
+            - TestLoad_BackwardCompat
+            - TestSave_AtomicWrite
+            - TestSave_PreservesUnknownKeys
+            - TestFindConfigPath_WalksUp
+            - TestFindConfigPath_NotFound
+            - TestLoadOrDefault_FallsBack
+            - TestLoadOrDefault_LoadsWhenExists
+        verification: PASS
+    B:
+        status: complete
+        branch: saw/config-state-unification/wave1-agent-B
+        commit: 11df35a
+        files_changed:
+            - pkg/result/codes.go
+            - pkg/config/state.go
+            - pkg/config/state_test.go
+        files_created:
+            - pkg/config/state.go
+            - pkg/config/state_test.go
+        tests_added:
+            - TestGetWaveState_ValidWave
+            - TestGetWaveState_WaveNotFound
+            - TestGetWaveState_AllComplete
+            - TestGetWaveState_PartialComplete
+            - TestGetWaveState_WithFailures
+            - TestGetAllWaveStates
+        verification: PASS
+    C:
+        status: complete
+        branch: saw/config-state-unification/wave2-agent-C
+        commit: 0d62579
+        files_changed:
+            - pkg/agent/backend/configfile.go
+            - pkg/agent/backend/api/client.go
+            - pkg/agent/backend/bedrock/client.go
+        verification: PASS
+    D:
+        status: complete
+        branch: saw/config-state-unification/wave2-agent-D
+        commit: 368b309
+        files_changed:
+            - cmd/saw/daemon_cmd.go
+            - cmd/saw/prepare_wave.go
+            - cmd/saw/verify_install_cmd.go
+            - pkg/autonomy/config.go
+            - pkg/autonomy/config_test.go
+        verification: PASS
+    E:
+        status: complete
+        branch: saw/config-state-unification/wave2-agent-E
+        commit: 9c23f80
+        files_changed:
+            - pkg/resume/detect.go
+            - pkg/resume/sessions.go
+            - pkg/resume/sessions_test.go
+        tests_added:
+            - TestLoadAgentSessionsFromManifest_CompositeKeys
+            - TestLoadAgentSessionsFromManifest_PlainKeys
+            - TestLoadAgentSessionsFromManifest_NilManifest
+            - TestBuildSessionState_IMPLFirstStateDerivation
+            - TestBuildSessionState_FallbackToPlainKeys
+        verification: PASS
+    F:
+        status: complete
+        branch: saw/config-state-unification/wave3-agent-F
+        commit: 34797db
+        files_changed:
+            - pkg/service/config_service.go
+            - pkg/service/config_service_test.go
+            - pkg/service/service.go
+        tests_added:
+            - None-new (14 existing config tests updated to use SDK types
+            - all pass)
+        verification: PASS
+    G:
+        status: complete
+        branch: saw/config-state-unification/wave3-agent-G
+        commit: c158bee
+        files_changed:
+            - pkg/api/config_handler.go
+            - pkg/api/config_handler_test.go
+            - pkg/api/server.go
+        verification: PASS
+pre_mortem:
+    overall_risk: medium
+    rows:
+        - scenario: SDK go.mod version mismatch — web app cannot import new pkg/config until SDK is committed and pushed
+          likelihood: high
+          impact: medium
+          mitigation: Wave 3 agents must run `go get github.com/blackwell-systems/scout-and-wave-go@develop` before building. SDK waves 1-2 must be committed and pushed first.
+        - scenario: protocol.RepoEntry vs config.RepoEntry collision — two identical types exist during migration
+          likelihood: high
+          impact: low
+          mitigation: Keep both during this IMPL. Convert protocol.RepoEntry callers to config.RepoEntry in a follow-up. The structs are field-identical so conversion is trivial.
+        - scenario: Web app handlers that read saw.config.json inline (wave_runner.go, chat_handler.go, etc.) are not migrated
+          likelihood: high
+          impact: low
+          mitigation: These handlers still work because saw.config.json format is unchanged. Document as known gap for follow-up IMPL.
+        - scenario: Autonomy Config struct field mismatch between autonomy.Config and config.AutonomyConfig
+          likelihood: medium
+          impact: medium
+          mitigation: Agent D must verify field names and JSON tags match exactly between the two structs.
+        - scenario: GetWaveState derives incorrect state from IMPL manifest completion reports
+          likelihood: medium
+          impact: medium
+          mitigation: Agent B must test with real IMPL manifests from docs/IMPL/complete/ to verify state derivation logic.
+known_issues:
+    - title: Remaining inline saw.config.json readers in web app
+      description: |
+        ~20 handlers in pkg/api/ and pkg/service/ read saw.config.json inline
+        (chat_handler.go, planner.go, wave_runner.go, scout_service.go, etc.).
+        These are not migrated in this IMPL. They continue working because the
+        file format is unchanged. A follow-up IMPL should migrate them to use
+        config.Load().
+      status: open
+    - title: protocol.RepoEntry duplication
+      description: |
+        After this IMPL, both protocol.RepoEntry and config.RepoEntry exist with
+        identical fields. Callers of protocol.ResolveTargetRepos still use
+        protocol.RepoEntry. A follow-up should consolidate to config.RepoEntry
+        and update protocol functions to accept it.
+      status: open
+critic_report:
+    verdict: PASS
+    agent_reviews:
+        A:
+            agent_id: A
+            verdict: PASS
+        B:
+            agent_id: B
+            verdict: PASS
+        C:
+            agent_id: C
+            verdict: PASS
+        D:
+            agent_id: D
+            verdict: PASS
+        E:
+            agent_id: E
+            verdict: PASS
+        F:
+            agent_id: F
+            verdict: PASS
+            issues:
+                - check: pattern_accuracy
+                  severity: warning
+                  description: Brief instructs running go get github.com/blackwell-systems/scout-and-wave-go@develop before building, but the web app go.mod already contains a replace directive pointing to the local filesystem path (/Users/dayna.blackwell/code/scout-and-wave-go). Running go get with a remote version tag will not override a local replace directive and may cause confusion. Agents F and G should simply build directly without the go get step.
+                  file: pkg/service/config_service.go
+        G:
+            agent_id: G
+            verdict: PASS
+            issues:
+                - check: pattern_accuracy
+                  severity: warning
+                  description: Brief instructs running go get github.com/blackwell-systems/scout-and-wave-go@develop before building, but the web app go.mod already contains a replace directive pointing to the local filesystem path (/Users/dayna.blackwell/code/scout-and-wave-go). Running go get with a remote version tag will not override a local replace directive and may cause confusion. Agents should simply build directly without the go get step.
+                  file: pkg/api/config_handler.go
+    summary: 'All 7 agent briefs verified against the codebase. File existence checks pass for all owned files (new files absent, modify/delete targets confirmed present). Symbols referenced in briefs (LoadProvidersFromConfig, ParseLevel, DetectWithConfig, GetConfig, SaveConfig, GetConfiguredRepos, IMPLManifest.CompletionReports, IMPLManifest.MergeState, result.IsSuccess, result.GetData, result.NewSuccess) all confirmed in source. Pattern descriptions are accurate: api/client.go line 55 call, bedrock/client.go AWS config import collision, daemon_cmd.go LoadConfig call, prepare_wave.go loadSAWConfigRepos lines 39-54, verify_install_cmd.go checkConfigFile/checkConfiguredRepos. Interface contracts are syntactically valid Go and all referenced types exist or are defined within the contract set. Import chains are valid: pkg/result, pkg/protocol, pkg/config (new), and web SDK dependency via local replace directive in go.mod. One advisory warning for Agents F and G: their briefs instruct running go get github.com/blackwell-systems/scout-and-wave-go@develop, but the web app go.mod already has a replace directive pointing to the local filesystem path; go get with a remote version tag will not override a local replace. This is advisory only and does not block wave execution.'
+    reviewed_at: "2026-03-24T06:11:38Z"
+    issue_count: 1
+state: COMPLETE

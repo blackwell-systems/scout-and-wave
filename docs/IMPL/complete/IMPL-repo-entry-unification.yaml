@@ -1,0 +1,822 @@
+completion_date: "2026-03-24"
+title: RepoEntry Unification & Inline Config Migration
+feature_slug: repo-entry-unification
+verdict: SUITABLE
+suitability_assessment: |
+    Suitability gate analysis:
+
+    1. File decomposition: YES. Work spans 2 repos (SDK + web), ~30 files. Clean
+       separation: SDK protocol package changes (delete type + update callers),
+       SDK CLI migration, web service layer migration, web API handler migration,
+       web API handler migration (cont'd), and TypeScript type update. No single
+       file bottleneck — callers are spread across many independent files.
+
+    2. Investigation-first items: NONE. All callers identified via grep. The
+       protocol.RepoEntry struct and all inline saw.config.json readers are
+       fully mapped. No unknown behavior.
+
+    3. Interface discoverability: YES. The interface is already defined by
+       config-state-unification: config.RepoEntry, config.Load(), config.SAWConfig.
+       This IMPL consumes those interfaces — it does not define new ones.
+
+    4. Pre-implementation status: DEPENDS on config-state-unification completing
+       first. That IMPL creates pkg/config/config.go with the unified types.
+       This IMPL is a follow-up that migrates all callers to use those types.
+
+    5. Parallelization value: HIGH. 30+ files across 2 repos. Build/test cycle
+       >30s for both repos. 5 agents with 3-6 files each across 2 waves. Clear
+       speedup over sequential.
+
+    Estimated times:
+    - Scout phase: ~8 min
+    - Agent execution: ~20 min (5 agents, ~8 min avg, 2 waves with parallelism)
+    - Merge & verification: ~5 min
+    Total SAW time: ~33 min
+
+    Sequential baseline: ~40 min (5 agents x 8 min avg)
+    Time savings: ~7 min (18% faster)
+
+    Recommendation: Clear speedup. Proceed.
+
+    DEPENDENCY: This IMPL MUST execute after config-state-unification completes.
+    Wave 1 of config-state-unification creates pkg/config/config.go with
+    config.RepoEntry, config.Load(), config.SAWConfig. This IMPL consumes those.
+test_command: go test ./...
+lint_command: go vet ./...
+file_ownership:
+    - file: pkg/protocol/repo_resolve.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/protocol/repo_resolve_test.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/protocol/multi_repo.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/protocol/multi_repo_test.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/protocol/baseline_gates.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/protocol/baseline_gates_test.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/protocol/file_existence_validator.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/protocol/file_existence_validator_test.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: cmd/saw/prepare_wave.go
+      agent: B
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: cmd/saw/prepare_wave_test.go
+      agent: B
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/service/config_service.go
+      agent: C
+      wave: 2
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/service/config_service_test.go
+      agent: C
+      wave: 2
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/service/impl_service.go
+      agent: C
+      wave: 2
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/service/impl_service_test.go
+      agent: C
+      wave: 2
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/service/wave_service.go
+      agent: C
+      wave: 2
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/service/wave_service_test.go
+      agent: C
+      wave: 2
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/service/program_service.go
+      agent: C
+      wave: 2
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/service/program_service_test.go
+      agent: C
+      wave: 2
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/service/service.go
+      agent: C
+      wave: 2
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/api/types.go
+      agent: D
+      wave: 2
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/api/types_test.go
+      agent: D
+      wave: 2
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/api/config_handler.go
+      agent: D
+      wave: 2
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/api/config_handler_test.go
+      agent: D
+      wave: 2
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/api/server.go
+      agent: D
+      wave: 2
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/api/files_handler.go
+      agent: D
+      wave: 2
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/api/files_handler_test.go
+      agent: D
+      wave: 2
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/api/manifest_routes.go
+      agent: D
+      wave: 2
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/api/wave_runner.go
+      agent: D
+      wave: 2
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/api/impl.go
+      agent: D
+      wave: 2
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/api/chat_handler.go
+      agent: D
+      wave: 2
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/api/bootstrap_handler.go
+      agent: D
+      wave: 2
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/api/planner.go
+      agent: D
+      wave: 2
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/api/scaffold_handler.go
+      agent: D
+      wave: 2
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/api/codereview_bridge.go
+      agent: D
+      wave: 2
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/api/resume_action.go
+      agent: D
+      wave: 2
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/api/merge_test_handlers.go
+      agent: D
+      wave: 2
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/api/notification_prefs_handler.go
+      agent: D
+      wave: 2
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/api/notification_prefs_handler_test.go
+      agent: D
+      wave: 2
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/api/program_handler.go
+      agent: D
+      wave: 2
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/api/program_handler_test.go
+      agent: D
+      wave: 2
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/api/pipeline_handler.go
+      agent: D
+      wave: 2
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/api/pipeline_impl_program_map_test.go
+      agent: D
+      wave: 2
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/api/autonomy_handler.go
+      agent: D
+      wave: 2
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/api/validation_handlers_test.go
+      agent: D
+      wave: 2
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/api/scout.go
+      agent: D
+      wave: 2
+      action: modify
+      repo: scout-and-wave-web
+    - file: go.mod
+      agent: E
+      wave: 2
+      action: modify
+      repo: scout-and-wave-web
+    - file: go.sum
+      agent: E
+      wave: 2
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/service/merge_service.go
+      agent: E
+      wave: 2
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/service/scout_service.go
+      agent: E
+      wave: 2
+      action: modify
+      repo: scout-and-wave-web
+    - file: web/src/types.ts
+      agent: E
+      wave: 2
+      action: modify
+      repo: scout-and-wave-web
+interface_contracts:
+    - name: config.RepoEntry
+      description: Unified repo entry type created by config-state-unification, consumed by all agents in this IMPL
+      definition: |
+        // Already exists in pkg/config/config.go after config-state-unification completes.
+        // This IMPL does NOT redefine it — agents import it.
+        type RepoEntry struct {
+            Name         string `json:"name"`
+            Path         string `json:"path"`
+            BuildCommand string `json:"build_command,omitempty"`
+            TestCommand  string `json:"test_command,omitempty"`
+        }
+      location: pkg/config/config.go
+    - name: config.Load
+      description: Unified config loader created by config-state-unification, replaces inline os.ReadFile+json.Unmarshal
+      definition: |
+        // Already exists in pkg/config/config.go after config-state-unification completes.
+        func Load(startDir string) result.Result[*SAWConfig]
+      location: pkg/config/config.go
+    - name: protocol.RepoEntry removal
+      description: Delete protocol.RepoEntry and update all callers to use config.RepoEntry
+      definition: |
+        // DELETE from pkg/protocol/repo_resolve.go:
+        //   type RepoEntry struct { ... }
+        //
+        // All function signatures change from:
+        //   func Foo(..., configRepos []RepoEntry) ...
+        // to:
+        //   func Foo(..., configRepos []config.RepoEntry) ...
+        //
+        // Affected functions in pkg/protocol/:
+        //   - ResolveTargetRepos(manifest, fallbackPath, configRepos []config.RepoEntry)
+        //   - ValidateRepoMatch(manifest, worktreePath, configRepos []config.RepoEntry)
+        //   - ValidateFileExistenceMultiRepo(m, primaryPath, configRepos []config.RepoEntry)
+        //   - RunCrossRepoBaselineGates(manifest, wave, targetRepos, configRepos []config.RepoEntry)
+        //   - ResolveAgentRepo(fileOwnership []FileOwnership, agentID string, fallbackRoot string, repos []config.RepoEntry)
+      location: pkg/protocol/repo_resolve.go
+    - name: service.RepoEntry removal
+      description: Delete service.RepoEntry and all duplicate types in web app, use config.RepoEntry
+      definition: |
+        // DELETE from pkg/service/config_service.go:
+        //   type RepoEntry struct { Name string; Path string }
+        //   type SAWConfig struct { ... }  (and all sub-types)
+        //
+        // DELETE from pkg/api/types.go:
+        //   type RepoEntry struct { Name string; Path string }
+        //   type SAWConfig struct { ... }  (and all sub-types)
+        //
+        // Replace with imports from config package:
+        //   import "github.com/blackwell-systems/scout-and-wave-go/pkg/config"
+        //   // Use config.RepoEntry, config.SAWConfig everywhere
+      location: pkg/service/config_service.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## Delete protocol.RepoEntry and migrate all pkg/protocol callers
+
+            **Context:** config-state-unification has created `pkg/config/config.go`
+            with a unified `config.RepoEntry` type (same fields: Name, Path,
+            BuildCommand, TestCommand). The old `protocol.RepoEntry` in
+            `pkg/protocol/repo_resolve.go` is now redundant.
+
+            **What to implement:**
+
+            1. DELETE the `RepoEntry` struct from `pkg/protocol/repo_resolve.go` (lines 9-16).
+            2. Add `import "github.com/blackwell-systems/scout-and-wave-go/pkg/config"`
+               to every file that previously used `protocol.RepoEntry`.
+            3. Update ALL function signatures to use `config.RepoEntry`:
+               - `ResolveTargetRepos(manifest, fallbackPath, configRepos []config.RepoEntry)`
+               - `ValidateRepoMatch(manifest, worktreePath, configRepos []config.RepoEntry)`
+               - `ValidateFileExistenceMultiRepo(m, primaryPath, configRepos []config.RepoEntry)`
+               - `RunCrossRepoBaselineGates(manifest, wave, targetRepos, configRepos []config.RepoEntry)`
+               - `ResolveAgentRepo(fileOwnership []FileOwnership, agentID string, fallbackRoot string, repos []config.RepoEntry)`
+            4. Update all internal usages (e.g., `configLookup := make(map[string]config.RepoEntry, ...)`).
+            5. Update ALL test files to construct `config.RepoEntry{}` instead of `protocol.RepoEntry{}`.
+
+            **Files:**
+            - pkg/protocol/repo_resolve.go — delete RepoEntry struct, update function sigs
+            - pkg/protocol/repo_resolve_test.go — update test constructors
+            - pkg/protocol/multi_repo.go — update function sig
+            - pkg/protocol/multi_repo_test.go — update test constructors
+            - pkg/protocol/baseline_gates.go — update RunCrossRepoBaselineGates sig + body
+            - pkg/protocol/baseline_gates_test.go — update test constructors
+            - pkg/protocol/file_existence_validator.go — update ValidateFileExistenceMultiRepo sig
+            - pkg/protocol/file_existence_validator_test.go — update test constructors
+
+            **Constraints:**
+            - No type aliases. No backward compatibility shims. Clean break.
+            - Do NOT touch cmd/saw/ files — Agent B handles those.
+            - config.RepoEntry has the same JSON tags as protocol.RepoEntry, so
+              no serialization changes are needed.
+
+            **Verification gate:**
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./pkg/protocol/... && go test ./pkg/protocol/...
+            ```
+          files:
+            - pkg/protocol/repo_resolve.go
+            - pkg/protocol/repo_resolve_test.go
+            - pkg/protocol/multi_repo.go
+            - pkg/protocol/multi_repo_test.go
+            - pkg/protocol/baseline_gates.go
+            - pkg/protocol/baseline_gates_test.go
+            - pkg/protocol/file_existence_validator.go
+            - pkg/protocol/file_existence_validator_test.go
+        - id: B
+          task: |
+            ## Migrate cmd/saw CLI to use config.Load and config.RepoEntry
+
+            **Context:** `cmd/saw/prepare_wave.go` has its own inline config reader
+            (`loadSAWConfigRepos`) that reads `saw.config.json` with os.ReadFile +
+            json.Unmarshal and returns `[]protocol.RepoEntry`. After
+            config-state-unification, `config.Load()` does this properly with
+            filesystem walking and defaults.
+
+            **What to implement:**
+
+            1. DELETE the `loadSAWConfigRepos` function from `cmd/saw/prepare_wave.go`.
+            2. Replace all calls to `loadSAWConfigRepos(configPath)` with:
+               ```go
+               cfgResult := config.Load(repoPath)
+               var configRepos []config.RepoEntry
+               if cfgResult.IsSuccess() {
+                   configRepos = cfgResult.GetData().Repos
+               }
+               ```
+            3. Update imports: remove `protocol` import if no longer needed,
+               add `"github.com/blackwell-systems/scout-and-wave-go/pkg/config"`.
+            4. Update all `protocol.RepoEntry` references to `config.RepoEntry`
+               in both source and test files.
+            5. In tests, construct `config.RepoEntry{}` instead of `protocol.RepoEntry{}`.
+
+            **Files:**
+            - cmd/saw/prepare_wave.go — delete loadSAWConfigRepos, use config.Load
+            - cmd/saw/prepare_wave_test.go — update constructors and imports
+
+            **Constraints:**
+            - Do NOT modify any pkg/protocol/ files — Agent A handles those.
+            - Use result.Result[T] pattern for config.Load() return handling.
+            - No aliases or adapters.
+
+            **Verification gate:**
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./cmd/saw/... && go test ./cmd/saw/...
+            ```
+          files:
+            - cmd/saw/prepare_wave.go
+            - cmd/saw/prepare_wave_test.go
+      base_commit: 8fe2f9fb75b114bc96f42a4f77c57de8f9677387
+    - number: 2
+      agents:
+        - id: C
+          task: |
+            ## Delete service.RepoEntry and migrate pkg/service to config types
+
+            **Context:** The web app's `pkg/service/config_service.go` defines its
+            own `RepoEntry`, `SAWConfig`, and all sub-types (AgentConfig, QualityConfig,
+            AppearConfig, ProvidersConfig, etc.). These duplicate the unified types
+            now in `github.com/blackwell-systems/scout-and-wave-go/pkg/config`.
+
+            **What to implement:**
+
+            1. DELETE all duplicate type definitions from `pkg/service/config_service.go`:
+               - RepoEntry, RepoConfig, SAWConfig, AgentConfig, QualityConfig,
+                 CodeReviewCfg, AppearConfig, ProvidersConfig, AnthropicProviderConfig,
+                 OpenAIProviderConfig, BedrockProviderConfig
+            2. Add import: `"github.com/blackwell-systems/scout-and-wave-go/pkg/config"`
+            3. Replace `service.GetConfig()` to delegate to `config.Load()`:
+               ```go
+               func GetConfig(deps Deps) (*config.SAWConfig, error) {
+                   r := config.Load(deps.RepoPath)
+                   if !r.IsSuccess() {
+                       return nil, fmt.Errorf("%s", r.Errors[0].Message)
+                   }
+                   return r.GetData(), nil
+               }
+               ```
+            4. Update `SaveConfig` to delegate to `config.Save()`.
+            5. Update `GetConfiguredRepos` to return `[]config.RepoEntry`.
+            6. Update `ValidateModelName` — keep in service (it's validation logic),
+               but ensure it references config types where needed.
+            7. Keep credential validation functions (ValidateAnthropicCredentials, etc.)
+               unchanged — they don't reference RepoEntry.
+            8. Update ALL references in service package files:
+               - impl_service.go: FindImplPath and GetImpl return config.RepoEntry
+               - wave_service.go: update the lossy conversion from config.RepoEntry to protocol.RepoEntry in
+                 config.Load(). There are 3 inline readers in this file.
+               - program_service.go: replace inline reader with config.Load()
+               - service.go: update any type references
+            9. Update ALL test files to construct `config.RepoEntry{}` and
+               `config.SAWConfig{}`.
+
+            **Files:**
+            - pkg/service/config_service.go — delete types, delegate to config pkg
+            - pkg/service/config_service_test.go — update constructors
+            - pkg/service/impl_service.go — update return types
+            - pkg/service/impl_service_test.go — update constructors
+            - pkg/service/wave_service.go — replace 3 inline readers
+            - pkg/service/wave_service_test.go — update constructors
+            - pkg/service/program_service.go — replace inline reader
+            - pkg/service/program_service_test.go — update constructors
+            - pkg/service/service.go — update type references
+
+            **Constraints:**
+            - Do NOT modify pkg/api/ files — Agent D handles those.
+            - Do NOT modify go.mod — Agent E handles that.
+            - Use config.SAWConfig everywhere. No wrapper types.
+            - Keep Deps struct and ConfigPath function — they may still be needed
+              for path resolution. If ConfigPath is no longer needed (config.Load
+              handles path walking), remove it.
+
+            **Verification gate:**
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-web && go build ./pkg/service/... && go test ./pkg/service/...
+            ```
+          files:
+            - pkg/service/config_service.go
+            - pkg/service/config_service_test.go
+            - pkg/service/impl_service.go
+            - pkg/service/impl_service_test.go
+            - pkg/service/wave_service.go
+            - pkg/service/wave_service_test.go
+            - pkg/service/program_service.go
+            - pkg/service/program_service_test.go
+            - pkg/service/service.go
+          dependencies:
+            - A
+            - B
+        - id: D
+          task: |
+            ## Delete api.RepoEntry, migrate all API handlers to config types
+
+            **Context:** The web app's `pkg/api/types.go` defines its own
+            `RepoEntry` and `SAWConfig` types. Additionally, ~15 API handler files
+            already uses config.LoadOrDefault() but converts back to protocol.RepoEntry — eliminate that conversion
+            instead of using a centralized loader.
+
+            **What to implement:**
+
+            1. DELETE duplicate type definitions from `pkg/api/types.go`:
+               - RepoEntry, RepoConfig, SAWConfig, AgentConfig, QualityConfig,
+                 CodeReviewCfg, AppearConfig, ProvidersConfig and sub-types
+            2. Add import: `"github.com/blackwell-systems/scout-and-wave-go/pkg/config"`
+            3. Replace ALL inline `saw.config.json` readers with `config.Load()`.
+               Pattern to find: `os.ReadFile(filepath.Join(..., "saw.config.json"))`
+               followed by `json.Unmarshal`. Replace with:
+               ```go
+               cfgResult := config.Load(repoPath)
+               if cfgResult.IsSuccess() {
+                   cfg := cfgResult.GetData()
+                   // use cfg.Repos, etc.
+               }
+               ```
+
+            **Inline readers to migrate (each file, approximate line):**
+            - server.go:104 — getConfiguredRepos() inline reader
+            - server.go:152 — another inline reader
+            - chat_handler.go:126 — inline reader for repos
+            - bootstrap_handler.go:107 — inline reader
+            - planner.go:148 — inline reader
+            - scaffold_handler.go:67 — inline reader
+            - wave_runner.go:113 — inline reader
+            - wave_runner.go:874 — second inline reader
+            - manifest_routes.go:128 — inline reader
+            - files_handler.go:109 — inline reader (via configPath)
+            - codereview_bridge.go:39 — inline reader
+            - resume_action.go:154 — inline reader
+            - merge_test_handlers.go:455 — inline reader
+            - notification_prefs_handler.go:33,73 — reads config for prefs
+
+            4. Update config_handler.go to eliminate the service<->api type
+               conversion boilerplate. Since both layers will now use
+               `config.SAWConfig` and `config.RepoEntry`, the handleGetConfig
+               and handleSaveConfig methods simplify dramatically — remove all
+               the field-by-field copying.
+            5. Update ALL test files to use `config.RepoEntry{}` and
+               `config.SAWConfig{}`.
+            6. Update pipeline_handler.go: `buildImplProgramMapFresh` and
+               `implProgramCache.get` to use `[]config.RepoEntry`.
+            7. Update program_handler.go: `buildPipelineData` to use
+               `[]config.RepoEntry`.
+
+            **Files:**
+            - pkg/api/types.go — delete RepoEntry, SAWConfig, and sub-types
+            - pkg/api/types_test.go — update test constructors
+            - pkg/api/config_handler.go — simplify, remove type conversion
+            - pkg/api/config_handler_test.go — update tests
+            - pkg/api/server.go — replace inline reader with config.Load
+            - pkg/api/files_handler.go — replace inline reader
+            - pkg/api/files_handler_test.go — update tests
+            - pkg/api/manifest_routes.go — replace inline reader
+            - pkg/api/wave_runner.go — replace 2 inline readers
+            - pkg/api/impl.go — update findImplPath return type
+            - pkg/api/chat_handler.go — replace inline reader
+            - pkg/api/bootstrap_handler.go — replace inline reader
+            - pkg/api/planner.go — replace inline reader
+            - pkg/api/scaffold_handler.go — replace inline reader
+            - pkg/api/codereview_bridge.go — replace inline reader
+            - pkg/api/resume_action.go — replace inline reader
+            - pkg/api/merge_test_handlers.go — replace inline reader
+            - pkg/api/notification_prefs_handler.go — replace inline readers
+            - pkg/api/notification_prefs_handler_test.go — update tests
+            - pkg/api/program_handler.go — update type references
+            - pkg/api/program_handler_test.go — update constructors
+            - pkg/api/pipeline_handler.go — update type references
+            - pkg/api/pipeline_impl_program_map_test.go — update constructors
+            - pkg/api/autonomy_handler.go — update type references
+            - pkg/api/validation_handlers_test.go — update constructors
+            - pkg/api/scout.go — update type references
+
+            **Constraints:**
+            - Do NOT modify pkg/service/ files — Agent C handles those.
+            - Do NOT modify go.mod — Agent E handles that.
+            - Keep ProviderValidationResponse in types.go — it's API-specific.
+            - Keep any API-only types (e.g., response wrappers) that don't
+              duplicate config types.
+            - For notification prefs: if the handler reads config for prefs
+              that aren't in SAWConfig, keep that reader but convert the
+              RepoEntry references.
+
+            **Verification gate:**
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-web && go build ./pkg/api/... && go test ./pkg/api/...
+            ```
+          files:
+            - pkg/api/types.go
+            - pkg/api/types_test.go
+            - pkg/api/config_handler.go
+            - pkg/api/config_handler_test.go
+            - pkg/api/server.go
+            - pkg/api/files_handler.go
+            - pkg/api/files_handler_test.go
+            - pkg/api/manifest_routes.go
+            - pkg/api/wave_runner.go
+            - pkg/api/impl.go
+            - pkg/api/chat_handler.go
+            - pkg/api/bootstrap_handler.go
+            - pkg/api/planner.go
+            - pkg/api/scaffold_handler.go
+            - pkg/api/codereview_bridge.go
+            - pkg/api/resume_action.go
+            - pkg/api/merge_test_handlers.go
+            - pkg/api/notification_prefs_handler.go
+            - pkg/api/notification_prefs_handler_test.go
+            - pkg/api/program_handler.go
+            - pkg/api/program_handler_test.go
+            - pkg/api/pipeline_handler.go
+            - pkg/api/pipeline_impl_program_map_test.go
+            - pkg/api/autonomy_handler.go
+            - pkg/api/validation_handlers_test.go
+            - pkg/api/scout.go
+          dependencies:
+            - A
+            - B
+        - id: E
+          task: |
+            ## Update go.mod, remaining service files, and TypeScript types
+
+            **Context:** The web app needs to pull the updated scout-and-wave-go
+            SDK (with config package) and update any remaining files not covered
+            by Agents C and D. Also update TypeScript types for frontend consistency.
+
+            **What to implement:**
+
+            1. Update `go.mod` to reference the latest scout-and-wave-go version
+               that includes `pkg/config`. Run `go mod tidy` and `go mod download`.
+            2. Update `go.sum` accordingly.
+            3. Update `pkg/service/merge_service.go` — if it references RepoEntry
+               or inline config reading, migrate to config.Load/config.RepoEntry.
+            4. Update `pkg/service/scout_service.go` — same migration.
+            5. Update `web/src/types.ts`:
+               - The `RepoEntry` interface shape stays the same (name + path),
+                 so no structural change needed.
+               - Add a comment noting it mirrors `config.RepoEntry` from the Go SDK.
+               - If `build_command` and `test_command` fields were added to the
+                 Go type, add them as optional fields to the TS interface:
+                 ```typescript
+                 export interface RepoEntry {
+                   name: string
+                   path: string
+                   build_command?: string
+                   test_command?: string
+                 }
+                 ```
+
+            **Files:**
+            - go.mod — update SDK dependency
+            - go.sum — regenerated
+            - pkg/service/merge_service.go — migrate references
+            - pkg/service/scout_service.go — migrate references
+            - web/src/types.ts — add optional fields to RepoEntry
+
+            **Constraints:**
+            - Do NOT modify pkg/service/config_service.go — Agent C handles that.
+            - Do NOT modify any pkg/api/ files — Agent D handles those.
+            - The go.mod update must happen before or alongside Agents C and D,
+              since they need the config import to compile. In practice, all
+              Wave 2 agents run in the same worktree-free environment on the
+              merged result of Wave 1, so the go.mod update applies to all.
+
+            **Verification gate:**
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-web && go mod tidy && go build ./... && go test ./...
+            ```
+          files:
+            - go.mod
+            - go.sum
+            - pkg/service/merge_service.go
+            - pkg/service/scout_service.go
+            - web/src/types.ts
+          dependencies:
+            - A
+            - B
+      base_commit: 8efcba5ffd4e6385bfc5c849e8ae78f0ec9f2a49
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./...
+          required: true
+        - type: lint
+          command: go vet ./...
+          required: true
+        - type: test
+          command: go test ./...
+          required: true
+post_merge_checklist:
+    groups: []
+completion_reports:
+    A:
+        status: complete
+        branch: saw/repo-entry-unification/wave1-agent-A
+        commit: 21b38a8
+        files_changed:
+            - pkg/protocol/file_existence_validator_test.go
+        verification: PASS
+    B:
+        status: complete
+        branch: saw/repo-entry-unification/wave1-agent-B
+        commit: 6c7a0c0
+        files_changed:
+            - cmd/saw/prepare_wave.go
+            - cmd/saw/prepare_wave_test.go
+        tests_added:
+            - TestConfigLoad_ReposIntegration
+            - TestConfigLoad_AbsentFile
+            - TestConfigLoad_NoReposKey
+        verification: 'FAIL (expected: 5 type mismatches at protocol call sites resolve when Agent A merges signature changes)'
+    C:
+        status: complete
+        branch: saw/repo-entry-unification/wave2-agent-C
+        commit: 92b66fc
+        files_changed:
+            - pkg/service/config_service.go
+            - pkg/service/impl_service.go
+            - pkg/service/program_service.go
+            - pkg/service/program_service_test.go
+            - pkg/service/wave_service.go
+        verification: PASS
+    D:
+        status: complete
+        branch: saw/repo-entry-unification/wave2-agent-D
+        commit: d83144d
+        files_changed:
+            - pkg/api/types.go
+            - pkg/api/config_handler.go
+            - pkg/api/config_handler_test.go
+            - pkg/api/server.go
+            - pkg/api/chat_handler.go
+            - pkg/api/bootstrap_handler.go
+            - pkg/api/planner.go
+            - pkg/api/scaffold_handler.go
+            - pkg/api/wave_runner.go
+            - pkg/api/manifest_routes.go
+            - pkg/api/files_handler.go
+            - pkg/api/codereview_bridge.go
+            - pkg/api/resume_action.go
+            - pkg/api/merge_test_handlers.go
+            - pkg/api/notification_prefs_handler.go
+            - pkg/api/pipeline_handler.go
+            - pkg/api/program_handler.go
+        verification: PASS
+    E:
+        status: complete
+        branch: saw/repo-entry-unification/wave2-agent-E
+        commit: ab2ea06
+        files_changed:
+            - go.mod
+            - web/src/types.ts
+        verification: PASS
+pre_mortem:
+    overall_risk: medium
+    rows:
+        - scenario: config-state-unification not yet merged when Wave 1 starts
+          likelihood: medium
+          impact: high
+          mitigation: 'This IMPL has an explicit prerequisite: config-state-unification must be fully merged. Do not start Wave 1 until that IMPL is closed.'
+        - scenario: config.RepoEntry missing BuildCommand/TestCommand fields
+          likelihood: low
+          impact: medium
+          mitigation: Verify config-state-unification's RepoEntry includes BuildCommand and TestCommand fields (matching protocol.RepoEntry). If not, Agent A must add them.
+        - scenario: Circular import between protocol and config packages
+          likelihood: low
+          impact: high
+          mitigation: config package must NOT import protocol. protocol imports config. Verify import direction before starting. If circular, extract shared types to a separate package.
+        - scenario: Web app go.mod update fails due to unpublished SDK changes
+          likelihood: medium
+          impact: high
+          mitigation: Wave 1 changes to scout-and-wave-go must be committed and pushed (or use replace directive) before Wave 2 can compile. Agent E handles go.mod; use replace directive if SDK not yet tagged.
+        - scenario: Agent D has too many files (26 files) causing context pressure
+          likelihood: medium
+          impact: medium
+          mitigation: 'The changes are mechanical (find-replace pattern). Each file follows the same pattern: replace os.ReadFile+json.Unmarshal with config.Load(). Agent can work through files systematically. If context pressure is an issue, split into D and D2 in a future revision.'
+        - scenario: Notification prefs handler stores non-SAWConfig data in saw.config.json
+          likelihood: low
+          impact: low
+          mitigation: If notification_prefs_handler stores/reads fields not in SAWConfig, keep its reader but convert RepoEntry references. Agent D should check what fields it actually reads.
+critic_report:
+    verdict: PASS
+    agent_reviews: {}
+    summary: 0 errors, 2 advisory warnings (pattern accuracy for agents B+C). Safe to proceed.
+    reviewed_at: "2026-03-24T08:22:41Z"
+    issue_count: 0
+state: COMPLETE

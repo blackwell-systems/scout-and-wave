@@ -1,0 +1,1043 @@
+completion_date: "2026-03-23"
+title: Dual-Layer Integration Completeness Verification System
+feature_slug: integration-completeness-gate
+verdict: SUITABLE
+suitability_assessment: |
+  SUITABLE. The work decomposes into 7 agents across 4 waves with disjoint file
+  ownership. Wave 1 updates protocol documentation (Scout prompt + E-rule). Wave 2
+  implements the integration_map data types. Wave 3 implements CLI and SDK wrappers
+  that depend on the types. Wave 4 wires it into web app and updates changelog.
+
+  File decomposition: 10+ files across 3 repositories (scout-and-wave, scout-and-wave-go,
+  scout-and-wave-web). Each agent owns distinct files. No conflicting modifications within
+  a wave.
+
+  Investigation-first items: None. The integration_connectors pattern already exists
+  (E25/E26/E27) and provides a template. The integration_map structure is well-defined
+  in the requirements.
+
+  Interface discoverability: All interfaces can be defined up front. The integration_map
+  YAML schema is fixed. The Go SDK function signature is standard (parse YAML, run
+  checks, return structured result). The web API endpoint follows existing SSE patterns.
+
+  Pre-implementation status: No components of this feature exist yet. The integration_map
+  YAML key is not mentioned in the codebase. The Scout prompt does not include integration
+  analysis instructions. No sawtools command performs integration completeness checking
+  beyond the existing E25/E26 reactive detection.
+
+  Parallelization value: High. Three repositories, Go test suite >30s, multiple agents
+  can work independently within waves. Wave 1 (protocol docs) has 2 parallel agents.
+  Wave 3 (CLI + SDK) has 2 parallel agents. Wave 4 (web + changelog) has 2 parallel agents.
+
+  Cross-repo considerations: This feature touches all 3 SAW repositories. Agents specify
+  repo: field in file_ownership. Protocol repo changes commit first, Go SDK second, web
+  app last (standard propagation pattern from MEMORY.md).
+
+  Estimated times:
+  - Scout phase: ~10 min (dependency mapping, interface contracts, IMPL doc)
+  - Agent execution: ~24 min (7 agents, 4 waves, ~6 min avg per agent accounting for parallelism)
+  - Merge and verification: ~5 min
+  Total SAW time: ~39 min
+  Sequential baseline: ~63 min (7 agents × ~9 min avg sequential)
+  Time savings: ~24 min (38% faster)
+  Recommendation: Clear speedup plus coordination value across 3 repos. The IMPL doc
+  itself serves as design documentation for the dual-layer system.
+
+test_command: go test ./...
+lint_command: go vet ./...
+
+file_ownership:
+  - file: implementations/claude-code/prompts/agents/scout.md
+    agent: A
+    wave: 1
+    action: modify
+    repo: scout-and-wave
+  - file: protocol/execution-rules.md
+    agent: B
+    wave: 1
+    action: modify
+    repo: scout-and-wave
+  - file: implementations/claude-code/prompts/saw-skill.md
+    agent: B
+    wave: 1
+    action: modify
+    repo: scout-and-wave
+  - file: pkg/protocol/integration_map.go
+    agent: C
+    wave: 2
+    action: new
+    repo: scout-and-wave-go
+  - file: pkg/protocol/integration_map_test.go
+    agent: C
+    wave: 2
+    action: new
+    repo: scout-and-wave-go
+  - file: pkg/protocol/types.go
+    agent: C
+    wave: 2
+    action: modify
+    repo: scout-and-wave-go
+  - file: cmd/saw/integration_check_cmd.go
+    agent: D
+    wave: 3
+    action: new
+    repo: scout-and-wave-go
+  - file: cmd/saw/integration_check_cmd_test.go
+    agent: D
+    wave: 3
+    action: new
+    repo: scout-and-wave-go
+  - file: pkg/engine/integration_check.go
+    agent: E
+    wave: 3
+    action: new
+    repo: scout-and-wave-go
+  - file: pkg/engine/integration_check_test.go
+    agent: E
+    wave: 3
+    action: new
+    repo: scout-and-wave-go
+  - file: pkg/api/wave_completion.go
+    agent: F
+    wave: 4
+    action: modify
+    repo: scout-and-wave-web
+  - file: CHANGELOG.md
+    agent: G
+    wave: 4
+    action: modify
+    repo: scout-and-wave
+
+interface_contracts:
+  - name: integration_map YAML schema
+    description: |
+      New top-level section in IMPL manifest that maps exports to their expected
+      callsites. Scout produces this during analysis; validation tools consume it.
+    definition: |
+      # YAML structure added to IMPL manifest
+      integration_map:
+        - export: "function or type name"
+          export_location: "path/to/defining/file.go"
+          export_type: "function" | "type" | "interface" | "middleware" | "constant"
+          callsites:
+            - file: "path/to/caller/file.go"
+              function: "callingFunction()"  # optional, for precision
+              action: "modify"
+              wave: 2
+              status: "existing" | "todo" | "planned"
+              note: "Why this callsite is required"  # optional
+
+      Field definitions:
+      - export: Name of the exported symbol (function, type, etc.)
+      - export_location: File where the export is defined
+      - export_type: Category of export
+      - callsites: Array of locations where the export must be called/referenced
+      - callsites[].file: Path to file that must reference the export
+      - callsites[].function: Optional specific function containing the callsite
+      - callsites[].action: Always "modify" (callsite file must be updated)
+      - callsites[].wave: Which wave creates/modifies this callsite
+      - callsites[].status: Implementation status
+        - "existing": Already implemented
+        - "todo": Must be implemented in specified wave
+        - "planned": Will be implemented in future wave
+      - callsites[].note: Optional explanation
+    location: protocol/scout-agent.md
+
+  - name: IntegrationCheckResult struct
+    description: |
+      Go struct returned by integration_check command and engine function.
+      Contains per-export verification status and detected gaps.
+    definition: |
+      package protocol
+
+      // IntegrationGap represents a missing integration callsite.
+      type IntegrationGap struct {
+          Export         string   `json:"export" yaml:"export"`
+          ExportLocation string   `json:"export_location" yaml:"export_location"`
+          ExportType     string   `json:"export_type" yaml:"export_type"`
+          MissingFile    string   `json:"missing_file" yaml:"missing_file"`
+          ExpectedFunc   string   `json:"expected_function,omitempty" yaml:"expected_function,omitempty"`
+          Wave           int      `json:"wave" yaml:"wave"`
+          Severity       string   `json:"severity" yaml:"severity"` // "critical", "warning", "info"
+          Reason         string   `json:"reason" yaml:"reason"`
+      }
+
+      // IntegrationVerified represents a successfully verified callsite.
+      type IntegrationVerified struct {
+          Export   string `json:"export" yaml:"export"`
+          File     string `json:"file" yaml:"file"`
+          Function string `json:"function,omitempty" yaml:"function,omitempty"`
+          Line     int    `json:"line,omitempty" yaml:"line,omitempty"`
+      }
+
+      // IntegrationCheckResult is the result of integration_check validation.
+      type IntegrationCheckResult struct {
+          TotalExports int                    `json:"total_exports" yaml:"total_exports"`
+          TotalSites   int                    `json:"total_callsites" yaml:"total_callsites"`
+          Verified     []IntegrationVerified  `json:"verified" yaml:"verified"`
+          Gaps         []IntegrationGap       `json:"gaps" yaml:"gaps"`
+          Summary      string                 `json:"summary" yaml:"summary"`
+      }
+    location: pkg/protocol/integration_map.go
+
+  - name: sawtools integration-check command
+    description: |
+      CLI command that reads an IMPL doc, parses its integration_map, and verifies
+      all expected callsites exist in the codebase. Runs as a post-merge gate.
+    definition: |
+      # Command signature
+      sawtools integration-check <impl-doc-path> [flags]
+
+      # Flags
+      --repo-root <path>     Repository root (default: auto-detect from IMPL path)
+      --format <json|text>   Output format (default: text)
+      --severity <level>     Minimum severity to report (critical|warning|info, default: warning)
+
+      # Exit codes
+      0 - All callsites verified OR only info-level gaps
+      1 - Critical or warning gaps detected
+      2 - Invalid IMPL doc or parsing error
+
+      # Output (text format)
+      Integration Check: IMPL-feature-slug.yaml
+
+      Checking 3 exports with 7 expected callsites...
+
+      ✓ dedup.WithDedup
+        ✓ pkg/agent/backend/api/client.go:91 (verified)
+        ✓ pkg/agent/backend/bedrock/client.go:87 (verified)
+        ✗ pkg/agent/backend/openai/client.go (NOT FOUND)
+        → WARNING: Expected in buildWorkshop() function
+
+      Summary: 2 gaps detected (0 critical, 2 warning)
+
+      # Output (json format)
+      {
+        "total_exports": 3,
+        "total_callsites": 7,
+        "verified": [{"export": "dedup.WithDedup", "file": "...", "line": 91}],
+        "gaps": [{"export": "dedup.WithDedup", "missing_file": "...", "severity": "warning"}],
+        "summary": "2 gaps detected (0 critical, 2 warning)"
+      }
+    location: cmd/saw/integration_check_cmd.go
+
+  - name: engine.CheckIntegration function
+    description: |
+      SDK function for programmatic integration checking. Used by web API and
+      custom orchestration scripts. Returns structured result.
+    definition: |
+      package engine
+
+      import "github.com/blackwell-systems/scout-and-wave-go/pkg/protocol"
+
+      // CheckIntegration validates integration_map entries against the codebase.
+      // Returns nil error if validation completes (gaps are reported in result.Gaps,
+      // not as errors). Only returns error if IMPL doc cannot be parsed or repo
+      // operations fail.
+      func CheckIntegration(implPath string, repoRoot string) (*protocol.IntegrationCheckResult, error)
+
+      // Severity classification heuristics:
+      // - critical: export_type "function" with name matching Register*, Init*, Build*
+      //             and status "todo" for current/past wave
+      // - warning: export_type "function" with status "todo", other naming patterns
+      // - info: export_type "type" or "interface" with no callers yet
+    location: pkg/engine/integration_check.go
+
+waves:
+  - number: 1
+    agents:
+      - id: A
+        task: |
+          ## Scout Prompt: Add Integration Analysis Section
+
+          **Objective**: Update the Scout agent prompt to include instructions for producing
+          the integration_map section during IMPL doc creation.
+
+          **Context**: The Scout agent currently produces file_ownership, interface_contracts,
+          and waves sections. This task adds a fourth major section: integration_map. The Scout
+          must analyze new exports (functions, types, middleware) and identify where they must
+          be called in the codebase.
+
+          **File to modify**: `implementations/claude-code/prompts/agents/scout.md`
+
+          **Changes required**:
+
+          1. **Add integration_map to schema section** (around line 97-103):
+             - Add `integration_map` to the list of valid top-level keys
+             - Position it after `integration_connectors` in the list
+
+          2. **Add integration_map to YAML schema example** (around line 40-95):
+             ```yaml
+             integration_map:        # Array of export-to-callsite mappings
+               - export: FunctionName
+                 export_location: path/to/file.go
+                 export_type: function
+                 callsites:
+                   - file: path/to/caller.go
+                     function: callerFunc()
+                     action: modify
+                     wave: 2
+                     status: todo
+                     note: "Optional explanation"
+             ```
+
+          3. **Add new step in Implementation Process** (insert after step 9, renumber subsequent steps):
+             ```markdown
+             10. **Produce integration_map for new exports.** After defining interface contracts
+                 and before writing agent prompts, analyze which exports must be called from
+                 outside their defining agent's ownership:
+
+                 **Detection heuristics:**
+                 - Agent A defines `func Register*(...)` → must be called in main/init code
+                 - Agent A defines `func Build*(...)` → must be called in factory/setup code
+                 - Agent A defines middleware `WithX(...)` → check all backend clients for consistent usage
+                 - Agent A defines stats collection → check orchestrator persists to reports
+                 - Agent A defines webhook/notification handler → check notification bus wires it
+
+                 **For each export that requires integration tracking:**
+                 1. Identify the export's purpose (registration, middleware, stats, event handler)
+                 2. Search codebase for parallel patterns (e.g., if API backend uses X, check Bedrock/OpenAI)
+                 3. List all files where the export must be referenced
+                 4. Determine which wave will add each callsite
+                 5. Mark status as "existing" (already done), "todo" (must do), or "planned" (future)
+
+                 **Severity classification guidance:**
+                 - Critical: Register*, Init*, Build* functions that must be called for feature to work
+                 - Warning: Middleware, stats collection, parallel patterns with inconsistent usage
+                 - Info: Types/interfaces exported for future use but not required immediately
+
+                 **Output format:** Add integration_map section to IMPL YAML following the schema.
+                 If no exports require integration tracking, omit the section entirely (do not
+                 output an empty array).
+
+                 **Relationship to integration_connectors:** integration_map is preventative (Scout
+                 plans callsites up front). integration_connectors is reactive (E25/E26 detects gaps
+                 post-merge). Both may exist in the same IMPL. integration_map entries with status
+                 "todo" should also have their callsite files in file_ownership or integration_connectors.
+             ```
+
+          4. **Add integration_map to E16A required block section** (around line 455-465):
+             - Note that integration_map is OPTIONAL (only include if exports require tracking)
+             - Distinguish from file_ownership/waves which are required
+
+          **Testing**: After modification, verify the Scout prompt includes:
+          - integration_map in the valid keys list
+          - integration_map in the YAML schema example
+          - Integration analysis step in the Implementation Process
+          - Detection heuristics (Register*, Build*, middleware patterns)
+          - Severity classification guidance
+
+          **Verification gate**:
+          ```bash
+          # Verify integration_map appears in schema section
+          grep -q "integration_map" implementations/claude-code/prompts/agents/scout.md
+          # Verify step mentions integration analysis
+          grep -A 20 "Produce integration_map" implementations/claude-code/prompts/agents/scout.md | grep -q "Detection heuristics"
+          ```
+        files:
+          - implementations/claude-code/prompts/agents/scout.md
+
+      - id: B
+        task: |
+          ## Protocol: Add E42 Execution Rule
+
+          **Objective**: Document the integration completeness requirement as execution rule E42.
+
+          **Context**: The execution rules document (protocol/execution-rules.md) defines
+          orchestrator behavior. E41 is the current highest rule number. This task adds E42
+          to document the dual-layer integration completeness verification system.
+
+          **File to modify**: `protocol/execution-rules.md`
+
+          **Changes required**:
+
+          Insert E42 section after E41 (after line ~1563):
+
+          ```markdown
+          ## E42: Integration Completeness Verification
+
+          **Trigger:** (Layer 1) Scout produces IMPL doc, (Layer 2) Wave merge completes
+
+          **Required Action:** Two-layer defense against the "built but not hooked up" pattern
+          where features are implemented with passing tests but critical integration points are
+          missed (exports never called in production flows).
+
+          ### Layer 1: Scout-Phase Integration Mapping (Preventative)
+
+          During IMPL doc creation, Scout must identify and plan integration callsites when
+          agents create new exports.
+
+          **Scout responsibilities:**
+          1. Analyze interface contracts for exports matching detection heuristics
+          2. Search codebase for parallel patterns (e.g., if API backend uses X, check Bedrock/OpenAI)
+          3. Identify where new exports must be called
+          4. Create `integration_map` section in IMPL doc with export-to-callsite mappings
+          5. Ensure callsite files are in file_ownership or integration_connectors
+
+          **integration_map structure:**
+          ```yaml
+          integration_map:
+            - export: "function or type name"
+              export_location: "path/to/file.go"
+              export_type: "function" | "type" | "middleware" | ...
+              callsites:
+                - file: "path/to/caller.go"
+                  function: "callerFunc()"  # optional
+                  action: "modify"
+                  wave: 2
+                  status: "existing" | "todo" | "planned"
+                  note: "Explanation"  # optional
+          ```
+
+          **Detection heuristics for integration-required exports:**
+          - Functions matching `Register*`, `Init*`, `Build*` patterns → likely require callsites
+          - Middleware functions (`WithX(...)`) → check all backends for consistent usage
+          - Stats collection functions → verify orchestrator persists to reports
+          - Webhook/event handlers → verify wired into notification bus
+
+          ### Layer 2: Post-Merge Integration Gate (Detective)
+
+          After wave merges, validate that expected callsites from integration_map exist.
+
+          **Orchestrator behavior:**
+          1. Run `sawtools integration-check <impl-doc>` or call `engine.CheckIntegration()`
+          2. Parse integration_map from IMPL doc
+          3. For each export, verify callsites exist via grep or AST parsing
+          4. Classify gaps by severity (critical/warning/info)
+          5. Report missing integrations
+
+          **Gate behavior:**
+          - Non-blocking warning (not error) by default
+          - Allows "define now, use later" patterns
+          - Runs after each wave merge (early detection)
+          - Runs after final merge (comprehensive check)
+          - Exit code 0 if all verified, 1 if gaps detected
+
+          **Severity classification:**
+          - `critical`: Register*, Init*, Build* functions with status "todo" in current/past wave
+          - `warning`: Other functions with status "todo", inconsistent middleware usage
+          - `info`: Types/interfaces exported but not required immediately
+
+          ### Relationship to E25/E26/E27
+
+          - **E25/E26** (reactive): Detects integration gaps post-merge via grep, launches Integration Agent
+          - **E27** (proactive): Scout plans integration work as explicit integration wave
+          - **E42** (preventative + detective): Scout maps callsites up front, gate verifies after merge
+
+          All three mechanisms are complementary:
+          - E42 Layer 1 runs at planning time (Scout phase)
+          - E27 runs for planned integration waves (known wiring work)
+          - E42 Layer 2 runs post-merge (verifies integration_map entries)
+          - E25/E26 runs post-merge (catches gaps integration_map missed)
+
+          **Related Rules:** See E25 (Integration Validation), E26 (Integration Agent), E27 (Planned Integration Waves)
+
+          ---
+          ```
+
+          **Testing**: After modification, verify E42 section includes:
+          - Two-layer structure (preventative + detective)
+          - integration_map YAML schema
+          - Detection heuristics
+          - Severity classification
+          - Relationship to E25/E26/E27
+
+          **Verification gate**:
+          ```bash
+          # Verify E42 section exists
+          grep -q "## E42: Integration Completeness" protocol/execution-rules.md
+          # Verify mentions both layers
+          grep -A 50 "## E42" protocol/execution-rules.md | grep -q "Layer 1.*Preventative"
+          grep -A 50 "## E42" protocol/execution-rules.md | grep -q "Layer 2.*Detective"
+          ```
+
+          ---
+
+          ## Orchestrator Procedure: Add E42 Layer 2 to Wave Finalization
+
+          **Objective**: Update the SAW skill orchestrator procedure to call `sawtools integration-check` post-merge.
+
+          **Context**: The /saw skill defines the orchestrator's execution logic. Currently step 8a references only E25/E26/E35 (reactive integration gap detection). This task adds E42 Layer 2 (integration completeness verification) as a separate post-merge step that runs BEFORE E25/E26.
+
+          **File to modify**: `implementations/claude-code/prompts/saw-skill.md`
+
+          **Changes required**:
+
+          Find step 8a (around line 259) which currently reads:
+          ```
+          8a. **E25/E26/E35: Integration gap detection (post-merge).** After wave finalization succeeds, read `${CLAUDE_SKILL_DIR}/references/failure-routing.md` § E25/E26/E35 for the full integration validation and wiring flow.
+          ```
+
+          Replace with two steps (8a for E42, 8b for E25/E26):
+          ```markdown
+          8a. **E42 Layer 2: Integration Completeness Verification (post-merge).** If the IMPL doc contains an `integration_map` section, run:
+             ```bash
+             sawtools integration-check "<impl-doc-path>" --severity warning
+             ```
+             Parse the JSON output. If gaps are detected, report them to the user with severity classification (critical/warning/info). Gaps are non-blocking by default (exit code 1 is informational). If `--severity critical` is passed and critical gaps exist, this becomes blocking.
+
+          8b. **E25/E26/E35: Reactive integration gap detection (post-merge).** After E42 Layer 2 completes (or if no integration_map exists), read `${CLAUDE_SKILL_DIR}/references/failure-routing.md` § E25/E26/E35 for the full integration validation and wiring flow.
+          ```
+
+          Also update step 9 reference (if needed) to point to 8b instead of 8a.
+
+          **Verification gate**:
+          ```bash
+          # Verify E42 Layer 2 step exists
+          grep -q "E42 Layer 2: Integration Completeness" implementations/claude-code/prompts/saw-skill.md
+          # Verify mentions sawtools integration-check command
+          grep -A 10 "E42 Layer 2" implementations/claude-code/prompts/saw-skill.md | grep -q "sawtools integration-check"
+          ```
+        files:
+          - protocol/execution-rules.md
+          - implementations/claude-code/prompts/saw-skill.md
+
+  - number: 2
+    agents:
+      - id: C
+        task: |
+          ## Go SDK: Integration Map Types and Parser
+
+          **Objective**: Define Go types for integration_map and implement parsing/validation logic.
+
+          **Context**: The IMPL manifest schema (pkg/protocol/types.go) needs types for the
+          integration_map section. These types support both YAML unmarshaling (from IMPL docs)
+          and JSON marshaling (for CLI/API output).
+
+          **Files to create/modify**:
+          - `pkg/protocol/integration_map.go` (NEW - types + validation)
+          - `pkg/protocol/integration_map_test.go` (NEW - tests)
+          - `pkg/protocol/types.go` (MODIFY - add IntegrationMap field to IMPLManifest)
+
+          **Types to define** (in integration_map.go):
+
+          ```go
+          package protocol
+
+          // IntegrationCallsite represents an expected callsite for an export.
+          type IntegrationCallsite struct {
+              File     string `json:"file" yaml:"file"`
+              Function string `json:"function,omitempty" yaml:"function,omitempty"`
+              Action   string `json:"action" yaml:"action"` // always "modify"
+              Wave     int    `json:"wave" yaml:"wave"`
+              Status   string `json:"status" yaml:"status"` // "existing", "todo", "planned"
+              Note     string `json:"note,omitempty" yaml:"note,omitempty"`
+          }
+
+          // IntegrationMapEntry represents one export and its expected callsites.
+          type IntegrationMapEntry struct {
+              Export         string                 `json:"export" yaml:"export"`
+              ExportLocation string                 `json:"export_location" yaml:"export_location"`
+              ExportType     string                 `json:"export_type" yaml:"export_type"`
+              Callsites      []IntegrationCallsite  `json:"callsites" yaml:"callsites"`
+          }
+
+          // IntegrationGap represents a missing integration callsite.
+          type IntegrationGap struct {
+              Export         string `json:"export" yaml:"export"`
+              ExportLocation string `json:"export_location" yaml:"export_location"`
+              ExportType     string `json:"export_type" yaml:"export_type"`
+              MissingFile    string `json:"missing_file" yaml:"missing_file"`
+              ExpectedFunc   string `json:"expected_function,omitempty" yaml:"expected_function,omitempty"`
+              Wave           int    `json:"wave" yaml:"wave"`
+              Severity       string `json:"severity" yaml:"severity"` // "critical", "warning", "info"
+              Reason         string `json:"reason" yaml:"reason"`
+          }
+
+          // IntegrationVerified represents a successfully verified callsite.
+          type IntegrationVerified struct {
+              Export   string `json:"export" yaml:"export"`
+              File     string `json:"file" yaml:"file"`
+              Function string `json:"function,omitempty" yaml:"function,omitempty"`
+              Line     int    `json:"line,omitempty" yaml:"line,omitempty"`
+          }
+
+          // IntegrationCheckResult is the result of integration_check validation.
+          type IntegrationCheckResult struct {
+              TotalExports int                    `json:"total_exports" yaml:"total_exports"`
+              TotalSites   int                    `json:"total_callsites" yaml:"total_callsites"`
+              Verified     []IntegrationVerified  `json:"verified" yaml:"verified"`
+              Gaps         []IntegrationGap       `json:"gaps" yaml:"gaps"`
+              Summary      string                 `json:"summary" yaml:"summary"`
+          }
+
+          // ValidateIntegrationMap validates integration_map entries.
+          func ValidateIntegrationMap(entries []IntegrationMapEntry) []ValidationError
+
+          // ClassifyGapSeverity classifies an integration gap by severity.
+          func ClassifyGapSeverity(export string, exportType string, status string, currentWave int, targetWave int) string
+          ```
+
+          **Add to IMPLManifest struct** (in types.go):
+          ```go
+          type IMPLManifest struct {
+              // ... existing fields ...
+              IntegrationMap []IntegrationMapEntry `json:"integration_map,omitempty" yaml:"integration_map,omitempty"`
+          }
+          ```
+
+          **Validation logic** (ValidateIntegrationMap):
+          - Check each entry for required fields (export, export_location, export_type not empty)
+          - export_type must be in allowed set (function, type, interface, middleware, constant)
+          - Each callsite must have file, action, wave, status
+          - action must be "modify"
+          - status must be in allowed set (existing, todo, planned)
+          - wave must be >= 1
+
+          **Severity classification** (ClassifyGapSeverity):
+          - critical: exportType "function" with export matching Register*|Init*|Build* AND status "todo" AND targetWave <= currentWave
+          - warning: exportType "function" with status "todo"
+          - info: exportType "type" or "interface", or status "planned"
+
+          **Tests** (in integration_map_test.go):
+
+          Table-driven tests covering:
+          1. ValidateIntegrationMap accepts valid entries
+          2. ValidateIntegrationMap rejects missing required fields
+          3. ValidateIntegrationMap rejects invalid export_type values
+          4. ValidateIntegrationMap rejects invalid status values
+          5. ValidateIntegrationMap rejects action != "modify"
+          6. ValidateIntegrationMap rejects wave < 1
+          7. ClassifyGapSeverity returns "critical" for Register*/Init*/Build* with status "todo"
+          8. ClassifyGapSeverity returns "warning" for other functions with status "todo"
+          9. ClassifyGapSeverity returns "info" for types/interfaces
+          10. YAML unmarshaling of integration_map section
+          11. JSON marshaling of IntegrationCheckResult
+
+          **Verification gate**:
+          ```bash
+          cd /Users/dayna.blackwell/code/scout-and-wave-go
+          go build ./pkg/protocol/...
+          go vet ./pkg/protocol/...
+          go test ./pkg/protocol/... -v -run TestIntegrationMap
+          go test ./pkg/protocol/... -v -run TestClassifyGapSeverity
+          go test ./pkg/protocol/... -v -run TestValidateIntegrationMap
+          ```
+        files:
+          - pkg/protocol/integration_map.go
+          - pkg/protocol/integration_map_test.go
+          - pkg/protocol/types.go
+
+  - number: 3
+    agents:
+      - id: D
+        task: |
+          ## Go SDK: sawtools integration-check Command
+
+          **Objective**: Implement CLI command for integration completeness verification.
+
+          **Context**: This command reads an IMPL doc's integration_map, searches the codebase
+          for each export's callsites, and reports gaps. Runs as a post-merge quality gate.
+
+          **Files to create**:
+          - `cmd/saw/integration_check_cmd.go` (command implementation)
+          - `cmd/saw/integration_check_cmd_test.go` (tests)
+
+          **Command structure** (in integration_check_cmd.go):
+
+          ```go
+          package main
+
+          import (
+              "github.com/blackwell-systems/scout-and-wave-go/pkg/protocol"
+              "github.com/blackwell-systems/scout-and-wave-go/pkg/engine"
+              "github.com/spf13/cobra"
+          )
+
+          var integrationCheckCmd = &cobra.Command{
+              Use:   "integration-check <impl-doc>",
+              Short: "Verify integration completeness from integration_map",
+              Long: `Read IMPL doc's integration_map and verify all expected callsites exist.
+
+          This command implements E42 Layer 2 (detective layer). Exit codes:
+            0 - All callsites verified OR only info-level gaps
+            1 - Critical or warning gaps detected
+            2 - Invalid IMPL doc or parsing error`,
+              Args: cobra.ExactArgs(1),
+              RunE: runIntegrationCheck,
+          }
+
+          var (
+              integrationCheckRepoRoot string
+              integrationCheckFormat   string
+              integrationCheckSeverity string
+          )
+
+          func init() {
+              integrationCheckCmd.Flags().StringVar(&integrationCheckRepoRoot, "repo-root", "", "Repository root (default: auto-detect)")
+              integrationCheckCmd.Flags().StringVar(&integrationCheckFormat, "format", "text", "Output format (json|text)")
+              integrationCheckCmd.Flags().StringVar(&integrationCheckSeverity, "severity", "warning", "Minimum severity to report (critical|warning|info)")
+              rootCmd.AddCommand(integrationCheckCmd)
+          }
+          ```
+
+          Implement runIntegrationCheck:
+          1. Parse IMPL manifest
+          2. Validate integration_map section (skip if empty)
+          3. Determine repo root (flag or auto-detect)
+          4. Call engine.CheckIntegration
+          5. Output result (JSON or text format)
+          6. Exit with appropriate code
+
+          **Text output format:**
+          ```
+          Integration Check: IMPL-feature-slug.yaml
+
+          Checking N exports with M expected callsites...
+
+          ✓ export1
+            ✓ file1.go:line (verified)
+            ✗ file2.go (NOT FOUND)
+            → SEVERITY: Reason
+
+          Summary: X gaps detected (Y critical, Z warning)
+          ```
+
+          **Tests** (in integration_check_cmd_test.go):
+
+          1. Command rejects missing IMPL path argument
+          2. Command exits 0 when no integration_map section exists
+          3. Command exits 2 for invalid IMPL doc
+          4. Command exits 1 when critical gaps detected
+          5. Command exits 0 when only info-level gaps exist
+          6. JSON format output is valid JSON
+          7. Text format includes indicators
+          8. --severity flag filters output correctly
+
+          Use t.TempDir() for test fixtures.
+
+          **Verification gate**:
+          ```bash
+          cd /Users/dayna.blackwell/code/scout-and-wave-go
+          go build ./cmd/saw/...
+          go vet ./cmd/saw/...
+          go test ./cmd/saw/... -v -run TestIntegrationCheck
+          ./saw integration-check --help | grep -q "integration_map"
+          ```
+        files:
+          - cmd/saw/integration_check_cmd.go
+          - cmd/saw/integration_check_cmd_test.go
+        dependencies:
+          - C
+
+      - id: E
+        task: |
+          ## Go SDK: engine.CheckIntegration Function
+
+          **Objective**: Implement SDK function for programmatic integration checking.
+
+          **Context**: The web API and custom orchestrators need to run integration checks
+          without shelling out to the CLI. This task creates an engine-level function.
+
+          **Files to create**:
+          - `pkg/engine/integration_check.go` (implementation)
+          - `pkg/engine/integration_check_test.go` (tests)
+
+          **Function implementation** (in integration_check.go):
+
+          ```go
+          package engine
+
+          import (
+              "github.com/blackwell-systems/scout-and-wave-go/pkg/protocol"
+          )
+
+          // CheckIntegration validates integration_map entries against the codebase.
+          func CheckIntegration(implPath string, repoRoot string) (*protocol.IntegrationCheckResult, error) {
+              // 1. Parse IMPL manifest
+              // 2. If no integration_map, return empty result
+              // 3. Validate integration_map structure
+              // 4. Initialize result
+              // 5. For each export, verify callsites (grep for references)
+              // 6. Classify gaps by severity
+              // 7. Generate summary
+              return result, nil
+          }
+
+          // Helper: grepForExport searches file for export reference
+          func grepForExport(filePath string, exportName string, functionContext string) (bool, int)
+
+          // Helper: classifySeverity determines gap severity
+          func classifySeverity(exportName string, exportType string, status string, currentWave int, targetWave int) string
+
+          // Helper: countBySeverity counts gaps by severity
+          func countBySeverity(gaps []protocol.IntegrationGap, severity string) int
+          ```
+
+          **Algorithm**:
+          - For each integration_map entry:
+            - For each callsite:
+              - Check if file exists (skip if status "planned" and file missing)
+              - grep file for export name
+              - If found: add to Verified list
+              - If not found and status "todo"/"existing": add to Gaps list with severity
+
+          **Severity logic** (use protocol.ClassifyGapSeverity):
+          - Critical: Register*/Init*/Build* functions, status "todo", targetWave <= currentWave
+          - Warning: Other functions, status "todo"
+          - Info: Types/interfaces or status "planned"
+
+          **Tests** (in integration_check_test.go):
+
+          1. CheckIntegration with empty integration_map returns empty result
+          2. CheckIntegration with invalid integration_map returns error
+          3. CheckIntegration verifies existing callsites correctly
+          4. CheckIntegration detects missing callsites
+          5. CheckIntegration handles nonexistent files
+          6. CheckIntegration skips "planned" status for future waves
+          7. classifySeverity returns correct severity levels
+          8. grepForExport finds export references
+          9. grepForExport returns false when export not found
+          10. CurrentWave calculation from manifest
+
+          Use t.TempDir() with test Go files containing/lacking export references.
+
+          **Verification gate**:
+          ```bash
+          cd /Users/dayna.blackwell/code/scout-and-wave-go
+          go build ./pkg/engine/...
+          go vet ./pkg/engine/...
+          go test ./pkg/engine/... -v -run TestCheckIntegration
+          go test ./pkg/engine/... -v -run TestGrepForExport
+          ```
+        files:
+          - pkg/engine/integration_check.go
+          - pkg/engine/integration_check_test.go
+        dependencies:
+          - C
+
+  - number: 4
+    agents:
+      - id: F
+        task: |
+          ## Web API: Wire Integration Check into Wave Completion
+
+          **Objective**: Add integration check call to wave completion handler in web app.
+
+          **Context**: When a wave completes and merges, the web app's completion handler
+          should run the integration check and report results via SSE. This integrates E42
+          Layer 2 into the web UI workflow.
+
+          **File to modify**: `pkg/api/wave_completion.go` (in scout-and-wave-web repo)
+
+          **Changes required**:
+
+          1. **Import engine package**:
+             ```go
+             import (
+                 "github.com/blackwell-systems/scout-and-wave-go/pkg/engine"
+                 "github.com/blackwell-systems/scout-and-wave-go/pkg/protocol"
+             )
+             ```
+
+          2. **Add integration check call** in wave completion handler (after quality gates pass):
+             ```go
+             // After quality gates pass, before final merge
+             // Run integration check (E42 Layer 2)
+             sseWriter.WriteEvent("integration_check", map[string]interface{}{
+                 "status": "running",
+                 "message": "Verifying integration completeness...",
+             })
+
+             result, err := engine.CheckIntegration(implPath, repoRoot)
+             if err != nil {
+                 sseWriter.WriteEvent("integration_check", map[string]interface{}{
+                     "status": "error",
+                     "error": err.Error(),
+                 })
+                 log.Printf("Integration check failed: %v", err)
+             } else {
+                 criticalCount := 0
+                 warningCount := 0
+                 for _, gap := range result.Gaps {
+                     if gap.Severity == "critical" {
+                         criticalCount++
+                     } else if gap.Severity == "warning" {
+                         warningCount++
+                     }
+                 }
+
+                 status := "pass"
+                 if criticalCount > 0 {
+                     status = "critical_gaps"
+                 } else if warningCount > 0 {
+                     status = "warning_gaps"
+                 }
+
+                 sseWriter.WriteEvent("integration_check", map[string]interface{}{
+                     "status": status,
+                     "total_exports": result.TotalExports,
+                     "total_callsites": result.TotalSites,
+                     "verified_count": len(result.Verified),
+                     "gap_count": len(result.Gaps),
+                     "critical_count": criticalCount,
+                     "warning_count": warningCount,
+                     "gaps": result.Gaps,
+                     "summary": result.Summary,
+                 })
+             }
+             ```
+
+          **Non-fatal behavior**: Integration check errors do not block merge. Log error and continue.
+
+          **Testing**: Mock engine.CheckIntegration with various result scenarios.
+
+          **Verification gate**:
+          ```bash
+          cd /Users/dayna.blackwell/code/scout-and-wave-web
+          go build ./pkg/api/...
+          go vet ./pkg/api/...
+          go test ./pkg/api/... -v -run TestWaveCompletion
+          grep -q "integration_check" pkg/api/wave_completion.go
+          ```
+        files:
+          - pkg/api/wave_completion.go
+        dependencies:
+          - E
+
+      - id: G
+        task: |
+          ## Documentation: Update CHANGELOG
+
+          **Objective**: Document the integration completeness verification system in CHANGELOG.md.
+
+          **Context**: The CHANGELOG tracks protocol and implementation changes.
+
+          **File to modify**: `CHANGELOG.md` (in scout-and-wave repo)
+
+          **Changes required**:
+
+          Add entry under "## Unreleased" section:
+
+          ```markdown
+          ## v0.64.0 (Unreleased)
+
+          ### Added
+
+          #### E42: Integration Completeness Verification (Dual-Layer Defense)
+
+          Introduces a two-layer system to prevent the "built but not hooked up" pattern where
+          features are implemented with passing tests but critical integration points are missed.
+
+          **Layer 1: Scout-Phase Integration Mapping (Preventative)**
+          - Scout agent now produces `integration_map` section in IMPL docs
+          - Maps exports (functions, types, middleware) to expected callsites
+          - Identifies parallel patterns (e.g., if API backend uses X, check Bedrock/OpenAI)
+          - Detection heuristics for Register*, Init*, Build* functions
+          - Status tracking: "existing", "todo", "planned"
+
+          **Layer 2: Post-Merge Integration Gate (Detective)**
+          - New `sawtools integration-check` command verifies callsites exist
+          - New `engine.CheckIntegration()` SDK function for programmatic access
+          - Severity classification: critical, warning, info
+          - Non-blocking by default (warning mode)
+          - Web app integration: SSE events for UI feedback
+
+          **Files Changed:**
+          - Protocol: `protocol/execution-rules.md` (added E42)
+          - Scout prompt: `implementations/claude-code/prompts/agents/scout.md` (integration analysis)
+          - Go SDK: `pkg/protocol/integration_map.go` (types), `pkg/engine/integration_check.go` (logic)
+          - CLI: `cmd/saw/integration_check_cmd.go` (command)
+          - Web API: `pkg/api/wave_completion.go` (SSE integration)
+
+          **Relationship to existing features:**
+          - Complements E25/E26 (reactive gap detection) with preventative planning
+          - Works alongside E27 (planned integration waves)
+          - integration_map is optional (only include if exports require tracking)
+
+          **Example use case:** Dedup cache middleware was implemented in API backend but not
+          added to Bedrock/OpenAI backends. integration_map would have flagged this at Scout
+          phase and verified after Wave 2 merge.
+          ```
+
+          **Verification gate**:
+          ```bash
+          grep -q "E42.*Integration Completeness" CHANGELOG.md
+          grep -A 30 "E42" CHANGELOG.md | grep -q "Layer 1.*Preventative"
+          grep -A 30 "E42" CHANGELOG.md | grep -q "Layer 2.*Detective"
+          ```
+        files:
+          - CHANGELOG.md
+
+quality_gates:
+  level: standard
+  gates:
+    - type: custom
+      command: echo "docs-only wave, no build required"
+      required: false
+      description: Wave 1 is documentation-only
+    - type: build
+      command: go build ./...
+      required: true
+      description: Wave 2 Go SDK build
+    - type: lint
+      command: go vet ./...
+      required: true
+      description: Wave 2 Go SDK lint
+    - type: test
+      command: go test ./pkg/protocol/... -v
+      required: true
+      description: Wave 2 Go SDK tests
+    - type: build
+      command: go build ./...
+      required: true
+      description: Wave 3 Go SDK build
+    - type: lint
+      command: go vet ./...
+      required: true
+      description: Wave 3 Go SDK lint
+    - type: test
+      command: go test ./pkg/engine/... ./cmd/saw/... -v
+      required: true
+      description: Wave 3 Go SDK tests
+    - type: build
+      command: go build ./...
+      required: true
+      description: Wave 4 web app build
+    - type: lint
+      command: go vet ./...
+      required: true
+      description: Wave 4 web app lint
+    - type: test
+      command: go test ./pkg/api/... -v
+      required: true
+      description: Wave 4 web app tests
+
+scaffolds: []
+
+integration_connectors: []
+
+pre_mortem:
+  overall_risk: medium
+  rows:
+    - scenario: Scout prompt integration analysis adds too much complexity, agents struggle to produce correct integration_map
+      likelihood: medium
+      impact: medium
+      mitigation: Make integration_map optional. Provide clear examples in Scout prompt. Start with simple heuristics (Register*, Init*, Build*) rather than complex pattern matching.
+
+    - scenario: grep-based export detection misses callsites (dynamic calls, reflection, indirect references)
+      likelihood: high
+      impact: low
+      mitigation: integration_check is detective layer (catches obvious gaps). E25/E26 provides reactive detection for complex cases. Mark integration_check as non-blocking by default. Use AST parsing for Go projects (future enhancement).
+
+    - scenario: integration_map bloats IMPL docs for features with many exports
+      likelihood: medium
+      impact: low
+      mitigation: Scout guidance emphasizes selectivity (Register*, Init*, Build* functions, not every exported type). If integration_map exceeds 50 entries, scout should flag as design smell.
+
+    - scenario: False positives from integration_check when export is intentionally unused (defensive exports for future use)
+      likelihood: medium
+      impact: low
+      mitigation: Severity classification handles this - mark as "info" level. Allow status "planned" for future waves. integration_check is non-blocking by default, so false positives don't break builds.
+
+    - scenario: Cross-repo integration_map entries hard to track (export in scout-and-wave-go, callsite in scout-and-wave-web)
+      likelihood: low
+      impact: medium
+      mitigation: integration_map callsites already include file paths. Multi-repo IMPL docs already have repo field in file_ownership. integration-check command can handle multiple repo roots via --repo-root flag or auto-detection.
+
+    - scenario: Web app SSE integration fails silently if engine.CheckIntegration errors
+      likelihood: low
+      impact: medium
+      mitigation: Agent F task explicitly makes integration_check non-fatal (log error, emit SSE error event, continue to merge). This preserves existing behavior while adding opt-in validation.
+
+state: COMPLETE

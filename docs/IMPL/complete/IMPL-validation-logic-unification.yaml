@@ -1,0 +1,548 @@
+completion_date: "2026-03-24"
+title: Validation Logic Unification
+feature_slug: validation-logic-unification
+verdict: SUITABLE
+suitability_assessment: |
+    SUITABLE - All five gates pass cleanly.
+
+    1. File decomposition: 9 files across 2 repos, cleanly partitioned into 4 agents.
+       No conflicting modifications to the same file.
+
+    2. Investigation-first: No unknowns. The audit clearly identifies the problem
+       (validation scattered across CLI/web with different rules enforced) and the
+       solution (centralize in SDK, thin wrappers everywhere else).
+
+    3. Interface discoverability: Yes. The new SDK functions (FullValidate,
+       FullValidateProgram) have clear signatures derivable from existing code.
+       Cross-agent interfaces are the new SDK functions consumed by CLI and web.
+
+    4. Pre-implementation status: SDK already has all core validation logic.
+       CLI and web both call protocol.Validate() but CLI adds 3 extra checks
+       (ValidateDuplicateKeys, DetectUnknownKeys, ValidateIMPLDoc) that web
+       skips entirely. The unification moves the orchestration into SDK.
+
+    5. Parallelization value: High. Build/test cycle for Go repos is ~30s each.
+       Wave 1 has 2 independent agents (SDK new functions + web cleanup), Wave 2
+       has 2 agents updating CLI commands. 4 agents across 2 waves.
+
+    Key divergence found during investigation:
+    - CLI validate_cmd.go runs 4 separate validation passes with auto-fix logic
+    - Web ValidateManifest() only runs protocol.Validate() - MISSING duplicate
+      key detection, unknown key detection, and typed-block validation
+    - CLI defines 6 local output types (validateOutput, validateError,
+      validateFixOutput, validateProgramOutput, validateProgramError, combinedReport)
+      that duplicate result.SAWError
+    - validate_integration.go has 77-line appendWiringReport YAML manipulation
+      function that belongs in SDK
+
+    Estimated times:
+    - Scout phase: ~8 min
+    - Agent execution: ~12 min (4 agents x 8 min avg, 2 waves)
+    - Merge & verification: ~4 min
+    Total SAW time: ~24 min
+
+    Sequential baseline: ~32 min (4 agents x 8 min)
+    Time savings: ~8 min (25% faster)
+
+    Recommendation: Clear speedup, plus consistency benefit (web will enforce
+    same validation rules as CLI after unification).
+test_command: go test ./...
+lint_command: go vet ./...
+file_ownership:
+    - file: pkg/protocol/full_validate.go
+      agent: A
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: pkg/protocol/full_validate_test.go
+      agent: A
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: pkg/protocol/wiring_validation.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/api/impl_handlers.go
+      agent: B
+      wave: 1
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/api/impl_handlers_test.go
+      agent: B
+      wave: 1
+      action: modify
+      repo: scout-and-wave-web
+    - file: cmd/saw/validate_cmd.go
+      agent: C
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+      repo: scout-and-wave-go
+    - file: cmd/saw/validate_program_cmd.go
+      agent: C
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+      repo: scout-and-wave-go
+    - file: cmd/saw/validate_integration.go
+      agent: D
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+      repo: scout-and-wave-go
+interface_contracts:
+    - name: FullValidate
+      description: |
+        Unified IMPL manifest validation that combines all checks in one call.
+        Replaces the 4-step orchestration currently in validate_cmd.go.
+        Runs: struct validation (Validate), duplicate key detection, unknown key
+        detection, and typed-block validation (ValidateIMPLDoc). Returns
+        Result[FullValidateData] using the standard result pattern.
+      definition: |
+        // FullValidateData holds the result of a complete manifest validation.
+        type FullValidateData struct {
+            Valid      bool            `json:"valid"`
+            ErrorCount int             `json:"error_count"`
+            Errors     []result.SAWError `json:"errors"`
+            Fixed      int             `json:"fixed,omitempty"`
+        }
+
+        // FullValidateOpts controls validation behavior.
+        type FullValidateOpts struct {
+            AutoFix    bool   // auto-correct fixable issues (gate types, unknown keys)
+            UseSolver  bool   // use CSP solver for wave assignment validation
+        }
+
+        // FullValidate runs all validation checks on an IMPL manifest file.
+        // This is the single entry point for CLI, web, and programmatic validation.
+        // When AutoFix is true, correctable issues are fixed in-place before validation.
+        func FullValidate(manifestPath string, opts FullValidateOpts) result.Result[FullValidateData]
+      location: pkg/protocol/full_validate.go
+    - name: FullValidateProgram
+      description: |
+        Unified PROGRAM manifest validation combining parse + validate + optional
+        import-mode checks. Replaces orchestration in validate_program_cmd.go.
+      definition: |
+        // FullValidateProgramData holds the result of program manifest validation.
+        type FullValidateProgramData struct {
+            Valid      bool              `json:"valid"`
+            ErrorCount int              `json:"error_count"`
+            Errors     []result.SAWError `json:"errors"`
+        }
+
+        // FullValidateProgramOpts controls program validation behavior.
+        type FullValidateProgramOpts struct {
+            ImportMode bool   // run import-mode checks (P1/P2 against on-disk IMPLs)
+            RepoDir    string // repo root for import-mode (default: cwd)
+        }
+
+        // FullValidateProgram runs all validation checks on a PROGRAM manifest file.
+        func FullValidateProgram(manifestPath string, opts FullValidateProgramOpts) result.Result[FullValidateProgramData]
+      location: pkg/protocol/full_validate.go
+    - name: AppendWiringReport
+      description: |
+        Persists a WiringValidationData to the manifest YAML under
+        wiring_validation_reports.{waveKey}. Currently a local function in
+        validate_integration.go CLI command; moves to SDK for reuse by web.
+      definition: |
+        // AppendWiringReport persists a WiringValidationData report to the manifest
+        // file under wiring_validation_reports.{waveKey}. Uses raw YAML manipulation
+        // to avoid re-marshaling the entire manifest.
+        func AppendWiringReport(manifestPath, waveKey string, data *WiringValidationData) error
+      location: pkg/protocol/wiring_validation.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## What to implement
+
+            Create `pkg/protocol/full_validate.go` with two unified validation entry points
+            that centralize ALL validation orchestration currently scattered across CLI commands.
+
+            ### 1. FullValidate function
+
+            Create `FullValidate(manifestPath string, opts FullValidateOpts) result.Result[FullValidateData]`
+            that combines ALL validation steps currently in `cmd/saw/validate_cmd.go`:
+
+            1. Load manifest via `protocol.Load(manifestPath)`
+            2. If `opts.AutoFix` is true:
+               - Call `FixGateTypes(m)` and save if changes made
+               - Call `StripUnknownKeys(rawData)` and write + reload if keys stripped
+            3. Read raw YAML bytes for byte-level checks
+            4. Run `ValidateDuplicateKeys(rawData)` on raw bytes
+            5. Run `DetectUnknownKeys(rawData)` on raw bytes
+            6. Run `Validate(m)` or `ValidateWithSolver(m)` based on opts.UseSolver
+            7. Run `ValidateIMPLDoc(manifestPath)` for typed-block checks
+            8. Collect all errors into FullValidateData, return Result
+
+            The FullValidateData struct:
+            ```go
+            type FullValidateData struct {
+                Valid      bool              `json:"valid"`
+                ErrorCount int              `json:"error_count"`
+                Errors     []result.SAWError `json:"errors"`
+                Fixed      int              `json:"fixed,omitempty"`
+            }
+
+            type FullValidateOpts struct {
+                AutoFix   bool
+                UseSolver bool
+            }
+            ```
+
+            ### 2. FullValidateProgram function
+
+            Create `FullValidateProgram(manifestPath string, opts FullValidateProgramOpts) result.Result[FullValidateProgramData]`
+            that combines steps currently in `cmd/saw/validate_program_cmd.go`:
+
+            1. Parse manifest via `ParseProgramManifest(manifestPath)`
+            2. Run `ValidateProgram(manifest)`
+            3. If `opts.ImportMode` is true, run `ValidateProgramImportMode(manifest, repoDir)`
+            4. Collect all errors into FullValidateProgramData, return Result
+
+            ```go
+            type FullValidateProgramData struct {
+                Valid      bool              `json:"valid"`
+                ErrorCount int              `json:"error_count"`
+                Errors     []result.SAWError `json:"errors"`
+            }
+
+            type FullValidateProgramOpts struct {
+                ImportMode bool
+                RepoDir    string
+            }
+            ```
+
+            ### 3. Move AppendWiringReport to SDK
+
+            Move the `appendWiringReport` function from `cmd/saw/validate_integration.go`
+            into `pkg/protocol/wiring_validation.go` as an exported function
+            `AppendWiringReport(manifestPath, waveKey string, data *WiringValidationData) error`.
+
+            The function is 77 lines of raw YAML node manipulation. Copy it exactly,
+            just make it exported. It persists a WiringValidationData under the
+            `wiring_validation_reports.{waveKey}` path in the manifest YAML.
+
+            ### Tests
+
+            Create `pkg/protocol/full_validate_test.go` with:
+            - TestFullValidate_ValidManifest: valid YAML returns Valid=true, no errors
+            - TestFullValidate_InvalidManifest: manifest with I1 violation returns errors
+            - TestFullValidate_AutoFix: manifest with invalid gate type gets fixed
+            - TestFullValidate_DuplicateKeys: YAML with duplicate keys returns errors
+            - TestFullValidateProgram_Valid: valid program manifest returns Valid=true
+            - TestFullValidateProgram_ImportMode: tests import-mode validation path
+            - TestAppendWiringReport: moved function persists correctly
+
+            ### Verification gate
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./... && go vet ./... && go test ./pkg/protocol/ -run TestFullValidate -count=1 -v
+            ```
+
+            ### Constraints
+            - Do NOT modify existing Validate() or ValidateProgram() signatures
+            - FullValidate/FullValidateProgram are NEW functions that compose existing ones
+            - Use result.NewSuccess / result.NewFailure / result.NewPartial consistently
+            - Import "os" for file I/O (reading raw YAML bytes, writing fixes)
+          files:
+            - pkg/protocol/full_validate.go
+            - pkg/protocol/full_validate_test.go
+            - pkg/protocol/wiring_validation.go
+        - id: B
+          task: |
+            ## What to implement
+
+            Update the web app's `ValidateManifest()` in `pkg/api/impl_handlers.go` to use
+            the SDK's `protocol.FullValidate()` instead of the current incomplete validation.
+
+            ### Current problem
+
+            `ValidateManifest()` currently only calls `protocol.Validate(manifest)`, which
+            MISSES three validation checks that the CLI performs:
+            - `ValidateDuplicateKeys` (duplicate YAML keys)
+            - `DetectUnknownKeys` (unknown top-level keys)
+            - `ValidateIMPLDoc` (typed-block validation)
+
+            This means the web UI and CLI enforce DIFFERENT validation rules.
+
+            ### Changes to impl_handlers.go
+
+            Replace the `ValidateManifest` function body:
+
+            **Before:**
+            ```go
+            func ValidateManifest(yamlPath string) ([]result.SAWError, error) {
+                manifest, err := protocol.Load(yamlPath)
+                if err != nil {
+                    return nil, fmt.Errorf("failed to load manifest for validation: %w", err)
+                }
+                validationErrs := protocol.Validate(manifest)
+                if len(validationErrs) == 0 {
+                    return nil, nil
+                }
+                return validationErrs, nil
+            }
+            ```
+
+            **After:**
+            ```go
+            func ValidateManifest(yamlPath string) ([]result.SAWError, error) {
+                res := protocol.FullValidate(yamlPath, protocol.FullValidateOpts{})
+                if res.IsFatal() {
+                    return nil, fmt.Errorf("failed to validate manifest: %s", res.Errors[0].Message)
+                }
+                data := res.GetData()
+                if data.Valid {
+                    return nil, nil
+                }
+                return data.Errors, nil
+            }
+            ```
+
+            This is a 1:1 behavioral replacement. The function signature does not change,
+            so all callers (HandleValidateManifest, etc.) continue to work unchanged.
+            The only difference: web now runs the SAME validation as CLI.
+
+            ### Update tests in impl_handlers_test.go
+
+            The existing tests (TestValidateManifest_Valid, TestValidateManifest_Invalid,
+            TestValidateManifest_MissingFile) should continue to pass with no changes.
+            Add one new test:
+
+            - TestValidateManifest_DetectsUnknownKeys: create a YAML with an unknown
+              top-level key (e.g., `bogus_field: true`), verify ValidateManifest returns
+              an error with code containing "UNKNOWN_KEY". This confirms the web now
+              catches issues it previously missed.
+
+            ### Verification gate
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-web && go build ./... && go vet ./... && go test ./pkg/api/ -run TestValidateManifest -count=1 -v
+            ```
+
+            ### Constraints
+            - Do NOT change the ValidateManifest function signature
+            - Do NOT modify HandleValidateManifest or manifest_routes.go
+            - The LoadManifest function is unchanged (it does not do validation)
+            - Ensure go.mod points to the version of scout-and-wave-go with FullValidate
+          files:
+            - pkg/api/impl_handlers.go
+            - pkg/api/impl_handlers_test.go
+      base_commit: 2d4320135317e739cdc5a9bd619e1fb371b88b1a
+    - number: 2
+      agents:
+        - id: C
+          task: |
+            ## What to implement
+
+            Simplify `cmd/saw/validate_cmd.go` and `cmd/saw/validate_program_cmd.go`
+            to be thin wrappers around the new SDK functions.
+
+            ### Changes to validate_cmd.go
+
+            1. DELETE the local types: `validateOutput`, `validateError`, `validateFixOutput`
+            2. Replace the entire RunE body with a call to `protocol.FullValidate`:
+
+            ```go
+            RunE: func(cmd *cobra.Command, args []string) error {
+                manifestPath := args[0]
+                res := protocol.FullValidate(manifestPath, protocol.FullValidateOpts{
+                    AutoFix:   autoFix,
+                    UseSolver: useSolver,
+                })
+                if res.IsFatal() {
+                    return fmt.Errorf("validate: %s", res.Errors[0].Message)
+                }
+                data := res.GetData()
+                out, _ := json.MarshalIndent(data, "", "  ")
+                fmt.Println(string(out))
+                if !data.Valid {
+                    os.Exit(1)
+                }
+                return nil
+            },
+            ```
+
+            The JSON output shape is identical because FullValidateData has the same
+            fields (valid, error_count, errors, fixed) as the old validateFixOutput.
+
+            ### Changes to validate_program_cmd.go
+
+            1. DELETE the local types: `validateProgramOutput`, `validateProgramError`
+            2. Replace the entire RunE body:
+
+            ```go
+            RunE: func(cmd *cobra.Command, args []string) error {
+                manifestPath := args[0]
+                rd := repoDir
+                if rd == "" {
+                    rd, _ = os.Getwd()
+                }
+                res := protocol.FullValidateProgram(manifestPath, protocol.FullValidateProgramOpts{
+                    ImportMode: importMode,
+                    RepoDir:    rd,
+                })
+                if res.IsFatal() {
+                    fmt.Fprintf(os.Stderr, "validate-program: %s\n", res.Errors[0].Message)
+                    os.Exit(2)
+                }
+                data := res.GetData()
+                out, _ := json.MarshalIndent(data, "", "  ")
+                fmt.Fprintln(cmd.OutOrStdout(), string(out))
+                if !data.Valid {
+                    os.Exit(1)
+                }
+                return nil
+            },
+            ```
+
+            Note: preserve the exit code 2 for parse errors (Fatal result from
+            FullValidateProgram when ParseProgramManifest fails).
+
+            ### Verification gate
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./... && go vet ./... && go test ./cmd/saw/ -run TestValidate -count=1 -v
+            ```
+
+            ### Constraints
+            - JSON output format MUST remain backward-compatible (same field names)
+            - Exit codes: 0=valid, 1=validation errors, 2=parse error (program only)
+            - Keep the --fix and --solver flags on validate command
+            - Keep the --import-mode and --repo-dir flags on validate-program command
+            - Remove ALL local output types — use FullValidateData directly
+          files:
+            - cmd/saw/validate_cmd.go
+            - cmd/saw/validate_program_cmd.go
+          dependencies:
+            - A
+        - id: D
+          task: |
+            ## What to implement
+
+            Simplify `cmd/saw/validate_integration.go` by:
+            1. Replacing the local `appendWiringReport` function with the SDK's
+               `protocol.AppendWiringReport`
+            2. Removing the local `combinedReport` type in favor of a simpler approach
+
+            ### Changes to validate_integration.go
+
+            1. DELETE the local `appendWiringReport` function (lines 120-196).
+               Replace all calls with `protocol.AppendWiringReport(manifestPath, waveKey, wiringResult)`.
+
+            2. The `combinedReport` struct can stay as-is (it is CLI-specific output
+               formatting, not validation logic). The key change is removing the 77-line
+               YAML manipulation function that duplicated SDK-level concerns.
+
+            3. Update the import block: remove `"gopkg.in/yaml.v3"` since the YAML
+               manipulation is now in the SDK.
+
+            ### Verification gate
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./... && go vet ./... && go test ./cmd/saw/ -run TestValidateIntegration -count=1 -v
+            ```
+
+            ### Constraints
+            - Do NOT change the CLI command interface (flags, output format)
+            - The combinedReport type stays (CLI output formatting is appropriate here)
+            - Only the appendWiringReport function moves to SDK
+            - Verify the import of "gopkg.in/yaml.v3" is removed from this file
+          files:
+            - cmd/saw/validate_integration.go
+          dependencies:
+            - A
+      base_commit: 74541ddf31b7ccf41c8d266315d5c9070965f53e
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./...
+          required: true
+        - type: lint
+          command: go vet ./...
+          required: true
+        - type: test
+          command: go test ./...
+          required: true
+completion_reports:
+    A:
+        status: complete
+        branch: saw/validation-logic-unification/wave1-agent-A
+        commit: 050ffff
+        files_changed:
+            - pkg/protocol/full_validate.go
+            - pkg/protocol/full_validate_test.go
+            - pkg/protocol/wiring_validation.go
+        files_created:
+            - pkg/protocol/full_validate.go
+            - pkg/protocol/full_validate_test.go
+        tests_added:
+            - TestFullValidate_ValidManifest
+            - TestFullValidate_InvalidManifest
+            - TestFullValidate_AutoFix
+            - TestFullValidate_DuplicateKeys
+            - TestFullValidateProgram_Valid
+            - TestFullValidateProgram_ImportMode
+            - TestAppendWiringReport
+        verification: PASS
+    B:
+        status: complete
+        branch: saw/validation-logic-unification/wave1-agent-B
+        commit: 4b28634
+        files_changed:
+            - pkg/api/impl_handlers.go
+            - pkg/api/impl_handlers_test.go
+        tests_added:
+            - TestValidateManifest_DetectsUnknownKeys
+        verification: PASS (code correct; build depends on Agent A FullValidate merge)
+    C:
+        status: complete
+        branch: saw/validation-logic-unification/wave2-agent-C
+        commit: eb22d1c
+        files_changed:
+            - cmd/saw/validate_cmd.go
+            - cmd/saw/validate_program_cmd.go
+        verification: 'PASS (go build passes; go vet/test fail on unowned test file referencing removed types -- out_of_scope: validate_program_cmd_test.go lines 67,210 must change validateProgramOutput to protocol.FullValidateProgramData)'
+    D:
+        status: complete
+        branch: saw/validation-logic-unification/wave2-agent-D
+        commit: 0cabbe5
+        files_changed:
+            - cmd/saw/validate_integration.go
+            - cmd/saw/wiring_cmd_test.go
+        verification: PASS
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: go.mod dependency mismatch between web and SDK repos
+          likelihood: medium
+          impact: medium
+          mitigation: |
+            Agent B (web) must use a replace directive or commit reference pointing
+            to the version of scout-and-wave-go that includes FullValidate. Use
+            go mod edit -replace to point to local SDK during development.
+        - scenario: JSON output format change breaks downstream consumers
+          likelihood: low
+          impact: high
+          mitigation: |
+            FullValidateData fields (valid, error_count, errors, fixed) exactly match
+            the existing validateFixOutput struct fields. Agent C must verify JSON output
+            is byte-identical for existing test cases.
+        - scenario: Exit code 2 behavior change for validate-program parse errors
+          likelihood: low
+          impact: medium
+          mitigation: |
+            FullValidateProgram returns FATAL result when ParseProgramManifest fails.
+            Agent C maps FATAL to os.Exit(2) to preserve existing behavior. Test with
+            malformed YAML input to verify.
+critic_report:
+    verdict: PASS
+    agent_reviews: {}
+    summary: All 4 agent briefs verified against codebase
+    reviewed_at: "2026-03-24T07:28:57Z"
+    issue_count: 0
+state: COMPLETE

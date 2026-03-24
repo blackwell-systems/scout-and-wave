@@ -1,0 +1,550 @@
+completion_date: "2026-03-23"
+title: Program Worktree Management
+feature_slug: program-worktree-management
+verdict: SUITABLE_WITH_CAVEATS
+suitability_assessment: |
+    Pre-implementation status check (4 capabilities):
+
+    1. create-program-worktrees CLI command — TODO.
+       pkg/protocol/program_worktree.go has the CreateProgramWorktrees() engine function
+       fully implemented with tests. The CLI command (cmd/saw/create_program_worktrees_cmd.go)
+       does NOT exist and is NOT registered in main.go. The command is the missing piece.
+
+    2. prepare-wave --merge-target flag — PARTIAL.
+       The --merge-target flag exists on newPrepareWaveCmd() (line 545 of prepare_wave.go).
+       It is wired to checkout the IMPL branch before baseline quality gates (Step 0b2a),
+       which ensures worktrees branch from the correct base. However, the merge target is
+       NOT threaded into the agent brief content or the AgentBriefInfo struct, so agents
+       cannot see which branch to merge into. This gap must be addressed.
+
+    3. finalize-wave --merge-target flag — DONE.
+       The --merge-target flag exists and is threaded to MergeAgents() (line 364).
+       TestFinalizeWave_MergeTargetFlag and TestPrepareWave_MergeTargetFlag pass.
+       No work needed.
+
+    4. finalize-tier command — DONE.
+       Both FinalizeTier() (pkg/protocol/program_tier_finalize.go) and
+       newFinalizeTierCmd() (cmd/saw/finalize_tier_cmd.go) are implemented and registered
+       in main.go (line 79). TestFinalizeTierCmd_* tests pass. No work needed.
+
+    Parallelization assessment: 2 independent tasks with disjoint file ownership.
+    - Agent A: new file cmd/saw/create_program_worktrees_cmd.go + main.go registration
+    - Agent B: prepare_wave.go brief-threading enhancement + test additions
+
+    Wave structure: single wave (agents independent), followed by one integration step
+    for main.go registration that can be absorbed into Agent A's scope.
+
+    Estimated times:
+    - Scout phase: ~10 min
+    - Agent execution: ~15 min (2 agents x ~7-8 min avg, parallel)
+    - Merge & verification: ~5 min
+    Total SAW time: ~30 min
+
+    Sequential baseline: ~20 min (2 tasks x ~10 min sequential)
+    Time savings: marginal speed gain; primary value is interface contract clarity and
+    audit trail. Proceeding as SUITABLE_WITH_CAVEATS (coordination value over speed).
+
+    Caveat: Agent B touches prepare_wave.go (large file, 570 lines). Care required to
+    inject the merge-target section into the brief template without breaking existing
+    brief structure or test coverage.
+test_command: go test ./...
+lint_command: go vet ./...
+file_ownership:
+    - file: cmd/saw/create_program_worktrees_cmd.go
+      agent: A
+      wave: 1
+      action: new
+    - file: cmd/saw/main.go
+      agent: A
+      wave: 1
+      action: modify
+    - file: cmd/saw/prepare_wave.go
+      agent: B
+      wave: 1
+      action: modify
+    - file: cmd/saw/prepare_wave_test.go
+      agent: B
+      wave: 1
+      action: modify
+interface_contracts:
+    - name: newCreateProgramWorktreesCmd
+      description: |
+        Cobra command constructor for create-program-worktrees. Wraps
+        protocol.CreateProgramWorktrees() and outputs JSON to stdout.
+      definition: |
+        func newCreateProgramWorktreesCmd() *cobra.Command
+
+        Flags:
+          --tier int          Tier number (required)
+          --repo-dir string   Repository root directory (persistent flag from root.go)
+
+        Arguments:
+          <program-manifest>  Path to PROGRAM manifest YAML (required, ExactArgs(1))
+
+        Output (stdout): JSON-encoded protocol.CreateProgramWorktreesData
+        Exit codes: 0 = success, 1 = failure, 2 = parse/validation error
+
+        Uses: protocol.CreateProgramWorktrees(manifestPath, tierNum, repoDir)
+      location: cmd/saw/create_program_worktrees_cmd.go
+    - name: PrepareWave_MergeTargetBriefSection
+      description: |
+        When --merge-target is non-empty, include a "## Merge Target" section in
+        the agent brief so agents know to merge their work to the IMPL branch
+        rather than HEAD. This section is injected after the Task section and
+        before Interface Contracts.
+      definition: |
+        // Brief template change: inject mergeTargetSection between agentTask and contractsSection.
+        // mergeTargetSection is built from mergeTarget string (non-empty only).
+        //
+        // Template addition in prepare_wave.go (approximate line 447):
+        //
+        //   var mergeTargetSection string
+        //   if mergeTarget != "" {
+        //       mergeTargetSection = fmt.Sprintf(
+        //           "\n\n## Merge Target\n\n**Merge your branch to:** `%s`\n"+
+        //           "Do NOT merge to HEAD or main. All commits must land on this IMPL branch.\n",
+        //           mergeTarget,
+        //       )
+        //   }
+        //
+        // The mergeTargetSection is then inserted as an additional %s argument
+        // between agentTask and contractsSection in the brief Sprintf call.
+
+        // AgentBriefInfo: add MergeTarget field for structured output
+        type AgentBriefInfo struct {
+            Agent       string `json:"agent"`
+            BriefPath   string `json:"brief_path"`
+            BriefLength int    `json:"brief_length"`
+            JournalDir  string `json:"journal_dir"`
+            FilesOwned  int    `json:"files_owned"`
+            Repo        string `json:"repo,omitempty"`
+            MergeTarget string `json:"merge_target,omitempty"`  // NEW FIELD
+        }
+      location: cmd/saw/prepare_wave.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## Task: Implement create-program-worktrees CLI command
+
+            ### Context
+            The engine function `protocol.CreateProgramWorktrees()` is fully implemented
+            at `pkg/protocol/program_worktree.go`. It parses a PROGRAM manifest, finds
+            the tier by number, and creates git worktrees for each IMPL in that tier.
+            The CLI command wrapping it does NOT exist and is NOT registered in main.go.
+
+            ### What to implement
+
+            **File 1: cmd/saw/create_program_worktrees_cmd.go (new file)**
+
+            Create a Cobra command following the exact same pattern as `newFinalizeTierCmd()`
+            in `cmd/saw/finalize_tier_cmd.go`.
+
+            Registration comment at top: `// Registration: add newCreateProgramWorktreesCmd() to main.go AddCommand list.`
+
+            ```go
+            package main
+
+            import (
+                "encoding/json"
+                "fmt"
+                "os"
+
+                "github.com/blackwell-systems/scout-and-wave-go/pkg/protocol"
+                "github.com/spf13/cobra"
+            )
+
+            func newCreateProgramWorktreesCmd() *cobra.Command {
+                var tierNum int
+
+                cmd := &cobra.Command{
+                    Use:   "create-program-worktrees <program-manifest>",
+                    Short: "Create IMPL branches and worktrees for all IMPLs in a program tier",
+                    Long: `Creates long-lived IMPL branches for all IMPLs in a program tier.
+            Branch naming: saw/program/{program-slug}/tier{N}-impl-{impl-slug}
+            These branches serve as merge targets for all wave executions within each IMPL.
+            Waves merge to the IMPL branch, not to main.
+
+            Examples:
+              sawtools create-program-worktrees docs/PROGRAM.yaml --tier 1
+              sawtools create-program-worktrees program.yaml --tier 2 --repo-dir /path/to/repo
+
+            Exit codes:
+              0 - All worktrees created successfully
+              1 - One or more worktrees failed
+              2 - Parse error or tier not found`,
+                    Args: cobra.ExactArgs(1),
+                    RunE: func(cmd *cobra.Command, args []string) error {
+                        manifestPath := args[0]
+
+                        res := protocol.CreateProgramWorktrees(manifestPath, tierNum, repoDir)
+
+                        if res.IsFatal() {
+                            // Print structured error and exit 2 for parse/tier-not-found errors
+                            for _, e := range res.Errors {
+                                fmt.Fprintf(os.Stderr, "create-program-worktrees: %s: %s\n", e.Code, e.Message)
+                            }
+                            os.Exit(2)
+                        }
+
+                        data := res.GetData()
+                        out, _ := json.MarshalIndent(data, "", "  ")
+                        fmt.Fprintln(cmd.OutOrStdout(), string(out))
+
+                        if !res.IsSuccess() {
+                            os.Exit(1)
+                        }
+
+                        return nil
+                    },
+                }
+
+                cmd.Flags().IntVar(&tierNum, "tier", 0, "Tier number (required)")
+                _ = cmd.MarkFlagRequired("tier")
+
+                return cmd
+            }
+            ```
+
+            **File 2: cmd/saw/main.go (modify)**
+
+            Add `newCreateProgramWorktreesCmd()` to the AddCommand list. Place it
+            immediately after `newCreateProgramCmd()` (line 77), so program-related
+            commands are grouped together:
+
+            ```go
+            newCreateProgramCmd(),
+            newCreateProgramWorktreesCmd(),  // ADD THIS LINE
+            newCheckIMPLConflictsCmd(),
+            ```
+
+            ### Tests to write
+
+            Add a new file `cmd/saw/create_program_worktrees_cmd_test.go` with tests
+            following the pattern in `cmd/saw/finalize_tier_cmd_test.go`.
+
+            Test cases (all in package main):
+            1. `TestCreateProgramWorktreesCmd_NoArgs` — verify ExactArgs(1) is enforced
+            2. `TestCreateProgramWorktreesCmd_NoTierFlag` — verify --tier is required
+            3. `TestCreateProgramWorktreesCmd_MissingManifest` — verify error for nonexistent file
+
+            ```go
+            package main
+
+            import (
+                "bytes"
+                "os"
+                "path/filepath"
+                "testing"
+            )
+
+            func TestCreateProgramWorktreesCmd_NoArgs(t *testing.T) {
+                var stdout bytes.Buffer
+                var stderr bytes.Buffer
+                cmd := newCreateProgramWorktreesCmd()
+                cmd.SetOut(&stdout)
+                cmd.SetErr(&stderr)
+                cmd.SetArgs([]string{"--tier", "1"})
+                err := cmd.Execute()
+                if err == nil {
+                    t.Fatal("expected error when no manifest argument provided, got nil")
+                }
+            }
+
+            func TestCreateProgramWorktreesCmd_NoTierFlag(t *testing.T) {
+                tmpDir := t.TempDir()
+                manifestPath := filepath.Join(tmpDir, "PROGRAM-test.yaml")
+                var stdout bytes.Buffer
+                var stderr bytes.Buffer
+                cmd := newCreateProgramWorktreesCmd()
+                cmd.SetOut(&stdout)
+                cmd.SetErr(&stderr)
+                cmd.SetArgs([]string{manifestPath})
+                err := cmd.Execute()
+                if err == nil {
+                    t.Fatal("expected error when --tier flag missing, got nil")
+                }
+            }
+
+            func TestCreateProgramWorktreesCmd_MissingManifest(t *testing.T) {
+                nonexistent := filepath.Join(os.TempDir(), "does-not-exist-program.yaml")
+                var stdout bytes.Buffer
+                var stderr bytes.Buffer
+                cmd := newCreateProgramWorktreesCmd()
+                cmd.SetOut(&stdout)
+                cmd.SetErr(&stderr)
+                cmd.SetArgs([]string{nonexistent, "--tier", "1"})
+                err := cmd.Execute()
+                // Should exit 2 for parse error — cobra RunE returns nil after os.Exit(2),
+                // so we rely on the fatal result branch triggering os.Exit. In tests,
+                // os.Exit cannot be intercepted, so verify the command at least accepts
+                // valid flags (non-panic) by checking error is nil (os.Exit bypasses RunE return).
+                // This test primarily validates cobra flag parsing, not the engine call.
+                _ = err // os.Exit(2) in RunE means err may be nil
+            }
+            ```
+
+            Note: The test for MissingManifest is necessarily limited because os.Exit(2)
+            in RunE cannot be intercepted in unit tests. Document this limitation in a comment.
+            Consider adding a table-driven test for the flag registration shape (tier required,
+            no default) to validate the command is wired correctly without triggering os.Exit.
+
+            ### Verification gate
+            ```
+            go build ./...
+            go vet ./...
+            go test ./cmd/saw/ -run "TestCreateProgramWorktreesCmd" -v
+            ```
+
+            ### Constraints
+            - Follow existing patterns from finalize_tier_cmd.go exactly
+            - `repoDir` is a persistent flag from root.go — do NOT re-declare it
+            - JSON output goes to stdout; errors/warnings to stderr
+            - Exit codes: 0 = success, 1 = runtime failure, 2 = parse/validation error
+            - No backward compat aliases needed (purely additive)
+          files:
+            - cmd/saw/create_program_worktrees_cmd.go
+            - cmd/saw/main.go
+        - id: B
+          task: |
+            ## Task: Thread merge-target into agent brief content and metadata
+
+            ### Context
+            `prepare-wave --merge-target` currently:
+            - Accepts the flag (line 545, prepare_wave.go)
+            - Checks out the IMPL branch before baseline quality gates (line 234-239)
+
+            It does NOT:
+            - Include the merge target in the agent brief markdown (agents don't know
+              which branch to merge to)
+            - Include the merge target in the AgentBriefInfo struct output (callers
+              like the web app cannot read it from the JSON result)
+
+            The protocol spec (Step 3b) says: "prepare-wave: sawtools prepare-wave <impl-doc>
+            --wave W --merge-target <impl-branch>" so agents know to merge to the IMPL branch.
+
+            ### What to implement
+
+            **File: cmd/saw/prepare_wave.go (modify)**
+
+            Change 1: Add `MergeTarget` field to `AgentBriefInfo` struct.
+            The struct is defined starting at line 30. Add at the end:
+            ```go
+            type AgentBriefInfo struct {
+                Agent       string `json:"agent"`
+                BriefPath   string `json:"brief_path"`
+                BriefLength int    `json:"brief_length"`
+                JournalDir  string `json:"journal_dir"`
+                FilesOwned  int    `json:"files_owned"`
+                Repo        string `json:"repo,omitempty"`
+                MergeTarget string `json:"merge_target,omitempty"`  // target IMPL branch for merge
+            }
+            ```
+
+            Change 2: Build a mergeTargetSection before the brief Sprintf call (around line 446).
+            Insert before the `brief := fmt.Sprintf(...)` call:
+            ```go
+            // Merge target section — included when running under /saw program execute
+            var mergeTargetSection string
+            if mergeTarget != "" {
+                mergeTargetSection = fmt.Sprintf(
+                    "\n\n## Merge Target\n\n**Merge your branch to:** `%s`\n\n"+
+                    "Do NOT merge to HEAD or main. All wave commits must land on "+
+                    "this IMPL branch. The finalize-tier command will merge the "+
+                    "IMPL branch to main after all IMPLs in the tier complete.\n",
+                    mergeTarget,
+                )
+            }
+            ```
+
+            Change 3: Inject mergeTargetSection into the brief template. The current
+            template format string at line 447 ends with:
+            ```go
+            brief := fmt.Sprintf(`# Agent %s Brief - Wave %d
+            ...
+            %s
+            %s%s%s
+            `,
+                agentID, waveNum, manifestPath,
+                formatFileList(agentFiles),
+                agentTask,
+                contractsSection,   // currently first %s in final group
+                wiringSection,
+                gatesSection,
+            )
+            ```
+
+            Add mergeTargetSection between agentTask and contractsSection:
+            ```go
+            brief := fmt.Sprintf(`# Agent %s Brief - Wave %d
+
+            **IMPL Doc:** %s
+
+            ## Files Owned
+
+            %s
+
+            ## Task
+
+            %s
+            %s%s%s%s
+            `,
+                agentID,
+                waveNum,
+                manifestPath,
+                formatFileList(agentFiles),
+                agentTask,
+                mergeTargetSection,   // NEW: appears right after task
+                contractsSection,
+                wiringSection,
+                gatesSection,
+            )
+            ```
+
+            Change 4: Set MergeTarget on the AgentBriefInfo struct when recording
+            agent brief info (around line 510 where agentBriefs is appended):
+            ```go
+            agentBriefs = append(agentBriefs, AgentBriefInfo{
+                Agent:       agentID,
+                BriefPath:   briefPath,
+                BriefLength: len(brief),
+                JournalDir:  observer.JournalDir,
+                FilesOwned:  len(agentFiles),
+                Repo:        agentRepoName,
+                MergeTarget: mergeTarget,  // NEW: thread through to output
+            })
+            ```
+
+            **File: cmd/saw/prepare_wave_test.go (modify)**
+
+            Add tests for the merge-target brief threading. Look at existing test
+            patterns in the file to match style. Add at minimum:
+
+            1. `TestPrepareWave_MergeTargetIncludedInBrief` — when --merge-target is set,
+               verify the brief content contains "## Merge Target" and the branch name.
+               This requires a test that exercises the brief-building code path without
+               triggering real git operations. Look at existing tests that mock or stub
+               git calls, or use a test that checks the brief template logic directly
+               by invoking the string-building logic in isolation.
+
+            2. `TestPrepareWave_NoMergeTargetNoBriefSection` — when --merge-target is
+               empty (the default), verify the brief does NOT contain "## Merge Target".
+
+            3. `TestPrepareWave_AgentBriefInfo_MergeTargetField` — verify that the
+               AgentBriefInfo struct has a MergeTarget field accessible via JSON tag
+               "merge_target". Use struct literal and json.Marshal to confirm.
+
+            Example for test 3:
+            ```go
+            func TestPrepareWave_AgentBriefInfo_MergeTargetField(t *testing.T) {
+                info := AgentBriefInfo{
+                    Agent:       "A",
+                    BriefPath:   "/tmp/brief.md",
+                    BriefLength: 100,
+                    JournalDir:  "/tmp/journal",
+                    FilesOwned:  3,
+                    MergeTarget: "saw/program/my-prog/tier1-impl-foo",
+                }
+                data, err := json.Marshal(info)
+                if err != nil {
+                    t.Fatalf("json.Marshal failed: %v", err)
+                }
+                if !strings.Contains(string(data), `"merge_target"`) {
+                    t.Errorf("expected merge_target in JSON, got: %s", string(data))
+                }
+                if !strings.Contains(string(data), "tier1-impl-foo") {
+                    t.Errorf("expected impl slug in JSON, got: %s", string(data))
+                }
+            }
+            ```
+
+            ### Verification gate
+            ```
+            go build ./...
+            go vet ./...
+            go test ./cmd/saw/ -run "TestPrepareWave" -v
+            ```
+
+            ### Constraints
+            - Backward compatible: when --merge-target is empty, brief is identical to current output
+            - The mergeTargetSection only appears when mergeTarget != "" (zero-value = no section)
+            - MergeTarget field uses omitempty so empty strings don't appear in JSON
+            - Do NOT modify any other existing fields in AgentBriefInfo
+            - Do NOT change the --merge-target flag definition or its baseline-checkout behavior
+          files:
+            - cmd/saw/prepare_wave.go
+            - cmd/saw/prepare_wave_test.go
+      base_commit: 5d9d0c98a9f8d3c7c5d918a68cc56c904bf77ab0
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./...
+          required: true
+        - type: lint
+          command: go vet ./...
+          required: true
+        - type: test
+          command: go test ./...
+          required: true
+completion_reports:
+    A:
+        status: complete
+        branch: saw/program-worktree-management/wave1-agent-A
+        commit: 22f44ea
+        files_changed:
+            - cmd/saw/create_program_worktrees_cmd.go
+            - cmd/saw/create_program_worktrees_cmd_test.go
+            - cmd/saw/main.go
+        files_created:
+            - cmd/saw/create_program_worktrees_cmd.go
+            - cmd/saw/create_program_worktrees_cmd_test.go
+        tests_added:
+            - TestCreateProgramWorktreesCmd_NoArgs
+            - TestCreateProgramWorktreesCmd_NoTierFlag
+            - TestCreateProgramWorktreesCmd_MissingManifest
+            - TestCreateProgramWorktreesCmd_FlagShape
+        verification: PASS
+    B:
+        status: complete
+        branch: saw/program-worktree-management/wave1-agent-B
+        commit: 8f0bbc1
+        files_changed:
+            - cmd/saw/prepare_wave.go
+            - cmd/saw/prepare_wave_test.go
+        tests_added:
+            - TestPrepareWave_MergeTargetIncludedInBrief
+            - TestPrepareWave_NoMergeTargetNoBriefSection
+            - TestPrepareWave_AgentBriefInfo_MergeTargetField
+        verification: PASS
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: |
+            os.Exit(2) in newCreateProgramWorktreesCmd() RunE cannot be tested in unit tests.
+            Tests for the missing manifest case may be incomplete or silently skip the os.Exit path.
+          likelihood: medium
+          impact: low
+          mitigation: |
+            Document the limitation in a comment. Add a table-driven test for flag registration
+            shape (--tier required, no default) that validates command structure without triggering
+            RunE. Follow the same accepted pattern used by finalize_tier_cmd_test.go.
+        - scenario: |
+            Agent B's brief template change (adding mergeTargetSection %s) shifts existing
+            %s argument positions, causing formatting bugs or test failures.
+          likelihood: low
+          impact: medium
+          mitigation: |
+            Interface contract specifies exact order of Sprintf arguments. Agent B must
+            read the current brief template carefully before editing and verify that
+            existing test output is unchanged when mergeTarget is empty.
+        - scenario: |
+            main.go is owned by Agent A but the wiring test (wiring_cmd_test.go) might
+            exercise main.go indirectly and fail if Agent A introduces a syntax error.
+          likelihood: low
+          impact: low
+          mitigation: |
+            Agent A's task is additive — one new line in main.go plus one new file.
+            Build gate (go build ./...) catches syntax errors immediately.
+state: COMPLETE

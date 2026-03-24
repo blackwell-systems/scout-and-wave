@@ -1,0 +1,1503 @@
+completion_date: "2026-03-23"
+title: 'Error Handling Unification: SAWError Full Deletion (No Aliases)'
+feature_slug: error-code-taxonomy-v2
+verdict: SUITABLE
+suitability_assessment: |
+    This IMPL executes a FULL DELETION of both legacy error types (no aliases, no adapters)
+    and migrates every caller to result.SAWError. This replaces the prior v2 Scout that
+    proposed a type alias for ValidationError — that approach is explicitly rejected.
+
+    THREE PARALLEL ERROR SYSTEMS TO ELIMINATE:
+    1. result.StructuredError (pkg/result/result.go) — rename to SAWError in-place, add
+       Error()/Unwrap()/IsFatal()/WithContext()/WithCause() methods. Add error code constants
+       in pkg/result/codes.go (new file). All 12 protocol files that import result and use
+       StructuredError get updated to SAWError in the same wave via explicit agent ownership.
+    2. ValidationError (pkg/protocol/types.go) — DELETED. All 22 protocol validator files
+       that return []ValidationError must be updated to return []result.SAWError. These 22
+       files are divided across multiple agents by file ownership (4 agents, ~5 files each)
+       in Wave 1.
+    3. errparse.StructuredError (pkg/errparse/types.go) — DELETED. Every parser file
+       (go_parsers.go, js_parsers.go, python_parsers.go, format_parsers.go) updated to
+       return []result.SAWError directly. ParseResult.Errors changes to []result.SAWError.
+       GateResult.ParsedErrors in pkg/protocol/gates.go changes to []result.SAWError.
+
+    WAVE STRATEGY:
+    Wave 1 is the critical foundation: rename StructuredError->SAWError in result.go,
+    delete ValidationError from types.go, and migrate ALL 22 protocol validator files
+    simultaneously. Since all validators are in pkg/protocol/ and return []ValidationError,
+    they must all change in the same wave to avoid a broken intermediate state where some
+    files return the old type and others return the new type. Wave 1 runs 5 agents in
+    parallel across disjoint file sets.
+
+    Wave 2 handles downstream callers that consumed []ValidationError or errparse types:
+    errparse package deletion (Agent F), CLI commands (Agent G), and web API handlers (Agent H).
+    Wave 2 can only start after Wave 1 completes because Wave 2 callers reference the new type.
+
+    Wave 3: pkg/protocol/gates.go (Agent G2) depends on errparse (Agent F, wave 2) so it
+    moves to wave 3. Also in wave 3: pkg/result/codes.go + render_errors.go (Agent I, additive)
+    and web/src/types.ts (Agent J, TypeScript).
+
+    FIELD MAPPING (ValidationError -> SAWError):
+    ValidationError.Code      -> SAWError.Code
+    ValidationError.Message   -> SAWError.Message
+    ValidationError.Field     -> SAWError.Field
+    ValidationError.Line      -> SAWError.Line
+    ValidationError.Slug      -> SAWError.Context["slug"]
+    ValidationError.Wave      -> SAWError.Context["wave"]
+    ValidationError.AgentID   -> SAWError.Context["agent_id"]
+    (new)                     -> SAWError.Severity ("error" default for validator errors)
+    (new)                     -> SAWError.Tool (empty for validation errors)
+    (new)                     -> SAWError.Suggestion
+
+    FIELD MAPPING (errparse.StructuredError -> SAWError):
+    StructuredError.File      -> SAWError.File
+    StructuredError.Line      -> SAWError.Line
+    StructuredError.Column    -> SAWError.Context["column"]
+    StructuredError.Severity  -> SAWError.Severity
+    StructuredError.Message   -> SAWError.Message
+    StructuredError.Rule      -> SAWError.Context["rule"]
+    StructuredError.Suggestion -> SAWError.Suggestion
+    StructuredError.Tool      -> SAWError.Tool
+    (new)                     -> SAWError.Code (set to "TOOL_ERROR" or tool-specific code)
+
+    SUITABILITY:
+    1. File decomposition: YES — 22 protocol files split across 4 agents (A,B,C,D),
+       result.go/SAWError foundation in agent E, errparse in agent F. Wave 2: 2 independent
+       agents (G=CLI, H=web API). Wave 3: gates.go (G2), codes+render (I), TypeScript (J).
+       All ownership disjoint.
+    2. Investigation-first: NO — all types are well-understood, no root cause work needed.
+    3. Interface discoverability: YES — SAWError struct fully specified below before agents launch.
+    4. Pre-implementation status: PARTIAL — result.StructuredError exists as the base.
+       errparse.StructuredError still exists and must be deleted. ValidationError still exists.
+    5. Parallelization value: HIGH — Go test cycle ~45s, 9+ agents across 3 waves.
+
+    Estimated times:
+    - Scout phase: ~20 min (large scope, 22 protocol files)
+    - Agent execution: ~65 min (9 agents, Wave 1 runs 5 in parallel)
+    - Merge and verification: ~15 min (3 waves)
+    Total SAW time: ~100 min
+
+    Sequential baseline: ~150 min (9 agents x ~17 min avg given large file counts)
+    Time savings: ~50 min (33% faster)
+
+    Recommendation: Clear speedup. Wave 1 parallelism across 5 agents is the key gain.
+test_command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go test ./...
+lint_command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go vet ./...
+file_ownership:
+    - file: pkg/result/result.go
+      agent: E
+      wave: 1
+      action: modify
+    - file: pkg/result/result_test.go
+      agent: E
+      wave: 1
+      action: modify
+    - file: pkg/protocol/validation.go
+      agent: A
+      wave: 1
+      action: modify
+    - file: pkg/protocol/program_validation.go
+      agent: A
+      wave: 1
+      action: modify
+    - file: pkg/protocol/jsonschema_validator.go
+      agent: A
+      wave: 1
+      action: modify
+    - file: pkg/protocol/schema_enum_validation.go
+      agent: A
+      wave: 1
+      action: modify
+    - file: pkg/protocol/schema_unknown_keys.go
+      agent: A
+      wave: 1
+      action: modify
+    - file: pkg/protocol/validator.go
+      agent: B
+      wave: 1
+      action: modify
+    - file: pkg/protocol/enumvalidation.go
+      agent: B
+      wave: 1
+      action: modify
+    - file: pkg/protocol/schema_validation.go
+      agent: B
+      wave: 1
+      action: modify
+    - file: pkg/protocol/schema_cross_field.go
+      agent: B
+      wave: 1
+      action: modify
+    - file: pkg/protocol/fieldvalidation.go
+      agent: B
+      wave: 1
+      action: modify
+    - file: pkg/protocol/manifest.go
+      agent: C
+      wave: 1
+      action: modify
+    - file: pkg/protocol/solver_integration.go
+      agent: C
+      wave: 1
+      action: modify
+    - file: pkg/protocol/validate_migration.go
+      agent: C
+      wave: 1
+      action: modify
+    - file: pkg/protocol/reactions_validation.go
+      agent: C
+      wave: 1
+      action: modify
+    - file: pkg/protocol/integration_checklist_validator.go
+      agent: C
+      wave: 1
+      action: modify
+    - file: pkg/protocol/action_validator.go
+      agent: D
+      wave: 1
+      action: modify
+    - file: pkg/protocol/duplicate_key_validator.go
+      agent: D
+      wave: 1
+      action: modify
+    - file: pkg/protocol/file_existence_validator.go
+      agent: D
+      wave: 1
+      action: modify
+    - file: pkg/protocol/merge_agents.go
+      agent: D
+      wave: 1
+      action: modify
+    - file: pkg/protocol/program_generator.go
+      agent: D
+      wave: 1
+      action: modify
+    - file: pkg/protocol/gate_populator.go
+      agent: D
+      wave: 1
+      action: modify
+    - file: pkg/protocol/types.go
+      agent: D
+      wave: 1
+      action: modify
+    - file: pkg/errparse/types.go
+      agent: F
+      wave: 2
+      action: modify
+      depends_on:
+        - E
+    - file: pkg/errparse/go_parsers.go
+      agent: F
+      wave: 2
+      action: modify
+      depends_on:
+        - E
+    - file: pkg/errparse/js_parsers.go
+      agent: F
+      wave: 2
+      action: modify
+      depends_on:
+        - E
+    - file: pkg/errparse/python_parsers.go
+      agent: F
+      wave: 2
+      action: modify
+      depends_on:
+        - E
+    - file: pkg/errparse/format_parsers.go
+      agent: F
+      wave: 2
+      action: modify
+      depends_on:
+        - E
+    - file: pkg/errparse/registry_test.go
+      agent: F
+      wave: 2
+      action: modify
+      depends_on:
+        - E
+    - file: pkg/errparse/go_parsers_test.go
+      agent: F
+      wave: 2
+      action: modify
+      depends_on:
+        - E
+    - file: cmd/saw/validate_cmd.go
+      agent: G
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+        - B
+        - C
+        - D
+    - file: cmd/saw/prepare_wave.go
+      agent: G
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+        - B
+        - C
+        - D
+    - file: cmd/saw/run_scout_cmd.go
+      agent: G
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+        - B
+        - C
+        - D
+    - file: cmd/saw/create_program_cmd.go
+      agent: G
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+        - B
+        - C
+        - D
+    - file: cmd/saw/baseline_output.go
+      agent: G
+      wave: 2
+      action: modify
+      depends_on:
+        - E
+    - file: pkg/api/types.go
+      agent: H
+      wave: 2
+      action: modify
+      depends_on:
+        - E
+    - file: pkg/api/impl_handlers.go
+      agent: H
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+        - B
+        - C
+        - D
+    - file: pkg/api/manifest_routes.go
+      agent: H
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+        - B
+        - C
+        - D
+    - file: pkg/api/program_handler.go
+      agent: H
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+        - B
+        - C
+        - D
+    - file: pkg/protocol/gates.go
+      agent: G2
+      wave: 3
+      action: modify
+      depends_on:
+        - E
+        - F
+    - file: pkg/result/codes.go
+      agent: I
+      wave: 3
+      action: modify
+      depends_on:
+        - E
+    - file: cmd/saw/render_errors.go
+      agent: I
+      wave: 3
+      action: modify
+      depends_on:
+        - G
+    - file: web/src/types.ts
+      agent: J
+      wave: 3
+      action: modify
+      depends_on:
+        - H
+interface_contracts:
+    - name: SAWError
+      description: |
+        Unified error type replacing ValidationError and errparse.StructuredError.
+        Implements the error interface. Supports errors.Is/As chains via Unwrap.
+      definition: |
+        // SAWError is the unified structured error type for all SAW operations.
+        // Replaces: protocol.ValidationError, errparse.StructuredError, result.StructuredError.
+        type SAWError struct {
+            Code       string            `json:"code"`                // e.g. "V001_MANIFEST_INVALID"
+            Message    string            `json:"message"`             // human-readable
+            Severity   string            `json:"severity"`            // "fatal"|"error"|"warning"|"info"
+            File       string            `json:"file,omitempty"`
+            Line       int               `json:"line,omitempty"`
+            Field      string            `json:"field,omitempty"`     // for validation errors
+            Tool       string            `json:"tool,omitempty"`      // for tool/parse errors
+            Suggestion string            `json:"suggestion,omitempty"`
+            Context    map[string]string `json:"context,omitempty"`   // slug, wave, agent_id, rule, column
+            Cause      error             `json:"-"`                   // wrapped error for errors.Is/As
+        }
+
+        func (e SAWError) Error() string
+        func (e SAWError) Unwrap() error
+        func (e SAWError) IsFatal() bool
+        func (e SAWError) WithContext(key, value string) SAWError
+        func (e SAWError) WithCause(cause error) SAWError
+      location: pkg/result/result.go
+    - name: Result[T] updated Errors field
+      description: |
+        Result[T].Errors changes from []StructuredError to []SAWError.
+        All constructors (NewSuccess, NewPartial, NewFailure) updated accordingly.
+      definition: |
+        type Result[T any] struct {
+            Data   *T         `json:"data,omitempty"`
+            Errors []SAWError `json:"errors,omitempty"`
+            Code   string     `json:"code"` // "SUCCESS" | "PARTIAL" | "FATAL"
+        }
+
+        func NewFailure[T any](errors []SAWError) Result[T]
+        func NewPartial[T any](data T, warnings []SAWError) Result[T]
+        func NewError(code, message string) SAWError
+        func NewFatal(code, message string) SAWError
+        func NewWarning(code, message string) SAWError
+      location: pkg/result/result.go
+    - name: ParseResult updated
+      description: |
+        errparse.ParseResult.Errors changes from []StructuredError to []result.SAWError.
+        All parsers return *ParseResult with SAWError elements.
+      definition: |
+        // In pkg/errparse/types.go:
+        import "github.com/blackwell-systems/scout-and-wave-go/pkg/result"
+
+        type ParseResult struct {
+            Tool   string            `json:"tool"`
+            Errors []result.SAWError `json:"errors"`
+            Raw    string            `json:"raw"`
+        }
+
+        type Parser interface {
+            Name() string
+            Parse(stdout, stderr string) *ParseResult
+        }
+      location: pkg/errparse/types.go
+    - name: GateResult.ParsedErrors updated
+      description: |
+        GateResult.ParsedErrors changes from []errparse.StructuredError to []result.SAWError.
+      definition: |
+        // In pkg/protocol/gates.go:
+        type GateResult struct {
+            // ... existing fields unchanged ...
+            ParsedErrors []result.SAWError `json:"parsed_errors,omitempty"`
+        }
+      location: pkg/protocol/gates.go
+    - name: protocol.Validate return type
+      description: |
+        All protocol validator functions return []result.SAWError instead of []protocol.ValidationError.
+        The top-level Validate(), ValidateBytes(), ValidateIMPLDoc(), ValidateProgram() all updated.
+      definition: |
+        // pkg/protocol/validation.go
+        func Validate(m *IMPLManifest) []result.SAWError
+        func ValidateBytes(raw []byte, m *IMPLManifest) []result.SAWError
+
+        // pkg/protocol/validator.go
+        func ValidateIMPLDoc(path string) ([]result.SAWError, error)
+
+        // pkg/protocol/program_validation.go
+        func ValidateProgram(manifest *PROGRAMManifest) []result.SAWError
+        func ValidateP1FileDisjointness(tier int, impls []*IMPLManifest) []result.SAWError
+      location: pkg/protocol/validation.go
+    - name: ValidateManifest (web API)
+      description: |
+        Web API wrapper in impl_handlers.go updated to return []result.SAWError.
+      definition: |
+        // pkg/api/impl_handlers.go
+        import "github.com/blackwell-systems/scout-and-wave-go/pkg/result"
+
+        func ValidateManifest(yamlPath string) ([]result.SAWError, error)
+      location: pkg/api/impl_handlers.go
+    - name: GateResult (TypeScript)
+      description: |
+        New TypeScript SAWError interface matching Go JSON shape, plus updated GateResult type.
+      definition: |
+        // web/src/types.ts
+        export interface SAWError {
+          code: string
+          message: string
+          severity: 'fatal' | 'error' | 'warning' | 'info'
+          file?: string
+          line?: number
+          field?: string
+          tool?: string
+          suggestion?: string
+          context?: Record<string, string>
+        }
+
+        export interface GateResult {
+          type: string
+          command: string
+          exit_code: number
+          stdout: string
+          stderr: string
+          required: boolean
+          passed: boolean
+          skipped?: boolean
+          skip_reason?: string
+          from_cache?: boolean
+          parsed_errors?: SAWError[]
+        }
+      location: web/src/types.ts
+waves:
+    - number: 1
+      agents:
+        - id: E
+          task: |
+            ## Role
+            Rename result.StructuredError to result.SAWError and add the full error interface
+            in pkg/result/result.go. This is the foundation that all other agents depend on.
+
+            ## What to implement
+
+            In pkg/result/result.go:
+
+            1. Rename `StructuredError` struct to `SAWError` in-place. Do NOT create an alias.
+               The struct already has these fields: Code, Message, Severity, File, Line, Field,
+               Tool, Suggestion, Context. Add one new field:
+               ```go
+               Cause error `json:"-"`
+               ```
+
+            2. Add these methods to SAWError:
+               ```go
+               func (e SAWError) Error() string {
+                   if e.Severity != "" {
+                       return fmt.Sprintf("[%s] %s: %s", e.Severity, e.Code, e.Message)
+                   }
+                   return fmt.Sprintf("[%s] %s", e.Code, e.Message)
+               }
+
+               func (e SAWError) Unwrap() error { return e.Cause }
+
+               func (e SAWError) IsFatal() bool { return e.Severity == "fatal" }
+
+               func (e SAWError) WithContext(key, value string) SAWError {
+                   if e.Context == nil {
+                       e.Context = make(map[string]string)
+                   }
+                   e.Context[key] = value
+                   return e
+               }
+
+               func (e SAWError) WithCause(cause error) SAWError {
+                   e.Cause = cause
+                   return e
+               }
+               ```
+
+            3. Add convenience constructors:
+               ```go
+               func NewError(code, message string) SAWError {
+                   return SAWError{Code: code, Message: message, Severity: "error"}
+               }
+
+               func NewFatal(code, message string) SAWError {
+                   return SAWError{Code: code, Message: message, Severity: "fatal"}
+               }
+
+               func NewWarning(code, message string) SAWError {
+                   return SAWError{Code: code, Message: message, Severity: "warning"}
+               }
+               ```
+
+            4. Update Result[T].Errors field type from []StructuredError to []SAWError.
+               Update all constructors (NewSuccess, NewPartial, NewFailure) to use SAWError.
+
+            5. In result_test.go: update all StructuredError references to SAWError.
+               Update any test helper types or literals that reference the old name.
+
+            The scaffold file pkg/result/codes.go will be created by the Scaffold Agent before
+            this wave starts. Do NOT create it yourself.
+
+            ## Constraints
+            - Do NOT create a type alias `StructuredError = SAWError`. Full rename only.
+            - pkg/result must NOT import pkg/protocol or pkg/errparse (no circular imports).
+            - All existing Result[T] method behavior (IsSuccess, IsFatal, IsPartial, HasErrors,
+              GetData) is preserved unchanged.
+
+            ## Verification gate
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./pkg/result/... && go vet ./pkg/result/... && go test ./pkg/result/...
+            ```
+          files:
+            - pkg/result/result.go
+            - pkg/result/result_test.go
+        - id: A
+          task: |
+            ## Role
+            Migrate protocol validator files group 1 from []ValidationError to []result.SAWError.
+            Mechanical migration: change return types and ValidationError{} literals.
+
+            ## What to implement
+
+            Files: validation.go, program_validation.go, jsonschema_validator.go,
+            schema_enum_validation.go, schema_unknown_keys.go
+
+            For EACH file:
+
+            1. Add import: `"github.com/blackwell-systems/scout-and-wave-go/pkg/result"`
+
+            2. Change ALL function signatures from `[]ValidationError` to `[]result.SAWError`.
+
+            3. Change ALL ValidationError{} literals to result.SAWError{} literals.
+               Field mapping:
+               - Code, Message, Field, Line stay identical
+               - Slug → .WithContext("slug", slug) chained call
+               - Wave (int) → .WithContext("wave", strconv.Itoa(wave))
+               - AgentID → .WithContext("agent_id", agentID)
+               - Add `Severity: "error"` to every literal
+
+            4. Replace `newValidationError(code, message)` with `result.NewError(code, message)`.
+
+            5. Replace `.WithContext(slug, wave, agentID)` with chained .WithContext() calls:
+               ```go
+               result.NewError(code, msg).
+                   WithContext("slug", slug).
+                   WithContext("wave", strconv.Itoa(wave)).
+                   WithContext("agent_id", agentID)
+               ```
+
+            6. Change `var errs []ValidationError` to `var errs []result.SAWError`.
+
+            ## Specific files
+
+            **validation.go** (~15 functions) — top-level Validate() is the most critical.
+            **program_validation.go** (~13 functions) including ValidateP1FileDisjointness.
+            **jsonschema_validator.go** (~6 functions) including validateJSEnum.
+            **schema_enum_validation.go** (~5 functions).
+            **schema_unknown_keys.go** (~4 functions).
+
+            ## Constraints
+            - Do NOT modify types.go (owned by Agent D).
+            - Do NOT modify any _test.go files.
+
+            ## Verification gate
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./pkg/protocol/... && go vet ./pkg/protocol/...
+            ```
+            Note: Full test run will fail because test files still reference ValidationError.
+            Build + vet only is the passing bar for this wave.
+          files:
+            - pkg/protocol/validation.go
+            - pkg/protocol/program_validation.go
+            - pkg/protocol/jsonschema_validator.go
+            - pkg/protocol/schema_enum_validation.go
+            - pkg/protocol/schema_unknown_keys.go
+        - id: B
+          task: |
+            ## Role
+            Migrate protocol validator files group 2 from []ValidationError to []result.SAWError.
+            Identical approach to Agent A.
+
+            ## What to implement
+
+            Files: validator.go, enumvalidation.go, schema_validation.go,
+            schema_cross_field.go, fieldvalidation.go
+
+            Apply the same migration pattern as Agent A:
+            1. Add result import.
+            2. Change all []ValidationError return types to []result.SAWError.
+            3. Replace ValidationError{} literals with result.SAWError{} (add Severity: "error").
+            4. Replace newValidationError() with result.NewError().
+            5. Replace .WithContext(slug, wave, agentID) with chained .WithContext() calls.
+            6. Update local var declarations.
+
+            ## Specific notes
+
+            **validator.go** — ValidateIMPLDoc returns ([]ValidationError, error); update to
+            ([]result.SAWError, error). Private helpers validateFileOwnership, validateDepGraph,
+            validateWaveStructure, validateCompletionReport all return []ValidationError; migrate all.
+
+            **enumvalidation.go** — ValidateCompletionStatuses, ValidateFailureTypes, ValidatePreMortemRisk.
+
+            **schema_validation.go**, **schema_cross_field.go**, **fieldvalidation.go** — follow same pattern.
+
+            ## Constraints
+            - Do not touch types.go (owned by Agent D). Do not touch test files.
+
+            ## Verification gate
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./pkg/protocol/... && go vet ./pkg/protocol/...
+            ```
+          files:
+            - pkg/protocol/validator.go
+            - pkg/protocol/enumvalidation.go
+            - pkg/protocol/schema_validation.go
+            - pkg/protocol/schema_cross_field.go
+            - pkg/protocol/fieldvalidation.go
+        - id: C
+          task: |
+            ## Role
+            Migrate protocol validator files group 3 from []ValidationError to []result.SAWError.
+            Identical approach to Agents A and B.
+
+            ## What to implement
+
+            Files: manifest.go, solver_integration.go, validate_migration.go,
+            reactions_validation.go, integration_checklist_validator.go
+
+            Apply the same migration pattern as Agents A and B:
+            1. Add result import.
+            2. Change all []ValidationError return types to []result.SAWError.
+            3. Replace ValidationError{} literals with result.SAWError{} (add Severity: "error").
+            4. Replace newValidationError() with result.NewError().
+            5. Replace .WithContext(slug, wave, agentID) with chained .WithContext() calls.
+            6. Update local var declarations.
+
+            ## Specific notes
+
+            **manifest.go** — ValidateSM02TransitionGuards and TransitionTo both return
+            []ValidationError. TransitionTo is called by engine code; its updated signature
+            is consumed by Wave 2/3 callers.
+
+            **integration_checklist_validator.go** — multi-line return literal:
+            ```go
+            // OLD:
+            return []ValidationError{{Code: "...", Message: "..."}}
+            // NEW:
+            return []result.SAWError{{Code: "...", Message: "...", Severity: "error"}}
+            ```
+
+            ## Constraints
+            - Same as Agents A and B (no types.go, no test files).
+
+            ## Verification gate
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./pkg/protocol/... && go vet ./pkg/protocol/...
+            ```
+          files:
+            - pkg/protocol/manifest.go
+            - pkg/protocol/solver_integration.go
+            - pkg/protocol/validate_migration.go
+            - pkg/protocol/reactions_validation.go
+            - pkg/protocol/integration_checklist_validator.go
+        - id: D
+          task: |
+            ## Role
+            Migrate protocol validator files group 4 AND delete ValidationError from types.go.
+            This agent performs the critical deletion of the source type.
+
+            ## What to implement
+
+            ### Step 1: Migrate validator files group 4
+
+            Files: action_validator.go, duplicate_key_validator.go, file_existence_validator.go,
+            merge_agents.go, program_generator.go, gate_populator.go
+
+            Apply the same migration pattern as Agents A, B, C:
+            1. Add result import.
+            2. Change all []ValidationError return types to []result.SAWError.
+            3. Replace ValidationError{} literals with result.SAWError{} (Severity: "error").
+            4. Replace newValidationError() and .WithContext() calls.
+            5. Update local var declarations.
+
+            ### Step 2: DELETE ValidationError from types.go
+
+            In pkg/protocol/types.go:
+            1. DELETE the entire ValidationError struct definition (with its comment).
+            2. DELETE the newValidationError helper function.
+            3. DELETE the ValidationError.WithContext method.
+            4. Verify no remaining references to ValidationError in types.go.
+
+            After deletion, types.go must not mention ValidationError anywhere.
+
+            ## Constraints
+            - You are the sole owner of types.go. Delete ValidationError completely —
+              no alias, no "deprecated" comment, no forwarding declaration.
+            - Test files (validation_test.go, pre_wave_gate_test.go, solver_integration_test.go,
+              run_wave_atomic_test.go) still reference ValidationError. Do NOT modify test files.
+              They will fail to compile until post-merge cleanup.
+            - program_generator.go may reference ValidationError in non-function contexts;
+              check all usages carefully.
+
+            ## Verification gate
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./pkg/protocol/... && go vet ./pkg/protocol/...
+            ```
+            Note: Tests will fail (test files still use ValidationError). Build only.
+          files:
+            - pkg/protocol/action_validator.go
+            - pkg/protocol/duplicate_key_validator.go
+            - pkg/protocol/file_existence_validator.go
+            - pkg/protocol/merge_agents.go
+            - pkg/protocol/program_generator.go
+            - pkg/protocol/gate_populator.go
+            - pkg/protocol/types.go
+      base_commit: 85dc0b0907f3f2b5aa98912cdf36c13a3cad1cec
+    - number: 2
+      agents:
+        - id: F
+          task: |
+            ## Role
+            Delete errparse.StructuredError and migrate all parser files to return
+            []result.SAWError. Completes the errparse parallel system elimination.
+
+            ## Context
+            Wave 1 (Agent E) renamed result.StructuredError to result.SAWError.
+
+            ## What to implement
+
+            ### Step 1: pkg/errparse/types.go
+
+            1. DELETE the StructuredError struct entirely.
+            2. Add import: `"github.com/blackwell-systems/scout-and-wave-go/pkg/result"`
+            3. Update ParseResult.Errors:
+               ```go
+               type ParseResult struct {
+                   Tool   string            `json:"tool"`
+                   Errors []result.SAWError `json:"errors"`
+                   Raw    string            `json:"raw"`
+               }
+               ```
+            4. Keep the Parser interface unchanged.
+
+            ### Step 2: Migrate go_parsers.go
+
+            Every `StructuredError{...}` literal → `result.SAWError{...}`.
+            Field mapping:
+            - File, Line, Severity, Message, Suggestion, Tool stay identical
+            - Column → Context["column"] via strconv.Itoa
+            - Rule → Context["rule"]
+            - Add Code: "TOOL_ERROR" (Agent I expands in Wave 3)
+
+            Update local declarations:
+            - `var panicErr *StructuredError` → `var panicErr *result.SAWError`
+            - `Errors: []StructuredError{}` → `Errors: []result.SAWError{}`
+
+            ### Step 3: Migrate js_parsers.go
+
+            Same pattern as go_parsers.go.
+
+            ### Step 4: Migrate python_parsers.go
+
+            Same pattern. `pendingFailed *StructuredError` → `*result.SAWError`.
+
+            ### Step 5: Migrate format_parsers.go
+
+            Same pattern.
+
+            ### Step 6: Update errparse test files
+
+            pkg/errparse/registry_test.go:
+            ```go
+            // OLD: Errors: []StructuredError{{File: "main.go", ...}}
+            // NEW: Errors: []result.SAWError{{File: "main.go", ...}}
+            ```
+            Add `Severity: "error"` and `Code: "TOOL_ERROR"` fields to test literals.
+
+            pkg/errparse/go_parsers_test.go: update any StructuredError references similarly.
+
+            ## Constraints
+            - Do NOT modify pkg/protocol/gates.go (owned by Agent G2 in Wave 3).
+            - Use Code: "TOOL_ERROR" as placeholder; Agent I defines full taxonomy in Wave 3.
+            - Add Severity: "error" as default where parsers don't already set severity.
+
+            ## Verification gate
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./pkg/errparse/... && go vet ./pkg/errparse/... && go test ./pkg/errparse/...
+            ```
+          files:
+            - pkg/errparse/types.go
+            - pkg/errparse/go_parsers.go
+            - pkg/errparse/js_parsers.go
+            - pkg/errparse/python_parsers.go
+            - pkg/errparse/format_parsers.go
+            - pkg/errparse/registry_test.go
+            - pkg/errparse/go_parsers_test.go
+          dependencies:
+            - E
+        - id: G
+          task: |
+            ## Role
+            Migrate the four CLI commands that referenced []protocol.ValidationError
+            to use []result.SAWError.
+
+            ## Context
+            Wave 1 deleted protocol.ValidationError. All protocol validators now return
+            []result.SAWError. pkg/protocol/gates.go is handled by Agent G2 in Wave 3
+            (it depends on errparse which is Wave 2).
+
+            ## What to implement
+
+            ### 1. cmd/saw/validate_cmd.go
+
+            - Remove protocol.ValidationError references.
+            - Change `var structErrs []protocol.ValidationError` to `[]result.SAWError`.
+            - Update the local validateError conversion: result.SAWError has identical
+              Code, Message, Field, Line fields — no structural change needed to field access.
+            - Add result import.
+            - The scaffold file cmd/saw/render_errors.go will be filled in by Agent I (Wave 3).
+              For now, format errors inline or leave a TODO referencing render_errors.go.
+
+            ### 2. cmd/saw/prepare_wave.go
+
+            - `var i1Errs []protocol.ValidationError` → `[]result.SAWError`
+            - Field accesses (Code, Message, Field) are identical — no change needed.
+            - Add result import if not present.
+
+            ### 3. cmd/saw/run_scout_cmd.go
+
+            - `countAgentsFromErrors(errs []protocol.ValidationError)` → `(errs []result.SAWError)`
+            - Update all call sites within this file.
+
+            ### 4. cmd/saw/create_program_cmd.go
+
+            - Check usages of ValidationError type. If `data.ValidationErrors` iterates
+              protocol.ValidationError values, update the type.
+            - Add result import as needed.
+
+            ### 5. cmd/saw/baseline_output.go
+
+            - GateResult.ParsedErrors will be []result.SAWError after Agent G2 updates gates.go.
+            - baseline_output.go accesses gr.ParsedErrors[0].Message — the Message field
+              exists on SAWError. Verify this compiles once gates.go is updated.
+            - For this wave, if baseline_output.go still references errparse.StructuredError
+              directly (not via GateResult), update it. If it only accesses the field via
+              GateResult.ParsedErrors, no change needed until gates.go is migrated.
+
+            ## Constraints
+            - Do NOT modify pkg/protocol/gates.go (owned by Agent G2 in Wave 3).
+            - Do NOT modify any _test.go files for CLI commands.
+
+            ## Verification gate
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./cmd/saw/... && go vet ./cmd/saw/...
+            ```
+          files:
+            - cmd/saw/validate_cmd.go
+            - cmd/saw/prepare_wave.go
+            - cmd/saw/run_scout_cmd.go
+            - cmd/saw/create_program_cmd.go
+            - cmd/saw/baseline_output.go
+          dependencies:
+            - A
+            - B
+            - C
+            - D
+            - E
+        - id: H
+          task: |
+            ## Role
+            Migrate web API Go handlers in scout-and-wave-web to use result.SAWError.
+
+            ## Context
+            Wave 1 deleted protocol.ValidationError. The web repo imports scout-and-wave-go.
+            After Wave 1 merges to scout-and-wave-go, this agent updates the web repo.
+
+            IMPORTANT: Check /Users/dayna.blackwell/code/scout-and-wave-web/go.mod for a
+            replace directive pointing to the local scout-and-wave-go path. If absent,
+            add one before making changes so the updated SAWError type is available.
+
+            ## What to implement
+
+            ### 0. pkg/api/types.go — DELETE web-only aliases
+
+            Delete these two type aliases entirely:
+            ```go
+            // DELETE THIS:
+            type APIResponse[T any] = result.Result[T]
+            // DELETE THIS:
+            type APIError = result.StructuredError
+            ```
+            Then find every reference to `APIResponse` and `APIError` in the three
+            other files below and replace with `result.Result[T]` and `result.SAWError`
+            directly. The web API must use the same types as the CLI — no wrapper aliases.
+
+            ### 1. pkg/api/impl_handlers.go
+
+            Update `ValidateManifest` return type:
+            ```go
+            import "github.com/blackwell-systems/scout-and-wave-go/pkg/result"
+
+            func ValidateManifest(yamlPath string) ([]result.SAWError, error)
+            ```
+            Update all callers within the file. SAWError fields Code, Message, Field, Line
+            match ValidationError exactly — no field access changes needed.
+
+            ### 2. pkg/api/manifest_routes.go
+
+            ```go
+            // OLD: response["errors"] = []protocol.ValidationError{}
+            // NEW: response["errors"] = []result.SAWError{}
+            ```
+            Check for any other ValidationError references and update.
+
+            ### 3. pkg/api/program_handler.go
+
+            The `ValidationErrors []string` field in a response struct is a string slice —
+            verify it is NOT typed as []protocol.ValidationError. If ValidationError is
+            referenced anywhere as a type in this file, update to result.SAWError.
+
+            ## Constraints
+            - Only modify the four listed .go files. Do not modify test files.
+            - Run `go mod tidy` if necessary to resolve imports after adding result import.
+
+            ## Verification gate
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-web && go build ./pkg/api/... && go vet ./pkg/api/... && go test ./pkg/api/... -run TestHandleGetProgramStatus
+            ```
+          files:
+            - pkg/api/types.go
+            - pkg/api/impl_handlers.go
+            - pkg/api/manifest_routes.go
+            - pkg/api/program_handler.go
+          dependencies:
+            - A
+            - B
+            - C
+            - D
+            - E
+      base_commit: a0f82b623aefc0ebcfb09949db887b20d4bceb0e
+    - number: 3
+      agents:
+        - id: G2
+          task: |
+            ## Role
+            Migrate pkg/protocol/gates.go: update GateResult.ParsedErrors from
+            []errparse.StructuredError to []result.SAWError.
+
+            ## Context
+            Agent F (Wave 2) deleted errparse.StructuredError and changed ParseResult.Errors
+            to []result.SAWError. This agent wires that change into the GateResult struct
+            which consumes errparse output.
+
+            ## What to implement
+
+            In pkg/protocol/gates.go:
+
+            1. Update the ParsedErrors field in GateResult:
+               ```go
+               // OLD:
+               ParsedErrors []errparse.StructuredError `json:"parsed_errors,omitempty"`
+
+               // NEW:
+               ParsedErrors []result.SAWError `json:"parsed_errors,omitempty"`
+               ```
+
+            2. The three assignment sites (approximately lines 137, 229, 409):
+               ```go
+               result.ParsedErrors = pr.Errors
+               ```
+               These compile unchanged because pr.Errors is now []result.SAWError after Wave 2.
+
+            3. Remove the errparse import if ParsedErrors was its only usage. Grep the file
+               for other errparse references before removing the import.
+
+            4. Add/verify result import:
+               `"github.com/blackwell-systems/scout-and-wave-go/pkg/result"`
+
+            ## Constraints
+            - Only modify gates.go.
+            - Do NOT modify any other pkg/protocol files (all owned by Wave 1 agents).
+
+            ## Verification gate
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./pkg/protocol/... && go vet ./pkg/protocol/... && go test ./pkg/protocol/...
+            ```
+            Full test suite should now pass for pkg/protocol (protocol test files were
+            unblocked by Wave 1 + 2 merges).
+          files:
+            - pkg/protocol/gates.go
+          dependencies:
+            - E
+            - F
+        - id: I
+          task: |
+            ## Role
+            Expand pkg/result/codes.go with the full error code taxonomy and implement
+            cmd/saw/render_errors.go shared CLI error display helper.
+
+            ## Context
+            Scaffold Agent created both files as stubs. All Wave 1 and Wave 2 migrations
+            are complete — SAWError is in use throughout the codebase. This wave fills in
+            the code constants and display helper.
+
+            ## What to implement
+
+            ### 1. pkg/result/codes.go — Full error code taxonomy
+
+            Define string constants. Use these ranges, derived from actual error codes
+            found in the codebase (grep pkg/protocol/ for existing Code strings):
+
+            ```go
+            package result
+
+            // Validation codes (V001-V099)
+            const (
+                CodeManifestInvalid           = "V001_MANIFEST_INVALID"
+                CodeDisjointOwnership         = "V002_DISJOINT_OWNERSHIP"
+                CodeSameWaveDependency        = "V003_SAME_WAVE_DEPENDENCY"
+                CodeWaveNotOneIndexed         = "V004_WAVE_NOT_1INDEXED"
+                CodeRequiredFieldsMissing     = "V005_REQUIRED_FIELDS_MISSING"
+                CodeFileOwnershipIncomplete   = "V006_FILE_OWNERSHIP_INCOMPLETE"
+                CodeDependencyCycle           = "V007_DEPENDENCY_CYCLE"
+                CodeInvalidState              = "V008_INVALID_STATE"
+                CodeInvalidAgentID            = "V009_INVALID_AGENT_ID"
+                CodeInvalidGateType           = "V010_INVALID_GATE_TYPE"
+                CodeInvalidActionEnum         = "V011_INVALID_ACTION_ENUM"
+                CodeDuplicateKey              = "V012_DUPLICATE_KEY"
+                CodeUnknownKey                = "V013_UNKNOWN_KEY"
+                CodeInvalidScaffoldStatus     = "V014_INVALID_SCAFFOLD_STATUS"
+                CodeInvalidPreMortemRisk      = "V015_INVALID_PRE_MORTEM_RISK"
+            )
+
+            // Build/gate codes (B001-B099)
+            const (
+                CodeBuildFailed          = "B001_BUILD_FAILED"
+                CodeTestFailed           = "B002_TEST_FAILED"
+                CodeLintFailed           = "B003_LINT_FAILED"
+                CodeFormatCheckFailed    = "B004_FORMAT_CHECK_FAILED"
+                CodeGateTimeout          = "B005_GATE_TIMEOUT"
+                CodeGateCommandMissing   = "B006_GATE_COMMAND_MISSING"
+            )
+
+            // Git codes (G001-G099)
+            const (
+                CodeWorktreeCreateFailed = "G001_WORKTREE_CREATE_FAILED"
+                CodeMergeConflict        = "G002_MERGE_CONFLICT"
+                CodeCommitMissing        = "G003_COMMIT_MISSING"
+                CodeBranchExists         = "G004_BRANCH_EXISTS"
+                CodeDirtyWorktree        = "G005_DIRTY_WORKTREE"
+            )
+
+            // Agent codes (A001-A099)
+            const (
+                CodeAgentTimeout             = "A001_AGENT_TIMEOUT"
+                CodeStubDetected             = "A002_STUB_DETECTED"
+                CodeCompletionReportMissing  = "A003_COMPLETION_REPORT_MISSING"
+                CodeVerificationFailed       = "A004_VERIFICATION_FAILED"
+            )
+
+            // Engine codes (N001-N099)
+            const (
+                CodePrepareWaveFailed      = "N001_PREPARE_WAVE_FAILED"
+                CodeFinalizeWaveFailed     = "N002_FINALIZE_WAVE_FAILED"
+                CodeScoutFailed            = "N003_SCOUT_FAILED"
+                CodeIsolationVerifyFailed  = "N004_ISOLATION_VERIFY_FAILED"
+            )
+
+            // Protocol codes (P001-P099)
+            const (
+                CodeStateTransitionInvalid    = "P001_STATE_TRANSITION_INVALID"
+                CodeProgramValidationFailed   = "P002_PROGRAM_VALIDATION_FAILED"
+                CodeMigrationBoundaryUnsafe   = "P003_MIGRATION_BOUNDARY_UNSAFE"
+            )
+
+            // Tool/parse codes (T001-T099)
+            const (
+                CodeToolError    = "T001_TOOL_ERROR"
+                CodeParsePanic   = "T002_PARSE_PANIC"
+                CodeToolNotFound = "T003_TOOL_NOT_FOUND"
+            )
+            ```
+
+            Before finalizing, grep pkg/protocol/ for existing hard-coded Code strings in
+            SAWError/ValidationError literals (e.g., "E16_UNKNOWN_KEY", "I1_DISJOINT") and
+            add any additional codes that don't fit the ranges above.
+
+            ### 2. cmd/saw/render_errors.go — CLI error display
+
+            Fill in the scaffold stub:
+            ```go
+            package main
+
+            import (
+                "fmt"
+                "strings"
+                "github.com/blackwell-systems/scout-and-wave-go/pkg/result"
+            )
+
+            // PrintSAWErrors prints []result.SAWError to stdout.
+            func PrintSAWErrors(errs []result.SAWError) {
+                for _, e := range errs {
+                    fmt.Println(FormatSAWError(e))
+                }
+            }
+
+            // FormatSAWError formats a single SAWError for CLI display.
+            func FormatSAWError(e result.SAWError) string {
+                var parts []string
+                sev := strings.ToUpper(e.Severity)
+                if sev == "" {
+                    sev = "ERROR"
+                }
+                parts = append(parts, fmt.Sprintf("[%s] %s: %s", sev, e.Code, e.Message))
+                if e.Field != "" {
+                    parts = append(parts, fmt.Sprintf("  field: %s", e.Field))
+                }
+                if e.File != "" {
+                    loc := e.File
+                    if e.Line > 0 {
+                        loc = fmt.Sprintf("%s:%d", e.File, e.Line)
+                    }
+                    parts = append(parts, fmt.Sprintf("  location: %s", loc))
+                }
+                if e.Suggestion != "" {
+                    parts = append(parts, fmt.Sprintf("  suggestion: %s", e.Suggestion))
+                }
+                return strings.Join(parts, "\n")
+            }
+            ```
+
+            ## Verification gate
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./pkg/result/... && go build ./cmd/saw/... && go vet ./pkg/result/... && go vet ./cmd/saw/... && go test ./pkg/result/...
+            ```
+          files:
+            - pkg/result/codes.go
+            - cmd/saw/render_errors.go
+          dependencies:
+            - E
+            - G
+        - id: J
+          task: |
+            ## Role
+            Update web/src/types.ts in scout-and-wave-web to add SAWError interface and
+            update GateResult to use parsed_errors: SAWError[].
+
+            ## Context
+            Wave 2 Agent H updated the Go web API. GateResult.ParsedErrors is now
+            []result.SAWError in the backend. The TypeScript frontend must match.
+
+            ## What to implement
+
+            In /Users/dayna.blackwell/code/scout-and-wave-web/web/src/types.ts:
+
+            1. Add the SAWError interface:
+            ```typescript
+            export interface SAWError {
+              code: string
+              message: string
+              severity: 'fatal' | 'error' | 'warning' | 'info'
+              file?: string
+              line?: number
+              field?: string
+              tool?: string
+              suggestion?: string
+              context?: Record<string, string>
+            }
+            ```
+
+            2. Update or create GateResult interface (backend serializes all these fields):
+            ```typescript
+            export interface GateResult {
+              type: string
+              command: string
+              exit_code: number
+              stdout: string
+              stderr: string
+              required: boolean
+              passed: boolean
+              skipped?: boolean
+              skip_reason?: string
+              from_cache?: boolean
+              parsed_errors?: SAWError[]
+            }
+            ```
+            If GateResultData already exists with a different shape, keep it as an alias:
+            ```typescript
+            export type GateResultData = GateResult
+            ```
+
+            3. If ValidationError is referenced anywhere in types.ts, replace with SAWError.
+
+            ## Constraints
+            - Only modify web/src/types.ts.
+            - Do NOT modify any .go files.
+
+            ## Verification gate
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-web/web && npx tsc --noEmit 2>&1 | tail -20
+            ```
+          files:
+            - web/src/types.ts
+          dependencies:
+            - H
+      base_commit: e64a4207dea8767c4095cbb1ae32270e70fd5740
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./...
+          required: true
+        - type: lint
+          command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go vet ./...
+          required: true
+        - type: test
+          command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go test ./...
+          required: true
+        - type: build
+          command: cd /Users/dayna.blackwell/code/scout-and-wave-web && go build ./...
+          required: true
+        - type: test
+          command: cd /Users/dayna.blackwell/code/scout-and-wave-web && go test ./pkg/api/...
+          required: true
+scaffolds:
+    - file: pkg/result/codes.go
+      contents: |
+        Error code constants for SAWError.Code field.
+        Ranges: V001-V099 (validation), B001-B099 (build/gate), G001-G099 (git),
+        A001-A099 (agent), N001-N099 (engine), P001-P099 (protocol), T001-T099 (tool/parse).
+        Constants are string values e.g. CodeManifestInvalid = "V001_MANIFEST_INVALID".
+      import_path: github.com/blackwell-systems/scout-and-wave-go/pkg/result
+      status: committed (ea308cd)
+    - file: cmd/saw/render_errors.go
+      contents: |
+        Shared helper for rendering []result.SAWError to CLI output.
+        Functions: PrintSAWErrors(errs []result.SAWError), FormatSAWError(e result.SAWError) string.
+        Replaces ad-hoc error formatting in validate_cmd.go, prepare_wave.go, run_scout_cmd.go.
+      import_path: main
+      status: committed (ea308cd)
+completion_reports:
+    A:
+        status: complete
+        branch: saw/error-code-taxonomy-v2/wave1-agent-A
+        commit: 40f7255
+        files_changed:
+            - pkg/protocol/validation.go
+            - pkg/protocol/program_validation.go
+            - pkg/protocol/jsonschema_validator.go
+            - pkg/protocol/schema_enum_validation.go
+            - pkg/protocol/schema_unknown_keys.go
+        verification: 'FAIL (expected: result.SAWError undefined - depends on Agent E completing StructuredError rename in pkg/result). All mechanical migration complete.'
+    B:
+        status: complete
+        branch: saw/error-code-taxonomy-v2/wave1-agent-B
+        commit: 4f61a33
+        files_changed:
+            - pkg/protocol/validator.go
+            - pkg/protocol/enumvalidation.go
+            - pkg/protocol/schema_validation.go
+            - pkg/protocol/schema_cross_field.go
+            - pkg/protocol/fieldvalidation.go
+        verification: PASS (build fails only on undefined result.SAWError which Agent E creates; no logic errors)
+    C:
+        status: complete
+        branch: saw/error-code-taxonomy-v2/wave1-agent-C
+        commit: ed5ba62
+        files_changed:
+            - pkg/protocol/manifest.go
+            - pkg/protocol/solver_integration.go
+            - pkg/protocol/validate_migration.go
+            - pkg/protocol/reactions_validation.go
+            - pkg/protocol/integration_checklist_validator.go
+        verification: PASS (only undefined result.SAWError errors remain, expected until Agent A creates SAWError type)
+    D:
+        status: complete
+        branch: saw/error-code-taxonomy-v2/wave1-agent-D
+        commit: 56e617b
+        files_changed:
+            - pkg/protocol/action_validator.go
+            - pkg/protocol/duplicate_key_validator.go
+            - pkg/protocol/file_existence_validator.go
+            - pkg/protocol/merge_agents.go
+            - pkg/protocol/program_generator.go
+            - pkg/protocol/gate_populator.go
+            - pkg/protocol/types.go
+        verification: PASS (build fails as expected - SAWError type not yet created by other agents, non-owned files still reference deleted ValidationError)
+    E:
+        status: complete
+        branch: saw/error-code-taxonomy-v2/wave1-agent-E
+        commit: 4a7c186
+        files_changed:
+            - pkg/result/result.go
+            - pkg/result/result_test.go
+        tests_added:
+            - TestSAWErrorInterface
+            - TestSAWErrorUnwrap
+            - TestSAWErrorIsFatal
+            - TestSAWErrorWithContext
+            - TestSAWErrorWithCause
+            - TestNewErrorConstructors
+            - TestSAWErrorCauseNotSerialized
+        verification: PASS
+    F:
+        status: complete
+        branch: saw/error-code-taxonomy-v2/wave2-agent-F
+        commit: 37aeb80
+        files_changed:
+            - pkg/errparse/types.go
+            - pkg/errparse/go_parsers.go
+            - pkg/errparse/js_parsers.go
+            - pkg/errparse/python_parsers.go
+            - pkg/errparse/format_parsers.go
+            - pkg/errparse/registry_test.go
+            - pkg/errparse/go_parsers_test.go
+        tests_added:
+            - TestGoBuildParser_SingleError
+            - TestGoBuildParser_MultipleErrors
+            - TestGoTestParser_FailingTests
+            - TestGoTestParser_Panic
+            - TestGoVetParser_Warnings
+            - TestGolangciLintParser_WithRules
+            - TestGolangciLintParser_Suggestions
+            - TestGolangciLintParser_BracketRule
+        verification: PASS (build+vet pass; go test blocked by unowned test files js_parsers_test.go and python_parsers_test.go still referencing .Column/.Rule - out_of_scope_deps)
+    G:
+        status: complete
+        branch: saw/error-code-taxonomy-v2/wave2-agent-G
+        commit: a0f82b6
+        verification: PASS
+    G2:
+        status: complete
+        branch: saw/error-code-taxonomy-v2/wave3-agent-G2
+        commit: e64a420
+        files_changed:
+            - pkg/protocol/gates.go
+        verification: PASS - GateResult.ParsedErrors already []result.SAWError on worktree base. Build, vet, tests all pass.
+    H:
+        status: complete
+        branch: saw/error-code-taxonomy-v2/wave2-agent-H
+        commit: eb849f6
+        files_changed:
+            - pkg/api/types.go
+            - pkg/api/types_test.go
+        tests_added:
+            - TestTypesResultSuccess
+            - TestTypesResultFailure
+            - TestTypesResultPartial
+            - TestTypesSAWError
+            - TestTypesResultJSON
+        verification: PASS
+    I:
+        status: complete
+        branch: saw/error-code-taxonomy-v2/wave3-agent-I
+        commit: 77b7a2e
+        files_changed:
+            - pkg/result/codes.go
+            - cmd/saw/render_errors.go
+        verification: PASS
+    J:
+        status: complete
+        branch: saw/error-code-taxonomy-v2/wave3-agent-J
+        commit: e64e845
+        files_changed:
+            - web/src/types.ts
+        verification: PASS
+pre_mortem:
+    overall_risk: high
+    rows:
+        - scenario: |
+            Wave 1 protocol test files (validation_test.go, pre_wave_gate_test.go,
+            solver_integration_test.go, run_wave_atomic_test.go, prepare_wave_test.go,
+            run_scout_cmd_test.go) still reference ValidationError after Wave 1 merges.
+            The full `go test ./...` will fail post-wave-1.
+          likelihood: high
+          impact: high
+          mitigation: |
+            Wave 1 quality gate deliberately runs `go build ./pkg/protocol/...` not
+            `go test ./...`. The post-merge full test suite (test_command) runs after all
+            waves. If tests still fail after all waves, add a Wave 4 cleanup agent owning
+            those test files to update ValidationError references to result.SAWError.
+        - scenario: |
+            Wave 1 has 5 parallel agents all modifying pkg/protocol/ files. Even with
+            disjoint file ownership, mismatched SAWError construction patterns across agents
+            (e.g., one agent sets Severity, another doesn't) may cause inconsistent behavior.
+          likelihood: medium
+          impact: medium
+          mitigation: |
+            All agents share the same field mapping specification in their task prompts.
+            The Severity: "error" default is explicitly required in every agent's instructions.
+            Post-merge lint gate (`go vet`) will catch any structural mismatches.
+        - scenario: |
+            errparse.StructuredError has Column and Rule fields that migrate to SAWError
+            Context map. If any consumer accesses .Column or .Rule directly on a parsed error,
+            it breaks after migration.
+          likelihood: medium
+          impact: medium
+          mitigation: |
+            Agent G2 task notes that baseline_output.go only accesses .Message. Before
+            finalizing Wave 3 merge, run:
+            `grep -rn "\.Column\b\|\.Rule\b" /Users/dayna.blackwell/code/scout-and-wave-go --include="*.go"`
+            to verify no other direct field access consumers exist.
+        - scenario: |
+            scout-and-wave-web go.mod does not have a replace directive for scout-and-wave-go.
+            Agent H (Wave 2) cannot use the new SAWError type until the module is published
+            or a local replace directive is added.
+          likelihood: medium
+          impact: high
+          mitigation: |
+            Agent H's task explicitly requires checking go.mod for a replace directive and
+            adding one if absent. The Orchestrator should verify this pre-flight before
+            launching Wave 2 agents in the web repo.
+        - scenario: |
+            pkg/result imports only encoding/json and fmt. If any Wave 1 agent accidentally
+            adds an import of pkg/protocol to result.go (e.g., to use a constant), a circular
+            import is introduced.
+          likelihood: low
+          impact: high
+          mitigation: |
+            Agent E's constraints explicitly prohibit importing pkg/protocol or pkg/errparse
+            from pkg/result. Post-merge build gate catches circular import immediately with
+            a compiler error.
+        - scenario: |
+            TypeScript GateResultData is used by existing components. Restructuring it
+            to match GateResult breaks component compilation.
+          likelihood: low
+          impact: medium
+          mitigation: |
+            Agent J is instructed to add `export type GateResultData = GateResult` as a
+            backward-compat alias if components reference the old name. The tsc --noEmit
+            verification gate catches TypeScript compilation failures.
+critic_report:
+    verdict: PASS
+    agent_reviews:
+        _global:
+            agent_id: _global
+            verdict: PASS
+            issues:
+                - check: interface_consistency
+                  severity: warning
+                  description: Interface contract for ValidateBytes shows signature ValidateBytes(raw []byte, m *IMPLManifest) []result.SAWError but actual current signature is ValidateBytes(yamlData []byte) ([]ValidationError, error) — parameter list differs (1 param vs 2). Agents do mechanical return-type replacement only, so this mismatch is cosmetic, but the contract does not accurately describe the target signature.
+                  file: pkg/protocol/validation.go
+                  symbol: ValidateBytes
+        A:
+            agent_id: A
+            verdict: PASS
+        B:
+            agent_id: B
+            verdict: PASS
+        C:
+            agent_id: C
+            verdict: PASS
+        D:
+            agent_id: D
+            verdict: PASS
+        E:
+            agent_id: E
+            verdict: PASS
+        F:
+            agent_id: F
+            verdict: PASS
+        G:
+            agent_id: G
+            verdict: PASS
+        G2:
+            agent_id: G2
+            verdict: PASS
+        H:
+            agent_id: H
+            verdict: PASS
+        I:
+            agent_id: I
+            verdict: PASS
+        J:
+            agent_id: J
+            verdict: PASS
+    summary: 'All 10 agents reviewed across 3 waves. All 42 owned files exist and have correct action types (all modify, all present). Key symbols (StructuredError, ValidationError, newValidationError, WithContext, ParsedErrors, countAgentsFromErrors, ValidateManifest) verified in their respective source files. Interface contracts are syntactically valid and reference existing packages. One advisory finding: the ValidateBytes interface contract shows a 2-parameter signature (raw []byte, m *IMPLManifest) but the actual function takes only (yamlData []byte) — agents perform mechanical type replacement so this does not block execution. The web repo go.mod already has a replace directive for scout-and-wave-go. TypeScript GateResultData shape difference is accounted for in Agent J brief.'
+    reviewed_at: "2026-03-23T23:43:29Z"
+    issue_count: 1
+state: COMPLETE

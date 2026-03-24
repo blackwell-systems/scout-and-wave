@@ -1,0 +1,552 @@
+completion_date: "2026-03-23"
+title: SubagentStop Validation Hook
+feature_slug: subagent-stop-validation
+verdict: SUITABLE
+suitability_assessment: |
+    Suitability gate assessment:
+
+    1. File decomposition: 8+ files across 3 repos (protocol, SDK, web). Clean
+       decomposition into hook script, protocol docs, SDK commands, installer,
+       skill prompt, and web engine. No single-file bottleneck.
+
+    2. Investigation-first items: None. The SubagentStop lifecycle event is a
+       known Claude Code feature. Hook patterns are well-established in this
+       codebase (9 existing hooks). No root cause analysis needed.
+
+    3. Interface discoverability: Yes. The stdin JSON schema for SubagentStop is
+       documented by Claude Code. The sawtools commands (validate, set-completion)
+       already exist. The hook script's interface is exit codes (0/2).
+
+    4. Pre-implementation status: No existing SubagentStop references in codebase
+       (grep confirmed). All work is net-new. Existing hooks provide clear patterns.
+       sawtools set-completion exists in SDK. critic_report field exists in types.go.
+
+    5. Parallelization value: High. 4 agents across 2 waves. Build/test cycles
+       are non-trivial (Go build for SDK, npm build for web). Agents are largely
+       independent within waves.
+
+    Estimated times:
+    - Scout phase: ~8 min
+    - Agent execution: ~15 min (4 agents, ~8 min avg, 2 waves)
+    - Merge and verification: ~5 min
+    Total SAW time: ~28 min
+    Sequential baseline: ~35 min (4 agents x ~9 min avg)
+    Time savings: ~7 min (20% faster)
+    Recommendation: Clear speedup plus coordination value for cross-repo work.
+test_command: 'echo ''protocol repo: markdown/yaml only, no test suite'''
+lint_command: none
+file_ownership:
+    - file: implementations/claude-code/hooks/validate_agent_completion
+      agent: A
+      wave: 1
+      action: new
+      repo: scout-and-wave
+    - file: implementations/claude-code/hooks/emit_agent_completion
+      agent: A
+      wave: 1
+      action: new
+      repo: scout-and-wave
+    - file: protocol/execution-rules.md
+      agent: B
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: protocol/invariants.md
+      agent: B
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: cmd/saw/check_completion_cmd.go
+      agent: C
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: cmd/saw/check_completion_cmd_test.go
+      agent: C
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: cmd/saw/main.go
+      agent: C
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: implementations/claude-code/hooks/install.sh
+      agent: D
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+      repo: scout-and-wave
+    - file: docs/HOOKS.md
+      agent: D
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+      repo: scout-and-wave
+    - file: implementations/claude-code/prompts/saw-skill.md
+      agent: D
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+        - B
+      repo: scout-and-wave
+    - file: implementations/claude-code/hooks/README.md
+      agent: D
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+      repo: scout-and-wave
+interface_contracts:
+    - name: validate_agent_completion hook stdin JSON
+      description: |
+        The SubagentStop lifecycle hook receives JSON on stdin from Claude Code
+        describing the agent session that just completed.
+      definition: |
+        {
+          "session_id": "string",
+          "agent_name": "string",
+          "agent_description": "[SAW:wave1:agent-A] implement cache layer",
+          "exit_reason": "completed"
+        }
+      location: implementations/claude-code/hooks/validate_agent_completion
+    - name: validate_agent_completion exit codes
+      description: |
+        Exit code semantics for the SubagentStop hook, consistent with
+        existing hook conventions.
+      definition: |
+        Exit 0: Pass (agent fulfilled obligations or is not a SAW agent)
+        Exit 2: Block (agent has unfulfilled protocol obligations)
+        Stderr: Human-readable error message explaining what is missing
+        Stdout: JSON observability event on success (non-blocking)
+      location: implementations/claude-code/hooks/validate_agent_completion
+    - name: sawtools check-completion
+      description: |
+        New CLI command that verifies a specific agent's completion report
+        exists in the IMPL doc and has valid structure. Used by the hook
+        script for wave agent validation.
+      definition: |
+        sawtools check-completion <manifest-path> --agent <ID>
+        Returns JSON:
+        {
+          "found": true,
+          "agent_id": "A",
+          "status": "complete",
+          "has_commit": true,
+          "files_changed": ["pkg/foo/bar.go"]
+        }
+        Exit 0 if found with status "complete" or "partial".
+        Exit 1 if not found or status is empty.
+      location: cmd/saw/check_completion_cmd.go
+    - name: observability event schema
+      description: |
+        Structured JSON event emitted to stdout on successful agent
+        completion, consumable by claudewatch and web app SSE.
+      definition: |
+        {
+          "event": "agent_complete",
+          "agent_id": "A",
+          "wave": 1,
+          "agent_type": "wave",
+          "status": "complete",
+          "files_changed": ["file1.go", "file2.go"],
+          "validation_checks": {
+            "i1_ownership": "pass",
+            "i5_commit": "pass",
+            "protocol_report": "pass",
+            "journal_archived": true
+          },
+          "duration_ms": 45000,
+          "timestamp": "2026-03-23T12:00:00Z"
+        }
+      location: implementations/claude-code/hooks/validate_agent_completion
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## Hook Script: validate_agent_completion
+
+            Create `implementations/claude-code/hooks/validate_agent_completion` (new bash script).
+
+            **What to implement:**
+
+            A SubagentStop lifecycle hook that validates SAW agent protocol compliance
+            before allowing completion. The script reads JSON from stdin (see interface
+            contract for schema), parses the `[SAW:...]` tag from `agent_description`,
+            and runs validation checks based on agent type.
+
+            **Validation sequence (run in order, short-circuit on failure):**
+
+            1. **Parse SAW tag** from `agent_description` field. If no `[SAW:...]` tag,
+               exit 0 immediately (not a SAW agent).
+
+            2. **Find IMPL doc** — check `.saw-state/active-impl` for the path. If not
+               found, try extracting from `agent_description`. If still not found and
+               agent has a SAW tag, exit 2 with "Cannot locate IMPL doc".
+
+            3. **I1 ownership verification** (wave agents only): Run
+               `git diff --name-only` in the worktree. Compare changed files against
+               the agent's file ownership from `.saw-ownership.json`. Any unowned
+               modified file = exit 2 with "I1 violation: agent modified unowned
+               file(s): <list>".
+
+            4. **I5 commit verification** (wave agents only): Check that the worktree
+               branch has at least 1 commit ahead of the merge base. If zero commits
+               but a completion report exists in the IMPL doc = exit 2 with
+               "I5 violation: completion report written but no commits found".
+
+            5. **Protocol report validation** (varies by agent type):
+               - `[SAW:wave*:agent-*]`: Verify agent ID appears in IMPL doc
+                 `completion_reports:` section. Use `sawtools check-completion` if
+                 available, otherwise grep for the agent ID in completion_reports.
+               - `[SAW:critic:*]`: Verify IMPL doc has non-empty `critic_report:`
+                 field. Check it has `verdict`, `agents_reviewed`, and `issues` keys
+                 using yq or grep.
+               - `[SAW:scout]` or `[SAW:scout:*]`: Verify IMPL doc exists at
+                 expected path and passes `sawtools validate`.
+               - `[SAW:scaffold:*]`: Verify all scaffold entries have
+                 `status: committed (...)` using yq or grep.
+               - Other SAW tags: exit 0 (pass through).
+
+            Steps 6-7 below are in the SEPARATE `emit_agent_completion` script
+            (runs as `async: true` hook — never blocks):
+
+            6. **Journal archival** (all SAW agents): Check for tool journal at
+               `.saw-state/journals/wave{N}/agent-{ID}/`. If the journal directory
+               doesn't exist but a `.saw-journal.jsonl` exists in the worktree,
+               copy it to the expected location. Log a warning if copy fails.
+
+            7. **Observability event emission** (all SAW agents): Emit a structured
+               JSON event to stdout (see interface contract for schema). Include
+               agent_id, wave, status, files_changed, validation results, and
+               timestamp. This is consumed by claudewatch hooks and the web app
+               SSE system.
+
+            NOTE: `validate_agent_completion` (steps 1-5) exits BEFORE steps 6-7
+            run. The async hook fires independently. This ensures validation never
+            waits on journal I/O or network emission.
+
+            **Pattern reference:** Follow the style of `validate_agent_launch` in the
+            same directory. Use `set -euo pipefail`, `jq` for JSON parsing, `yq` with
+            grep fallback for YAML, and `sawtools` commands with graceful degradation
+            if not on PATH.
+
+            **Exit code convention:** Exit 0 = pass, Exit 2 = block. Never exit 1
+            (reserved for non-blocking errors in PostToolUse).
+
+            **Performance:** Must be fast. Use compiled sawtools binaries, avoid
+            expensive operations. Non-SAW agents must exit 0 within milliseconds.
+
+            **Tests:** Include manual test commands in the script header comments
+            (same pattern as validate_agent_launch). Cover: non-SAW agent passthrough,
+            wave agent with completion report, wave agent missing completion report,
+            critic agent with valid report, scaffold agent with uncommitted scaffold.
+
+            **Verification gate:**
+            ```
+            bash -n implementations/claude-code/hooks/validate_agent_completion
+            ```
+            Plus manual test with echo piped input.
+
+            **Constraints:**
+            - Do not modify any other file
+            - Script must be executable (chmod +x)
+            - Use exit 2 to block, exit 0 to allow
+            - Graceful degradation when sawtools/yq not available
+          files:
+            - implementations/claude-code/hooks/validate_agent_completion
+            - implementations/claude-code/hooks/emit_agent_completion
+        - id: B
+          task: |
+            ## Protocol Documentation: E42 SubagentStop Validation
+
+            Modify two protocol files to document the new execution rule.
+
+            **File 1: protocol/execution-rules.md**
+
+            Add a new section `## E42: SubagentStop Validation` after E41. Content:
+
+            - Trigger: SubagentStop lifecycle event fires for any SAW agent
+            - Required action: Hook validates protocol obligations before allowing
+              agent session to close
+            - Validation matrix (table): agent type -> required checks
+              - Wave agents: I1 ownership, I5 commit, completion report
+              - Critic: critic_report field with valid schema
+              - Scout: IMPL doc exists and passes validate
+              - Scaffold: all scaffolds have committed status
+            - Non-SAW agents pass through (exit 0)
+            - Exit 2 blocks completion with actionable error message
+            - Observability: structured JSON event emitted on success
+            - Rationale: Prevents agents from "completing" without fulfilling their
+              protocol obligations. Catches I1/I5 violations at agent boundary
+              rather than at wave finalization, enabling faster feedback loops.
+
+            **File 2: protocol/invariants.md**
+
+            Add cross-references to E42 in two places:
+            - In I4 section: Add a sentence noting that E42 enforces I4 at agent
+              completion time by verifying completion reports exist before the agent
+              session closes.
+            - In I5 section (if exists, or I1 section): Add a note that E42
+              performs post-hoc I1 ownership verification and I5 commit verification
+              at SubagentStop time.
+
+            **Style:** Match existing E-rule format exactly. Include trigger,
+            required action, rationale, and failure handling subsections.
+
+            **Verification gate:**
+            ```
+            grep -q "E42" protocol/execution-rules.md && grep -q "E42" protocol/invariants.md
+            ```
+
+            **Constraints:**
+            - Do not modify any file outside protocol/execution-rules.md and
+              protocol/invariants.md
+            - Append E42 after E41, do not renumber existing rules
+            - Keep E-rule version number unchanged (version bump is orchestrator's job)
+          files:
+            - protocol/execution-rules.md
+            - protocol/invariants.md
+        - id: C
+          task: |
+            ## SDK: sawtools check-completion command
+
+            Create a new `check-completion` CLI command for sawtools in the
+            scout-and-wave-go repository.
+
+            **Repo:** /Users/dayna.blackwell/code/scout-and-wave-go
+
+            **File 1: cmd/saw/check_completion_cmd.go** (new)
+
+            Implement `sawtools check-completion <manifest-path> --agent <ID>`:
+            - Parse the IMPL manifest YAML using existing `protocol.Load()`
+            - Look up agent ID in the `completion_reports` map
+            - Return structured JSON (see interface contract for schema)
+            - Exit 0 if found with status "complete" or "partial"
+            - Exit 1 if not found or status is empty/missing
+
+            Pattern reference: Follow `cmd/saw/set_completion_cmd.go` for structure,
+            cobra command registration, and manifest parsing patterns.
+
+            **File 2: cmd/saw/check_completion_cmd_test.go** (new)
+
+            Test cases:
+            - Agent with complete status -> exit 0, found=true
+            - Agent with partial status -> exit 0, found=true
+            - Agent not in completion_reports -> exit 1, found=false
+            - Missing manifest file -> error
+            - Empty agent ID flag -> error
+
+            **File 3: cmd/saw/main.go** (modify)
+
+            Register the new command: add the check-completion command registration
+            alongside the existing command registrations in main.go (where all
+            commands are registered, not root.go which only defines the root command).
+
+            **Verification gate:**
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./cmd/saw/... && go test ./cmd/saw/ -run TestCheckCompletion
+            ```
+
+            **Constraints:**
+            - Only modify files listed above
+            - Use existing protocol.Load() and protocol.IMPLManifest types
+            - Follow existing cobra command patterns (see set_completion_cmd.go)
+            - JSON output to stdout, errors to stderr
+          files:
+            - cmd/saw/check_completion_cmd.go
+            - cmd/saw/check_completion_cmd_test.go
+            - cmd/saw/main.go
+    - number: 2
+      agents:
+        - id: D
+          task: |
+            ## Installation, Documentation, and Skill Prompt Updates
+
+            Update 4 files in the protocol repo to integrate the new hook.
+
+            **File 1: implementations/claude-code/hooks/install.sh** (modify)
+
+            Add installation for `validate_agent_completion`:
+            - New variable: VALIDATE_COMPLETION_SCRIPT and VALIDATE_COMPLETION_SYMLINK
+            - Symlink creation block (follow existing pattern exactly)
+            - chmod +x
+            - SubagentStop hook config in settings.json — register TWO hooks:
+              ```json
+              {
+                "hooks": [
+                  {
+                    "type": "command",
+                    "command": "$HOME/.local/bin/validate_agent_completion",
+                    "timeout": 10
+                  },
+                  {
+                    "type": "command",
+                    "command": "$HOME/.local/bin/emit_agent_completion",
+                    "async": true
+                  }
+                ]
+              }
+              ```
+              First hook (validate_agent_completion): BLOCKING — runs I1/I5/report
+              validation. Exit 2 blocks agent completion. Must be synchronous.
+              Second hook (emit_agent_completion): NON-BLOCKING — runs journal
+              archival + observability event emission. Uses `async: true` so it
+              never slows down the agent lifecycle. Failures are logged, not fatal.
+              Register under `.hooks.SubagentStop` (new top-level key, not
+              PreToolUse or PostToolUse).
+            - Verification check (symlink executable)
+            - Update "Active hooks" count from 10 to 11
+            - Add to uninstall instructions
+
+            **File 2: docs/HOOKS.md** (modify)
+
+            Add new section for the hook. Follow existing format:
+            - Add row to Overview Table:
+              `| validate_agent_completion | 1 (SubagentStop) | E42/I1/I4/I5 | SAW agent session ends | Blocks completion if protocol obligations unfulfilled |`
+            - Add full hook documentation section (Hook 10):
+              - File path, Type (SubagentStop), Exit codes
+              - Validation sequence (5 checks by agent type)
+              - I1 ownership verification, I5 commit verification
+              - Journal archival and observability event
+              - Manual installation instructions
+              - Testing examples
+            - Update "Layer 1" introduction if it says specific hook count
+            - Add to Troubleshooting if relevant
+
+            **File 3: implementations/claude-code/prompts/saw-skill.md** (modify)
+
+            Add a brief note in the orchestrator prompt that SubagentStop validation
+            is now enforced automatically via E42. The orchestrator does not need to
+            manually verify completion reports (the hook blocks agents that skip them),
+            but should still read completion reports per I4 for decision-making.
+            Add near the agent launch section, roughly 2-3 sentences.
+
+            **File 4: implementations/claude-code/hooks/README.md** (modify)
+
+            Update the hook summary table and total count. Add:
+            `| validate_agent_completion | SubagentStop | - | E42/I1/I4/I5 | Validates protocol compliance at agent completion |`
+
+            **Verification gate:**
+            ```
+            grep -q "validate_agent_completion" implementations/claude-code/hooks/install.sh && grep -q "validate_agent_completion" docs/HOOKS.md && grep -q "E42" implementations/claude-code/prompts/saw-skill.md
+            ```
+
+            **Constraints:**
+            - Only modify the 4 files listed
+            - Follow existing patterns exactly (install.sh is particularly
+              pattern-sensitive)
+            - The hook script itself (validate_agent_completion) was created by
+              Agent A in wave 1 — reference it but do not modify it
+          files:
+            - implementations/claude-code/hooks/install.sh
+            - docs/HOOKS.md
+            - implementations/claude-code/prompts/saw-skill.md
+            - implementations/claude-code/hooks/README.md
+          dependencies:
+            - A
+            - B
+quality_gates:
+    level: standard
+    gates:
+        - type: custom
+          command: bash -n implementations/claude-code/hooks/validate_agent_completion
+          required: true
+        - type: custom
+          command: sawtools validate docs/IMPL/IMPL-subagent-stop-validation.yaml
+          required: true
+completion_reports:
+    A:
+        status: complete
+        branch: saw/subagent-stop-validation/wave1-agent-A
+        commit: dded85b
+        files_changed:
+            - implementations/claude-code/hooks/validate_agent_completion
+            - implementations/claude-code/hooks/emit_agent_completion
+        files_created:
+            - implementations/claude-code/hooks/validate_agent_completion
+            - implementations/claude-code/hooks/emit_agent_completion
+        tests_added:
+            - manual:non-SAW-passthrough
+            - manual:syntax-check
+        verification: PASS
+    B:
+        status: complete
+        branch: saw/subagent-stop-validation/wave1-agent-B
+        commit: 4ac9968
+        files_changed:
+            - protocol/execution-rules.md
+            - protocol/invariants.md
+        verification: PASS
+    C:
+        status: complete
+        branch: saw/subagent-stop-validation/wave1-agent-C
+        commit: f25b007
+        files_changed:
+            - cmd/saw/check_completion_cmd.go
+            - cmd/saw/check_completion_cmd_test.go
+            - cmd/saw/main.go
+        files_created:
+            - cmd/saw/check_completion_cmd.go
+            - cmd/saw/check_completion_cmd_test.go
+        tests_added:
+            - TestCheckCompletion_CompleteAgent
+            - TestCheckCompletion_PartialAgent
+            - TestCheckCompletion_AgentNotFound
+            - TestCheckCompletion_MissingManifest
+            - TestCheckCompletion_EmptyAgentFlag
+        verification: PASS
+    D:
+        status: complete
+        branch: develop
+        commit: 456f694
+        files_changed:
+            - implementations/claude-code/hooks/install.sh
+            - docs/HOOKS.md
+            - implementations/claude-code/prompts/saw-skill.md
+            - implementations/claude-code/hooks/README.md
+        verification: PASS
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: SubagentStop event schema differs from documented format
+          likelihood: low
+          impact: high
+          mitigation: |
+            Hook script uses defensive JSON parsing with jq defaults.
+            All field extractions use `// empty` fallback. Non-SAW agents
+            pass through immediately regardless of schema shape.
+        - scenario: sawtools check-completion not on PATH when hook runs
+          likelihood: medium
+          impact: low
+          mitigation: |
+            Hook degrades gracefully — falls back to grep-based detection
+            of completion report in IMPL YAML. Same pattern as existing
+            validate_agent_launch hook.
+        - scenario: I1 ownership check false positive in worktrees with uncommitted scaffold changes
+          likelihood: low
+          impact: medium
+          mitigation: |
+            Hook only checks I1 for wave agents (not scaffold agents).
+            Scaffold agents have their own validation path that checks
+            scaffold status, not file ownership.
+        - scenario: Journal archival fails due to permissions or missing directory
+          likelihood: medium
+          impact: low
+          mitigation: |
+            Journal archival is explicitly non-blocking (step 6).
+            Failure is logged as a warning but does not block agent
+            completion. The journal can be recovered from the worktree
+            before cleanup.
+        - scenario: install.sh SubagentStop key not recognized by older Claude Code versions
+          likelihood: low
+          impact: medium
+          mitigation: |
+            SubagentStop is a standard Claude Code lifecycle event.
+            If not supported, the hook simply never fires — no breakage.
+            Existing hooks continue to work.
+state: COMPLETE

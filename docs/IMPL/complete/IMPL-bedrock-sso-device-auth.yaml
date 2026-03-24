@@ -1,0 +1,526 @@
+completion_date: "2026-03-23"
+title: AWS SSO Device Authorization Flow for Bedrock Provider
+feature_slug: bedrock-sso-device-auth
+verdict: SUITABLE
+suitability_assessment: |
+    SUITABLE - All five gates pass cleanly.
+
+    1. File decomposition: 6+ distinct files across backend (Go) and frontend (React/TS),
+       naturally split into SSO service logic, API handler, frontend component, and types.
+       No single-file bottleneck.
+
+    2. No investigation-first items: AWS SSO OIDC device auth flow is well-documented.
+       The ssooidc SDK package is already in go.mod as an indirect dependency.
+
+    3. Interface discoverability: All cross-agent interfaces can be fully specified upfront.
+       The SSO flow has a clear request/response contract (start auth -> poll -> token).
+
+    4. Pre-implementation status: No existing SSO device auth code exists. The Bedrock
+       provider card supports static credentials and profile names only. The ssooidc
+       package is already a transitive dependency via aws-sdk-go-v2.
+
+    5. Parallelization value: High. Backend Go service + API handler are independent from
+       frontend React component work. Build/test cycle is >30s (Go build + npm build).
+       3 parallel agents in wave 1, 1 integration agent in wave 2.
+
+    Estimated times:
+    - Scout phase: ~8 min
+    - Agent execution: ~12 min (3 agents x 8 min avg, parallel in wave 1, then 1 agent in wave 2)
+    - Merge and verification: ~4 min
+    Total SAW time: ~24 min
+    Sequential baseline: ~40 min (4 agents x 10 min avg)
+    Time savings: ~16 min (40% faster)
+    Recommendation: Clear speedup.
+test_command: cd /Users/dayna.blackwell/code/scout-and-wave-web && go test ./...
+lint_command: cd /Users/dayna.blackwell/code/scout-and-wave-web && go vet ./...
+file_ownership:
+    - file: pkg/service/sso_service.go
+      agent: A
+      wave: 1
+      action: new
+    - file: pkg/service/sso_service_test.go
+      agent: A
+      wave: 1
+      action: new
+    - file: pkg/api/sso_handler.go
+      agent: B
+      wave: 1
+      action: new
+    - file: pkg/api/sso_handler_test.go
+      agent: B
+      wave: 1
+      action: new
+    - file: web/src/components/SSOLoginButton.tsx
+      agent: C
+      wave: 1
+      action: new
+    - file: web/src/components/SettingsScreen.tsx
+      agent: D
+      wave: 2
+      action: modify
+    - file: pkg/api/server.go
+      agent: D
+      wave: 2
+      action: modify
+interface_contracts:
+    - name: SSODeviceAuthStart
+      description: Initiates AWS SSO OIDC device authorization flow by reading SSO profile config, registering a client, and starting device authorization.
+      definition: |
+        // In pkg/service/sso_service.go
+        type SSOStartRequest struct {
+            Profile string `json:"profile"`
+            Region  string `json:"region,omitempty"`
+        }
+
+        type SSOStartResponse struct {
+            VerificationURI         string `json:"verification_uri"`
+            VerificationURIComplete string `json:"verification_uri_complete"`
+            UserCode                string `json:"user_code"`
+            DeviceCode              string `json:"device_code"`
+            ClientID                string `json:"client_id"`
+            ClientSecret            string `json:"client_secret"`
+            ExpiresIn               int32  `json:"expires_in"`
+            Interval                int32  `json:"interval"`
+            PollID                  string `json:"poll_id"`
+        }
+
+        func StartSSODeviceAuth(ctx context.Context, req SSOStartRequest) (*SSOStartResponse, error)
+      location: pkg/service/sso_service.go
+    - name: SSODeviceAuthPoll
+      description: Polls AWS SSO OIDC CreateToken until authentication completes or times out. Caches the resulting SSO token.
+      definition: |
+        // In pkg/service/sso_service.go
+        type SSOPollRequest struct {
+            PollID string `json:"poll_id"`
+        }
+
+        type SSOPollResponse struct {
+            Status   string `json:"status"`
+            Identity string `json:"identity,omitempty"`
+            Error    string `json:"error,omitempty"`
+        }
+
+        func PollSSODeviceAuth(ctx context.Context, req SSOPollRequest) (*SSOPollResponse, error)
+      location: pkg/service/sso_service.go
+    - name: HandleSSOStart
+      description: HTTP handler for POST /api/config/providers/bedrock/sso/start
+      definition: |
+        func (s *Server) handleSSOStart(w http.ResponseWriter, r *http.Request)
+      location: pkg/api/sso_handler.go
+    - name: HandleSSOPoll
+      description: HTTP handler for POST /api/config/providers/bedrock/sso/poll
+      definition: |
+        func (s *Server) handleSSOPoll(w http.ResponseWriter, r *http.Request)
+      location: pkg/api/sso_handler.go
+    - name: SSOLoginButton
+      description: React component rendering SSO Login button and device auth flow UI
+      definition: |
+        interface SSOLoginButtonProps {
+          profile: string
+          region: string
+          onComplete: (identity: string) => void
+          onError: (error: string) => void
+        }
+        export default function SSOLoginButton(props: SSOLoginButtonProps): JSX.Element
+      location: web/src/components/SSOLoginButton.tsx
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## Agent A - SSO Service Layer
+
+            **What to implement:**
+            Create `pkg/service/sso_service.go` implementing the AWS SSO OIDC device authorization
+            flow. This is the core business logic with no HTTP concerns.
+
+            **Files:** `pkg/service/sso_service.go`, `pkg/service/sso_service_test.go`
+
+            **Implementation details:**
+
+            1. **ParseSSOProfile(profile string) function:**
+               - Read `~/.aws/config` using manual INI parsing (read file, parse sections)
+               - Extract `sso_start_url`, `sso_account_id`, `sso_role_name`, `sso_region` from
+                 the `[profile <name>]` section
+               - Return a struct with these fields, error if profile not found or missing required fields
+
+            2. **StartSSODeviceAuth(ctx, SSOStartRequest) function:**
+               - Parse the SSO profile config to get sso_start_url and sso_region
+               - Use `github.com/aws/aws-sdk-go-v2/service/ssooidc` client:
+                 - Call `RegisterClient` with ClientName="saw-web", ClientType="public"
+                 - Call `StartDeviceAuthorization` with the client ID/secret from RegisterClient
+                   and the sso_start_url
+               - Generate a unique PollID (use crypto/rand hex string)
+               - Store the pending auth state in a package-level sync.Map keyed by PollID
+                 (device code, client ID, client secret, sso_region, sso_account_id, sso_role_name, expiry)
+               - Return SSOStartResponse with verification URL, user code, poll ID, interval, expiry
+               - CRITICAL: Never log client_secret, device_code, or any token values
+
+            3. **PollSSODeviceAuth(ctx, SSOPollRequest) function:**
+               - Look up pending auth state by PollID from sync.Map
+               - If not found or expired, return status="expired"
+               - Call ssooidc.CreateToken with grant_type="urn:ietf:params:oauth:grant-type:device_code"
+               - If AuthorizationPendingException: return status="pending"
+               - If SlowDownException: return status="pending"
+               - If ExpiredTokenException: return status="expired", clean up state
+               - On success: cache the SSO token, call STS GetCallerIdentity to get ARN,
+                 return status="complete" with identity
+
+            4. **SSO token caching (cacheSSOToken function):**
+               - Cache directory: `~/.aws/sso/cache/`
+               - File name: SHA1 hash of sso_start_url + ".json" (matches `aws sso login` convention)
+               - Cache file JSON format:
+                 ```json
+                 {
+                   "startUrl": "https://my-org.awsapps.com/start",
+                   "region": "us-east-1",
+                   "accessToken": "...",
+                   "expiresAt": "2024-01-01T00:00:00UTC",
+                   "clientId": "...",
+                   "clientSecret": "...",
+                   "registrationExpiresAt": "2024-01-01T00:00:00UTC"
+                 }
+                 ```
+               - This format is compatible with what `aws sso login` produces
+               - Set file permissions to 0600
+
+            5. **Cleanup:** Use time.AfterFunc or lazy check to remove expired pending auth states.
+
+            **Testing:**
+            - Unit test ParseSSOProfile with a temp config file
+            - Unit test PollID generation for uniqueness
+            - Unit test cacheSSOToken writes correct JSON format and 0600 permissions
+            - Unit test expired state cleanup
+            - For StartSSODeviceAuth and PollSSODeviceAuth, define an ssooidcClient interface
+              and use a mock implementation in tests
+
+            **Verification gate:**
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-web && go build ./pkg/service/ && go test ./pkg/service/ -run TestSSO -v
+            ```
+
+            **Constraints:**
+            - Only modify files listed in your file ownership
+            - Never log or include in error messages: access tokens, client secrets, device codes
+            - SSO token cache must be compatible with `aws sso login` format
+            - Use existing aws-sdk-go-v2 packages (ssooidc is already an indirect dep in go.mod)
+          files:
+            - pkg/service/sso_service.go
+            - pkg/service/sso_service_test.go
+        - id: B
+          task: |
+            ## Agent B - SSO HTTP Handler
+
+            **What to implement:**
+            Create `pkg/api/sso_handler.go` with HTTP handlers that expose the SSO service
+            layer via REST endpoints. Route registration happens in wave 2.
+
+            **Files:** `pkg/api/sso_handler.go`, `pkg/api/sso_handler_test.go`
+
+            **Implementation details:**
+
+            1. **handleSSOStart (POST /api/config/providers/bedrock/sso/start):**
+               - Decode JSON body: `{ "profile": "my-sso-profile", "region": "us-east-1" }`
+               - Profile is required; region is optional
+               - Call `service.StartSSODeviceAuth(ctx, req)`
+               - Return JSON with: verification_uri, verification_uri_complete, user_code,
+                 poll_id, expires_in, interval
+               - CRITICAL: Do NOT include device_code, client_id, or client_secret in response
+               - On error: return appropriate HTTP status with JSON error
+
+            2. **handleSSOPoll (POST /api/config/providers/bedrock/sso/poll):**
+               - Decode JSON body: `{ "poll_id": "..." }`
+               - Call `service.PollSSODeviceAuth(ctx, req)`
+               - Return JSON: `{ "status": "pending"|"complete"|"expired"|"error",
+                 "identity": "arn:...", "error": "..." }`
+
+            3. **RegisterSSORoutes method:**
+               - Create `func (s *Server) RegisterSSORoutes()` that registers both routes
+               - Follows the pattern of RegisterConflictRoutes, RegisterAmendRoutes, etc.
+
+            **HTTP response type for start endpoint** (define in sso_handler.go):
+            ```go
+            type ssoStartHTTPResponse struct {
+                VerificationURI         string `json:"verification_uri"`
+                VerificationURIComplete string `json:"verification_uri_complete"`
+                UserCode                string `json:"user_code"`
+                PollID                  string `json:"poll_id"`
+                ExpiresIn               int32  `json:"expires_in"`
+                Interval                int32  `json:"interval"`
+            }
+            ```
+
+            **Testing:**
+            - Test handleSSOStart with valid/invalid/missing-profile JSON bodies
+            - Test handleSSOPoll with valid/invalid/expired poll IDs
+            - Verify sensitive fields are NOT in HTTP responses
+            - Use httptest.NewRecorder for handler tests
+
+            **Verification gate:**
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-web && go build ./pkg/api/ && go test ./pkg/api/ -run TestSSO -v
+            ```
+
+            **Constraints:**
+            - Only modify files listed in your file ownership
+            - Follow existing handler patterns in config_handler.go (respondJSON, respondError, decodeJSON)
+            - Never expose device_code or client_secret in HTTP responses
+            - Do NOT modify server.go - route registration happens in wave 2
+          files:
+            - pkg/api/sso_handler.go
+            - pkg/api/sso_handler_test.go
+        - id: C
+          task: |
+            ## Agent C - SSO Login Frontend Component
+
+            **What to implement:**
+            Create `web/src/components/SSOLoginButton.tsx` - a React component for the SSO
+            device auth flow UI. Integration into SettingsScreen happens in wave 2.
+
+            **Files:** `web/src/components/SSOLoginButton.tsx`
+
+            **Implementation details:**
+
+            1. **Component props:**
+               ```typescript
+               interface SSOLoginButtonProps {
+                 profile: string
+                 region: string
+                 onComplete: (identity: string) => void
+                 onError: (error: string) => void
+               }
+               ```
+
+            2. **State machine:**
+               - `idle` - Shows "SSO Login" button
+               - `starting` - Button shows spinner while calling start endpoint
+               - `awaiting` - Shows verification URL, user code, countdown timer
+               - `complete` - Shows success checkmark and identity ARN
+               - `error` - Shows error message with retry button
+               - `expired` - Shows "Session expired" with retry button
+
+            3. **UI for `awaiting` state:**
+               - User code displayed prominently (large, monospace, selectable text)
+               - Verification URL as clickable link (target="_blank")
+               - Instructional text: "Open the URL above and enter the code to authenticate"
+               - Countdown timer showing remaining seconds
+               - Do NOT auto-open the URL (app may be running remotely)
+
+            4. **Polling logic:**
+               - On start response, poll POST /api/config/providers/bedrock/sso/poll
+                 at the interval from the response (default 5s)
+               - Handle status transitions: pending->continue, complete->done, expired/error->stop
+               - Clean up interval on unmount (useEffect cleanup)
+
+            5. **Styling:**
+               - Tailwind classes matching existing components
+               - lucide-react icons: Loader2, CheckCircle2, XCircle, ExternalLink
+               - Compact button matching "Test Connection" size in ProviderCard
+
+            6. **Disable when:** profile is empty, or during starting/awaiting states
+
+            **Verification gate:**
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-web/web && npx tsc --noEmit
+            ```
+
+            **Constraints:**
+            - Only create the file listed in your file ownership
+            - Do NOT modify SettingsScreen.tsx (wave 2 handles integration)
+            - Do NOT auto-open browser windows
+            - Export as default export
+            - Define types locally in the component file
+          files:
+            - web/src/components/SSOLoginButton.tsx
+      base_commit: 0384c0240cfd56998a4c0788b1a23fba8c46828f
+    - number: 2
+      type: integration
+      agents:
+        - id: D
+          task: |
+            ## Agent D - Integration (Route Registration + UI Wiring)
+
+            **What to implement:**
+            Wire SSO handler routes into server.go and integrate SSOLoginButton into
+            the Bedrock section of SettingsScreen.tsx.
+
+            **Files:** `pkg/api/server.go`, `web/src/components/SettingsScreen.tsx`
+
+            **Implementation details:**
+
+            1. **server.go route registration:**
+               - In the `New()` function, add `s.RegisterSSORoutes()` near the existing
+                 provider validation route (around line 176):
+                 ```go
+                 s.mux.HandleFunc("POST /api/config/providers/{provider}/validate", s.handleValidateProvider)
+                 s.RegisterSSORoutes() // AWS SSO device auth flow
+                 ```
+
+            2. **SettingsScreen.tsx integration:**
+               - Import SSOLoginButton from './SSOLoginButton'
+               - In the Bedrock ProviderCard section (around line 362-369), add SSOLoginButton
+                 BELOW the existing ProviderCard, inside the same container
+               - Pass props:
+                 ```tsx
+                 <SSOLoginButton
+                   profile={providers.bedrock.profile || ''}
+                   region={providers.bedrock.region || ''}
+                   onComplete={(identity) => { /* show success toast or trigger validation */ }}
+                   onError={(error) => { /* display error */ }}
+                 />
+                 ```
+               - Add a visual separator (border-t) between ProviderCard and SSO button
+               - Add helper text: "Use SSO Login when your AWS profile is configured for
+                 SSO in ~/.aws/config"
+
+            **Verification gate:**
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-web && go build ./... && cd web && npx tsc --noEmit
+            ```
+
+            **Constraints:**
+            - Only modify files listed in your file ownership
+            - Do not change existing ProviderCard behavior or Bedrock field definitions
+            - Keep SSO button visually secondary to existing profile/credentials flow
+          files:
+            - pkg/api/server.go
+            - web/src/components/SettingsScreen.tsx
+          dependencies:
+            - A
+            - B
+            - C
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: cd /Users/dayna.blackwell/code/scout-and-wave-web && go build ./...
+          required: true
+        - type: lint
+          command: cd /Users/dayna.blackwell/code/scout-and-wave-web && go vet ./...
+          required: true
+        - type: test
+          command: cd /Users/dayna.blackwell/code/scout-and-wave-web && go test ./pkg/service/ ./pkg/api/
+          required: true
+        - type: build
+          command: cd /Users/dayna.blackwell/code/scout-and-wave-web/web && npx tsc --noEmit
+          required: true
+post_merge_checklist:
+    groups:
+        - title: Build Verification
+          items:
+            - description: Run go mod tidy to promote ssooidc to direct dependency
+              command: cd /Users/dayna.blackwell/code/scout-and-wave-web && go mod tidy
+            - description: Rebuild frontend assets
+              command: cd /Users/dayna.blackwell/code/scout-and-wave-web/web && npm run build
+            - description: Rebuild Go binary with embedded assets
+              command: cd /Users/dayna.blackwell/code/scout-and-wave-web && go build -o saw ./cmd/saw
+            - description: Run full test suite
+              command: cd /Users/dayna.blackwell/code/scout-and-wave-web && go test ./...
+        - title: Manual Smoke Test
+          items:
+            - description: Open Settings > Providers > Bedrock, enter an SSO profile name, click SSO Login
+            - description: Verify device code and verification URL are displayed without auto-opening browser
+            - description: Complete auth in browser, verify identity ARN shown on success
+            - description: Verify SSO token cached in ~/.aws/sso/cache/ with correct format
+completion_reports:
+    A:
+        status: complete
+        branch: saw/bedrock-sso-device-auth/wave1-agent-A
+        commit: d4cee92
+        files_changed:
+            - pkg/service/sso_service.go
+            - pkg/service/sso_service_test.go
+        files_created:
+            - pkg/service/sso_service.go
+            - pkg/service/sso_service_test.go
+        tests_added:
+            - TestSSOParseSSOProfile
+            - TestSSOGeneratePollID
+            - TestSSOCacheSSOToken
+            - TestSSOStartDeviceAuth
+            - TestSSOStartDeviceAuth_EmptyProfile
+            - TestSSOPollDeviceAuth_Pending
+            - TestSSOPollDeviceAuth_Complete
+            - TestSSOPollDeviceAuth_NotFound
+            - TestSSOPollDeviceAuth_Expired
+            - TestSSOPollDeviceAuth_EmptyPollID
+        verification: PASS (go build and go vet pass; go test blocked by pre-existing config_service_test.go compile error)
+    B:
+        status: complete
+        branch: saw/bedrock-sso-device-auth/wave1-agent-B
+        commit: "8646159"
+        files_changed:
+            - pkg/api/sso_handler.go
+            - pkg/api/sso_handler_test.go
+        files_created:
+            - pkg/api/sso_handler.go
+            - pkg/api/sso_handler_test.go
+        tests_added:
+            - TestSSOStart_ValidRequest
+            - TestSSOStart_SensitiveFieldsNotExposed
+            - TestSSOStart_MissingProfile
+            - TestSSOStart_InvalidJSON
+            - TestSSOStart_EmptyBody
+            - TestSSOStart_ServiceError
+            - TestSSOStart_ServiceNotConfigured
+            - TestSSOPoll_Pending
+            - TestSSOPoll_Complete
+            - TestSSOPoll_Expired
+            - TestSSOPoll_MissingPollID
+            - TestSSOPoll_InvalidJSON
+            - TestSSOPoll_ServiceError
+            - TestSSOPoll_ServiceNotConfigured
+        verification: PASS
+    C:
+        status: complete
+        branch: saw/bedrock-sso-device-auth/wave1-agent-C
+        commit: 1217f5c
+        files_changed:
+            - web/src/components/SSOLoginButton.tsx
+        files_created:
+            - web/src/components/SSOLoginButton.tsx
+        verification: PASS
+    D:
+        status: complete
+pre_mortem:
+    overall_risk: medium
+    rows:
+        - scenario: AWS SSO profile not found in ~/.aws/config on user's machine
+          likelihood: medium
+          impact: low
+          mitigation: ParseSSOProfile returns a clear error guiding the user to run 'aws configure sso' first
+        - scenario: ssooidc SDK calls fail due to network or firewall restrictions
+          likelihood: low
+          impact: medium
+          mitigation: Standard error handling with descriptive messages. The 5-second polling interval avoids rate limits.
+        - scenario: SSO token cache format diverges from what aws-sdk-go-v2 credential chain expects
+          likelihood: low
+          impact: high
+          mitigation: Agent A tests must verify exact JSON field names and date format match aws CLI output. SHA1 hash of start_url for filename.
+        - scenario: Concurrent SSO auth attempts cause stale state in sync.Map
+          likelihood: low
+          impact: low
+          mitigation: Each auth gets a unique PollID. Expired entries cleaned up lazily. sync.Map is goroutine-safe.
+        - scenario: go.mod needs ssooidc promoted from indirect to direct dependency
+          likelihood: medium
+          impact: medium
+          mitigation: ssooidc already in go.mod as indirect. Agent A runs go mod tidy after importing the package.
+critic_report:
+    verdict: PASS
+    agent_reviews:
+        A:
+            agent_id: A
+            verdict: PASS
+        B:
+            agent_id: B
+            verdict: PASS
+        C:
+            agent_id: C
+            verdict: PASS
+        D:
+            agent_id: D
+            verdict: PASS
+    summary: All four agent briefs verified against the scout-and-wave-web codebase. File existence checks confirm all new files do not yet exist and all modify-target files exist. Symbol references (respondJSON, respondError, decodeJSON, RegisterConflictRoutes, RegisterAmendRoutes, Server struct, ProviderCard, BEDROCK_FIELDS, lucide-react icons) all resolve correctly. The ssooidc, sts, and aws-sdk-go-v2/config packages are present in go.mod as indirect dependencies. Route registration patterns match the described Register*Routes() method convention. Line number references in Agent D brief (line 176 for handleValidateProvider, lines 362-369 for Bedrock ProviderCard) are accurate. No errors or warnings found.
+    reviewed_at: "2026-03-23T07:46:25Z"
+    issue_count: 0
+state: WAVE_PENDING

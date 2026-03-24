@@ -1,0 +1,57 @@
+title: 'Unification Phase 3: Config, State, Validation, RepoEntry'
+program_slug: unification-phase3
+state: COMPLETE
+created: "2026-03-24T05:14:56Z"
+updated: "2026-03-24T05:14:56Z"
+impls:
+    - slug: config-state-unification
+      title: Config & State Unification
+      tier: 1
+      estimated_agents: 7
+      estimated_waves: 3
+      key_outputs:
+        - config.SAWConfig
+        - config.Load
+        - config.Save
+        - config.FindConfigPath
+        - config.GetWaveState
+        - Error codes N013-N014
+      status: pending
+    - slug: validation-logic-unification
+      title: Validation Logic Unification
+      tier: 1
+      estimated_agents: 4
+      estimated_waves: 2
+      key_outputs:
+        - FullValidate
+        - FullValidateProgram
+        - AppendWiringReport
+      status: pending
+    - slug: repo-entry-unification
+      title: RepoEntry Unification & Inline Config Migration
+      tier: 2
+      depends_on:
+        - config-state-unification
+      estimated_agents: 5
+      estimated_waves: 2
+      key_outputs:
+        - config.RepoEntry
+        - config.Load
+        - protocol.RepoEntry removal
+        - service.RepoEntry removal
+      status: complete
+tiers:
+    - number: 1
+      impls:
+        - config-state-unification
+        - validation-logic-unification
+    - number: 2
+      impls:
+        - repo-entry-unification
+completion:
+    tiers_complete: 0
+    tiers_total: 2
+    impls_complete: 0
+    impls_total: 3
+    total_agents: 16
+    total_waves: 7

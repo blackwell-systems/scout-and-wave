@@ -1,0 +1,341 @@
+completion_date: "2026-03-23"
+title: prepare-tier batching command
+feature_slug: prepare-tier-command
+verdict: SUITABLE
+suitability_assessment: |
+    1. File decomposition: 3 files will be created/modified across 2 packages.
+       The command file (cmd/saw/prepare_tier_cmd.go), its registration in main.go,
+       and a new engine function in pkg/protocol/program_tier_prepare.go. These map
+       cleanly to 2 agents with disjoint ownership.
+
+    2. Investigation-first: No. All composed functions already exist:
+       - protocol.ParseProgramManifest (program_parser.go)
+       - protocol.CheckIMPLConflicts (program_conflict.go)
+       - protocol.Load + protocol.Validate (manifest.go, validation.go)
+       - protocol.CreateProgramWorktrees (program_worktree.go)
+
+    3. Interface discoverability: Yes. The PrepareTier function signature and
+       result type can be fully defined before implementation. All composed
+       functions have stable, known signatures.
+
+    4. Pre-implementation status: No existing prepare-tier command. The counterpart
+       finalize-tier exists and provides the pattern to follow.
+
+    5. Parallelization value: 2 agents, Go build/test cycle ~15s, agents touch
+       2-3 files each. Marginal speedup but coordination value is high — the IMPL
+       doc serves as a precise specification for the command's behavior.
+
+    Estimated times:
+    - Scout phase: ~5 min
+    - Agent execution: ~8 min (2 agents x 4 min avg)
+    - Merge & verification: ~3 min
+    Total SAW time: ~16 min
+
+    Sequential baseline: ~12 min (2 tasks x 6 min avg)
+    Time savings: ~-4 min (overhead slightly exceeds parallelization benefit)
+
+    Recommendation: Coordination value — the IMPL doc provides a precise spec
+    for the command, and Wave 1 parallelism saves a small amount of agent time.
+test_command: go test ./...
+lint_command: go vet ./...
+file_ownership:
+    - file: pkg/protocol/program_tier_prepare.go
+      agent: A
+      wave: 1
+      action: new
+    - file: cmd/saw/prepare_tier_cmd.go
+      agent: B
+      wave: 1
+      action: new
+    - file: cmd/saw/main.go
+      agent: B
+      wave: 1
+      action: modify
+interface_contracts:
+    - name: PrepareTier
+      description: |
+        Atomic batching function that combines conflict check, IMPL validation,
+        and worktree creation for a program tier. Returns structured result with
+        per-step outcomes.
+      definition: |
+        func PrepareTier(programManifestPath string, tierNumber int, repoDir string) (*PrepareTierResult, error)
+      location: pkg/protocol/program_tier_prepare.go
+    - name: PrepareTierResult
+      description: |
+        Structured output type for prepare-tier containing per-step results.
+        Returned as JSON by the CLI command.
+      definition: |
+        type PrepareTierResult struct {
+            Tier           int                       `json:"tier"`
+            ConflictCheck  *ConflictCheckResult      `json:"conflict_check"`
+            Validations    []IMPLValidationResult    `json:"validations"`
+            Branches       []ProgramWorktreeInfo     `json:"branches"`
+            Success        bool                      `json:"success"`
+        }
+
+        type ConflictCheckResult struct {
+            Conflicts []IMPLFileConflict `json:"conflicts"`
+            Disjoint  bool               `json:"disjoint"`
+        }
+
+        type IMPLValidationResult struct {
+            ImplSlug string `json:"impl_slug"`
+            Valid    bool   `json:"valid"`
+            Fixed    int    `json:"fixed"`
+            Errors   []string `json:"errors,omitempty"`
+        }
+      location: pkg/protocol/program_tier_prepare.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## What to implement
+
+            Create `pkg/protocol/program_tier_prepare.go` containing the `PrepareTier`
+            function and its result types. This is the engine-level batching function
+            that composes existing protocol functions into an atomic operation.
+
+            ## Result types
+
+            Define these types in the file:
+
+            ```go
+            type PrepareTierResult struct {
+                Tier           int                       `json:"tier"`
+                ConflictCheck  *ConflictCheckResult      `json:"conflict_check"`
+                Validations    []IMPLValidationResult    `json:"validations"`
+                Branches       []ProgramWorktreeInfo     `json:"branches"`
+                Success        bool                      `json:"success"`
+            }
+
+            type ConflictCheckResult struct {
+                Conflicts []IMPLFileConflict `json:"conflicts"`
+                Disjoint  bool               `json:"disjoint"`
+            }
+
+            type IMPLValidationResult struct {
+                ImplSlug string   `json:"impl_slug"`
+                Valid    bool     `json:"valid"`
+                Fixed    int      `json:"fixed"`
+                Errors   []string `json:"errors,omitempty"`
+            }
+            ```
+
+            Note: `ProgramWorktreeInfo` already exists in `program_worktree.go`.
+            `IMPLFileConflict` already exists in `program_conflict.go`. Reuse them.
+
+            ## PrepareTier function
+
+            Signature: `func PrepareTier(programManifestPath string, tierNumber int, repoDir string) (*PrepareTierResult, error)`
+
+            Steps (abort on any failure, return partial result with Success=false):
+
+            1. Parse program manifest via `ParseProgramManifest(programManifestPath)`.
+               If error, return nil + error (fatal, exit code 2 in CLI).
+
+            2. Find tier by `tierNumber` in manifest.Tiers. If not found, return nil + error (fatal).
+
+            3. **Conflict check**: Extract `tier.Impls` slugs, call `CheckIMPLConflicts(slugs, repoDir)`.
+               Populate `result.ConflictCheck` with conflicts and disjoint status.
+               If conflicts exist (`len(report.Conflicts) > 0`), set `Success=false` and return
+               immediately (do NOT proceed to validation or worktree creation).
+
+            4. **IMPL validation**: For each slug in `tier.Impls`:
+               - Resolve IMPL path via the existing `resolveIMPLPath(repoDir, slug)` function.
+               - Load IMPL doc via `Load(implPath)`.
+               - Run `FixGateTypes(m)` to count auto-fixes.
+               - If fixes were applied, call `Save(m, implPath)` to persist them.
+               - Run `Validate(m)` to get validation errors.
+               - Append an `IMPLValidationResult` with slug, valid status, fix count, and error messages.
+               - If any IMPL is invalid (has errors after fix), set `Success=false` and return
+                 (do NOT proceed to worktree creation).
+
+            5. **Create worktrees**: Call `CreateProgramWorktrees(programManifestPath, tierNumber, repoDir)`.
+               If result is not success, set `Success=false`, populate Branches as empty, return.
+               Otherwise copy worktree info into `result.Branches`.
+
+            6. Set `Success=true` and return.
+
+            ## Conventions
+
+            - Follow the pattern in `program_tier_finalize.go` for error handling.
+            - Package: `protocol` (in `pkg/protocol/`).
+            - Use existing imports only (no new dependencies).
+            - The function must be deterministic and idempotent where possible.
+
+            ## Tests
+
+            Create `pkg/protocol/program_tier_prepare_test.go` with:
+            - Test that PrepareTier returns error for non-existent manifest path
+            - Test that PrepareTier returns error for non-existent tier number
+            (Full integration tests require git repos; unit tests cover parse failures.)
+
+            ## Verification gate
+
+            ```
+            go build ./pkg/protocol/... && go vet ./pkg/protocol/... && go test ./pkg/protocol/...
+            ```
+
+            ## Constraints
+
+            - Do NOT duplicate logic from CheckIMPLConflicts, Load, Validate, or CreateProgramWorktrees.
+              Call them directly.
+            - The `resolveIMPLPath` function is unexported but in the same package — you can call it.
+            - Do NOT modify any existing files.
+          files:
+            - pkg/protocol/program_tier_prepare.go
+        - id: B
+          task: |
+            ## What to implement
+
+            Create `cmd/saw/prepare_tier_cmd.go` containing the cobra command for
+            `sawtools prepare-tier`, and register it in `cmd/saw/main.go`.
+
+            ## Command structure
+
+            Follow the exact pattern from `finalize_tier_cmd.go`:
+
+            ```go
+            func newPrepareTierCmd() *cobra.Command {
+                var tierNum int
+
+                cmd := &cobra.Command{
+                    Use:   "prepare-tier <program-manifest>",
+                    Short: "Prepare a program tier: check conflicts, validate IMPLs, create branches",
+                    Long: `Prepares a program tier for execution by:
+            1. Checking for file ownership conflicts across IMPLs in the tier
+            2. Validating each IMPL doc (with --fix auto-corrections)
+            3. Creating IMPL branches for all IMPLs in the tier
+
+            This is the counterpart to finalize-tier. Together they bookend tier execution:
+              prepare-tier -> orchestrator launches scouts/agents -> finalize-tier
+
+            Examples:
+              sawtools prepare-tier docs/PROGRAM.yaml --tier 1
+              sawtools prepare-tier program.yaml --tier 2 --repo-dir /path/to/repo
+
+            Exit codes:
+              0 - All steps succeeded
+              1 - Step failure (conflicts found, validation failed, or worktree creation failed)
+              2 - Fatal error (manifest not found, tier not found)`,
+                    Args: cobra.ExactArgs(1),
+                    RunE: func(cmd *cobra.Command, args []string) error {
+                        // ... implementation
+                    },
+                }
+
+                cmd.Flags().IntVar(&tierNum, "tier", 0, "Tier number to prepare (required)")
+                _ = cmd.MarkFlagRequired("tier")
+
+                return cmd
+            }
+            ```
+
+            ## RunE implementation
+
+            1. Get `manifestPath` from `args[0]`.
+            2. Call `protocol.PrepareTier(manifestPath, tierNum, repoDir)`.
+            3. If error is returned (fatal): print to stderr and return error (cobra exits with code 1,
+               but for parse/tier-not-found errors, call `os.Exit(2)` explicitly).
+               Detect fatal errors by checking if `result == nil` (PrepareTier returns nil result on fatal).
+            4. Marshal result as indented JSON, print to stdout.
+            5. If `!result.Success`, call `os.Exit(1)`.
+            6. Return nil.
+
+            ## Registration in main.go
+
+            Add `newPrepareTierCmd()` to the `rootCmd.AddCommand(...)` call in main.go.
+            Place it immediately before `newFinalizeTierCmd()` for logical grouping.
+
+            ## Imports
+
+            Only needs:
+            - `encoding/json`
+            - `fmt`
+            - `os`
+            - `github.com/blackwell-systems/scout-and-wave-go/pkg/protocol`
+            - `github.com/spf13/cobra`
+
+            Uses the package-level `repoDir` variable from `root.go` (same as finalize-tier).
+
+            ## Verification gate
+
+            ```
+            go build ./cmd/saw/... && go vet ./cmd/saw/...
+            ```
+
+            ## Constraints
+
+            - Follow `finalize_tier_cmd.go` patterns exactly (same comment style, same error handling).
+            - Include the `// Registration: add newPrepareTierCmd() to main.go AddCommand list.` comment at top.
+            - The `repoDir` package variable is already defined in `root.go` — do not redeclare.
+            - Do NOT modify any files other than `cmd/saw/prepare_tier_cmd.go` and `cmd/saw/main.go`.
+          files:
+            - cmd/saw/prepare_tier_cmd.go
+            - cmd/saw/main.go
+      base_commit: a498f15025bb15acafdcb8f0ecb330ed35492d29
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./cmd/saw/...
+          required: true
+        - type: lint
+          command: go vet ./...
+          required: true
+        - type: test
+          command: go test ./...
+          required: true
+completion_reports:
+    A:
+        status: complete
+        branch: saw/prepare-tier-command/wave1-agent-A
+        commit: ec755f7
+        files_changed:
+            - pkg/protocol/program_tier_prepare.go
+            - pkg/protocol/program_tier_prepare_test.go
+        files_created:
+            - pkg/protocol/program_tier_prepare.go
+            - pkg/protocol/program_tier_prepare_test.go
+        tests_added:
+            - TestPrepareTier_ManifestNotFound
+            - TestPrepareTier_TierNotFound
+            - TestPrepareTierResult_JSONFields
+            - TestConflictCheckResult_JSONFields
+            - TestIMPLValidationResult_JSONOmitEmpty
+        verification: PASS
+    B:
+        status: complete
+        branch: saw/prepare-tier-command/wave1-agent-B
+        commit: 2bc1d93
+        files_changed:
+            - cmd/saw/prepare_tier_cmd.go
+            - cmd/saw/main.go
+        files_created:
+            - cmd/saw/prepare_tier_cmd.go
+        verification: PASS (build depends on Agent A protocol.PrepareTier; structure verified against finalize_tier_cmd.go pattern)
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: Agent B imports protocol.PrepareTier before Agent A creates it
+          likelihood: medium
+          impact: low
+          mitigation: |
+            Both agents are in Wave 1 with isolated worktrees. Agent B's build gate
+            will fail in isolation but succeed post-merge. The function signature is
+            defined in interface contracts so Agent B can code against it.
+        - scenario: resolveIMPLPath behavior differs when called from PrepareTier vs standalone
+          likelihood: low
+          impact: low
+          mitigation: |
+            resolveIMPLPath is a simple path resolution function with no side effects.
+            PrepareTier calls it identically to CheckIMPLConflicts.
+        - scenario: CreateProgramWorktrees modifies git state making operation non-idempotent
+          likelihood: medium
+          impact: medium
+          mitigation: |
+            CreateProgramWorktrees already handles stale branches (auto-cleans merged ones).
+            Document that re-running prepare-tier after partial failure may require manual
+            branch cleanup if branches were created but not merged.
+state: COMPLETE

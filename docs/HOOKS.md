@@ -41,7 +41,10 @@ this JSON to determine whether to block.
 | `check_git_ownership` | 1 (PostToolUse) | I1 | Wave agent calls Bash with git checkout/merge/rebase/etc. | Warns (non-blocking) when git operations modify files outside ownership list |
 | SAW pre-commit guard | 2 (Git hook) | I4 | `git commit` in a worktree | Blocks commits to `main`/`master` from agent worktrees |
 | SAW go.mod guard | 2 (Git hook) | -- | `git commit` touching `go.mod` | Blocks `replace` directives with deep relative paths (`../../..`) |
+| `warn_stubs` | 1 (PostToolUse) | E20 | Any agent calls Write or Edit | Warns (non-blocking) when written file contains stub patterns (TODO, FIXME, panic, unimplemented!) |
+| `check_branch_drift` | 1 (PostToolUse) | I4 | Any agent calls Bash with `git commit` | Blocks commits directly to `main` or `master` from any agent context |
 | `validate_agent_completion` | 1 (SubagentStop) | E42/I1/I4/I5 | SAW agent session ends | Blocks completion if protocol obligations unfulfilled |
+| `emit_agent_completion` | 1 (SubagentStop) | -- | SAW agent session ends (after validation passes) | Async observability event emitter (non-blocking) |
 | Ownership middleware | 3 (SDK) | I1 | Engine Write/Edit tool execution | Blocks agent writing files outside `OwnedFiles` map |
 | Freeze middleware | 3 (SDK) | I2 | Engine Write/Edit tool execution | Blocks agent writing to frozen interface paths after freeze time |
 | Role path middleware | 3 (SDK) | I6 | Engine Write/Edit tool execution | Blocks agent writing outside `AllowedPathPrefixes` |
@@ -74,11 +77,10 @@ It performs these steps:
    - `~/.local/bin/check_wave_ownership`
    - `~/.local/bin/check_git_ownership`
    - `~/.local/bin/validate_agent_launch`
+   - `~/.local/bin/warn_stubs`
+   - `~/.local/bin/check_branch_drift`
    - `~/.local/bin/validate_agent_completion`
    - `~/.local/bin/emit_agent_completion`
-   - (plus `check_impl_path`, `warn_stubs`, `check_branch_drift` — referenced
-     in the installer but scripts not yet present in repo; these steps fail
-     silently if scripts are missing)
 
 2. **Merges hook configuration** into `~/.claude/settings.json` using `jq`:
    - `PreToolUse`: `check_scout_boundaries` (matcher `Write|Edit`)
@@ -86,7 +88,9 @@ It performs these steps:
    - `PreToolUse`: `check_wave_ownership` (matcher `Write|Edit|NotebookEdit`)
    - `PreToolUse`: `validate_agent_launch` (matcher `Agent`)
    - `PostToolUse`: `validate_impl_on_write` (matcher `Write`)
-   - `PostToolUse`: `check_git_ownership` (matcher `Bash`)
+   - `PostToolUse`: `check_git_ownership` (matcher `Bash`, async)
+   - `PostToolUse`: `warn_stubs` (matcher `Write|Edit`)
+   - `PostToolUse`: `check_branch_drift` (matcher `Bash`)
    - `SubagentStop`: `validate_agent_completion` (blocking, timeout 10s) + `emit_agent_completion` (async)
 
 3. **Verifies** the installation by checking symlinks are executable and
@@ -295,6 +299,73 @@ Instead:
 1. Run: git checkout HEAD -- <file> for each file listed above
 2. Only commit files in your ownership list
 3. If a conflict blocks your work, report status: blocked
+```
+
+### warn_stubs (E20)
+
+**File:** `implementations/claude-code/hooks/warn_stubs`
+**Type:** PostToolUse
+**Matcher:** `Write|Edit`
+**Exit to block:** N/A — non-blocking warning (always exits 0)
+**Invariant:** E20 (stub scanning)
+
+Early-warning layer for stub patterns left in written files. Catches TODO,
+FIXME, panic, unimplemented!, and similar patterns immediately after a file
+is written or edited, rather than waiting for the post-wave E20 stub scan.
+
+**Logic:**
+- Exits 0 if `tool_name` is not `Write` or `Edit`.
+- For Write: reads content from `tool_input.content`.
+- For Edit: reads the file from disk at `tool_input.file_path`.
+- Scans for patterns: `TODO`, `FIXME`, `HACK`, `XXX`, `panic("not implemented")`,
+  `unimplemented!`, `throw new Error("not implemented")`, and similar.
+- If patterns are found, emits a JSON response with `additionalContext`
+  warning the agent about remaining stubs. Does NOT block execution.
+- Always exits 0.
+
+**Example warning output (stdout JSON):**
+```json
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PostToolUse",
+    "additionalContext": "WARNING: File pkg/handler.go contains stub patterns: TODO (line 42), panic(\"not implemented\") (line 78). These will be flagged by E20 stub scanning at wave finalization."
+  }
+}
+```
+
+### check_branch_drift (I4)
+
+**File:** `implementations/claude-code/hooks/check_branch_drift`
+**Type:** PostToolUse
+**Matcher:** `Bash`
+**Exit to block:** 2
+**Invariant:** I4 (IMPL doc / protected branch enforcement)
+
+Blocks any agent from committing directly to `main` or `master`. This is a
+Layer 1 complement to the Layer 2 git pre-commit hook — it catches the
+violation before the git command executes (PostToolUse on Bash fires after
+the command runs, but the error message instructs the agent to revert).
+
+**Note:** This hook applies to ALL agent types (Wave, Scout, Integration,
+general-purpose), not just Wave agents. Any `git commit` on a protected
+branch is blocked regardless of context.
+
+**Logic:**
+- Exits 0 if the Bash command does not contain `git commit`.
+- Determines the current git branch via `git rev-parse --abbrev-ref HEAD`.
+- If the branch is `main` or `master`, exits 2 with a `BLOCKED` message
+  on stderr instructing the agent to switch to its worktree branch.
+- Exits 0 for all other branches.
+
+**Exit codes:**
+- `0` — not a `git commit`, or commit is on a valid (non-protected) branch
+- `2` — committed directly to `main` or `master` → BLOCK
+
+**Example block output:**
+```
+BLOCKED [check_branch_drift / H4]: Direct commit to 'main' detected.
+Wave agents must commit to their worktree branch, not main/master.
+Switch to your assigned branch: git checkout saw/<slug>/wave<N>-agent-<ID>
 ```
 
 ---
@@ -609,6 +680,8 @@ These are used for after-the-fact auditing, not real-time blocking.
    ls -la ~/.local/bin/check_wave_ownership
    ls -la ~/.local/bin/check_git_ownership
    ls -la ~/.local/bin/validate_agent_launch
+   ls -la ~/.local/bin/warn_stubs
+   ls -la ~/.local/bin/check_branch_drift
    ls -la ~/.local/bin/validate_agent_completion
    ls -la ~/.local/bin/emit_agent_completion
    ```
@@ -621,8 +694,9 @@ These are used for after-the-fact auditing, not real-time blocking.
    ```
    Verify `PreToolUse` contains `check_scout_boundaries`, `block_claire_paths`,
    `check_wave_ownership`, and `validate_agent_launch`; `PostToolUse`
-   contains `validate_impl_on_write` and `check_git_ownership`; and
-   `SubagentStop` contains `validate_agent_completion` and `emit_agent_completion`.
+   contains `validate_impl_on_write`, `check_git_ownership`, `warn_stubs`,
+   and `check_branch_drift`; and `SubagentStop` contains
+   `validate_agent_completion` and `emit_agent_completion`.
 
 3. **Check jq is installed** (required by most hook scripts):
    ```bash
@@ -665,16 +739,12 @@ enforced:
 
 ## Known Gaps
 
-### check_impl_path, warn_stubs, check_branch_drift not yet implemented
+### check_impl_path not yet implemented
 
-`install.sh` references three hooks that do not yet exist in the repository:
-- `check_impl_path` — H2 PreToolUse on `Agent` for IMPL path validation
-- `warn_stubs` — H3 PostToolUse on `Write|Edit` for stub pattern warnings
-- `check_branch_drift` — H4 PostToolUse on `Bash` for branch drift detection
-
-The installer will fail when attempting to `chmod +x` these missing scripts.
-These are planned hooks; until implemented, the relevant checks are not
-enforced at the Claude Code layer.
+`install.sh` previously referenced `check_impl_path` (H2 PreToolUse on
+`Agent` for IMPL path validation). This hook was superseded by
+`validate_agent_launch` (H5), which provides a superset of H2's checks.
+The installer no longer registers `check_impl_path`.
 
 ### validate_impl_on_write depends on sawtools availability
 

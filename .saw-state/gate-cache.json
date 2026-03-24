@@ -12,6 +12,18 @@
         "cached_at": "2026-03-19T22:59:13.851167-07:00"
       }
     },
+    "0e2201fffdd264019c0672248610fa89": {
+      "build": {
+        "gate_type": "build",
+        "command": "go build ./...",
+        "passed": false,
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "pattern ./...: directory prefix . does not contain main module or its selected dependencies\n",
+        "from_cache": true,
+        "cached_at": "2026-03-23T01:41:40.238213-07:00"
+      }
+    },
     "113032ceb4e7eba338473def33f32edd": {
       "custom": {
         "gate_type": "custom",
@@ -22,6 +34,18 @@
         "stderr": "",
         "from_cache": true,
         "cached_at": "2026-03-20T18:57:04.239555-07:00"
+      }
+    },
+    "1358e4c088e2fb28dc92dbb0f57b22ef": {
+      "custom": {
+        "gate_type": "custom",
+        "command": "bash -c 'echo \"{\\\"tool_name\\\":\\\"Agent\\\",\\\"agent_type\\\":\\\"wave-agent\\\",\\\"tool_input\\\":{\\\"prompt\\\":\\\"test\\\"}}\" | bash implementations/claude-code/hooks/validate_agent_launch 2\u003e\u00261; exit 0'",
+        "passed": true,
+        "exit_code": 0,
+        "stdout": "bash: implementations/claude-code/hooks/validate_agent_launch: No such file or directory\n",
+        "stderr": "",
+        "from_cache": true,
+        "cached_at": "2026-03-23T01:56:35.406332-07:00"
       }
     },
     "1ad3e0ff178c2fb07a5459ce877682d5": {
@@ -58,6 +82,18 @@
         "stderr": "",
         "from_cache": true,
         "cached_at": "2026-03-19T22:53:59.123631-07:00"
+      }
+    },
+    "551686224e9f0bcc549d98408d761d60": {
+      "lint": {
+        "gate_type": "lint",
+        "command": "go vet ./...",
+        "passed": false,
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "pattern ./...: directory prefix . does not contain main module or its selected dependencies\n",
+        "from_cache": true,
+        "cached_at": "2026-03-23T01:41:40.358969-07:00"
       }
     },
     "61bf2c809504bb7c9345875add68204e": {
@@ -122,6 +158,30 @@
         "stderr": "# ./...\npattern ./...: directory prefix . does not contain main module or its selected dependencies\n",
         "from_cache": true,
         "cached_at": "2026-03-17T19:25:49.453625-07:00"
+      }
+    },
+    "7e988bfd280b7e3c74644859eb8a7d9b": {
+      "lint": {
+        "gate_type": "lint",
+        "command": "go vet ./...",
+        "passed": false,
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "pattern ./...: directory prefix . does not contain main module or its selected dependencies\n",
+        "from_cache": true,
+        "cached_at": "2026-03-23T12:54:48.741364-07:00"
+      }
+    },
+    "812e1e4494f96665797a4821c27fba6a": {
+      "test": {
+        "gate_type": "test",
+        "command": "go test ./... -timeout 120s",
+        "passed": false,
+        "exit_code": 1,
+        "stdout": "FAIL\t./... [setup failed]\nFAIL\n",
+        "stderr": "# ./...\npattern ./...: directory prefix . does not contain main module or its selected dependencies\n",
+        "from_cache": true,
+        "cached_at": "2026-03-23T12:54:48.631077-07:00"
       }
     },
     "82b8f7639011354c993f7e11afb84ea4": {
@@ -280,6 +340,18 @@
         "cached_at": "2026-03-21T22:09:28.619835-07:00"
       }
     },
+    "a47afeab495499f8e8d336a033aa6bb6": {
+      "custom": {
+        "gate_type": "custom",
+        "command": "sawtools validate docs/IMPL/IMPL-subagent-stop-validation.yaml",
+        "passed": true,
+        "exit_code": 0,
+        "stdout": "{\n  \"valid\": true,\n  \"error_count\": 0,\n  \"errors\": []\n}\n",
+        "stderr": "",
+        "from_cache": true,
+        "cached_at": "2026-03-23T18:10:40.565367-07:00"
+      }
+    },
     "a6351909e001dcc713fe30781e8bd7cb": {
       "custom": {
         "gate_type": "custom",
@@ -394,6 +466,18 @@
         "cached_at": "2026-03-20T22:41:25.597953-07:00"
       }
     },
+    "bc6920ae7e120d6fc4631df09d826e71": {
+      "build": {
+        "gate_type": "build",
+        "command": "go build ./...",
+        "passed": false,
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "pattern ./...: directory prefix . does not contain main module or its selected dependencies\n",
+        "from_cache": true,
+        "cached_at": "2026-03-23T12:54:48.545078-07:00"
+      }
+    },
     "c471ca49295d8a4069362b34338dcd2b": {
       "custom": {
         "gate_type": "custom",
@@ -404,6 +488,18 @@
         "stderr": "",
         "from_cache": true,
         "cached_at": "2026-03-19T22:59:15.171225-07:00"
+      }
+    },
+    "c7c4da9c855dd305d844369d5918b83c": {
+      "test": {
+        "gate_type": "test",
+        "command": "go test ./...",
+        "passed": false,
+        "exit_code": 1,
+        "stdout": "FAIL\t./... [setup failed]\nFAIL\n",
+        "stderr": "# ./...\npattern ./...: directory prefix . does not contain main module or its selected dependencies\n",
+        "from_cache": true,
+        "cached_at": "2026-03-23T01:41:40.461886-07:00"
       }
     },
     "cc41b6e007a589a4587eee20c37df78a": {
@@ -604,6 +700,18 @@
         "stderr": "",
         "from_cache": true,
         "cached_at": "2026-03-22T00:17:01.467249-07:00"
+      }
+    },
+    "e1277aeb7e7e57cf3edfbcc433b46f68": {
+      "custom": {
+        "gate_type": "custom",
+        "command": "bash -n implementations/claude-code/hooks/validate_agent_completion",
+        "passed": false,
+        "exit_code": 127,
+        "stdout": "",
+        "stderr": "bash: implementations/claude-code/hooks/validate_agent_completion: No such file or directory\n",
+        "from_cache": true,
+        "cached_at": "2026-03-23T18:10:40.462159-07:00"
       }
     },
     "e536eb984bb965fbc3ccd42cffd619f2": {

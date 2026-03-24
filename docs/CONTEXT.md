@@ -37,3 +37,25 @@
   - IMPL doc: docs/IMPL/complete/IMPL-file-read-dedup-integration.yaml
 - **wave-finalization-robustness**: completed 2026-03-23, 3 waves, 7 agents
   - IMPL doc: docs/IMPL/complete/IMPL-wave-finalization-robustness.yaml
+- **result-types-unification**: completed 2026-03-23, 5 waves, 26 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-result-types-unification.yaml
+- **result-types-phase2**: completed 2026-03-23, 2 waves, 8 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-result-types-phase2.yaml
+- **subagent-stop-validation**: completed 2026-03-23, 2 waves, 4 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-subagent-stop-validation.yaml
+- **error-code-taxonomy-v2**: completed 2026-03-23, 3 waves, 11 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-error-code-taxonomy-v2.yaml
+- **integration-completeness-gate**: completed 2026-03-23, 4 waves, 7 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-integration-completeness-gate.yaml
+- **integration-wiring-completeness**: completed 2026-03-23, 1 waves, 2 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-integration-wiring-completeness.yaml
+- **program-worktree-management**: completed 2026-03-23, 1 waves, 2 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-program-worktree-management.yaml
+- **prepare-tier-command**: completed 2026-03-23, 1 waves, 2 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-prepare-tier-command.yaml
+- **config-state-unification**: completed 2026-03-24, 3 waves, 7 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-config-state-unification.yaml
+- **validation-logic-unification**: completed 2026-03-24, 2 waves, 4 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-validation-logic-unification.yaml
+- **repo-entry-unification**: completed 2026-03-24, 2 waves, 5 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-repo-entry-unification.yaml
