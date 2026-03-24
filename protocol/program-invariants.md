@@ -1,6 +1,6 @@
 # Scout-and-Wave Program Invariants
 
-**Version:** 0.1.0
+**Version:** 0.3.0
 
 This document defines the invariants that must hold throughout program-level execution in Scout-and-Wave. These invariants extend the IMPL-level invariants (I1-I6 in `invariants.md`) to multi-IMPL orchestration.
 
@@ -13,6 +13,55 @@ Program invariants are identified by number (P1–P4, plus P1+ and P5). They par
 When referenced in implementation files, the P-number serves as an anchor for cross-referencing and audit; implementations should embed the canonical definition verbatim alongside the reference so each document remains self-contained without requiring a lookup.
 
 To audit consistency, search implementation files for `P{N}` and verify the embedded definitions match this document.
+
+---
+
+## PROGRAM States
+
+The Go SDK defines the following valid `ProgramState` values for the PROGRAM manifest's `state` field:
+
+| State | Description |
+|-------|-------------|
+| `PLANNING` | Planner agent is producing the initial manifest |
+| `VALIDATING` | Manifest is being validated against P1–P4 |
+| `REVIEWED` | Human has reviewed and approved the manifest |
+| `SCAFFOLD` | Program contracts are being materialized as source files |
+| `TIER_EXECUTING` | Active tier is running (Scouts/agents in progress) |
+| `TIER_VERIFIED` | Active tier's gate has passed; ready to advance |
+| `COMPLETE` | All tiers complete, all gates passed |
+| `BLOCKED` | Execution halted due to gate failure, missing contract, or merge conflict |
+| `NOT_SUITABLE` | Planner determined the request is not suitable for program-level execution (e.g., P1 violation after 3 correction retries) |
+
+**Note:** Earlier versions of this document used `PROGRAM_BLOCKED`; the Go implementation uses `BLOCKED`.
+
+## IMPL Statuses Within a PROGRAM
+
+Each `ProgramIMPL` entry in the manifest carries a `status` field (lowercase):
+
+| Status | Description |
+|--------|-------------|
+| `pending` | IMPL has not been scouted yet |
+| `scouting` | Scout agent is actively producing the IMPL doc |
+| `reviewed` | Scout output has been reviewed |
+| `executing` | Waves are running |
+| `complete` | All waves merged and verified |
+
+**Auto-status update:** When `FinalizeTier` successfully merges all IMPL branches, it automatically sets each merged IMPL's status to `complete` in the PROGRAM manifest. This eliminates the need for a manual `update-program-impl --status complete` step.
+
+## ProgramIMPL Extended Fields
+
+Each `ProgramIMPL` also carries these fields used by the prioritization system:
+
+- `priority_score` (int): Computed by `UnblockingScore()` — higher scores indicate IMPLs that unblock more downstream work.
+- `priority_reasoning` (string): Human-readable explanation of the score (e.g., `"unblocking(2x+100=+200), age(+0)"`).
+
+These are populated by `ScoreTierIMPLs()` during automatic tier advancement.
+
+## ProgramTier Extended Fields
+
+Each `ProgramTier` carries:
+
+- `concurrency_cap` (int): Maximum number of IMPLs to execute in parallel within this tier. When 0 or omitted, all IMPLs in the tier may execute simultaneously. The caller (Orchestrator or CLI) is responsible for honoring this cap.
 
 ---
 
@@ -43,12 +92,14 @@ Program invariants are structural extensions of IMPL-level invariants, applied a
 - During Planner correction loop retries (analogous to E16 for Scout validation)
 
 **Mechanical Validation:**
-The `ValidateProgram()` function in the Go SDK performs this check:
+The `ValidateProgram()` function in the Go SDK performs this check via `validateP1Independence()`:
 1. For each tier T in the manifest
 2. For each IMPL I in tier T
 3. For each dependency D in I.DependsOn
 4. Find the tier of D
 5. If D is also in tier T, return a `P1_VIOLATION` validation error with details
+
+Additionally, `validateTierOrdering()` enforces a stricter constraint: if IMPL-A depends on IMPL-B, A's tier must be *strictly greater* than B's tier (not merely different). Violations return a `TIER_ORDER_VIOLATION` error code. This prevents both same-tier dependencies (P1) and reverse-tier dependencies where a consumer is in an earlier tier than its producer.
 
 If P1 is violated, the Planner is issued a correction prompt (analogous to Scout correction in E16) and retries up to 3 times. After 3 failures, the PROGRAM enters `NOT_SUITABLE` state and execution halts.
 
@@ -81,11 +132,15 @@ complement to P1's logical constraint.
 
 **Enforcement:** Machine-enforced before launching any IMPL in a tier via
 `sawtools check-program-conflicts <PROGRAM.yaml> --tier N`. This command:
-1. Loads all IMPL docs for tier N
+1. Loads all IMPL docs for tier N (via `CheckIMPLConflicts()`)
 2. Intersects their `file_ownership` tables
 3. If any file appears in two or more IMPL ownership tables: BLOCKED with
-   structured error output showing conflicting IMPLs and files
+   structured error output showing conflicting IMPLs and files (exit 1)
 4. If all ownership sets are disjoint: exit 0 (proceed)
+
+The `PrepareTier()` batching function also runs this check as its first step (Step 3); if conflicts are found, it aborts immediately with `Success=false`.
+
+Additionally, `ValidateProgramImportMode()` performs P1+ file disjointness checks across all tiers when validating imported IMPL docs, using `ValidateP1FileDisjointness()` which returns errors with code `P1_FILE_OVERLAP`.
 
 **When to run:**
 - Before `prepare-wave` for any IMPL in the tier (pre-flight check)
@@ -106,6 +161,8 @@ suggestion: feature-b → tier 2).
 2. Move the conflicting IMPL to the suggested tier in the PROGRAM manifest
 3. Re-run check-program-conflicts to confirm resolution
 4. Alternatively, split the conflicting IMPL into sub-IMPLs with disjoint ownership
+
+**Go implementation types:** The conflict report uses `protocol.ConflictReport` (from `conflict.go`) containing `[]IMPLFileConflict` entries. Each conflict identifies the file path and the list of IMPL slugs that claim ownership.
 
 **Rationale:** P1 (dependency-graph) and P1+ (file-level) together provide the
 complete safety guarantee for parallel tier execution. P1 prevents logical
@@ -136,9 +193,13 @@ tier completion.
 Before launching any Scout in Tier N:
 1. Read all `program_contracts` entries where `freeze_at` references a tier < N
 2. For each contract, verify that `contract.location` exists as a committed file
-3. Verify the contract file is committed to HEAD (not in a worktree or uncommitted)
-4. If any contract file is missing or uncommitted, enter `PROGRAM_BLOCKED` state
+3. Verify the contract file is committed to HEAD via `git status --porcelain` (empty output means committed)
+4. If any contract file is missing or uncommitted, enter `BLOCKED` state
 5. Surface error to human: which contract is missing, which tier is blocked
+
+The `FreezeContracts()` function in the Go SDK implements this check. It matches contracts to tiers by checking if any IMPL slug in the completing tier appears as a whole word in the contract's `freeze_at` string (word-boundary regex matching). Contracts that match but fail the existence/committed check are recorded as errors, and the overall `Success` is false.
+
+`ValidateProgramImportMode()` also performs a P2 check: if an IMPL doc redefines an interface contract whose name matches a frozen program contract, it returns a `P2_CONTRACT_REDEFINITION` error.
 
 **Program Contract Lifecycle:**
 ```
@@ -183,20 +244,21 @@ Program contracts are defined by the Planner. IMPL contracts are defined by the 
    - Read PROGRAM manifest
    - For each IMPL I in Tier N, verify I.status == "complete"
    - If any IMPL is not complete, wait (poll or event-driven)
+   - Note: `FinalizeTier()` automatically sets merged IMPLs to `complete` status, so this check typically passes immediately after a successful finalize.
 
 2. **Tier gate check:**
-   - Read `tier_gates` from PROGRAM manifest
-   - Execute each gate command for Tier N
-   - Collect exit codes and output
-   - If any required gate fails, enter `PROGRAM_BLOCKED` state
+   - `RunTierGate()` reads `tier_gates` from PROGRAM manifest
+   - First verifies all IMPLs in the tier are complete; if not, returns `AllImplsDone=false` and `Passed=false`
+   - Then executes each gate command with a 5-minute timeout per command
+   - If any *required* gate fails, the tier fails (non-required gates are informational)
+   - If the gate fails in auto-mode, `AutoTriggerReplan()` invokes the Planner agent to revise the manifest (E34)
 
 3. **Contract freeze check:**
-   - Read all `program_contracts` where `freeze_at` references Tier N
-   - For each contract, mark as frozen in PROGRAM manifest (or separate state file)
-   - Verify contract files are committed (git log confirms commit exists)
-   - Update contract metadata to indicate immutability
+   - `FreezeContracts()` reads all `program_contracts` where `freeze_at` matches an IMPL slug in Tier N
+   - For each contract, verifies the file exists and is committed to HEAD
+   - If any contract file is missing or uncommitted, returns partial result with errors
 
-Only after all three conditions pass does the Orchestrator transition from `TIER_VERIFIED` (Tier N) to `TIER_EXECUTING` (Tier N+1).
+Only after all three conditions pass does the Orchestrator transition from `TIER_VERIFIED` (Tier N) to `TIER_EXECUTING` (Tier N+1). In auto-mode, `AdvanceTierAutomatically()` orchestrates all three checks and computes the priority-ordered IMPL list for the next tier via `ScoreTierIMPLs()`.
 
 **Tier Gate Definition:**
 Tier gates are defined in the PROGRAM manifest's `tier_gates` section, reusing the existing `QualityGate` schema from IMPL manifests:
@@ -270,8 +332,10 @@ The Orchestrator reads the PROGRAM manifest for all tier/IMPL ordering decisions
 The PROGRAM manifest is updated at specific lifecycle events:
 - After Planner completes: initial manifest creation
 - After each IMPL state transition: update `impls[i].status`
+- After `FinalizeTier` merges all IMPL branches: auto-sets merged IMPLs to `complete` status and persists via `SaveProgramManifest()`
 - After tier gate passes: increment `completion.tiers_complete`
-- After program completes: set `state: COMPLETE`, write completion timestamp
+- After program completes: set `state: COMPLETE`, write `completion_date`, append `SAW:PROGRAM:COMPLETE` marker, archive to `docs/PROGRAM/complete/`, and update `CONTEXT.md`
+- After replan (E34): Planner agent rewrites the manifest in place with revised tier structure
 
 These updates are atomic file writes (read-modify-write), not concurrent edits. The Orchestrator is the sole writer.
 
@@ -333,71 +397,72 @@ When all preconditions hold and all invariants (I1-I6 + P1-P5 including P1+) are
 
 ---
 
-## Enforcement Mechanisms (Phase 1)
+## Enforcement Mechanisms
 
-Phase 1 of the Program Layer defines invariants and validation logic. Enforcement is documented here so Phase 2 implementors know exactly what to build.
+All enforcement mechanisms described below are implemented in the Go SDK (`pkg/protocol/`) and CLI (`cmd/saw/`).
 
 ### P1 Enforcement: IMPL Independence Validation
 
 **When:**
 - During PROGRAM manifest validation (after Planner completes)
 - Before launching any Scout in a tier (pre-flight check)
+- During import-mode validation (`ValidateProgramImportMode()`)
 
 **How:**
-- `ValidateProgram()` function in Go SDK checks depends_on within same tier
-- If violation found, return `ValidationError` with code `P1_VIOLATION`
+- `ValidateProgram()` calls `validateP1Independence()` — checks depends_on within same tier → `P1_VIOLATION`
+- `ValidateProgram()` calls `validateTierOrdering()` — checks dependency tier ordering → `TIER_ORDER_VIOLATION`
+- `ValidateProgram()` calls `validateDependencyValidity()` — checks all depends_on targets exist → `INVALID_DEPENDENCY`
+- `ValidateProgram()` calls `validateTierIMPLConsistency()` — checks every IMPL appears in exactly one tier → `TIER_MISMATCH`
 - Planner correction loop retries up to 3 times (analogous to E16 for Scout)
 - After 3 failures, PROGRAM enters `NOT_SUITABLE` state
 
-**Phase 2 Implementation:**
-The Orchestrator will integrate this validation into the program execution loop.
+**Implementation:** `pkg/protocol/program_validation.go` — `ValidateProgram()`, `validateP1Independence()`, `validateTierOrdering()`, `validateDependencyValidity()`, `validateTierIMPLConsistency()`
 
 ### P1+ Enforcement: File Ownership Conflict Detection
 
 **When:**
-- Before `prepare-wave` for any IMPL in a tier (pre-flight check)
-- As part of `program-execute` auto-mode tier setup
-- Any time an IMPL is added to or re-scouted within a tier
+- As Step 3 of `PrepareTier()` — before IMPL validation and branch creation
+- Via standalone `sawtools check-program-conflicts <PROGRAM.yaml> --tier N`
+- During import-mode validation (`ValidateProgramImportMode()`)
 
 **How:**
-- `sawtools check-program-conflicts <PROGRAM.yaml> --tier N` loads all IMPL docs for tier N
-- Intersects `file_ownership` tables across all IMPLs in the tier
-- If any file appears in two or more IMPL ownership tables: exit 1 with structured error
-- Reuses `protocol.ConflictReport` (from `program_conflict.go`); no new Go type needed
+- `PrepareTier()` calls `CheckIMPLConflicts()` which loads all IMPL docs for the tier and intersects `file_ownership` tables
+- `ValidateProgramImportMode()` calls `ValidateP1FileDisjointness()` per tier → `P1_FILE_OVERLAP`
+- If conflicts found, `PrepareTier()` aborts with `Success=false` before any branches are created
+- CLI `check-program-conflicts` exits 1 with structured `ConflictReport` JSON and human-readable BLOCKED message on stderr
 
-**Phase 2 Implementation:**
-The CLI command `check-program-conflicts` is implemented by Agent D. The Orchestrator
-will call this command in the tier setup logic before launching any IMPL in the tier.
+**Implementation:** `pkg/protocol/program_tier_prepare.go` — `PrepareTier()` Step 3; `pkg/protocol/program_validation.go` — `ValidateP1FileDisjointness()`, `ValidateProgramImportMode()`; `cmd/saw/check_program_conflicts_cmd.go`
 
-### P2 Enforcement: Program Contract Existence Check
+### P2 Enforcement: Program Contract Freeze and Redefinition Check
 
 **When:**
-- Before launching any Scout in Tier N+1
-- After Tier N completes and gates pass
+- After tier completion, before advancing to next tier (`FreezeContracts()`)
+- During `AdvanceTierAutomatically()` in auto-mode
+- During import-mode validation (`ValidateProgramImportMode()`)
 
 **How:**
-- Orchestrator reads `program_contracts` section from manifest
-- For each contract where `freeze_at` references a tier < N+1
-- Verify `contract.location` file exists and is committed to HEAD
-- If any contract file missing, enter `PROGRAM_BLOCKED` state
+- `FreezeContracts()` identifies contracts whose `freeze_at` matches an IMPL slug in the completing tier (word-boundary regex match)
+- For each matching contract, verifies file exists at `contract.location` and is committed via `git status --porcelain`
+- If any contract file is missing or uncommitted, returns partial result with `Success=false`
+- `ValidateProgramImportMode()` checks P2 redefinition: if an IMPL doc's `interface_contracts` redefines a frozen program contract name → `P2_CONTRACT_REDEFINITION`
 
-**Phase 2 Implementation:**
-The Orchestrator will implement this check in the tier advancement logic.
+**Implementation:** `pkg/protocol/program_freeze.go` — `FreezeContracts()`, `matchesSlugInFreezeAt()`; `pkg/protocol/program_validation.go` — `ValidateProgramImportMode()`; `cmd/saw/freeze_contracts_cmd.go`
 
-### P3 Enforcement: Tier Completion Check
+### P3 Enforcement: Tier Completion and Gate Check
 
 **When:**
 - Before transitioning from `TIER_VERIFIED` (Tier N) to `TIER_EXECUTING` (Tier N+1)
+- As part of `FinalizeTier()` which runs the tier gate after merging all IMPL branches
+- In `AdvanceTierAutomatically()` during auto-mode tier advancement
 
 **How:**
-- Orchestrator reads PROGRAM manifest's `impls` section
-- For each IMPL in Tier N, check `status == "complete"`
-- Execute all `tier_gates` commands
-- If all pass, update manifest and advance to next tier
-- If any fail, enter `PROGRAM_BLOCKED` state
+- `RunTierGate()` first checks all IMPLs in the tier have status `complete`; if not, returns `AllImplsDone=false`, `Passed=false`
+- Then executes each `tier_gates` command via `sh -c` with a 5-minute timeout
+- Required gates that fail cause `Passed=false`; non-required gate failures are informational
+- `FinalizeTier()` runs `RunTierGate()` after all IMPL branch merges succeed
+- In auto-mode, if the tier gate fails, `AutoTriggerReplan()` invokes the Planner agent to revise the manifest (E34)
 
-**Phase 2 Implementation:**
-The Orchestrator will implement this as a state transition guard in the program state machine.
+**Implementation:** `pkg/protocol/program_tier_gate.go` — `RunTierGate()`, `runTierGateCommand()`; `pkg/protocol/program_tier_finalize.go` — `FinalizeTier()`; `pkg/engine/program_auto.go` — `AdvanceTierAutomatically()`, `AutoTriggerReplan()`
 
 ### P4 Enforcement: Manifest Read Discipline
 
@@ -405,12 +470,65 @@ The Orchestrator will implement this as a state transition guard in the program 
 - All program execution decisions (tier ordering, IMPL discovery, dependency resolution)
 
 **How:**
-- Orchestrator always reads from PROGRAM manifest, never infers from file system
-- Manifest is re-read at each tier boundary to handle manual edits
-- All status updates write back to manifest atomically
+- Orchestrator always reads from PROGRAM manifest via `ParseProgramManifest()`, never infers from file system
+- Manifest is re-read at each tier boundary and after replans to pick up changes
+- All status updates write back to manifest atomically via `SaveProgramManifest()`
+- `GetProgramStatus()` enriches manifest data with real-time IMPL doc state from disk but uses manifest as the authoritative fallback
 
-**Phase 2 Implementation:**
-This is a discipline enforced by code structure, not a single validation function.
+**Implementation:** `pkg/protocol/program_parser.go` — `ParseProgramManifest()`, `SaveProgramManifest()`; `pkg/protocol/program_status.go` — `GetProgramStatus()`
+
+### Additional Validations (Not Tied to a Single Invariant)
+
+`ValidateProgram()` also performs these structural checks:
+
+| Check | Error Code | Description |
+|-------|-----------|-------------|
+| Required fields | `MISSING_FIELD` | `title`, `program_slug`, and `state` must be non-empty |
+| Valid state | `INVALID_STATE` | `state` must be one of the 9 defined `ProgramState` values |
+| Valid IMPL statuses | `INVALID_STATUS` | Each IMPL status must be one of: pending, scouting, reviewed, executing, complete |
+| Contract consumer validity | `INVALID_CONSUMER` | All `program_contracts[].consumers[].impl` must reference existing IMPL slugs |
+| Slug format | `INVALID_SLUG_FORMAT` | `program_slug` and all IMPL slugs must be kebab-case |
+| Completion bounds | `COMPLETION_BOUNDS` | `tiers_complete <= tiers_total`, `impls_complete <= impls_total` |
+| IMPL total consistency | `IMPLS_TOTAL_MISMATCH` | `completion.impls_total` must equal the number of `impls` entries |
+
+### PrepareTier: Atomic Batching Function
+
+`PrepareTier()` combines multiple enforcement steps into a single atomic operation:
+
+1. Parse PROGRAM manifest
+2. Find tier by number
+3. **P1+ conflict check** — calls `CheckIMPLConflicts()` for all tier IMPLs; aborts if conflicts found
+4. **IMPL validation + E37 critic enforcement** — for each IMPL in the tier:
+   - If `criticRequired()` (3+ wave 1 agents or file_ownership spans 2+ repos) and critic report is not PASS, aborts with E37 error
+   - Runs `FixGateTypes()` auto-correction on gate types
+   - Runs `Validate()` on each IMPL doc; aborts on validation errors
+5. **Branch creation** — calls `CreateProgramWorktrees()` to create IMPL branches
+
+If any step fails, returns partial result with `Success=false`. Steps are not retried.
+
+**Implementation:** `pkg/protocol/program_tier_prepare.go` — `PrepareTier()`, `criticRequired()`, `criticPassed()`
+
+### FinalizeTier: Atomic Batching Function
+
+`FinalizeTier()` combines merge and gate operations:
+
+1. Parse PROGRAM manifest and find tier
+2. For each IMPL in tier order: merge IMPL branch to HEAD via `git merge --no-ff`
+   - Branch naming: `saw/program/{program-slug}/tier{N}-impl-{impl-slug}`
+   - Idempotent: if branch doesn't exist (already merged), skip
+   - Stops on first merge failure
+3. **Auto-update IMPL statuses** to `complete` and persist to manifest
+4. Run `RunTierGate()` — if gate fails, return failure
+
+**Implementation:** `pkg/protocol/program_tier_finalize.go` — `FinalizeTier()`
+
+### IMPL Branch Isolation
+
+IMPL branches follow the naming convention: `saw/program/{program-slug}/tier{N}-impl-{impl-slug}`
+
+`CreateProgramWorktrees()` creates these as bare branches (not worktrees) — wave agents create their own worktrees; the IMPL branch is a staging merge target. If a branch already exists and is an ancestor of HEAD (already merged), it is auto-cleaned (branch deleted, stale worktree removed). If it exists and is *not* merged, creation fails with an error.
+
+**Implementation:** `pkg/protocol/program_worktree.go` — `ProgramBranchName()`, `CreateProgramWorktrees()`
 
 ---
 
@@ -423,6 +541,31 @@ This is a discipline enforced by code structure, not a single validation functio
 - See `docs/program-layer.md` for user-facing program documentation (autonomy levels, CLI commands, API, web UI)
 - Program execution rules E28-E34 (including E28A, E28B) are defined in `protocol/execution-rules.md`
 
+## Go SDK Implementation Map
+
+| File | Key Functions |
+|------|--------------|
+| `pkg/protocol/program_types.go` | `PROGRAMManifest`, `ProgramState`, `ProgramIMPL`, `ProgramTier`, `ProgramContract` |
+| `pkg/protocol/program_validation.go` | `ValidateProgram()`, `ValidateP1FileDisjointness()`, `ValidateProgramImportMode()` |
+| `pkg/protocol/program_tier_prepare.go` | `PrepareTier()`, `criticRequired()`, `criticPassed()` |
+| `pkg/protocol/program_tier_finalize.go` | `FinalizeTier()` |
+| `pkg/protocol/program_tier_gate.go` | `RunTierGate()` |
+| `pkg/protocol/program_freeze.go` | `FreezeContracts()` |
+| `pkg/protocol/program_worktree.go` | `CreateProgramWorktrees()`, `ProgramBranchName()` |
+| `pkg/protocol/program_status.go` | `GetProgramStatus()` |
+| `pkg/protocol/program_parser.go` | `ParseProgramManifest()`, `SaveProgramManifest()` |
+| `pkg/protocol/program_prioritizer.go` | `UnblockingScore()`, `PrioritizeIMPLs()` |
+| `pkg/engine/program_auto.go` | `AdvanceTierAutomatically()`, `ReplanProgram()`, `ScoreTierIMPLs()` |
+| `pkg/engine/program_tier_loop.go` | `RunTierLoop()`, `AutoTriggerReplan()` |
+| `cmd/saw/prepare_tier_cmd.go` | CLI: `sawtools prepare-tier` |
+| `cmd/saw/finalize_tier_cmd.go` | CLI: `sawtools finalize-tier` (with `--auto` flag) |
+| `cmd/saw/check_program_conflicts_cmd.go` | CLI: `sawtools check-program-conflicts` |
+| `cmd/saw/freeze_contracts_cmd.go` | CLI: `sawtools freeze-contracts` |
+| `cmd/saw/mark_program_complete_cmd.go` | CLI: `sawtools mark-program-complete` |
+| `cmd/saw/update_program_state_cmd.go` | CLI: `sawtools update-program-state` |
+| `cmd/saw/update_program_impl_cmd.go` | CLI: `sawtools update-program-impl` |
+| `cmd/saw/program_status_cmd.go` | CLI: `sawtools program-status` |
+
 ---
 
-*Version 0.2.0 — P1-P4 plus P1+ defined. P5 (IMPL Branch Isolation) in `protocol/invariants.md`. Enforcement mechanisms documented. E28-E34 cross-references verified.*
+*Version 0.3.0 — Reconciled against Go SDK implementation. Added PROGRAM states, IMPL statuses, extended ProgramIMPL/ProgramTier fields. Updated enforcement mechanisms from Phase 1 stubs to actual implementation references. Documented PrepareTier/FinalizeTier batching functions, E37 critic enforcement, auto-status updates, IMPL branch isolation mechanics, auto-advance with priority scoring, E34 replan, additional structural validations, and Go SDK implementation map.*
