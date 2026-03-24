@@ -106,7 +106,7 @@ def transform_file(input_path: Path, output_path: Path) -> None:
 
 if __name__ == '__main__':
     diagrams = ['saw-scout-wave', 'saw-bootstrap', 'saw-check', 'saw-status']
-    base = Path(__file__).parent.parent / 'docs' / 'diagrams'
+    base = Path(__file__).parent
 
     for name in diagrams:
         transform_file(base / f'{name}.drawio', base / f'{name}-dark.drawio')
