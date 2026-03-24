@@ -8,7 +8,7 @@ This document defines the invariants that must hold throughout program-level exe
 
 ## Overview
 
-Program invariants are identified by number (P1–P4). They parallel the structure of IMPL-level invariants but operate at a higher abstraction level: coordinating multiple IMPL documents into tiered execution rather than coordinating agents within a single IMPL.
+Program invariants are identified by number (P1–P4, plus P1+ and P5). They parallel the structure of IMPL-level invariants but operate at a higher abstraction level: coordinating multiple IMPL documents into tiered execution rather than coordinating agents within a single IMPL. P5 (IMPL Branch Isolation) is defined in `protocol/invariants.md` because it bridges both levels — it is a program-level invariant enforced through IMPL-level git branch mechanics.
 
 When referenced in implementation files, the P-number serves as an anchor for cross-referencing and audit; implementations should embed the canonical definition verbatim alongside the reference so each document remains self-contained without requiring a lookup.
 
@@ -23,9 +23,11 @@ Program invariants are structural extensions of IMPL-level invariants, applied a
 | IMPL Invariant | Program Invariant | Parallel Concept |
 |----------------|-------------------|------------------|
 | I1: Disjoint File Ownership | P1: IMPL Independence Within a Tier | Parallel execution safety within a tier |
+| I1 (extended) | P1+: File Disjointness Within a Tier | No same-tier IMPLs own the same file |
 | I2: Interface Contracts Precede Implementation | P2: Program Contracts Precede Tier Execution | Cross-IMPL types frozen before consumption |
 | I3: Wave Sequencing | P3: Tier Sequencing | Sequential tier advancement |
 | I4: IMPL Doc is Source of Truth | P4: PROGRAM Manifest is Source of Truth | Single coordination artifact |
+| (wave merge to HEAD) | P5: IMPL Branch Isolation | IMPL waves merge to IMPL branch, not main (see `protocol/invariants.md`) |
 
 **Key insight:** Tiers are to IMPLs what waves are to agents. Same-tier IMPLs execute in parallel (like same-wave agents). Later tiers depend on earlier tiers (like later waves depend on earlier waves). Program invariants enforce safety at this new layer of parallelism.
 
@@ -320,7 +322,7 @@ Program invariants extend SAW's correctness guarantees from feature-level to pro
 
 ## Protocol Guarantees
 
-When all preconditions hold and all invariants (I1-I6 + P1-P4 including P1+) are maintained:
+When all preconditions hold and all invariants (I1-I6 + P1-P5 including P1+) are maintained:
 
 - No two IMPLs in the same tier will have conflicting dependencies
 - No two IMPLs in the same tier own the same file; merge conflicts at tier completion are structurally impossible
@@ -414,13 +416,13 @@ This is a discipline enforced by code structure, not a single validation functio
 
 ## Cross-References
 
-- See `protocol/invariants.md` for IMPL-level invariants I1-I6
+- See `protocol/invariants.md` for IMPL-level invariants I1-I6 and P5 (IMPL Branch Isolation)
 - See `protocol/program-manifest.md` for PROGRAM manifest schema
 - See `protocol/participants.md` for Planner role definition
 - See `protocol/state-machine.md` for IMPL state transitions
-- See `docs/program-layer-roadmap.md` for full Program Layer design (Section 6)
-- Program execution rules E28-E34 are defined in `protocol/execution-rules.md` (not a separate file)
+- See `docs/program-layer.md` for user-facing program documentation (autonomy levels, CLI commands, API, web UI)
+- Program execution rules E28-E34 (including E28A, E28B) are defined in `protocol/execution-rules.md`
 
 ---
 
-*Version 0.1.0 — Phase 1 of Program Layer. Enforcement mechanisms documented for Phase 2 implementation.*
+*Version 0.2.0 — P1-P4 plus P1+ defined. P5 (IMPL Branch Isolation) in `protocol/invariants.md`. Enforcement mechanisms documented. E28-E34 cross-references verified.*

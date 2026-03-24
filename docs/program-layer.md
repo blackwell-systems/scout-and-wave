@@ -370,6 +370,7 @@ Go type: `protocol.ProgramState` (a `string` typedef)
 | `ProgramStateTierVerified` | `TIER_VERIFIED` | Current tier complete, gates passed |
 | `ProgramStateComplete` | `COMPLETE` | All tiers complete |
 | `ProgramStateBlocked` | `BLOCKED` | Tier failed or cross-IMPL issue detected |
+| `ProgramStateReplanning` | `REPLANNING` | Planner re-engaged to revise manifest after failure (E34) |
 | `ProgramStateNotSuitable` | `NOT_SUITABLE` | Planner determined project not suitable (terminal) |
 
 ### 4.2 Primary Success Path
@@ -399,7 +400,8 @@ COMPLETE
 - `PLANNING → NOT_SUITABLE`: Terminal. Planner's suitability gate determined the project is too small or too entangled for multi-IMPL orchestration. A minimal manifest is written with `state: NOT_SUITABLE` and an explanation. The user should use `/saw bootstrap` or `/saw scout` instead.
 - `TIER_EXECUTING → BLOCKED`: An IMPL in the tier failed, or the tier gate failed. Recovery is possible (fix the IMPL, then resume).
 - `BLOCKED → TIER_EXECUTING`: Issue resolved, execution resumes.
-- `BLOCKED → PLANNING`: Re-planning triggered (E34). Planner produces revised manifest; returns to `REVIEWED` after human approval.
+- `BLOCKED → REPLANNING`: Re-planning triggered (E34). Planner produces revised manifest.
+- `REPLANNING → REVIEWED`: Revised manifest produced; returns to `REVIEWED` after human approval.
 
 ### 4.4 TIER_EXECUTING Inner Loop
 
@@ -425,9 +427,9 @@ This is analogous to `<!-- SAW:COMPLETE -->` for IMPL docs (E15).
 
 ---
 
-## 5. Program Invariants (P1–P4)
+## 5. Program Invariants (P1–P5)
 
-These four invariants extend I1–I6 from the IMPL level to the program level. I1–I6 continue to apply within each IMPL.
+These invariants extend I1–I6 from the IMPL level to the program level. I1–I6 continue to apply within each IMPL. P1-P4 and P1+ are defined in `protocol/program-invariants.md`; P5 is defined in `protocol/invariants.md`.
 
 ### P1: IMPL Independence Within a Tier
 
@@ -470,6 +472,14 @@ The PROGRAM manifest is the single source of truth for:
 IMPL docs reference the PROGRAM manifest but do not duplicate its information. The Orchestrator updates the manifest after each IMPL state transition (E32).
 
 **Rationale:** Extension of I4 (IMPL doc is source of truth) to the program level.
+
+### P5: IMPL Branch Isolation
+
+Within a program tier, each IMPL's wave merges target the IMPL's dedicated branch (`saw/program/{slug}/tier{N}-impl-{implSlug}`), not main. Main is only updated by `FinalizeTier` after all IMPLs in the tier complete and the tier gate passes. This prevents partial state leakage between co-tier IMPLs.
+
+**Enforcement:** `CreateProgramWorktrees` creates the IMPL branch; `MergeTarget` is threaded through `RunWaveFull` / `FinalizeWave` / `MergeAgents`. `FinalizeTier` merges IMPL branches to main.
+
+**Rationale:** Without branch isolation, a wave merge from one IMPL could land on main while another IMPL's waves are still running, creating implicit coupling between supposedly independent IMPLs (E28B).
 
 ---
 

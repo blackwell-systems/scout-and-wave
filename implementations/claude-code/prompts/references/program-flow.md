@@ -2,6 +2,16 @@
 
 **Wave execution:** Program tiers execute IMPLs using the standard wave loop from the core SKILL.md (steps 3-11 of Execution Logic). Do not duplicate that logic here — when Step 3b says "use existing `/saw wave --auto` flow", follow the wave loop in the core file.
 
+**Lifecycle analogy — Program commands mirror IMPL commands:**
+
+| IMPL Lifecycle | Program Lifecycle | Purpose |
+|---------------|-------------------|---------|
+| `/saw scout <feature>` | `/saw program --impl x y z` or `/saw program plan` | Create the plan artifact |
+| `/saw wave` | `/saw program execute` | Execute next unit of work (wave / tier) |
+| `/saw wave --auto` | `/saw program execute --auto` | Execute all remaining units automatically |
+| `/saw status` | `/saw program status` | Show progress |
+| `/saw amend --extend-scope` | `/saw program replan --reason` | Revise the plan after failure |
+
 ## /saw program --impl — Create PROGRAM from Existing IMPLs
 
 Create a PROGRAM manifest from pre-existing IMPL docs with automatic tiering based on file ownership disjointness.
@@ -91,6 +101,19 @@ This is the `/saw program execute` flow (Level B), which is documented in the ne
 ### `/saw program execute "<project-description>"`
 
 Orchestrator flow for `/saw program execute`: Plan and execute a multi-IMPL program with tier-gated progression. This extends the Level A planning flow with automated execution.
+
+**Resume detection:** Before starting the planning flow, check if a PROGRAM manifest already exists:
+```bash
+sawtools list-programs --dir "<repo-path>/docs"
+```
+If a PROGRAM manifest is found with state `REVIEWED`, `TIER_EXECUTING`, `TIER_VERIFIED`, or `BLOCKED`:
+- Report the existing program to the user: "Found existing PROGRAM: {title} ({slug}) in state {state}"
+- If state is `REVIEWED` or `TIER_VERIFIED`: skip Phase 1, proceed directly to Phase 2 (scaffold) or Phase 3 (tier execution) as appropriate
+- If state is `TIER_EXECUTING`: resume the current tier (identify the first tier with incomplete IMPLs and continue execution)
+- If state is `BLOCKED`: surface the blocking issue and ask the user whether to fix and resume, or replan
+- This mirrors how `/saw wave` auto-selects an existing IMPL when one is pending
+
+If no existing PROGRAM manifest is found, or the user provides a new description, proceed with Phase 1.
 
 **Phase 1: Planning (reuses /saw program plan flow)**
 

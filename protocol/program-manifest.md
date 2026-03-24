@@ -355,6 +355,7 @@ The `state` field tracks the program's current execution phase.
 | `TIER_VERIFIED` | Current tier complete, gates passed |
 | `COMPLETE` | All tiers complete |
 | `BLOCKED` | Tier failed, cross-IMPL issue detected |
+| `REPLANNING` | Planner re-engaged to revise manifest after failure (E34) |
 | `NOT_SUITABLE` | Planner determined project not suitable for multi-IMPL orchestration |
 
 ### 9.2 State Transitions
@@ -372,6 +373,8 @@ TIER_EXECUTING (Tier 2) → TIER_VERIFIED (Tier 2) →
 - `PLANNING → NOT_SUITABLE` (terminal, Planner suitability gate failed)
 - `TIER_EXECUTING → BLOCKED` (IMPL failure or tier gate failure)
 - `BLOCKED → TIER_EXECUTING` (recovery, issue resolved)
+- `BLOCKED → REPLANNING` (E34, Planner re-engaged to revise manifest)
+- `REPLANNING → REVIEWED` (revised manifest produced, awaiting human approval)
 
 See `protocol/state-machine.md` for detailed state machine specification. Program-level state transitions (TIER_EXECUTING, TIER_VERIFIED, etc.) are governed by E28 (Tier Execution Loop), E29 (Tier Gate Verification), and E33 (Automatic Tier Advancement).
 
@@ -416,12 +419,13 @@ may be revised.
 
 The following `/saw program` commands are available for program-level orchestration:
 
-| Command | Description |
-|---------|-------------|
-| `/saw program plan <requirements>` | Launch Planner to produce a PROGRAM manifest from requirements |
-| `/saw program status` | Show current program state, tier progress, and IMPL statuses |
-| `/saw program execute [--auto]` | Begin or resume program execution (tier-by-tier) |
-| `/saw program replan` | Re-engage Planner to revise PROGRAM manifest after failure or on request |
+| Command | Description | Analogy |
+|---------|-------------|---------|
+| `/saw program --impl <s1> <s2> ...` | Create PROGRAM manifest from existing IMPLs with auto-tiering | `/saw scout` (produces the plan artifact) |
+| `/saw program plan <requirements>` | Launch Planner to produce a PROGRAM manifest from requirements | `/saw scout` (produces the plan artifact) |
+| `/saw program execute [--auto]` | Begin or resume program execution (tier-by-tier) | `/saw wave [--auto]` (executes the plan) |
+| `/saw program status` | Show current program state, tier progress, and IMPL statuses | `/saw status` (shows progress) |
+| `/saw program replan --reason "<reason>"` | Re-engage Planner to revise PROGRAM manifest after failure | `/saw amend --extend-scope` (revises the plan) |
 
 **Command details:**
 
@@ -838,10 +842,10 @@ The orchestrator validates PROGRAM manifests before proceeding with execution. V
 ### 16.1 Cross-References
 
 - **Planner agent:** See `protocol/participants.md` for Planner role definition
-- **Program invariants:** See `protocol/program-invariants.md` (to be created) for P1-P4
+- **Program invariants:** See `protocol/program-invariants.md` for P1-P4, P1+; see `protocol/invariants.md` for P5 (IMPL Branch Isolation)
 - **Existing invariants:** I1-I6 continue to apply within each IMPL (see `protocol/invariants.md`)
 - **IMPL manifest:** See `protocol/message-formats.md` for IMPL doc schema
-- **State machine:** See `protocol/state-machine.md` (to be extended with Program states)
+- **State machine:** See `protocol/state-machine.md` for IMPL states; Program states defined in Section 9 of this document
 
 ### 16.2 Hierarchy
 
@@ -859,6 +863,6 @@ The PROGRAM manifest extends SAW's protocol from feature-level coordination (IMP
 
 ---
 
-**Document Status:** Version 0.2.0 — Added Re-Planning section (§10) and Orchestrator Commands section (§11)
-**Next Steps:** Define program-level invariants (P1-P4) and extend state machine with Program states
+**Document Status:** Version 0.3.0 — Added Re-Planning (§10), Orchestrator Commands (§11), Pre-Mortem (§12), Import workflow (§13.4)
+**Related:** Program invariants P1-P4 in `protocol/program-invariants.md`, P5 (IMPL Branch Isolation) in `protocol/invariants.md`. Execution rules E28-E34 in `protocol/execution-rules.md`.
 **Related Implementation:** See `pkg/protocol/program_types.go` for Go SDK struct definitions
