@@ -113,6 +113,20 @@ ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agents/scaffold
        ~/.claude/skills/saw/agents/scaffold-agent.md
 ```
 
+**Install on-demand reference files (progressive disclosure):**
+
+```bash
+mkdir -p ~/.claude/skills/saw/references
+ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/references/program-flow.md \
+       ~/.claude/skills/saw/references/program-flow.md
+ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/references/failure-routing.md \
+       ~/.claude/skills/saw/references/failure-routing.md
+ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/references/amend-flow.md \
+       ~/.claude/skills/saw/references/amend-flow.md
+```
+
+These files are loaded on-demand only when the matching subcommand is invoked (`/saw program *`, `/saw amend *`, agent failure). See `docs/skills-progressive-disclosure.md` for the design.
+
 **What you get:** Custom agent types provide runtime-enforced tool restrictions (scout cannot Edit source files, wave agents cannot spawn sub-agents) and better observability. Each agent type has YAML frontmatter that Claude Code uses to enforce behavioral constraints.
 
 ### Step 5: Verify Installation
