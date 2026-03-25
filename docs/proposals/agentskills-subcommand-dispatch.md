@@ -184,10 +184,10 @@ The hook is a thin orchestrator — it iterates skill directories and delegates 
 
 ### Phase 3: `install.sh` wiring
 
-Add to `hooks/install.sh`:
-- Symlink `inject_skill_context` to `~/.local/bin/`
-- Register `UserPromptSubmit` hook in `~/.claude/settings.json`
-- Scan both `~/.claude/skills/` and `~/.agents/skills/` (cross-client convention)
+Handled by the consolidated root `install.sh` (completed):
+- Symlinks `inject_skill_context` to `~/.local/bin/`
+- Registers `UserPromptSubmit` hook in `~/.claude/settings.json`
+- `--generic` mode installs to `~/.agents/skills/saw/` (cross-client convention)
 
 ### Phase 4: SAW frontmatter update
 

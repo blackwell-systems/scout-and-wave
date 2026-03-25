@@ -190,22 +190,9 @@ Reference files follow a consistent internal structure:
 
 The `agents/` subdirectory already uses the symlink pattern: agent type definition files live in `implementations/claude-code/prompts/agents/` and are symlinked into `~/.claude/skills/saw/agents/` during installation. The Orchestrator references them as `${CLAUDE_SKILL_DIR}/agents/<type>.md`.
 
-The `references/` directory should use the same pattern. The current installation instructions in `implementations/claude-code/README.md` document agent symlinks but do not yet include the `references/` directory.
+The `references/` directory uses the same pattern. The consolidated `install.sh` at the repo root handles all symlinks: core skill files, agent definitions, references, and scripts. It dynamically discovers files in each subdirectory, so adding a new reference or agent definition requires no installer changes.
 
-**Gap:** `implementations/claude-code/hooks/install.sh` is a hooks installer and does not handle skill file symlinks at all — skill symlinks are documented manually in the README's "Step 3" and "Step 4" sections. The `references/` symlinks need to be added to those manual instructions.
-
-The commands to add to the README installation block:
-
-```bash
-# Symlink on-demand references
-mkdir -p ~/.claude/skills/saw/references
-ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/references/program-flow.md \
-       ~/.claude/skills/saw/references/program-flow.md
-ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/references/amend-flow.md \
-       ~/.claude/skills/saw/references/amend-flow.md
-ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/references/failure-routing.md \
-       ~/.claude/skills/saw/references/failure-routing.md
-```
+**Gap: resolved.** The root `install.sh` now handles skill files, hooks, settings.json registration, and Agent permission in a single command. The old `hooks/install.sh` delegates to it.
 
 Like the `agents/` symlinks, these should be one-time setup steps. A `git pull` on the protocol repo will then update all on-demand references automatically.
 

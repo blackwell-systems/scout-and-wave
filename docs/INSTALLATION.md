@@ -2,13 +2,13 @@
 
 ## Zero to First Scout
 
-Six commands from nothing to your first `/saw scout`. Copy-paste in order:
+Five commands from nothing to your first `/saw scout`. Copy-paste in order:
 
 ```bash
 # 0. Prerequisites: Git 2.20+, Go 1.25+, jq 1.6+
 git --version && go version && jq --version
 
-# 1. Install skill files + enforcement hooks
+# 1. Install skill files, hooks, and Agent permission
 git clone https://github.com/blackwell-systems/scout-and-wave.git
 cd scout-and-wave && ./install.sh
 
@@ -22,18 +22,13 @@ sawtools init
 # 4. Verify everything works
 sawtools verify-install
 
-# 5. Run your first scout
-#    (in Claude Code, type this as a prompt)
+# 5. Run your first scout (in Claude Code, type this as a prompt)
 /saw scout "describe your feature here"
 ```
 
-**Important:** Add `Agent` to your Claude Code permissions or you'll be prompted to approve every agent launch:
+The installer auto-detects Claude Code and handles everything: skill files, enforcement hooks, settings.json registration, and Agent permission. No manual configuration needed.
 
-```bash
-# Add to ~/.claude/settings.json under "permissions.allow":
-jq '.permissions.allow += ["Agent"] | .permissions.allow |= unique' \
-  ~/.claude/settings.json > /tmp/cs.json && mv /tmp/cs.json ~/.claude/settings.json
-```
+For non-Claude-Code platforms, use `./install.sh --generic` to install to `~/.agents/skills/saw/` instead (see [Platform Support](#platform-support) below).
 
 That's it for most users. The Web UI is optional -- see [Step 3](#step-3-web-ui-optional) below if you want the browser interface.
 
@@ -73,17 +68,18 @@ cd scout-and-wave
 ./install.sh
 ```
 
-The installer does three things:
+The installer auto-detects Claude Code (checks for `~/.claude`) and does four things:
 
 1. **Symlinks skill files** to `~/.claude/skills/saw/` (SKILL.md, agent definitions, references, scripts).
 2. **Symlinks hook scripts** to `~/.local/bin/` (11 enforcement hooks, see [Hooks](#hooks-10-total) below).
 3. **Registers hooks** in `~/.claude/settings.json` under `PreToolUse`, `PostToolUse`, `SubagentStop`, and `UserPromptSubmit` lifecycle events.
+4. **Adds `Agent` permission** to `~/.claude/settings.json` so SAW can launch agents without manual approval.
 
-The installer is idempotent — safe to run multiple times. It backs up `settings.json` before modifying it.
+The installer is idempotent — safe to run multiple times. It backs up `settings.json` before modifying it. Run `./install.sh --generic` to install to `~/.agents/skills/saw/` without Claude Code-specific configuration.
 
 #### Skill Files
 
-The skill files must also be symlinked into `~/.claude/skills/saw/`. After installation, the directory structure should look like this:
+After installation, the skill directory structure looks like this:
 
 ```
 ~/.claude/skills/saw/
@@ -106,24 +102,6 @@ The skill files must also be symlinked into `~/.claude/skills/saw/`. After insta
 ```
 
 All symlink targets point into `implementations/claude-code/prompts/` in the protocol repo, so pulling the latest revision updates skill behavior without re-symlinking.
-
-If the skill symlinks are not set up by the hook installer, create them manually:
-
-```bash
-mkdir -p ~/.claude/skills/saw/agents ~/.claude/skills/saw/references ~/.claude/skills/saw/hooks
-
-ln -sf "$(pwd)/implementations/claude-code/prompts/saw-skill.md" ~/.claude/skills/saw/SKILL.md
-ln -sf "$(pwd)/implementations/claude-code/prompts/agent-template.md" ~/.claude/skills/saw/agent-template.md
-ln -sf "$(pwd)/implementations/claude-code/prompts/saw-bootstrap.md" ~/.claude/skills/saw/saw-bootstrap.md
-
-for f in implementations/claude-code/prompts/agents/*.md; do
-  ln -sf "$(pwd)/$f" ~/.claude/skills/saw/agents/$(basename "$f")
-done
-
-for f in implementations/claude-code/prompts/references/*.md; do
-  ln -sf "$(pwd)/$f" ~/.claude/skills/saw/references/$(basename "$f")
-done
-```
 
 ### Step 2: CLI Tools (`sawtools`)
 
@@ -369,7 +347,7 @@ ls ~/.claude/skills/saw/agents/
 ls ~/.claude/skills/saw/references/
 ```
 
-If any are missing, re-create the symlinks (see [Skill Files](#skill-files) above).
+If any are missing, re-run the installer: `./install.sh`
 
 ### Hooks not firing
 
@@ -435,30 +413,27 @@ cd scout-and-wave-web
 go build -o saw ./cmd/saw
 ```
 
+## Platform Support
+
+The installer supports multiple platforms via flags:
+
+| Flag | Skill directory | Hooks | Settings |
+|------|----------------|-------|----------|
+| `./install.sh` (auto-detect) | `~/.claude/skills/saw/` if Claude Code detected, else `~/.agents/skills/saw/` | `~/.local/bin/` | `settings.json` if Claude Code |
+| `./install.sh --claude-code` | `~/.claude/skills/saw/` | `~/.local/bin/` | Registers in `settings.json` + Agent permission |
+| `./install.sh --generic` | `~/.agents/skills/saw/` | `~/.local/bin/` | None (manual registration) |
+
+**`sawtools` works on any platform** -- it's a standalone Go binary that manages git worktrees, validates IMPL docs, merges branches, and runs quality gates. No LLM API calls.
+
+**The orchestrator prompt and hooks are platform-specific.** The `/saw` skill prompt is written for Claude Code's skill system. The hook scripts use a JSON stdin/stdout protocol that can be adapted to other platforms' hook systems (Gemini CLI's `BeforeAgent`, Cursor's `beforeSubmitPrompt`, etc.). Use `--generic` to install the scripts, then register them in your platform's configuration.
+
 ## Uninstalling
 
-To remove SAW hooks and symlinks:
+```bash
+./install.sh --uninstall
+```
 
-1. Remove hook symlinks:
-   ```bash
-   rm ~/.local/bin/check_scout_boundaries \
-      ~/.local/bin/block_claire_paths \
-      ~/.local/bin/check_wave_ownership \
-      ~/.local/bin/validate_agent_launch \
-      ~/.local/bin/validate_impl_on_write \
-      ~/.local/bin/check_git_ownership \
-      ~/.local/bin/warn_stubs \
-      ~/.local/bin/check_branch_drift \
-      ~/.local/bin/validate_agent_completion \
-      ~/.local/bin/emit_agent_completion
-   ```
-
-2. Edit `~/.claude/settings.json` and remove the `PreToolUse`, `PostToolUse`, and `SubagentStop` hook entries that reference SAW hooks.
-
-3. Remove skill files:
-   ```bash
-   rm -rf ~/.claude/skills/saw
-   ```
+This removes skill file symlinks and hook script symlinks. Hook registrations in `settings.json` are not removed automatically -- edit that file manually if needed.
 
 ## Next Steps
 
@@ -469,4 +444,4 @@ To remove SAW hooks and symlinks:
 
 ---
 
-Last reviewed: 2026-03-24
+Last reviewed: 2026-03-25
