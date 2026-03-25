@@ -35,18 +35,19 @@ Install in this order. Each step builds on the previous one.
 
 ### Step 1: Protocol, Skill Files, and Hooks
 
-Clone this repository and run the hook installer:
+Clone this repository and run the installer:
 
 ```bash
 git clone https://github.com/blackwell-systems/scout-and-wave.git
 cd scout-and-wave
-./implementations/claude-code/hooks/install.sh
+./install.sh
 ```
 
-The installer does two things:
+The installer does three things:
 
-1. **Creates symlinks** in `~/.local/bin/` pointing to the 11 hook scripts in the repo (see [Hooks](#hooks-10-total) below).
-2. **Registers hooks** in `~/.claude/settings.json` under `PreToolUse`, `PostToolUse`, and `SubagentStop` lifecycle events.
+1. **Symlinks skill files** to `~/.claude/skills/saw/` (SKILL.md, agent definitions, references, scripts).
+2. **Symlinks hook scripts** to `~/.local/bin/` (11 enforcement hooks, see [Hooks](#hooks-10-total) below).
+3. **Registers hooks** in `~/.claude/settings.json` under `PreToolUse`, `PostToolUse`, `SubagentStop`, and `UserPromptSubmit` lifecycle events.
 
 The installer is idempotent — safe to run multiple times. It backs up `settings.json` before modifying it.
 
@@ -228,23 +229,87 @@ For human-readable output instead of JSON:
 sawtools verify-install --human
 ```
 
-## Configuration
+## Configuration: `saw.config.json`
 
-The recommended way to create your configuration is `sawtools init`, which auto-detects your project and generates a `saw.config.json` with appropriate defaults (see [Step 2b](#step-2b-initialize-your-project) above).
+### What it is
 
-To configure manually, create a `saw.config.json` file in your project root. This tells `sawtools` where to find the other repos:
+`saw.config.json` is a per-project configuration file that lives in your project root. It tells SAW how to build, test, and manage your project -- which repos are involved, which models to use for each agent role, and what quality gates to run.
+
+### What happens without it
+
+SAW works without `saw.config.json`, but with reduced capabilities:
+
+| Feature | With config | Without config |
+|---------|-------------|----------------|
+| Agent model selection | Per-role models (Scout=Sonnet, Wave=Opus, etc.) | All agents inherit parent session model |
+| Build/test commands | Auto-detected or configured | Must be specified in IMPL doc quality gates |
+| Multi-repo awareness | Repos listed, cross-repo IMPL docs work | Single-repo only |
+| Web UI project binding | `saw serve` auto-finds project | Must pass `--repo` flag every time |
+| Webhook notifications | Adapters configured under `webhooks:` key | No webhook delivery |
+
+**Bottom line:** A single-repo project with default models works fine without it. Multi-repo projects or custom model selection need it.
+
+### Creating it
+
+The recommended approach is auto-detection:
+
+```bash
+cd your-project
+sawtools init
+```
+
+This scans for language markers (go.mod, Cargo.toml, package.json, pyproject.toml, Gemfile, Makefile) and generates a config with sensible defaults. Use `--force` to overwrite an existing file.
+
+### Full reference
 
 ```json
 {
-  "repos": {
-    "protocol": "/path/to/scout-and-wave",
-    "engine": "/path/to/scout-and-wave-go",
-    "web": "/path/to/scout-and-wave-web"
+  "repos": [
+    {"name": "my-project", "path": "/absolute/path/to/my-project"},
+    {"name": "my-shared-lib", "path": "/absolute/path/to/shared-lib"}
+  ],
+  "agent": {
+    "scout_model": "claude-sonnet-4-6",
+    "wave_model": "claude-sonnet-4-6",
+    "scaffold_model": "",
+    "integration_model": "",
+    "planner_model": "",
+    "critic_model": "",
+    "chat_model": ""
+  },
+  "build": {
+    "command": "go build ./...",
+    "detected": true
+  },
+  "test": {
+    "command": "go test ./...",
+    "detected": true
+  },
+  "webhooks": {
+    "enabled": false,
+    "adapters": []
   }
 }
 ```
 
-If you cloned all three repos into the same parent directory, the default paths should work automatically.
+### Field reference
+
+**`repos`** (array of `{name, path}`) -- Repositories this project spans. For single-repo projects, `sawtools init` creates one entry pointing to the current directory. For multi-repo projects, add additional entries. Cross-repo IMPL docs use `repo:` tags on file_ownership and quality_gates that must match a `name` here.
+
+**`agent`** (object) -- Model override per agent role. Empty string or missing field means "inherit the parent session's model." The `/saw` skill reads these at agent launch time. Available roles: `scout_model`, `wave_model`, `scaffold_model`, `integration_model`, `planner_model`, `critic_model`, `chat_model`.
+
+**`build`** / **`test`** (object with `command` and `detected`) -- Build and test commands for the project. `sawtools init` auto-detects these and sets `detected: true`. Override `command` if auto-detection chose wrong. These are used by `sawtools finalize-wave` for post-merge verification.
+
+**`webhooks`** (object) -- Webhook notification configuration. `enabled: true` activates delivery. `adapters` is an array of adapter configs (Slack, Discord, Telegram). Configure via the web UI Settings page or edit directly.
+
+### Config file lookup
+
+SAW checks two locations (first match wins):
+
+1. `<project-root>/saw.config.json` -- per-project config
+2. `~/.claude/saw.config.json` -- global default for all projects
+
+The project-local file takes full precedence. There is no merging between levels.
 
 ## Troubleshooting
 
@@ -291,7 +356,7 @@ If any are missing, re-create the symlinks (see [Skill Files](#skill-files) abov
 
 3. Re-run the installer:
    ```bash
-   ./implementations/claude-code/hooks/install.sh
+   ./install.sh
    ```
 
 See [HOOKS.md](HOOKS.md) for detailed troubleshooting of individual hooks.
