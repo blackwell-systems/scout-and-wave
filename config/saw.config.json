@@ -1,0 +1,16 @@
+{
+  "agent": {
+    "scout_model": "",
+    "wave_model": "",
+    "chat_model": "",
+    "integration_model": "",
+    "scaffold_model": "",
+    "planner_model": "",
+    "critic_model": ""
+  },
+  "quality": {
+    "require_tests": false,
+    "require_lint": false,
+    "block_on_failure": false
+  }
+}

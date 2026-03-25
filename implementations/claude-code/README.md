@@ -6,6 +6,7 @@ Scout-and-Wave implemented as a Claude Code skill for fully automated parallel a
 
 - Claude Code desktop app
 - Git 2.20+ (for worktree support)
+- `sawtools` CLI (see Step 2 below)
 - Project with existing codebase OR empty repo for bootstrap mode
 
 ## Installation
@@ -58,7 +59,28 @@ EOF
 
 For project-scoped settings, add the same block to `.claude/settings.json` in the project root.
 
-### Step 2: Clone the Repository (Required)
+### Step 2: Install sawtools (Required)
+
+`sawtools` is the CLI engine for all wave operations — worktree creation, merge, IMPL validation, stub scanning. **Without it, `/saw wave` cannot function.**
+
+```bash
+# Clone the Go engine repo
+git clone https://github.com/blackwell-systems/scout-and-wave-go.git ~/code/scout-and-wave-go
+
+# Build the binary
+cd ~/code/scout-and-wave-go
+go build -o sawtools ./cmd/sawtools
+
+# Install to PATH
+mv sawtools ~/.local/bin/sawtools
+
+# Verify
+sawtools --version
+```
+
+**Requirements:** Go 1.21+. `~/.local/bin` must be on your `$PATH`.
+
+### Step 3: Clone the Repository (Required)
 
 The skill reads prompt files from the repository at runtime, so keep it on disk:
 
@@ -70,7 +92,7 @@ git clone https://github.com/blackwell-systems/scout-and-wave.git ~/code/scout-a
 # git clone https://github.com/blackwell-systems/scout-and-wave.git /path/you/prefer
 ```
 
-### Step 3: Install the Skill (Required)
+### Step 4: Install the Skill (Required)
 
 Create the skill directory and symlink all required files:
 
@@ -98,7 +120,7 @@ ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agent-template.
 
 **What changed in v0.5.0:** The skill now uses the Claude Code Skills API instead of the legacy commands API. Supporting files are co-located in the skill directory and referenced via `${CLAUDE_SKILL_DIR}`, eliminating hardcoded paths and environment variables.
 
-### Step 4: Install Custom Agent Types (Required)
+### Step 5: Install Custom Agent Types (Required)
 
 SAW uses custom Claude Code agent types that provide structural tool restrictions (e.g., scout cannot edit source files, wave agents cannot spawn sub-agents) and behavioral instructions. These must be installed for the skill to function.
 
@@ -135,7 +157,26 @@ These files are loaded on-demand only when the matching subcommand is invoked (`
 
 **What you get:** Custom agent types provide runtime-enforced tool restrictions (scout cannot Edit source files, wave agents cannot spawn sub-agents) and better observability. Each agent type has YAML frontmatter that Claude Code uses to enforce behavioral constraints.
 
-### Step 5: Verify Installation
+### Step 6: Install Hooks (Required)
+
+Hooks enforce the protocol's correctness guarantees at the Claude Code level — preventing Scout from writing source files (I6), blocking wave agents from touching files they don't own (I1), validating IMPL docs on write (E16), and checking agent launch/completion protocol (E42). **Without hooks, these invariants are advisory only.**
+
+```bash
+cd ~/code/scout-and-wave/implementations/claude-code/hooks
+./install.sh
+```
+
+The installer symlinks all hook scripts to `~/.local/bin/`, registers them in `~/.claude/settings.json`, and verifies each hook is executable. It will print a summary of what was installed.
+
+**If `~/.local/bin` is not on your `$PATH`**, add it:
+```bash
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc  # or ~/.bashrc
+source ~/.zshrc
+```
+
+See `implementations/claude-code/hooks/README.md` for the full list of hooks and what each enforces.
+
+### Step 7: Verify Installation
 
 Restart Claude Code (if it was already running), then in any session:
 
@@ -229,7 +270,7 @@ The `/saw` skill consists of several specialized prompts, all installed to `~/.c
 - **`SKILL.md`** (from `implementations/claude-code/prompts/saw-skill.md`) - Main orchestrator with YAML frontmatter
 - **`saw-bootstrap.md`** - Bootstrap mode for new projects
 - **`agent-template.md`** - Wave Agent template (Scout fills this to generate per-agent prompts)
-- **`agents/`** - Custom agent type definitions (scout, wave-agent, scaffold-agent, integration-agent)
+- **`agents/`** - Custom agent type definitions (scout, wave-agent, scaffold-agent, integration-agent, critic-agent, planner)
 
 All orchestration operations (worktree management, merge procedures, validation, stub scanning) are handled by the `sawtools` CLI from the scout-and-wave-go SDK.
 
@@ -264,7 +305,7 @@ Per-project config overrides global. Use global for your default model preferenc
 ln -sf ~/code/scout-and-wave/config/saw.config.json ~/.claude/saw.config.json
 ```
 
-Edit `config/saw.config.json` in the repo to set your defaults. Changes are version-controlled and propagate via `git pull`.
+Edit `config/saw.config.json` in the repo to set your preferred models. Empty string fields inherit the parent session's model. Changes are version-controlled and propagate via `git pull`.
 
 ```json
 {
@@ -309,11 +350,14 @@ SAW uses custom Claude Code agent types for all Scout, Scaffold Agent, Wave Agen
 ```
 prompts/
 ├── agent-template.md     # Scout's reference doc for writing agent briefs into IMPL doc
+├── saw-bootstrap.md      # Bootstrap Scout procedure
 └── agents/
     ├── scout.md              # Custom agent type (with YAML frontmatter)
-    ├── scaffold-agent.md     # Custom agent type (with YAML frontmatter)
     ├── wave-agent.md         # Custom agent type (with YAML frontmatter)
-    └── integration-agent.md  # Custom agent type (with YAML frontmatter)
+    ├── scaffold-agent.md     # Custom agent type (with YAML frontmatter)
+    ├── integration-agent.md  # Custom agent type (with YAML frontmatter)
+    ├── critic-agent.md       # Custom agent type (with YAML frontmatter)
+    └── planner.md            # Custom agent type (with YAML frontmatter)
 ```
 
 **Wave agents use a two-layer architecture:**
