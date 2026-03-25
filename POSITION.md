@@ -46,7 +46,7 @@ SAW does not assume a specific LLM provider. The protocol specifies *what* agent
 | **OpenAI-compatible** | `pkg/agent/backend/openai` | Any OpenAI-compatible endpoint: OpenAI, Groq, Ollama (local models), or custom deployments |
 | **CLI** | `pkg/agent/backend/cli` | Wraps any CLI binary (`claude`, or any compatible CLI via `BinaryPath` config) |
 
-Model selection is configurable at three levels: per-invocation (`--model`), per-role in `saw.config.json` (separate `scout_model`, `wave_model`, `critic_model`, `integration_model`, `scaffold_model`, `planner_model`), or inherited from the parent session. A single SAW execution can use different models for different roles -- Opus for Scout planning, Sonnet for Wave agents, Haiku for critic review.
+Model selection is configurable at three levels: per-invocation (`--model`), per-role in `saw.config.json` (separate `scout_model`, `wave_model`, `critic_model`, `integration_model`, `scaffold_model`, `planner_model`), or inherited from the parent session. A single SAW execution can use different models for different roles -- Opus for Scout planning, Sonnet for Wave agents, Haiku for critic review. The web app's ModelPicker UI surfaces this as per-role provider selection: each role (Scout, Wave, Critic, Scaffold, Integration, Planner, Chat) has its own model dropdown, and different roles can use different providers in the same session.
 
 The `Backend` config accepts `BaseURL` for endpoint override, meaning any API-compatible service works without code changes: `http://localhost:11434/v1` for local Ollama, `https://api.groq.com/openai/v1` for Groq, or a corporate proxy endpoint.
 
