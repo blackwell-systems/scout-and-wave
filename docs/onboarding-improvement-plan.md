@@ -724,6 +724,8 @@ Independent review verdict: **APPROVE WITH CHANGES**. Status of each condition:
 - **FTUE deferral** — RESOLVED. FTUE analysis reviewed item-by-item; most items already implemented. Remaining 3 minor items tracked separately.
 - **FTUE 1.4 Approve confirmation** — REJECTED. Tooltip already explains action; double-click friction unacceptable.
 - **`go install` priority** — MOVED to Tier 1 (see revised priority below).
+- **`go install` for sawtools** — DONE (2026-03-25). GoReleaser configured, first release v0.92.0 published. Install: `go install github.com/blackwell-systems/scout-and-wave-go/cmd/sawtools@latest`. All installation docs updated across all three repos. Installation steps reduced from 9 to ~4 (clone protocol repo, run install.sh, go install sawtools, verify).
+- **Installation docs updated** — DONE (2026-03-25). All 8 docs across protocol and Go repos updated to show `go install` as primary method, build-from-source as collapsible alternative for contributors.
 
 ### Open (still to address)
 - **First-run detection reconciliation:** `saw init` checks `saw.config.json`; skill guided mode checks `docs/IMPL/`. Need single signal. Recommendation: `saw.config.json` existence is the canonical "initialized" flag.
@@ -751,7 +753,7 @@ Independent review verdict: **APPROVE WITH CHANGES**. Status of each condition:
 
 | # | Proposal | Impact | Effort | Rationale |
 |---|---|---|---|---|
-| 1 | **`go install` for sawtools** | High | Small | Eliminates the real installation friction (building Go from source). Single command: `go install github.com/blackwell-systems/scout-and-wave-go/cmd/sawtools@latest` |
+| 1 | **~~`go install` for sawtools~~** | ~~High~~ | ~~Small~~ | **DONE (2026-03-25).** v0.92.0 released via GoReleaser. All docs updated. |
 | 2 | **Web app empty state redesign (4.3)** | High | Small | Immediate payoff. Replaces dead-end "No plan selected" with call-to-action. No dependencies. |
 | 3 | **Error message templates in skill prompt (4.5, prompt-side only)** | High | Small | Verbatim error strings for the 6 most common failures. No Go changes needed. |
 | 4 | **Hide advanced model selectors (4.4, UI labels)** | High | Small | Show SCOUT, WAVE, CHAT; hide CRITIC, SCAFFOLD, INTEGRATION, PLANNER behind Advanced toggle. |
@@ -773,7 +775,7 @@ Independent review verdict: **APPROVE WITH CHANGES**. Status of each condition:
 | 10 | **`saw plan` alias (4.7)** | Low | Small | Deferred — overloads "plan" and no standalone CLI exists. Revisit if CLI entry point is built. |
 | 11 | **`saw init` command (4.1)** | Low | Medium | Descoped — `install.sh` and `go install` cover the real friction. |
 | 12 | **Protocol doc renaming (4.4 docs)** | Low | Large | Docs are secondary to the product experience. |
-| 13 | **Homebrew formula** | Medium | Medium | macOS convenience. Depends on `go install` working first. |
+| 13 | **~~Homebrew formula~~** | ~~Medium~~ | ~~Medium~~ | **DONE.** Formula maintained manually in `blackwell-systems/homebrew-tap`. Install: `brew install blackwell-systems/tap/sawtools`. |
 | 14 | **Interactive web tutorial** | Medium | Large | Guided overlay in web app. Nice to have. |
 
 ## 7. Anti-Patterns to Avoid
