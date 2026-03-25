@@ -1,5 +1,13 @@
 # Program Commands — On-Demand Reference
 
+**Contents:**
+- [Create PROGRAM from Existing IMPLs](#saw-program---impl)
+- [Level A: Planning Only — program plan/execute/status/replan](#program-commands-level-a-planning-only)
+  - [/saw program plan](#saw-program-plan-project-description)
+  - [/saw program execute](#saw-program-execute-project-description)
+  - [/saw program status](#saw-program-status)
+  - [/saw program replan](#saw-program-replan---reason-reason)
+
 **Wave execution:** Program tiers execute IMPLs using the standard wave loop from the core SKILL.md (steps 3-11 of Execution Logic). Do not duplicate that logic here — when Step 3b says "use existing `/saw wave --auto` flow", follow the wave loop in the core file.
 
 **Lifecycle analogy — Program commands mirror IMPL commands:**
