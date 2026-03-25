@@ -53,6 +53,13 @@ if [[ "${SAW_ALLOW_MAIN_COMMIT:-}" == "1" ]]; then
   exit 0
 fi
 
+# Only block if we're inside a SAW worktree (wave agent context).
+# The orchestrator commits to main from the repo root, not a worktree.
+git_toplevel=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
+if [[ -n "$git_toplevel" ]] && ! echo "$git_toplevel" | grep -q '\.claude/worktrees/saw/'; then
+  exit 0
+fi
+
 if [[ "$current_branch" == "main" || "$current_branch" == "master" ]]; then
   echo "BLOCKED [check_branch_drift / H4]: Direct commit to '${current_branch}' detected." >&2
   echo "" >&2
