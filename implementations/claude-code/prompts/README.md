@@ -3,40 +3,67 @@
 Reference implementations of the SAW protocol. Each file maps to a specific
 participant role or procedure defined in the [protocol/](../protocol/) specification.
 
+## Directory Structure
+
+```
+prompts/
+├── saw-skill.md          ← Orchestrator skill (entry point)
+├── saw-bootstrap.md      ← Bootstrap Scout procedure
+├── agent-template.md     ← Wave agent brief specification (Scout reference)
+├── agents/               ← Agent type definitions (tool restrictions + behavior)
+│   ├── scout.md
+│   ├── wave-agent.md
+│   ├── scaffold-agent.md
+│   ├── integration-agent.md
+│   ├── critic-agent.md
+│   └── planner.md
+└── references/           ← Orchestrator on-demand references (progressive disclosure)
+    ├── program-flow.md
+    ├── amend-flow.md
+    └── failure-routing.md
+```
+
 ## Entry Point
 
-| File | Version | Purpose |
+| File | Purpose |
+|------|---------|
+| [`saw-skill.md`](saw-skill.md) | The `/saw` skill body. Loaded on every `/saw` invocation. Drives all protocol state transitions as the Orchestrator. Uses `sawtools prepare-wave`, `sawtools finalize-wave`, `sawtools close-impl` for orchestration operations. Routes: `scout`, `wave`, `wave --auto`, `status`, `bootstrap`, `interview`. On-demand routing to `references/` for `program`, `amend`, and failure handling. |
+
+## Agent Type Definitions (`agents/`)
+
+Custom Claude Code agent types. Each file carries YAML frontmatter that Claude Code
+uses to enforce tool restrictions and behavioral invariants. Launched via
+`subagent_type:` — the Orchestrator does not pass the file content directly.
+
+| File | Agent | Purpose |
+|------|-------|---------|
+| [`agents/scout.md`](agents/scout.md) | Scout | Suitability gate + IMPL doc production. Analyzes codebase, assigns file ownership, defines interface contracts, structures waves. Cannot edit source files (I6 enforcement). |
+| [`agents/wave-agent.md`](agents/wave-agent.md) | Wave Agent | TYPE LAYER shared by all wave agents. Worktree isolation protocol, workflow checklist, session recovery, completion report format. Cannot spawn sub-agents. |
+| [`agents/scaffold-agent.md`](agents/scaffold-agent.md) | Scaffold Agent | Materializes approved interface contracts as type scaffold source files. Runs between Scout and Wave 1. Creates only files listed in IMPL doc Scaffolds section. |
+| [`agents/integration-agent.md`](agents/integration-agent.md) | Integration Agent | Post-merge wiring agent (E26/E27). Wires unconnected exports into connector files. Runs on main branch after wave merge. |
+| [`agents/critic-agent.md`](agents/critic-agent.md) | Critic Agent | Pre-wave brief review (E37). Reads every agent brief, reads every owned file, verifies accuracy across 6 checks. Writes verdict to IMPL doc. Never modifies source files. |
+| [`agents/planner.md`](agents/planner.md) | Planner | Program-level planning agent. Produces PROGRAM manifest with tiered IMPL execution plan for `/saw program plan/execute`. |
+
+## Scout Payload Files (root)
+
+These files are **passed by path** to the Scout agent at launch. The Orchestrator
+does not read them directly; it includes the path in the Scout's prompt.
+
+| File | When used | Purpose |
+|------|-----------|---------|
+| [`agent-template.md`](agent-template.md) | Every Scout launch | INSTANCE LAYER reference. Defines the 9-field agent brief structure, isolation verification protocol, YAML completion schema, and protocol constraints. Scout reads this → writes filled briefs into the IMPL doc. Wave agents never read this file directly. |
+| [`saw-bootstrap.md`](saw-bootstrap.md) | `/saw bootstrap` only | Bootstrap Scout procedure. Architecture design principles, disjoint ownership patterns, Rust workspace rules, types scaffold specification, and IMPL-bootstrap.yaml output format. |
+
+## On-Demand References (`references/`)
+
+Loaded by the Orchestrator only when the matching subcommand is invoked.
+See `docs/skills-progressive-disclosure.md` for the design.
+
+| File | Trigger | Purpose |
 |------|---------|---------|
-| [`saw-skill.md`](saw-skill.md) | v0.7.0 | The `/saw` skill router. Install to `~/.claude/skills/saw/SKILL.md`. Routes `bootstrap`, `scout`, `wave`, `wave --auto`, and `status` commands. Drives all protocol state transitions as the Orchestrator. Uses sawtools commands for all orchestration operations (`sawtools create-worktrees`, `sawtools merge-agents`, `sawtools verify-build`, `sawtools run-wave`, etc.). |
-
-## Participant Prompts
-
-These files are passed as agent content; the Orchestrator reads them and
-uses their text as the prompt when launching an asynchronous agent.
-
-| File | Version | Participant | Purpose |
-|------|---------|-------------|---------|
-| [`scout.md`](scout.md) | v0.4.0 | Scout | Suitability gate (5 questions) + IMPL doc production. Analyzes the codebase, assigns file ownership, defines interface contracts, specifies scaffold file contents in the IMPL doc Scaffolds section, structures waves, and stamps per-agent prompts. Never modifies source files. |
-| [`scaffold-agent.md`](scaffold-agent.md) | v0.1.2 | Scaffold Agent | Materializes approved interface contracts as type scaffold source files after human review of the IMPL doc. Runs between Scout and Wave 1. Creates only the files listed in the IMPL doc Scaffolds section, verifies they compile, commits, and updates scaffold status. |
-| [`agent-template.md`](agent-template.md) | v0.3.9 | Wave Agent | 9-field prompt template stamped per-agent by the Scout into the IMPL doc. Field 0: isolation verification (mandatory pre-flight). Fields 1–8: file ownership, interfaces, implementation spec, tests, verification gate, constraints, completion report. |
-| [`agents/integration-agent.md`](agents/integration-agent.md) | v0.1.0 | Integration Agent | Post-merge wiring agent (E26). Reads IntegrationReport, wires unconnected exports into `integration_connectors` files. Runs on main branch after wave merge. Non-fatal — gaps reported to human if wiring fails. |
-
-## Procedure Prompts
-
-These files are read by the Orchestrator at runtime to drive its own
-behavior. They are not passed to agents; the Orchestrator follows the
-instructions in them directly.
-
-| File | Version | When read | Purpose |
-|------|---------|-----------|---------|
-| [`saw-worktree.md`](saw-worktree.md) | v0.5.1 | Before wave launch | Worktree lifecycle: preflight working tree check, pre-launch ownership verification, interface freeze (including scaffold commit verification via `saw validate-scaffolds` and `saw freeze-check`), pre-creation, creation verification, failure diagnosis, and post-wave cleanup. |
-| [`saw-merge.md`](saw-merge.md) | v0.5.0 | After wave completes | Merge procedure: parse completion reports, conflict prediction (via `saw check-conflicts`), interface deviation review, quality gates (via `saw run-gates`), per-agent merge, worktree cleanup, post-merge verification (linter auto-fix pass + scaffold integrity check via `saw validate-scaffolds`), IMPL doc updates, and crash recovery. |
-
-## Variant Prompts
-
-| File | Version | Skill command | Purpose |
-|------|---------|---------------|---------|
-| [`saw-bootstrap.md`](saw-bootstrap.md) | v0.4.0 | `/saw bootstrap` | Design-first execution for new projects with no existing codebase. Orchestrator reads this and acts as architect: gathers requirements, designs package structure, defines interface contracts, specifies types scaffold in manifest Scaffolds section, and writes `docs/IMPL/IMPL-bootstrap.yaml` with parallel implementation waves starting from Wave 1. |
+| [`references/program-flow.md`](references/program-flow.md) | `/saw program *` | Program plan/execute/status/replan flow. ~324 lines. Includes lifecycle analogy table and per-subcommand Orchestrator steps. |
+| [`references/amend-flow.md`](references/amend-flow.md) | `/saw amend *` | Amend subcommands: `--add-wave`, `--redirect-agent`, `--extend-scope`. |
+| [`references/failure-routing.md`](references/failure-routing.md) | Agent failure or post-merge integration gaps | E7a retry context, E19 failure type routing, E19.1 reactions override, E8 interface failures, E20 stub scanning, E25/E26/E35 integration gap detection. |
 
 ## Protocol Invariants Referenced
 
@@ -45,5 +72,5 @@ invariants appear in these prompts, they are embedded verbatim alongside
 their I-number so each prompt is self-contained. To audit consistency:
 
 ```bash
-grep -n "I[1-6]:" prompts/*.md
+grep -rn "I[1-6]:" prompts/
 ```
