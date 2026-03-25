@@ -54,7 +54,7 @@ See [INSTALLATION.md](INSTALLATION.md) for the full installation guide, includin
 **Quick version:**
 
 1. Clone this repo and run `./install.sh` (installs the Claude Code skill)
-2. Clone [scout-and-wave-go](https://github.com/blackwell-systems/scout-and-wave-go) and build `sawtools`
+2. Install sawtools: `go install github.com/blackwell-systems/scout-and-wave-go/cmd/sawtools@latest`
 3. (Optional) Clone [scout-and-wave-web](https://github.com/blackwell-systems/scout-and-wave-web) for the Web UI
 
 ## Three Repos, One System

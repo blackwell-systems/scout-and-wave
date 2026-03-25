@@ -64,21 +64,13 @@ For project-scoped settings, add the same block to `.claude/settings.json` in th
 `sawtools` is the CLI engine for all wave operations — worktree creation, merge, IMPL validation, stub scanning. **Without it, `/saw wave` cannot function.**
 
 ```bash
-# Clone the Go engine repo
-git clone https://github.com/blackwell-systems/scout-and-wave-go.git ~/code/scout-and-wave-go
-
-# Build the binary
-cd ~/code/scout-and-wave-go
-go build -o sawtools ./cmd/sawtools
-
-# Install to PATH
-mv sawtools ~/.local/bin/sawtools
+go install github.com/blackwell-systems/scout-and-wave-go/cmd/sawtools@latest
 
 # Verify
-sawtools --version
+sawtools version
 ```
 
-**Requirements:** Go 1.21+. `~/.local/bin` must be on your `$PATH`.
+**Requirements:** Go 1.21+. `$GOPATH/bin` (typically `~/go/bin`) must be on your `$PATH`.
 
 ### Step 3: Clone the Repository (Required)
 

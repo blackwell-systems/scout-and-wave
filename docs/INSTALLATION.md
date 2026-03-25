@@ -96,7 +96,22 @@ done
 
 ### Step 2: CLI Tools (`sawtools`)
 
-Clone the Go engine repo and build the binary:
+Install the `sawtools` binary:
+
+```bash
+go install github.com/blackwell-systems/scout-and-wave-go/cmd/sawtools@latest
+```
+
+This places the binary in `$GOPATH/bin` (typically `~/go/bin`), which Go adds to your PATH by default.
+
+Verify the installation:
+
+```bash
+sawtools version
+```
+
+<details>
+<summary>Alternative: build from source (for contributors)</summary>
 
 ```bash
 git clone https://github.com/blackwell-systems/scout-and-wave-go.git
@@ -104,19 +119,8 @@ cd scout-and-wave-go
 go build -o ~/.local/bin/sawtools ./cmd/sawtools
 ```
 
-Make sure `~/.local/bin` is on your PATH. Add this to your shell profile if needed:
-
-```bash
-export PATH="$HOME/.local/bin:$PATH"
-```
-
-Verify the build:
-
-```bash
-sawtools help
-```
-
-There is no `--version` flag. Use `sawtools help` to confirm the binary is working.
+Make sure `~/.local/bin` is on your PATH: `export PATH="$HOME/.local/bin:$PATH"`
+</details>
 
 ### Step 3: Web UI (Optional)
 
@@ -223,9 +227,12 @@ If you cloned all three repos into the same parent directory, the default paths 
 
 ### "sawtools: command not found"
 
-The `sawtools` binary is not on your PATH. Either:
-- Move it to a directory on your PATH: `go build -o ~/.local/bin/sawtools ./cmd/sawtools`
-- Or add its location to PATH: `export PATH="$HOME/.local/bin:$PATH"`
+Install or reinstall: `go install github.com/blackwell-systems/scout-and-wave-go/cmd/sawtools@latest`
+
+If already installed, ensure `$GOPATH/bin` (typically `~/go/bin`) is on your PATH:
+```bash
+export PATH="$(go env GOPATH)/bin:$PATH"
+```
 
 Verify with: `which sawtools`
 
