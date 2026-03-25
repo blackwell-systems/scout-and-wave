@@ -13,6 +13,8 @@ Most approaches to parallel agent coordination fall into one of four failure mod
 
 Scout-and-Wave (SAW) treats parallel agent work as a distributed systems problem and solves it structurally: disjoint ownership eliminates conflicts by construction, interface contracts eliminate coordination drift, and wave sequencing eliminates cascade failures.
 
+The distinction is mechanical, not philosophical. Systems in categories 1-3 rely on probabilistic outcomes -- files might not conflict, merges might succeed, humans might catch issues. SAW eliminates the probability: I1 makes conflicts impossible by construction, I2 makes API drift impossible by construction, and I3 makes cascade failures detectable at wave boundaries rather than at the end. The protocol's correctness properties are enforced by tool-level hooks, not by agent cooperation -- a model prompted to violate ownership will be blocked before the tool executes.
+
 ## What SAW Is
 
 SAW is a coordination protocol for safely parallelizing LLM agent work on shared codebases. It is language-agnostic, provider-agnostic, and enforces correctness through six invariants (I1-I6) and 42 execution rules (E1-E42) that govern every phase from planning through post-merge verification.
@@ -70,6 +72,15 @@ The primary interactive experience. The `/saw` skill is a YAML-frontmatter + mar
 - Interview mode (E39): structured 6-phase requirements gathering (`/saw interview`) that produces a REQUIREMENTS.md for Scout consumption -- an alternative entry point when the user needs guided decomposition before planning
 - Because the skill conforms to the open standard, it is not structurally locked to Claude Code. Any agent runtime that supports the skills standard can load the same `saw-skill.md` file
 
+The skill uses a four-tier progressive disclosure model to keep the Orchestrator's context window lean:
+
+- **Tier 0** (CLAUDE.md) -- discovery index, always present, zero invocation cost
+- **Tier 1** (frontmatter metadata, ~17 lines) -- parsed by the Skills API before context construction
+- **Tier 2** (core skill body, ~310 lines) -- loads on invocation; covers scout, wave, status, bootstrap, and interview (the operations needed on >90% of sessions)
+- **Tier 3** (on-demand reference files) -- loads only when a subcommand match fires: program execution, IMPL amendment, and failure routing stay out of context until needed
+
+The `triggers:` frontmatter extension enables deterministic Tier 3 injection via the `UserPromptSubmit` hook. A `/saw wave` invocation never pays the context cost of program coordination logic.
+
 ### CLI (`sawtools` binary)
 
 A standalone Go binary with no Claude Code dependency. Every protocol operation is a CLI command:
@@ -82,7 +93,7 @@ sawtools run-wave <impl> --wave N         # Fully automated wave execution (any 
 sawtools daemon                           # Continuous autonomous operation from queue
 ```
 
-The CLI is callable from CI/CD pipelines, shell scripts, cron jobs, or other orchestrators. `sawtools run-wave` drives agents through the API or Bedrock backend without a Claude Code session -- this is the path for fully automated pipelines.
+The CLI is callable from CI/CD pipelines, shell scripts, cron jobs, or other orchestrators. `sawtools run-wave` drives agents through the API or Bedrock backend without a Claude Code session -- this is the path for fully automated pipelines. Pre-built binaries for macOS, Linux, and Windows (amd64/arm64) are published via GoReleaser on each release.
 
 Batching commands (`prepare-wave`, `finalize-wave`, `prepare-tier`, `finalize-tier`) package multi-step workflows as atomic operations. Each succeeds or fails as a unit with structured JSON output. Forgotten steps -- the most common source of silent protocol violations -- are eliminated by design.
 
@@ -119,6 +130,20 @@ The web application (`scout-and-wave-web`) is built on this SDK. Every CLI comma
 - Composable pipeline framework (`pkg/pipeline`) -- step sequencing with conditions, retry strategies, and error aggregation for building custom orchestration flows
 
 ## What Makes SAW Different
+
+### Seven Participants, One Pipeline
+
+SAW coordinates seven participant roles through a single Orchestrator:
+
+1. **Orchestrator** -- synchronous coordinator in the user's session; drives all state transitions
+2. **Scout** -- analyzes codebase, produces IMPL doc with disjoint file ownership and interface contracts
+3. **Human** -- reviews the plan at the REVIEWED checkpoint; last point where changing architecture is cheap
+4. **Scaffold Agent** -- materializes shared types as committed source files before any Wave Agent launches
+5. **Wave Agents** -- implement in parallel, each in an isolated worktree with disjoint file ownership
+6. **Integration Agent** -- wires new exports into caller code post-merge; restricted to `integration_connectors` files
+7. **Critic Agent** -- reviews briefs for symbol accuracy, import conflicts, and ownership gaps before agents launch
+
+The Planner role coordinates at program scope when multiple features execute as a PROGRAM. Each role has mechanically enforced boundaries: Scouts cannot edit source files, Wave Agents cannot spawn sub-agents, Integration Agents cannot touch agent-owned files.
 
 ### Scout Before You Parallelize
 
@@ -159,7 +184,7 @@ Protocol compliance is not advisory. Lifecycle hooks enforce invariants mechanic
 
 Agents cannot violate the protocol even if prompted to. Enforcement lives below the agent's decision layer. The three enforcement layers are:
 
-1. **Claude Code hooks** (Layer 1) -- PreToolUse/PostToolUse/SubagentStop scripts that block violations in the agent runtime. 10 hooks covering ownership (I1), role separation (I6), branch drift (I4), IMPL schema validation (E16), pre-launch gates (H5), stub warnings (E20), git ownership (I1 Layer 2), and agent completion (I4/I5).
+1. **Claude Code hooks** (Layer 1) -- PreToolUse/PostToolUse/SubagentStop scripts that block violations in the agent runtime. 11 hooks covering ownership (I1), role separation (I6), branch drift (I4), IMPL schema validation (E16), pre-launch gates (H5), stub warnings (E20), git ownership (I1 Layer 2), agent completion (I4/I5), context injection (Tier 3 progressive disclosure), and observability event emission.
 2. **Git pre-commit hooks** (Layer 2) -- ownership verification at commit time, catching violations that bypass Layer 1.
 3. **SDK constraint middleware** (Layer 3) -- `tools.Constraints` on every backend, enforcing the same rules programmatically for CLI and daemon execution where Claude Code hooks are not present.
 
@@ -197,7 +222,9 @@ The autonomy system (`pkg/autonomy`) supports graduated levels: supervised (huma
 
 ### PROGRAM Layer for Multi-Feature Coordination
 
-For projects spanning multiple features, the PROGRAM layer provides tier-gated execution. A Planner agent decomposes the project into IMPLs, assigns them to tiers based on dependency analysis, and the engine executes tiers sequentially with parallel IMPL execution within each tier. P1+ validates cross-IMPL file ownership at tier boundaries. P5 (IMPL branch isolation) ensures each IMPL's wave merges target a dedicated branch -- main only advances when a full tier is verified.
+For projects spanning multiple features, the PROGRAM layer provides tier-gated execution of multiple IMPLs. A Planner agent decomposes the project into features, identifies cross-feature dependencies, and assigns IMPLs to execution tiers. Tiers execute sequentially; IMPLs within a tier execute in parallel. P1+ validates that no two IMPLs in the same tier share file ownership -- the same disjoint ownership guarantee that prevents conflicts within a wave, applied at the multi-feature scale. P5 ensures each IMPL's wave merges target a dedicated branch; main advances only when a full tier is verified.
+
+This is not multi-feature task management -- it is structural coordination with the same correctness guarantees SAW provides within a single feature. A program with 5 IMPLs across 3 tiers executes with the same confidence as a single 3-wave IMPL: file ownership is disjoint, dependencies are ordered, and verification gates fire at every boundary.
 
 ### LLM-Powered Code Review
 
@@ -210,7 +237,7 @@ The web application (`scout-and-wave-web`) provides a real-time SSE-based dashbo
 The web application includes:
 
 - **Program Board** -- multi-IMPL coordination view with tier visualization and cross-IMPL dependency graph
-- **Wave Board** -- per-wave agent cards with live status, tool feeds, and completion tracking
+- **Wave Board** -- per-wave agent cards with live status, tool feeds, and completion tracking; state persistence reconstructs from the IMPL doc on reconnect so browser refreshes and disconnections are non-destructive
 - **IMPL Review Screen** -- 15+ panels (overview, file ownership, dependency graph, interface contracts, scaffolds, quality gates, wiring obligations, critic reports, stub reports, agent contexts, reactions, pre-mortem, post-merge checklist) for deep plan inspection
 - **Interview Launcher** -- guided requirements gathering with phase progression
 - **Planner and Scout Launchers** -- one-click program/feature initiation with model selection
@@ -245,4 +272,4 @@ The protocol is self-hosting. The scout-and-wave protocol repository, Go SDK, an
 
 The Go SDK contains 33 packages across engine, protocol, hooks, resume, retry, journal, collision detection, autonomy, suitability analysis, wave solver, pipeline framework, build diagnostics, error parsing, code review, scaffold validation, four LLM backends (Anthropic API, Bedrock, OpenAI-compatible, CLI), constraint enforcement, and configuration. The CLI exposes 60+ commands. The web app ships 70+ React components with real-time SSE streaming, Base16 theming, and Bedrock SSO -- all embedded in a single Go binary.
 
-The protocol version is 0.65.0. This is production infrastructure, not a proof of concept.
+This is production infrastructure, not a proof of concept.
