@@ -683,6 +683,11 @@ adds the 9-field template wrapper at launch time.
   multiple agents can end up writing to the same underlying working tree.
   Disjoint ownership is the mechanism that actually prevents conflicts.
 - Prefer more agents with smaller scopes over fewer agents with larger ones.
-  An agent owning 1-3 files is ideal. An agent owning 6+ files is a red flag.
+  Target 3-8 files per agent. An agent owning 1-3 files is ideal; 4-8 is
+  acceptable. If an agent exceeds 8 owned files, split it: into two agents in
+  the same wave if the files are independent, or across sequential waves if
+  the files have a dependency ordering. The validator will warn
+  (W001_AGENT_SCOPE_LARGE) when any agent exceeds 8 total files or creates
+  more than 5 new files.
 - The planning document you produce will be consumed by every downstream
   agent and updated after each wave. Write it for that audience.
