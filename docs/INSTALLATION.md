@@ -96,18 +96,16 @@ done
 
 ### Step 2: CLI Tools (`sawtools`)
 
-Install the `sawtools` binary:
+Install the `sawtools` binary using one of these methods:
 
+**Homebrew (macOS/Linux):**
 ```bash
-go install github.com/blackwell-systems/scout-and-wave-go/cmd/sawtools@latest
+brew install blackwell-systems/tap/sawtools
 ```
 
-This places the binary in `$GOPATH/bin` (typically `~/go/bin`), which Go adds to your PATH by default.
-
-Verify the installation:
-
+**Go install (any platform with Go 1.21+):**
 ```bash
-sawtools version
+go install github.com/blackwell-systems/scout-and-wave-go/cmd/sawtools@latest
 ```
 
 <details>
@@ -121,6 +119,12 @@ go build -o ~/.local/bin/sawtools ./cmd/sawtools
 
 Make sure `~/.local/bin` is on your PATH: `export PATH="$HOME/.local/bin:$PATH"`
 </details>
+
+Verify the installation:
+
+```bash
+sawtools version
+```
 
 ### Step 3: Web UI (Optional)
 
@@ -227,9 +231,14 @@ If you cloned all three repos into the same parent directory, the default paths 
 
 ### "sawtools: command not found"
 
-Install or reinstall: `go install github.com/blackwell-systems/scout-and-wave-go/cmd/sawtools@latest`
+Install or reinstall:
+```bash
+brew install blackwell-systems/tap/sawtools
+# or
+go install github.com/blackwell-systems/scout-and-wave-go/cmd/sawtools@latest
+```
 
-If already installed, ensure `$GOPATH/bin` (typically `~/go/bin`) is on your PATH:
+If installed via `go install`, ensure `$GOPATH/bin` (typically `~/go/bin`) is on your PATH:
 ```bash
 export PATH="$(go env GOPATH)/bin:$PATH"
 ```

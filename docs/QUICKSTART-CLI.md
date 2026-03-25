@@ -166,7 +166,7 @@ If any step fails, the output includes diagnostics and the merge is not finalize
 
 ### "sawtools: command not found"
 
-Install: `go install github.com/blackwell-systems/scout-and-wave-go/cmd/sawtools@latest`. Ensure `$GOPATH/bin` is in your PATH.
+Install: `brew install blackwell-systems/tap/sawtools` or `go install github.com/blackwell-systems/scout-and-wave-go/cmd/sawtools@latest`. Ensure the binary is on your PATH.
 
 ### "verify-install: skill_symlinks: FAIL"
 
