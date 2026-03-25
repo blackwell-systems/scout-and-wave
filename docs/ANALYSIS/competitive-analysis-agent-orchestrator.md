@@ -126,7 +126,7 @@ Key architectural properties:
 | Issue-to-session mapping | None | Core feature -- `ao spawn INT-1234` | **SAW weakness** |
 | Batch issue processing | None | `ao batch-spawn INT-1 INT-2 INT-3` | **SAW weakness** |
 | **Notification Channels** | | | |
-| Desktop notifications | Web dashboard only | Native desktop notifications (node-notifier) | |
+| Desktop notifications | Browser push notifications + in-app toasts (9 event types, per-event muting) | Native desktop notifications (node-notifier) | Both have push notifications |
 | Slack | None | Slack webhook plugin | **SAW weakness** |
 | Generic webhooks | None | Webhook notifier plugin | **SAW weakness** |
 | Composio integration | None | Composio notifier plugin | |

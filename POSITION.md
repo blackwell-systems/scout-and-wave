@@ -246,7 +246,7 @@ The web application includes:
 - **Command Palette** -- keyboard-driven navigation across all operations
 - **File Browser** -- tree view with diff viewer and file content inspection
 - **Chat Panel** -- conversational agent interaction via `engine.Chat()`
-- **Notification System** -- configurable alerts for wave completions, failures, and state transitions
+- **Notification System** -- browser push notifications and in-app toasts for 9 event types (wave complete, agent failed, merge complete/failed, scaffold complete, build verify pass/fail, plan complete, run failed), with per-event muting and preferences persisted in `saw.config.json`
 - **Base16 Theming** -- 200+ color themes with dark/light mode and live preview
 - **Bedrock SSO** -- browser-based device authorization for AWS credentials
 
