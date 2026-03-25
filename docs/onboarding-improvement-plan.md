@@ -718,7 +718,6 @@ Independent review verdict: **APPROVE WITH CHANGES**. Status of each condition:
 
 ### Open (still to address)
 - **First-run detection reconciliation:** `saw init` checks `saw.config.json`; skill guided mode checks `docs/IMPL/`. Need single signal. Recommendation: `saw.config.json` existence is the canonical "initialized" flag.
-- **CHAT model visibility in header:** Plan proposes hiding advanced model selectors but doesn't mention CHAT. Recommendation: show SCOUT, WAVE, CHAT by default; hide CRITIC, SCAFFOLD, INTEGRATION, PLANNER behind Advanced toggle.
 - **Web onboarding wizard split:** Decouple generic wizard (no project detection dependency) from language-specific examples. Generic version can ship in Tier 2 without `saw init`.
 - **Team lead / evaluator persona:** README needs "What does it look like?" with screenshot/recording in first 20 lines. Not addressed by current plan.
 - **"Just try it" persona:** Can `saw plan "feature"` work without `saw init`? Auto-detect everything on the fly for the zero-commitment trial.
@@ -744,7 +743,7 @@ Independent review verdict: **APPROVE WITH CHANGES**. Status of each condition:
 |---|---|---|---|---|
 | 1 | **Web app empty state redesign (4.3)** | High | Small | Immediate payoff. Replaces dead-end "No plan selected" with call-to-action. No dependencies. |
 | 2 | **Error message templates in skill prompt (4.5, prompt-side only)** | High | Small | Verbatim error strings for the 6 most common failures. No Go changes needed. |
-| 3 | **Hide advanced model selectors (4.4, UI labels)** | High | Small | Show SCOUT, WAVE, CHAT; hide CRITIC, SCAFFOLD, INTEGRATION, PLANNER behind Advanced toggle. |
+| 3 | **~~Hide advanced model selectors (4.4, UI labels)~~** | — | — | REJECTED. All 7 model selectors stay visible. Per-role model selection is a differentiator, not clutter. |
 | 4 | **README screenshot/recording** | High | Small | 10-second GIF of Scout → review → wave → merge in first 20 lines. Converts evaluators. |
 
 ### Tier 2: Medium Impact (do second)
