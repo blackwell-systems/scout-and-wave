@@ -477,6 +477,10 @@ to human. Do not enter REVIEWED.
 
 **On validation pass:** Proceed to REVIEWED normally.
 
+**Multi-repo consistency checks:** The validator includes two cross-repo rules:
+- `MR01_INCONSISTENT_REPO` — if any `file_ownership` entry has `repo:` set, ALL entries must have it. Mixed tagged/untagged entries fail validation.
+- `MR02_UNSCOPED_GATE` — if `file_ownership` spans 2+ distinct repos, every `quality_gates.gates[]` entry must have `repo:` set. Without it, gates run in all repos including docs-only repos with no build system. This catches the common failure where `go build ./...` runs in a protocol-only repo.
+
 **Relationship to structured outputs:** For API-backend runs using structured output enforcement, the validator always passes on first attempt (the output was already schema-validated). E16's correction loop is effectively a no-op in that path but must still be present in the protocol for CLI-backend and hand-edited docs.
 
 ### E16A: Required Block Presence
@@ -828,6 +832,8 @@ Note: Fix-mode gates modify files in-place but do not `git add` or commit — th
 **Out of scope:** AI Verification Gate (an agent that reviews implementation correctness). Subprocess-based gates only.
 
 **Closed-loop gate retry (CLI path only):** When a required pre-merge gate fails, `sawtools finalize-wave` automatically calls `engine.ClosedLoopGateRetry` (up to 2 retries) before reporting failure. The retry spawns a repair agent that receives the gate output and attempts to fix the failing code in the agent's worktree. If the retry succeeds, gates are re-run to confirm before merge proceeds. This auto-retry is a CLI-only behavior — the engine path (`engine.FinalizeWave`) does not retry automatically.
+
+**Cross-repo gate scoping:** Each `QualityGate` has an optional `repo` field. When set, the gate runs only in that repo's directory. When omitted, the gate runs in every repo the IMPL touches. For cross-repo IMPLs (file_ownership spans 2+ repos), every gate MUST include `repo:` — a docs-only repo has no build system and `go build ./...` will fail. The validator enforces this: `MR02_UNSCOPED_GATE` blocks IMPLs with 2+ repos and un-scoped gates at validation time (E16).
 
 **Rationale:** Individual agents run gates in isolation (their own package scope). The orchestrator's post-wave gate runs unscoped — catching cross-package cascade failures that agent-scoped gates miss.
 
@@ -1514,7 +1520,7 @@ E2 (interface freeze: critic runs before freeze, so corrections are safe)
 | Check | Description |
 |-------|-------------|
 | `validation` | Validates manifest structure and content (E16) |
-| `critic_review` | Verifies a critic review has been performed (E37) |
+| `critic_review` | Verifies a critic review has been performed (E37). Checks E37 trigger conditions first: if wave 1 has <3 agents AND file_ownership spans <2 repos, the check passes without requiring a critic report. Multi-repo detection counts unique `repo:` values from `file_ownership` entries (not just the top-level `repositories` field). |
 | `scaffolds` | Verifies all scaffold files have `status: committed` |
 | `state` | Confirms IMPL state allows wave execution |
 

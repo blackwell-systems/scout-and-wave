@@ -71,3 +71,5 @@
   - IMPL doc: docs/IMPL/complete/IMPL-engine-finalize-enforcement.yaml
 - **interview-mode-gaps**: completed 2026-03-25, 1 waves, 4 agents
   - IMPL doc: docs/IMPL/complete/IMPL-interview-mode-gaps.yaml
+- **saw-init**: completed 2026-03-25, 1 waves, 2 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-saw-init.yaml

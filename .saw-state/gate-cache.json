@@ -72,6 +72,18 @@
         "cached_at": "2026-03-21T16:55:51.768168-07:00"
       }
     },
+    "1fd203509769a7a323cf3fdc367f7adc": {
+      "lint": {
+        "gate_type": "lint",
+        "command": "go vet ./...",
+        "passed": false,
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "pattern ./...: directory prefix . does not contain main module or its selected dependencies\n",
+        "from_cache": true,
+        "cached_at": "2026-03-25T13:09:40.20158-07:00"
+      }
+    },
     "3538fee64250538ea62414158451c2c1": {
       "custom": {
         "gate_type": "custom",
@@ -174,6 +186,18 @@
         "stderr": "pattern ./...: directory prefix . does not contain main module or its selected dependencies\n",
         "from_cache": true,
         "cached_at": "2026-03-24T18:25:29.990504-07:00"
+      }
+    },
+    "6f627e0cc33b8cdb284ef4305d222607": {
+      "test": {
+        "gate_type": "test",
+        "command": "go test ./cmd/sawtools/... -run TestInit",
+        "passed": false,
+        "exit_code": 1,
+        "stdout": "FAIL\t./cmd/sawtools/... [setup failed]\nFAIL\n",
+        "stderr": "# ./cmd/sawtools/...\npattern ./cmd/sawtools/...: directory prefix cmd/sawtools does not contain main module or its selected dependencies\n",
+        "from_cache": true,
+        "cached_at": "2026-03-25T13:09:40.290264-07:00"
       }
     },
     "7857f328aafde3d74442aee590f6296b": {
@@ -306,6 +330,18 @@
         "stderr": "# ./...\npattern ./...: directory prefix . does not contain main module or its selected dependencies\n",
         "from_cache": true,
         "cached_at": "2026-03-19T17:18:17.756245-07:00"
+      }
+    },
+    "8ba2c38b44dc7555ef0a9fb4b461434a": {
+      "build": {
+        "gate_type": "build",
+        "command": "go build ./...",
+        "passed": false,
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "pattern ./...: directory prefix . does not contain main module or its selected dependencies\n",
+        "from_cache": true,
+        "cached_at": "2026-03-25T13:09:40.10324-07:00"
       }
     },
     "8d04a5d31b12f52b5fc55c30e5b6ce92": {

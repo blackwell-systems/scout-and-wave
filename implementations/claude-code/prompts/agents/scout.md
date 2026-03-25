@@ -53,9 +53,11 @@ quality_gates:              # Struct with level + gates array
     - type: build
       command: go build ./...
       required: true
+      repo: my-repo            # REQUIRED for cross-repo IMPLs (see below)
     - type: test
       command: go test ./...
       required: true
+      repo: my-repo
 
 scaffolds: []               # Empty array if no scaffolds, or array of scaffold structs
 
@@ -443,7 +445,9 @@ from a PROGRAM manifest. These contracts are IMMUTABLE — the Scout must:
 
    **IMPORTANT — mismatched repos:** When the IMPL doc lives in repository X but the owned files live in repository Y (common when the protocol repo contains IMPL docs for work that lands in the Go SDK or web app repos), you MUST set `repo:` on every file ownership entry. Even if you believe all files are in one repo, check: does the IMPL doc's location (e.g. `scout-and-wave/docs/IMPL/`) match the repo where the files will be created or modified? If not, tag every entry with its correct repo name. Omitting `repo:` in this scenario causes the file browser to 404 when users try to view owned files.
 
-   **Single-repository work:** If all files belong to the same repository, omit the `repo:` field entirely. The web UI and tooling automatically detect multi-repo work by counting distinct repo values.
+   **IMPORTANT — cross-repo quality gates:** When file_ownership spans 2+ repos, every quality gate MUST include `repo:` specifying which repo it runs in. Without `repo:`, gates execute in ALL repos — a docs-only repo (like `scout-and-wave`) has no Go module and `go build ./...` will fail, blocking the entire wave. The validator enforces this (MR02_UNSCOPED_GATE).
+
+   **Single-repository work:** If all files belong to the same repository, omit the `repo:` field entirely on both file_ownership and quality_gates. The web UI and tooling automatically detect multi-repo work by counting distinct repo values.
 
    **Agent ID format:** Agent identifiers follow the `[Letter][Generation]` scheme (regex: `[A-Z][2-9]?`). Generation 1 is the bare letter (`A`, `B`, `C`, …); the digit is omitted. Multi-generation IDs (`A2`, `B3`, `C4`, …) are assigned when:
    - More than 26 agents are needed in a wave (exhausting single letters), OR

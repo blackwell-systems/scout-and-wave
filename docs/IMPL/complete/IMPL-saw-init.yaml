@@ -1,0 +1,452 @@
+completion_date: "2026-03-25"
+title: saw init — Zero-Config Project Initialization Command
+feature_slug: saw-init
+verdict: SUITABLE
+suitability_assessment: |-
+    Single wave, 2 parallel agents across 2 repos. Agent A implements the command
+    (init_cmd.go + test + main.go registration) in scout-and-wave-go. Agent B
+    updates documentation (INSTALLATION.md, README.md, saw-skill.md,
+    onboarding-improvement-plan.md) in scout-and-wave. Fully disjoint — no shared files.
+    Registration (1 line in main.go) folded into Agent A since it's trivial and
+    requires A's function to compile. Docs agent runs in parallel since it has no
+    code dependency.
+
+    Estimated times:
+    - Agent execution: Wave 1 ~15 min (A + B parallel)
+    - Merge and verification: ~5 min
+    Total SAW time: ~20 min
+test_command: go test ./...
+lint_command: go vet ./...
+file_ownership:
+    - file: cmd/sawtools/init_cmd.go
+      agent: A
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: cmd/sawtools/init_cmd_test.go
+      agent: A
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: cmd/sawtools/main.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: docs/INSTALLATION.md
+      agent: B
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: README.md
+      agent: B
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: implementations/claude-code/prompts/saw-skill.md
+      agent: B
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: docs/onboarding-improvement-plan.md
+      agent: B
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+interface_contracts:
+    - name: newInitCmd
+      description: |-
+        Returns the cobra.Command for `sawtools init`. Registered in main.go via
+        rootCmd.AddCommand(newInitCmd()). Takes no constructor arguments; flags
+        are defined internally on the returned command.
+      definition: |
+        func newInitCmd() *cobra.Command
+      location: cmd/sawtools/init_cmd.go
+    - name: detectProject
+      description: |-
+        Scans repoDir for known marker files and returns a DetectedProject
+        describing the language, build command, test command, and detected
+        project name. Uses os.Stat priority ordering across known marker files.
+      definition: |
+        type DetectedProject struct {
+            Name      string // base name of repoDir
+            Language  string // "go", "rust", "node", "python", "ruby", "makefile", "unknown"
+            Build     string // detected build command, empty if none
+            Test      string // detected test command, empty if none
+            Detected  bool   // true when values came from auto-detection
+        }
+
+        func detectProject(repoDir string) DetectedProject
+      location: cmd/sawtools/init_cmd.go
+    - name: generateConfig
+      description: |-
+        Converts a DetectedProject into a SAWConfig suitable for writing to
+        saw.config.json. Sets repos, agent.scout_model, agent.wave_model.
+        Does NOT include quality.build or quality.test — those fields are
+        not in the SAWConfig schema (build/test commands live in saw.config.json
+        as top-level keys "build" and "test" with "detected" markers, written
+        as raw JSON by the command, not via SAWConfig).
+      definition: |
+        func generateConfig(repoDir string, project DetectedProject) *config.SAWConfig
+      location: cmd/sawtools/init_cmd.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |-
+            ## Context
+
+            You are implementing `sawtools init` — a zero-config project initialization
+            command for the sawtools CLI. This is a new command in
+            `cmd/sawtools/init_cmd.go` (package main). You also register it in main.go.
+
+            ## What to implement
+
+            ### File: cmd/sawtools/init_cmd.go
+
+            Implement `newInitCmd() *cobra.Command` following the same pattern as
+            other commands in this package (e.g., verify_install_cmd.go,
+            install_hooks_cmd.go). The command signature is:
+
+            ```
+            sawtools init [--repo <path>] [--force]
+            ```
+
+            **Flags:**
+            - `--repo <path>` — directory to initialize (default: current working directory)
+            - `--force` — overwrite existing saw.config.json
+
+            **Behavior (in order):**
+
+            1. Resolve the target directory (--repo flag or os.Getwd()).
+
+            2. Check if saw.config.json already exists at that path. If it exists and
+               --force is NOT set, print an error message and return a non-nil error:
+               ```
+               saw.config.json already exists at <path>. Use --force to overwrite.
+               ```
+
+            3. Call detectProject(repoDir) — see below.
+
+            4. Call generateConfig(repoDir, project) to build a *config.SAWConfig.
+
+            5. Write saw.config.json using config.Save(repoDir, cfg).
+               Additionally, the output JSON must include top-level "build" and "test"
+               keys with "detected": true markers that are NOT part of SAWConfig.
+               To achieve this, after config.Save writes the base config, re-read the
+               file, unmarshal into map[string]json.RawMessage, add the "build" and
+               "test" keys (marshaled from anonymous structs), then write back atomically
+               using os.CreateTemp + os.Rename.
+
+               The "build" and "test" keys look like:
+               ```json
+               "build": {"command": "go build ./...", "detected": true},
+               "test":  {"command": "go test ./...",  "detected": true}
+               ```
+               If the detected commands are empty strings, omit the respective key.
+
+            6. Call runInstallChecks() (already defined in verify_install_cmd.go in the
+               same package) and call printHumanOutput(cmd, result) to display results.
+               If the verdict is "FAIL", print the sawtools install instructions after
+               the checks:
+               ```
+               sawtools not found. Install it:
+                 go install github.com/blackwell-systems/scout-and-wave-go/cmd/sawtools@latest
+
+               Or build from source:
+                 git clone https://github.com/blackwell-systems/scout-and-wave-go.git
+                 cd scout-and-wave-go && go build -o ~/.local/bin/sawtools ./cmd/sawtools
+               ```
+
+            7. Print next steps:
+               ```
+               SAW initialized for <project.Name> (<project.Language>).
+
+               Quick start:
+                 saw plan "describe your feature"     Create an implementation plan
+                 saw serve                            Open the web dashboard
+
+               Learn more:
+                 saw help                             All commands
+               ```
+               Use fmt.Fprintf(cmd.OutOrStdout(), ...) for all output so tests can
+               capture it.
+
+            ### Helper functions to implement
+
+            **detectProject(repoDir string) DetectedProject**
+
+            Check for marker files in repoDir in this priority order:
+            1. go.mod → language "go", build "go build ./...", test "go test ./..."
+            2. Cargo.toml → language "rust", build "cargo build", test "cargo test"
+            3. package.json → language "node", build "npm run build", test "npm test"
+            4. pyproject.toml OR requirements.txt → language "python", build "", test "pytest"
+            5. Gemfile → language "ruby", build "", test "bundle exec rspec"
+            6. Makefile (with no language marker above) → language "makefile", build "make", test "make test"
+            7. None found → language "unknown", build "", test ""
+
+            Use os.Stat for each check. Set Detected: true whenever commands are set.
+            Set Name to filepath.Base(repoDir).
+
+            **generateConfig(repoDir string, project DetectedProject) *config.SAWConfig**
+
+            Returns a *config.SAWConfig with:
+            ```go
+            &config.SAWConfig{
+                Repos: []config.RepoEntry{
+                    {Name: project.Name, Path: repoDir},
+                },
+                Agent: config.AgentConfig{
+                    ScoutModel: "claude-sonnet-4-6",
+                    WaveModel:  "claude-sonnet-4-6",
+                },
+            }
+            ```
+
+            ### DetectedProject struct
+
+            Define it in init_cmd.go (unexported fields are fine; the struct itself
+            is package-level so tests can reference it):
+            ```go
+            type DetectedProject struct {
+                Name     string
+                Language string
+                Build    string
+                Test     string
+                Detected bool
+            }
+            ```
+
+            ### File: cmd/sawtools/main.go
+
+            Register the init command by adding `newInitCmd()` to the
+            rootCmd.AddCommand(...) call, near the other lifecycle/setup commands —
+            after newVerifyInstallCmd():
+
+            ```go
+            newVerifyInstallCmd(),
+            newInitCmd(),           // zero-config project initialization
+            ```
+
+            ### File: cmd/sawtools/init_cmd_test.go
+
+            Write table-driven tests covering:
+
+            1. **TestDetectProject** — create temp dirs with marker files, verify
+               language, build, and test fields are set correctly for each language.
+               Test cases: go.mod, Cargo.toml, package.json, pyproject.toml, Gemfile,
+               Makefile-only, and empty dir (unknown).
+
+            2. **TestInitCmd_AlreadyExists** — create a temp dir with an existing
+               saw.config.json, run the command without --force, expect non-nil error.
+
+            3. **TestInitCmd_Force** — same setup, run with --force, expect success
+               and that saw.config.json is overwritten.
+
+            4. **TestInitCmd_WritesConfig** — create a temp dir with go.mod, run init,
+               read back saw.config.json, verify:
+               - repos[0].name == basename of temp dir
+               - repos[0].path == temp dir path
+               - agent.scout_model == "claude-sonnet-4-6"
+               - build.command == "go build ./..."
+               - build.detected == true
+               - test.command == "go test ./..."
+               - test.detected == true
+
+            5. **TestInitCmd_Output** — run init in a Go project temp dir, capture
+               cmd.OutOrStdout() output, verify it contains "SAW initialized" and
+               the project name.
+
+            ## Imports
+
+            You will need:
+            - "encoding/json"
+            - "fmt"
+            - "os"
+            - "path/filepath"
+            - "github.com/blackwell-systems/scout-and-wave-go/pkg/config"
+            - "github.com/spf13/cobra"
+
+            ## Verification gate
+
+            After implementation:
+            ```
+            go build ./cmd/sawtools/...
+            go vet ./cmd/sawtools/...
+            go test ./cmd/sawtools/... -run TestInit -v
+            sawtools init --help
+            ```
+          files:
+            - cmd/sawtools/init_cmd.go
+            - cmd/sawtools/init_cmd_test.go
+            - cmd/sawtools/main.go
+        - id: B
+          task: |-
+            ## Context
+
+            `sawtools init` is being implemented (by Agent A in scout-and-wave-go).
+            Your task is to update all documentation in scout-and-wave so that
+            `sawtools init` is properly integrated into the onboarding story.
+
+            You do NOT need Agent A's code to exist — you are writing documentation
+            about what the command does. The command:
+            - Auto-detects language (go, rust, node, python, ruby, makefile)
+            - Auto-detects build and test commands
+            - Writes `saw.config.json` with repos, agent models, build/test config
+            - Flags: `--repo <path>` (default: cwd), `--force` (overwrite existing)
+            - Runs install checks and prints next steps
+
+            ## What to update
+
+            ### File: docs/INSTALLATION.md
+
+            Add `sawtools init` as the recommended first step after binary installation.
+            Find the "Getting Started" or "Quick Start" section and insert:
+
+            ```
+            # After installing sawtools:
+            cd your-project
+            sawtools init
+            ```
+
+            Mention that it auto-detects language, build, and test commands.
+            Mention `--force` to overwrite existing config.
+
+            ### File: README.md
+
+            Update the quick start section to use `sawtools init` instead of
+            manual `saw.config.json` creation. Keep it concise — 2-3 lines showing
+            install + init + first scout.
+
+            ### File: implementations/claude-code/prompts/saw-skill.md
+
+            In the Pre-flight Validation section, step 4 currently says
+            `saw.config.json (informational): Check project root for config — not a blocker`.
+            Update it to: if `saw.config.json` is missing, suggest running
+            `sawtools init` to auto-generate it. Still not a blocker, but now with
+            actionable guidance.
+
+            ### File: docs/onboarding-improvement-plan.md
+
+            Mark §4.1 (`sawtools init` command) as COMPLETE with today's date (2026-03-25).
+            If there are other items that reference init, update their status too.
+
+            ## Verification gate
+
+            Verify all 4 files were updated and contain `sawtools init` references.
+            ```
+            grep -l "sawtools init" docs/INSTALLATION.md README.md implementations/claude-code/prompts/saw-skill.md docs/onboarding-improvement-plan.md
+            ```
+            All 4 files should match.
+          files:
+            - docs/INSTALLATION.md
+            - README.md
+            - implementations/claude-code/prompts/saw-skill.md
+            - docs/onboarding-improvement-plan.md
+      base_commit: c0047ae3993dadf7800ab842149751ff9a39e320
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./...
+          required: true
+          repo: scout-and-wave-go
+        - type: lint
+          command: go vet ./...
+          required: true
+          repo: scout-and-wave-go
+        - type: test
+          command: go test ./cmd/sawtools/... -run TestInit
+          required: true
+          repo: scout-and-wave-go
+completion_reports:
+    A:
+        status: complete
+        branch: saw/saw-init/wave1-agent-A
+        commit: 974f0ee
+        files_changed:
+            - cmd/sawtools/init_cmd.go
+            - cmd/sawtools/init_cmd_test.go
+            - cmd/sawtools/main.go
+        files_created:
+            - cmd/sawtools/init_cmd.go
+            - cmd/sawtools/init_cmd_test.go
+        tests_added:
+            - TestDetectProject
+            - TestInitCmd_AlreadyExists
+            - TestInitCmd_Force
+            - TestInitCmd_WritesConfig
+            - TestInitCmd_Output
+        verification: PASS
+    B:
+        status: complete
+        branch: saw/saw-init/wave1-agent-B
+        commit: 6a73a5f
+        files_changed:
+            - docs/INSTALLATION.md
+            - README.md
+            - implementations/claude-code/prompts/saw-skill.md
+            - docs/onboarding-improvement-plan.md
+        verification: PASS
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: |-
+            The "build" and "test" keys with "detected" markers are not part of
+            SAWConfig, so config.Save will not write them. Agent A must do a
+            second merge pass after Save. If this two-phase write has a bug,
+            the output config may be missing the build/test keys or the file
+            may be left in an inconsistent state.
+          likelihood: medium
+          impact: low
+          mitigation: |-
+            Agent A's test TestInitCmd_WritesConfig explicitly verifies the
+            build.detected and test.command fields are present in the written JSON.
+            If those assertions fail, the agent will fix the write logic before
+            completing.
+        - scenario: |-
+            detectProject uses os.Stat priority ordering. If a project has both
+            go.mod and package.json (common in monorepos with embedded frontends),
+            Go will win because it is checked first. This may surprise users with
+            Node-primary projects that also have go.mod for tooling.
+          likelihood: low
+          impact: low
+          mitigation: |-
+            The design spec does not address priority conflicts. The Go-wins ordering
+            matches the majority of projects this tool targets. The --force flag and
+            direct saw.config.json editing remain available for overrides.
+        - scenario: |-
+            runInstallChecks() is defined in verify_install_cmd.go in the same
+            package (main). If the function signature or behavior changes in a
+            future PR that merges before this one, Agent A's call site may fail
+            to compile.
+          likelihood: low
+          impact: medium
+          mitigation: |-
+            Both files are in package main in the same directory. The function
+            signature is stable (returns installResult, no arguments). If it changes,
+            the compile error is caught immediately by the build gate.
+critic_report:
+    verdict: PASS
+    agent_reviews:
+        A:
+            agent_id: A
+            verdict: PASS
+            issues:
+                - check: symbol_accuracy
+                  severity: warning
+                  description: Brief says to call config.Save(repoDir, cfg) but does not mention that Save returns result.Result[bool], not error. Agent will need to handle the Result type pattern. Discoverable from source.
+                  file: cmd/sawtools/init_cmd.go
+                  symbol: config.Save
+        B:
+            agent_id: B
+            verdict: PASS
+            issues:
+                - check: pattern_accuracy
+                  severity: warning
+                  description: Brief says to find the Getting Started or Quick Start section in INSTALLATION.md and insert sawtools init guidance. No section with that exact name exists — closest sections are Installation Steps (line 32) and Verify Installation (line 198). The instruction is flexible enough (find...and insert) that the agent should adapt.
+                  file: docs/INSTALLATION.md
+    summary: 'All briefs verified against codebase. Two advisory warnings: (1) Agent A brief describes config.Save without mentioning its result.Result[bool] return type — agent will need to handle this but can discover it from source; (2) Agent B brief references a ''Getting Started'' or ''Quick Start'' section in INSTALLATION.md that does not exist by that exact name — the instruction is flexible enough to work. No errors found. All files exist/don''t-exist as expected, all referenced symbols are accurate, registration patterns match, and import dependencies are available.'
+    reviewed_at: "2026-03-25T20:03:51Z"
+    issue_count: 2
+state: COMPLETE
