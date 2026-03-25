@@ -1,0 +1,429 @@
+completion_date: "2026-03-25"
+title: Webhook Adapter Config Unification
+feature_slug: webhook-adapter-unification
+verdict: SUITABLE
+suitability_assessment: |
+    Suitability gate passed on all five criteria:
+
+    1. File decomposition: 10 files across 2 repos split cleanly into 2 agents
+       with disjoint file ownership. Agent A owns Go adapter code (scout-and-wave-go),
+       Agent B owns web API + frontend (scout-and-wave-web). No file conflicts.
+
+    2. Investigation-first: No unknowns. The current field names and target field
+       names are fully specified. This is a straightforward rename + restructure.
+
+    3. Interface discoverability: The cross-agent interface is the config field name
+       convention (mode, webhook_url, token, destination). Both agents implement
+       against the same field names independently — Go adapters read from
+       map[string]string keys, web layer writes those keys. No runtime coordination.
+
+    4. Pre-implementation status: All items are TODO. No partial implementations exist.
+
+    5. Parallelization value: 2 agents, each touching 4-5 files with non-trivial
+       logic (backward compat fallback, UI mode toggle, test updates). Go build+test
+       cycle is ~15s, npm build is ~10s. Both run independently in parallel.
+
+    Estimated times:
+    - Scout phase: ~8 min
+    - Agent execution: ~8 min (2 agents x 8 min avg, fully parallel single wave)
+    - Merge and verification: ~3 min
+    Total SAW time: ~19 min
+
+    Sequential baseline: ~20 min (2 agents x 10 min avg)
+    Time savings: ~5 min (25% faster)
+
+    Recommendation: Clear speedup from parallel cross-repo execution. Proceed.
+test_command: go test ./pkg/notify/...
+lint_command: go vet ./pkg/notify/...
+file_ownership:
+    - file: pkg/notify/slack.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/notify/discord.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/notify/telegram.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/notify/slack_test.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/notify/discord_test.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/notify/telegram_test.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/api/webhook_handler.go
+      agent: B
+      wave: 1
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/api/server.go
+      agent: B
+      wave: 1
+      action: modify
+      repo: scout-and-wave-web
+    - file: web/src/hooks/useWebhooks.ts
+      agent: B
+      wave: 1
+      action: modify
+      repo: scout-and-wave-web
+    - file: web/src/components/WebhookSettings.tsx
+      agent: B
+      wave: 1
+      action: modify
+      repo: scout-and-wave-web
+interface_contracts:
+    - name: Unified config field names
+      description: |
+        All adapters read from a shared set of config map keys. This is the
+        binding contract between the Go adapters (Agent A) and the web layer
+        (Agent B). Both sides must use identical key strings.
+      definition: |
+        Config map keys (map[string]string):
+          "mode"        - "webhook" | "token" (explicit mode selector)
+          "webhook_url" - webhook endpoint URL (used when mode=webhook)
+          "token"       - bot/API token (unified from bot_token; used when mode=token)
+          "destination" - target channel/chat (unified from channel/chat_id)
+
+        Backward compatibility keys (read-only fallback in Go adapters):
+          "bot_token"   - falls back to "token" if "token" is empty
+          "channel"     - falls back to "destination" if "destination" is empty
+          "chat_id"     - falls back to "destination" if "destination" is empty
+      location: pkg/notify/slack.go (and discord.go, telegram.go)
+    - name: WebhookAdapterConfig struct (web)
+      description: |
+        The Go struct in webhook_handler.go and TypeScript type in useWebhooks.ts
+        must use the new unified field names with JSON tags matching the contract.
+      definition: |
+        Go (webhook_handler.go):
+          type WebhookAdapterConfig struct {
+            Type        string `json:"type"`
+            Mode        string `json:"mode,omitempty"`
+            WebhookURL  string `json:"webhook_url,omitempty"`
+            Token       string `json:"token,omitempty"`
+            Destination string `json:"destination,omitempty"`
+          }
+
+        TypeScript (useWebhooks.ts):
+          export interface WebhookAdapter {
+            type: 'slack' | 'discord' | 'telegram'
+            mode?: 'webhook' | 'token'
+            webhook_url?: string
+            token?: string
+            destination?: string
+          }
+      location: pkg/api/webhook_handler.go, web/src/hooks/useWebhooks.ts
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## Goal
+            Unify the config field names across all three Go notification adapters
+            (Slack, Discord, Telegram) to use a consistent model with backward
+            compatibility for existing config files.
+
+            ## Repo
+            /Users/dayna.blackwell/code/scout-and-wave-go
+
+            ## Unified Field Name Contract
+            All adapters read from map[string]string with these keys:
+            - "mode": "webhook" | "token" — explicit mode selector
+            - "webhook_url": webhook endpoint URL (when mode=webhook)
+            - "token": bot/API token (replaces "bot_token")
+            - "destination": target channel/chat (replaces "channel" and "chat_id")
+
+            ## Changes Required
+
+            ### pkg/notify/slack.go
+            1. In NewSlackAdapter, read new field names with fallback:
+               - Read "token" first, fall back to "bot_token" if empty
+               - Read "destination" first, fall back to "channel" if empty
+               - "webhook_url" stays the same
+               - Read "mode" to determine explicit mode; if absent, infer from
+                 which fields are populated (webhook_url present = webhook mode,
+                 token present = token mode) for backward compat
+            2. Update error messages to reference new field names ("token" not
+               "bot_token") while keeping them clear
+            3. SlackAdapter struct fields: rename botToken to token, channel to
+               destination. Update all references in Send() method.
+            4. In Send(), update: s.channel -> s.destination, s.botToken -> s.token
+
+            ### pkg/notify/discord.go
+            1. Discord only supports webhook mode. In NewDiscordAdapter:
+               - Continue reading "webhook_url" (unchanged)
+               - No other field changes needed for Discord since it only uses webhook_url
+            2. No struct field changes needed (webhookURL stays)
+
+            ### pkg/notify/telegram.go
+            1. In NewTelegramAdapter, read new field names with fallback:
+               - Read "token" first, fall back to "bot_token" if empty
+               - Read "destination" first, fall back to "chat_id" if empty
+            2. Rename TelegramAdapter struct fields: botToken -> token,
+               chatID -> destination
+            3. Update Send(): references to a.botToken -> a.token,
+               a.chatID -> a.destination
+
+            ### pkg/notify/slack_test.go
+            Update all test config maps to use new field names:
+            - "bot_token" -> "token"
+            - "channel" -> "destination"
+            - "webhook_url" stays the same
+            Add one backward-compat test: TestNewSlackAdapter_BackwardCompat that
+            passes old field names ("bot_token", "channel") and verifies the adapter
+            creates successfully.
+
+            ### pkg/notify/discord_test.go
+            No field name changes needed (Discord only uses "webhook_url").
+            Verify existing tests still pass unchanged.
+
+            ### pkg/notify/telegram_test.go
+            Update all test config maps:
+            - "bot_token" -> "token"
+            - "chat_id" -> "destination"
+            Add one backward-compat test: TestNewTelegramAdapter_BackwardCompat
+            that passes old field names and verifies success.
+
+            ## Backward Compatibility Pattern
+            For each adapter's constructor, use this helper pattern:
+            ```go
+            // readWithFallback reads key from cfg, falling back to fallbackKey.
+            func readWithFallback(cfg map[string]string, key, fallbackKey string) string {
+                if v := cfg[key]; v != "" {
+                    return v
+                }
+                return cfg[fallbackKey]
+            }
+            ```
+            Define this as a package-level unexported function in slack.go (it will
+            be accessible to all files in the package). Use it in all three adapters.
+
+            ## Verification
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-go
+            go build ./pkg/notify/...
+            go vet ./pkg/notify/...
+            go test ./pkg/notify/...
+            ```
+
+            ## Constraints
+            - Do NOT change the Adapter interface, Event, Message, or Formatter types
+            - Do NOT change the registry (registry.go) or dispatcher
+            - Do NOT change the formatter types (SlackFormatter, etc.)
+            - Maintain all existing test coverage; only change config key strings
+          files:
+            - pkg/notify/slack.go
+            - pkg/notify/discord.go
+            - pkg/notify/telegram.go
+            - pkg/notify/slack_test.go
+            - pkg/notify/discord_test.go
+            - pkg/notify/telegram_test.go
+        - id: B
+          task: |
+            ## Goal
+            Update the web API layer and React frontend to use unified webhook
+            config field names (mode, token, destination) with a mode toggle UI.
+
+            ## Repo
+            /Users/dayna.blackwell/code/scout-and-wave-web
+
+            ## Unified Field Name Contract
+            - "mode": "webhook" | "token"
+            - "webhook_url": webhook endpoint URL
+            - "token": bot/API token (replaces "bot_token")
+            - "destination": target channel/chat (replaces "channel" and "chat_id")
+
+            ## Changes Required
+
+            ### pkg/api/webhook_handler.go
+            1. Update WebhookAdapterConfig struct:
+               - Remove: BotToken, Channel, ChatID fields
+               - Add: Mode string `json:"mode,omitempty"`
+               - Add: Token string `json:"token,omitempty"`
+               - Add: Destination string `json:"destination,omitempty"`
+               - Keep: Type, WebhookURL unchanged
+            2. In handleTestWebhook, update the cfg map building (lines 175-187):
+               - Replace cfg["bot_token"] = ac.BotToken with cfg["token"] = ac.Token
+               - Replace cfg["channel"] = ac.Channel and cfg["chat_id"] = ac.ChatID
+                 with cfg["destination"] = ac.Destination
+               - Add cfg["mode"] = ac.Mode if non-empty
+
+            ### pkg/api/server.go
+            Update the initWebhookBridge function (around line 372) where it
+            builds the cfg map from WebhookAdapterConfig:
+            - Replace cfg["bot_token"] = ac.BotToken with cfg["token"] = ac.Token
+            - Replace cfg["channel"] = ac.Channel with cfg["destination"] = ac.Destination
+            - Replace cfg["chat_id"] = ac.ChatID with cfg["destination"] = ac.Destination
+              (remove the duplicate — destination covers both)
+            - Add cfg["mode"] = ac.Mode if ac.Mode != ""
+
+            ### web/src/hooks/useWebhooks.ts
+            1. Update WebhookAdapter interface:
+               - Remove: channel?, bot_token?, chat_id?
+               - Add: mode?: 'webhook' | 'token'
+               - Add: token?: string
+               - Add: destination?: string
+               - Keep: type, webhook_url unchanged
+
+            ### web/src/components/WebhookSettings.tsx
+            1. Update ADAPTER_FIELDS to use new field names and add mode toggle:
+               ```
+               slack: [
+                 { key: 'mode', label: 'Mode', type: 'select',
+                   options: ['webhook', 'token'] },
+                 { key: 'webhook_url', label: 'Webhook URL',
+                   placeholder: 'https://hooks.slack.com/services/...',
+                   showWhen: { mode: 'webhook' } },
+                 { key: 'token', label: 'Bot Token',
+                   placeholder: 'xoxb-...',
+                   showWhen: { mode: 'token' } },
+                 { key: 'destination', label: 'Channel',
+                   placeholder: '#saw-notifications',
+                   showWhen: { mode: 'token' } },
+               ]
+               discord: [
+                 { key: 'webhook_url', label: 'Webhook URL',
+                   placeholder: 'https://discord.com/api/webhooks/...' },
+               ]
+               telegram: [
+                 { key: 'token', label: 'Bot Token',
+                   placeholder: '123456:ABC-DEF...' },
+                 { key: 'destination', label: 'Chat ID',
+                   placeholder: '-1001234567890' },
+               ]
+               ```
+            2. Update AdapterFieldDef interface to support the mode toggle:
+               - Add optional `type?: 'text' | 'select'` field
+               - Add optional `options?: string[]` for select fields
+               - Add optional `showWhen?: Record<string, string>` for conditional display
+            3. Update the field rendering loop to:
+               - Render a <select> when field.type === 'select'
+               - Check showWhen conditions: if field.showWhen is set, only render
+                 the field when adapter[conditionKey] === conditionValue
+            4. When adding a new Slack adapter, default mode to 'webhook'.
+               When adding Discord, do not set mode (webhook-only, no toggle).
+               When adding Telegram, do not set mode (token-only, no toggle).
+            5. For Discord: hide mode selector entirely (webhook_url only).
+               For Telegram: hide mode selector entirely (token + destination only).
+
+            ## Verification
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-web
+            go build ./...
+            go vet ./pkg/api/...
+            cd web && npm run build
+            ```
+
+            ## Constraints
+            - Do NOT modify webhook_bridge.go (the bridge just passes through)
+            - Do NOT modify the /api/webhooks route registrations in server.go
+              (only the cfg map building in initWebhookBridge)
+            - The handleTestWebhook handler in webhook_handler.go uses
+              DefaultFormatter from webhook_bridge.go — do not change that
+            - Preserve the atomic write pattern in writeWebhookConfig
+          files:
+            - pkg/api/webhook_handler.go
+            - pkg/api/server.go
+            - web/src/hooks/useWebhooks.ts
+            - web/src/components/WebhookSettings.tsx
+      base_commit: 9a801539156cfe07b969897afcbb5f85adc601d4
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./...
+          required: true
+          repo: scout-and-wave-go
+        - type: test
+          command: go test ./pkg/notify/...
+          required: true
+          repo: scout-and-wave-go
+        - type: lint
+          command: go vet ./pkg/notify/...
+          required: true
+          repo: scout-and-wave-go
+        - type: build
+          command: go build ./...
+          required: true
+          repo: scout-and-wave-web
+        - type: test
+          command: go test ./pkg/api/...
+          required: true
+          repo: scout-and-wave-web
+        - type: build
+          command: cd web && npm run build
+          required: true
+          repo: scout-and-wave-web
+completion_reports:
+    A:
+        status: complete
+        branch: saw/webhook-adapter-unification/wave1-agent-A
+        commit: 30a26cd
+        files_changed:
+            - pkg/notify/slack.go
+            - pkg/notify/telegram.go
+            - pkg/notify/slack_test.go
+            - pkg/notify/telegram_test.go
+        tests_added:
+            - TestNewSlackAdapter_BackwardCompat
+            - TestNewTelegramAdapter_BackwardCompat
+        verification: PASS
+    B:
+        status: complete
+        branch: saw/webhook-adapter-unification/wave1-agent-B
+        commit: d7e796e
+        files_changed:
+            - pkg/api/webhook_handler.go
+            - pkg/api/webhook_handler_test.go
+            - pkg/api/server.go
+            - web/src/hooks/useWebhooks.ts
+            - web/src/components/WebhookSettings.tsx
+        verification: PASS
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: Existing saw.config.json files use old field names (bot_token, chat_id, channel)
+          likelihood: high
+          impact: low
+          mitigation: Go adapters have backward-compat fallback reading old field names. Web layer writes new names going forward.
+        - scenario: Agent B's web changes reference new Go adapter behavior before Agent A merges
+          likelihood: low
+          impact: low
+          mitigation: Agents are in different repos with no compile-time dependency on field name strings. The web layer writes config JSON; Go adapters read it. Both can change independently.
+        - scenario: Mode field missing in existing configs causes adapter creation failure
+          likelihood: medium
+          impact: medium
+          mitigation: Go adapters infer mode from populated fields when mode is empty — if webhook_url is set, mode=webhook; if token is set, mode=token. Explicit mode is optional.
+critic_report:
+    verdict: PASS
+    agent_reviews:
+        A:
+            agent_id: A
+            verdict: PASS
+        B:
+            agent_id: B
+            verdict: PASS
+            issues:
+                - check: pattern_accuracy
+                  severity: warning
+                  description: Brief says initWebhookBridge is around line 372 in server.go but the function actually starts at line 346. Line number references are advisory and do not affect correctness.
+                  file: pkg/api/server.go
+                  symbol: initWebhookBridge
+    summary: 'All 10 files verified to exist across both repos. Agent A briefs are accurate -- struct field names (botToken, channel, chatID, webhookURL), config map keys (bot_token, channel, chat_id, webhook_url), and constructor signatures all match the actual source code exactly. Agent B briefs are accurate -- WebhookAdapterConfig struct fields, handleTestWebhook cfg map building, initWebhookBridge function name and cfg map building, WebhookAdapter TypeScript interface fields, ADAPTER_FIELDS configuration, and AdapterFieldDef interface all match. One advisory warning: the brief says initWebhookBridge is around line 372 in server.go but it actually starts at line 346. No symbol errors, no import chain issues, no missing registrations.'
+    reviewed_at: "2026-03-25T20:58:34Z"
+    issue_count: 1
+state: COMPLETE
