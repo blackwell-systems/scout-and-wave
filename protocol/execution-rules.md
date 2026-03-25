@@ -1400,20 +1400,27 @@ all source files listed in file_ownership. The critic:
 
 ### Enforcement Point (Added in P5)
 
-After critic writes verdict to IMPL doc, `prepare-wave` checks the verdict before creating worktrees:
+After critic writes verdict to IMPL doc, `prepare-wave` checks the verdict before creating worktrees.
+The enforcement is **severity-aware**: `CriticIssue.Severity` is either `"error"` (blocking) or
+`"warning"` (advisory). The overall `verdict` field is `"PASS"` or `"ISSUES"`; `"ISSUES"` may
+contain errors, warnings, or a mix.
 
 - **Verdict: PASS** → proceed with worktree creation
-- **Verdict: WARNING** → emit warning, proceed (orchestrator can override with --no-review)
-- **Verdict: ISSUES** → exit code 1, block worktree creation
+- **Verdict: ISSUES, all warnings** → emit advisory notice, proceed with worktree creation
+- **Verdict: ISSUES, any errors** → exit code 1, block worktree creation
 
-Error message format:
+Error message format (errors present):
 ```
-Error: E37 blocking: Critic found errors in agent briefs.
-Fix via: sawtools amend-impl --redirect-agent <ID> --wave <N>
-Agent IDs with errors: [C, D]
+Error: E37: critic found N error(s) in agent briefs — fix before launching wave
 ```
 
-This ensures agents cannot launch with inaccurate briefs.
+Advisory message format (warnings only):
+```
+prepare-wave: [critic_verdict] success — critic found N warning(s) only — proceeding (advisory)
+```
+
+This ensures agents cannot launch with inaccurate briefs, while warnings surface for awareness
+without blocking execution.
 
 **Verification checks per agent brief:**
 - file_existence: Every file marked action=modify must exist in the repo; every file
