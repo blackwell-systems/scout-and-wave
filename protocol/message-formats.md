@@ -16,64 +16,30 @@ SAW uses the IMPL doc (Implementation Document) as the single source of truth (I
 
 ---
 
-## IMPL Doc Format
-
-**File extension:** `.yaml` or `.yml`
-
-The IMPL doc is a YAML manifest with structure matching the `IMPLManifest` schema (see scout-and-wave-go/pkg/protocol/types.go).
-
-**Characteristics:**
-- Pure YAML structure, schema-validated via `sawtools validate`
-- Completion reports stored in `completion_reports:` map at root level (keyed by agent ID)
-- Scaffolds, quality gates, and file ownership as explicit YAML fields
-- Machine-readable, optimized for SDK-based implementations
-
-**Example:**
-```yaml
-title: "Feature Name"
-feature: "One-line description"
-repository: "/absolute/path/to/repo"
-suitability_assessment:
-  verdict: "SUITABLE"
-  reasoning: "..."
-scaffolds:
-  - file: "pkg/types/shared.go"
-    contents: "type Foo struct { ... }"
-    import_path: "module/pkg/types"
-    status: "committed"
-    commit: "abc1234"
-completion_reports:
-  A:
-    status: "complete"
-    commit: "def5678"
-    verification: "PASS"
-```
-
-**Legacy markdown format (removed):** Prior to v0.7.0, Scout agents generated markdown IMPL docs (`.md` files with `# IMPL:` headers). This format is fully deprecated. Scout v0.7.1+ generates YAML manifests exclusively. The parser retains read-only backward compatibility for pre-existing markdown IMPL docs, but **no new IMPL docs may use the markdown format**. All tooling, validation (E16), and orchestrator parsing targets YAML manifests only.
-
----
-
 ## YAML Manifest Structure
-
-The remainder of this document describes the YAML manifest structure. For historical markdown format, see git history prior to v0.15.0.
 
 **Root-level YAML structure:**
 
 ```yaml
-title: "Feature Name"
-feature: "One-line description"
+title: "Feature Name"           # required
+feature_slug: "url-safe-slug"   # required — used in branch names and file paths
+feature: "One-line description" # optional — informational
 repository: "/absolute/path/to/repo"  # single-repo waves
 repositories:  # multi-repo waves (omit if single-repo)
   - "/absolute/path/to/repo1"
   - "/absolute/path/to/repo2"
 plan_reference: "path/to/original/plan.md"  # optional
 
-state: "WAVE_PENDING" | "WAVE_IN_PROGRESS" | "WAVE_BLOCKED" | "COMPLETE"
+test_command: "go test ./..."  # required
+lint_command: "go vet ./..."   # required
 
-suitability_assessment:
-  verdict: "SUITABLE" | "NOT_SUITABLE" | "CONDITIONAL"
-  reasoning: "..."
-  # See Suitability Assessment section for full schema
+state: "SCOUT_PENDING"  # SCOUT_PENDING | SCOUT_VALIDATING | REVIEWED | SCAFFOLD_PENDING
+                        # WAVE_PENDING | WAVE_EXECUTING | WAVE_MERGING | WAVE_VERIFIED
+                        # BLOCKED | COMPLETE | NOT_SUITABLE
+
+verdict: "SUITABLE"  # required: "SUITABLE" | "NOT_SUITABLE" | "SUITABLE_WITH_CAVEATS"
+suitability_assessment: "..."  # optional — prose rationale written by Scout (see Suitability Verdict Format)
+suitability_reasoning: "..."   # optional — additional reasoning detail
 
 quality_gates:  # optional - omit if no build toolchain
   level: "quick" | "standard" | "full"
@@ -283,6 +249,8 @@ Written by Scout between Pre-Mortem and Dependency Graph. Lists pre-existing iss
 ## Suitability Verdict Format
 
 Emitted by the Scout at the end of the suitability gate. Written to the IMPL doc before any agent prompts.
+
+**YAML field vs prose display:** The `verdict:` YAML field uses underscores: `"SUITABLE"`, `"NOT_SUITABLE"`, `"SUITABLE_WITH_CAVEATS"`. The section templates below show the prose content Scout writes into the `suitability_assessment:` field (free-form markdown text) — that prose may use spaces for readability, but the YAML `verdict:` field value must use underscores exactly as shown above.
 
 ### SUITABLE Verdict
 
@@ -940,46 +908,38 @@ If no known issues exist, omit the section entirely or write:
 
 ## Per-Agent Context Payload
 
-The orchestrator constructs a per-agent context payload (E23) before launching each Wave agent. The payload is a markdown string passed as the `prompt` parameter to the Agent tool — agents do not receive the full IMPL doc.
+Before launching Wave agents, `sawtools prepare-wave` writes a `.saw-agent-brief.md` file to each agent's worktree root. The Agent tool receives a short stub prompt (~60 tokens) referencing the IMPL doc path, wave number, and agent ID; the agent reads its full brief from `.saw-agent-brief.md`.
 
-**Sections always included:**
+**Brief contents (written by `engine/prepare.go`):**
 
-| Section | Source in IMPL doc | Purpose |
-|---------|-------------------|---------|
-| Agent's 9-field prompt | `### Agent {ID} - {Role}` through next `### Agent` heading | Complete implementation spec |
-| Interface contracts | `## Interface Contracts` | Cross-agent boundary definitions |
-| File ownership table | `## File Ownership` typed block | Agent verifies its row; sees peers' rows for I1 reasoning |
-| Scaffolds section | `## Scaffolds` | Pre-built scaffold files (types/interfaces) the agent imports |
-| Quality gates | `## Quality Gates` | Verification commands required before completion report |
-| IMPL doc path | Literal string preamble | Agent writes completion report here (I4, I5) |
+| Section | Source | Purpose |
+|---------|--------|---------|
+| IMPL doc path header | `opts.IMPLPath` | Agent writes completion report here (I4, I5) |
+| Files owned | `file_ownership` filtered to this agent | Hard constraint (I1) |
+| Task | `waves[N].agents[ID].task` | Implementation specification |
+| Interface contracts | `interface_contracts` | Cross-agent boundary definitions |
+| Wiring obligations | `wiring` filtered to this agent (E35 Layer 3C) | Mandatory call-sites to wire |
+| Quality gates | `quality_gates.gates` | Verification commands required before completion report |
+| Merge target | `opts.MergeTarget` (program-mode only) | Which branch to merge to (P5) |
 
-**Sections excluded:** Other agents' 9-field prompt sections, `## Suitability Assessment`, `## Dependency Graph`, `## Pre-Mortem`, `## Known Issues`, `## Wave Structure` prose, completion reports from prior waves.
-
-**Payload format:**
+**Agent stub prompt format (passed to Agent tool):**
 
 ```markdown
-<!-- IMPL doc: /absolute/path/to/docs/IMPL/IMPL-feature.md -->
+<!-- IMPL doc: /absolute/path/to/docs/IMPL/IMPL-feature.yaml | Wave N | Agent X -->
+<!-- Worktree: /absolute/path/to/worktree | Branch: saw/{slug}/wave{N}-agent-{X} -->
 
-{agent 9-field prompt section}
+MANDATORY FIRST STEP - Verify isolation before any work:
+1. cd /absolute/path/to/worktree
+2. sawtools verify-isolation --branch saw/{slug}/wave{N}-agent-{X}
+3. If verification fails (exit code 1), STOP immediately and report status: blocked
 
-## Interface Contracts
+After verification passes, read your pre-extracted brief:
+Read .saw-agent-brief.md
 
-{extracted contracts}
-
-## File Ownership
-
-{extracted ownership table}
-
-## Scaffolds
-
-{extracted Scaffolds section}
-
-## Quality Gates
-
-{extracted gates}
+Follow the brief exactly.
 ```
 
-**Stability:** Payload format is identical across waves. Wave 2 agents receive the same structure as Wave 1 agents — their own section extracted, same shared sections included.
+**Stability:** Brief format is identical across waves. Wave 2 agents receive the same structure as Wave 1 agents — their own task and files extracted, same shared sections included.
 
 ---
 

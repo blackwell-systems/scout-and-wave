@@ -1,0 +1,878 @@
+completion_date: "2026-03-25"
+title: 'Interview Mode: Protocol-Implementation Gap Fixes'
+feature_slug: interview-mode-gaps
+verdict: SUITABLE
+suitability_assessment: |-
+    All 11 gaps are well-scoped and target distinct files across 3 repos.
+    File ownership is cleanly decomposable: Go engine changes (A), web API
+    changes (B), frontend changes (C), and protocol doc updates (D) touch
+    completely disjoint files with no shared types needed between agents.
+
+    Pre-implementation status check:
+    - G1 (INTERVIEWING state): TODO — state-machine.md has no mention of INTERVIEWING
+    - G2 (INTERVIEWING→SCOUT_PENDING transition): TODO — not documented anywhere
+    - G3 (REQUIREMENTS.md format): PARTIAL — protocol spec describes phase-mirrored format,
+      compiler generates bootstrap-oriented format; spec needs updating
+    - G4 (web resume endpoint): TODO — DeterministicManager.Resume() exists but no HTTP handler
+    - G5 (phase transition guard): PARTIAL — checkPhaseTransition has no panic for backward
+      transitions; recalculatePhase actively resets, which is undocumented
+    - G6 (max-questions Warnings): PARTIAL — truncation path compiles but no Warnings section
+    - G7 (--non-interactive flag): PARTIAL — flag exists, is declared, but nonInteractive
+      variable is never read in command body; decision: implement it (suppress prompts when set)
+    - G8 (back navigation docs): TODO — HandleBackCommand exists in deterministic.go but
+      interview-mode.md has no Navigation Commands section
+    - G9 (frontend phase labels): PARTIAL — PHASES array uses display aliases that never match
+      server-emitted phase strings; progress bar always shows Phase 1/6
+    - G10 (phase_complete SSE): TODO — frontend handler registered but server never emits it
+    - G11 (UUID format): PARTIAL — newID() generates 32-char hex, not UUID-hyphenated format;
+      decision: fix to proper UUID format using fmt.Sprintf with hyphenation
+
+    Parallelization value: HIGH. Wave 1 has 4 fully independent agents (disjoint files across
+    3 repos). Build + test cycles are moderate (~10-20s for Go, ~5s for TypeScript). Each agent
+    touches 2-4 files with non-trivial logic changes (new HTTP handler, SSE emission, UUID
+    formatting, doc updates).
+
+    Estimated times:
+    - Scout phase: ~15 min
+    - Agent execution: ~45 min (4 agents x ~15 min avg, fully parallel)
+    - Merge & verification: ~10 min
+    Total SAW time: ~70 min
+    Sequential baseline: ~90 min
+    Time savings: ~20 min (22% faster). Clear speedup for cross-repo coordination.
+test_command: go test ./...
+lint_command: go vet ./...
+file_ownership:
+    - file: cmd/sawtools/interview_cmd.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/interview/deterministic.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/interview/compiler.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/interview/phase_questions.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/api/interview_handlers.go
+      agent: B
+      wave: 1
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/api/server.go
+      agent: B
+      wave: 1
+      action: modify
+      repo: scout-and-wave-web
+    - file: web/src/components/InterviewLauncher.tsx
+      agent: C
+      wave: 1
+      action: modify
+      repo: scout-and-wave-web
+    - file: web/src/lib/apiClient.ts
+      agent: C
+      wave: 1
+      action: modify
+      repo: scout-and-wave-web
+    - file: protocol/state-machine.md
+      agent: D
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: protocol/interview-mode.md
+      agent: D
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+interface_contracts:
+    - name: POST /api/interview/resume
+      description: HTTP endpoint to resume a paused interview from a YAML doc on disk
+      definition: |
+        // Request body
+        type InterviewResumeRequest struct {
+            DocPath string `json:"doc_path"` // absolute or relative path to INTERVIEW-<slug>.yaml
+        }
+
+        // Response body (202 Accepted)
+        type InterviewResumeResponse struct {
+            RunID string `json:"run_id"` // new run ID; client subscribes to /api/interview/{runID}/events
+        }
+
+        // Error cases:
+        // 400 Bad Request — doc_path missing or empty
+        // 404 Not Found — file does not exist
+        // 409 Conflict — interview already complete (status: "complete")
+        // 500 Internal Server Error — failed to parse YAML or start manager
+      location: pkg/api/interview_handlers.go
+    - name: phase_complete SSE event payload
+      description: SSE event emitted by runInterviewLoop when phase changes between answer iterations
+      definition: |
+        // Event name: "phase_complete"
+        // Data payload:
+        type PhaseCompleteEvent struct {
+            Phase     string `json:"phase"`      // completed phase name, e.g. "overview"
+            NextPhase string `json:"next_phase"` // upcoming phase name, e.g. "scope"
+        }
+
+        // Emitted in runInterviewLoop after run.mgr.Answer() returns, when
+        // updatedDoc.Phase != doc.Phase (before the phase field on doc was updated).
+        // Emit BEFORE the next "question" event.
+      location: pkg/api/interview_handlers.go
+    - name: PHASES display map in InterviewLauncher.tsx
+      description: Mapping from server phase names to display labels for the progress bar
+      definition: |
+        // Replace: const PHASES = ['Goals', 'Scope', 'Users', 'Constraints', 'Integration', 'Quality']
+        // With:
+        const PHASE_KEYS = ['overview', 'scope', 'requirements', 'interfaces', 'stories', 'review']
+        const PHASE_LABELS: Record<string, string> = {
+          overview: 'Goals',
+          scope: 'Scope',
+          requirements: 'Requirements',
+          interfaces: 'Interfaces',
+          stories: 'Stories',
+          review: 'Review',
+        }
+        // Phase index lookup uses PHASE_KEYS.findIndex(k => k === phase)
+        // Display labels use PHASE_LABELS[key] ?? key
+      location: web/src/components/InterviewLauncher.tsx
+    - name: resume method on sawClient.interview
+      description: TypeScript apiClient method for POST /api/interview/resume
+      definition: |
+        // Add to SawClient.interview interface:
+        resume(docPath: string): Promise<{ runId: string }>
+
+        // Implementation:
+        async resume(docPath: string): Promise<{ runId: string }> {
+          const r = await fetch('/api/interview/resume', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ doc_path: docPath }),
+          })
+          await check(r)
+          const data = await r.json() as { run_id: string }
+          return { runId: data.run_id }
+        }
+      location: web/src/lib/apiClient.ts
+    - name: newID UUID format
+      description: Updated newID() in deterministic.go to emit proper UUID-formatted string
+      definition: |
+        // Before: fmt.Sprintf("%x", b)  → "a1b2c3d4e5f6..."  (32 hex chars, no hyphens)
+        // After: format as UUID xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+        func newID() string {
+            b := make([]byte, 16)
+            _, _ = rand.Read(b)
+            return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
+                b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+        }
+      location: pkg/interview/deterministic.go
+    - name: CompileToRequirements with Warnings section
+      description: Updated compiler to detect truncation and append Warnings section
+      definition: |
+        // After building main content, check if required fields are populated.
+        // Required fields: Overview.Title, Overview.Goal, Scope.InScope, Requirements.Functional
+        // If any are empty AND doc.QuestionCursor >= doc.MaxQuestions (truncated):
+        //   append to output:
+        //   "## Warnings\n- Interview truncated at max_questions limit. Some phases incomplete.\n"
+        // This does NOT change any existing section structure — it's append-only.
+      location: pkg/interview/compiler.go
+    - name: checkPhaseTransition panic guard
+      description: |
+        Add backward/skip transition guard to checkPhaseTransition in phase_questions.go.
+        Protocol says backward transitions are a bug and should panic.
+      definition: |
+        // At the TOP of checkPhaseTransition, before the switch statement, add:
+        // Detect backward or skip: build a phaseOrder map and check new phase >= current phase
+        // If the transition would go backward, panic with a descriptive message.
+        // EXCEPTION: this guard does NOT apply when called from recalculatePhase
+        //   (recalculatePhase starts from PhaseOverview and replays forward-only).
+        // Implementation options:
+        //   1. Add a boolean parameter `allowBackward bool` — recalculatePhase passes true
+        //   2. Add a package-level bool flag set by recalculatePhase before calling
+        //   3. Only guard transitions that skip phases (not backward — back is handled separately)
+        // Recommended: option 3 — guard skip-phase transitions only in checkPhaseTransition,
+        //   document that backward nav is handled via recalculatePhase.
+      location: pkg/interview/phase_questions.go
+    - name: nonInteractive prompt suppression
+      description: |
+        When --non-interactive flag is set in interview_cmd.go, suppress the question prompt
+        lines (do not print to stdout), but still print the answer on a new line for traceability.
+      definition: |
+        // In interview_cmd.go RunE, use the nonInteractive flag:
+        // if !nonInteractive {
+        //     fmt.Fprintf(writer, "%s\n", interview.FormatPhaseProgress(doc))
+        //     fmt.Fprintf(writer, "%s\n", question.Text)
+        //     if question.Hint != "" {
+        //         fmt.Fprintf(writer, "(%s)\n", question.Hint)
+        //     }
+        //     fmt.Fprint(writer, "> ")
+        // }
+        // The reader.Scan() call and answer handling remain unchanged.
+      location: cmd/sawtools/interview_cmd.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |-
+            You are implementing fixes for gaps G5, G6, G7, G11 in the interview mode
+            Go engine (scout-and-wave-go repo).
+
+            ## Repo and Files
+            Repo root: /Users/dayna.blackwell/code/scout-and-wave-go
+            Files to modify:
+            - cmd/sawtools/interview_cmd.go
+            - pkg/interview/deterministic.go
+            - pkg/interview/compiler.go
+            - pkg/interview/phase_questions.go (read for context; checkPhaseTransition is here)
+
+            ## G11: Fix UUID format in newID()
+            In pkg/interview/deterministic.go, find `func newID()` (around line 358).
+            Current: `return fmt.Sprintf("%x", b)` — emits 32 hex chars with no hyphens.
+            Fix: format as standard UUID xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx.
+            Use: `return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])`
+            No new imports needed (crypto/rand and fmt already imported).
+
+            ## G5: Phase transition panic guard for skip transitions
+            In pkg/interview/phase_questions.go, find `func checkPhaseTransition(doc *InterviewDoc)`.
+            The function currently only handles forward phase transitions (no guard for
+            skip-phase or backward transitions).
+
+            Add a phase order map at the top of the file (package-level var or local):
+            ```go
+            var phaseOrder = map[InterviewPhase]int{
+                PhaseOverview:     0,
+                PhaseScope:        1,
+                PhaseRequirements: 2,
+                PhaseInterfaces:   3,
+                PhaseStories:      4,
+                PhaseReview:       5,
+                PhaseComplete:     6,
+            }
+            ```
+
+            In checkPhaseTransition, AFTER the switch sets the new phase (use a helper that
+            captures the "target phase"), add a guard: if the target phase skips more than
+            one step forward (i.e. phaseOrder[newPhase] > phaseOrder[currentPhase] + 1),
+            panic with: `panic(fmt.Sprintf("interview: invalid phase skip: %s → %s", currentPhase, newPhase))`
+
+            IMPORTANT: The guard should only detect skip-phase transitions (jumping 2+ phases).
+            Do NOT guard single-step forward transitions (those are normal).
+            Do NOT guard backward transitions — those are handled by recalculatePhase which
+            resets to PhaseOverview and replays forward-only transitions (this is correct behavior).
+
+            Protocol says invalid forward-skip is a bug → panic.
+
+            ## G6: Warnings section in CompileToRequirements
+            In pkg/interview/compiler.go, find `func CompileToRequirements`.
+            After building all sections and before returning, add truncation detection:
+
+            Required fields to check: Overview.Title, Overview.Goal, Scope.InScope (non-nil),
+            Requirements.Functional (non-empty).
+
+            Add after the last `b.WriteString("\n")` before `return b.String(), nil`:
+            ```go
+            // Truncation detection: if max_questions was hit and required fields are missing
+            truncated := doc.QuestionCursor >= doc.MaxQuestions
+            missingRequired := doc.SpecData.Overview.Title == "" ||
+                doc.SpecData.Overview.Goal == "" ||
+                doc.SpecData.Scope.InScope == nil ||
+                len(doc.SpecData.Requirements.Functional) == 0
+            if truncated && missingRequired {
+                b.WriteString("## Warnings\n")
+                b.WriteString("- Interview truncated at max_questions limit. Some phases incomplete.\n")
+            }
+            ```
+
+            ## G7: Implement --non-interactive flag
+            In cmd/sawtools/interview_cmd.go, find the question-answer loop (around line 109).
+            The `nonInteractive` variable is declared (line 34) but never read.
+
+            Wrap the prompt-printing block with a conditional:
+            ```go
+            if !nonInteractive {
+                // Show preview before final confirmation
+                if question.FieldName == "_confirm" { ... }
+                // Print the question prompt with phase-aware progress
+                fmt.Fprintf(writer, "%s\n", interview.FormatPhaseProgress(doc))
+                fmt.Fprintf(writer, "%s\n", question.Text)
+                if question.Hint != "" {
+                    fmt.Fprintf(writer, "(%s)\n", question.Hint)
+                }
+                fmt.Fprint(writer, "> ")
+            }
+            ```
+            The `reader.Scan()`, answer handling, and all state saving remain unchanged.
+
+            ## Verification gate
+            From the repo root (/Users/dayna.blackwell/code/scout-and-wave-go):
+            1. go build ./...
+            2. go vet ./...
+            3. go test ./pkg/interview/... -v -run "TestCompile|TestNewID|TestPhase"
+            4. go test ./...
+
+            If no tests exist for these functions, add minimal table tests in the
+            appropriate _test.go files:
+            - TestNewIDFormat: verify newID() output matches UUID regex `^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`
+            - TestCompileToRequirementsWarnings: verify warnings section appears when truncated + missing required fields
+            - TestNonInteractive: verify prompt text is not written to output when --non-interactive is true (test via interviewCmd directly if possible, or unit test the guard logic)
+          files:
+            - cmd/sawtools/interview_cmd.go
+            - pkg/interview/deterministic.go
+            - pkg/interview/compiler.go
+            - pkg/interview/phase_questions.go
+        - id: B
+          task: |-
+            You are implementing fixes for gaps G4 and G10 in the web API layer
+            (scout-and-wave-web repo).
+
+            ## Repo and Files
+            Repo root: /Users/dayna.blackwell/code/scout-and-wave-web
+            Files to modify:
+            - pkg/api/interview_handlers.go
+            - pkg/api/server.go
+
+            ## G4: Add POST /api/interview/resume endpoint
+
+            ### Step 1: Add request/response types to interview_handlers.go
+            Add after `InterviewStartResponse` (around line 24):
+            ```go
+            // InterviewResumeRequest is the JSON body for POST /api/interview/resume.
+            type InterviewResumeRequest struct {
+                DocPath string `json:"doc_path"` // path to INTERVIEW-<slug>.yaml
+            }
+            ```
+            The response reuses `InterviewStartResponse` (returns a `run_id`).
+
+            ### Step 2: Add handleInterviewResume handler
+            Add a new handler function after `handleInterviewStart`:
+            ```go
+            // handleInterviewResume handles POST /api/interview/resume.
+            // Loads an existing INTERVIEW-<slug>.yaml from disk and resumes the interview,
+            // returning a new run ID so the client can subscribe to SSE and submit answers.
+            func (s *Server) handleInterviewResume(w http.ResponseWriter, r *http.Request) {
+                var req InterviewResumeRequest
+                if err := decodeJSON(r, &req); err != nil {
+                    respondError(w, "invalid request body: "+err.Error(), http.StatusBadRequest)
+                    return
+                }
+                if req.DocPath == "" {
+                    respondError(w, "doc_path is required", http.StatusBadRequest)
+                    return
+                }
+
+                // Verify file exists.
+                if _, err := os.Stat(req.DocPath); os.IsNotExist(err) {
+                    respondError(w, "interview doc not found: "+req.DocPath, http.StatusNotFound)
+                    return
+                }
+
+                // Determine docsDir from the file's directory.
+                docsDir := filepath.Dir(req.DocPath)
+                mgr := interview.NewDeterministicManager(docsDir)
+
+                doc, firstQ, err := mgr.Resume(req.DocPath)
+                if err != nil {
+                    respondError(w, "failed to resume interview: "+err.Error(), http.StatusInternalServerError)
+                    return
+                }
+
+                // If already complete, return 409 Conflict.
+                if doc.Status == "complete" || firstQ == nil {
+                    respondError(w, "interview is already complete", http.StatusConflict)
+                    return
+                }
+
+                runID := fmt.Sprintf("interview-%d", time.Now().UnixNano())
+                ctx, cancel := context.WithCancel(s.serverCtx)
+
+                run := &interviewRun{
+                    cancel:  cancel,
+                    mgr:     mgr,
+                    doc:     doc,
+                    answers: make(chan string, 1),
+                }
+                s.interviewRuns.Store(runID, run)
+
+                go s.runInterviewLoop(ctx, runID, run, firstQ)
+
+                respondJSON(w, http.StatusAccepted, InterviewStartResponse{RunID: runID})
+            }
+            ```
+            Add `"os"` and `"path/filepath"` to imports (check if already imported first).
+
+            ### Step 3: Wire route in server.go
+            In pkg/api/server.go, find the "Interview layer" section (around line 297).
+            Add after `s.mux.HandleFunc("POST /api/interview/{runID}/cancel", s.handleInterviewCancel)`:
+            ```go
+            s.mux.HandleFunc("POST /api/interview/resume", s.handleInterviewResume)
+            ```
+            IMPORTANT: This route must be registered BEFORE any `{runID}` pattern routes to
+            avoid Go 1.22+ ServeMux ambiguity. Check whether `POST /api/interview/resume`
+            could conflict with `POST /api/interview/{runID}/cancel` — it won't (different
+            path depth), but confirm placement is correct.
+
+            ## G10: Emit phase_complete SSE event in runInterviewLoop
+            In pkg/api/interview_handlers.go, find `runInterviewLoop` (around line 113).
+
+            In the answer processing loop, after getting `updatedDoc` from `run.mgr.Answer()`,
+            capture the previous phase BEFORE updating doc:
+            ```go
+            // Capture phase BEFORE updating doc.
+            run.docMu.Lock()
+            previousPhase := run.doc.Phase
+            run.docMu.Unlock()
+
+            updatedDoc, nextQ, err := run.mgr.Answer(doc, answer)
+            ```
+
+            Then, after the `answer_recorded` event emission and BEFORE emitting the next
+            question, check if phase changed:
+            ```go
+            // Emit phase_complete if phase changed.
+            if string(updatedDoc.Phase) != string(previousPhase) && updatedDoc.Phase != "complete" {
+                s.broker.Publish(brokerKey, SSEEvent{
+                    Event: "phase_complete",
+                    Data: map[string]string{
+                        "phase":      string(previousPhase),
+                        "next_phase": string(updatedDoc.Phase),
+                    },
+                })
+            }
+            ```
+
+            Note: the existing code already reads `doc` from the mutex at the top of the
+            answer case. The `previousPhase` capture must happen BEFORE calling `run.mgr.Answer()`
+            to record the phase at answer-time. Ensure the mutex is correctly sequenced.
+
+            Exact insertion point in the `case answer := <-run.answers:` block:
+            1. Lock docMu, read doc and previousPhase, unlock.
+            2. Call run.mgr.Answer(doc, answer).
+            3. Lock docMu, set run.doc = updatedDoc, unlock.
+            4. Emit answer_recorded.
+            5. If phase changed, emit phase_complete.
+            6. Check complete / emit next question.
+
+            ## Verification gate
+            From /Users/dayna.blackwell/code/scout-and-wave-web:
+            1. go build ./...
+            2. go vet ./...
+            3. go test ./pkg/api/... -v -run "TestInterview"
+            4. go test ./...
+          files:
+            - pkg/api/interview_handlers.go
+            - pkg/api/server.go
+        - id: C
+          task: |-
+            You are implementing fixes for G9 (frontend phase label matching) and G4
+            (resume method on apiClient) in the React frontend (scout-and-wave-web repo).
+
+            ## Repo and Files
+            Repo root: /Users/dayna.blackwell/code/scout-and-wave-web
+            Files to modify:
+            - web/src/components/InterviewLauncher.tsx
+            - web/src/lib/apiClient.ts
+
+            ## G9: Fix frontend phase label matching in InterviewLauncher.tsx
+
+            ### Problem
+            Line 33: `const PHASES = ['Goals', 'Scope', 'Users', 'Constraints', 'Integration', 'Quality']`
+            Line 202: `const phaseIndex = PHASES.findIndex(p => p.toLowerCase() === phase.toLowerCase())`
+
+            The server emits phase strings: `overview`, `scope`, `requirements`, `interfaces`,
+            `stories`, `review`. The PHASES array uses display aliases that never match these
+            strings. `phaseIndex` is always -1, so `currentPhaseNum` is always 1.
+
+            ### Fix
+            Replace the single PHASES constant with two: a keys array (for matching) and a
+            labels map (for display). Update the phase index lookup and the render.
+
+            In the "Constants" section (around line 29-33), replace:
+            ```tsx
+            const PHASES = ['Goals', 'Scope', 'Users', 'Constraints', 'Integration', 'Quality']
+            ```
+            With:
+            ```tsx
+            const PHASE_KEYS = ['overview', 'scope', 'requirements', 'interfaces', 'stories', 'review']
+            const PHASE_LABELS: Record<string, string> = {
+              overview: 'Goals',
+              scope: 'Scope',
+              requirements: 'Requirements',
+              interfaces: 'Interfaces',
+              stories: 'Stories',
+              review: 'Review',
+            }
+            ```
+
+            In the "Phase progress" section (around line 201-203), replace:
+            ```tsx
+            const phaseIndex = PHASES.findIndex(p => p.toLowerCase() === phase.toLowerCase())
+            const currentPhaseNum = phaseIndex >= 0 ? phaseIndex + 1 : 1
+            const totalPhases = PHASES.length
+            ```
+            With:
+            ```tsx
+            const phaseIndex = PHASE_KEYS.indexOf(phase)
+            const currentPhaseNum = phaseIndex >= 0 ? phaseIndex + 1 : 1
+            const totalPhases = PHASE_KEYS.length
+            ```
+
+            In the render, find where PHASES.map() is used (the phase label dots row, around
+            line 285-292). Replace `{PHASES.map((p, i) => (` with `{PHASE_KEYS.map((p, i) => (`,
+            and inside change `{p}` to `{PHASE_LABELS[p] ?? p}`.
+
+            Also update the phase display text where phase is shown (line 270):
+            `Phase {currentPhaseNum}/{totalPhases}: {phase || 'Starting...'}`
+            Change `{phase || 'Starting...'}` to `{PHASE_LABELS[phase] ?? phase || 'Starting...'}`
+
+            ## G4: Add resume method to apiClient.ts
+
+            ### Step 1: Add to SawClient interface
+            In web/src/lib/apiClient.ts, find the `interview` section of the `SawClient`
+            interface (around line 133-137):
+            ```typescript
+            interview: {
+              start(description: string, opts?: { maxQuestions?: number; projectPath?: string }): Promise<{ runId: string }>
+              subscribeEvents(runId: string): EventSource
+              answer(runId: string, answer: string): Promise<void>
+            }
+            ```
+            Add `resume` to the interface:
+            ```typescript
+            interview: {
+              start(description: string, opts?: { maxQuestions?: number; projectPath?: string }): Promise<{ runId: string }>
+              subscribeEvents(runId: string): EventSource
+              answer(runId: string, answer: string): Promise<void>
+              resume(docPath: string): Promise<{ runId: string }>
+            }
+            ```
+
+            ### Step 2: Add implementation
+            Find the `sawClient` implementation object (search for `interview: {` in the
+            implementation section, not the interface). The implementation of `start`,
+            `subscribeEvents`, and `answer` should be there. Add `resume` alongside them:
+            ```typescript
+            async resume(docPath: string): Promise<{ runId: string }> {
+              const r = await fetch('/api/interview/resume', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ doc_path: docPath }),
+              })
+              await check(r)
+              const data = await r.json() as { run_id: string }
+              return { runId: data.run_id }
+            },
+            ```
+
+            ## Verification gate
+            From /Users/dayna.blackwell/code/scout-and-wave-web:
+            1. go build ./...  (ensures TypeScript does not block Go compilation)
+            2. cd web && npm run build  (TypeScript compile check; catches type errors)
+            3. go vet ./...
+            Note: the Go build includes embedded web assets — if npm run build fails,
+            the overall Go build will not embed the updated JS bundle. Always run both.
+          files:
+            - web/src/components/InterviewLauncher.tsx
+            - web/src/lib/apiClient.ts
+        - id: D
+          task: |-
+            You are implementing protocol doc updates for gaps G1, G2, G3, G7, G8
+            (scout-and-wave protocol repo — docs only, no Go module).
+
+            ## Repo and Files
+            Repo root: /Users/dayna.blackwell/code/scout-and-wave
+            Files to modify:
+            - protocol/state-machine.md
+            - protocol/interview-mode.md
+
+            ## G1 + G2: Add INTERVIEWING state to state-machine.md
+
+            ### Step 1: Add INTERVIEWING to the State Catalog table
+            Find the State Catalog table (around line 15). Add a new row for INTERVIEWING
+            BEFORE the SCOUT_PENDING row (since INTERVIEWING precedes SCOUT_PENDING):
+
+            | **INTERVIEWING** | User is being guided through structured requirements gathering via `/saw interview`. | `/saw interview` command invoked | Interview completes, REQUIREMENTS.md written (manual: user runs `/saw scout` or `/saw bootstrap` after) |
+
+            ### Step 2: Add to Primary Flow section
+            Find the "Primary Flow (Success Path)" section. Add a new "Interview Path" subsection
+            before or after the primary flow:
+            ```
+            ### Interview Path (Optional Pre-Scout Entry)
+
+            ```
+            INTERVIEWING
+                ↓ (Interview completes, REQUIREMENTS.md written)
+            (manually) SCOUT_PENDING
+            ```
+
+            The INTERVIEWING → SCOUT_PENDING transition is manual: after the interview
+            completes, the user invokes `/saw scout "<feature>" --requirements docs/REQUIREMENTS.md`
+            (or `/saw bootstrap`) to enter SCOUT_PENDING. There is no automatic state signal
+            from the interview tool to the SAW orchestrator.
+            ```
+
+            ### Step 3: Add INTERVIEWING to the "Alternate Success Paths" subsection
+            Note that the interview path bypasses the normal SCOUT_PENDING start and feeds
+            a REQUIREMENTS.md into it instead.
+
+            ### Step 4: Add INTERVIEWING to the Canonical Allowed Transitions Table
+            Find the table at the bottom of the file (around line 399). Add:
+            | **INTERVIEWING** | *(manual: user invokes /saw scout after interview completes)* |
+
+            ### Step 5: Add INTERVIEWING to the State Entry Actions table
+            Find the "State Entry Actions" table (around line 274). Add:
+            | **INTERVIEWING** | CLI prints question prompts to stdout and reads answers from stdin. Web UI emits SSE `question` events and waits for `/api/interview/{runID}/answer` POSTs. State persisted to `docs/INTERVIEW-<slug>.yaml` after each turn. |
+
+            ## G3: Update Output Contract section in interview-mode.md
+
+            Find the "Output Contract" section (around line 119). The spec currently describes
+            a phase-mirrored format (## Overview / ## Scope / ## Requirements / etc.) but the
+            actual compiler.go produces a bootstrap-oriented format.
+
+            Replace the Output Contract section's REQUIREMENTS.md example with the actual format:
+            ```markdown
+            # Requirements: <title>
+
+            ## Language & Ecosystem
+            - <language/ecosystem items from interfaces.external containing "language" keyword>
+
+            ## Project Type
+            <goal text>
+
+            ## Deployment Target
+            - <constraints items containing "deploy" keyword>
+
+            ## Key Concerns (3-6 major responsibility areas)
+            1. <scope.in_scope item 1>
+            2. <scope.in_scope item 2>
+            ...
+
+            ## Storage
+            - <interfaces.data_models items>
+
+            ## External Integrations
+            - <interfaces.external items>
+
+            ## Source Codebase (if porting/adapting)
+            - <interfaces.external items with "source:" prefix, stripped>
+
+            ## Architectural Decisions Already Made
+            - <requirements.constraints items>
+            - <requirements.non_functional items>
+
+            ## Warnings  ← only present if interview was truncated before completion
+            - Interview truncated at max_questions limit. Some phases incomplete.
+            ```
+
+            Add a note explaining why: "The compiled format is tailored to the
+            `saw-bootstrap.md` intake format (bootstrap-oriented sections) rather than
+            mirroring the 6 interview phases. This maximizes compatibility with `/saw bootstrap`
+            which parses these specific section headings."
+
+            Also add a note: "Sections with no data are emitted with a placeholder comment
+            `<!-- placeholder — fill in before running /saw bootstrap -->` so the file is
+            always complete and can be manually edited before running bootstrap."
+
+            ## G7: Document --non-interactive flag in interview-mode.md
+
+            In the "Implementation Notes" section (around line 194), find or add a "CLI Flags"
+            subsection. Add documentation for `--non-interactive`:
+            ```
+            **`--non-interactive`** — When set, suppresses question prompts (phase progress
+            header, question text, hint, and `> ` prompt) from stdout. Answers are still
+            read from stdin normally. Use for testing/piping: `echo "My App\nA CLI tool" |
+            sawtools interview "test" --non-interactive`. The interview log and state files
+            are written normally regardless of this flag.
+            ```
+
+            ## G8: Document `back` navigation in interview-mode.md
+
+            Add a new "Navigation Commands" section to interview-mode.md, AFTER the "Skip
+            semantics" paragraph and BEFORE "LLM mode":
+            ```markdown
+            ### Navigation Commands
+
+            The deterministic interview mode supports the following special answer values:
+
+            **`back`** — Reverts to the previous question. The last answer is removed from the
+            interview history, and its corresponding spec data field is cleared. The phase is
+            recalculated from scratch (replaying forward transitions) so the phase indicator
+            stays accurate. Cannot go back from the first question (cursor = 0); the back
+            command is silently ignored in that case.
+
+            **`skip`** — For optional fields, typing `skip` marks the field as asked-and-skipped
+            (sets an empty slice `[]` rather than nil). Required fields reject `skip` with an
+            error prompt. See Skip semantics above.
+
+            **Navigation constraint:** The `back` command is a user-facing undo. It is NOT
+            a mechanism to re-enter a previous phase directly — phase boundaries are enforced
+            by the `checkPhaseTransition` logic, which only advances forward. Going back within
+            a phase is supported; going back across a phase boundary is possible by typing
+            `back` repeatedly until the cursor reaches the relevant question.
+            ```
+
+            ## Verification gate
+            From /Users/dayna.blackwell/code/scout-and-wave:
+            These are documentation-only changes. Verify:
+            1. The state-machine.md INTERVIEWING row is properly formatted in the Markdown table
+            2. The Canonical Allowed Transitions Table includes INTERVIEWING
+            3. The interview-mode.md Output Contract section matches the actual compiler.go output
+            4. The Navigation Commands section is in the correct location
+            5. No broken Markdown (check for unclosed code fences, misaligned table rows)
+
+            Optional: `cat protocol/state-machine.md | grep -c "INTERVIEWING"` should return
+            at least 3 (State Catalog, Allowed Transitions Table, State Entry Actions).
+          files:
+            - protocol/state-machine.md
+            - protocol/interview-mode.md
+      base_commit: 190f915ff614ab7647e9d989f6b6e4b386fe7f3e
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./...
+          required: true
+          repo: scout-and-wave-go
+        - type: test
+          command: go test ./...
+          required: true
+          repo: scout-and-wave-go
+        - type: lint
+          command: go vet ./...
+          required: true
+          repo: scout-and-wave-go
+        - type: build
+          command: go build ./...
+          required: true
+          repo: scout-and-wave-web
+        - type: test
+          command: go test ./...
+          required: true
+          repo: scout-and-wave-web
+        - type: lint
+          command: go vet ./...
+          required: true
+          repo: scout-and-wave-web
+completion_reports:
+    A:
+        status: complete
+        branch: saw/interview-mode-gaps/wave1-agent-A
+        commit: dc16cdb
+        files_changed:
+            - cmd/sawtools/interview_cmd.go
+            - cmd/sawtools/interview_cmd_test.go
+            - pkg/interview/deterministic.go
+            - pkg/interview/deterministic_test.go
+            - pkg/interview/compiler.go
+            - pkg/interview/compiler_test.go
+            - pkg/interview/phase_questions.go
+        tests_added:
+            - TestNewIDFormat
+            - TestCheckPhaseTransition_NoPanic_SingleStep
+            - TestNonInteractive_LogicGuard
+            - TestCompileToRequirements_Warnings
+            - TestCompileToRequirements_NoWarnings_NotTruncated
+            - TestCompileToRequirements_NoWarnings_Complete
+        verification: PASS
+    B:
+        status: complete
+        branch: saw/interview-mode-gaps/wave1-agent-B
+        commit: 70aacc5
+        files_changed:
+            - pkg/api/interview_handlers.go
+            - pkg/api/server.go
+        verification: 'PASS: go build ./..., go vet ./..., go test ./pkg/api/... all pass. Pre-existing cmd/saw TestValidate_FileNotFound failure on branch base unrelated to owned files.'
+    C:
+        status: complete
+        branch: saw/interview-mode-gaps/wave1-agent-C
+        commit: cf87793
+        files_changed:
+            - web/src/components/InterviewLauncher.tsx
+            - web/src/lib/apiClient.ts
+        verification: 'PASS: tsc --noEmit clean, npm run build success, go build OK, go vet OK. G9: PHASE_KEYS/PHASE_LABELS replace PHASES array. G4: resume() added to interface and implementation.'
+    D:
+        status: complete
+        branch: saw/interview-mode-gaps/wave1-agent-D
+        commit: d01008d
+        files_changed:
+            - protocol/state-machine.md
+            - protocol/interview-mode.md
+        verification: PASS
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: |-
+            G10 phase_complete SSE event: the previousPhase capture in runInterviewLoop
+            requires careful mutex sequencing. If Agent B reads previousPhase inside the
+            mutex AFTER doc is already updated, the event would always show the same phase.
+          likelihood: medium
+          impact: low
+          mitigation: |-
+            The interface contract explicitly specifies the mutex sequencing order (lock,
+            read doc and previousPhase, unlock, then call mgr.Answer). Agent B's task
+            description makes this explicit with a numbered step sequence.
+        - scenario: |-
+            G4 resume endpoint route conflict: `POST /api/interview/resume` might be parsed
+            by Go 1.22 ServeMux as matching `POST /api/interview/{runID}/...` patterns
+            if registered in the wrong order.
+          likelihood: low
+          impact: medium
+          mitigation: |-
+            The paths have different depths (`/api/interview/resume` vs
+            `/api/interview/{runID}/answer`), so no conflict exists. Agent B's task
+            notes this explicitly and instructs to verify placement.
+        - scenario: |-
+            G9 frontend phase labels: after replacing PHASES with PHASE_KEYS/PHASE_LABELS,
+            there may be additional render locations in InterviewLauncher.tsx that still
+            reference the old PHASES constant.
+          likelihood: low
+          impact: low
+          mitigation: |-
+            Agent C's task instructs a grep for all PHASES usages. The component is small
+            (~440 lines). Agent should search for all occurrences of `PHASES` before
+            marking work complete.
+        - scenario: |-
+            G7 non-interactive preview suppression: the _confirm preview block (lines
+            111-114) is INSIDE the prompt block that gets wrapped. If Agent A wraps only
+            the inner prompt lines but leaves the preview outside, the preview will still
+            print in non-interactive mode.
+          likelihood: medium
+          impact: low
+          mitigation: |-
+            Agent A's task shows the exact wrapping structure including the _confirm
+            preview block. The interface contract makes clear the entire prompt block
+            (including preview) is conditionally gated on !nonInteractive.
+        - scenario: |-
+            scout-and-wave (protocol) has no Go module and no automated tests.
+            Agent D's changes cannot be verified with go test.
+          likelihood: high
+          impact: low
+          mitigation: |-
+            Agent D uses manual verification (grep counts, visual inspection). The
+            quality gates explicitly exclude build/test gates for the scout-and-wave repo.
+            Documentation-only wave — no compilation risk.
+critic_report:
+    verdict: PASS
+    agent_reviews:
+        A:
+            agent_id: A
+            verdict: PASS
+        B:
+            agent_id: B
+            verdict: PASS
+        C:
+            agent_id: C
+            verdict: PASS
+        D:
+            agent_id: D
+            verdict: PASS
+    summary: 'All four agent briefs verified against the codebase with no errors. Agent A: newID() at line 358 matches the UUID fix target; checkPhaseTransition at line 134 exists; CompileToRequirements at line 25 returns at line 111 with no existing Warnings section; nonInteractive variable is declared at line 34 and the prompt block (lines 111-124) is unguarded as described. Agent B: InterviewStartResponse type exists for reuse; serverCtx, broker.Publish, decodeJSON, respondError, respondJSON all confirmed; os and path/filepath are correctly identified as missing imports; the Interview layer route block is at line 297-301 and resume route will not conflict due to different path depths. Agent C: PHASES constant at line 33, findIndex at line 202, totalPhases at line 204, and PHASES.map at line 285 all match exactly; apiClient interview interface at lines 133-137 matches the described structure; check() helper exists at line 248 for use in resume implementation. Agent D: state-machine.md State Catalog at line 13, State Entry Actions at line 273, Canonical Allowed Transitions at line 394, and Primary Flow at line 33 all exist and lack INTERVIEWING entries; interview-mode.md Output Contract at line 119, Skip semantics at line 261, and LLM mode paragraph at line 263 confirm the insertion point for Navigation Commands.'
+    reviewed_at: "2026-03-25T19:29:49Z"
+    issue_count: 0
+state: COMPLETE

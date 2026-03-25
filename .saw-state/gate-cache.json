@@ -12,6 +12,18 @@
         "cached_at": "2026-03-19T22:59:13.851167-07:00"
       }
     },
+    "0bd32f81e82a4f2afd46517dae92f1b4": {
+      "test": {
+        "gate_type": "test",
+        "command": "go test ./pkg/api/...",
+        "passed": false,
+        "exit_code": 1,
+        "stdout": "FAIL\t./pkg/api/... [setup failed]\nFAIL\n",
+        "stderr": "# ./pkg/api/...\npattern ./pkg/api/...: directory prefix pkg/api does not contain main module or its selected dependencies\n",
+        "from_cache": true,
+        "cached_at": "2026-03-25T11:55:48.44883-07:00"
+      }
+    },
     "0e2201fffdd264019c0672248610fa89": {
       "build": {
         "gate_type": "build",
@@ -84,6 +96,18 @@
         "cached_at": "2026-03-19T22:53:59.123631-07:00"
       }
     },
+    "46ece866faebf8706d97809e15beca21": {
+      "test": {
+        "gate_type": "test",
+        "command": "go test ./cmd/sawtools/... ./pkg/protocol/...",
+        "passed": false,
+        "exit_code": 1,
+        "stdout": "FAIL\t./cmd/sawtools/... [setup failed]\nFAIL\t./pkg/protocol/... [setup failed]\nFAIL\n",
+        "stderr": "# ./cmd/sawtools/...\npattern ./cmd/sawtools/...: directory prefix cmd/sawtools does not contain main module or its selected dependencies\n# ./pkg/protocol/...\npattern ./pkg/protocol/...: directory prefix pkg/protocol does not contain main module or its selected dependencies\n",
+        "from_cache": true,
+        "cached_at": "2026-03-24T18:24:53.73513-07:00"
+      }
+    },
     "551686224e9f0bcc549d98408d761d60": {
       "lint": {
         "gate_type": "lint",
@@ -128,6 +152,30 @@
         "cached_at": "2026-03-19T14:22:47.446852-07:00"
       }
     },
+    "65c06c6ef0abe752ed47b33805afe516": {
+      "test": {
+        "gate_type": "test",
+        "command": "go test ./cmd/sawtools/... ./pkg/protocol/...",
+        "passed": false,
+        "exit_code": 1,
+        "stdout": "FAIL\t./cmd/sawtools/... [setup failed]\nFAIL\t./pkg/protocol/... [setup failed]\nFAIL\n",
+        "stderr": "# ./cmd/sawtools/...\npattern ./cmd/sawtools/...: directory prefix cmd/sawtools does not contain main module or its selected dependencies\n# ./pkg/protocol/...\npattern ./pkg/protocol/...: directory prefix pkg/protocol does not contain main module or its selected dependencies\n",
+        "from_cache": true,
+        "cached_at": "2026-03-24T18:25:30.20756-07:00"
+      }
+    },
+    "6762a7f997d0b6cb68a9a29fb8f43934": {
+      "build": {
+        "gate_type": "build",
+        "command": "go build ./...",
+        "passed": false,
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "pattern ./...: directory prefix . does not contain main module or its selected dependencies\n",
+        "from_cache": true,
+        "cached_at": "2026-03-24T18:25:29.990504-07:00"
+      }
+    },
     "7857f328aafde3d74442aee590f6296b": {
       "build": {
         "gate_type": "build",
@@ -170,6 +218,18 @@
         "stderr": "pattern ./...: directory prefix . does not contain main module or its selected dependencies\n",
         "from_cache": true,
         "cached_at": "2026-03-23T12:54:48.741364-07:00"
+      }
+    },
+    "7f4f40583abf1eaaf9707bf1535a5d64": {
+      "lint": {
+        "gate_type": "lint",
+        "command": "go vet ./...",
+        "passed": false,
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "pattern ./...: directory prefix . does not contain main module or its selected dependencies\n",
+        "from_cache": true,
+        "cached_at": "2026-03-24T18:25:30.105608-07:00"
       }
     },
     "812e1e4494f96665797a4821c27fba6a": {
@@ -376,6 +436,18 @@
         "cached_at": "2026-03-20T22:33:41.414291-07:00"
       }
     },
+    "ab0d71f240c0f43db1a14ee4ab2f41c6": {
+      "lint": {
+        "gate_type": "lint",
+        "command": "go vet ./...",
+        "passed": false,
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "pattern ./...: directory prefix . does not contain main module or its selected dependencies\n",
+        "from_cache": true,
+        "cached_at": "2026-03-24T18:24:53.58753-07:00"
+      }
+    },
     "acc0a369ef4797bfe8f96a1c0ab9a050": {
       "build": {
         "gate_type": "build",
@@ -442,6 +514,18 @@
         "cached_at": "2026-03-20T22:33:42.465049-07:00"
       }
     },
+    "bb22f12538f59b0b90b1a80ad3412c4d": {
+      "lint": {
+        "gate_type": "lint",
+        "command": "go vet ./...",
+        "passed": false,
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "pattern ./...: directory prefix . does not contain main module or its selected dependencies\n",
+        "from_cache": true,
+        "cached_at": "2026-03-25T11:55:48.295607-07:00"
+      }
+    },
     "bb99d546b653b59437f989c85f0ab41b": {
       "test": {
         "gate_type": "test",
@@ -500,6 +584,18 @@
         "stderr": "# ./...\npattern ./...: directory prefix . does not contain main module or its selected dependencies\n",
         "from_cache": true,
         "cached_at": "2026-03-23T01:41:40.461886-07:00"
+      }
+    },
+    "c88e9b52edb1b4e3a7c77b2b4ad733ea": {
+      "build": {
+        "gate_type": "build",
+        "command": "go build ./...",
+        "passed": false,
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "pattern ./...: directory prefix . does not contain main module or its selected dependencies\n",
+        "from_cache": true,
+        "cached_at": "2026-03-25T11:55:48.153918-07:00"
       }
     },
     "cc41b6e007a589a4587eee20c37df78a": {
@@ -712,6 +808,18 @@
         "stderr": "bash: implementations/claude-code/hooks/validate_agent_completion: No such file or directory\n",
         "from_cache": true,
         "cached_at": "2026-03-23T18:10:40.462159-07:00"
+      }
+    },
+    "e4e6b395e99072b76b6a04a65acf37ec": {
+      "build": {
+        "gate_type": "build",
+        "command": "go build ./...",
+        "passed": false,
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "pattern ./...: directory prefix . does not contain main module or its selected dependencies\n",
+        "from_cache": true,
+        "cached_at": "2026-03-24T18:24:53.436573-07:00"
       }
     },
     "e536eb984bb965fbc3ccd42cffd619f2": {

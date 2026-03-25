@@ -1,0 +1,642 @@
+completion_date: "2026-03-25"
+title: File Browser Cross-Repo 404 Fix
+feature_slug: file-browser-cross-repo
+verdict: SUITABLE
+suitability_assessment: |-
+    File decomposition: 5 distinct files change across 3 repos with clean disjoint ownership.
+    - Agent A (scout-and-wave-web): pkg/api/files_handler.go — new resolve endpoint
+    - Agent B (scout-and-wave-web): pkg/api/server.go — register the new route
+    - Agent C (scout-and-wave-web): web/src/lib/apiClient.ts + web/src/api.ts + web/src/types/filebrowser.ts — client method
+    - Agent D (scout-and-wave-web): web/src/components/review/FileOwnershipPanel.tsx — use resolve in handleViewFile
+    - Agent E (scout-and-wave): implementations/claude-code/prompts/agents/scout.md — prompt guidance
+
+    Investigation-first items: Root cause is fully understood (entry.repo is empty because the
+    Scout agent doesn't tag file ownership entries when the IMPL doc repo differs from the code
+    repo). No investigation needed before implementation.
+
+    Interface discoverability: The resolve endpoint response type is fully specifiable now.
+    Frontend call contract is clear. All cross-agent interfaces can be written before wave start.
+
+    Pre-implementation status: Bug is confirmed TODO. The resolve endpoint does not exist.
+    The frontend handleViewFile fallback (entry.repo || impl.repo) is already present but
+    insufficient — it silently uses the wrong repo when entry.repo is empty.
+
+    Parallelization value: Agent A and Agent E are fully independent. Agent C is independent
+    of A/B. Agent D depends on A (needs the resolve endpoint contract) and C (needs the new
+    client method). Agent B depends on A. Structured as Wave 1 (A, C, E in parallel) and
+    Wave 2 (B, D). Go build/test cycles are moderate (~10-15s). Clear speedup over sequential.
+
+    IMPL-saw-init.yaml fix: The 3 file_ownership entries in
+    docs/IMPL/IMPL-saw-init.yaml (in the scout-and-wave repo) need repo: scout-and-wave-go
+    added. This is a direct edit done as a pre-wave manual step, not a wave agent task.
+    The brief below documents it for the scout to apply immediately.
+
+    Estimated times:
+    - Scout phase: ~15 min
+    - Agent execution: Wave 1 ~15 min (3 parallel agents), Wave 2 ~15 min (2 parallel agents)
+    - Merge and verification: ~5 min
+    Total SAW time: ~35 min
+
+    Sequential baseline: ~50 min (5 agents x ~10 min each)
+    Time savings: ~15 min (30% faster)
+
+    Recommendation: Clear speedup from Wave 1 parallelism. Proceed as SUITABLE.
+test_command: go test ./...
+lint_command: go vet ./...
+file_ownership:
+    - file: pkg/api/files_handler.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-web
+    - file: web/src/lib/apiClient.ts
+      agent: C
+      wave: 1
+      action: modify
+      repo: scout-and-wave-web
+    - file: web/src/api.ts
+      agent: C
+      wave: 1
+      action: modify
+      repo: scout-and-wave-web
+    - file: web/src/types/filebrowser.ts
+      agent: C
+      wave: 1
+      action: modify
+      repo: scout-and-wave-web
+    - file: implementations/claude-code/prompts/agents/scout.md
+      agent: E
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: pkg/api/server.go
+      agent: B
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+      repo: scout-and-wave-web
+    - file: web/src/components/review/FileOwnershipPanel.tsx
+      agent: D
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+        - C
+      repo: scout-and-wave-web
+interface_contracts:
+    - name: FileResolveResponse
+      description: |-
+        JSON response type for GET /api/files/resolve. Returned when a file
+        path is searched across all configured repos.
+      definition: |
+        // Go (pkg/api/files_handler.go)
+        type FileResolveResponse struct {
+            Repo  string `json:"repo"`
+            Path  string `json:"path"`
+            Found bool   `json:"found"`
+        }
+
+        // TypeScript (web/src/types/filebrowser.ts)
+        export interface FileResolveResponse {
+          repo: string
+          path: string
+          found: boolean
+        }
+      location: pkg/api/files_handler.go
+    - name: handleFilesResolve
+      description: |-
+        New HTTP handler for GET /api/files/resolve?path=<relpath>.
+        Iterates all configured repos via s.getConfiguredRepos() and returns
+        the first repo where os.Stat succeeds for the given relative path.
+        Returns found: false if no repo contains the file.
+      definition: |
+        func (s *Server) handleFilesResolve(w http.ResponseWriter, r *http.Request)
+      location: pkg/api/files_handler.go
+    - name: sawClient.files.resolve
+      description: |-
+        New method in the files namespace of apiClient.ts.
+        Calls GET /api/files/resolve?path=<path> and returns FileResolveResponse.
+      definition: |
+        resolve(path: string): Promise<FileResolveResponse>
+      location: web/src/lib/apiClient.ts
+    - name: fetchResolveFile
+      description: |-
+        Thin wrapper in api.ts over sawClient.files.resolve. Follows the same
+        pattern as fetchFileTree and fetchFileContent.
+      definition: |
+        export async function fetchResolveFile(path: string): Promise<FileResolveResponse>
+      location: web/src/api.ts
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |-
+            ## Context
+
+            You are fixing a file browser 404 bug in the Scout-and-Wave web app.
+            When a user clicks the eye icon on a file in the File Ownership table,
+            the request uses `impl.repo` (the repo that *contains* the IMPL doc),
+            but the owned files may live in a *different* repo. The result is a 404.
+
+            Your task is to add a new `/api/files/resolve` endpoint to
+            `pkg/api/files_handler.go` that searches all configured repos for a
+            file by relative path and returns which repo contains it.
+
+            ## What to implement
+
+            ### File: pkg/api/files_handler.go (scout-and-wave-web repo)
+
+            **Step 1: Add FileResolveResponse struct** near the other response types
+            at the top of the file (after FileContentResponse, before GitFileStatus):
+
+            ```go
+            // FileResolveResponse is the JSON body for GET /api/files/resolve.
+            type FileResolveResponse struct {
+                Repo  string `json:"repo"`
+                Path  string `json:"path"`
+                Found bool   `json:"found"`
+            }
+            ```
+
+            **Step 2: Add handleFilesResolve handler** at the end of the file,
+            after handleFilesStatus and before collectGitStatus:
+
+            ```go
+            // handleFilesResolve serves GET /api/files/resolve?path=<relpath>
+            // Searches all configured repos for a file matching the given relative path.
+            // Returns {"repo": "...", "path": "...", "found": true} on success,
+            // or {"found": false} if the file is not found in any repo.
+            func (s *Server) handleFilesResolve(w http.ResponseWriter, r *http.Request) {
+                relPath := r.URL.Query().Get("path")
+                if relPath == "" {
+                    http.Error(w, "missing path query param", http.StatusBadRequest)
+                    return
+                }
+
+                for _, repo := range s.getConfiguredRepos() {
+                    absPath, ok := safeRepoPath(repo.Path, relPath)
+                    if !ok {
+                        continue
+                    }
+                    if _, err := os.Stat(absPath); err == nil {
+                        respondJSON(w, http.StatusOK, FileResolveResponse{
+                            Repo:  repo.Name,
+                            Path:  relPath,
+                            Found: true,
+                        })
+                        return
+                    }
+                }
+
+                respondJSON(w, http.StatusOK, FileResolveResponse{Found: false})
+            }
+            ```
+
+            No new imports are needed — `os`, `net/http`, and the existing helpers
+            (`safeRepoPath`, `respondJSON`, `s.getConfiguredRepos`) are all already
+            in scope in this file.
+
+            ## Verification gate
+
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-web
+            go build ./pkg/api/...
+            go vet ./pkg/api/...
+            go test ./pkg/api/... -run TestFilesResolve -v
+            ```
+
+            If no TestFilesResolve test exists yet, the build and vet gates are sufficient
+            for this agent. Agent D's integration test will exercise the full flow.
+          files:
+            - pkg/api/files_handler.go
+        - id: C
+          task: |-
+            ## Context
+
+            You are fixing a file browser 404 bug in the Scout-and-Wave web app.
+            The fix requires a new API client method and a new exported function
+            that the frontend will use to resolve which repo contains a given file.
+
+            Your task is to add the resolve method to 3 TypeScript files.
+
+            ## What to implement
+
+            ### File: web/src/types/filebrowser.ts (scout-and-wave-web repo)
+
+            Add a new exported interface after `GitStatusResponse`:
+
+            ```typescript
+            export interface FileResolveResponse {
+              repo: string
+              path: string
+              found: boolean
+            }
+            ```
+
+            ### File: web/src/lib/apiClient.ts (scout-and-wave-web repo)
+
+            Two changes:
+
+            **1. Update the `files` interface** (around line 205-210) to add `resolve`:
+
+            ```typescript
+            files: {
+              tree(repo: string, path?: string): Promise<FileTreeResponse>
+              read(repo: string, path: string): Promise<FileContentResponse>
+              diff(repo: string, path: string): Promise<{ repo: string; path: string; diff: string }>
+              gitStatus(repo: string): Promise<GitStatusResponse>
+              resolve(path: string): Promise<FileResolveResponse>
+            }
+            ```
+
+            **2. Add the import** for `FileResolveResponse` in the filebrowser import block
+            (around line 46-51):
+
+            ```typescript
+            import type {
+              FileTreeResponse,
+              FileContentResponse,
+              GitStatusResponse,
+              FileResolveResponse,
+            } from '../types/filebrowser'
+            ```
+
+            **3. Add the implementation** in the `files:` object inside `createHttpClient`
+            (around line 894-924), after `gitStatus`:
+
+            ```typescript
+            async resolve(path: string): Promise<FileResolveResponse> {
+              const params = new URLSearchParams({ path })
+              const r = await fetch(`/api/files/resolve?${params}`)
+              await check(r)
+              return r.json() as Promise<FileResolveResponse>
+            },
+            ```
+
+            ### File: web/src/api.ts (scout-and-wave-web repo)
+
+            Add a new export after `fetchGitStatus` (around line 197-199):
+
+            ```typescript
+            export async function fetchResolveFile(path: string): Promise<FileResolveResponse> {
+              return sawClient.files.resolve(path)
+            }
+            ```
+
+            Also add `FileResolveResponse` to the filebrowser import at the top of the file
+            (around line 7):
+
+            ```typescript
+            import type { FileTreeResponse, FileContentResponse, GitStatusResponse, FileResolveResponse } from './types/filebrowser'
+            ```
+
+            ## Verification gate
+
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-web/web
+            npx tsc --noEmit
+            ```
+
+            TypeScript must compile without errors. No new tests are required for
+            this agent — Agent D's component tests will exercise the resolve path.
+          files:
+            - web/src/lib/apiClient.ts
+            - web/src/api.ts
+            - web/src/types/filebrowser.ts
+        - id: E
+          task: |-
+            ## Context
+
+            You are updating the Scout agent prompt to ensure future IMPL docs
+            correctly tag cross-repo file ownership entries with `repo:` fields.
+
+            The root cause of the file browser 404 bug is that the Scout agent
+            doesn't set `repo:` on file_ownership entries when the IMPL doc's
+            containing repo differs from the repo where the file lives. The existing
+            guidance in step 7 (Assign file ownership) covers cross-repository work
+            but may not be prominent enough.
+
+            ## What to implement
+
+            ### File: implementations/claude-code/prompts/agents/scout.md (scout-and-wave repo)
+
+            Locate step 7 "Assign file ownership and agent IDs." in the scout prompt.
+            The section currently contains this paragraph:
+
+            > **Cross-repository file ownership:** If the work spans multiple repositories,
+            > add a `repo:` field to each file ownership entry specifying which repository
+            > the file belongs to. Use the repository name (not the full path). For files
+            > outside any repository (e.g., `~/.local/bin/sawtools`), use `repo: system`.
+
+            Immediately after that paragraph (before the "Single-repository work:" paragraph),
+            insert the following new paragraph:
+
+            > **IMPORTANT — mismatched repos:** When the IMPL doc lives in repository X but
+            > the owned files live in repository Y (common when the protocol repo contains
+            > IMPL docs for work that lands in the Go SDK or web app repos), you MUST set
+            > `repo:` on every file ownership entry. Even if you believe all files are in
+            > one repo, check: does the IMPL doc's location (e.g. `scout-and-wave/docs/IMPL/`)
+            > match the repo where the files will be created or modified? If not, tag every
+            > entry with its correct repo name. Omitting `repo:` in this scenario causes the
+            > file browser to 404 when users try to view owned files.
+
+            The insertion point is between:
+            - "...use `repo: system`." (end of cross-repo paragraph)
+            - "**Single-repository work:**..." (start of single-repo paragraph)
+
+            Do not modify any other part of the file.
+
+            ## Verification gate
+
+            ```
+            grep -n "IMPORTANT — mismatched repos" /Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/prompts/agents/scout.md
+            ```
+
+            This must return at least one match. Visually verify the paragraph
+            is inserted between the cross-repo and single-repo paragraphs.
+          files:
+            - implementations/claude-code/prompts/agents/scout.md
+      base_commit: 1ae0b7916658f0220cac58d4ac98ed757e734b1e
+    - number: 2
+      agents:
+        - id: B
+          task: |-
+            ## Context
+
+            Agent A has added `handleFilesResolve` to `pkg/api/files_handler.go`.
+            Your task is to register the new route in `server.go` so it is reachable
+            at `GET /api/files/resolve`.
+
+            ## What to implement
+
+            ### File: pkg/api/server.go (scout-and-wave-web repo)
+
+            Locate the File browser API route block (around lines 251-255):
+
+            ```go
+            // File browser API — tree, read, diff, status
+            s.mux.HandleFunc("GET /api/files/tree", s.handleFilesTree)
+            s.mux.HandleFunc("GET /api/files/read", s.handleFilesRead)
+            s.mux.HandleFunc("GET /api/files/diff", s.handleFilesDiff)
+            s.mux.HandleFunc("GET /api/files/status", s.handleFilesStatus)
+            ```
+
+            Add the resolve route immediately after the status route:
+
+            ```go
+            s.mux.HandleFunc("GET /api/files/resolve", s.handleFilesResolve)
+            ```
+
+            The comment block should also be updated to reflect the new endpoint:
+
+            ```go
+            // File browser API — tree, read, diff, status, resolve
+            ```
+
+            Do NOT modify any other part of server.go.
+
+            ## Verification gate
+
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-web
+            go build ./...
+            go vet ./pkg/api/...
+            curl -s "http://localhost:7432/api/files/resolve?path=cmd/sawtools/main.go" | head -c 200
+            ```
+
+            The curl command is informational only (server may not be running in CI).
+            Build and vet must pass cleanly.
+          files:
+            - pkg/api/server.go
+          dependencies:
+            - A
+        - id: D
+          task: |-
+            ## Context
+
+            Agent A has added the `/api/files/resolve` endpoint (backend).
+            Agent C has added `sawClient.files.resolve(path)` and `fetchResolveFile(path)`
+            (frontend client).
+
+            Your task is to update `FileOwnershipPanel.tsx` so that when `entry.repo`
+            is empty, the eye icon click resolves the correct repo before opening
+            the file modal.
+
+            ## What to implement
+
+            ### File: web/src/components/review/FileOwnershipPanel.tsx (scout-and-wave-web repo)
+
+            **Step 1: Add the import** for `fetchResolveFile` at the top of the file.
+            The existing imports include things from `../../types` and `../FileBrowser/FileModal`.
+            Add the api import:
+
+            ```typescript
+            import { fetchResolveFile } from '../../api'
+            ```
+
+            **Step 2: Make `handleViewFile` async and add resolve logic.**
+
+            The current implementation (lines 41-48) is:
+
+            ```typescript
+            function handleViewFile(entry: FileOwnershipEntry) {
+              const repoName = entry.repo || impl.repo || (repos.length > 0 ? repos[0].name : '')
+              setModalState({ open: true, filePath: entry.file, repo: repoName })
+            }
+            ```
+
+            Replace it with:
+
+            ```typescript
+            async function handleViewFile(entry: FileOwnershipEntry) {
+              // If entry has an explicit repo tag, use it directly.
+              if (entry.repo) {
+                setModalState({ open: true, filePath: entry.file, repo: entry.repo })
+                return
+              }
+
+              // Open the modal immediately with the best-available repo so the UI
+              // is responsive. Then resolve the real repo in the background.
+              const fallbackRepo = impl.repo || (repos.length > 0 ? repos[0].name : '')
+              setModalState({ open: true, filePath: entry.file, repo: fallbackRepo })
+
+              try {
+                const resolved = await fetchResolveFile(entry.file)
+                if (resolved.found && resolved.repo !== fallbackRepo) {
+                  // Update the modal with the correct repo.
+                  setModalState(prev =>
+                    prev.open ? { ...prev, repo: resolved.repo } : prev
+                  )
+                }
+              } catch {
+                // Resolve failed — keep the fallback repo. Not critical.
+              }
+            }
+            ```
+
+            **Step 3: Update the onClick handler** to handle the async function.
+            The `renderViewButton` function calls `onClick={() => handleViewFile(entry)}`.
+            Since `handleViewFile` is now async, the void result should be explicitly
+            discarded to prevent unhandled promise warnings:
+
+            ```typescript
+            onClick={() => { void handleViewFile(entry) }}
+            ```
+
+            Locate the `renderViewButton` function (around line 55-68) and update
+            the `onClick` attribute from:
+            ```typescript
+            onClick={() => handleViewFile(entry)}
+            ```
+            to:
+            ```typescript
+            onClick={() => { void handleViewFile(entry) }}
+            ```
+
+            ## Verification gate
+
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-web/web
+            npx tsc --noEmit
+            ```
+
+            TypeScript must compile without errors. Visually verify:
+            1. The import for `fetchResolveFile` is present at the top.
+            2. `handleViewFile` is `async`.
+            3. The `onClick` uses `void handleViewFile(entry)`.
+          files:
+            - web/src/components/review/FileOwnershipPanel.tsx
+          dependencies:
+            - A
+            - C
+      base_commit: 8ed066a12383890b3fe47db75bde22b740bd5a00
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./...
+          required: true
+          repo: scout-and-wave-web
+        - type: lint
+          command: go vet ./...
+          required: true
+          repo: scout-and-wave-web
+        - type: test
+          command: go test ./pkg/api/...
+          required: true
+          repo: scout-and-wave-web
+completion_reports:
+    A:
+        status: complete
+        branch: saw/file-browser-cross-repo/wave1-agent-A
+        commit: 19c8d12
+        files_changed:
+            - pkg/api/files_handler.go
+        verification: PASS
+    B:
+        status: complete
+        branch: saw/file-browser-cross-repo/wave2-agent-B
+        commit: a68bd5b
+        files_changed:
+            - pkg/api/server.go
+        verification: PASS
+    C:
+        status: complete
+        branch: saw/file-browser-cross-repo/wave1-agent-C
+        commit: c13dbea
+        files_changed:
+            - web/src/types/filebrowser.ts
+            - web/src/lib/apiClient.ts
+            - web/src/api.ts
+        verification: PASS
+    D:
+        status: complete
+        branch: saw/file-browser-cross-repo/wave2-agent-D
+        commit: 65bf84a
+        files_changed:
+            - web/src/components/review/FileOwnershipPanel.tsx
+        verification: PASS
+    E:
+        status: complete
+        branch: saw/file-browser-cross-repo/wave1-agent-E
+        commit: 490f204
+        files_changed:
+            - implementations/claude-code/prompts/agents/scout.md
+        verification: 'PASS: grep found IMPORTANT mismatched repos paragraph at line 444, correctly positioned between cross-repo and single-repo paragraphs'
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: |-
+            The resolve endpoint iterates all configured repos and returns the first
+            match. If two repos contain a file at the same relative path (e.g. both
+            have `pkg/config/config.go`), the first repo in the config wins, which
+            may not be the intended one.
+          likelihood: low
+          impact: low
+          mitigation: |-
+            This edge case is rare in practice (repos tend to have distinct directory
+            structures). The file browser's existing behavior also has no way to
+            distinguish ambiguous paths. The fix still improves over the current
+            hard 404 for the common cross-repo case.
+        - scenario: |-
+            Agent D's async `handleViewFile` opens the modal with a fallback repo,
+            then updates it if resolve returns a different repo. If the user clicks
+            into the file tree before the resolve completes, the tree loads for the
+            wrong repo before switching. This could appear as a flash of wrong content.
+          likelihood: medium
+          impact: low
+          mitigation: |-
+            The resolve call is fast (just os.Stat across local filesystem paths).
+            In practice the flash will be sub-100ms. The alternative (showing a
+            loading spinner before opening) would make the UI feel sluggish. The
+            approach in the brief (open immediately, update on resolve) is the
+            correct UX tradeoff. If the flash becomes a user complaint, a loading
+            state can be added in a follow-up.
+        - scenario: |-
+            Agent C modifies apiClient.ts, which is a large file (>900 lines). The
+            TypeScript interface update (adding `resolve` to the `files:` interface
+            and the implementation in the `createHttpClient` function body) are in
+            two separate locations in the file. If the agent only updates one
+            location, the TypeScript compiler will catch the mismatch.
+          likelihood: low
+          impact: low
+          mitigation: |-
+            Agent C's verification gate (`npx tsc --noEmit`) must pass. TypeScript
+            will error if the interface declares `resolve` but the implementation
+            object does not provide it (or vice versa). This is caught before merge.
+        - scenario: |-
+            The IMPL-saw-init.yaml file in the scout-and-wave repo needs `repo: scout-and-wave-go`
+            added to its 3 file_ownership entries. This is noted as a manual pre-wave
+            step in the suitability assessment. If it is not done before waves run,
+            the existing IMPL doc continues to have the bug but the new feature
+            resolves it dynamically via the endpoint.
+          likelihood: low
+          impact: low
+          mitigation: |-
+            The manual edit is a 3-line YAML change. Document it clearly so the
+            operator applies it before or alongside the wave run. Even if skipped,
+            the Layer 1+2 fix (resolve endpoint + frontend fallback) will fix the
+            404 for IMPL-saw-init.yaml automatically at runtime.
+critic_report:
+    verdict: PASS
+    agent_reviews:
+        A:
+            agent_id: A
+            verdict: PASS
+        B:
+            agent_id: B
+            verdict: PASS
+        C:
+            agent_id: C
+            verdict: PASS
+        D:
+            agent_id: D
+            verdict: PASS
+        E:
+            agent_id: E
+            verdict: PASS
+    summary: 'All five agent briefs verified accurately against the codebase. Agent A: safeRepoPath and respondJSON are confirmed present in files_handler.go; s.getConfiguredRepos() is confirmed in server.go; the struct insertion point (after FileContentResponse at line 34, before GitFileStatus at line 37) and handler insertion point (after handleFilesStatus ending at line 397, before collectGitStatus starting at line 401) are both accurate. Agent B: the File browser route block at lines 251-255 matches the brief verbatim (tree, read, diff, status in that order); the mux.HandleFunc pattern is correct. Agent C: the files interface at lines 205-210 of apiClient.ts is confirmed (tree, read, diff, gitStatus with no resolve yet); the implementation block ends at line 924 and the agent inserts before that closing brace; the filebrowser import block at lines 46-50 is confirmed; api.ts fetchGitStatus wrapper ends at line 199 matching the stated insertion point. Agent D: handleViewFile at lines 41-48 and renderViewButton onClick at line 63 both match the brief exactly; the fetchResolveFile import from ''../../api'' is the correct relative path. Agent E: scout.md has the cross-repo paragraph at line 442 ending with ''repo: system'' and the single-repo paragraph at line 444; the insertion gap between them is confirmed and the new paragraph fits cleanly there. No errors or warnings found.'
+    reviewed_at: "2026-03-25T18:45:58Z"
+    issue_count: 0
+state: COMPLETE

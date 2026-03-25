@@ -2,6 +2,8 @@
 
 **Version:** 0.21.0
 
+> **See also:** `execution-rules.md` (v0.20.0) — numbered execution rules (E1–E42) referenced throughout these procedures.
+
 This document defines the operational procedures executed by the Orchestrator and other participants: suitability assessment, scaffold materialization, wave execution, and merge operations.
 
 ---
@@ -164,10 +166,12 @@ Scaffold files are committed to HEAD before worktrees are created. Once worktree
 
 ### Phase 1: Pre-Launch Verification
 
+0a. **Resume detection (pre-flight):** Before all other pre-flight steps, `prepare-wave` runs `resume.Detect` to identify orphaned worktrees from crashed or interrupted previous runs of any SAW session in this repo. If orphaned worktrees are found, a warning is emitted (step `resume_detection: warning`) but execution continues — this is distinct from the stale worktree cleanup in E4a, which removes worktrees for the current IMPL slug.
+
 0. **Baseline verification (E21A):** For multi-agent waves with quality gates defined in the IMPL doc:
-   - Run `sawtools run-gates "<manifest-path>" --baseline` to execute all quality gate commands against current HEAD.
+   - `prepare-wave` runs baseline gate verification automatically as part of its pre-flight checks. There is no standalone `--baseline` flag on `run-gates`; this step is internal to `prepare-wave`.
    - If all required gates pass (or no gates defined): proceed to Step 1.
-   - If any required gate fails: Protocol stop. Report `baseline_verification_failed` to human with the failing gate commands and their output. Do not create worktrees. The human must fix the codebase or gate configuration before re-running `prepare-wave`.
+   - If any required gate fails: Protocol stop. `prepare-wave` reports `baseline_verification_failed` with the failing gate commands and their output. Do not proceed. The human must fix the codebase or gate configuration before re-running `prepare-wave`.
    - E21A is a no-op for solo waves (Step 3 solo wave exception applies; skip this step if the wave has exactly one agent).
 
 1. **Ownership verification (E3):** Orchestrator scans wave's file ownership table in IMPL doc
@@ -227,11 +231,19 @@ Scaffold files are committed to HEAD before worktrees are created. Once worktree
 
    **Key constraint:** Prefer agents that own files in exactly one repo. If an agent must own files in multiple repos, provide explicit absolute paths for each repo's worktree in Field 0. Keep cross-repo agent ownership minimal — single-repo agents have cleaner isolation boundaries.
 
+3. **Repo match validation:** `prepare-wave` calls `ValidateRepoMatch` to verify the IMPL doc's declared repo (via `repo:` fields in `file_ownership` and `saw.config.json`) matches the working directory passed as `--repo-dir`. A mismatch (e.g., running prepare-wave for a saw-web IMPL while in the saw-engine directory) produces a blocking error with a message referencing `saw.config.json`.
+
+4. **File existence validation:** `prepare-wave` calls `ValidateFileExistenceMultiRepo` to check that all `action: modify` files exist in their resolved repos. Missing files produce non-blocking warnings, with one exception: if ALL `action: modify` files are absent, `prepare-wave` emits `E16_REPO_MISMATCH_SUSPECTED` and exits with a blocking error — this pattern indicates the IMPL targets a different repository than the one being used.
+
 ### Phase 2: Worktree Creation
 
-**Solo wave exception:** If wave contains exactly one agent, skip worktree creation. Agent runs on main branch directly. Proceed to Phase 3.
+**Solo wave exception:** If wave contains exactly one agent, do NOT use `prepare-wave` — it always creates worktrees regardless of agent count. Instead, run:
+```bash
+sawtools prepare-agent "<manifest-path>" --wave <N> --agent <ID> --repo-dir "<repo-path>" --no-worktree
+```
+The agent runs on the main branch directly. `finalize-wave` auto-detects that no worktrees exist and skips VerifyCommits and MergeAgents automatically. Proceed to Phase 3.
 
-1. **Create worktrees:** For each agent in wave (excluding solo waves):
+1. **Create worktrees:** For each agent in multi-agent waves (2+ agents):
    ```
    git worktree add .claude/worktrees/saw/{slug}/wave{N}-agent-{ID} -b saw/{slug}/wave{N}-agent-{ID}
    ```
@@ -239,17 +251,16 @@ Scaffold files are committed to HEAD before worktrees are created. Once worktree
    - Branch name: `saw/{slug}/wave{N}-agent-{ID}` (matches worktree name)
    - All worktrees branch from current HEAD (includes committed scaffolds from Scaffold Agent)
 
-2. **Install pre-commit hook (Layer 0 isolation):** Installed automatically by `sawtools create-worktrees`
-   - Hook embedded in Go SDK (`pkg/worktree/manager.go`), written programmatically to each worktree
-   - Blocks commits to main during active waves
-   - Provides instructive error if agent attempts to commit to main
-   - Orchestrator bypasses via `SAW_ALLOW_MAIN_COMMIT=1` for legitimate main commits
+2. **Install pre-commit hooks:** Two hooks are installed during wave setup:
+   - **Isolation hook (Layer 0):** Installed per-worktree by `sawtools create-worktrees` (via `internal/git/commands.go`). Blocks commits to main/master unless `SAW_ALLOW_MAIN_COMMIT=1` is set. Orchestrator bypasses this for legitimate main commits.
+   - **Quality gate hook (M4):** Installed to the project root by `prepare-wave` (via `sawtools install-hooks`). Runs `sawtools pre-commit-check` on every commit to enforce quality gates inline.
+   - Note: The `pkg/orchestrator/` programmatic path installs a simplified isolation hook variant (`pkg/worktree/manager.go`) — the CLI path above is authoritative for `sawtools`-based orchestration.
 
 ### Phase 3: Agent Launch (E1: Background Execution)
 
 1. **Launch agents in parallel:** For each agent in wave:
    - Orchestrator launches agent asynchronously (background execution, non-blocking)
-   - Construct per-agent context payload (E23): extract from the IMPL doc the agent's 9-field section + `## Interface Contracts` + `## File Ownership` table + `## Scaffolds` + `## Quality Gates` + absolute IMPL doc path. Pass assembled payload as the `prompt` parameter.
+   - Construct per-agent context payload (E23): extract from the IMPL doc the agent's 9-field section (Fields 0–8) + `## Interface Contracts` + `## File Ownership` table + `## Scaffolds` + `## Quality Gates` + absolute IMPL doc path. Pass assembled payload as the `prompt` parameter.
    - Agent receives extracted payload — does not read the full IMPL doc for instructions. Writes completion report to the provided IMPL doc path (I4, I5).
    - **E1 requirement:** All launches must be non-blocking. Blocking on one agent before launching the next eliminates parallelism (protocol violation).
 
@@ -304,8 +315,8 @@ Scaffold files are committed to HEAD before worktrees are created. Once worktree
 
 4. **E20: Stub detection.** After all agents complete:
    - Collect union of all `files_changed` and `files_created` from completion reports
-   - Run `bash "${CLAUDE_SKILL_DIR}/scripts/scan-stubs.sh" {file1} {file2} ...`
-   - Append output to IMPL doc under `## Stub Report — Wave {N}` (exit code is always 0 — informational only)
+   - Run `sawtools scan-stubs --append-impl "<manifest-path>" --wave {N}` (exit code is always 0 — informational only)
+   - **Note:** `finalize-wave` runs this automatically as step 2; no manual invocation needed when using `finalize-wave`
    - Surface stubs at the review checkpoint; they do not automatically block merge
 
 5. **E21: Quality gates.** If IMPL doc contains a `## Quality Gates` section:
@@ -313,17 +324,15 @@ Scaffold files are committed to HEAD before worktrees are created. Once worktree
    - Required gate failures → enter BLOCKED
    - Optional gate failures → warn only; do not block merge
 
-6. **E25: Validate integration.** After quality gates pass, scan for unconnected exports:
-   - Run `ValidateIntegration()` on the completed wave to produce an `IntegrationReport`
-   - If `report.Valid == true`: No integration gaps detected, proceed to Phase 6 (merge)
-   - If `report.Valid == false`: Integration gaps detected, emit `integration_gaps_detected` message to IMPL doc, proceed to step 7
+6. **E25: Validate integration (pre-merge).** After quality gates pass and before merge, scan for unconnected exports:
+   - `finalize-wave` runs `StepValidateIntegration()` automatically at step 3.5a (after gates, before merge). This produces an `IntegrationReport`.
+   - If `report.Valid == true`: No integration gaps detected, proceed to merge
+   - If `report.Valid == false`: Integration gaps detected. `finalize-wave` reports the gaps in its JSON output but does not automatically launch an Integration Agent.
 
-7. **E26: Launch Integration Agent (if gaps detected).** If E25 report exists AND `report.Valid == false`:
-   - Verify `integration_connectors` field exists in IMPL manifest
-   - Emit `integration_agent_started` message
-   - Launch Integration Agent with `RunIntegrationAgent()` — agent may only modify files listed in `integration_connectors`
-   - On success: emit `integration_agent_complete` message, proceed to Phase 6 (merge)
-   - On failure: emit `integration_agent_failed` message, enter BLOCKED
+7. **E26: Integration Agent (if gaps detected).** If E25 reports gaps:
+   - In programmatic/engine flows (`RunWaveFull`): the engine automatically launches an Integration Agent post-merge.
+   - In CLI orchestration (`finalize-wave` direct use): the Orchestrator must manually launch an Integration Agent after merge, constraining it to files listed in `integration_connectors`.
+   - On success: proceed; on failure: enter BLOCKED
 
 ### Phase 6: Failure Handling (If Blocked)
 
@@ -368,6 +377,8 @@ Scaffold files are committed to HEAD before worktrees are created. Once worktree
 
 ### Phase 2: Per-Agent Merge
 
+**Automated merge via `finalize-wave`:** The merge phase is handled by `sawtools finalize-wave <manifest> --wave N --repo-dir <path>`. For program-mode IMPL branch isolation (E28B), pass `--merge-target <branch>` to merge agent branches into the IMPL branch rather than main. Manual invocation of the individual git commands below is only needed when `finalize-wave` is unavailable or when the octopus merge fallback (Phase 0 above) is in use.
+
 **E11: Merge order is arbitrary within a valid wave.** Same-wave agents are independent by construction. If merge order appears to matter, wave structure is wrong.
 
 For each agent (in any order):
@@ -383,6 +394,14 @@ For each agent (in any order):
    - **Conflict on orchestrator-owned append-only files (configs, registries):** Expected. Resolve by accepting all additions.
 
 4. **Verify merge:** Check `git status` shows clean working tree
+
+### Phase 2.5: Integration Checklist Population (M5)
+
+After merge and before post-merge verification, `finalize-wave` automatically runs `protocol.PopulateIntegrationChecklist()` (step 4.5). This scans `file_ownership` for integration-requiring patterns (new API handlers, React components, CLI commands) and writes integration tasks to the manifest's `post_merge_checklist` field.
+
+- **Non-blocking:** Errors are logged to stderr but do not fail finalization
+- **Idempotent:** Appends new groups if `post_merge_checklist` already has items
+- **Manual invocation not needed:** This runs inside `finalize-wave` automatically
 
 ### Phase 3: Post-Merge Verification
 
@@ -406,18 +425,20 @@ For each agent (in any order):
 
 ### Phase 4: Worktree Cleanup
 
-1. **Remove worktrees:** For each agent:
-   ```
-   git worktree remove .claude/worktrees/saw/{slug}/wave{N}-agent-{ID}
-   ```
+Use `sawtools cleanup` — three modes available:
 
-2. **Delete branches (optional):**
-   ```
-   git branch -d saw/{slug}/wave{N}-agent-{ID}
-   ```
-   - Keep branches if history preservation desired
+```bash
+# Manifest-based (standard post-wave):
+sawtools cleanup "<manifest-path>" --wave <N> --repo-dir "<repo-path>"
 
-3. **Remove pre-commit hook:** Delete `.git/hooks/pre-commit` (or restore original if existed)
+# Slug-based (no manifest required):
+sawtools cleanup --slug <slug> --repo-dir "<repo-path>"
+
+# All stale across all slugs (recovery / maintenance):
+sawtools cleanup --all-stale --repo-dir "<repo-path>"
+```
+
+Add `--force` to skip safety checks for uncommitted changes. `finalize-wave` runs manifest-based cleanup automatically as its final step — manual invocation is only needed for recovery scenarios.
 
 ### Phase 5: Transition
 
@@ -463,7 +484,11 @@ For each agent (in any order):
 
 2. **Cleanup:** Remove any remaining worktrees or temporary artifacts
 
-3. **E15: Write completion marker.** Write `<!-- SAW:COMPLETE YYYY-MM-DD -->` (with the current ISO date) on the line immediately after the IMPL doc title (`# IMPL: ...`), then commit the update. This must be written before reporting completion to the user. If the marker is already present, do not overwrite it.
+3. **E15: Mark complete.** Run:
+   ```bash
+   sawtools mark-complete "<manifest-path>" --date "YYYY-MM-DD"
+   ```
+   This writes the `<!-- SAW:COMPLETE YYYY-MM-DD -->` marker, archives the manifest to `docs/IMPL/complete/`, and auto-cleans stale worktrees. It does NOT commit. If the marker is already present, do not re-run. Commit the archived file together with the E18 CONTEXT.md update in the next step.
 
 4. **E18: Update project memory.** Read `docs/CONTEXT.md` in the project root (create it if absent). Update the `features_completed` list with this feature slug and summary. Update `established_interfaces` if any new cross-cutting interfaces were defined. Update `architecture.description` and `architecture.modules` list if the feature introduced structural changes (see schema in `message-formats.md`). Update `decisions` with any key architectural choices made during this wave. Commit the updated `docs/CONTEXT.md`. See E18 in `execution-rules.md` and the schema in `message-formats.md` (## docs/CONTEXT.md — Project Memory section).
 

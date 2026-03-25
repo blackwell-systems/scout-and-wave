@@ -36,6 +36,20 @@ This is not an I1 violation because there is no concurrent execution — the Int
 
 **Related Rules:** See E25 (Integration Validation), E26 (Integration Agent)
 
+### I1 Amendment: Post-Hoc Undeclared-Modification Detection
+
+The engine cross-references completion report `files_changed` and `files_created` fields against the declared `file_ownership` table after each wave completes. Files modified by an agent outside its declared ownership are flagged as I1 violations even if no other agent owns that file — the constraint covers declared accountability, not only concurrent conflict avoidance.
+
+This detection runs at wave finalization via `protocol.DetectOwnershipConflicts()` and surfaces in the `finalize-wave` output.
+
+**Related Rules:** See E7 (agent failure handling), E42 (SubagentStop ownership verification)
+
+### I1 Amendment: Identical-Edit Allowance at Merge Time
+
+At merge time, if two agents have modified the same file and the resulting content is byte-identical (verified via SHA256 hash comparison in `conflict_predict.go`), the conflict is treated as non-blocking. This is a pragmatic allowance: formatting changes or comments applied consistently by multiple agents produce no functional conflict and would otherwise require manual merge resolution.
+
+This allowance applies only at merge time. The declared ownership table must still be disjoint — no two agents may declare ownership of the same file in the IMPL doc. Identical-edit allowance is a safety valve for accidental identical edits, not a license for shared ownership.
+
 ---
 
 ## I2: Interface Contracts Precede Parallel Implementation
@@ -51,6 +65,8 @@ This is not an I1 violation because there is no concurrent execution — the Int
 - Wave Agents branch from HEAD and import from committed scaffold files
 - Agents implement against scaffold files without seeing each other's code
 
+**Freeze Enforcement:** `PrepareWave` records a `worktrees_created_at` timestamp and computes JSON hashes of `interface_contracts` and `scaffolds` when worktrees are first created. On subsequent calls (re-entrant resume), `CheckFreeze()` (`pkg/protocol/freeze.go`) recomputes those hashes and compares them. Any modification to interface contracts or scaffold entries after the freeze timestamp is a blocking violation — the wave cannot re-enter preparation with modified contracts.
+
 **Related Rules:** See E2 (interface freeze) and E8 (same-wave interface failure handling)
 
 ---
@@ -60,6 +76,8 @@ This is not an I1 violation because there is no concurrent execution — the Int
 **Formal Statement:** Wave N+1 does not launch until Wave N has been merged and post-merge verification has passed.
 
 **Enforcement:** The orchestrator controls state transitions. Waves execute sequentially. When Wave N completes, its implementations are committed to HEAD. Wave N+1 agents branch from that commit and import from the committed codebase directly.
+
+**Engine enforcement:** `PrepareWave` enforces I3 at the execution layer: when `WaveNum > 1`, it verifies that all agents in wave `WaveNum - 1` have completion reports with `status: complete` before creating any worktrees. This prevents Wave N from launching if Wave N-1 is still executing, has blocked or partial agents, or has not been finalized. The check surfaces as a blocking `wave_sequencing` step failure with a message identifying the specific agent and its current status.
 
 **Cross-Wave Coordination:** Waves execute sequentially. This provides coordination without special mechanisms: later waves always have access to earlier waves' committed work. Scaffold files solve the intra-wave problem (parallel agents that cannot see each other's code); cross-wave coordination is ordinary software development.
 

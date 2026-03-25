@@ -2,6 +2,8 @@
 
 **Version:** 0.20.0
 
+> **See also:** `procedures.md` (v0.21.0) — operational procedures for Orchestrator, Scout, Scaffold Agent, and Wave Agent participants.
+
 This document defines the execution rules that govern orchestrator behavior during Scout-and-Wave protocol execution. These rules are not captured by the state machine alone.
 
 ---
@@ -21,6 +23,8 @@ To audit consistency, search implementation files for `E{N}` and verify the embe
 **Required Action:** All such operations must execute asynchronously without blocking the orchestrator's main execution thread.
 
 **Why This Is Not a Performance Preference:** A blocking agent launch serializes the wave; the orchestrator waits for one agent before launching the next, eliminating parallelism. This is a protocol violation. Any implementation that blocks the orchestrator on agent execution or polling is non-conforming.
+
+**Agent launch prioritization:** `sawtools run-wave` uses `engine.PrioritizeAgents` to determine launch order. Agents with a longer critical path depth (more downstream dependents) launch first to unblock downstream work sooner. Tie-breaker: when two agents share equal critical path depth, the agent with fewer owned files launches first (lower implementation risk). To disable this ordering and use declaration order instead, pass `--no-prioritize` to `sawtools run-wave` (sets `SAW_NO_PRIORITIZE=1` internally).
 
 **Failure Handling:** If the runtime does not support asynchronous execution, the implementation is non-conforming.
 
@@ -106,7 +110,8 @@ When an interface change is required after worktrees exist and some agents have 
 - This is the primary mechanism
 - It is deterministic and does not depend on agent cooperation
 
-**Layer 2 — Task tool isolation:**
+**Layer 2 — Task tool isolation (Claude Code–specific):**
+- The `isolation: "worktree"` parameter is a Claude Code Agent tool invocation parameter — it is not a general protocol concept or SDK field. Other orchestration backends (API, programmatic engine) do not have an equivalent; they rely on Layer 1 alone.
 - Runtime isolation parameters provide isolation when the orchestrator and target repository are the same
 - This is the secondary mechanism
 - **Cross-repository waves: omit Layer 2 intentionally.** When agents work in a different repo from the Orchestrator, `isolation: "worktree"` creates worktrees in the Orchestrator's repo (wrong repo). Omit the parameter entirely for cross-repo agents. Layer 1 (manual worktree creation in each target repo) and Layer 3 (Field 0 absolute path navigation) provide the isolation instead. Omitting Layer 2 in a cross-repo wave is correct protocol, not a degraded fallback.
@@ -154,7 +159,7 @@ This prevents prepare-wave failures caused by leftover git worktrees from crashe
 
 **Required Action:** Worktrees must be named `.claude/worktrees/saw/{slug}/wave{N}-agent-{ID}` where `{slug}` is the IMPL doc's `feature_slug` field, `{N}` is the 1-based wave number, and `{ID}` is the agent identifier. Branch names follow the same pattern: `saw/{slug}/wave{N}-agent-{ID}`. Agent identifiers follow the `[A-Z][2-9]?` pattern: a single uppercase letter (generation 1, e.g., `A`, `B`, `C`) or a letter followed by a digit 2–9 (multi-generation, e.g., `A2`, `B3`). Examples: `saw/my-feature/wave1-agent-A`, `saw/my-feature/wave1-agent-A2`, `saw/my-feature/wave2-agent-B3`.
 
-**Backward compatibility:** Branches created before v0.39.0 use the legacy format `wave{N}-agent-{ID}` without slug prefix. Tools accept both formats.
+**Backward compatibility:** Branches created in the legacy format `wave{N}-agent-{ID}` (without slug prefix) are still accepted. The slug-prefix convention was introduced in the scout-and-wave-go engine after protocol v0.20.0. Tools accept both formats.
 
 **Why This Is Not a Style Choice:** This is a canonical requirement. The naming scheme is the mechanism by which external tooling identifies SAW sessions and correlates agents to waves. Deviating from it breaks observability silently. Any tooling that consumes SAW session data must treat this naming scheme as the stable interface.
 
@@ -241,6 +246,8 @@ Always surface to the user regardless of `--auto` mode:
 
 **WAVE_MERGING Non-Idempotency:** WAVE_MERGING is not idempotent. If the orchestrator crashes mid-merge, inspect the state before continuing: check which worktree branches are already present in main's history (search merge commits) and skip those. Do not re-merge a worktree that has already been merged.
 
+**finalize-wave already-merged detection:** When all agent branches are absent (deleted after a previous successful merge), `finalize-wave` treats the wave as already merged and skips VerifyCommits and MergeAgents. However, absent branches alone do not prove the work landed in main — branches can be deleted without merging. `finalize-wave` therefore verifies each agent's commit SHA (from their completion report) is reachable from HEAD using `git merge-base --is-ancestor`. If any SHA is unreachable, `finalize-wave` returns a data-loss error with a recovery command: `git branch recover-<id> <sha>`.
+
 **Failure Handling:** Before continuing a crashed merge, the orchestrator must verify merge state to prevent duplicate merges.
 
 ---
@@ -317,13 +324,34 @@ Do NOT use when:
 
 4. Integration validation runs automatically in step 5.5 (RunPostMergeGates)
 
+### Normal Pipeline (finalize-wave step reference)
+
+Full step sequence for a standard `finalize-wave` run:
+- Step 1: VerifyCommits — each agent branch has ≥1 commit ahead of merge base (I5)
+- Step 1.1: Completion report check — every agent has a report in `manifest.completion_reports` (I4). Missing reports are a blocking error: `"finalize-wave: missing completion reports for agents: [...] — agents must call sawtools set-completion before merge"`
+- Step 1.5: CheckTypeCollisions — AST-based duplicate type/function/const detection across agent branches (E41)
+- Step 2: ScanStubs — scan for hollow implementations (`pass`, `...`, `NotImplementedError`) in changed files (E20)
+- Step 3: RunPreMergeGates — required gates block merge; optional gates warn (E21)
+- Step 3.5a: ValidateIntegration — scan for unconnected exports pre-merge (E25, CLI path)
+- Step 3.5b: Wiring declaration check — verify E35 wiring declarations are satisfied
+- Step 4: MergeAgents — no-fast-forward merge per agent branch to main (or `--merge-target`)
+- Step 4.5: PopulateIntegrationChecklist — populate `post_merge_checklist` in manifest (M5, non-blocking)
+- Step 5: VerifyBuild — run post-merge build/test to catch cross-package failures (E10)
+- Step 5.5: RunPostMergeGates — gates scoped to `timing: post-merge`
+- Step 6: Cleanup — remove worktrees and branches
+
 ### Resumption Pipeline (--skip-merge)
 
-When --skip-merge flag is used:
+When --skip-merge flag is used, `finalize-wave` jumps directly to the post-merge label, skipping all pre-merge steps:
 - Step 1: VerifyCommits - SKIP
+- Step 1.1: Completion report check (I4) - SKIP
+- Step 1.5: CheckTypeCollisions - SKIP
 - Step 2: ScanStubs - SKIP
 - Step 3: RunPreMergeGates - SKIP
+- Step 3.5a: ValidateIntegration (E25) - SKIP
+- Step 3.5b: Wiring declaration check (E35) - SKIP
 - Step 4: MergeAgents - SKIP (already merged manually)
+- Step 4.5: PopulateIntegrationChecklist (M5) - RUN
 - Step 5: VerifyBuild - RUN (catches semantic conflicts)
 - Step 5.5: RunPostMergeGates - RUN (includes E25/E26/E35)
 - Step 6: Cleanup - RUN
@@ -338,9 +366,9 @@ When --skip-merge flag is used:
 
 If --skip-merge is not used, integration validation can be run separately:
 ```bash
-sawtools detect-integration-gaps docs/IMPL/IMPL-{slug}.yaml --wave {N}
-sawtools wire-integration docs/IMPL/IMPL-{slug}.yaml --wave {N} [--dry-run]
+sawtools validate-integration "<manifest-path>" --wave {N}
 ```
+The `--wiring` flag (default: true) enables wiring declaration checks (E35 Layer 3B). Use `--wiring=false` to skip wiring checks.
 
 **Related Rules:** See E11 (conflict prediction), E7 (agent failure handling)
 
@@ -408,7 +436,11 @@ Three distinct conflict types can arise; each has a different resolution path:
 
 **Trigger:** Final wave's post-merge verification passes (WAVE_VERIFIED → COMPLETE transition)
 
-**Required Action:** The orchestrator writes `<!-- SAW:COMPLETE YYYY-MM-DD -->` (with the current ISO date) on the line immediately after the IMPL doc title, then commits the update. This is the formal close of the IMPL lifecycle. The marker must be written before the orchestrator reports completion to the user.
+**Required Action:** The orchestrator runs:
+```bash
+sawtools mark-complete "<manifest-path>" --date "YYYY-MM-DD"
+```
+This atomically: (1) writes `<!-- SAW:COMPLETE YYYY-MM-DD -->` on the line immediately after the IMPL doc title, (2) archives the manifest to `docs/IMPL/complete/`, and (3) auto-cleans any stale worktrees for the completed IMPL slug. The command does NOT commit — the orchestrator commits the archived file and any E18 CONTEXT.md updates together in a single commit. The marker must be present before reporting completion to the user.
 
 **Format:** HTML comment tag. Invisible in rendered markdown. Parseable with a single regex: `<!-- SAW:COMPLETE (\d{4}-\d{2}-\d{2}) -->`. Tooling can grep a directory of IMPL docs without parsing each file.
 
@@ -558,19 +590,27 @@ where `N` is the 1-based line number of the opening fence of the suspect block.
 
 ### E16 Correction Loop (Automatic Re-Prompting)
 
-When validation fails, the orchestrator may automatically re-prompt the Scout with the validation errors (up to 3 retries). The correction loop:
+When validation fails, the orchestrator automatically re-prompts the Scout with the validation errors (up to 3 retries). The correction loop (implemented by `ScoutCorrectionLoop()` in `pkg/engine/`):
 
-1. Runs `sawtools validate --fix` on the IMPL doc to apply auto-correctable fixes (e.g., normalizing field names, fixing YAML indentation)
-2. If errors remain after `--fix`, constructs a correction prompt listing each specific error with section name, failure description, and block identifier
-3. Re-launches the Scout with the correction prompt prepended to its original context
-4. Repeats up to 3 times (configurable via retry limit)
-5. After 3 failures, sets state to `SCOUT_VALIDATION_FAILED` (enters BLOCKED)
+1. Runs Scout
+2. Validates the IMPL doc directly via `protocol.Validate()` — no auto-fixing inside the loop
+3. If errors: builds a correction prompt listing each error (code, message, field) and prepends it to the Scout's feature description for the next attempt
+4. Repeats up to 3 times
+5. On exhaustion: sets state to `BLOCKED`
 
-The correction loop is implemented by `ScoutCorrectionLoop()` in the engine (`pkg/engine/` in scout-and-wave-go). The function reads validation errors from `sawtools validate`, formats them into a targeted correction prompt, and re-invokes the Scout agent with only the failing sections highlighted for revision.
+Note: `sawtools validate --fix` (which auto-corrects fixable issues like invalid gate types → `custom`) is a useful standalone CLI tool but is NOT called inside the correction loop. The loop sends errors back to Scout for self-correction rather than applying mechanical fixes.
 
 **Key property:** The correction loop is idempotent — running it multiple times on an already-valid IMPL doc is a no-op (validation passes on first attempt, no Scout re-invocation).
 
-**Related Rules:** See E16A (required block presence), E16B (dep graph grammar), E16C (out-of-band detection), E39 (Interview Mode — alternative requirements gathering pathway)
+**Full `run-scout` pipeline (all steps):**
+1. `ScoutCorrectionLoop` — Scout execution + internal E16 validation-retry (up to 3 attempts)
+2. Wait for IMPL doc file to appear on disk
+3. Post-loop validation pass (`protocol.ValidateIMPLDoc`) — defense-in-depth after the loop exits
+4. Agent ID errors: generate suggested correct IDs (advisory only — operator must apply manually; no auto-fix)
+5. Finalize IMPL doc — populate verification gates (`engine.FinalizeIMPLEngine` / M4)
+6. Critic gate if threshold met (E37) — optional, skipped with `--no-critic`
+
+**Related Rules:** See E16A (required block presence), E16B (dep graph grammar), E16C (out-of-band detection), E37 (critic gate — step 6), E39 (Interview Mode — alternative requirements gathering pathway)
 
 ### Scout Pre-Processing Helpers (H-series)
 
@@ -614,34 +654,32 @@ each completed feature).
 **Trigger:** Final wave's post-merge verification passes (WAVE_VERIFIED → COMPLETE
 transition — same trigger as E15)
 
-**Required Action:** The Orchestrator creates or updates `docs/CONTEXT.md` in the
-target project:
+**Required Action:** Run:
+```bash
+sawtools update-context "<manifest-path>" --project-root "<project-root>"
+```
+This creates or updates `docs/CONTEXT.md`, appending to `features_completed`, `decisions`, and `established_interfaces` as needed. Returns JSON; does NOT commit. The commit is the Orchestrator's responsibility (see Constraint below).
 
-1. If `docs/CONTEXT.md` does not exist, create it with the schema defined in
-   `message-formats.md` (## docs/CONTEXT.md — Project Memory section).
+If manual construction is needed, the fields to update are:
 
-2. Append to `features_completed`:
+1. Append to `features_completed`:
    ```yaml
    - slug: {feature-slug}
-     impl_doc: docs/IMPL/IMPL-{feature-slug}.md
+     impl_doc: docs/IMPL/IMPL-{feature-slug}.yaml
      waves: {N}
      agents: {N-agents}
      date: {YYYY-MM-DD}
    ```
 
-3. Append any architectural decisions made during this feature to `decisions`.
-   Decisions are identified from interface contracts and any `out_of_scope_deps`
-   resolutions that reveal project conventions.
+2. Append any architectural decisions made during this feature to `decisions`.
 
-4. Append any new scaffold-file interfaces to `established_interfaces`. An
-   interface is "established" if it was committed as a scaffold file and is now
-   part of the project's public module boundary.
+3. Append any new scaffold-file interfaces to `established_interfaces`.
 
-5. Commit: `git commit -m "chore: update docs/CONTEXT.md for {feature-slug}"`
-
-**Constraint:** E18 runs after E15 (IMPL doc completion marker). The commit order
-is: E15 writes `<!-- SAW:COMPLETE -->` to the IMPL doc, then E18 updates
-`docs/CONTEXT.md`, then a single commit captures both.
+**Constraint:** E18 runs after E15 (`sawtools mark-complete`). Commit both together:
+```bash
+git add docs/IMPL/complete/IMPL-{slug}.yaml docs/CONTEXT.md
+git commit -m "chore: close {feature-slug} IMPL and update project memory"
+```
 
 **When to omit:** If no new decisions, interfaces, or conventions were established
 during the feature, E18 still appends to `features_completed` but may omit the
@@ -733,12 +771,12 @@ default behavior unchanged. Individual missing entries also fall back to default
 
 **Required Action:** The Orchestrator:
 1. Collects the union of all `files_changed` and `files_created` from wave agent completion reports.
-2. Runs `bash ${CLAUDE_SKILL_DIR}/scripts/scan-stubs.sh {file1} {file2} ...` with that file list.
-3. Appends the scan output to the IMPL doc under `## Stub Report — Wave {N}` (after the last completion report section for this wave).
+2. Runs `sawtools scan-stubs --append-impl "<manifest-path>" --wave {N}` — this writes the report directly into the manifest.
+3. The scan report is available in the manifest's stub detection section for that wave.
 
-Exit code of `scan-stubs.sh` is always 0 — stub detection is informational only. Stubs found are surfaced at the review checkpoint but do not block merge automatically.
+Exit code of `sawtools scan-stubs` is always 0 — stub detection is informational only. Stubs found are surfaced at the review checkpoint but do not block merge automatically.
 
-**Note:** The script carries the comment `# scan-stubs.sh — SAW stub detection scanner (E20)` — E20 was reserved in the script header before this rule was written.
+**Note:** `finalize-wave` runs stub scanning automatically as step 2 of its pipeline; the orchestrator does not need to invoke this manually when using `finalize-wave`.
 
 **Rationale:** An agent can write a syntactically correct function shell with a stub body (`pass`, `...`, `raise NotImplementedError`) and mark `[COMPLETE]`. The human reviewer approving the plan (not the diff) may not catch it. Stub detection surfaces hollow implementations before they ship.
 
@@ -764,19 +802,17 @@ For each gate:
 - `required: false` — non-zero exit code is a **warning only**. Log and continue.
 
 **Flow levels** (set in `## Quality Gates` section):
-- `quick` — skip all gates
-- `standard` — run all gates; failures warn
-- `full` — run all gates; required failures block merge
+- `quick`, `standard`, `full` — stored in the manifest for operator reference, but not currently used to filter gate execution. All gates run regardless of level; `required: true/false` on each gate controls blocking vs. warning behavior.
 
 ### Format Gate Fix Mode
 
 Quality gates with `fix: true` in their configuration run in **fix mode** — they auto-apply formatting corrections (e.g., `gofmt -w`, `prettier --write`) rather than merely checking. Fix-mode gates:
 
 1. Execute the fix command (e.g., `gofmt -w ./...`)
-2. Stage any modified files (`git add` the formatted files)
-3. Report the fix as a pass (exit code 0 after formatting)
+2. Report pass/fail based on exit code (0 = pass)
+3. Invalidate the gate cache so subsequent gates see the reformatted files
 
-Fix-mode gates run **before** check-only gates in the gate execution order. This ensures that formatting is applied before lint/test gates verify correctness.
+Note: Fix-mode gates modify files in-place but do not `git add` or commit — that is the caller's responsibility. Gates run in **declaration order** from the IMPL doc; the engine does not auto-sort fix-mode gates ahead of check-only gates. To ensure formatting runs before lint/test, list fix-mode gates first in the IMPL doc.
 
 **When to use fix mode:**
 - Formatting tools with deterministic, safe auto-fix (gofmt, prettier, black)
@@ -790,6 +826,8 @@ Fix-mode gates run **before** check-only gates in the gate execution order. This
 **Default:** `fix: false`. Gates are check-only unless explicitly configured with `fix: true`.
 
 **Out of scope:** AI Verification Gate (an agent that reviews implementation correctness). Subprocess-based gates only.
+
+**Closed-loop gate retry (CLI path only):** When a required pre-merge gate fails, `sawtools finalize-wave` automatically calls `engine.ClosedLoopGateRetry` (up to 2 retries) before reporting failure. The retry spawns a repair agent that receives the gate output and attempts to fix the failing code in the agent's worktree. If the retry succeeds, gates are re-run to confirm before merge proceeds. This auto-retry is a CLI-only behavior — the engine path (`engine.FinalizeWave`) does not retry automatically.
 
 **Rationale:** Individual agents run gates in isolation (their own package scope). The orchestrator's post-wave gate runs unscoped — catching cross-package cascade failures that agent-scoped gates miss.
 
@@ -958,14 +996,16 @@ This duality does not violate I4. The IMPL doc defines *what should be done*. Th
 
 ## E25: Integration Validation
 
-**Trigger:** Wave agents complete and merge succeeds
+**Trigger:** Wave agents complete. Timing depends on execution path:
+- **CLI (`finalize-wave`):** Runs pre-merge at step 3.5a (after quality gates, before `MergeAgents`). Reports gaps in JSON output; does not auto-launch an Integration Agent.
+- **Engine (`RunWaveFull`):** Runs post-merge. Gaps trigger automatic Integration Agent launch (E26).
 
-**Required Action:** Scan the merged result for unconnected exports using AST analysis. Produce an `IntegrationReport` with gaps classified by severity (`error`, `warning`, `info`).
+**Required Action:** Scan for unconnected exports using AST analysis. Produce an `IntegrationReport` with gaps classified by severity (`error`, `warning`, `info`).
 
 **Non-fatal:** Integration gaps do not block the pipeline. They are reported to the orchestrator, which decides whether to launch an Integration Agent (E26) to wire gaps automatically.
 
 **Process:**
-1. The orchestrator calls `ValidateIntegration` on the merged codebase for the completed wave.
+1. The orchestrator calls `ValidateIntegration` on the codebase for the completed wave.
 2. `ValidateIntegration` walks all files changed by wave agents, identifies new exported symbols, and classifies each as an `IntegrationGap` if no caller is found in the existing codebase.
 3. Each gap includes: `export_name`, `file_path`, `agent_id`, `category` (function_call, type_usage, field_init), `severity`, `reason`, and `suggested_fix`.
 4. The `IntegrationReport` is persisted to the IMPL manifest under `integration_report:` for the completed wave.
@@ -992,7 +1032,9 @@ This duality does not violate I4. The IMPL doc defines *what should be done*. Th
 3. Verification gate: `go build ./...` must pass after wiring
 
 **Execution context:**
-- The Integration Agent runs AFTER merge, on the main branch (no worktree)
+- **Engine path (`RunWaveFull`):** Integration Agent is launched automatically post-merge.
+- **CLI path (`finalize-wave`):** Integration Agent must be launched manually by the Orchestrator after reading gap report from `finalize-wave` JSON output.
+- Runs on the main branch (no worktree)
 - Constraint role: `integrator` — may only modify files listed in the IMPL manifest's `integration_connectors` field
 - The `integrator` constraint is enforced via `AllowedPathPrefixes` — the agent cannot write to agent-owned files or scaffold files
 - Timeout: same as wave agent timeout (30 minutes)
@@ -1345,21 +1387,18 @@ wiring:
 `sawtools amend-impl <manifest> --redirect-agent <ID> --wave <N>`
 - Valid only if the agent has NOT committed yet (checked by: no completion report
   in completion_reports map AND no git commits on worktree branch beyond base_commit)
-- Updates the agent's task field in the manifest with new content (read from stdin
-  or --new-task flag)
+- Updates the agent's task field in the manifest with new content (read from
+  `--new-task` flag if provided; falls back to reading from stdin if omitted)
 - Clears any partial completion report for the agent (if status != "complete")
 - Does NOT recreate the worktree (agent re-reads updated task on next launch)
 - If agent HAS committed: operation is rejected with ErrAmendBlocked
 
 ### E36c: Extend Scope
 `sawtools amend-impl <manifest> --extend-scope`
-- Re-engages Scout with the current IMPL YAML injected as context
-- Scout receives the full IMPL as a "current plan" and is instructed to append
-  new waves only (not modify existing waves or contracts)
-- Scout produces an updated IMPL doc with additional waves appended
-- Human reviews before any new wave executes
-- The extend-scope path is handled by the CLI/orchestrator layer (not amend.go);
-  `--extend-scope` triggers a Scout agent launch, not a direct mutation
+- Returns a JSON hint: `{"operation": "extend-scope", "manifest_path": "<path>", "message": "Re-engage Scout with --impl-context <path>"}` — the CLI does not launch a Scout agent itself.
+- The orchestrator is responsible for acting on the hint: launch Scout with `--impl-context <manifest>` so Scout can append new waves without modifying existing waves or contracts.
+- Scout produces an updated IMPL doc with additional waves appended; human reviews before any new wave executes.
+- The IMPL doc is not mutated by this command; it is a hint-only operation handled entirely in the CLI layer.
 
 **Common preconditions for all E36 operations:**
 1. IMPL doc must not have completion_date set (state != COMPLETE)
@@ -1381,7 +1420,7 @@ E15 (completion marker — amend invalid after SAW:COMPLETE)
 **Trigger:** After IMPL doc validation passes (E16) and before entering REVIEWED state.
 Auto-triggered when wave 1 has 3 or more agents, or when file_ownership contains
 entries from 2 or more repos. Optional for smaller IMPLs; can be suppressed with
-`--no-review` flag or `min_agents_for_review: 0` in saw.config.json.
+`--no-critic` flag on `sawtools run-scout`.
 
 **CLI orchestration note:** In CLI orchestration mode (inside a Claude Code session),
 do NOT use `sawtools run-critic` — that command spawns a `claude` subprocess which
@@ -1459,14 +1498,27 @@ state. Instead:
 3. After corrections applied, orchestrator re-runs critic (via Agent tool in CLI orchestration; via `sawtools run-critic` in programmatic/API orchestration)
 4. Repeat until verdict is PASS, then enter REVIEWED state normally
 
-**Skip condition:** Pass `--no-review` to `sawtools run-scout` or set
-`min_agents_for_review: 0` in saw.config.json to disable auto-triggering.
+**Skip condition:** Pass `--no-critic` to `sawtools run-scout` to disable
+auto-triggering.
 Manual skip: `sawtools run-critic --skip` writes a PASS result with
 summary "Skipped by operator" to satisfy downstream state checks.
 
 **Related rules:** E16 (schema validation precedes critic gate), E36 (amend
 --redirect-agent is the recovery mechanism for agent-level brief corrections),
 E2 (interface freeze: critic runs before freeze, so corrections are safe)
+
+### Pre-Wave-Gate Standalone Check
+
+`sawtools pre-wave-gate <manifest-path>` runs a structured pre-wave readiness check and returns JSON. Checks performed:
+
+| Check | Description |
+|-------|-------------|
+| `validation` | Validates manifest structure and content (E16) |
+| `critic_review` | Verifies a critic review has been performed (E37) |
+| `scaffolds` | Verifies all scaffold files have `status: committed` |
+| `state` | Confirms IMPL state allows wave execution |
+
+Exit code 0 if `ready: true`; exit code 1 if any check fails. This is a standalone diagnostic command — it does not modify the manifest and does not create worktrees. It is distinct from `prepare-wave`'s inline pre-flight checks: `prepare-wave` runs a superset of these checks as part of its full pipeline (worktree creation, hook installation, brief extraction), whereas `pre-wave-gate` is a lightweight readiness probe that can be called independently at any time.
 
 ---
 
@@ -1662,11 +1714,16 @@ The following checklist enumerates ALL lifecycle events that must be emitted. Ev
 
 ## E41: Type Collision Detection
 
-**Trigger:** Before worktree creation (during prepare-wave)
+**Trigger:** Two distinct points in the wave lifecycle:
+
+1. **prepare-wave (pre-flight):** Before worktree creation. Blocks wave launch. Run manually with `sawtools check-type-collisions <impl-doc>`.
+2. **finalize-wave step 1.5 (pre-merge):** Before agent branches are merged. Blocking — if collisions are found, the merge does not proceed. This second check catches any collisions introduced during wave execution that were absent at launch time.
+
+> **CLI-only note:** The finalize-wave step 1.5 collision check runs in the `sawtools` CLI path only. The programmatic engine path (`sawtools run-wave`) does not run this check; collision detection is not in the engine's step functions.
 
 **Required Action:** Run `sawtools check-type-collisions <impl-doc>` to detect potential type name collisions across agents in the same wave. If two agents define the same type name in different files, the merge will fail with duplicate declarations.
 
-**Implementation:** The `pkg/collision/` package in scout-and-wave-go provides AST-based detection. The check runs as a pre-flight step in prepare-wave alongside E3 ownership verification.
+**Implementation:** The `pkg/collision/` package in scout-and-wave-go provides AST-based detection. The prepare-wave check runs as a pre-flight step alongside E3 ownership verification. The finalize-wave step 1.5 check runs per-repo immediately after completion report verification (step 1.1) and conflict prediction (step 1.2).
 
 **Detection mechanism:**
 1. Parse all scaffold files and agent-owned files listed in the IMPL doc's file ownership table
@@ -1697,6 +1754,8 @@ The following checklist enumerates ALL lifecycle events that must be emitted. Ev
 | Scout (`[SAW:scout]` or `[SAW:scout:*]`) | IMPL doc exists at expected path and passes `sawtools validate` |
 | Scaffold (`[SAW:scaffold:*]`) | All scaffold entries have `status: committed (...)` |
 | Other SAW tags | Pass through (exit 0) |
+
+**Active IMPL marker:** Before creating worktrees, `prepare-wave` writes the absolute IMPL doc path to `.saw-state/active-impl` (creating the directory if needed). The E42 SubagentStop hook uses this file to locate the IMPL doc without requiring it as a command-line argument. If this file is absent when a wave agent exits, the hook falls back to extracting the path from `agent_description`.
 
 **Validation sequence (wave agents):**
 

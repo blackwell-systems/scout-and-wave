@@ -1,0 +1,893 @@
+completion_date: "2026-03-25"
+title: Move CLI-only enforcement steps into engine.FinalizeWave()
+feature_slug: engine-finalize-enforcement
+verdict: SUITABLE
+suitability_assessment: |
+    All 7 enforcement gaps are concrete, locatable changes in well-understood files.
+    File decomposition is clean: new step functions (finalize_steps.go), engine
+    orchestration (finalize.go), CLI cleanup (finalize_wave.go), and tests
+    (finalize_steps_test.go) are fully disjoint by agent. Interfaces are derivable
+    before implementation — every new Step* function follows the established pattern
+    in finalize_steps.go. No investigation required. 4 agents with non-trivial
+    logic each (1 new file + modifications, concrete function signatures). Build
+    cycle is moderate (go build + go test ./pkg/engine/...). SUITABLE.
+
+    Estimated times:
+    - Scout phase: ~15 min
+    - Agent execution: ~4 agents x ~15 min avg = ~60 min, parallelized to ~20 min (wave 1)
+      + wave 2 agents ~10 min (B + C depend on A's interfaces)
+    - Merge and verification: ~5 min
+    Total SAW time: ~40 min
+    Sequential baseline: ~60 min
+    Time savings: ~20 min (33% faster). Clear speedup for concurrent code changes.
+test_command: go test ./...
+lint_command: go vet ./...
+file_ownership:
+    - file: pkg/engine/finalize_steps.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/engine/finalize.go
+      agent: B
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+      repo: scout-and-wave-go
+    - file: cmd/sawtools/finalize_wave.go
+      agent: C
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+      repo: scout-and-wave-go
+    - file: pkg/engine/finalize_steps_test.go
+      agent: D
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+      repo: scout-and-wave-go
+interface_contracts:
+    - name: StepVerifyCompletionReports
+      description: |-
+        I4 check — verify every agent in the wave has a completion report.
+        Fatal: returns error listing missing agent IDs.
+      definition: |
+        func StepVerifyCompletionReports(
+            ctx context.Context,
+            opts FinalizeWaveOpts,
+            manifest *protocol.IMPLManifest,
+            onEvent EventCallback,
+        ) (*StepResult, error)
+
+        // Returns fmt.Errorf("verify-completion-reports: missing for agents: %v (I4)", missing)
+        // when len(missing) > 0. Data field of StepResult is nil for this step.
+      location: pkg/engine/finalize_steps.go
+    - name: StepCheckAgentStatuses
+      description: |-
+        E7 check — block merge if any agent in the wave has status "partial" or "blocked".
+        Fatal: returns error identifying the offending agent ID and status.
+      definition: |
+        func StepCheckAgentStatuses(
+            ctx context.Context,
+            opts FinalizeWaveOpts,
+            manifest *protocol.IMPLManifest,
+            onEvent EventCallback,
+        ) (*StepResult, error)
+
+        // Returns fmt.Errorf("check-agent-statuses: agent %s has status %q — cannot merge (E7)", id, status)
+        // Data field is nil. Checks all agents; returns on first violation.
+      location: pkg/engine/finalize_steps.go
+    - name: StepPredictConflicts
+      description: |-
+        E11 check — call protocol.PredictConflictsFromReports to detect file-level
+        conflicts before merge. Fatal on conflict.
+      definition: |
+        func StepPredictConflicts(
+            ctx context.Context,
+            opts FinalizeWaveOpts,
+            manifest *protocol.IMPLManifest,
+            onEvent EventCallback,
+        ) (*StepResult, error)
+
+        // Wraps: protocol.PredictConflictsFromReports(manifest, opts.WaveNum)
+        // Returns error from PredictConflictsFromReports wrapped with step name.
+      location: pkg/engine/finalize_steps.go
+    - name: StepCheckTypeCollisions
+      description: |-
+        Opt-in type collision detection using pkg/collision.DetectCollisions.
+        Only runs when FinalizeWaveOpts.CollisionDetectionEnabled == true.
+        Fatal: returns error when CollisionReport.Valid == false.
+      definition: |
+        func StepCheckTypeCollisions(
+            ctx context.Context,
+            opts FinalizeWaveOpts,
+            onEvent EventCallback,
+        ) (*StepResult, *collision.CollisionReport, error)
+
+        // Skips (returns success) when CollisionDetectionEnabled == false.
+        // Data field is *collision.CollisionReport when detection runs.
+        // Fatal when report.Valid == false.
+      location: pkg/engine/finalize_steps.go
+    - name: StepCheckWiringDeclarations
+      description: |-
+        E35 check — call protocol.ValidateWiringDeclarations when manifest.Wiring is
+        non-empty. Non-fatal: gaps surface in result but do not block merge.
+      definition: |
+        func StepCheckWiringDeclarations(
+            ctx context.Context,
+            opts FinalizeWaveOpts,
+            manifest *protocol.IMPLManifest,
+            onEvent EventCallback,
+        ) (*StepResult, *protocol.WiringValidationData, error)
+
+        // Returns (success, nil, nil) when manifest.Wiring is empty.
+        // Data field is *protocol.WiringValidationData when wiring check runs.
+        // Never returns a non-nil error (informational only).
+      location: pkg/engine/finalize_steps.go
+    - name: StepPopulateIntegrationChecklist
+      description: |-
+        M5 — call protocol.PopulateIntegrationChecklist and save manifest.
+        Non-fatal: errors are logged but do not block merge.
+      definition: |
+        func StepPopulateIntegrationChecklist(
+            ctx context.Context,
+            opts FinalizeWaveOpts,
+            manifest *protocol.IMPLManifest,
+            onEvent EventCallback,
+        ) (*StepResult, *protocol.IMPLManifest, error)
+
+        // Returns (success, updatedManifest, nil) on success.
+        // Returns (success, nil, nil) on error (non-fatal).
+        // Caller is responsible for updating its manifest pointer if non-nil returned.
+      location: pkg/engine/finalize_steps.go
+    - name: FinalizeWaveOpts_NewFields
+      description: Two new boolean fields added to FinalizeWaveOpts for opt-in behaviors.
+      definition: |
+        // CollisionDetectionEnabled: When true, StepCheckTypeCollisions runs before
+        // StepMergeAgents. The CLI sets this to true; web app leaves false (default).
+        CollisionDetectionEnabled bool
+
+        // ClosedLoopRetryEnabled: When true, after a required gate fails in
+        // StepRunGates, engine.ClosedLoopGateRetry is invoked per-agent.
+        // The CLI sets this to true; web app leaves false (default).
+        ClosedLoopRetryEnabled bool
+      location: pkg/engine/finalize.go
+    - name: FinalizeWaveResult_NewFields
+      description: New fields on FinalizeWaveResult to capture results from the new steps.
+      definition: |
+        CollisionReport  *collision.CollisionReport    `json:"collision_report,omitempty"`
+        WiringReport     *protocol.WiringValidationData `json:"wiring_report,omitempty"`
+      location: pkg/engine/finalize.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## Context
+
+            You are implementing Layer 1 of the engine-finalize-enforcement feature in
+            `scout-and-wave-go`. Your task is to add 5 new Step* functions to
+            `pkg/engine/finalize_steps.go`. These functions move "CLI-only" enforcement
+            steps from `cmd/sawtools/finalize_wave.go` into the engine so both CLI and
+            web app enforce the same protocol rules.
+
+            ## What to Implement
+
+            In `pkg/engine/finalize_steps.go`, add these 5 new functions after the
+            existing `StepCleanup` function (at the end of the file):
+
+            ### 1. StepVerifyCompletionReports (I4)
+
+            ```go
+            func StepVerifyCompletionReports(ctx context.Context, opts FinalizeWaveOpts, manifest *protocol.IMPLManifest, onEvent EventCallback) (*StepResult, error)
+            ```
+
+            Logic: Iterate `manifest.Waves[opts.WaveNum-1].Agents`. For each agent,
+            check `manifest.CompletionReports[agent.ID]` exists. Collect missing IDs.
+            If any missing, return fatal error:
+            `fmt.Errorf("verify-completion-reports: missing for agents: %v (I4)", missing)`
+            Step name: `"verify-completion-reports"`
+
+            ### 2. StepCheckAgentStatuses (E7)
+
+            ```go
+            func StepCheckAgentStatuses(ctx context.Context, opts FinalizeWaveOpts, manifest *protocol.IMPLManifest, onEvent EventCallback) (*StepResult, error)
+            ```
+
+            Logic: Iterate agents; for each with a completion report, check
+            `report.Status == "partial" || report.Status == "blocked"`. Return fatal
+            on first violation:
+            `fmt.Errorf("check-agent-statuses: agent %s has status %q — cannot merge (E7)", agent.ID, report.Status)`
+            Step name: `"check-agent-statuses"`
+
+            ### 3. StepPredictConflicts (E11)
+
+            ```go
+            func StepPredictConflicts(ctx context.Context, opts FinalizeWaveOpts, manifest *protocol.IMPLManifest, onEvent EventCallback) (*StepResult, error)
+            ```
+
+            Logic: Call `protocol.PredictConflictsFromReports(manifest, opts.WaveNum)`.
+            Wrap any non-nil error: `fmt.Errorf("predict-conflicts: %w", err)`.
+            Step name: `"predict-conflicts"`
+
+            ### 4. StepCheckTypeCollisions (opt-in)
+
+            ```go
+            func StepCheckTypeCollisions(ctx context.Context, opts FinalizeWaveOpts, onEvent EventCallback) (*StepResult, *collision.CollisionReport, error)
+            ```
+
+            Import `"github.com/blackwell-systems/scout-and-wave-go/pkg/collision"`.
+            Logic: When `opts.CollisionDetectionEnabled == false`, emit step event
+            with status "skipped" and return `(success_result, nil, nil)`. When
+            enabled, call `collision.DetectCollisions(opts.IMPLPath, opts.WaveNum, opts.RepoPath)`.
+            On detect error, return `(failed_result, nil, fmt.Errorf(...))`.
+            When `report.Valid == false`, return `(failed_result, &report, fmt.Errorf("check-type-collisions: collisions detected"))`.
+            When valid, return `(success_result, &report, nil)`.
+            Set `result.Data = &report` in all non-skip paths.
+            Step name: `"check-type-collisions"`
+
+            ### 5. StepCheckWiringDeclarations (E35, non-fatal)
+
+            ```go
+            func StepCheckWiringDeclarations(ctx context.Context, opts FinalizeWaveOpts, manifest *protocol.IMPLManifest, onEvent EventCallback) (*StepResult, *protocol.WiringValidationData, error)
+            ```
+
+            Logic: When `len(manifest.Wiring) == 0`, return success (skipped).
+            Otherwise, call `protocol.ValidateWiringDeclarations(manifest, opts.RepoPath)`.
+            When result `IsFatal()`, log warning (non-fatal), return success with
+            detail describing the error.
+            Otherwise, extract data and return `(success_result, wiringData, nil)`.
+            Set `result.Data = wiringData` when data is available.
+            Step name: `"check-wiring-declarations"`
+
+            ### 6. StepPopulateIntegrationChecklist (M5, non-fatal)
+
+            ```go
+            func StepPopulateIntegrationChecklist(ctx context.Context, opts FinalizeWaveOpts, manifest *protocol.IMPLManifest, onEvent EventCallback) (*StepResult, *protocol.IMPLManifest, error)
+            ```
+
+            Logic: Call `protocol.PopulateIntegrationChecklist(manifest)`. If error,
+            log warning and return `(success_result, nil, nil)` (non-fatal).
+            On success, call `protocol.Save(updated, opts.IMPLPath)`. If save error,
+            log warning, return `(success_result, nil, nil)` (non-fatal).
+            Return `(success_result, updated, nil)` on full success.
+            Step name: `"populate-integration-checklist"`
+
+            ## Patterns to Follow
+
+            Existing functions in this file show the exact pattern:
+            - Open with `emitStepEvent(onEvent, stepName, "running", "")`
+            - Close success path with `emitStepEvent(onEvent, stepName, "complete", "")`
+            - Close failure path with `emitStepEvent(onEvent, stepName, "failed", detail)`
+            - Always return a non-nil `*StepResult`
+            - Use `loggerFrom(opts.Logger).Warn(...)` for non-fatal log entries
+            - `opts.Logger` is available; nil is safe via `loggerFrom`
+
+            ## Imports to Add
+
+            Add `"github.com/blackwell-systems/scout-and-wave-go/pkg/collision"` to the
+            import block (needed for StepCheckTypeCollisions).
+
+            The `protocol` import is already present. `context` and `fmt` are already
+            present.
+
+            ## Verification Gate
+
+            ```
+            go build ./pkg/engine/...
+            go vet ./pkg/engine/...
+            go test ./pkg/engine/... -run TestStep -v
+            ```
+
+            ## Constraints
+
+            - Do NOT modify `finalize.go`, `finalize_steps_test.go`, or any file
+              outside `pkg/engine/finalize_steps.go`.
+            - Do NOT move or delete existing Step* functions.
+            - All 6 new functions must be exported (capital S).
+            - Non-fatal steps (5 and 6) must never return a non-nil error.
+          files:
+            - pkg/engine/finalize_steps.go
+    - number: 2
+      agents:
+        - id: B
+          task: |
+            ## Context
+
+            You are implementing Layer 2 of the engine-finalize-enforcement feature in
+            `scout-and-wave-go`. Agent A (wave 1) has added 6 new Step* functions to
+            `pkg/engine/finalize_steps.go`. Your task is to:
+
+            1. Add two new opt fields to `FinalizeWaveOpts` in `pkg/engine/finalize.go`
+            2. Add two new result fields to `FinalizeWaveResult` in `pkg/engine/finalize.go`
+            3. Update the `FinalizeWave()` function body to call the new steps in the
+               correct order
+
+            ## Changes to FinalizeWaveOpts
+
+            In the `FinalizeWaveOpts` struct (around line 17 of `pkg/engine/finalize.go`),
+            add these two fields after the existing `SkipMerge` field:
+
+            ```go
+            // CollisionDetectionEnabled: When true, StepCheckTypeCollisions runs before
+            // StepMergeAgents. The CLI sets this to true; the web app leaves false (default).
+            CollisionDetectionEnabled bool
+
+            // ClosedLoopRetryEnabled: When true, after a required gate fails in
+            // StepRunGates, engine.ClosedLoopGateRetry is invoked per-agent before
+            // giving up. The CLI sets this to true; the web app leaves false (default).
+            ClosedLoopRetryEnabled bool
+            ```
+
+            ## Changes to FinalizeWaveResult
+
+            In the `FinalizeWaveResult` struct (around line 47), add these two fields
+            after `IntegrationReport`:
+
+            ```go
+            CollisionReport *collision.CollisionReport      `json:"collision_report,omitempty"`
+            WiringReport    *protocol.WiringValidationData  `json:"wiring_report,omitempty"`
+            ```
+
+            Add `"github.com/blackwell-systems/scout-and-wave-go/pkg/collision"` to the
+            import block.
+
+            ## Changes to FinalizeWave() body
+
+            The current pipeline in `FinalizeWave()` (inside the `!opts.SkipMerge` block):
+
+            ```
+            Step 1: StepVerifyCommits
+            Step 2: StepScanStubs
+            Step 3: StepRunGates
+            Step 3.5: StepValidateIntegration
+            Step 4: StepMergeAgents
+            ```
+
+            Expand it to:
+
+            ```
+            Step 1:   StepVerifyCommits
+            Step 1.1: StepVerifyCompletionReports  (NEW, fatal, after VerifyCommits)
+            Step 1.2: StepCheckAgentStatuses       (NEW, fatal, after VerifyCompletionReports)
+            Step 1.3: StepPredictConflicts         (NEW, fatal, after CheckAgentStatuses)
+            Step 2:   StepScanStubs
+            Step 3:   StepRunGates
+            Step 3.3: StepCheckTypeCollisions      (NEW, opt-in fatal, after RunGates)
+            Step 3.5: StepValidateIntegration
+            Step 3.6: StepCheckWiringDeclarations  (NEW, non-fatal, after ValidateIntegration)
+            Step 4:   StepMergeAgents
+            ```
+
+            And after StepMergeAgents (outside the SkipMerge block, before StepFixGoMod):
+
+            ```
+            Step 4.2: StepPopulateIntegrationChecklist (NEW, non-fatal)
+            ```
+
+            For each new step, follow the exact same pattern used for existing steps:
+
+            **Fatal steps (1.1, 1.2, 1.3, 3.3):**
+            ```go
+            stepResult, stepErr := StepXxx(ctx, opts, manifest, onEvent)
+            if stepErr != nil {
+                return result, fmt.Errorf("engine.FinalizeWave: %w", stepErr)
+            }
+            ```
+            Store relevant data into `result` fields as appropriate (CollisionReport
+            from step 3.3).
+
+            **Non-fatal step 3.6 (WiringDeclarations):**
+            ```go
+            _, wiringData, _ := StepCheckWiringDeclarations(ctx, opts, manifest, onEvent)
+            if wiringData != nil {
+                result.WiringReport = wiringData
+            }
+            ```
+
+            **Non-fatal step 4.2 (IntegrationChecklist):**
+            Call after StepMergeAgents but before StepFixGoMod. Update `manifest`
+            pointer if a non-nil manifest is returned:
+            ```go
+            _, updatedManifest, _ := StepPopulateIntegrationChecklist(ctx, opts, manifest, onEvent)
+            if updatedManifest != nil {
+                manifest = updatedManifest
+            }
+            ```
+
+            For step 3.3 (CollisionDetectionEnabled), extract the CollisionReport:
+            ```go
+            collisionResult, collisionReport, stepErr := StepCheckTypeCollisions(ctx, opts, onEvent)
+            _ = collisionResult
+            if collisionReport != nil {
+                result.CollisionReport = collisionReport
+            }
+            if stepErr != nil {
+                return result, fmt.Errorf("engine.FinalizeWave: %w", stepErr)
+            }
+            ```
+
+            ## Verification Gate
+
+            ```
+            go build ./pkg/engine/...
+            go vet ./pkg/engine/...
+            go test ./pkg/engine/... -run TestFinalize -v
+            ```
+
+            ## Constraints
+
+            - Do NOT modify `finalize_steps.go`, `finalize_steps_test.go`, or
+              `cmd/sawtools/finalize_wave.go`.
+            - The `ClosedLoopRetryEnabled` field is added to opts but is NOT wired
+              into `FinalizeWave()` in this IMPL (the CLI still handles the retry loop
+              directly). The field is added now so the CLI can set it and future work
+              can move that logic too.
+            - Preserve all existing step ordering; only insert new steps at the
+              positions described above.
+          files:
+            - pkg/engine/finalize.go
+          dependencies:
+            - A
+        - id: C
+          task: |
+            ## Context
+
+            You are implementing Layer 3 of the engine-finalize-enforcement feature in
+            `scout-and-wave-go`. Agent A (wave 1) has added 6 new Step* functions to
+            `pkg/engine/finalize_steps.go`. Your task is to update
+            `cmd/sawtools/finalize_wave.go` to:
+
+            1. Set `CollisionDetectionEnabled: true` and `ClosedLoopRetryEnabled: true`
+               in the opts passed to engine step functions.
+            2. Remove the "CLI-only" blocks that are now in the engine, replacing them
+               with engine step calls where appropriate.
+            3. Keep the multi-repo loop structure intact — just remove the duplicated
+               logic that now lives in the engine.
+
+            ## Blocks to Remove / Replace
+
+            ### Block 1: Remove the I4 completion report check (lines ~222-236)
+
+            Remove this entire block:
+            ```go
+            // Step 1.1: I4 — Verify completion reports exist for every agent.
+            // CLI-only: ...
+            {
+                var missing []string
+                for _, agent := range manifest.Waves[waveNum-1].Agents {
+                    if _, ok := manifest.CompletionReports[agent.ID]; !ok {
+                        missing = append(missing, agent.ID)
+                    }
+                }
+                ...
+            }
+            ```
+
+            The engine's `StepVerifyCompletionReports` now handles this inside
+            `FinalizeWave()`. Since the CLI calls individual engine step functions
+            (not `FinalizeWave()` as a whole), you need to add an explicit call
+            here instead. Add after the VerifyCommits loop, once per manifest
+            (not per repo):
+
+            ```go
+            // Step 1.1: I4 — delegate to engine (now engine-enforced)
+            for repoKey, repoPath := range repos {
+                stepOpts := engine.FinalizeWaveOpts{
+                    IMPLPath:                  manifestPath,
+                    RepoPath:                  repoPath,
+                    WaveNum:                   waveNum,
+                    Logger:                    newSawLogger(),
+                    CollisionDetectionEnabled: true,
+                    ClosedLoopRetryEnabled:    true,
+                }
+                _, stepErr := engine.StepVerifyCompletionReports(cmd.Context(), stepOpts, manifest, onEvent)
+                if stepErr != nil {
+                    out, _ := json.MarshalIndent(result, "", "  ")
+                    fmt.Println(string(out))
+                    return fmt.Errorf("finalize-wave: %v", stepErr)
+                }
+                break // manifest-level check, only run once
+            }
+            ```
+
+            ### Block 2: Remove the E7 status check (lines ~239-249)
+
+            Remove:
+            ```go
+            // Step 1.2: E7 — Check completion report statuses before merge.
+            // CLI-only: block merge if any agent...
+            for _, agent := range manifest.Waves[waveNum-1].Agents {
+                ...
+            }
+            ```
+
+            Add after the I4 call:
+            ```go
+            // Step 1.2: E7 — delegate to engine
+            for repoKey, repoPath := range repos {
+                stepOpts := engine.FinalizeWaveOpts{
+                    IMPLPath: manifestPath, RepoPath: repoPath, WaveNum: waveNum,
+                    Logger: newSawLogger(), CollisionDetectionEnabled: true, ClosedLoopRetryEnabled: true,
+                }
+                _, stepErr := engine.StepCheckAgentStatuses(cmd.Context(), stepOpts, manifest, onEvent)
+                if stepErr != nil {
+                    out, _ := json.MarshalIndent(result, "", "  ")
+                    fmt.Println(string(out))
+                    return fmt.Errorf("finalize-wave: %v", stepErr)
+                }
+                break
+            }
+            ```
+
+            ### Block 3: Remove the E11 conflict prediction call (lines ~251-256)
+
+            Remove:
+            ```go
+            // Step 1.2: E11 — Predict merge conflicts from completion reports.
+            if err := protocol.PredictConflictsFromReports(manifest, waveNum); err != nil {
+                ...
+            }
+            ```
+
+            Add after the E7 call:
+            ```go
+            // Step 1.3: E11 — delegate to engine
+            for repoKey, repoPath := range repos {
+                stepOpts := engine.FinalizeWaveOpts{
+                    IMPLPath: manifestPath, RepoPath: repoPath, WaveNum: waveNum,
+                    Logger: newSawLogger(), CollisionDetectionEnabled: true, ClosedLoopRetryEnabled: true,
+                }
+                _, stepErr := engine.StepPredictConflicts(cmd.Context(), stepOpts, manifest, onEvent)
+                if stepErr != nil {
+                    out, _ := json.MarshalIndent(result, "", "  ")
+                    fmt.Println(string(out))
+                    return fmt.Errorf("finalize-wave: %v", stepErr)
+                }
+                break
+            }
+            ```
+
+            ### Block 4: Replace collision detection block (lines ~258-272)
+
+            Remove the entire `// Step 1.5: Check type collisions` block and replace
+            with:
+            ```go
+            // Step 1.5: Check type collisions — delegate to engine
+            for repoKey, repoPath := range repos {
+                stepOpts := engine.FinalizeWaveOpts{
+                    IMPLPath: manifestPath, RepoPath: repoPath, WaveNum: waveNum,
+                    Logger: newSawLogger(), CollisionDetectionEnabled: true, ClosedLoopRetryEnabled: true,
+                }
+                _, collisionReport, stepErr := engine.StepCheckTypeCollisions(cmd.Context(), stepOpts, onEvent)
+                if collisionReport != nil {
+                    result.CollisionReports[repoKey] = collisionReport
+                }
+                if stepErr != nil {
+                    out, _ := json.MarshalIndent(result, "", "  ")
+                    fmt.Println(string(out))
+                    return fmt.Errorf("finalize-wave: %v", stepErr)
+                }
+            }
+            ```
+
+            ### Block 5: Replace wiring declaration check (lines ~385-410)
+
+            Remove the `// Step 3.5b: Wiring declaration check` block and replace with:
+            ```go
+            // Step 3.5b: Wiring declaration check — delegate to engine
+            for _, repoPath := range repos {
+                stepOpts := engine.FinalizeWaveOpts{
+                    IMPLPath: manifestPath, RepoPath: repoPath, WaveNum: waveNum,
+                    Logger: newSawLogger(), CollisionDetectionEnabled: true, ClosedLoopRetryEnabled: true,
+                }
+                _, wiringData, _ := engine.StepCheckWiringDeclarations(cmd.Context(), stepOpts, manifest, onEvent)
+                if wiringData != nil {
+                    result.WiringReport = wiringData
+                    if !wiringData.Valid {
+                        for _, gap := range wiringData.Gaps {
+                            fmt.Fprintf(os.Stderr, "finalize-wave: WIRING GAP [error]: %s not called in %s\n",
+                                gap.Declaration.Symbol, gap.Declaration.MustBeCalledFrom)
+                        }
+                        result.IntegrationActionRequired = true
+                        for _, gap := range wiringData.Gaps {
+                            result.WiringGaps = append(result.WiringGaps,
+                                fmt.Sprintf("%s not called in %s", gap.Declaration.Symbol, gap.Declaration.MustBeCalledFrom))
+                        }
+                    }
+                }
+                break
+            }
+            ```
+
+            ### Block 6: Replace M5 integration checklist block (lines ~435-446)
+
+            Remove the `// Step 4.5: M5 populate-integration-checklist` block and
+            replace with:
+            ```go
+            // Step 4.5: M5 populate-integration-checklist — delegate to engine
+            for _, repoPath := range repos {
+                stepOpts := engine.FinalizeWaveOpts{
+                    IMPLPath: manifestPath, RepoPath: repoPath, WaveNum: waveNum,
+                    Logger: newSawLogger(), CollisionDetectionEnabled: true, ClosedLoopRetryEnabled: true,
+                }
+                _, updatedManifest, _ := engine.StepPopulateIntegrationChecklist(cmd.Context(), stepOpts, manifest, onEvent)
+                if updatedManifest != nil {
+                    manifest = updatedManifest
+                }
+                break
+            }
+            ```
+
+            ## Imports
+
+            After removing the direct `protocol.PredictConflictsFromReports`,
+            `protocol.ValidateWiringDeclarations`, and `protocol.PopulateIntegrationChecklist`
+            calls, check if `protocol` is still used elsewhere in the file (it is — for
+            `protocol.Load`, `protocol.MergeAgents`, etc.). Do NOT remove the protocol
+            import. The `collision` package import can be removed if `collision.DetectCollisions`
+            is no longer called directly (it's now called via engine).
+
+            Check: after your changes, does `collision` still appear as a direct call?
+            If not, remove `"github.com/blackwell-systems/scout-and-wave-go/pkg/collision"`
+            from the import block.
+
+            ## Verification Gate
+
+            ```
+            go build ./cmd/sawtools/...
+            go vet ./cmd/sawtools/...
+            ```
+
+            ## Constraints
+
+            - Do NOT modify `finalize_steps.go`, `finalize.go`, or
+              `finalize_steps_test.go`.
+            - Do NOT remove the multi-repo loop structure — the engine step functions
+              take a single repoPath. The per-repo loop must remain for steps that
+              differ by repo (collision detection). For manifest-level checks (I4,
+              E7, E11), add `break` after first iteration.
+            - Preserve all variable declarations at the top of RunE to avoid
+              "goto jumps over variable declaration" compile errors.
+            - Keep the `extractReposFromManifest` helper function intact.
+          files:
+            - cmd/sawtools/finalize_wave.go
+          dependencies:
+            - A
+        - id: D
+          task: |
+            ## Context
+
+            You are implementing Layer 4 of the engine-finalize-enforcement feature in
+            `scout-and-wave-go`. Agent A (wave 1) has added 6 new Step* functions to
+            `pkg/engine/finalize_steps.go`. Your task is to add tests for the new
+            functions to `pkg/engine/finalize_steps_test.go`.
+
+            ## Test Pattern
+
+            Follow the exact style of existing tests in this file:
+            - Use `makeTestIMPL(t, implYAML)` for fixtures
+            - Use `collectStepEvents()` to capture events
+            - Use YAML inline literals for IMPL content
+            - Test: nil callback doesn't panic, events are emitted, success/failure cases
+
+            ## Tests to Add
+
+            ### TestStepVerifyCompletionReports_MissingReports
+
+            Setup: IMPL with 2 agents (A and B) in wave 1. No completion_reports.
+            Call: `StepVerifyCompletionReports(ctx, opts, manifest, onEvent)`
+            Assert: returns non-nil error, error message contains both agent IDs,
+            StepResult.Step == "verify-completion-reports", StepResult.Status == "failed".
+
+            ### TestStepVerifyCompletionReports_AllPresent
+
+            Setup: IMPL with 1 agent A. completion_reports has entry for A with
+            status "complete".
+            Assert: no error, StepResult.Status == "success".
+
+            ### TestStepCheckAgentStatuses_BlockedAgent
+
+            Setup: IMPL with 1 agent A. completion_reports has A with status "blocked".
+            Call: `StepCheckAgentStatuses(ctx, opts, manifest, onEvent)`
+            Assert: returns non-nil error, error contains "blocked", status == "failed".
+
+            ### TestStepCheckAgentStatuses_PartialAgent
+
+            Setup: same but status "partial".
+            Assert: error contains "partial", status == "failed".
+
+            ### TestStepCheckAgentStatuses_CompleteAgent
+
+            Setup: status "complete".
+            Assert: no error, status == "success".
+
+            ### TestStepPredictConflicts_NoConflicts
+
+            Setup: IMPL with 1 agent, completion_reports for A with no overlapping files.
+            Assert: no error (PredictConflictsFromReports is a no-op for single agent).
+
+            ### TestStepCheckTypeCollisions_Disabled
+
+            Setup: any valid IMPL.
+            Call with `CollisionDetectionEnabled: false`.
+            Assert: no error, StepResult.Status == "skipped", returned CollisionReport is nil.
+
+            ### TestStepCheckWiringDeclarations_EmptyWiring
+
+            Setup: IMPL with no `wiring:` field.
+            Assert: no error, StepResult.Status == "skipped".
+
+            ### TestStepPopulateIntegrationChecklist_NoChecklist
+
+            Setup: minimal IMPL with no post_merge_checklist.
+            Assert: no error (non-fatal even with minimal manifest), StepResult.Status == "success".
+
+            ### TestStepVerifyCompletionReports_NilCallback
+
+            Setup: IMPL with agent A, no completion reports.
+            Call with nil onEvent.
+            Assert: does not panic, returns non-nil StepResult.
+
+            ## Verification Gate
+
+            ```
+            go build ./pkg/engine/...
+            go vet ./pkg/engine/...
+            go test ./pkg/engine/... -run TestStep -v
+            ```
+
+            ## Constraints
+
+            - Do NOT modify `finalize_steps.go`, `finalize.go`, or
+              `cmd/sawtools/finalize_wave.go`.
+            - Do NOT remove or modify existing tests.
+            - Each test must be a standalone `func TestXxx(t *testing.T)` at package
+              scope — no subtests required, but allowed.
+            - Completion report YAML uses this structure in inline IMPL:
+              ```yaml
+              completion_reports:
+                A:
+                  status: complete
+                  commit: abc123
+                  branch: wave1-agent-A
+                  files_changed: []
+                  files_created: []
+              ```
+          files:
+            - pkg/engine/finalize_steps_test.go
+          dependencies:
+            - A
+      base_commit: 190f915ff614ab7647e9d989f6b6e4b386fe7f3e
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./...
+          required: true
+          repo: scout-and-wave-go
+        - type: lint
+          command: go vet ./...
+          required: true
+          repo: scout-and-wave-go
+        - type: test
+          command: go test ./pkg/engine/... -run TestStep -v
+          required: true
+          repo: scout-and-wave-go
+completion_reports:
+    A:
+        status: complete
+        branch: main
+        commit: 190f915
+        files_changed:
+            - pkg/engine/finalize_steps.go
+            - pkg/engine/finalize.go
+        verification: 'PASS: go build ./pkg/engine/... && go vet ./pkg/engine/... && go test ./pkg/engine/... -run TestStep -v (8 tests passed)'
+    B:
+        status: complete
+        branch: saw/engine-finalize-enforcement/wave2-agent-B
+        commit: 58047a2
+        files_changed:
+            - pkg/engine/finalize.go
+        verification: PASS
+    C:
+        status: complete
+        branch: saw/engine-finalize-enforcement/wave2-agent-C
+        commit: a0c24dd
+        files_changed:
+            - cmd/sawtools/finalize_wave.go
+        verification: PASS
+    D:
+        status: complete
+        branch: saw/engine-finalize-enforcement/wave2-agent-D
+        commit: 745cb28
+        files_changed:
+            - pkg/engine/finalize_steps_test.go
+        tests_added:
+            - TestStepVerifyCompletionReports_MissingReports
+            - TestStepVerifyCompletionReports_AllPresent
+            - TestStepVerifyCompletionReports_NilCallback
+            - TestStepCheckAgentStatuses_BlockedAgent
+            - TestStepCheckAgentStatuses_PartialAgent
+            - TestStepCheckAgentStatuses_CompleteAgent
+            - TestStepPredictConflicts_NoConflicts
+            - TestStepCheckTypeCollisions_Disabled
+            - TestStepCheckWiringDeclarations_EmptyWiring
+            - TestStepPopulateIntegrationChecklist_NoChecklist
+        verification: PASS
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: |-
+            Agent B adds collision import but FinalizeWaveResult needs collision package
+            which creates circular import if collision already imports engine.
+          likelihood: low
+          impact: high
+          mitigation: |-
+            pkg/collision imports only pkg/protocol and internal/git. pkg/engine is not
+            imported by pkg/collision. No circular dependency risk. Verified by reading
+            collision/detector.go imports.
+        - scenario: |-
+            The CLI's finalize_wave.go calls protocol.PredictConflictsFromReports,
+            ValidateWiringDeclarations, and PopulateIntegrationChecklist directly.
+            After Agent C removes these calls, the protocol import might be flagged
+            as unused by go vet.
+          likelihood: low
+          impact: medium
+          mitigation: |-
+            protocol is still used for Load, MergeAgents, RunPreMergeGates,
+            RunPostMergeGates, SetImplState, UpdateStatus, etc. The import will
+            remain valid. Agent C's brief explicitly instructs checking for this.
+        - scenario: |-
+            Agent D's tests call StepCheckTypeCollisions with CollisionDetectionEnabled:false.
+            The step is defined in finalize_steps.go by Agent A. If Agent A's function
+            signature differs from what Agent D expects, compilation fails.
+          likelihood: low
+          impact: medium
+          mitigation: |-
+            Interface contracts in this IMPL doc define the exact signatures. Both
+            agents reference them. The StepCheckTypeCollisions return signature
+            (*StepResult, *collision.CollisionReport, error) is uniquely defined
+            and frozen in the interface_contracts section.
+        - scenario: |-
+            StepPopulateIntegrationChecklist in finalize_steps.go needs protocol.Save.
+            If protocol.Save does not exist or has a different signature, compilation fails.
+          likelihood: low
+          impact: medium
+          mitigation: |-
+            Verify before wave launch. Run:
+            grep -n "^func Save" /Users/dayna.blackwell/code/scout-and-wave-go/pkg/protocol/*.go
+            The CLI already calls protocol.Save(manifest, manifestPath) at line 441
+            of finalize_wave.go, confirming the function exists with this signature.
+        - scenario: |-
+            goto statements in finalize_wave.go (goto postMerge) may cause "jumps over
+            variable declaration" compile errors if Agent C introduces new var declarations
+            before the goto.
+          likelihood: medium
+          impact: high
+          mitigation: |-
+            Agent C's brief explicitly warns to preserve all variable declarations at the
+            top of RunE and to not introduce new var declarations between goto and label.
+            Agent C delegates to engine step functions (no new vars needed).
+critic_report:
+    verdict: PASS
+    agent_reviews:
+        A:
+            agent_id: A
+            verdict: PASS
+        B:
+            agent_id: B
+            verdict: PASS
+        C:
+            agent_id: C
+            verdict: PASS
+        D:
+            agent_id: D
+            verdict: PASS
+    summary: 'All four agent briefs verified against the scout-and-wave-go codebase. File existence checks pass: all four modify-action files exist. Symbol accuracy checks pass: PredictConflictsFromReports, ValidateWiringDeclarations, PopulateIntegrationChecklist, Save, DetectCollisions, CollisionReport, WiringValidationData, loggerFrom, EventCallback, StepResult, newSawLogger all exist under their stated names and signatures. Pattern accuracy checks pass: the emitStepEvent pattern, loggerFrom usage, and step function structure in finalize_steps.go match exactly what agents A and D are told to follow. The FinalizeWaveOpts and FinalizeWaveResult struct positions referenced by Agent B (lines 17 and 47) are accurate. Line number references in Agent C (blocks at ~222, ~239, ~251, ~258, ~385, ~435) match the actual file. Interface consistency checks pass: all cross-agent type signatures are valid Go and reference types that exist. Import chain checks pass: pkg/collision is a local package in the same module with no circular dependency risk (it imports only pkg/protocol and internal/git). Side-effect completeness is not applicable as this IMPL only modifies existing files with no new exported types requiring registration.'
+    reviewed_at: "2026-03-25T19:27:10Z"
+    issue_count: 0
+state: COMPLETE

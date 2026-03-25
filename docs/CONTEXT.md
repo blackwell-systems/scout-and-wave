@@ -65,3 +65,9 @@
   - IMPL doc: docs/IMPL/complete/IMPL-web-prepare-wave-migration.yaml
 - **waveboard-state-persistence**: completed 2026-03-24, 2 waves, 4 agents
   - IMPL doc: docs/IMPL/complete/IMPL-waveboard-state-persistence.yaml
+- **file-browser-cross-repo**: completed 2026-03-25, 2 waves, 5 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-file-browser-cross-repo.yaml
+- **engine-finalize-enforcement**: completed 2026-03-25, 2 waves, 4 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-engine-finalize-enforcement.yaml
+- **interview-mode-gaps**: completed 2026-03-25, 1 waves, 4 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-interview-mode-gaps.yaml

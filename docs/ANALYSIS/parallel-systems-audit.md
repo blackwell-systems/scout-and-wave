@@ -11,16 +11,32 @@
 
 **Status:** Substantially resolved. 4 of 6 specific duplications fixed, 2 residual items remain.
 
-**Residual item A: CLI finalize_wave.go orchestration outside engine.**
-CLI `finalize_wave.go` still has cross-repo iteration, closed-loop gate retry, and collision detection logic that isn't in `engine.FinalizeWave()`. These are CLI-specific concerns (the web app doesn't need cross-repo iteration because it handles one repo at a time). Low priority — the engine step functions exist, the CLI just hasn't migrated its extra orchestration into them yet.
+**Residual item A: Web app skips critical enforcement steps during wave finalization. ⚠️ MEDIUM priority, not low.**
+
+Reviewed 2026-03-25. The CLI `finalize_wave.go` has 8 enforcement steps that are explicitly labeled "CLI-only" and are NOT called by `engine.FinalizeWave()` (the path the web app uses):
+
+| Missing step | Protocol rule | Risk |
+|---|---|---|
+| I4 completion report verification | I4 | Web can merge a wave with no completion reports |
+| E7 status check before merge | E7 | Web can merge a `partial`/`blocked` agent's work |
+| E11 conflict prediction | E11 | Merge conflicts not predicted before attempt |
+| Type collision detection (Step 1.5) | E21 | Type name collisions across agent branches undetected |
+| C2 closed-loop gate retry | C2 | Failed gates not auto-retried in web UI |
+| E35 wiring declaration check | E35 | Wiring gaps not caught post-merge in web UI |
+| M5 populate-integration-checklist | M5 | Integration checklist not populated after wave |
+| Cross-repo iteration (`extractReposFromManifest`) | — | Web finalizes only one repo even for cross-repo IMPLs |
+
+The most dangerous gaps are I4 and E7 — the web app can merge a wave where agents reported `blocked` or wrote no completion report. These should be moved into the engine so both paths enforce them.
+
+Note: the web app also needs cross-repo file browser awareness (separate from finalization). The `/api/files/resolve` endpoint was added 2026-03-25 for that case.
 
 **Residual item B: Two wave execution paths (RunWaveFull vs PrepareWave+RunWave).**
-CLI's `RunWaveFull()` is a separate code path from the web's `PrepareWave()` + `orchestrator.RunWave()`. Both work, but they don't share the same composition. Runner.go decomposition scout (in flight) may address this.
+CLI's `RunWaveFull()` is a separate code path from the web's `PrepareWave()` + `orchestrator.RunWave()`. `RunWaveFull` is also used by `program_tier_loop.go:172`. Both work, but they don't share the same composition. Runner.go decomposition scout (in flight) may address this.
 
 ~~**Residual item C: Scout finalization inconsistency.**~~ — **RESOLVED**
 CLI `finalize_impl_cmd.go` and `run_scout_cmd.go` now call `engine.FinalizeIMPLEngine()` instead of `protocol.FinalizeIMPL()` directly. Both paths use the same engine wrapper.
 
-**Effort:** Low for each residual item. No urgency — both paths work correctly.
+**Effort:** Item A (I4+E7 into engine) is medium effort, high correctness value. Item B is low urgency — both paths work.
 
 ---
 
