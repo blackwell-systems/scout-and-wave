@@ -1,33 +1,63 @@
 # Installation Guide
 
-This guide walks you through installing all Scout-and-Wave components. Most users need the first two steps; the Web UI is optional.
+## Zero to First Scout
+
+Six commands from nothing to your first `/saw scout`. Copy-paste in order:
+
+```bash
+# 0. Prerequisites: Git 2.20+, Go 1.25+, jq 1.6+
+git --version && go version && jq --version
+
+# 1. Install skill files + enforcement hooks
+git clone https://github.com/blackwell-systems/scout-and-wave.git
+cd scout-and-wave && ./install.sh
+
+# 2. Install the CLI
+go install github.com/blackwell-systems/scout-and-wave-go/cmd/sawtools@latest
+
+# 3. Initialize your project
+cd /path/to/your-project
+sawtools init
+
+# 4. Verify everything works
+sawtools verify-install
+
+# 5. Run your first scout
+#    (in Claude Code, type this as a prompt)
+/saw scout "describe your feature here"
+```
+
+**Important:** Add `Agent` to your Claude Code permissions or you'll be prompted to approve every agent launch:
+
+```bash
+# Add to ~/.claude/settings.json under "permissions.allow":
+jq '.permissions.allow += ["Agent"] | .permissions.allow |= unique' \
+  ~/.claude/settings.json > /tmp/cs.json && mv /tmp/cs.json ~/.claude/settings.json
+```
+
+That's it for most users. The Web UI is optional -- see [Step 3](#step-3-web-ui-optional) below if you want the browser interface.
+
+---
 
 ## Prerequisites
 
 | Tool | Minimum Version | Check With | Required For |
 |---|---|---|---|
-| Git | 2.20+ | `git --version` | All components |
-| Go | 1.25+ | `go version` | Building `sawtools` and `saw` binaries |
-| jq | 1.6+ | `jq --version` | Hook installer, hook scripts at runtime |
-| yq | 4.x | `yq --version` | Pre-launch validation (H5), IMPL parsing |
+| Git | 2.20+ | `git --version` | All (worktree support) |
+| Go | 1.25+ | `go version` | `sawtools` binary |
+| jq | 1.6+ | `jq --version` | Installer + hooks at runtime |
+| yq | 4.x | `yq --version` | Pre-launch validation (H5); grep fallback exists |
 | Node.js | 18+ | `node --version` | Web UI only |
 
-**Notes:**
-- Git 2.20+ is required for worktree support (SAW creates isolated worktrees for parallel agents)
-- Go is required to build the `sawtools` binary from scout-and-wave-go
-- `jq` is required by the hook installer and by most hook scripts at runtime
-- `yq` is used by the pre-launch validation hook; a `grep` fallback exists but is less precise
-- Node.js is only required if you want the Web UI (scout-and-wave-web)
+## What you need
 
-## Dependency Matrix
+Most users need **two repos**: this one (protocol + skill files + hooks) and `sawtools` (a single binary from scout-and-wave-go). The web UI is a third repo, optional.
 
-Not every component needs every tool. Here is what each repo requires:
-
-| Component | Requires | Purpose |
+| What | Install method | Required? |
 |---|---|---|
-| Protocol (scout-and-wave) | Git, jq | Skill files, protocol spec, hook installer |
-| CLI (scout-and-wave-go) | Git, Go 1.25+ | `sawtools` binary |
-| Web UI (scout-and-wave-web) | Git, Go 1.25+, Node.js 18+ | `saw` web server |
+| Protocol + skill + hooks | `git clone` + `./install.sh` | Yes |
+| `sawtools` CLI | `brew install` or `go install` | Yes |
+| Web UI | `git clone` + `npm build` + `go build` | No -- only if you want the browser dashboard |
 
 ## Installation Steps
 
