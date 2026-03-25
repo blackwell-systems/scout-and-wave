@@ -48,6 +48,11 @@ if [[ -z "$current_branch" ]]; then
   exit 0
 fi
 
+# Allow orchestrator commits to main when explicitly permitted
+if [[ "${SAW_ALLOW_MAIN_COMMIT:-}" == "1" ]]; then
+  exit 0
+fi
+
 if [[ "$current_branch" == "main" || "$current_branch" == "master" ]]; then
   echo "BLOCKED [check_branch_drift / H4]: Direct commit to '${current_branch}' detected." >&2
   echo "" >&2
