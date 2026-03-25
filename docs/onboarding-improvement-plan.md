@@ -694,7 +694,7 @@ In the web app, the "New Plan" button already uses "Plan" language. This makes C
 |---|---|---|---|---|---|
 | 5 | **4.2 Guided first run** (CLI skill prompt changes) | High — transforms first experience | Medium | scout-and-wave | None |
 | 6 | **4.3 Web app empty state** redesign | High — eliminates dead-end first impression | Medium | scout-and-wave-web | None |
-| 7 | **4.1 `saw init`** command | High — replaces 9-step install with 1 command | Medium | scout-and-wave-go | None |
+| 7 | **~~4.1 `sawtools init`~~** | — | — | COMPLETE (2026-03-25) | — |
 | 8 | **4.5 Error messages** (Go-side UserMessage fields) | Medium — better diagnostics compound over time | Medium | scout-and-wave-go | None |
 
 ### Tier 3: High Impact, Large Effort (do third)
@@ -729,7 +729,7 @@ Independent review verdict: **APPROVE WITH CHANGES**. Status of each condition:
 
 1. **4.7 `saw plan` alias — DEFERRED.** The CLI is invoked via `/saw scout` inside Claude Code — there is no standalone `saw` binary for CLI users. The alias would need to live in the skill prompt as routing logic, not in sawtools. Additionally, "plan" is already overloaded: it is a noun (the IMPL doc), a verb in `/saw program plan`, and would become a second verb meaning "run the scout." This creates ambiguity. Revisit only if a standalone CLI entry point is built.
 
-2. **4.1 `saw init` — DESCOPED.** The web app has its own setup flow. CLI users install via `install.sh` which handles clone + build + symlink + permissions in one invocation. The installation friction (building sawtools from source) was solved by `go install` and Homebrew (v0.92.0). `saw init` adds surface area without addressing the actual bottleneck. Keep the project-detection logic in the backlog for the web onboarding wizard, but do not build a separate CLI command for it.
+2. **4.1 `sawtools init` — COMPLETE (2026-03-25).** Implemented as `sawtools init` (not `saw init`). Auto-detects language (Go, Rust, Node, Python, Ruby, Makefile), build and test commands, and generates `saw.config.json`. Flags: `--repo <path>` (default: cwd), `--force` (overwrite existing config). Documentation updated in INSTALLATION.md, README.md, and saw-skill.md.
 
 3. **4.2 Guided first-run — RESTRUCTURE.** Adding ~50 lines to the skill prompt for a path that fires once per project is expensive context for every subsequent invocation. Move the guided first-run content into a reference file (e.g., `references/first-run.md`) loaded on first-run detection, same pattern as `program-flow.md` and `amend-flow.md`. The routing table in the core skill adds one line; the content loads on demand.
 
@@ -760,7 +760,7 @@ Independent review verdict: **APPROVE WITH CHANGES**. Status of each condition:
 | # | Proposal | Impact | Effort | Rationale |
 |---|---|---|---|---|
 | 10 | **`saw plan` alias (4.7)** | Low | Small | Deferred — overloads "plan" and no standalone CLI exists. Revisit if CLI entry point is built. |
-| 11 | **`saw init` command (4.1)** | Low | Medium | Descoped — `install.sh` and `go install` cover the real friction. |
+| 11 | **~~`sawtools init` command (4.1)~~** | — | — | COMPLETE (2026-03-25). Implemented as `sawtools init` with auto-detection. |
 | 12 | **Protocol doc renaming (4.4 docs)** | Low | Large | Docs are secondary to the product experience. |
 | 13 | **Interactive web tutorial** | Medium | Large | Guided overlay in web app. Nice to have. |
 
