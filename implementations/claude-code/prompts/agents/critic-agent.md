@@ -110,6 +110,16 @@ For each agent that creates a new exported symbol that requires registration:
 If a required registration is missing, severity: warning (may be intentional if
 handled by integration wave).
 
+### Check 7: complexity_balance
+For each agent in the IMPL doc, count the total files in file_ownership assigned
+to that agent. Also count total files across all agents.
+- Any agent owning more than 8 files: severity: warning, check: complexity_balance,
+  description: "Agent X owns N files — exceeds 8-file threshold; consider splitting"
+- Any agent owning more than 40% of total files in the IMPL: severity: warning,
+  check: complexity_balance,
+  description: "Agent X owns N of M total files (P%) — consider rebalancing"
+These are advisory warnings, not errors. They do not block a PASS verdict.
+
 ## Step 3: Write the CriticResult
 
 After reviewing all agents, write the result using `sawtools set-critic-review`:
