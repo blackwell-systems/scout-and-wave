@@ -19,7 +19,7 @@ A new user who discovers SAW and wants to try it goes through these steps:
 5. **Navigate to `implementations/claude-code/QUICKSTART.md`** for a step-by-step walkthrough.
 6. **Finally run `/saw scout "feature"`** — and wait 30-90 seconds for a result they need protocol knowledge to evaluate.
 
-**Minimum steps before first productive use: 9** (clone, install, clone, build, PATH, permissions, verify, read quickstart, run scout). Compare with AO's 1 step: `ao start <url>`.
+**Minimum steps before first productive use: ~4** (clone protocol repo, run install.sh, `brew install blackwell-systems/tap/sawtools`, run `/saw scout`). Previously 9 steps before `go install` and Homebrew were available. Compare with AO's 1 step: `ao start <url>`.
 
 **Minimum concepts required before first use:**
 - What a "Scout" is and why it runs first
@@ -643,7 +643,7 @@ Options:
 
 They share the engine (`pkg/`), not each other. That's correct architecture.
 
-**The real fix for installation friction is `go install`** (make both binaries easy to install), not merging them. See Tier 2 priority.
+**The installation friction was solved by `go install` and Homebrew** (v0.92.0, 2026-03-25). Both binaries are now easy to install without building from source.
 
 **Note:** The fact that this proposal was generated at all is itself an onboarding signal — the two-binary architecture and its rationale need to be documented clearly in INSTALLATION.md and the README. If a researcher reading the codebase can't tell why they're separate, new users can't either.
 
@@ -695,8 +695,7 @@ In the web app, the "New Plan" button already uses "Plan" language. This makes C
 | 5 | **4.2 Guided first run** (CLI skill prompt changes) | High — transforms first experience | Medium | scout-and-wave | None |
 | 6 | **4.3 Web app empty state** redesign | High — eliminates dead-end first impression | Medium | scout-and-wave-web | None |
 | 7 | **4.1 `saw init`** command | High — replaces 9-step install with 1 command | Medium | scout-and-wave-go | None |
-| 8 | **`go install` distribution** for sawtools | High — without this, `saw init` still requires building from source | Small | scout-and-wave-go | None |
-| 9 | **4.5 Error messages** (Go-side UserMessage fields) | Medium — better diagnostics compound over time | Medium | scout-and-wave-go | None |
+| 8 | **4.5 Error messages** (Go-side UserMessage fields) | Medium — better diagnostics compound over time | Medium | scout-and-wave-go | None |
 
 ### Tier 3: High Impact, Large Effort (do third)
 
@@ -709,23 +708,13 @@ In the web app, the "New Plan" button already uses "Plan" language. This makes C
 
 | # | Proposal | Impact | Effort | Repos |
 |---|---|---|---|---|
-| 12 | Homebrew formula for `saw` | Medium — macOS users expect this | Medium | New repo (homebrew-tap) |
-| 13 | Interactive web tutorial (guided overlay) | Medium — web-specific onboarding | Large | scout-and-wave-web |
+| 12 | Interactive web tutorial (guided overlay) | Medium — web-specific onboarding | Large | scout-and-wave-web |
 
 ---
 
 ## 6. Review Findings (integrated 2026-03-22)
 
 Independent review verdict: **APPROVE WITH CHANGES**. Status of each condition:
-
-### Resolved
-- **4.6 Unified binary** — REJECTED. Two binaries stay separate (sawtools = CLI, saw = web app). Rationale documented in 4.6 section.
-- **Phase vs Wave inconsistency** — FIXED. All mocks now use "Wave", not "Phase".
-- **FTUE deferral** — RESOLVED. FTUE analysis reviewed item-by-item; most items already implemented. Remaining 3 minor items tracked separately.
-- **FTUE 1.4 Approve confirmation** — REJECTED. Tooltip already explains action; double-click friction unacceptable.
-- **`go install` priority** — MOVED to Tier 1 (see revised priority below).
-- **`go install` for sawtools** — DONE (2026-03-25). GoReleaser configured, first release v0.92.0 published. Install: `go install github.com/blackwell-systems/scout-and-wave-go/cmd/sawtools@latest`. All installation docs updated across all three repos. Installation steps reduced from 9 to ~4 (clone protocol repo, run install.sh, go install sawtools, verify).
-- **Installation docs updated** — DONE (2026-03-25). All 8 docs across protocol and Go repos updated to show `go install` as primary method, build-from-source as collapsible alternative for contributors.
 
 ### Open (still to address)
 - **First-run detection reconciliation:** `saw init` checks `saw.config.json`; skill guided mode checks `docs/IMPL/`. Need single signal. Recommendation: `saw.config.json` existence is the canonical "initialized" flag.
@@ -741,7 +730,7 @@ Independent review verdict: **APPROVE WITH CHANGES**. Status of each condition:
 
 1. **4.7 `saw plan` alias — DEFERRED.** The CLI is invoked via `/saw scout` inside Claude Code — there is no standalone `saw` binary for CLI users. The alias would need to live in the skill prompt as routing logic, not in sawtools. Additionally, "plan" is already overloaded: it is a noun (the IMPL doc), a verb in `/saw program plan`, and would become a second verb meaning "run the scout." This creates ambiguity. Revisit only if a standalone CLI entry point is built.
 
-2. **4.1 `saw init` — DESCOPED.** The web app has its own setup flow. CLI users install via `install.sh` which handles clone + build + symlink + permissions in one invocation. The stated "9 steps" inflates the problem — `install.sh` is already a single command. The real installation friction is building sawtools from source, which `go install` (Tier 2, item 8) solves directly. `saw init` adds surface area without addressing the actual bottleneck. Keep the project-detection logic in the backlog for the web onboarding wizard, but do not build a separate CLI command for it.
+2. **4.1 `saw init` — DESCOPED.** The web app has its own setup flow. CLI users install via `install.sh` which handles clone + build + symlink + permissions in one invocation. The installation friction (building sawtools from source) was solved by `go install` and Homebrew (v0.92.0). `saw init` adds surface area without addressing the actual bottleneck. Keep the project-detection logic in the backlog for the web onboarding wizard, but do not build a separate CLI command for it.
 
 3. **4.2 Guided first-run — RESTRUCTURE.** Adding ~50 lines to the skill prompt for a path that fires once per project is expensive context for every subsequent invocation. Move the guided first-run content into a reference file (e.g., `references/first-run.md`) loaded on first-run detection, same pattern as `program-flow.md` and `amend-flow.md`. The routing table in the core skill adds one line; the content loads on demand.
 
@@ -753,11 +742,10 @@ Independent review verdict: **APPROVE WITH CHANGES**. Status of each condition:
 
 | # | Proposal | Impact | Effort | Rationale |
 |---|---|---|---|---|
-| 1 | **~~`go install` for sawtools~~** | ~~High~~ | ~~Small~~ | **DONE (2026-03-25).** v0.92.0 released via GoReleaser. All docs updated. |
-| 2 | **Web app empty state redesign (4.3)** | High | Small | Immediate payoff. Replaces dead-end "No plan selected" with call-to-action. No dependencies. |
-| 3 | **Error message templates in skill prompt (4.5, prompt-side only)** | High | Small | Verbatim error strings for the 6 most common failures. No Go changes needed. |
-| 4 | **Hide advanced model selectors (4.4, UI labels)** | High | Small | Show SCOUT, WAVE, CHAT; hide CRITIC, SCAFFOLD, INTEGRATION, PLANNER behind Advanced toggle. |
-| 5 | **README screenshot/recording** | High | Small | 10-second GIF of Scout → review → wave → merge in first 20 lines. Converts evaluators. |
+| 1 | **Web app empty state redesign (4.3)** | High | Small | Immediate payoff. Replaces dead-end "No plan selected" with call-to-action. No dependencies. |
+| 2 | **Error message templates in skill prompt (4.5, prompt-side only)** | High | Small | Verbatim error strings for the 6 most common failures. No Go changes needed. |
+| 3 | **Hide advanced model selectors (4.4, UI labels)** | High | Small | Show SCOUT, WAVE, CHAT; hide CRITIC, SCAFFOLD, INTEGRATION, PLANNER behind Advanced toggle. |
+| 4 | **README screenshot/recording** | High | Small | 10-second GIF of Scout → review → wave → merge in first 20 lines. Converts evaluators. |
 
 ### Tier 2: Medium Impact (do second)
 
@@ -775,8 +763,7 @@ Independent review verdict: **APPROVE WITH CHANGES**. Status of each condition:
 | 10 | **`saw plan` alias (4.7)** | Low | Small | Deferred — overloads "plan" and no standalone CLI exists. Revisit if CLI entry point is built. |
 | 11 | **`saw init` command (4.1)** | Low | Medium | Descoped — `install.sh` and `go install` cover the real friction. |
 | 12 | **Protocol doc renaming (4.4 docs)** | Low | Large | Docs are secondary to the product experience. |
-| 13 | **~~Homebrew formula~~** | ~~Medium~~ | ~~Medium~~ | **DONE.** Formula maintained manually in `blackwell-systems/homebrew-tap`. Install: `brew install blackwell-systems/tap/sawtools`. |
-| 14 | **Interactive web tutorial** | Medium | Large | Guided overlay in web app. Nice to have. |
+| 13 | **Interactive web tutorial** | Medium | Large | Guided overlay in web app. Nice to have. |
 
 ## 7. Anti-Patterns to Avoid
 
