@@ -126,6 +126,23 @@ Verify the installation:
 sawtools version
 ```
 
+### Step 2b: Initialize Your Project
+
+After installing `sawtools`, run `sawtools init` in your project directory to auto-generate a `saw.config.json` configuration file:
+
+```bash
+cd your-project
+sawtools init
+```
+
+`sawtools init` auto-detects your project's language (Go, Rust, Node, Python, Ruby, or Makefile-based), build command, and test command, then writes a `saw.config.json` with sensible defaults. No manual configuration needed for most projects.
+
+**Flags:**
+- `--repo <path>` — Initialize a project at a different path (default: current directory)
+- `--force` — Overwrite an existing `saw.config.json`
+
+If you already have a `saw.config.json` or prefer to configure manually, this step is optional — see [Configuration](#configuration) below.
+
 ### Step 3: Web UI (Optional)
 
 If you want the browser-based interface:
@@ -213,7 +230,9 @@ sawtools verify-install --human
 
 ## Configuration
 
-SAW looks for a `saw.config.json` file in your project root. This tells `sawtools` where to find the other repos:
+The recommended way to create your configuration is `sawtools init`, which auto-detects your project and generates a `saw.config.json` with appropriate defaults (see [Step 2b](#step-2b-initialize-your-project) above).
+
+To configure manually, create a `saw.config.json` file in your project root. This tells `sawtools` where to find the other repos:
 
 ```json
 {

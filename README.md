@@ -89,7 +89,11 @@ ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/saw-bootstrap.m
 ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agent-template.md ~/.claude/skills/saw/agent-template.md
 ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agents ~/.claude/skills/saw/agents
 
-# 2. Restart Claude Code, then in any session on any project:
+# 2. Initialize your project (auto-detects language, build, and test commands)
+cd your-project
+sawtools init
+
+# 3. Restart Claude Code, then in any session on any project:
 /saw scout "add a caching layer to the API client"
 # → Scout analyzes the codebase, assigns files to agents, writes docs/IMPL/IMPL-caching-layer.yaml
 # → Orchestrator shows you the wave structure and interface contracts for review

@@ -129,7 +129,7 @@ Run once per session on first `/saw` invocation. Skip on subsequent invocations.
 1. **sawtools on PATH**: `command -v sawtools` — blocker if missing
 2. **Skill files present**: Check `${CLAUDE_SKILL_DIR}/agent-template.md` exists — blocker if missing
 3. **Git 2.20+**: `git --version` — blocker if < 2.20
-4. **saw.config.json** (informational): Check project root for config — not a blocker
+4. **saw.config.json** (informational): Check project root for config. If missing, suggest: "No saw.config.json found. Run `sawtools init` to auto-generate one (detects language, build, and test commands)." Not a blocker — SAW works without it, but the config improves model selection and build/test detection.
 
 If checks 1-3 fail, print what's missing and how to install it (see `docs/INSTALLATION.md`), then stop.
 
