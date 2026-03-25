@@ -1,6 +1,18 @@
 # Progressive Disclosure in SAW Skills
 
-The SAW `/saw` skill uses a four-tier progressive disclosure model to minimize context window usage. This document explains the design, implementation, and how to extend it.
+The SAW `/saw` skill implements the [Agent Skills progressive disclosure model](https://agentskills.io/specification#progressive-disclosure) with a four-tier structure to minimize context window usage. This document explains how SAW applies the spec, where it extends it, and how to add new tiers.
+
+## The Agent Skills Spec
+
+The [Agent Skills specification](https://agentskills.io/specification) defines a three-tier progressive disclosure model for agentic skills:
+
+1. **Metadata** (~100 tokens) — `name` and `description` frontmatter, loaded at startup for all skills
+2. **Instructions** (<5000 tokens recommended) — the full `SKILL.md` body, loaded on skill activation
+3. **Resources** (as needed) — files in `scripts/`, `references/`, `assets/`, loaded only when required
+
+SAW extends this with a Tier 0 discovery layer (`CLAUDE.md`) that sits outside the skill itself, providing project-level routing before any skill is activated.
+
+The `triggers:` frontmatter extension proposed in `docs/proposals/skill-context-injection.md` is SAW's contribution back to the ecosystem — deterministic enforcement of Tier 3 loading via the `UserPromptSubmit` hook, rather than convention-based routing.
 
 ## Why Progressive Disclosure
 
@@ -17,7 +29,11 @@ Progressive disclosure defers these on-demand references until the matching subc
 
 ## The Four Tiers
 
+> **Spec alignment:** The Agent Skills spec defines three tiers (Metadata, Instructions, Resources). SAW adds Tier 0 as a discovery layer that sits outside the spec's scope — it is not part of the skill itself, but part of the project environment.
+
 ### Tier 0 — CLAUDE.md Index (always in context, zero invocation cost)
+
+*Not part of the Agent Skills spec — SAW extension for project-level discovery.*
 
 `CLAUDE.md` files — global (`~/.claude/CLAUDE.md`) or project-level (`.claude/CLAUDE.md`) — are loaded into every Claude Code session before any user message is processed. They are not loaded *by* a skill; they are always present. This makes them the ideal entry point for the entire progressive disclosure system.
 
@@ -56,9 +72,11 @@ A user who types "add caching to the API" in a project with this CLAUDE.md gets 
 
 This is the progressive disclosure model applied at the project level: the index is always loaded; the skill bodies load only when invoked.
 
-**Known limitation:** CLAUDE.md entries are advisory — Claude reads them but there is no enforcement mechanism that prevents the model from ignoring them. The entries should be written to make the correct routing the obvious choice, not to mandate it. The `UserPromptSubmit` hook proposal (`docs/proposals/skill-context-injection.md`) addresses a related problem one tier deeper: ensuring on-demand references are injected before the skill runs, not just described in an index.
+**Known limitation:** CLAUDE.md entries are advisory — Claude reads them but there is no enforcement mechanism that prevents the model from ignoring them. The entries should be written to make the correct routing the obvious choice, not to mandate it. The `UserPromptSubmit` hook proposal (`docs/proposals/skill-context-injection.md`) addresses the same gap the Agent Skills spec leaves open: the spec defines the Resources tier but leaves loading to convention. The `triggers:` frontmatter extension converts Tier 3 from convention-based to enforcement-based via deterministic hook injection.
 
 ### Tier 1 — Metadata (always loaded, ~17 lines)
+
+*Maps to Agent Skills spec: **Metadata** tier (~100 tokens).*
 
 The skill frontmatter is parsed by the Claude Code Skills API before the Orchestrator's context is constructed. It is always present and carries zero variable cost at invocation time:
 
@@ -78,6 +96,8 @@ allowed-tools: |
 
 ### Tier 2 — Core SKILL.md (loaded on invocation, ~283 lines)
 
+*Maps to Agent Skills spec: **Instructions** tier (<5000 tokens recommended).*
+
 The main body of `saw-skill.md` is loaded on every `/saw` invocation. It contains everything the Orchestrator needs for the most common subcommands:
 
 - Role separation invariants (I6)
@@ -92,6 +112,8 @@ The main body of `saw-skill.md` is loaded on every `/saw` invocation. It contain
 **Target:** Under 350 lines. The heuristic for what stays in core is: any logic invoked on more than 50% of `/saw` calls belongs here. If it is only needed for a minority subcommand family, it is a candidate for extraction.
 
 ### Tier 3 — On-Demand Reference Files (loaded only when matched)
+
+*Maps to Agent Skills spec: **Resources** tier (loaded as needed). The spec recommends keeping reference files focused and one level deep from SKILL.md.*
 
 Three on-demand references live in `implementations/claude-code/prompts/references/`. The Orchestrator reads them only when the routing table matches the invoked subcommand.
 

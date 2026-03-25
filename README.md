@@ -65,8 +65,8 @@ The five questions assess whether the work:
 See [protocol/preconditions.md](protocol/preconditions.md) for details.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/saw-scout-wave-dark.svg">
-  <img src="docs/diagrams/saw-scout-wave-light.svg" alt="SAW scout + wave execution flow">
+  <source media="(prefers-color-scheme: dark)" srcset="assets/diagrams/saw-scout-wave-dark.svg">
+  <img src="assets/diagrams/saw-scout-wave-light.svg" alt="SAW scout + wave execution flow">
 </picture>
 
 ## Quick Start

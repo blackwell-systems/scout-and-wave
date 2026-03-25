@@ -1,0 +1,591 @@
+completion_date: "2026-03-24"
+title: WaveBoard State Persistence from IMPL Doc
+feature_slug: waveboard-state-persistence
+verdict: SUITABLE
+suitability_assessment: |
+    1. File decomposition: 8+ files across Go backend and TypeScript frontend with
+       clear boundaries. Backend changes (new API endpoint, pipeline state enrichment)
+       are fully disjoint from frontend changes (WaveBoard mount reconstruction,
+       new hooks, recovery panel state). Passes.
+
+    2. Investigation-first: No unknowns. The three state sources are well-documented
+       in the feature description. The existing disk-status endpoint already demonstrates
+       the pattern for reconstructing state from IMPL docs. Passes.
+
+    3. Interface discoverability: The API contract between backend and frontend can be
+       fully defined upfront. The existing DiskWaveStatus type is the template. A new
+       enriched endpoint (or expanded disk-status) returns pipeline steps + completion
+       report details. Passes.
+
+    4. Pre-implementation status:
+       - Disk-seeding of agent status: DONE (useWaveEvents already calls fetchDiskWaveStatus)
+       - Pipeline tracker persistence to .saw-state/: DONE (pipelineTracker already persists)
+       - Pipeline state GET endpoint: DONE (GET /api/wave/{slug}/pipeline exists)
+       - WaveBoard mount reconstruction from IMPL doc: PARTIAL (agents seeded, but
+         pipeline steps, file ownership board, and recovery state not seeded)
+       - Agent output snapshots: TODO (no snapshot mechanism exists)
+       - File ownership board from IMPL doc: TODO (only rendered from live SSE agents)
+
+    5. Parallelization value: High. Go backend has >30s build+test cycle. 4 agents
+       across 2 waves, each touching 2-3 files. Clear speedup over sequential.
+
+    Estimated times:
+    - Scout phase: ~8 min
+    - Agent execution: ~12 min (4 agents, ~6 min avg, 2 waves)
+    - Merge and verification: ~4 min
+    Total SAW time: ~24 min
+    Sequential baseline: ~32 min (4 agents x 8 min avg)
+    Time savings: ~8 min (25% faster)
+    Recommendation: Clear speedup. Proceed.
+test_command: go test ./... && cd /Users/dayna.blackwell/code/scout-and-wave-web/web && node_modules/.bin/vitest run
+lint_command: go vet ./...
+file_ownership:
+    - file: pkg/api/wave_status_disk.go
+      agent: A
+      wave: 1
+      action: modify
+    - file: pkg/api/wave_status_disk_test.go
+      agent: A
+      wave: 1
+      action: new
+    - file: web/src/lib/apiClient.ts
+      agent: B
+      wave: 1
+      action: modify
+    - file: web/src/hooks/waveEventsReducer.ts
+      agent: B
+      wave: 1
+      action: modify
+    - file: web/src/hooks/useWaveEvents.ts
+      agent: B
+      wave: 1
+      action: modify
+    - file: web/src/components/WaveBoard.tsx
+      agent: C
+      wave: 2
+      action: modify
+    - file: web/src/components/wave/WaveRecoveryPanel.tsx
+      agent: C
+      wave: 2
+      action: modify
+    - file: web/src/components/wave/WaveCompletionPanel.tsx
+      agent: C
+      wave: 2
+      action: modify
+    - file: web/src/components/FileOwnershipTable.tsx
+      agent: D
+      wave: 2
+      action: modify
+    - file: web/src/hooks/useFileActivity.ts
+      agent: D
+      wave: 2
+      action: modify
+interface_contracts:
+    - name: EnrichedDiskWaveStatus
+      description: |
+        Expanded DiskWaveStatus response that includes pipeline step state and
+        completion report verification details, enabling full WaveBoard reconstruction.
+      definition: |
+        // Go struct additions to DiskWaveStatus:
+        type DiskWaveStatus struct {
+            // ... existing fields ...
+            PipelineSteps  map[string]StepStateJSON `json:"pipeline_steps,omitempty"`
+            RunFailed      string                    `json:"run_failed,omitempty"`
+            RunComplete    bool                      `json:"run_complete"`
+            CompletionInfo map[string]AgentCompletionInfo `json:"completion_info,omitempty"`
+        }
+
+        type StepStateJSON struct {
+            Status string `json:"status"`
+            Error  string `json:"error,omitempty"`
+        }
+
+        type AgentCompletionInfo struct {
+            Status       string   `json:"status"`
+            Commit       string   `json:"commit,omitempty"`
+            FilesChanged []string `json:"files_changed,omitempty"`
+            Verification string   `json:"verification,omitempty"`
+        }
+      location: pkg/api/wave_status_disk.go
+    - name: fetchDiskWaveStatus enriched TypeScript type
+      description: |
+        TypeScript mirror of the enriched DiskWaveStatus for frontend consumption.
+      definition: |
+        export interface DiskWaveStatus {
+            // ... existing fields ...
+            pipeline_steps?: Record<string, { status: string; error?: string }>
+            run_failed?: string
+            run_complete?: boolean
+            completion_info?: Record<string, {
+                status: string
+                commit?: string
+                files_changed?: string[]
+                verification?: string
+            }>
+        }
+      location: web/src/lib/apiClient.ts
+    - name: SEED_DISK_STATUS enhanced action
+      description: |
+        Enhanced SEED_DISK_STATUS action to carry pipeline steps, run state,
+        and file ownership data from disk status.
+      definition: |
+        | { type: 'SEED_DISK_STATUS';
+            agents: AgentStatus[];
+            waves: WaveState[];
+            scaffoldStatus: AppWaveState['scaffoldStatus'];
+            hasScaffolds: boolean;
+            mergedWaves: number[];
+            pipelineSteps?: Record<string, { status: string; error?: string }>;
+            runFailed?: string;
+            runComplete?: boolean;
+          }
+      location: web/src/hooks/waveEventsReducer.ts
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## What to implement
+
+            Enrich the GET /api/wave/{slug}/disk-status endpoint to include pipeline step
+            state, run completion/failure status, and per-agent completion report details.
+            This data enables the frontend to fully reconstruct WaveBoard state on mount.
+
+            ## Files to modify
+
+            1. **pkg/api/wave_status_disk.go** — Expand DiskWaveStatus struct and handler:
+
+               Add these fields to `DiskWaveStatus`:
+               - `PipelineSteps map[string]StepStateJSON` — read from defaultPipelineTracker.Read(slug)
+               - `RunFailed string` — if the IMPL's state indicates a failed run (check for
+                 incomplete waves where agents have failure status in completion reports)
+               - `RunComplete bool` — true when all waves have all agents complete AND all
+                 waves are merged (waves_merged covers all wave numbers)
+               - `CompletionInfo map[string]AgentCompletionInfo` — per-agent details from
+                 completion reports: status, commit, files_changed, verification notes
+
+               Add helper structs:
+               ```go
+               type StepStateJSON struct {
+                   Status string `json:"status"`
+                   Error  string `json:"error,omitempty"`
+               }
+
+               type AgentCompletionInfo struct {
+                   Status       string   `json:"status"`
+                   Commit       string   `json:"commit,omitempty"`
+                   FilesChanged []string `json:"files_changed,omitempty"`
+                   Verification string   `json:"verification,omitempty"`
+               }
+               ```
+
+               In handleWaveDiskStatus, after the existing agent loop:
+               - Read pipeline state: `if defaultPipelineTracker != nil { state := defaultPipelineTracker.Read(slug); ... }`
+               - Convert PipelineState.Steps to map[string]StepStateJSON
+               - Populate CompletionInfo from manifest.CompletionReports
+               - Set RunComplete = true when len(result.WavesMerged) == len(manifest.Waves) && all agents complete
+               - Set RunFailed from any agent with status "blocked" or "failed" in completion reports,
+                 or if pipeline state has a failed step
+
+            2. **pkg/api/wave_status_disk_test.go** — Add tests:
+               - Test that pipeline_steps is populated when pipelineTracker has state
+               - Test that completion_info is populated from manifest completion reports
+               - Test that run_complete is true when all waves merged
+               - Test that run_failed is set when an agent has failed status
+
+            ## Interface contracts
+
+            The DiskWaveStatus struct gains 4 new JSON fields. All are omitempty so existing
+            consumers are not affected. The frontend will read these new fields in wave 2.
+
+            ## Verification gate
+
+            ```
+            go test ./pkg/api/ -run TestDiskStatus -v
+            go vet ./pkg/api/
+            ```
+
+            ## Constraints
+
+            - Do not change the function signature of handleWaveDiskStatus
+            - All new fields must be `omitempty` for backward compatibility
+            - Access defaultPipelineTracker with nil-check (it may be nil in tests)
+            - Use the existing protocol.Load and manifest.CompletionReports patterns
+          files:
+            - pkg/api/wave_status_disk.go
+            - pkg/api/wave_status_disk_test.go
+        - id: B
+          task: |
+            ## What to implement
+
+            Update the frontend state layer to consume enriched disk-status data and
+            seed WaveBoard state (pipeline steps, run state) from disk on mount.
+
+            ## Files to modify
+
+            1. **web/src/lib/apiClient.ts** — Expand the DiskWaveStatus TypeScript type:
+
+               Find the existing `DiskWaveStatus` interface (search for `export interface DiskWaveStatus`)
+               and add:
+               ```typescript
+               pipeline_steps?: Record<string, { status: string; error?: string }>
+               run_failed?: string
+               run_complete?: boolean
+               completion_info?: Record<string, {
+                   status: string
+                   commit?: string
+                   files_changed?: string[]
+                   verification?: string
+               }>
+               ```
+
+               No changes to the fetch call itself — it already hits /api/wave/{slug}/disk-status.
+
+            2. **web/src/hooks/waveEventsReducer.ts** — Enhance SEED_DISK_STATUS:
+
+               Add fields to the SEED_DISK_STATUS action type:
+               ```typescript
+               | { type: 'SEED_DISK_STATUS';
+                   agents: AgentStatus[];
+                   waves: WaveState[];
+                   scaffoldStatus: AppWaveState['scaffoldStatus'];
+                   hasScaffolds: boolean;
+                   mergedWaves: number[];
+                   pipelineSteps?: Record<string, { status: string; error?: string }>;
+                   runFailed?: string;
+                   runComplete?: boolean;
+                 }
+               ```
+
+               In the SEED_DISK_STATUS case of the reducer, add:
+               ```typescript
+               // Seed pipeline steps from disk
+               const pipelineSteps = action.pipelineSteps ?? state.pipelineSteps
+               // Seed run state from disk
+               const runFailed = action.runFailed ?? state.runFailed
+               const runComplete = action.runComplete ?? state.runComplete
+               ```
+               Include these in the returned state object.
+
+            3. **web/src/hooks/useWaveEvents.ts** — Pass enriched data through dispatch:
+
+               In the fetchDiskWaveStatus .then() callback (line ~37), add the new fields
+               to the SEED_DISK_STATUS dispatch:
+               ```typescript
+               dispatch({
+                 type: 'SEED_DISK_STATUS',
+                 agents,
+                 waves,
+                 scaffoldStatus,
+                 hasScaffolds: disk.scaffold_status !== 'none',
+                 mergedWaves,
+                 pipelineSteps: disk.pipeline_steps,
+                 runFailed: disk.run_failed,
+                 runComplete: disk.run_complete,
+               })
+               ```
+
+            ## Interface contracts
+
+            - DiskWaveStatus TypeScript type gains 4 optional fields (backward compatible)
+            - SEED_DISK_STATUS action type gains 3 optional fields
+            - waveEventsReducer seeds pipelineSteps, runFailed, runComplete from disk
+
+            ## Verification gate
+
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-web/web && node_modules/.bin/vitest run --reporter=verbose hooks/waveEventsReducer hooks/useWaveEvents
+            ```
+
+            ## Constraints
+
+            - All new fields are optional (?) to maintain backward compatibility
+            - Never overwrite SSE-driven live state with disk state (SSE takes priority)
+            - Follow the existing pattern: disk state seeds initial view, SSE events override
+            - Do not modify any component files — those are wave 2
+          files:
+            - web/src/lib/apiClient.ts
+            - web/src/hooks/waveEventsReducer.ts
+            - web/src/hooks/useWaveEvents.ts
+      base_commit: 03d6e4b817734fff0f8577bc96e3b8c605a3c239
+    - number: 2
+      agents:
+        - id: C
+          task: |
+            ## What to implement
+
+            Update WaveBoard and its sub-panels to render reconstructed state from disk
+            instead of showing empty/pending views when SSE events are unavailable.
+
+            ## Files to modify
+
+            1. **web/src/components/WaveBoard.tsx** — Mount reconstruction:
+
+               The component already fetches `impl` via fetchImpl (line 79). The `state`
+               from `useWaveEvents` now includes disk-seeded pipeline steps, runFailed,
+               and runComplete from wave 1's work.
+
+               Changes needed:
+
+               a) **File ownership board from IMPL doc on mount**: When no agents are running
+                  but the IMPL doc has file_ownership data, render the FileOwnershipTable
+                  from impl.file_ownership. Currently (lines 504-543), file activity only
+                  shows for running agents. Add a fallback section after the live file
+                  activity block:
+
+                  ```typescript
+                  {/* Static file ownership from IMPL doc when no live activity */}
+                  {!displayAgents.some(a => a.status === 'running') && impl?.file_ownership && impl.file_ownership.length > 0 && (
+                    <div className="bg-card border border-border rounded-none p-4 shadow-sm">
+                      <span className="font-semibold text-foreground text-sm">File Ownership</span>
+                      <FileOwnershipTable fileOwnership={impl.file_ownership} />
+                    </div>
+                  )}
+                  ```
+
+               b) **Show completion panel from disk state**: The `state.runComplete` field
+                  is now seeded from disk. The existing `{state.runComplete && ...}` block
+                  (line 329) will render automatically. No change needed here.
+
+               c) **Show recovery panel from disk state**: The `state.runFailed` field is now
+                  seeded from disk. The existing `{state.runFailed && ...}` block (line 334)
+                  will render automatically. The `state.pipelineSteps` is also seeded, so
+                  the RecoveryControlsPanel will show step statuses. No change needed here.
+
+               d) **Empty state improvement**: Update the empty state block (lines 351-362)
+                  to check if disk state has been loaded. If agents exist from disk seeding
+                  but no SSE is active, don't show "Waiting for wave execution to start":
+
+                  ```typescript
+                  {state.waves.length === 0 && state.scaffoldStatus === 'idle' && !state.runFailed && !state.runComplete && (
+                  ```
+                  Add `!state.runComplete` to the condition.
+
+            2. **web/src/components/wave/WaveRecoveryPanel.tsx** — No changes needed:
+
+               The WaveRecoveryPanel receives state.runFailed and state.pipelineSteps as
+               props. Since these are now seeded from disk (wave 1 work), the panel renders
+               correctly on mount. The retryError state is correctly ephemeral (it's a
+               user-action result, not persistent state). Verify this works by testing.
+
+            3. **web/src/components/wave/WaveCompletionPanel.tsx** — No changes needed:
+
+               The panel receives state.runComplete and renders accordingly. Since
+               state.runComplete is now seeded from disk, it renders on mount. Verify only.
+
+            ## Interface contracts
+
+            No new interfaces. Consumes existing AppWaveState and IMPLDocResponse types.
+
+            ## Verification gate
+
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-web/web && node_modules/.bin/vitest run --reporter=verbose components/WaveBoard
+            ```
+
+            ## Constraints
+
+            - Do not change useWaveEvents or waveEventsReducer (wave 1 Agent B owns those)
+            - Do not change apiClient.ts (wave 1 Agent B owns that)
+            - Preserve all existing SSE-driven behavior — disk state is fallback only
+            - Keep the existing visual design (no styling changes)
+          files:
+            - web/src/components/WaveBoard.tsx
+            - web/src/components/wave/WaveRecoveryPanel.tsx
+            - web/src/components/wave/WaveCompletionPanel.tsx
+          dependencies:
+            - B
+        - id: D
+          task: |
+            ## What to implement
+
+            Make the FileOwnershipTable and useFileActivity work in "static" mode when
+            rendering from IMPL doc data (no live SSE stream), and add a fetchPipelineState
+            API method to allow on-demand pipeline state refresh.
+
+            ## Files to modify
+
+            1. **web/src/components/FileOwnershipTable.tsx** — The `liveStatus` prop
+               is already optional (`liveStatus?: Map<string, FileActivityEntry>` at
+               line 20) and the component already hides the Status column when
+               `liveStatus` is undefined (via `hasStatus` guard at line 109).
+               No prop type changes needed.
+
+               Add a visual distinction for static/plan data: when liveStatus is
+               undefined and the table is rendering from plan data (passed via a new
+               `isStatic?: boolean` prop), show a subtle "from plan" badge or muted
+               styling to indicate this is plan data, not live data.
+
+            2. **web/src/hooks/useFileActivity.ts** — Handle empty/null input gracefully:
+
+               The hook derives file activity from SSE-driven agent state. When called with
+               agents that have no running status (all from disk seeding), it should return
+               an empty map without errors. Verify the hook handles this case. If it throws
+               or returns incorrect data when all agents are 'complete' or 'pending', fix it.
+
+               Add a new export:
+               ```typescript
+               export function useStaticFileOwnership(
+                 fileOwnership: FileOwnershipEntry[] | undefined
+               ): Map<string, { agent: string; status: string }> {
+                 // Convert IMPL file_ownership entries to the same shape as liveStatus
+                 // but with status = 'planned' (not live)
+                 return useMemo(() => {
+                   const map = new Map<string, { agent: string; status: string }>()
+                   if (!fileOwnership) return map
+                   for (const fo of fileOwnership) {
+                     map.set(fo.file, { agent: fo.agent, status: 'planned' })
+                   }
+                   return map
+                 }, [fileOwnership])
+               }
+               ```
+
+            ## Interface contracts
+
+            - FileOwnershipTable: add `isStatic?: boolean` prop for plan-data styling
+            - useStaticFileOwnership: new export, same shape as useFileActivity return type
+
+            ## Verification gate
+
+            ```
+            cd /Users/dayna.blackwell/code/scout-and-wave-web/web && node_modules/.bin/vitest run --reporter=verbose components/FileOwnershipTable hooks/useFileActivity
+            ```
+
+            ## Constraints
+
+            - Do not change WaveBoard.tsx (wave 2 Agent C owns that)
+            - Maintain backward compatibility: existing callers that pass liveStatus
+              should see no behavior change
+            - Do not add new API calls — this agent only handles UI component changes
+          files:
+            - web/src/components/FileOwnershipTable.tsx
+            - web/src/hooks/useFileActivity.ts
+          dependencies:
+            - B
+      base_commit: 03d6e4b817734fff0f8577bc96e3b8c605a3c239
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./...
+          required: true
+        - type: lint
+          command: go vet ./...
+          required: true
+        - type: test
+          command: go test ./pkg/api/... -run TestDiskStatus
+          required: true
+completion_reports:
+    A:
+        status: complete
+        branch: saw/waveboard-state-persistence/wave1-agent-A
+        commit: a74a487
+        files_changed:
+            - pkg/api/wave_status_disk.go
+            - pkg/api/wave_status_disk_test.go
+        files_created:
+            - pkg/api/wave_status_disk_test.go
+        tests_added:
+            - TestDiskStatus_PipelineSteps
+            - TestDiskStatus_CompletionInfo
+            - TestDiskStatus_RunComplete
+            - TestDiskStatus_RunFailed_BlockedAgent
+            - TestDiskStatus_RunFailed_PipelineStep
+            - TestDiskStatus_NilPipelineTracker
+        verification: PASS
+    B:
+        status: complete
+        branch: saw/waveboard-state-persistence/wave1-agent-B
+        commit: f424af4
+        files_changed:
+            - web/src/lib/apiClient.ts
+            - web/src/hooks/waveEventsReducer.ts
+            - web/src/hooks/useWaveEvents.ts
+            - web/src/hooks/__tests__/waveEventsReducer.test.ts
+            - web/src/hooks/useWaveEvents.test.ts
+        tests_added:
+            - seeds pipelineSteps from disk
+            - seeds runFailed from disk
+            - seeds runComplete from disk
+            - does not overwrite SSE-driven pipelineSteps
+            - does not overwrite SSE-driven runFailed
+            - seeds enriched pipeline and run state from disk status
+        verification: PASS
+    C:
+        status: complete
+        branch: saw/waveboard-state-persistence/wave2-agent-C
+        commit: f1d58b0
+        files_changed:
+            - web/src/components/WaveBoard.tsx
+        verification: PASS
+    D:
+        status: complete
+        branch: saw/waveboard-state-persistence/wave2-agent-D
+        commit: c848fb8
+        files_changed:
+            - web/src/components/FileOwnershipTable.tsx
+            - web/src/hooks/useFileActivity.ts
+            - web/src/hooks/useFileActivity.test.ts
+        files_created:
+            - web/src/components/FileOwnershipTable.test.tsx
+        tests_added:
+            - useStaticFileOwnership-returns-empty-map-undefined
+            - useStaticFileOwnership-returns-empty-map-empty
+            - useStaticFileOwnership-converts-entries
+            - useStaticFileOwnership-duplicate-files
+            - useStaticFileOwnership-all-planned
+            - FileOwnershipTable-default-no-badge
+            - FileOwnershipTable-isStatic-badge
+            - FileOwnershipTable-isStatic-false-no-badge
+            - FileOwnershipTable-isStatic-opacity
+            - FileOwnershipTable-no-opacity-default
+            - FileOwnershipTable-hides-status-column
+        verification: PASS
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: Disk-status endpoint returns stale pipeline state after server restart
+          likelihood: low
+          impact: low
+          mitigation: |
+            Pipeline state files persist in .saw-state/ and survive server restarts.
+            The pipelineTracker.Read() method reads from disk, not memory.
+        - scenario: Race between disk seeding and SSE events causes duplicate agents
+          likelihood: medium
+          impact: low
+          mitigation: |
+            The existing SEED_DISK_STATUS reducer already handles this race with the
+            liveKeys dedup pattern (lines 176-182 of waveEventsReducer.ts). The same
+            pattern applies to the new fields.
+        - scenario: Large completion reports slow down disk-status endpoint
+          likelihood: low
+          impact: low
+          mitigation: |
+            Completion reports are typically <1KB per agent. The endpoint already loads
+            the full manifest. Adding completion_info is marginal overhead.
+        - scenario: Frontend tests fail due to missing mock data for new fields
+          likelihood: medium
+          impact: medium
+          mitigation: |
+            All new fields are optional (?). Existing mocks will work without changes.
+            New tests should mock the enriched response shape.
+critic_report:
+    verdict: PASS
+    agent_reviews:
+        A:
+            agent_id: A
+            verdict: PASS
+        B:
+            agent_id: B
+            verdict: PASS
+        C:
+            agent_id: C
+            verdict: PASS
+        D:
+            agent_id: D
+            verdict: PASS
+    summary: All briefs verified after corrections. Agent A warning about CompletionReport.Status values is advisory (agent can infer from code). Agent C verify-only files are cosmetic. No errors.
+    reviewed_at: "2026-03-25T05:12:24Z"
+    issue_count: 0
+state: COMPLETE

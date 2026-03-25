@@ -27,6 +27,8 @@ VALIDATE_COMPLETION_SCRIPT="$SCRIPT_DIR/validate_agent_completion"
 VALIDATE_COMPLETION_SYMLINK="$HOME/.local/bin/validate_agent_completion"
 EMIT_COMPLETION_SCRIPT="$SCRIPT_DIR/emit_agent_completion"
 EMIT_COMPLETION_SYMLINK="$HOME/.local/bin/emit_agent_completion"
+INJECT_SKILL_CONTEXT_SCRIPT="$SCRIPT_DIR/inject_skill_context"
+INJECT_SKILL_CONTEXT_SYMLINK="$HOME/.local/bin/inject_skill_context"
 SETTINGS_FILE="$HOME/.claude/settings.json"
 
 echo "🔧 Installing SAW hooks..."
@@ -173,6 +175,27 @@ else
   echo "   ✓ Created symlink: $EMIT_COMPLETION_SYMLINK"
 fi
 chmod +x "$EMIT_COMPLETION_SCRIPT"
+
+# Context injection hook (Layer 2: deterministic reference injection)
+echo "   Installing inject_skill_context..."
+if [ -L "$INJECT_SKILL_CONTEXT_SYMLINK" ]; then
+  ln -sf "$INJECT_SKILL_CONTEXT_SCRIPT" "$INJECT_SKILL_CONTEXT_SYMLINK"
+  echo "   ✓ Symlink updated: $INJECT_SKILL_CONTEXT_SYMLINK"
+elif [ -e "$INJECT_SKILL_CONTEXT_SYMLINK" ]; then
+  echo "   ✗ Error: $INJECT_SKILL_CONTEXT_SYMLINK exists but is not a symlink"
+  exit 1
+else
+  ln -sf "$INJECT_SKILL_CONTEXT_SCRIPT" "$INJECT_SKILL_CONTEXT_SYMLINK"
+  echo "   ✓ Created symlink: $INJECT_SKILL_CONTEXT_SYMLINK"
+fi
+chmod +x "$INJECT_SKILL_CONTEXT_SCRIPT"
+
+# Symlink inject-context script into skill's scripts/ directory
+SKILL_SCRIPTS_DIR="$HOME/.claude/skills/saw/scripts"
+INJECT_CONTEXT_SRC="$SCRIPT_DIR/../prompts/scripts/inject-context"
+mkdir -p "$SKILL_SCRIPTS_DIR"
+ln -sf "$(cd "$SCRIPT_DIR/../prompts/scripts" && pwd)/inject-context" "$SKILL_SCRIPTS_DIR/inject-context"
+echo "   ✓ Symlinked scripts/inject-context into skill directory"
 echo
 
 # Step 2: Configure settings.json
@@ -447,6 +470,32 @@ else
   mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
   echo "   ✓ Added SubagentStop completion validation hook (E42)"
 fi
+
+# Add UserPromptSubmit hook (context injection: deterministic Tier 3 loading)
+INJECT_HOOK_CONFIG=$(cat <<EOF
+{
+  "hooks": [
+    {
+      "type": "command",
+      "command": "$HOME/.local/bin/inject_skill_context"
+    }
+  ]
+}
+EOF
+)
+
+INJECT_EXISTING=$(jq -r '.hooks.UserPromptSubmit // [] | map(select(.hooks[]?.command | contains("inject_skill_context"))) | length' "$SETTINGS_FILE")
+
+if [ "$INJECT_EXISTING" -gt 0 ]; then
+  echo "   ✓ UserPromptSubmit context injection hook already configured (skipping)"
+else
+  jq --argjson hook "$INJECT_HOOK_CONFIG" '
+    .hooks.UserPromptSubmit = (.hooks.UserPromptSubmit // []) + [$hook]
+  ' "$SETTINGS_FILE" > "$SETTINGS_FILE.tmp"
+
+  mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
+  echo "   ✓ Added UserPromptSubmit context injection hook"
+fi
 echo
 
 # Step 3: Verify installation
@@ -516,6 +565,20 @@ else
   exit 1
 fi
 
+if [ -x "$INJECT_SKILL_CONTEXT_SYMLINK" ]; then
+  echo "   ✓ Context injection hook executable: $INJECT_SKILL_CONTEXT_SYMLINK"
+else
+  echo "   ✗ Context injection hook not executable"
+  exit 1
+fi
+
+if [ -x "$SKILL_SCRIPTS_DIR/inject-context" ]; then
+  echo "   ✓ Skill inject-context script linked: $SKILL_SCRIPTS_DIR/inject-context"
+else
+  echo "   ✗ Skill inject-context script not found"
+  exit 1
+fi
+
 # Check settings.json
 if jq -e '.hooks.PreToolUse[]?.hooks[]? | select(.command | contains("check_scout_boundaries"))' "$SETTINGS_FILE" &> /dev/null; then
   echo "   ✓ PreToolUse hook configured in settings.json"
@@ -553,18 +616,19 @@ fi
 echo
 echo "✅ Installation complete!"
 echo
-echo "Active hooks (10 total):"
-echo "  PreToolUse:    check_scout_boundaries (I6 — Scouts can only write IMPL docs)"
-echo "  PreToolUse:    block_claire_paths (blocks .claire typo, suggests .claude)"
-echo "  PreToolUse:    check_wave_ownership (I1 — Wave agents can only write owned files)"
-echo "  PreToolUse:    validate_agent_launch (H5 — full pre-launch validation gate)"
-echo "  PostToolUse:   validate_impl_on_write (E16 — IMPL docs validated on write)"
-echo "  PostToolUse:   check_git_ownership [async] (I1 layer 2 — catch git-level ownership violations)"
-echo "  PostToolUse:   warn_stubs (H3 — warns on stub patterns in written code)"
-echo "  PostToolUse:   check_branch_drift (H4 — detects commits on wrong branch)"
-echo "  SubagentStop:  validate_agent_completion (E42 — protocol compliance at agent completion)"
-echo "  SubagentStop:  emit_agent_completion [async] (E42 — observability event emission)"
+echo "Active hooks (11 total):"
+echo "  PreToolUse:        check_scout_boundaries (I6 — Scouts can only write IMPL docs)"
+echo "  PreToolUse:        block_claire_paths (blocks .claire typo, suggests .claude)"
+echo "  PreToolUse:        check_wave_ownership (I1 — Wave agents can only write owned files)"
+echo "  PreToolUse:        validate_agent_launch (H5 — full pre-launch validation gate)"
+echo "  PostToolUse:       validate_impl_on_write (E16 — IMPL docs validated on write)"
+echo "  PostToolUse:       check_git_ownership [async] (I1 layer 2 — catch git-level ownership violations)"
+echo "  PostToolUse:       warn_stubs (H3 — warns on stub patterns in written code)"
+echo "  PostToolUse:       check_branch_drift (H4 — detects commits on wrong branch)"
+echo "  SubagentStop:      validate_agent_completion (E42 — protocol compliance at agent completion)"
+echo "  SubagentStop:      emit_agent_completion [async] (E42 — observability event emission)"
+echo "  UserPromptSubmit:  inject_skill_context (Tier 3 — deterministic reference injection)"
 echo
 echo "To uninstall:"
-echo "  1. Remove symlinks: rm $SYMLINK_PATH $VALIDATE_SYMLINK $CLAIRE_SYMLINK $WAVE_OWNERSHIP_SYMLINK $GIT_OWNERSHIP_SYMLINK $CHECK_IMPL_PATH_SYMLINK $WARN_STUBS_SYMLINK $CHECK_BRANCH_DRIFT_SYMLINK $VALIDATE_LAUNCH_SYMLINK $VALIDATE_COMPLETION_SYMLINK $EMIT_COMPLETION_SYMLINK"
-echo "  2. Edit $SETTINGS_FILE and remove the PreToolUse/PostToolUse/SubagentStop hook entries"
+echo "  1. Remove symlinks: rm $SYMLINK_PATH $VALIDATE_SYMLINK $CLAIRE_SYMLINK $WAVE_OWNERSHIP_SYMLINK $GIT_OWNERSHIP_SYMLINK $CHECK_IMPL_PATH_SYMLINK $WARN_STUBS_SYMLINK $CHECK_BRANCH_DRIFT_SYMLINK $VALIDATE_LAUNCH_SYMLINK $VALIDATE_COMPLETION_SYMLINK $EMIT_COMPLETION_SYMLINK $INJECT_SKILL_CONTEXT_SYMLINK"
+echo "  2. Edit $SETTINGS_FILE and remove the PreToolUse/PostToolUse/SubagentStop/UserPromptSubmit hook entries"

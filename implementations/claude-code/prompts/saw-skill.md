@@ -14,6 +14,15 @@ compatibility: Requires Claude Code (Skills API). Git 2.20+ required for worktre
 metadata:
   author: blackwell-systems
   version: "0.55.0"
+triggers:
+  - match: "^/saw program"
+    inject: references/program-flow.md
+  - match: "^/saw amend"
+    inject: references/amend-flow.md
+  # failure-routing.md is intentionally NOT triggered here. It's a mid-execution
+  # reference loaded after agents report back, not at dispatch time. The skill
+  # body contains "failure", "blocked", etc. which would false-positive on every
+  # invocation since UserPromptSubmit receives the expanded prompt.
 ---
 
 # Scout-and-Wave: Parallel Agent Coordination
@@ -192,7 +201,7 @@ If no `docs/IMPL/IMPL-*.yaml` file exists for the current feature:
 
    **E37 reference (used by both scout and existing-IMPL flows):**
    - **Trigger:** Auto-trigger if wave 1 has 3+ agents OR file_ownership spans 2+ repos. Manual: `--review` flag. Skip: `--no-review` OR `min_agents_for_review: 0` in saw.config.json.
-   - **Execution:** Read `agent.critic_model` from saw.config.json (fall back to parent model). Launch critic agent via Agent tool — do NOT use `sawtools run-critic` in CLI mode (spawns subprocess that fails in Claude Code session): `Agent(subagent_type=critic-agent, run_in_background=true, description="[SAW:critic:<slug>] pre-wave brief review", prompt="<IMPL doc path>\n<repo root path>")`. Wait for completion. Read `critic_report.verdict` from IMPL doc.
+   - **Execution:** Read `agent.critic_model` from saw.config.json (fall back to parent model). Launch critic agent via Agent tool — do NOT use `sawtools run-critic` in CLI mode (spawns subprocess that fails in Claude Code session): `Agent(subagent_type=critic-agent, run_in_background=true, description="[SAW:critic:<slug>] pre-wave brief review — <IMPL doc absolute path>", prompt="<IMPL doc path>\n<repo root path>")`. The IMPL doc path MUST be in the description (not just the prompt) so the SubagentStop hook can locate it for E42 validation. Wait for completion. Read `critic_report.verdict` from IMPL doc.
    - **PASS:** Proceed to human REVIEWED checkpoint.
    - **ISSUES (severity: error):** BLOCKS execution. Correct briefs (`sawtools amend-impl --redirect-agent <ID>`), re-validate (E16), re-run critic.
    - **ISSUES (warnings only):** Advisory. Inform user, ask if they want to proceed.

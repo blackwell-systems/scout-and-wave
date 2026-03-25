@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# inject_skill_context — Claude Code UserPromptSubmit hook
+#
+# Iterates all installed skills, delegates to each skill's
+# scripts/inject-context, and returns combined results as
+# additionalContext for the model.
+#
+# This hook is a thin orchestrator. Trigger logic lives in
+# each skill's inject-context script, not here. Adding a new
+# skill requires zero changes to this hook.
+#
+# Install: copy to ~/.local/bin/ and register in settings.json
+#   "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "inject_skill_context"}]}]
+
+set -euo pipefail
+
+# Read hook input from stdin
+input=$(cat)
+PROMPT=$(echo "$input" | jq -r '.prompt // ""' 2>/dev/null)
+[ -z "$PROMPT" ] && exit 0
+
+# Skill directories to scan (Claude Code + cross-client convention)
+SKILL_DIRS=(
+  "$HOME/.claude/skills"
+  "$HOME/.agents/skills"
+)
+
+injected=""
+
+for base_dir in "${SKILL_DIRS[@]}"; do
+  [ -d "$base_dir" ] || continue
+
+  for skill_dir in "$base_dir"/*/; do
+    [ -d "$skill_dir" ] || continue
+    inject_script="$skill_dir/scripts/inject-context"
+    [ -x "$inject_script" ] || continue
+
+    # Delegate to the skill's own injection script
+    result=$("$inject_script" "$PROMPT" 2>/dev/null) || true
+    [ -n "$result" ] && injected+="$result"$'\n'
+  done
+done
+
+# Return additionalContext if anything was injected
+if [ -n "$injected" ]; then
+  jq -n --arg ctx "$injected" \
+    '{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":$ctx}}'
+fi

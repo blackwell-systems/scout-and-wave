@@ -59,3 +59,9 @@
   - IMPL doc: docs/IMPL/complete/IMPL-validation-logic-unification.yaml
 - **repo-entry-unification**: completed 2026-03-24, 2 waves, 5 agents
   - IMPL doc: docs/IMPL/complete/IMPL-repo-entry-unification.yaml
+- **finalize-wave-gaps**: completed 2026-03-24, 1 waves, 2 agents
+  - IMPL doc: docs/IMPL/IMPL-finalize-wave-gaps.yaml
+- **web-prepare-wave-migration**: completed 2026-03-24, 1 waves, 2 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-web-prepare-wave-migration.yaml
+- **waveboard-state-persistence**: completed 2026-03-24, 2 waves, 4 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-waveboard-state-persistence.yaml

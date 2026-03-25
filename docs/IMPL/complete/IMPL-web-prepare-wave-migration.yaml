@@ -1,0 +1,493 @@
+completion_date: "2026-03-24"
+title: Migrate web app wave preparation to engine.PrepareWave step functions
+feature_slug: web-prepare-wave-migration
+verdict: SUITABLE
+suitability_assessment: |
+    SUITABLE. The work decomposes cleanly into 2 agents across 2 packages (pkg/api/
+    and pkg/service/) with disjoint file ownership in a single wave.
+
+    1. File decomposition: 4 source files + 2 test files across 2 packages. Agent A
+       owns pkg/api/wave_runner.go (the api-layer runWaveLoop), Agent B owns
+       pkg/service/wave_service.go (the service-layer runWaveLoop). No conflicting
+       modifications to the same file.
+
+    2. Investigation-first items: None. engine.PrepareWave() is fully implemented
+       and tested in scout-and-wave-go. The duplicated code is clearly identified.
+       The predecessor IMPL (IMPL-web-engine-migration) completed the finalization
+       side; this follows the same pattern for preparation.
+
+    3. Interface discoverability: Yes. engine.PrepareWave() has a stable signature
+       (PrepareWaveOpts, PrepareWaveResult, EventCallback). No new interfaces needed;
+       we are consuming existing ones.
+
+    4. Pre-implementation status: engine.PrepareWave() is complete in scout-and-wave-go.
+       The web app currently bypasses it entirely -- runWaveLoop calls
+       engine.RunSingleWave which only does CreateWorktrees + RunWave, skipping all
+       20+ pre-flight checks (dep checks, baseline gates, scaffold validation, freeze
+       checks, I1 disjoint ownership, type collision, wiring ownership, etc.).
+
+    5. Parallelization value: Build+test cycle is ~45s (go test ./... + vitest).
+       2 agents with 2-3 files each in separate packages. Clear speedup and coordination
+       value for tracking the cross-package migration.
+
+    Estimated times:
+    - Scout phase: ~8 min
+    - Agent execution: ~8 min (2 agents x 8 min avg, Wave 1 parallel)
+    - Merge & verification: ~3 min
+    Total SAW time: ~19 min
+
+    Sequential baseline: ~22 min (2 agents x 11 min avg)
+    Time savings: ~3 min (14% faster)
+
+    Recommendation: Clear speedup, plus coordination value. Agents work in separate
+    packages with zero import overlap, making this a clean single-wave parallel execution.
+test_command: go test ./... && cd /Users/dayna.blackwell/code/scout-and-wave-web/web && node_modules/.bin/vitest run
+lint_command: go vet ./...
+file_ownership:
+    - file: pkg/api/wave_runner.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/api/wave_runner_test.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/service/wave_service.go
+      agent: B
+      wave: 1
+      action: modify
+      repo: scout-and-wave-web
+    - file: pkg/service/wave_service_test.go
+      agent: B
+      wave: 1
+      action: modify
+      repo: scout-and-wave-web
+interface_contracts:
+    - name: engine.PrepareWave
+      description: |
+        Full wave preparation pipeline. Already exists in scout-and-wave-go.
+        Web app should call this instead of reimplementing preparation steps inline.
+        Returns a PrepareWaveResult with worktree paths, agent briefs, and step results.
+      definition: |
+        func PrepareWave(ctx context.Context, opts PrepareWaveOpts) (*PrepareWaveResult, error)
+
+        type PrepareWaveOpts struct {
+            IMPLPath    string
+            RepoPath    string
+            WaveNum     int
+            MergeTarget string
+            NoCache     bool
+            OnEvent     EventCallback
+        }
+
+        type EventCallback func(step string, status string, detail string)
+
+        type PrepareWaveResult struct {
+            Wave        int                     `json:"wave"`
+            Worktrees   []protocol.WorktreeInfo `json:"worktrees"`
+            AgentBriefs []AgentBriefInfo        `json:"agent_briefs"`
+            Steps       []StepResult            `json:"steps"`
+            Success     bool                    `json:"success"`
+        }
+
+        type StepResult struct {
+            Step   string      `json:"step"`
+            Status string      `json:"status"`
+            Detail string      `json:"detail,omitempty"`
+            Data   interface{} `json:"data,omitempty"`
+        }
+
+        type AgentBriefInfo struct {
+            Agent       string `json:"agent"`
+            BriefPath   string `json:"brief_path"`
+            BriefLength int    `json:"brief_length"`
+            JournalDir  string `json:"journal_dir"`
+            FilesOwned  int    `json:"files_owned"`
+            Repo        string `json:"repo,omitempty"`
+            MergeTarget string `json:"merge_target,omitempty"`
+        }
+      location: github.com/blackwell-systems/scout-and-wave-go/pkg/engine/prepare.go
+    - name: engine.RunSingleWave
+      description: |
+        Existing function that creates worktrees and runs agents. Currently the web
+        app calls this directly. After migration, engine.PrepareWave() should run
+        BEFORE RunSingleWave to perform all pre-flight checks. RunSingleWave itself
+        still calls protocol.CreateWorktrees internally, so PrepareWave's worktree
+        creation output is informational (used for SSE events) -- RunSingleWave
+        handles the actual worktree setup for the orchestrator.
+      definition: |
+        func RunSingleWave(ctx context.Context, opts RunWaveOpts, waveNum int, onEvent func(Event)) error
+
+        type RunWaveOpts struct {
+            IMPLPath         string
+            RepoPath         string
+            Slug             string
+            WaveModel        string
+            ScaffoldModel    string
+            IntegrationModel string
+        }
+      location: github.com/blackwell-systems/scout-and-wave-go/pkg/engine/runner.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## Agent A: Replace RunSingleWave with PrepareWave + orchestrator.RunWave in wave_runner.go
+
+            ### What to implement
+
+            **WARNING: Line numbers in this brief may be stale.** The predecessor
+            IMPL (web-engine-migration) recently modified wave_runner.go extensively,
+            cutting ~320 lines from runFinalizeSteps. Grep for function names and
+            patterns rather than relying on line numbers.
+
+            Replace the `engine.RunSingleWave()` call in `runWaveLoop` in
+            `pkg/api/wave_runner.go` with `engine.PrepareWave()` followed by
+            direct orchestrator usage. This eliminates double worktree creation
+            (PrepareWave creates worktrees, and RunSingleWave would redundantly
+            create them again).
+
+            `engine.RunSingleWave` is only 33 lines. It does 3 things:
+            1. Creates an orchestrator + sets model/event publisher
+            2. Calls `protocol.CreateWorktrees` (redundant -- PrepareWave does this)
+            3. Calls `orch.RunWave(waveNum)`
+
+            After migration, the flow becomes:
+            ```
+            RunScaffold (if needed) → PrepareWave → orchestrator.RunWave
+            ```
+
+            Instead of the current:
+            ```
+            RunScaffold (if needed) → RunSingleWave (which creates worktrees internally)
+            ```
+
+            **Key changes:**
+
+            1. **Replace RunSingleWave with PrepareWave + orch.RunWave.** Inside
+               the wave loop, replace the `engine.RunSingleWave()` call with:
+               ```go
+               // Stage: wave_prepare
+               onStage("wave_prepare", StageStatusRunning, waveNum, "")
+               prepResult, prepErr := engine.PrepareWave(ctx, engine.PrepareWaveOpts{
+                   IMPLPath: implPath,
+                   RepoPath: repoPath,
+                   WaveNum:  waveNum,
+                   OnEvent: func(step, status, detail string) {
+                       publish("prepare_step", map[string]interface{}{
+                           "slug":   slug,
+                           "wave":   waveNum,
+                           "step":   step,
+                           "status": status,
+                           "detail": detail,
+                       })
+                   },
+               })
+               if prepErr != nil {
+                   onStage("wave_prepare", StageStatusFailed, waveNum, prepErr.Error())
+                   publish("run_failed", map[string]string{"error": prepErr.Error()})
+                   return
+               }
+               onStage("wave_prepare", StageStatusComplete, waveNum, "")
+
+               // Create orchestrator and run wave (replaces RunSingleWave)
+               orch, orchErr := orchestrator.New(repoPath, implPath)
+               if orchErr != nil {
+                   publish("run_failed", map[string]string{"error": orchErr.Error()})
+                   return
+               }
+               if waveModel != "" {
+                   orch.SetDefaultModel(waveModel)
+               }
+               orch.SetEventPublisher(func(ev orchestrator.OrchestratorEvent) {
+                   publish(ev.Event, ev.Data)
+               })
+               // Feed worktree paths from PrepareWave result
+               if len(prepResult.Worktrees) > 0 {
+                   paths := make(map[string]string, len(prepResult.Worktrees))
+                   for _, wt := range prepResult.Worktrees {
+                       paths[wt.Agent] = wt.Path
+                   }
+                   orch.SetWorktreePaths(paths)
+               }
+               if err := orch.RunWave(waveNum); err != nil {
+                   // ... existing error handling ...
+               }
+               ```
+
+            2. **Import `orchestrator` package.** Add import for
+               `github.com/blackwell-systems/scout-and-wave-go/pkg/orchestrator`.
+               Check the existing imports -- it may already be imported for other
+               purposes. The orchestrator.New, SetDefaultModel, SetEventPublisher,
+               SetWorktreePaths, and RunWave methods are the ones you need.
+
+            3. **Remove the inline AllScaffoldsCommitted check but preserve
+               RunScaffold ordering.** The current code runs
+               `protocol.AllScaffoldsCommitted(manifest)` and
+               `engine.RunScaffold()` inline. PrepareWave handles scaffold
+               validation. Remove the AllScaffoldsCommitted check. BUT:
+               RunScaffold (creates scaffold files) MUST run BEFORE PrepareWave
+               (validates scaffolds are committed). The correct order is:
+               ```
+               RunScaffold (if needed) → PrepareWave → orch.RunWave
+               ```
+
+            4. **Skip PrepareWave when resuming with existing agent commits.**
+               The existing `waveAgentsHaveCommitsWithManifest` check detects
+               when agents already have commits and skips execution. In this
+               case, also skip PrepareWave -- go straight to finalization.
+
+            5. **Remove the `engine.RunSingleWave` import if it becomes unused.**
+               After replacing the call, check if RunSingleWave is still
+               referenced anywhere in this file. If not, remove the import or
+               let the compiler tell you.
+
+            6. **Preserve all SSE event publishing.** The PrepareWave OnEvent
+               callback emits `prepare_step` SSE events. The orchestrator event
+               publisher emits existing wave execution events. Both must work.
+
+            7. **Handle PrepareWave failure gracefully.** If PrepareWave fails,
+               publish `run_failed` with the error details from
+               PrepareWaveResult.Steps and return.
+
+            ### Interfaces
+
+            Consume `engine.PrepareWave()`, `engine.PrepareWaveOpts` from
+            `github.com/blackwell-systems/scout-and-wave-go/pkg/engine`, and
+            `orchestrator.New` from
+            `github.com/blackwell-systems/scout-and-wave-go/pkg/orchestrator`.
+
+            ### Tests
+
+            Update `pkg/api/wave_runner_test.go`:
+            - Existing tests should still pass (PrepareWave fails early on bad
+              paths, same behavior as before).
+            - Add test verifying that `prepare_step` SSE events are emitted
+              before wave execution events.
+
+            ### Verification gate
+
+            ```
+            go build ./... && go vet ./... && go test ./pkg/api/ -run "TestRunWaveLoop|TestRunFinalizeSteps" -count=1 -v
+            ```
+
+            ### Constraints
+
+            - Do NOT modify any files in `pkg/service/` -- that is Agent B's scope.
+            - Do NOT change SSE event names or payload shapes for existing events.
+            - Do NOT modify `stage_state.go` -- it is outside your file list.
+            - Keep `waveAgentsHaveCommitsWithManifest` -- both packages need it.
+            - The `runFinalizeSteps` function is NOT affected by this migration.
+          files:
+            - pkg/api/wave_runner.go
+            - pkg/api/wave_runner_test.go
+        - id: B
+          task: |
+            ## Agent B: Replace RunSingleWave with PrepareWave + orchestrator.RunWave in wave_service.go
+
+            ### What to implement
+
+            **WARNING: Line numbers in this brief may be stale.** The predecessor
+            IMPL (web-engine-migration) recently modified service-layer files.
+            Grep for function names and patterns rather than relying on line numbers.
+
+            Replace the `engine.RunSingleWave()` call in `runWaveLoop` in
+            `pkg/service/wave_service.go` with `engine.PrepareWave()` followed by
+            direct orchestrator usage. This eliminates double worktree creation
+            and adds the 20+ pre-flight checks that RunSingleWave skips.
+
+            `engine.RunSingleWave` is only 33 lines (create orchestrator, create
+            worktrees, run wave). PrepareWave replaces steps 1-2 with full
+            pre-flight validation. The orchestrator.RunWave call replaces step 3.
+
+            After migration, the flow becomes:
+            ```
+            RunScaffold (if needed) → PrepareWave → orchestrator.RunWave
+            ```
+
+            **Key changes:**
+
+            1. **Replace RunSingleWave with PrepareWave + orch.RunWave.** Inside
+               the wave loop, replace the `engine.RunSingleWave()` call with:
+               ```go
+               prepResult, prepErr := engine.PrepareWave(ctx, engine.PrepareWaveOpts{
+                   IMPLPath: implPath,
+                   RepoPath: repoPath,
+                   WaveNum:  waveNum,
+                   OnEvent: func(step, status, detail string) {
+                       publish("prepare_step", map[string]interface{}{
+                           "slug":   slug,
+                           "wave":   waveNum,
+                           "step":   step,
+                           "status": status,
+                           "detail": detail,
+                       })
+                   },
+               })
+               if prepErr != nil {
+                   publish("run_failed", map[string]string{"error": prepErr.Error()})
+                   return
+               }
+
+               // Create orchestrator and run wave (replaces RunSingleWave)
+               orch, orchErr := orchestrator.New(repoPath, implPath)
+               if orchErr != nil {
+                   publish("run_failed", map[string]string{"error": orchErr.Error()})
+                   return
+               }
+               if waveModel != "" {
+                   orch.SetDefaultModel(waveModel)
+               }
+               orch.SetEventPublisher(func(ev orchestrator.OrchestratorEvent) {
+                   publish(ev.Event, ev.Data)
+               })
+               if len(prepResult.Worktrees) > 0 {
+                   paths := make(map[string]string, len(prepResult.Worktrees))
+                   for _, wt := range prepResult.Worktrees {
+                       paths[wt.Agent] = wt.Path
+                   }
+                   orch.SetWorktreePaths(paths)
+               }
+               if err := orch.RunWave(waveNum); err != nil {
+                   publish("run_failed", map[string]string{"error": err.Error()})
+                   return
+               }
+               ```
+
+            2. **Import `orchestrator` package.** Add import for
+               `github.com/blackwell-systems/scout-and-wave-go/pkg/orchestrator`.
+
+            3. **Remove the inline PreWaveGate check.** Grep for
+               `protocol.PreWaveGate` -- remove this block. PrepareWave performs
+               the same check internally (step "pre_wave_gate").
+
+            4. **Remove the inline AllScaffoldsCommitted check but preserve
+               RunScaffold ordering.** Remove the AllScaffoldsCommitted check.
+               RunScaffold (creates scaffold files) MUST run BEFORE PrepareWave
+               (validates scaffolds are committed). Correct order:
+               ```
+               RunScaffold (if needed) → PrepareWave → orch.RunWave
+               ```
+
+            5. **Skip PrepareWave when resuming.** The existing
+               `waveAgentsHaveCommitsWithManifest` check detects agents with
+               existing commits. Skip both PrepareWave and orch.RunWave -- go
+               straight to finalization.
+
+            6. **Remove the `engine.RunSingleWave` import if it becomes unused.**
+
+            7. **Keep waveAgentsHaveCommitsWithManifest.** Both packages need
+               their own copy (unexported, different packages).
+
+            ### Interfaces
+
+            Consume `engine.PrepareWave()`, `engine.PrepareWaveOpts` from
+            `github.com/blackwell-systems/scout-and-wave-go/pkg/engine`, and
+            `orchestrator.New` from
+            `github.com/blackwell-systems/scout-and-wave-go/pkg/orchestrator`.
+
+            ### Tests
+
+            Update `pkg/service/wave_service_test.go`:
+            - Existing tests should still pass.
+            - Add test verifying that PrepareWave failure causes `run_failed`
+              event to be published.
+
+            ### Verification gate
+
+            ```
+            go build ./... && go vet ./... && go test ./pkg/service/ -run "TestStartWave|TestProceedGate|TestRepoRedirect" -count=1 -v
+            ```
+
+            ### Constraints
+
+            - Do NOT modify any files in `pkg/api/` -- that is Agent A's scope.
+            - Do NOT change SSE event names or payload shapes for existing events.
+            - Keep `MergeFunc`, `ResolveConflictsFunc` seam variables and
+              `RunTracker`, `MergeTracker`, `TestTracker` types unchanged.
+            - Keep `FinalizeWave`, `RerunAgent`, `StartWave`, `StopWave`,
+              `ProceedGate` signatures unchanged.
+            - Keep helper functions (`resolveTargetRepoFromManifest`,
+              `targetRepoNames`, `resolveModelsFromPath`,
+              `detectStaleBranches`) unchanged.
+          files:
+            - pkg/service/wave_service.go
+            - pkg/service/wave_service_test.go
+      base_commit: 90d8d9ffa8e2ed72d3300ae7aa7cf327425dad10
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./...
+          required: true
+        - type: lint
+          command: go vet ./...
+          required: true
+        - type: test
+          command: go test ./pkg/api/ ./pkg/service/
+          required: true
+completion_reports:
+    A:
+        status: complete
+        branch: saw/web-prepare-wave-migration/wave1-agent-A
+        commit: a2a1294
+        files_changed:
+            - pkg/api/wave_runner.go
+            - pkg/api/wave_runner_test.go
+        tests_added:
+            - TestRunWaveLoop_EmitsPrepareStepBeforeExecution
+        verification: PASS
+    B:
+        status: complete
+        branch: saw/web-prepare-wave-migration/wave1-agent-B
+        commit: 1a0e18d
+        files_changed:
+            - pkg/service/wave_service.go
+            - pkg/service/wave_service_test.go
+        tests_added:
+            - TestRunWaveLoop_PrepareWaveFailure_PublishesRunFailed
+        verification: PASS
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: PrepareWave fails on checks that previously were not run
+          likelihood: medium
+          impact: medium
+          mitigation: |
+            The whole point of the migration is to add these checks. If PrepareWave
+            fails on a check that was previously skipped (e.g., baseline gates,
+            freeze check), that is correct behavior. The SSE events will surface the
+            failure reason to the user via prepare_step events. This is a feature,
+            not a bug -- but it may surprise users who had waves succeeding before.
+        - scenario: orchestrator.New or RunWave API mismatch
+          likelihood: low
+          impact: medium
+          mitigation: |
+            Agents now call orchestrator.New and orch.RunWave directly instead
+            of going through engine.RunSingleWave. If the orchestrator package
+            API changes (method signatures, import path), the build will fail
+            immediately. Check the current orchestrator package API before
+            writing code -- do not assume the code examples in this brief are
+            exact. The examples are based on engine.RunSingleWave's implementation
+            which is the canonical usage pattern.
+        - scenario: SSE event ordering changes confuse frontend
+          likelihood: low
+          impact: medium
+          mitigation: |
+            New prepare_step events are emitted BEFORE the existing wave_execute
+            stage events. Frontend should ignore unknown events gracefully (it
+            already does for other event types). No existing events are removed
+            or reordered.
+        - scenario: Scaffold RunScaffold still called after PrepareWave validates scaffolds
+          likelihood: medium
+          impact: low
+          mitigation: |
+            RunScaffold (the scaffold agent) and PrepareWave's scaffold_validation
+            step are different operations. Validation checks that scaffolds are
+            committed; RunScaffold creates them if they are not. The correct order
+            is: RunScaffold first (creates uncommitted scaffolds), then PrepareWave
+            (validates they are committed). Agents must preserve RunScaffold BEFORE
+            PrepareWave in the execution order.
+state: COMPLETE

@@ -723,7 +723,7 @@ Independent review verdict: **APPROVE WITH CHANGES**. Status of each condition:
 - **Phase vs Wave inconsistency** — FIXED. All mocks now use "Wave", not "Phase".
 - **FTUE deferral** — RESOLVED. FTUE analysis reviewed item-by-item; most items already implemented. Remaining 3 minor items tracked separately.
 - **FTUE 1.4 Approve confirmation** — REJECTED. Tooltip already explains action; double-click friction unacceptable.
-- **`go install` priority** — MOVED to Tier 2 (item 8).
+- **`go install` priority** — MOVED to Tier 1 (see revised priority below).
 
 ### Open (still to address)
 - **First-run detection reconciliation:** `saw init` checks `saw.config.json`; skill guided mode checks `docs/IMPL/`. Need single signal. Recommendation: `saw.config.json` existence is the canonical "initialized" flag.
@@ -732,6 +732,49 @@ Independent review verdict: **APPROVE WITH CHANGES**. Status of each condition:
 - **Team lead / evaluator persona:** README needs "What does it look like?" with screenshot/recording in first 20 lines. Not addressed by current plan.
 - **"Just try it" persona:** Can `saw plan "feature"` work without `saw init`? Auto-detect everything on the fly for the zero-commitment trial.
 - **Onboarding metrics:** No way to measure if improvements work. Suggest: time from init to first merge, abandonment rate per step, error frequency by type.
+
+### Second review (2026-03-24)
+
+**Pushbacks:**
+
+1. **4.7 `saw plan` alias — DEFERRED.** The CLI is invoked via `/saw scout` inside Claude Code — there is no standalone `saw` binary for CLI users. The alias would need to live in the skill prompt as routing logic, not in sawtools. Additionally, "plan" is already overloaded: it is a noun (the IMPL doc), a verb in `/saw program plan`, and would become a second verb meaning "run the scout." This creates ambiguity. Revisit only if a standalone CLI entry point is built.
+
+2. **4.1 `saw init` — DESCOPED.** The web app has its own setup flow. CLI users install via `install.sh` which handles clone + build + symlink + permissions in one invocation. The stated "9 steps" inflates the problem — `install.sh` is already a single command. The real installation friction is building sawtools from source, which `go install` (Tier 2, item 8) solves directly. `saw init` adds surface area without addressing the actual bottleneck. Keep the project-detection logic in the backlog for the web onboarding wizard, but do not build a separate CLI command for it.
+
+3. **4.2 Guided first-run — RESTRUCTURE.** Adding ~50 lines to the skill prompt for a path that fires once per project is expensive context for every subsequent invocation. Move the guided first-run content into a reference file (e.g., `references/first-run.md`) loaded on first-run detection, same pattern as `program-flow.md` and `amend-flow.md`. The routing table in the core skill adds one line; the content loads on demand.
+
+4. **Section 6 "Open" items underweighted.** The screenshot/recording for evaluators ("What does it look like?" in README first 20 lines) and the zero-commitment trial (`/saw scout` auto-detects everything without init) would have more impact than error message templates. A 10-second GIF showing Scout → review → wave → merge would convert more evaluators than any amount of better error messages.
+
+**Revised priority order:**
+
+### Tier 1: Highest Impact (do first)
+
+| # | Proposal | Impact | Effort | Rationale |
+|---|---|---|---|---|
+| 1 | **`go install` for sawtools** | High | Small | Eliminates the real installation friction (building Go from source). Single command: `go install github.com/blackwell-systems/scout-and-wave-go/cmd/sawtools@latest` |
+| 2 | **Web app empty state redesign (4.3)** | High | Small | Immediate payoff. Replaces dead-end "No plan selected" with call-to-action. No dependencies. |
+| 3 | **Error message templates in skill prompt (4.5, prompt-side only)** | High | Small | Verbatim error strings for the 6 most common failures. No Go changes needed. |
+| 4 | **Hide advanced model selectors (4.4, UI labels)** | High | Small | Show SCOUT, WAVE, CHAT; hide CRITIC, SCAFFOLD, INTEGRATION, PLANNER behind Advanced toggle. |
+| 5 | **README screenshot/recording** | High | Small | 10-second GIF of Scout → review → wave → merge in first 20 lines. Converts evaluators. |
+
+### Tier 2: Medium Impact (do second)
+
+| # | Proposal | Impact | Effort | Rationale |
+|---|---|---|---|---|
+| 6 | **Guided first-run as reference file (4.2 restructured)** | High | Medium | On-demand reference loaded on first-run detection. No prompt bloat. |
+| 7 | **Error messages Go-side (4.5, UserMessage fields)** | Medium | Medium | Better diagnostics compound over time. |
+| 8 | **Web onboarding wizard (4.2 web, generic version)** | High | Medium | 3-step wizard without project-detection dependency. |
+| 9 | **Concept renaming in UI (4.4 full)** | Medium | Medium | "Plans" not "IMPLs" in sidebar, section explanations in ReviewScreen. |
+
+### Tier 3: Lower Priority
+
+| # | Proposal | Impact | Effort | Rationale |
+|---|---|---|---|---|
+| 10 | **`saw plan` alias (4.7)** | Low | Small | Deferred — overloads "plan" and no standalone CLI exists. Revisit if CLI entry point is built. |
+| 11 | **`saw init` command (4.1)** | Low | Medium | Descoped — `install.sh` and `go install` cover the real friction. |
+| 12 | **Protocol doc renaming (4.4 docs)** | Low | Large | Docs are secondary to the product experience. |
+| 13 | **Homebrew formula** | Medium | Medium | macOS convenience. Depends on `go install` working first. |
+| 14 | **Interactive web tutorial** | Medium | Large | Guided overlay in web app. Nice to have. |
 
 ## 7. Anti-Patterns to Avoid
 

@@ -1,0 +1,443 @@
+completion_date: "2026-03-24"
+title: finalize-wave and prepare-wave batching gaps
+feature_slug: finalize-wave-gaps
+verdict: SUITABLE
+suitability_assessment: |-
+    Five batching-command gaps close cleanly across two disjoint files:
+    - cmd/sawtools/finalize_wave.go (gaps 1-4): WAVE_VERIFIED state transition,
+      per-agent update-status, M5 post-merge call, structured wiring fields in result JSON.
+    - cmd/sawtools/prepare_wave.go (gap 5): stale cleanup warning propagation to result JSON.
+
+    File decomposition: Agent A owns finalize_wave.go exclusively; Agent B owns
+    prepare_wave.go exclusively. No shared file ownership. I1 satisfied.
+
+    All interface contracts are discoverable from the existing codebase:
+    - protocol.SetImplState(manifestPath, StateWaveVerified, SetImplStateOpts{}) — already implemented
+    - protocol.UpdateStatus(manifestPath, waveNum, agentID, "complete") — already implemented
+    - protocol.PopulateIntegrationChecklist(manifest) — already implemented (M5)
+    - protocol.CleanStaleWorktrees returns result.Result[*StaleCleanupData] with Errors field
+
+    Gap 3 pre-implementation status: PopulateIntegrationChecklist exists and is wired as a
+    standalone CLI command. It is NOT called from finalize_wave.go — confirmed TODO.
+
+    Parallelization value: 2 agents, independent files, Go build+test cycle ~10-30s.
+    Marginal speed gain, but the IMPL doc provides coordination value as audit trail.
+
+    Estimated times:
+    - Scout phase: ~10 min
+    - Agent execution: ~2 agents x ~15 min avg = ~15 min (parallel)
+    - Merge and verification: ~5 min
+    Total SAW time: ~30 min
+    Sequential baseline: ~2 x 15 min = ~30 min
+    Recommendation: Marginal speed gain; coordination value justifies SAW.
+test_command: go test ./...
+lint_command: go vet ./...
+file_ownership:
+    - file: cmd/sawtools/finalize_wave.go
+      agent: A
+      wave: 1
+      action: modify
+    - file: cmd/sawtools/prepare_wave.go
+      agent: B
+      wave: 1
+      action: modify
+interface_contracts:
+    - name: SetImplState
+      description: |-
+        Atomically transitions the IMPL doc state. Agent A calls this after successful
+        verify-build to advance the doc to WAVE_VERIFIED. Already implemented in
+        pkg/protocol/state_transition.go — no new code needed.
+      definition: |
+        func SetImplState(
+            manifestPath string,
+            newState ProtocolState,
+            opts SetImplStateOpts,
+        ) result.Result[*SetImplStateData]
+
+        // Call site in finalize_wave.go (after step 5.5 succeeds):
+        stateRes := protocol.SetImplState(manifestPath, protocol.StateWaveVerified, protocol.SetImplStateOpts{})
+        // Non-fatal: log warning on failure, do not block success result
+      location: pkg/protocol/state_transition.go
+    - name: UpdateStatus
+      description: |-
+        Updates a single agent's completion report status field. Agent A calls this
+        in a loop over all wave agents after successful finalize. Already implemented
+        in pkg/protocol/status_update.go — no new code needed.
+      definition: |
+        func UpdateStatus(
+            manifestPath string,
+            waveNum int,
+            agentID string,
+            status string,
+        ) result.Result[*UpdateStatusData]
+
+        // Call site in finalize_wave.go (after SetImplState, before returning success):
+        for _, agent := range manifest.Waves[waveNum-1].Agents {
+            protocol.UpdateStatus(manifestPath, waveNum, agent.ID, "complete")
+        }
+        // Non-fatal: log warning per agent on failure, accumulate in result
+      location: pkg/protocol/status_update.go
+    - name: PopulateIntegrationChecklist
+      description: |-
+        M5 determinism tool. Scans file_ownership for integration-requiring patterns
+        and populates post_merge_checklist. Agent A calls this as a non-blocking
+        informational step after successful merge. Already implemented in
+        pkg/protocol/checklist_populator.go — no new code needed.
+      definition: |
+        func PopulateIntegrationChecklist(manifest *IMPLManifest) (*IMPLManifest, error)
+
+        // Call site in finalize_wave.go (after step 4 merge, non-blocking):
+        updated, m5Err := protocol.PopulateIntegrationChecklist(manifest)
+        if m5Err != nil {
+            fmt.Fprintf(os.Stderr, "finalize-wave: populate-integration-checklist (M5): %v\n", m5Err)
+        } else {
+            manifest = updated
+            if err := protocol.Save(manifest, manifestPath); err != nil {
+                fmt.Fprintf(os.Stderr, "finalize-wave: M5 save: %v\n", err)
+            }
+        }
+        // Errors are logged to stderr only; they do not block the finalize flow.
+      location: pkg/protocol/checklist_populator.go
+    - name: FinalizeWaveResult (updated fields)
+      description: |-
+        Two new fields added to FinalizeWaveResult struct in finalize_wave.go.
+        These expose wiring gap data that was previously only emitted to stderr.
+      definition: |
+        // Add to FinalizeWaveResult struct:
+        IntegrationActionRequired bool     `json:"integration_action_required"`
+        WiringGaps                []string `json:"wiring_gaps,omitempty"`
+
+        // Population logic (in step 3.5b, after ValidateWiringDeclarations):
+        if wiringData != nil && !wiringData.Valid {
+            result.IntegrationActionRequired = true
+            for _, gap := range wiringData.Gaps {
+                result.WiringGaps = append(result.WiringGaps,
+                    fmt.Sprintf("%s not called in %s", gap.Declaration.Symbol, gap.Declaration.MustBeCalledFrom))
+            }
+        }
+      location: cmd/sawtools/finalize_wave.go
+    - name: PrepareWaveResult (updated fields)
+      description: |-
+        One new field added to PrepareWaveResult struct in prepare_wave.go.
+        Surfaces stale cleanup failures that were previously swallowed silently.
+      definition: |
+        // Add to PrepareWaveResult struct:
+        StaleCleanupWarnings []string `json:"stale_cleanup_warnings,omitempty"`
+
+        // Population logic (in step 0a2, after CleanStaleWorktrees):
+        cleanRes := protocol.CleanStaleWorktrees(sameSlug, true)
+        if cleanRes.IsPartial() || (!cleanRes.IsSuccess() && !cleanRes.IsFatal()) {
+            for _, e := range cleanRes.GetData().Errors {
+                result.StaleCleanupWarnings = append(result.StaleCleanupWarnings,
+                    fmt.Sprintf("stale cleanup failed for %s: %s", e.Worktree.BranchName, e.Error))
+            }
+        }
+        // Note: current code declares `result` after worktree creation; field must be
+        // accumulated before then and merged into final result struct at output time.
+      location: cmd/sawtools/prepare_wave.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |-
+            ## Agent A — finalize_wave.go: gaps 1, 2, 3, 4
+
+            Modify `cmd/sawtools/finalize_wave.go` to close four batching gaps.
+
+            ### Gap 1: WAVE_VERIFIED state transition
+
+            After step 5.5 (RunPostMergeGates) succeeds and before setting
+            `result.Success = true`, call `protocol.SetImplState` to advance the
+            IMPL doc to `WAVE_VERIFIED`:
+
+            ```go
+            stateRes := protocol.SetImplState(manifestPath, protocol.StateWaveVerified, protocol.SetImplStateOpts{})
+            if stateRes.IsFatal() {
+                fmt.Fprintf(os.Stderr, "finalize-wave: warning: SetImplState(WAVE_VERIFIED) failed: %v\n", stateRes.Errors)
+            } else {
+                fmt.Fprintf(os.Stderr, "finalize-wave: IMPL state -> WAVE_VERIFIED\n")
+            }
+            ```
+
+            This call is non-fatal: log a warning on failure, do not block the
+            success result. The state transition is allowed because finalize-wave
+            leaves the doc in WAVE_EXECUTING or WAVE_MERGING, both of which have
+            WAVE_VERIFIED as a valid next state (see allowedTransitions in
+            pkg/protocol/state_transition.go).
+
+            ### Gap 2: Per-agent update-status on finalize success
+
+            Immediately after the SetImplState call (still before `result.Success = true`),
+            loop over all agents in the wave and call `protocol.UpdateStatus` for each:
+
+            ```go
+            for _, agent := range manifest.Waves[waveNum-1].Agents {
+                updateRes := protocol.UpdateStatus(manifestPath, waveNum, agent.ID, "complete")
+                if updateRes.IsFatal() {
+                    fmt.Fprintf(os.Stderr, "finalize-wave: warning: update-status for agent %s failed: %v\n",
+                        agent.ID, updateRes.Errors)
+                }
+            }
+            ```
+
+            Non-fatal: log per-agent warning on failure, continue loop.
+
+            ### Gap 3: populate-integration-checklist (M5) post-merge
+
+            After step 4 (MergeAgents) completes successfully — just before step 5
+            (VerifyBuild) — call M5 as a non-blocking informational step:
+
+            ```go
+            // Step 4.5: M5 populate-integration-checklist (non-blocking)
+            m5Updated, m5Err := protocol.PopulateIntegrationChecklist(manifest)
+            if m5Err != nil {
+                fmt.Fprintf(os.Stderr, "finalize-wave: M5 populate-integration-checklist: %v\n", m5Err)
+            } else {
+                manifest = m5Updated
+                if saveErr := protocol.Save(manifest, manifestPath); saveErr != nil {
+                    fmt.Fprintf(os.Stderr, "finalize-wave: M5 save: %v\n", saveErr)
+                } else {
+                    fmt.Fprintf(os.Stderr, "finalize-wave: M5 integration checklist populated\n")
+                }
+            }
+            ```
+
+            Place this in the `postMerge:` label section, after all repos have
+            confirmed a successful merge result but before the VerifyBuild loop.
+            This runs once (not per-repo) since it operates on the manifest itself.
+
+            Note: `manifest` is already in scope as the loaded `*protocol.IMPLManifest`.
+            `protocol.PopulateIntegrationChecklist` and `protocol.Save` are already
+            imported; no new imports needed.
+
+            ### Gap 4: Structured integration_action_required + wiring_gaps fields
+
+            Add two fields to the `FinalizeWaveResult` struct:
+
+            ```go
+            IntegrationActionRequired bool     `json:"integration_action_required"`
+            WiringGaps                []string `json:"wiring_gaps,omitempty"`
+            ```
+
+            In step 3.5b (ValidateWiringDeclarations block), after the existing
+            per-gap stderr logging, populate these fields:
+
+            ```go
+            if !wiringData.Valid {
+                result.IntegrationActionRequired = true
+                for _, gap := range wiringData.Gaps {
+                    result.WiringGaps = append(result.WiringGaps,
+                        fmt.Sprintf("%s not called in %s",
+                            gap.Declaration.Symbol, gap.Declaration.MustBeCalledFrom))
+                }
+            }
+            ```
+
+            The existing stderr logging stays in place. The new fields supplement
+            it with programmatic access.
+
+            ### Tests
+
+            Add or update tests in `cmd/sawtools/finalize_wave_test.go` (create if
+            it doesn't exist) or an appropriate `_test.go` file co-located with
+            finalize_wave.go. At minimum verify:
+            - `FinalizeWaveResult` struct serializes `integration_action_required`
+              and `wiring_gaps` fields correctly.
+            - The new fields are zero-valued (false / nil) when wiring is clean.
+
+            ### Verification gate
+
+            ```
+            go build ./cmd/sawtools/...
+            go vet ./cmd/sawtools/...
+            go test ./cmd/sawtools/... ./pkg/protocol/...
+            ```
+
+            ### Constraints
+
+            - Do NOT change any function signatures in pkg/protocol/.
+            - The SetImplState and UpdateStatus calls must be non-fatal (warning on
+              failure, not error return).
+            - M5 call must be non-fatal (stderr warning only).
+            - Place the M5 call after merge succeeds and before VerifyBuild — it
+              must NOT run if merge failed.
+            - The `goto postMerge` paths (skipMerge, isSolo, allGone) all jump past
+              the merge loop and land at `postMerge:`. Place the M5 call inside the
+              `postMerge:` section, after the label, so it also runs in skip/solo
+              cases if desired — OR place it only in the successful merge path by
+              adding it just before `goto postMerge` in the main merge loop. The
+              former (post-label placement) is preferred so all paths get M5.
+          files:
+            - cmd/sawtools/finalize_wave.go
+        - id: B
+          task: |-
+            ## Agent B — prepare_wave.go: gap 5
+
+            Modify `cmd/sawtools/prepare_wave.go` to surface stale worktree cleanup
+            failures as warnings in the result JSON instead of silently swallowing them.
+
+            ### Gap 5: Stale cleanup failures as warnings in result JSON
+
+            **Step 1: Add field to PrepareWaveResult struct.**
+
+            Add `StaleCleanupWarnings []string` to the existing struct:
+
+            ```go
+            type PrepareWaveResult struct {
+                Wave                 int                     `json:"wave"`
+                Worktrees            []protocol.WorktreeInfo `json:"worktrees"`
+                AgentBriefs          []AgentBriefInfo        `json:"agent_briefs"`
+                Repos                []string                `json:"repos,omitempty"`
+                StaleCleanupWarnings []string                `json:"stale_cleanup_warnings,omitempty"`
+            }
+            ```
+
+            **Step 2: Collect warnings from CleanStaleWorktrees.**
+
+            In step 0a2 (the `CleanStaleWorktrees` block, around line 180), the
+            current code only acts on `IsSuccess()/IsPartial()` success cases and
+            prints a cleanup count. Extend it to capture warnings:
+
+            ```go
+            var staleCleanupWarnings []string
+            if len(sameSlug) > 0 {
+                cleanRes := protocol.CleanStaleWorktrees(sameSlug, true)
+                cleanData := cleanRes.GetData()
+                if cleanData != nil {
+                    if cleanRes.IsSuccess() || cleanRes.IsPartial() {
+                        fmt.Fprintf(os.Stderr, "prepare-wave: cleaned %d stale worktree(s) from previous runs\n",
+                            len(cleanData.Cleaned))
+                    }
+                    for _, e := range cleanData.Errors {
+                        msg := fmt.Sprintf("stale cleanup failed for %s: %s", e.Worktree.BranchName, e.Error)
+                        fmt.Fprintf(os.Stderr, "prepare-wave: warning: %s\n", msg)
+                        staleCleanupWarnings = append(staleCleanupWarnings, msg)
+                    }
+                }
+            }
+            ```
+
+            Replace the existing `if len(sameSlug) > 0 { cleanRes := ... }` block
+            with this version. The `staleCleanupWarnings` variable is declared
+            before the block so it is in scope when the result struct is built.
+
+            **Step 3: Populate the result struct.**
+
+            When building the final `PrepareWaveResult` (near the bottom, around
+            line 540), set the new field:
+
+            ```go
+            result := PrepareWaveResult{
+                Wave:                 waveNum,
+                Worktrees:            worktreeResult.Worktrees,
+                AgentBriefs:          agentBriefs,
+                Repos:                repoList,
+                StaleCleanupWarnings: staleCleanupWarnings,
+            }
+            ```
+
+            **Important scope note:** `staleCleanupWarnings` is declared in step 0a2
+            which is inside the `RunE` closure but before the worktree creation block.
+            The result struct is built at the end of the same closure, so the variable
+            will be in scope. Verify the declaration placement doesn't conflict with
+            the `goto`-related variable scoping constraints already present in the file
+            (finalize_wave.go uses gotos; prepare_wave.go does not, so this is safe).
+
+            ### Tests
+
+            Verify the new field serializes correctly. A simple struct initialization
+            test in a `_test.go` file is sufficient:
+
+            ```go
+            r := PrepareWaveResult{StaleCleanupWarnings: []string{"test warning"}}
+            out, _ := json.Marshal(r)
+            // assert "stale_cleanup_warnings" key present in output
+            ```
+
+            ### Verification gate
+
+            ```
+            go build ./cmd/sawtools/...
+            go vet ./cmd/sawtools/...
+            go test ./cmd/sawtools/...
+            ```
+
+            ### Constraints
+
+            - The change is purely additive: existing behavior (cleanup count log,
+              IsSuccess/IsPartial branch logic) must remain intact.
+            - Failures are warnings only — do NOT return an error or block wave
+              creation on stale cleanup failure.
+            - `omitempty` on the JSON tag ensures the field is absent from output
+              when there are no warnings (clean path).
+          files:
+            - cmd/sawtools/prepare_wave.go
+      base_commit: d7dea349b3c33194a1156d045f3e9d9ea302a22d
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./...
+          required: true
+        - type: lint
+          command: go vet ./...
+          required: true
+        - type: test
+          command: go test ./cmd/sawtools/... ./pkg/protocol/...
+          required: true
+completion_reports:
+    A:
+        status: complete
+        worktree: /Users/dayna.blackwell/code/scout-and-wave/.claude/worktrees/saw/finalize-wave-gaps/wave1-agent-A
+        branch: saw/finalize-wave-gaps/wave1-agent-A
+        commit: d7dea349b3c33194a1156d045f3e9d9ea302a22d
+        notes: no changes produced (API agent)
+    B:
+        status: complete
+        worktree: /Users/dayna.blackwell/code/scout-and-wave/.claude/worktrees/saw/finalize-wave-gaps/wave1-agent-B
+        branch: saw/finalize-wave-gaps/wave1-agent-B
+        commit: d7dea349b3c33194a1156d045f3e9d9ea302a22d
+        notes: no changes produced (API agent)
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: |-
+            SetImplState rejects the transition because the IMPL doc is in an
+            unexpected state (e.g., WAVE_PENDING instead of WAVE_EXECUTING) when
+            finalize-wave runs.
+          likelihood: low
+          impact: low
+          mitigation: |-
+            The call is non-fatal — log warning to stderr and continue. The allowed
+            transitions table in state_transition.go shows WAVE_EXECUTING -> WAVE_VERIFIED
+            and WAVE_MERGING -> WAVE_VERIFIED are both valid. Only edge cases (e.g.,
+            IMPL already COMPLETE) would reject; those are benign.
+        - scenario: |-
+            M5 (PopulateIntegrationChecklist) modifies the manifest and writes it
+            to disk between VerifyCommits and VerifyBuild, causing a dirty working
+            tree that interferes with git operations in VerifyBuild.
+          likelihood: low
+          impact: medium
+          mitigation: |-
+            PopulateIntegrationChecklist modifies the YAML file at manifestPath, not
+            files in the agent worktrees. VerifyBuild runs test_command/lint_command
+            on the source repo, not the docs/ directory. No interference expected.
+            The call is also non-fatal so any failure is logged and skipped.
+        - scenario: |-
+            UpdateStatus overwrites a completion report's fields beyond `status`,
+            losing FilesChanged/FilesCreated data already written by the agent.
+          likelihood: low
+          impact: medium
+          mitigation: |-
+            UpdateStatus in status_update.go reads the existing report, sets only
+            the Status field, and writes back the full struct — it preserves all
+            other fields. Reviewed the implementation; this is safe.
+        - scenario: |-
+            staleCleanupWarnings variable declared before the staleErr/sameSlug block
+            conflicts with Go's goto-jump-over-declaration rules in prepare_wave.go.
+          likelihood: low
+          impact: low
+          mitigation: |-
+            prepare_wave.go does not use goto statements (only finalize_wave.go does).
+            Variable declaration placement is unrestricted. No conflict expected.
+state: COMPLETE

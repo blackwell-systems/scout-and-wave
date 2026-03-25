@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+# inject-context — vendor-neutral context injection for Agent Skills
+#
+# Reads trigger patterns from the parent skill's SKILL.md frontmatter,
+# matches them against the user's prompt, and outputs the contents of
+# any matching reference files.
+#
+# Usage:
+#   bash scripts/inject-context "user prompt text"
+#   echo "user prompt text" | bash scripts/inject-context
+#
+# Output:
+#   Concatenated contents of all matching reference files, each preceded
+#   by an HTML comment indicating the source. Empty output if no match.
+#
+# Exit codes:
+#   0  Success (output may be empty if no triggers matched)
+#   1  Error (missing SKILL.md, parse failure)
+
+set -euo pipefail
+
+# Accept prompt from $1 or stdin
+PROMPT="${1:-$(cat)}"
+[ -z "$PROMPT" ] && exit 0
+
+# Resolve skill directory (parent of scripts/)
+SKILL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+SKILL_FILE="$SKILL_DIR/SKILL.md"
+
+if [ ! -f "$SKILL_FILE" ]; then
+  echo "error: SKILL.md not found at $SKILL_FILE" >&2
+  exit 1
+fi
+
+# Extract triggers from YAML frontmatter using awk.
+# Outputs tab-separated lines: <regex>\t<inject-path>
+# Handles both quoted and unquoted YAML values.
+triggers=$(awk '
+  /^---$/ { if (++delim == 2) exit; next }
+  delim == 1 && /^triggers:/ { in_triggers = 1; next }
+  in_triggers && /^[^ ]/ { exit }
+  in_triggers && /^  - match:/ {
+    m = $0
+    sub(/.*match: *"?/, "", m)
+    sub(/"? *$/, "", m)
+    current_match = m
+    next
+  }
+  in_triggers && /^    inject:/ {
+    i = $0
+    sub(/.*inject: *"?/, "", i)
+    sub(/"? *$/, "", i)
+    if (current_match != "" && i != "") {
+      print current_match "\t" i
+    }
+    current_match = ""
+    next
+  }
+' "$SKILL_FILE")
+
+# No triggers defined — nothing to do
+[ -z "$triggers" ] && exit 0
+
+injected=""
+
+while IFS=$'\t' read -r pattern file; do
+  [ -z "$pattern" ] && continue
+
+  # Test prompt against trigger pattern
+  if echo "$PROMPT" | grep -qE "$pattern" 2>/dev/null; then
+    ref_path="$SKILL_DIR/$file"
+    if [ -f "$ref_path" ]; then
+      injected+="<!-- injected: $file -->"$'\n'
+      injected+="$(cat "$ref_path")"$'\n\n'
+    else
+      echo "warn: inject target not found: $ref_path" >&2
+    fi
+  fi
+done <<< "$triggers"
+
+# Output injected content (empty string = no output = no injection)
+if [ -n "$injected" ]; then
+  printf '%s' "$injected"
+fi
