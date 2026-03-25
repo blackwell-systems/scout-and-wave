@@ -111,6 +111,12 @@ ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agents/wave-age
        ~/.claude/skills/saw/agents/wave-agent.md
 ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agents/scaffold-agent.md \
        ~/.claude/skills/saw/agents/scaffold-agent.md
+ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agents/integration-agent.md \
+       ~/.claude/skills/saw/agents/integration-agent.md
+ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agents/critic-agent.md \
+       ~/.claude/skills/saw/agents/critic-agent.md
+ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agents/planner.md \
+       ~/.claude/skills/saw/agents/planner.md
 ```
 
 **Install on-demand reference files (progressive disclosure):**
