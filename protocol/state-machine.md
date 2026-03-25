@@ -14,6 +14,7 @@ SAW execution progresses through a series of states orchestrated by the synchron
 
 | State | Description | Entry Condition | Exit Condition |
 |-------|-------------|-----------------|----------------|
+| **INTERVIEWING** | User is being guided through structured requirements gathering via `/saw interview`. | `/saw interview` command invoked | Interview completes, REQUIREMENTS.md written (manual: user runs `/saw scout` or `/saw bootstrap` after) |
 | **SCOUT_PENDING** | Initial state. Scout analysis not yet complete. | Protocol invoked | Scout completes, produces IMPL doc |
 | **SCOUT_VALIDATING** | Orchestrator running validator on Scout output; feeding errors back to Scout if needed. | Scout writes IMPL doc | Validation passes OR retry limit exhausted |
 | **REVIEWED** | IMPL doc produced, awaiting human review and approval. | Scout complete | Human approves plan |
@@ -29,6 +30,19 @@ SAW execution progresses through a series of states orchestrated by the synchron
 ---
 
 ## State Transitions
+
+### Interview Path (Optional Pre-Scout Entry)
+
+```
+INTERVIEWING
+    ↓ (Interview completes, REQUIREMENTS.md written)
+(manually) SCOUT_PENDING
+```
+
+The INTERVIEWING → SCOUT_PENDING transition is manual: after the interview
+completes, the user invokes `/saw scout "<feature>" --requirements docs/REQUIREMENTS.md`
+(or `/saw bootstrap`) to enter SCOUT_PENDING. There is no automatic state signal
+from the interview tool to the SAW orchestrator.
 
 ### Primary Flow (Success Path)
 
@@ -55,6 +69,12 @@ COMPLETE
 ```
 
 ### Alternate Success Paths
+
+**Interview path (bypasses normal SCOUT_PENDING start):**
+The INTERVIEWING state is an optional precursor. After completing the interview,
+the user manually invokes `/saw scout` or `/saw bootstrap` with the generated
+REQUIREMENTS.md, entering SCOUT_PENDING. The interview path bypasses the normal
+SCOUT_PENDING entry and feeds a REQUIREMENTS.md into it instead.
 
 **Solo wave skip (no merge needed):**
 ```
@@ -276,6 +296,7 @@ These actions occur automatically when entering each state.
 
 | State | Entry Actions |
 |-------|---------------|
+| **INTERVIEWING** | CLI prints question prompts to stdout and reads answers from stdin. Web UI emits SSE `question` events and waits for `/api/interview/{runID}/answer` POSTs. State persisted to `docs/INTERVIEW-<slug>.yaml` after each turn. |
 | **SCOUT_PENDING** | Orchestrator launches Scout agent with absolute IMPL doc path |
 | **SCOUT_VALIDATING** | Orchestrator runs validator on all `type=impl-*` blocks in IMPL doc; on failure, issues correction prompt to Scout (E16); on pass, advances to REVIEWED |
 | **REVIEWED** | Orchestrator surfaces IMPL doc to human, requests approval |
@@ -397,6 +418,7 @@ The following table is the canonical reference for all allowed state transitions
 
 | From State | Allowed Targets |
 |-----------|----------------|
+| **INTERVIEWING** | *(manual: user invokes /saw scout after interview completes)* |
 | **SCOUT_PENDING** | REVIEWED, NOT_SUITABLE |
 | **SCOUT_VALIDATING** | REVIEWED, NOT_SUITABLE |
 | **REVIEWED** | SCAFFOLD_PENDING, WAVE_PENDING, WAVE_EXECUTING, BLOCKED |
