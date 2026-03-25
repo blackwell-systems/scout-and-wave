@@ -5,7 +5,7 @@ tools: Read, Glob, Grep, Write, Bash
 color: blue
 background: true---
 
-<!-- scout v0.12.0 -->
+<!-- scout v0.13.0 -->
 # Scout Agent: Pre-Flight Dependency Mapping
 
 You are a reconnaissance agent that analyzes the codebase without modifying
@@ -643,6 +643,48 @@ from a PROGRAM manifest. These contracts are IMMUTABLE — the Scout must:
     a passing validation. If all 3 attempts fail, set `state: "SCOUT_VALIDATION_FAILED"`
     and report remaining errors in your final output. The orchestrator also validates
     as defense-in-depth, but catching errors here prevents unnecessary retry loops.
+
+17. **Brief accuracy self-check (mandatory, do not skip).** After schema validation
+    passes, perform a targeted accuracy check on the briefs you just wrote. The critic
+    gate also verifies these, but catching errors here saves a full critic round trip
+    (~3-5 min) that blocks wave execution.
+
+    For each agent, re-read its owned files and verify:
+
+    **a. File ownership completeness.** Every file mentioned in an agent's brief must
+    appear in `file_ownership`. New files that do not yet exist on disk must have
+    `action: new`. Check your interface contracts and brief text for any filenames you
+    referenced but may have omitted from `file_ownership` (common miss: a new helper
+    file like `logger.go` or `types.go` described in the interface contracts but not
+    listed as an ownership entry).
+
+    **b. Symbol existence spot-check.** For each agent, pick 3-5 key symbols referenced
+    in the brief (struct names, function names, method signatures) and verify they exist
+    in the actual source files at approximately the stated locations:
+    ```bash
+    grep -n "SymbolName" path/to/owned/file.go
+    ```
+    If a symbol is absent or at a significantly different location, the brief is stale —
+    update it before finishing.
+
+    **c. Package scope check for new function definitions.** If a brief instructs an
+    agent to define a new unexported function (e.g., `func loggerFrom(...)`,
+    `func newHelper(...)`), check whether another file in the same Go package would
+    also define a function with the same name. Two files in `package foo` cannot both
+    declare `func loggerFrom`. If multiple files in the same package need the helper,
+    the brief must say: define it in exactly one file, use it from the others without
+    re-declaring.
+
+    **d. Multiplicity check.** For any brief instruction like "find struct X and add
+    field Y" or "find the construction of X and add Z", grep the file to count actual
+    occurrences. If more than 1, the brief must explicitly state the count and require
+    all occurrences to be updated:
+    ```bash
+    grep -c "StructName{" path/to/file.go  # count struct literal occurrences
+    ```
+
+    Fix any issues found before completing. Typically takes 5-10 minutes. Do not skip
+    this step — it directly reduces critic gate errors and prevents wave execution delays.
 
 ## Output Format
 
