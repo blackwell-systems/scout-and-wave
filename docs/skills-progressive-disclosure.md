@@ -12,7 +12,7 @@ The [Agent Skills specification](https://agentskills.io/specification) defines a
 
 SAW extends this with a Tier 0 discovery layer (`CLAUDE.md`) that sits outside the skill itself, providing project-level routing before any skill is activated.
 
-The `triggers:` frontmatter extension proposed in `docs/proposals/skill-context-injection.md` is SAW's contribution back to the ecosystem — deterministic enforcement of Tier 3 loading via the `UserPromptSubmit` hook, rather than convention-based routing.
+The `triggers:` frontmatter extension proposed in `docs/proposals/agentskills-subcommand-dispatch.md` is SAW's contribution back to the ecosystem — deterministic enforcement of Tier 3 loading via the `UserPromptSubmit` hook, rather than convention-based routing.
 
 ## Why Progressive Disclosure
 
@@ -72,7 +72,7 @@ A user who types "add caching to the API" in a project with this CLAUDE.md gets 
 
 This is the progressive disclosure model applied at the project level: the index is always loaded; the skill bodies load only when invoked.
 
-**Known limitation:** CLAUDE.md entries are advisory — Claude reads them but there is no enforcement mechanism that prevents the model from ignoring them. The entries should be written to make the correct routing the obvious choice, not to mandate it. The `UserPromptSubmit` hook proposal (`docs/proposals/skill-context-injection.md`) addresses the same gap the Agent Skills spec leaves open: the spec defines the Resources tier but leaves loading to convention. The `triggers:` frontmatter extension converts Tier 3 from convention-based to enforcement-based via deterministic hook injection.
+**Known limitation:** CLAUDE.md entries are advisory — Claude reads them but there is no enforcement mechanism that prevents the model from ignoring them. The entries should be written to make the correct routing the obvious choice, not to mandate it. The `UserPromptSubmit` hook proposal (`docs/proposals/agentskills-subcommand-dispatch.md`) addresses the same gap the Agent Skills spec leaves open: the spec defines the Resources tier but leaves loading to convention. The `triggers:` frontmatter extension provides deterministic dispatch for subcommand-anchored references (e.g. `/saw program` → `program-flow.md`). Mid-execution references (failure routing, error states) remain convention-based — see the proposal for scope and known limitations.
 
 ### Tier 1 — Metadata (always loaded, ~17 lines)
 
