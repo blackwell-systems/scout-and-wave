@@ -18,10 +18,10 @@ Interview mode adds a new state to the Scout-and-Wave state machine:
 
 ```
 IDLE → INTERVIEWING (on /saw interview command)
-INTERVIEWING → SCOUT_PENDING (on interview completion, REQUIREMENTS.md written)
+INTERVIEWING → SCOUT_PENDING (manual: user invokes /saw scout or /saw bootstrap after interview completes)
 ```
 
-The INTERVIEWING state is terminal for the interview process — it either completes (writes REQUIREMENTS.md and transitions to SCOUT_PENDING) or the user pauses/abandons it. There is no automatic retry or failure recovery; if the user exits, they must explicitly resume.
+The INTERVIEWING state is terminal for the interview process — it either completes (writes REQUIREMENTS.md) or the user pauses/abandons it. The transition to SCOUT_PENDING is manual: after the interview completes, the user explicitly invokes `/saw scout "<feature>" --requirements docs/REQUIREMENTS.md` (or `/saw bootstrap`). There is no automatic state signal from the interview tool to the SAW orchestrator. There is no automatic retry or failure recovery; if the user exits, they must explicitly resume.
 
 ### Interview Structure
 
@@ -118,56 +118,46 @@ The orchestrator:
 
 ### Output Contract
 
-On completion (when the final question is answered and `status: complete` is set), the orchestrator calls the interview compiler, which generates `docs/REQUIREMENTS.md`. The format of REQUIREMENTS.md is structured markdown with sections corresponding to the 6 interview phases:
+On completion (when the final question is answered and `status: complete` is set), the orchestrator calls the interview compiler, which generates `docs/REQUIREMENTS.md`.
+
+**Note:** The compiled format is tailored to the `saw-bootstrap.md` intake format (bootstrap-oriented sections) rather than mirroring the 6 interview phases. This maximizes compatibility with `/saw bootstrap` which parses these specific section headings.
+
+**Note:** Sections with no data are emitted with a placeholder comment `<!-- placeholder — fill in before running /saw bootstrap -->` so the file is always complete and can be manually edited before running bootstrap.
+
+The actual format produced by the compiler is:
 
 ```markdown
-# <title>
+# Requirements: <title>
 
-## Overview
-**Goal:** <goal>
+## Language & Ecosystem
+- <language/ecosystem items from interfaces.external containing "language" keyword>
 
-**Success Metrics:**
-- <metric 1>
-- <metric 2>
+## Project Type
+<goal text>
 
-**Non-Goals:**
-- <non-goal 1>
+## Deployment Target
+- <constraints items containing "deploy" keyword>
 
-## Scope
-**In Scope:**
-- <item 1>
+## Key Concerns (3-6 major responsibility areas)
+1. <scope.in_scope item 1>
+2. <scope.in_scope item 2>
+...
 
-**Out of Scope:**
-- <item 1>
+## Storage
+- <interfaces.data_models items>
 
-**Assumptions:**
-- <assumption 1>
+## External Integrations
+- <interfaces.external items>
 
-## Requirements
-**Functional:**
-- <requirement 1>
+## Source Codebase (if porting/adapting)
+- <interfaces.external items with "source:" prefix, stripped>
 
-**Non-Functional:**
-- <requirement 1>
+## Architectural Decisions Already Made
+- <requirements.constraints items>
+- <requirements.non_functional items>
 
-**Constraints:**
-- <constraint 1>
-
-## Interfaces
-**Data Models:**
-- <model 1>
-
-**APIs:**
-- <api 1>
-
-**External Dependencies:**
-- <dependency 1>
-
-## User Stories
-- <story 1>
-
-## Open Questions
-- <question 1>
+## Warnings  ← only present if interview was truncated before completion
+- Interview truncated at max_questions limit. Some phases incomplete.
 ```
 
 This REQUIREMENTS.md file is suitable input for:
@@ -197,6 +187,14 @@ If the CLI detects EOF on stdin before the interview is complete, it:
 - Command: `sawtools interview "<description>"` (in scout-and-wave-go repo)
 - Located in: `cmd/sawtools/interview_cmd.go`
 - Uses: `pkg/interview` package (Manager interface, DeterministicManager implementation)
+
+**CLI Flags:**
+
+**`--non-interactive`** — When set, suppresses question prompts (phase progress
+header, question text, hint, and `> ` prompt) from stdout. Answers are still
+read from stdin normally. Use for testing/piping: `echo "My App\nA CLI tool" |
+sawtools interview "test" --non-interactive`. The interview log and state files
+are written normally regardless of this flag.
 
 **Claude Code Integration:**
 - Skill command: `/saw interview "<description>"`
@@ -259,6 +257,26 @@ The deterministic interview mode uses a fixed question bank defined in `pkg/inte
 **Phase transition rules:** A phase advances to the next when all its required fields are populated AND all optional fields have been asked (answered or skipped). The `_confirm` field in the review phase is special: it is never considered "populated" and is always asked exactly once. A "yes" answer transitions to `PhaseComplete`; a "no" answer keeps the interview in the review phase (implementation-defined behavior for re-asking).
 
 **Skip semantics:** When the user types "skip" for an optional field, the field is set to an empty slice (`[]`) rather than left as `nil`. This distinguishes "asked and skipped" from "not yet asked" -- a `nil` slice means the question has not been presented.
+
+### Navigation Commands
+
+The deterministic interview mode supports the following special answer values:
+
+**`back`** — Reverts to the previous question. The last answer is removed from the
+interview history, and its corresponding spec data field is cleared. The phase is
+recalculated from scratch (replaying forward transitions) so the phase indicator
+stays accurate. Cannot go back from the first question (cursor = 0); the back
+command is silently ignored in that case.
+
+**`skip`** — For optional fields, typing `skip` marks the field as asked-and-skipped
+(sets an empty slice `[]` rather than nil). Required fields reject `skip` with an
+error prompt. See Skip semantics above.
+
+**Navigation constraint:** The `back` command is a user-facing undo. It is NOT
+a mechanism to re-enter a previous phase directly — phase boundaries are enforced
+by the `checkPhaseTransition` logic, which only advances forward. Going back within
+a phase is supported; going back across a phase boundary is possible by typing
+`back` repeatedly until the cursor reaches the relevant question.
 
 **LLM mode (not yet implemented):** The LLM-backed mode will generate questions dynamically based on prior answers, enabling follow-up questions and adaptive depth. The deterministic question bank above serves as the baseline; LLM mode may ask these same questions plus additional context-sensitive ones.
 
