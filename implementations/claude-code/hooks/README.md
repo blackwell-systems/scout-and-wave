@@ -63,7 +63,7 @@ Fires when the orchestrator calls the `Agent` tool to launch a subagent. Dispatc
 
 **Why `updatedInput`, not `additionalContext`:** `additionalContext` in a `PreToolUse` hook adds content to the *calling model's* context (the orchestrator). `updatedInput` modifies the tool call parameters before execution — the only mechanism that reaches inside a subagent's initial prompt. See `docs/proposals/agentskills-agent-type-injection.md` for the full decision record.
 
-**Coverage:** `wave-agent`, `critic-agent`, `scout`, `planner`. Dispatch is a sequence of `if` blocks on `subagent_type`. Adding a new agent type requires adding one `if` block — no new hook registration needed.
+**Coverage:** `scout`, `wave-agent`, `critic-agent`, `planner`. Dispatch is a sequence of `if` blocks on `subagent_type`. Adding a new agent type requires adding one `if` block — no new hook registration needed.
 
 **Dedup:** Injection markers (`<!-- injected: references/X.md -->`) prevent double-injection if the orchestrator also manually prepended the reference.
 
@@ -544,6 +544,7 @@ echo $?  # 0 (if on expected branch)
 9. **Scout reference injection** — When launching a scout agent, inject reference files into the subagent prompt via `updatedInput`. Detection: fires if `[SAW:scout` appears in description, `subagent_type: scout` appears in prompt, or `# Scout Agent: Pre-Flight Dependency Mapping` appears in prompt. Always injects `scout-suitability-gate.md` and `scout-implementation-process.md`. Conditionally injects `scout-program-contracts.md` only when `--program` appears in the prompt. Dedup: uses HTML comment markers `<!-- injected: references/scout-X.md -->` to skip files already present in the prompt. Non-scout agents are unaffected — Check 9 is gated behind scout detection and falls through to `exit 0` if the agent is not a scout.
 10. **Wave-agent reference injection** — When launching a wave agent, inject reference files into the subagent prompt via `updatedInput`. Detection: fires if `[SAW:wave` appears in description or `subagent_type: wave-agent` appears in tool input. Always injects `wave-agent-worktree-isolation.md`, `wave-agent-completion-report.md`, and `wave-agent-build-diagnosis.md`. Conditionally injects `wave-agent-program-contracts.md` only when `frozen_contracts_hash` or `frozen: true` appears in the prompt (indicating a PROGRAM-managed IMPL with frozen interface contracts). Dedup: uses HTML comment markers `<!-- injected: references/wave-agent-X.md -->` to skip files already present in the prompt. Non-wave agents are unaffected — Check 10 is gated behind wave-agent detection.
 11. **Critic-agent reference injection** — When launching a critic agent, inject reference files into the subagent prompt via `updatedInput`. Detection: fires if `[SAW:critic` appears in description or `subagent_type: critic-agent` appears in tool input. Always injects both `critic-agent-verification-checks.md` and `critic-agent-completion-format.md` — there is no conditional injection for critic agents. Dedup: uses HTML comment markers `<!-- injected: references/critic-agent-X.md -->` to skip files already present in the prompt. Non-critic agents are unaffected — Check 11 is gated behind critic-agent detection.
+12. **Planner reference injection** — When launching a planner agent, inject reference files into the subagent prompt via `updatedInput`. Detection: fires if `[SAW:planner` appears in description or `subagent_type: planner` appears in tool input. Always injects all three planner reference files: `planner-suitability-gate.md`, `planner-implementation-process.md`, and `planner-example-manifest.md` — there is no conditional injection for planner agents. Dedup: uses HTML comment markers `<!-- injected: references/planner-X.md -->` to skip files already present in the prompt. Non-planner agents are unaffected — Check 12 is gated behind planner detection.
 
 ### Checks 9+: Agent Type Injection
 
@@ -554,10 +555,10 @@ After enforcement passes, dispatch on `subagent_type` and inject matching refere
 | `wave-agent` | `wave-agent-worktree-isolation.md`, `wave-agent-completion-report.md`, `wave-agent-build-diagnosis.md` (always); `wave-agent-program-contracts.md` (when frozen contracts present) |
 | `critic-agent` | `critic-agent-verification-checks.md`, `critic-agent-completion-format.md` (always) |
 | `scout` | `scout-suitability-gate.md`, `scout-implementation-process.md` (always); `scout-program-contracts.md` (with --program) |
-| `planner` | `suitability-gate.md`, `implementation-process.md`, `example-manifest.md` |
+| `planner` | `planner-suitability-gate.md`, `planner-implementation-process.md`, `planner-example-manifest.md` (always) |
 | other | pass through (exit 0) |
 
-**Status:** Checks 1–11 implemented. Check 9 (scout reference injection) added by Wave 2 Agent D in `IMPL-scout-prompt-extraction.yaml`. Check 10 (wave-agent reference injection) added by Wave 2 Agent D in `IMPL-wave-agent-prompt-extraction.yaml`. Check 11 (critic-agent reference injection) added by Wave 2 Agent D in `IMPL-critic-agent-prompt-extraction.yaml`.
+**Status:** Checks 1–12 implemented. Check 9 (scout reference injection) added by Wave 2 Agent D in `IMPL-scout-prompt-extraction.yaml`. Check 10 (wave-agent reference injection) added by Wave 2 Agent D in `IMPL-wave-agent-prompt-extraction.yaml`. Check 11 (critic-agent reference injection) added by Wave 2 Agent D in `IMPL-critic-agent-prompt-extraction.yaml`. Check 12 (planner reference injection) added by Wave 2 Agent D in `IMPL-planner-prompt-extraction.yaml`.
 
 ### Manual Installation
 

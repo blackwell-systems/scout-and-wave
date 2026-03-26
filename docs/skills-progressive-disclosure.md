@@ -350,7 +350,7 @@ The same heuristics apply as for skill references, scoped to the agent type:
 | `scout` | ~166 lines | `scout-suitability-gate.md`, `scout-implementation-process.md`, `scout-program-contracts.md` |
 | `wave-agent` | ~133 lines | `worktree-isolation.md`, `build-diagnosis.md`, `completion-report.md` |
 | `critic-agent` | ~75 lines | `critic-agent-verification-checks.md`, `critic-agent-completion-format.md` |
-| `planner` | ~148 lines | `suitability-gate.md`, `implementation-process.md`, `example-manifest.md` |
+| `planner` | ~148 lines | `planner-suitability-gate.md`, `planner-implementation-process.md`, `planner-example-manifest.md` |
 
 Injection is implemented in `validate_agent_launch` checks 9+ (see `implementations/claude-code/hooks/README.md` § Hook 9).
 
@@ -385,9 +385,19 @@ Detection in `validate_agent_launch` fires on `subagent_type: critic-agent` in t
 
 With scout, wave-agent, and critic-agent all using hook-based progressive disclosure, the pattern is now applied to all three core SAW agent types that perform the primary SAW workflow: analysis (scout), implementation (wave-agent), and review (critic-agent).
 
+### Planner as the fourth progressive disclosure surface
+
+The planner agent is the fourth SAW agent type to fully apply the progressive disclosure pattern at the subagent level. The planner's suitability gate (4-question program assessment with verdicts and time estimates), implementation process (Steps 1–10 for analyzing the project and producing a PROGRAM manifest), and example manifest (a complete annotated example PROGRAM manifest for a fictional project) have been extracted from the core `agents/planner.md` prompt into three always-injected reference files: `references/planner-suitability-gate.md`, `references/planner-implementation-process.md`, and `references/planner-example-manifest.md`.
+
+Like critic-agent, planner has no conditional references — all three files are always injected. Every planner launch evaluates program suitability, runs the full implementation process, and can benefit from an example manifest as a structural guide.
+
+Detection in `validate_agent_launch` fires on `subagent_type: planner` in tool input or `[SAW:planner` in the description. Dedup markers (`<!-- injected: references/planner-X.md -->`) prevent double-injection. The slim `planner.md` core (~148 lines) carries identity, role definition, and a reference loading block instructing the agent to skip re-reading files whose markers are already in context.
+
+With scout, wave-agent, critic-agent, and planner all using hook-based progressive disclosure, the pattern now covers all four major SAW agent types: analysis (scout), implementation (wave-agent), review (critic-agent), and program planning (planner).
+
 ### The generalized pattern
 
-With scout, wave-agent, and critic-agent all using hook-based progressive disclosure, the pattern is fully generalized. Any SAW agent type can apply it:
+With scout, wave-agent, critic-agent, and planner all using hook-based progressive disclosure, the pattern is fully generalized. Any SAW agent type can apply it:
 
 1. Extract heavy procedural content from the core type prompt into `references/<type>-<name>.md` files
 2. Add a detection block in `validate_agent_launch` for the new `subagent_type`

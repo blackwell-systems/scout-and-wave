@@ -379,5 +379,50 @@ if [[ "$is_critic" == "true" ]]; then
   fi
 fi
 
+# --- Check 12: Planner reference injection ---
+# When launching a planner agent, inject reference files via updatedInput.
+# All three reference files are always injected — no conditional injection.
+
+is_planner=false
+if [[ "$subagent_type" == "planner" ]] || [[ "$description" =~ \[SAW:planner ]]; then
+  is_planner=true
+fi
+
+if [[ "$is_planner" == "true" ]]; then
+  ref_dir=""
+  skill_dir="${CLAUDE_SKILL_DIR:-${HOME}/.claude/skills/saw}"
+  if [[ -d "${skill_dir}/references" ]]; then
+    ref_dir="${skill_dir}/references"
+  fi
+
+  if [[ -n "$ref_dir" ]]; then
+    inject_content=""
+
+    ref_file="${ref_dir}/planner-suitability-gate.md"
+    if [[ -f "$ref_file" ]] && ! echo "$prompt" | grep -q '<!-- injected: references/planner-suitability-gate.md -->'; then
+      inject_content+="<!-- injected: references/planner-suitability-gate.md -->"$'\n'
+      inject_content+="$(command cat "$ref_file")"$'\n\n'
+    fi
+
+    ref_file="${ref_dir}/planner-implementation-process.md"
+    if [[ -f "$ref_file" ]] && ! echo "$prompt" | grep -q '<!-- injected: references/planner-implementation-process.md -->'; then
+      inject_content+="<!-- injected: references/planner-implementation-process.md -->"$'\n'
+      inject_content+="$(command cat "$ref_file")"$'\n\n'
+    fi
+
+    ref_file="${ref_dir}/planner-example-manifest.md"
+    if [[ -f "$ref_file" ]] && ! echo "$prompt" | grep -q '<!-- injected: references/planner-example-manifest.md -->'; then
+      inject_content+="<!-- injected: references/planner-example-manifest.md -->"$'\n'
+      inject_content+="$(command cat "$ref_file")"$'\n\n'
+    fi
+
+    if [[ -n "$inject_content" ]]; then
+      jq -n --arg inject "$inject_content" --arg orig "$prompt" \
+        '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow", "updatedInput": {"prompt": ($inject + "\n\n" + $orig)}}}'
+      exit 0
+    fi
+  fi
+fi
+
 # All checks passed
 exit 0

@@ -29,7 +29,10 @@ prompts/
     ├── wave-agent-build-diagnosis.md     ← NEW
     ├── wave-agent-program-contracts.md   ← NEW
     ├── critic-agent-verification-checks.md  ← NEW
-    └── critic-agent-completion-format.md    ← NEW
+    ├── critic-agent-completion-format.md    ← NEW
+    ├── planner-suitability-gate.md          ← NEW
+    ├── planner-implementation-process.md    ← NEW
+    └── planner-example-manifest.md          ← NEW
 ```
 
 ## Entry Point
@@ -51,7 +54,7 @@ uses to enforce tool restrictions and behavioral invariants. Launched via
 | [`agents/scaffold-agent.md`](agents/scaffold-agent.md) | Scaffold Agent | Materializes approved interface contracts as type scaffold source files. Runs between Scout and Wave 1. Creates only files listed in IMPL doc Scaffolds section. |
 | [`agents/integration-agent.md`](agents/integration-agent.md) | Integration Agent | Post-merge wiring agent (E26/E27). Wires unconnected exports into connector files. Runs on main branch after wave merge. |
 | [`agents/critic-agent.md`](agents/critic-agent.md) | Critic Agent | Slim identity core (~75 lines). Verification checks (7 checks) and completion format extracted to `references/critic-agent-*.md` and injected by `validate_agent_launch` hook. Never modifies source files. |
-| [`agents/planner.md`](agents/planner.md) | Planner | Program-level planning agent. Produces PROGRAM manifest with tiered IMPL execution plan for `/saw program plan/execute`. |
+| [`agents/planner.md`](agents/planner.md) | Planner | Slim identity core (~148 lines). Suitability gate, implementation process, and example manifest extracted to `references/planner-*.md` and injected by `validate_agent_launch` hook. Produces PROGRAM manifests only. |
 
 ## Scout Payload Files (root)
 
@@ -82,6 +85,9 @@ See `docs/skills-progressive-disclosure.md` for the design.
 | [`references/wave-agent-program-contracts.md`](references/wave-agent-program-contracts.md) | Wave agent launch with frozen contracts (hook-injected) | Program contract handling rules. Injected by `validate_agent_launch` only when `frozen_contracts_hash` or `frozen: true` present in prompt. |
 | [`references/critic-agent-verification-checks.md`](references/critic-agent-verification-checks.md) | Critic agent launch (hook-injected) | Verification checks procedure for critic agents. Injected by `validate_agent_launch` into every critic agent prompt. |
 | [`references/critic-agent-completion-format.md`](references/critic-agent-completion-format.md) | Critic agent launch (hook-injected) | `sawtools set-critic-review` command reference and output format. Injected by `validate_agent_launch` into every critic agent prompt. |
+| [`references/planner-suitability-gate.md`](references/planner-suitability-gate.md) | Planner agent launch (hook-injected) | 4-question program suitability gate with verdicts and time estimate format. Injected by `validate_agent_launch` into every planner agent prompt. |
+| [`references/planner-implementation-process.md`](references/planner-implementation-process.md) | Planner agent launch (hook-injected) | Steps 1-10 for analyzing the project and producing the PROGRAM manifest. Injected by `validate_agent_launch` into every planner agent prompt. |
+| [`references/planner-example-manifest.md`](references/planner-example-manifest.md) | Planner agent launch (hook-injected) | Complete annotated example PROGRAM manifest for a fictional project. Injected by `validate_agent_launch` into every planner agent prompt. |
 
 ## Protocol Invariants Referenced
 
