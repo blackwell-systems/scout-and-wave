@@ -293,3 +293,75 @@ The decision heuristic (for content already past the CLAUDE.md entry stage):
 **Always in Tier 3 (on-demand references):**
 - Subcommand families that represent a distinct execution tier (program, amend)
 - Failure routing logic beyond the basic "read failure-routing.md" trigger point — agents succeed on the majority of runs, so detailed remediation logic is pay-per-use
+
+---
+
+## Agent Type Progressive Disclosure
+
+The skill's four-tier model covers one surface: the **orchestrator's** context window. There is a parallel surface: **agent type prompts** (`wave-agent.md`, `critic-agent.md`, `scout.md`, `planner.md`). These are loaded in full on every agent launch, regardless of whether the agent will use the content.
+
+The same principle applies: content needed on <25% of launches belongs in a reference file, not the core type prompt.
+
+### The second progressive disclosure surface
+
+| Surface | Loaded when | Injection mechanism |
+|---------|-------------|---------------------|
+| SKILL.md (Tier 2) | User invokes `/saw *` | Always loaded |
+| Skill references (Tier 3) | Matching subcommand triggered | `UserPromptSubmit` → `additionalContext` into orchestrator |
+| Agent type prompt core | Any agent of that type launches | Always loaded |
+| Agent type references | Agent of that type launches | `PreToolUse/Agent` → `updatedInput` into subagent |
+
+The bottom two rows are the agent type layer. The injection mechanism is different from the skill layer — and the difference matters.
+
+### Why `updatedInput`, not `additionalContext`
+
+`UserPromptSubmit` fires when the user submits a prompt. `PreToolUse/Agent` fires when the orchestrator calls the `Agent` tool to launch a subagent. By the time the orchestrator is launching agents, `UserPromptSubmit` is long past and cannot inject into a subagent's context.
+
+`additionalContext` in a `PreToolUse` hook adds content to the *calling model's* (orchestrator's) context — wrong target. `updatedInput.prompt` modifies the Agent tool's `prompt` parameter before execution — the content becomes part of the subagent's initial message.
+
+```
+PreToolUse/Agent hook fires
+  → hook reads subagent_type
+  → hook loads matching reference files
+  → hook returns updatedInput.prompt = "[reference content]\n\n[original prompt]"
+  → Claude Code launches subagent with modified prompt
+  → subagent has reference content before its first step
+```
+
+See `docs/proposals/agentskills-agent-type-injection.md` for the full decision record (including why this was a non-obvious discovery — `additionalContext` was tried first and blocked by critic review).
+
+### What to extract from agent type prompts
+
+The same heuristics apply as for skill references, scoped to the agent type:
+
+| Condition | Decision |
+|-----------|----------|
+| Needed on every launch of this agent type | Keep in core type prompt |
+| Needed only for specific scenarios (errors, edge cases) | Extract to reference file |
+| Procedural steps for a specific sub-flow | Extract to reference file |
+| Long examples, sample outputs, example manifests | Extract to reference file |
+| Identity, role definition, invariants | Always in core type prompt |
+| Completion report format | Extract — only needed at end of work |
+
+### Current extraction state
+
+| Agent type | Core prompt | Reference files |
+|-----------|-------------|-----------------|
+| `scout` | ~100 lines | `suitability-gate.md`, `scout-procedure.md` |
+| `wave-agent` | ~133 lines | `worktree-isolation.md`, `build-diagnosis.md`, `completion-report.md` |
+| `critic-agent` | ~75 lines | `verification-checks.md`, `completion-format.md` |
+| `planner` | ~148 lines | `suitability-gate.md`, `implementation-process.md`, `example-manifest.md` |
+
+Injection is implemented in `validate_agent_launch` checks 9+ (see `implementations/claude-code/hooks/README.md` § Hook 9).
+
+### How to extend — adding a new agent type reference
+
+1. Write `implementations/claude-code/prompts/agents/<type>/references/<name>.md` with the extracted content
+2. Add a back-link in the reference file pointing to the core type prompt for shared logic it defers to
+3. Add a stub in the core type prompt: "For X, see `${CLAUDE_SKILL_DIR}/agents/<type>/references/<name>.md`"
+4. Add a case branch to `validate_agent_launch` checks 9+:
+   ```bash
+   new-agent-type) refs=("name.md") ;;
+   ```
+5. Add symlink in `install.sh` for the new reference file
+6. Verify: launch a `new-agent-type` agent and confirm the reference marker appears in its initial context

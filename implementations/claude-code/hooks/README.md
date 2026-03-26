@@ -1,21 +1,89 @@
 # SAW Claude Code Hooks
 
-Enforcement hooks for CLI-based SAW agents. 11 hooks across PreToolUse, PostToolUse, and SubagentStop events.
+Enforcement and injection hooks for CLI-based SAW agents. 12 hooks across PreToolUse, PostToolUse, SubagentStop, and UserPromptSubmit events.
 
 ## Hook Summary
+
+### Enforcement hooks (block protocol violations)
 
 | Hook | Event | Matcher | Rule | Description |
 |------|-------|---------|------|-------------|
 | check_scout_boundaries | PreToolUse | Write\|Edit | I6 | Scouts can only write IMPL docs |
 | block_claire_paths | PreToolUse | Write\|Edit\|Bash | — | Blocks `.claire` typo paths |
 | check_wave_ownership | PreToolUse | Write\|Edit\|NotebookEdit | I1 | Wave agents write only owned files |
-| check_impl_path | PreToolUse | Agent | H2 | Validates IMPL doc path before agent launch |
+| validate_agent_launch | PreToolUse | Agent | H5 | Pre-launch validation gate + agent type injection (see below) |
 | validate_impl_on_write | PostToolUse | Write | E16 | Validates IMPL schema after write |
 | check_git_ownership | PostToolUse | Bash | I1 | Catches git-level ownership violations |
 | warn_stubs | PostToolUse | Write\|Edit | H3 | Warns on stub patterns in written code |
-| validate_agent_launch | PreToolUse | Agent | H5 | Full pre-launch validation gate (subsumes H2) |
 | check_branch_drift | PostToolUse | Bash | H4 | Detects commits on wrong branch |
-| validate_agent_completion | SubagentStop | - | E42/I1/I4/I5 | Validates protocol compliance at agent completion |
+| validate_agent_completion | SubagentStop | — | E42/I1/I4/I5 | Validates protocol compliance at agent completion |
+
+### Injection hooks (prepend reference content)
+
+| Hook | Event | Matcher | Mechanism | Description |
+|------|-------|---------|-----------|-------------|
+| validate_agent_launch | PreToolUse | Agent | `updatedInput` | Injects agent type reference files into subagent prompt |
+| inject_skill_context | UserPromptSubmit | — | `additionalContext` | Injects skill subcommand references into orchestrator context |
+
+### Observability hooks
+
+| Hook | Event | Matcher | Description |
+|------|-------|---------|-------------|
+| emit_agent_completion | SubagentStop | — | Emits structured completion event for claudewatch/SSE (async, non-blocking) |
+
+## Injection Patterns
+
+Two hooks handle progressive disclosure injection. They operate at different layers and use different Claude Code mechanisms — neither can substitute for the other.
+
+### Layer 1: Orchestrator injection (`inject_skill_context`, UserPromptSubmit)
+
+Fires when the user submits a prompt. Matches subcommand anchors in the user's raw prompt text, loads the matching reference files from the skill's `references/` directory, and returns them as `additionalContext` — prepended to the **orchestrator's** context before it runs.
+
+```json
+{ "hookSpecificOutput": { "hookEventName": "UserPromptSubmit", "additionalContext": "..." } }
+```
+
+Trigger definitions live in the skill's YAML frontmatter (`triggers:` extension field). See `docs/proposals/agentskills-subcommand-dispatch.md` for the full design.
+
+**Coverage:** `/saw program *`, `/saw amend *`. Only subcommand-anchored patterns are reliable here — keyword triggers false-positive against skill body content.
+
+### Layer 2: Subagent injection (`validate_agent_launch`, PreToolUse/Agent)
+
+Fires when the orchestrator calls the `Agent` tool to launch a subagent. Dispatches by `subagent_type`, loads matching reference files, and returns them via `updatedInput.prompt` — modifying the Agent tool's `prompt` parameter **before the subagent launches**.
+
+```json
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PreToolUse",
+    "permissionDecision": "allow",
+    "updatedInput": { "prompt": "<!-- injected: references/wave-agent-isolation.md -->\n...\n\n[original prompt]" }
+  }
+}
+```
+
+**Why `updatedInput`, not `additionalContext`:** `additionalContext` in a `PreToolUse` hook adds content to the *calling model's* context (the orchestrator). `updatedInput` modifies the tool call parameters before execution — the only mechanism that reaches inside a subagent's initial prompt. See `docs/proposals/agentskills-agent-type-injection.md` for the full decision record.
+
+**Coverage:** `wave-agent`, `critic-agent`, `scout`, `planner`. Dispatch is a sequence of `if` blocks on `subagent_type`. Adding a new agent type requires adding one `if` block — no new hook registration needed.
+
+**Dedup:** Injection markers (`<!-- injected: references/X.md -->`) prevent double-injection if the orchestrator also manually prepended the reference.
+
+### The two-layer picture
+
+```
+User types: /saw wave
+    │
+    ▼
+UserPromptSubmit → inject_skill_context
+  Target: orchestrator context (additionalContext)
+  Matches: ^/saw program, ^/saw amend
+
+      │
+      ▼  orchestrator runs, calls Agent tool
+
+PreToolUse/Agent → validate_agent_launch (checks 9+)
+  Target: subagent initial prompt (updatedInput)
+  Matches: subagent_type ∈ {wave-agent, critic-agent, scout, planner}
+```
 
 ## Installation
 
@@ -459,22 +527,34 @@ echo $?  # 0 (if on expected branch)
 
 ---
 
-## Hook 9: Pre-Launch Validation Gate (H5)
+## Hook 9: Pre-Launch Validation Gate + Agent Type Injection (H5)
 
-**PreToolUse** — Full pre-launch validation gate that checks all SAW agent launch preconditions before dispatching a subagent. Subsumes H2 (IMPL path validation) with 7 additional checks.
+**PreToolUse** — Full pre-launch validation gate (checks 1–8) plus agent type reference injection (checks 9+). Dual-purpose: enforcement and progressive disclosure injection for subagents.
 
-### Checks Performed
+### Checks 1–8: Enforcement
 
-1. **IMPL path extraction** — Extracts `docs/IMPL/IMPL-*.yaml` path from agent prompt
-2. **IMPL file exists** — Verifies the IMPL doc exists on disk
-3. **Wave number extraction** — Extracts wave number from SAW tag (`[SAW:wave{N}:agent-{ID}]`)
-4. **Agent ID extraction** — Extracts agent ID from SAW tag
-5. **Ownership verification** — Finds `.saw-ownership.json` and verifies agent ID and wave match
-6. **Branch verification** — Verifies worktree branch matches expected pattern (`saw/{slug}/wave{N}-agent-{ID}`)
-7. **Scaffold check** — Checks scaffolds are committed (if any exist in IMPL doc)
-8. **I1 conflict check** — Verifies no file ownership conflicts via `.saw-ownership.json`
+1. **SAW tag detection** — Parse `[SAW:wave{N}:agent-{ID}]` from description; non-SAW agents pass through
+2. **IMPL path extraction** — Extract `docs/IMPL/IMPL-*.yaml` from agent prompt
+3. **IMPL file exists** — Verify the IMPL doc exists on disk
+4. **IMPL validation** — Run `sawtools validate` (if sawtools on PATH)
+5. **Agent in wave** — Verify agent ID exists in the specified wave
+6. **Ownership file match** — Cross-reference `.saw-ownership.json` agent ID and wave
+7. **Branch verification** — Verify worktree branch matches `saw/{slug}/wave{N}-agent-{ID}`
+8. **Scaffold check** — Verify all scaffolds are committed (if any in IMPL doc)
 
-Non-SAW agents (no SAW tag in description) are allowed through without checks (exit 0).
+### Checks 9+: Agent Type Injection
+
+After enforcement passes, dispatch on `subagent_type` and inject matching reference files via `updatedInput.prompt`. See [Injection Patterns](#injection-patterns) above for mechanism details.
+
+| subagent_type | Reference files injected |
+|---------------|--------------------------|
+| `wave-agent` | `worktree-isolation.md`, `build-diagnosis.md`, `completion-report.md` |
+| `critic-agent` | `verification-checks.md`, `completion-format.md` |
+| `scout` | `suitability-gate.md`, `scout-procedure.md` |
+| `planner` | `suitability-gate.md`, `implementation-process.md`, `example-manifest.md` |
+| other | pass through (exit 0) |
+
+**Status:** Checks 1–8 implemented. Checks 9+ implemented by Wave 2 Agent D across `IMPL-{scout,wave-agent,critic-agent,planner}-prompt-extraction.yaml`.
 
 ### Manual Installation
 

@@ -81,6 +81,8 @@ The skill uses a four-tier progressive disclosure model to keep the Orchestrator
 
 The `triggers:` frontmatter extension enables deterministic Tier 3 injection via the `UserPromptSubmit` hook. A `/saw wave` invocation never pays the context cost of program coordination logic.
 
+Progressive disclosure extends to agent type prompts. Each agent type (`wave-agent`, `scout`, `critic-agent`, `planner`, `integration-agent`) has a slim core prompt and a set of reference files injected at launch -- worktree isolation procedures, build diagnosis steps, completion report format, verification checklists. The injection mechanism is different from skill Tier 3: `UserPromptSubmit` targets the Orchestrator's context; injecting into a subagent requires `PreToolUse(updatedInput)`, which modifies the Agent tool's `prompt` parameter before Claude Code launches the subagent. The `validate_agent_launch` hook handles both roles: enforcement checks (1-8) block bad launches; injection checks (9+) prepend reference content. The Go engine mirrors this via `LoadTypePromptWithRefs`, which reads reference files alongside each type prompt file when constructing prompts for the API or Bedrock path. A `/saw wave` launch never loads critic verification checklists; a `/saw scout` launch never loads wave agent worktree isolation procedures. Both the CLI hook layer and the engine layer enforce this -- neither path is a second-class citizen.
+
 ### CLI (`sawtools` binary)
 
 A standalone Go binary with no Claude Code dependency. Every protocol operation is a CLI command:
@@ -177,14 +179,14 @@ Protocol compliance is not advisory. Lifecycle hooks enforce invariants mechanic
 
 - **PreToolUse (`check_wave_ownership`)**: Blocks Write/Edit operations on files the agent does not own. I1 violations are rejected before the tool executes.
 - **PreToolUse (`check_scout_boundaries`)**: Prevents Scout agents from writing source code. I6 role separation enforced at the tool boundary.
-- **PreToolUse (`validate_agent_launch`)**: H5 pre-launch gate -- 8 checks (SAW tag, IMPL exists, IMPL valid, wave exists, agent exists, worktree branch, scaffolds committed, critic review) before any agent starts.
+- **PreToolUse (`validate_agent_launch`)**: H5 pre-launch gate -- 8 enforcement checks (SAW tag, IMPL exists, IMPL valid, agent in wave, ownership file match, worktree branch, scaffolds committed, scaffold correctness) before any agent starts; plus agent type reference injection (checks 9+) that prepends on-demand reference files into the subagent's initial prompt via `updatedInput` before the subagent launches.
 - **SubagentStop (`validate_agent_completion`)**: Blocks agent completion if I5 (commit before reporting), I4 (completion report exists), or I1 (ownership audit) obligations are unmet.
 - **PostToolUse (`check_branch_drift`)**: Detects when an agent has drifted off its assigned worktree branch.
 - **PostToolUse (`check_git_ownership`)**: Catches git operations that modify files outside the ownership list -- the layer-2 defense that catches merge conflict resolutions bypassing Write/Edit hooks.
 
 Agents cannot violate the protocol even if prompted to. Enforcement lives below the agent's decision layer. The three enforcement layers are:
 
-1. **Claude Code hooks** (Layer 1) -- PreToolUse/PostToolUse/SubagentStop scripts that block violations in the agent runtime. 11 hooks covering ownership (I1), role separation (I6), branch drift (I4), IMPL schema validation (E16), pre-launch gates (H5), stub warnings (E20), git ownership (I1 Layer 2), agent completion (I4/I5), context injection (Tier 3 progressive disclosure), and observability event emission.
+1. **Claude Code hooks** (Layer 1) -- PreToolUse/PostToolUse/SubagentStop/UserPromptSubmit scripts in three categories: enforcement hooks block protocol violations (ownership I1, role separation I6, branch drift, IMPL validation E16, pre-launch gate H5, git ownership, agent completion I4/I5); injection hooks prepend reference content at two layers (`inject_skill_context` targets the Orchestrator via `UserPromptSubmit` + `additionalContext`, `validate_agent_launch` targets subagents via `PreToolUse` + `updatedInput`); observability hooks emit structured events for monitoring and cost tracking.
 2. **Git pre-commit hooks** (Layer 2) -- ownership verification at commit time, catching violations that bypass Layer 1.
 3. **SDK constraint middleware** (Layer 3) -- `tools.Constraints` on every backend, enforcing the same rules programmatically for CLI and daemon execution where Claude Code hooks are not present.
 
@@ -222,7 +224,9 @@ The autonomy system (`pkg/autonomy`) supports graduated levels: supervised (huma
 
 ### PROGRAM Layer for Multi-Feature Coordination
 
-For projects spanning multiple features, the PROGRAM layer provides tier-gated execution of multiple IMPLs. A Planner agent decomposes the project into features, identifies cross-feature dependencies, and assigns IMPLs to execution tiers. Tiers execute sequentially; IMPLs within a tier execute in parallel. P1+ validates that no two IMPLs in the same tier share file ownership -- the same disjoint ownership guarantee that prevents conflicts within a wave, applied at the multi-feature scale. P5 ensures each IMPL's wave merges target a dedicated branch; main advances only when a full tier is verified.
+For projects spanning multiple features, the PROGRAM layer provides tier-gated execution of multiple IMPLs. Tiers execute sequentially; IMPLs within a tier execute in parallel. P1+ validates that no two IMPLs in the same tier share file ownership -- the same disjoint ownership guarantee that prevents conflicts within a wave, applied at the multi-feature scale. P5 ensures each IMPL's wave merges target a dedicated branch; main advances only when a full tier is verified.
+
+Program creation supports two directions. **Top-down:** `/saw program plan "description"` launches a Planner agent that decomposes the project into features, identifies cross-feature dependencies, and produces a PROGRAM manifest with tier assignments before any Scout runs. Scouts then execute with awareness of their tier context. **Bottom-up:** `/saw program --impl slug1 slug2 ...` assembles a PROGRAM manifest from pre-existing IMPL docs, auto-tiering based on file ownership disjointness. Both paths produce the same PROGRAM manifest format and execute identically from that point forward. The bottom-up path is useful when IMPLs were scouted independently and need to be coordinated; the top-down path is the correct approach for new projects where the decomposition should drive the scouting.
 
 This is not multi-feature task management -- it is structural coordination with the same correctness guarantees SAW provides within a single feature. A program with 5 IMPLs across 3 tiers executes with the same confidence as a single 3-wave IMPL: file ownership is disjoint, dependencies are ordered, and verification gates fire at every boundary.
 
@@ -269,6 +273,10 @@ The observability event schema (E40) defines three event types -- `cost` (token 
 ## Evidence
 
 The protocol is self-hosting. The scout-and-wave protocol repository, Go SDK, and web application were built using SAW. CONTEXT.md records 30+ completed features executed through the protocol, ranging from 1-wave/2-agent documentation fixes to 5-wave/26-agent cross-cutting refactors. The PROGRAM layer's first real execution (a 3-tier, 5-IMPL unification project) drove the discovery and resolution of 13 integration gaps (P1-P13) -- gaps that would not have been found without running the protocol at scale on its own codebase.
+
+Dogfooding surfaces real issues. A Scout analyzing the Go engine's agent prompt loading discovered two pre-existing silent path bugs: `RunScout` was loading from `implementations/claude-code/prompts/scout.md` (does not exist) and `RunPlanner` from `agents/planner.md` (relative to repo root, also does not exist). `RunPlanner` had a fallback string that masked the failure; `RunScout` would have errored on any web/API execution path. Both were caught before execution, fixed in the same IMPL that added reference injection. This is the expected property of a system that analyzes itself before acting.
+
+The critic gate also catches planning errors before compute is wasted. During the progressive disclosure extraction project, a pre-wave critic review caught that the planned hook output format used `additionalContext` (which targets the orchestrator's context) rather than `updatedInput` (which modifies the subagent's prompt). Three critic cycles -- not execution failures -- corrected the mechanism before any agent ran. The correctness of the final implementation is traceable to the review process, not to getting it right on the first try.
 
 The Go SDK contains 33 packages across engine, protocol, hooks, resume, retry, journal, collision detection, autonomy, suitability analysis, wave solver, pipeline framework, build diagnostics, error parsing, code review, scaffold validation, four LLM backends (Anthropic API, Bedrock, OpenAI-compatible, CLI), constraint enforcement, and configuration. The CLI exposes 60+ commands. The web app ships 70+ React components with real-time SSE streaming, Base16 theming, and Bedrock SSO -- all embedded in a single Go binary.
 

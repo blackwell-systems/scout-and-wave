@@ -16,7 +16,7 @@ impls:
         - config.FindConfigPath
         - config.GetWaveState
         - Error codes N013-N014
-      status: pending
+      status: complete
     - slug: validation-logic-unification
       title: Validation Logic Unification
       tier: 1
@@ -26,7 +26,7 @@ impls:
         - FullValidate
         - FullValidateProgram
         - AppendWiringReport
-      status: pending
+      status: complete
     - slug: repo-entry-unification
       title: RepoEntry Unification & Inline Config Migration
       tier: 2
@@ -49,9 +49,9 @@ tiers:
       impls:
         - repo-entry-unification
 completion:
-    tiers_complete: 0
+    tiers_complete: 2
     tiers_total: 2
-    impls_complete: 0
+    impls_complete: 3
     impls_total: 3
     total_agents: 16
     total_waves: 7

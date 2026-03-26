@@ -1,0 +1,98 @@
+title: Progressive Disclosure for Agent Type Prompts
+program_slug: agent-type-progressive-disclosure
+state: REVIEWED
+created: "2026-03-25T23:53:40Z"
+updated: "2026-03-25T23:53:40Z"
+impls:
+    - slug: scout-prompt-extraction
+      title: Extract scout agent prompt into layered progressive disclosure
+      tier: 1
+      estimated_agents: 4
+      estimated_waves: 2
+      key_outputs:
+        - Dedup marker format
+        - Reference file back-link header
+        - Scout core reference loading block
+        - Hook injection for scout subagent_type
+      status: pending
+    - slug: wave-agent-prompt-extraction
+      title: Extract wave-agent prompt into layered progressive disclosure
+      tier: 2
+      depends_on:
+        - scout-prompt-extraction
+      estimated_agents: 4
+      estimated_waves: 2
+      key_outputs:
+        - Dedup marker format (wave-agent)
+        - Reference file back-link header (wave-agent)
+        - Wave-agent core reference loading block
+        - Hook injection for wave-agent subagent_type
+      status: pending
+    - slug: critic-agent-prompt-extraction
+      title: Extract critic-agent prompt into layered progressive disclosure
+      tier: 3
+      depends_on:
+        - scout-prompt-extraction
+        - wave-agent-prompt-extraction
+      estimated_agents: 4
+      estimated_waves: 2
+      key_outputs:
+        - Dedup marker format (critic-agent)
+        - Reference file back-link header (critic-agent)
+        - Critic-agent core reference loading block
+        - Hook injection for critic-agent subagent_type
+      status: pending
+    - slug: planner-prompt-extraction
+      title: Extract planner agent prompt into layered progressive disclosure
+      tier: 4
+      depends_on:
+        - critic-agent-prompt-extraction
+        - scout-prompt-extraction
+        - wave-agent-prompt-extraction
+      estimated_agents: 4
+      estimated_waves: 2
+      key_outputs:
+        - Dedup marker format (planner)
+        - Reference file back-link header (planner)
+        - Planner core reference loading block
+        - Hook injection for planner subagent_type
+      status: pending
+    - slug: integration-agent-prompt-extraction
+      title: Extract integration-agent prompt into layered progressive disclosure
+      tier: 5
+      depends_on:
+        - critic-agent-prompt-extraction
+        - planner-prompt-extraction
+        - scout-prompt-extraction
+        - wave-agent-prompt-extraction
+      estimated_agents: 3
+      estimated_waves: 2
+      key_outputs:
+        - Dedup marker format (integration-agent)
+        - Reference file back-link headers (integration-agent)
+        - Integration-agent core reference loading block
+        - Hook injection for integration-agent subagent_type
+      status: pending
+tiers:
+    - number: 1
+      impls:
+        - scout-prompt-extraction
+    - number: 2
+      impls:
+        - wave-agent-prompt-extraction
+    - number: 3
+      impls:
+        - critic-agent-prompt-extraction
+    - number: 4
+      impls:
+        - planner-prompt-extraction
+    - number: 5
+      impls:
+        - integration-agent-prompt-extraction
+completion:
+    tiers_complete: 0
+    tiers_total: 5
+    impls_complete: 0
+    impls_total: 5
+    total_agents: 19
+    total_waves: 10

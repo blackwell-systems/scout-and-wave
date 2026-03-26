@@ -1,0 +1,621 @@
+title: Extract scout agent prompt into layered progressive disclosure
+feature_slug: scout-prompt-extraction
+verdict: SUITABLE
+suitability_assessment: |
+    File decomposition: 6 distinct files across 4 agents with disjoint ownership.
+    Three new reference files (extract from scout.md), one modified core prompt
+    (scout.md slim-down), one modified hook (validate_agent_launch), one modified
+    skill file (saw-skill.md routing table update).
+
+    Investigation-first: None. Extraction boundaries are precisely defined in the
+    feature description with line ranges.
+
+    Interface discoverability: Yes. The dedup marker format (<!-- injected: X -->)
+    and extraction boundaries are specified upfront. File paths are known.
+
+    Pre-implementation status: Fresh feature, nothing implemented yet.
+
+    Parallelization value: This is documentation/prompt editing work with no
+    build/test cycles. However, 4 agents across 2 waves with disjoint file
+    ownership means clear coordination value. The extraction boundaries are
+    well-defined and agents can work independently within their wave.
+
+    Estimated times:
+    - Scout phase: ~8 min (dependency mapping, interface contracts, IMPL doc)
+    - Agent execution: ~8 min (4 agents in wave 1, 1 agent in wave 2, ~5 min avg)
+    - Merge & verification: ~3 min
+    Total SAW time: ~19 min
+
+    Sequential baseline: ~25 min (5 agents x 5 min avg)
+    Time savings: ~6 min (24% faster)
+
+    Recommendation: Clear coordination value. The IMPL doc ensures extraction
+    boundaries are consistent across all agents and no content is duplicated
+    or lost.
+test_command: 'echo ''docs-only: no tests'''
+lint_command: none
+file_ownership:
+    - file: implementations/claude-code/prompts/references/scout-suitability-gate.md
+      agent: A
+      wave: 1
+      action: new
+    - file: implementations/claude-code/prompts/references/scout-implementation-process.md
+      agent: B
+      wave: 1
+      action: new
+    - file: implementations/claude-code/prompts/references/scout-program-contracts.md
+      agent: B
+      wave: 1
+      action: new
+    - file: implementations/claude-code/prompts/agents/scout.md
+      agent: C
+      wave: 1
+      action: modify
+    - file: implementations/claude-code/hooks/validate_agent_launch
+      agent: D
+      wave: 2
+      action: modify
+    - file: implementations/claude-code/prompts/saw-skill.md
+      agent: D
+      wave: 2
+      action: modify
+    - file: implementations/claude-code/prompts/README.md
+      agent: D
+      wave: 2
+      action: modify
+    - file: docs/INSTALLATION.md
+      agent: D
+      wave: 2
+      action: modify
+    - file: implementations/claude-code/hooks/README.md
+      agent: D
+      wave: 2
+      action: modify
+    - file: docs/skills-progressive-disclosure.md
+      agent: D
+      wave: 2
+      action: modify
+interface_contracts:
+    - name: Dedup marker format
+      description: |
+        HTML comment markers wrapping injected reference content. Used by
+        validate_agent_launch hook to avoid double-injection, and by scout.md
+        to skip reading references already in context.
+      definition: |
+        Format: <!-- injected: references/scout-{name}.md -->
+        Where {name} is one of: suitability-gate, implementation-process, program-contracts
+
+        The hook checks the agent prompt for these markers before injecting.
+        The scout.md core file instructs: "skip reading reference if marker already in context."
+      location: implementations/claude-code/hooks/validate_agent_launch
+    - name: Reference file back-link header
+      description: |
+        Each extracted reference file begins with a back-link comment indicating
+        it is part of the scout agent procedure, not a standalone skill.
+      definition: |
+        First line of each reference file:
+        <!-- Part of scout agent procedure. Loaded by validate_agent_launch hook. -->
+      location: implementations/claude-code/prompts/references/
+    - name: Scout core reference loading block
+      description: |
+        Block in slim scout.md that instructs the agent about reference files
+        and dedup behavior.
+      definition: |
+        ## Reference Files
+
+        The following reference files contain detailed procedure steps. They are
+        normally injected by the validate_agent_launch hook before this prompt
+        is delivered. If you see `<!-- injected: references/scout-X.md -->` markers
+        in your context, the content is already loaded — do not re-read those files.
+
+        If the markers are absent (e.g., hook not installed), read these files:
+        - `${CLAUDE_SKILL_DIR}/references/scout-suitability-gate.md` — 5-question suitability checklist
+        - `${CLAUDE_SKILL_DIR}/references/scout-implementation-process.md` — Steps 1-17 for IMPL doc production
+        - `${CLAUDE_SKILL_DIR}/references/scout-program-contracts.md` — Program contract handling (only when --program flag present)
+      location: implementations/claude-code/prompts/agents/scout.md
+    - name: Hook injection for scout subagent_type
+      description: |
+        New check in validate_agent_launch that detects scout agent launches
+        and injects reference file contents into the prompt via hook output.
+      definition: |
+        Detection: Parse subagent_type from tool_input or description.
+        If description contains "[SAW:scout" OR tool_input contains "subagent_type: scout"
+        OR the prompt contains "# Scout Agent: Pre-Flight Dependency Mapping":
+
+        1. Resolve reference directory: find scout-and-wave repo references/ dir
+        2. Always inject: scout-suitability-gate.md, scout-implementation-process.md
+        3. Conditionally inject scout-program-contracts.md (when "--program" in prompt)
+        4. Dedup: skip injection if <!-- injected: references/scout-X.md --> already in prompt
+        5. Output: JSON using PreToolUse updatedInput to prepend injected content to
+           the agent's prompt parameter (NOT additionalContext — that goes to the
+           orchestrator, not the subagent):
+           {"hookSpecificOutput": {"hookEventName": "PreToolUse",
+            "permissionDecision": "allow",
+            "updatedInput": {"prompt": "<injected>\n\n<original-prompt>"}}}
+      location: implementations/claude-code/hooks/validate_agent_launch
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## What to implement
+
+            Create the file `implementations/claude-code/prompts/references/scout-suitability-gate.md`
+            by extracting the Suitability Gate section from the current scout.md.
+
+            ### Content to extract
+
+            Read `implementations/claude-code/prompts/agents/scout.md` lines 138-260
+            (the `## Suitability Gate` section). This includes:
+            - The introductory paragraph ("Run this gate before any file analysis...")
+            - All 5 questions (file decomposition, investigation-first, interface
+              discoverability, pre-implementation status check, parallelization value check)
+            - The verdict section (SUITABLE / NOT SUITABLE / SUITABLE WITH CAVEATS)
+            - The time-to-value estimate format template
+            - The final paragraph about recording the verdict
+
+            ### File structure
+
+            Start the file with this back-link header:
+            ```
+            <!-- Part of scout agent procedure. Loaded by validate_agent_launch hook. -->
+            # Suitability Gate
+            ```
+
+            Then include ALL content from lines 138-260 of the current scout.md,
+            preserving exact formatting, markdown structure, code blocks, and indentation.
+            Do NOT paraphrase or restructure — this is a mechanical extraction.
+
+            The section starts with "Run this gate before any file analysis" and ends
+            with "Record the verdict and its rationale in the IMPL doc under a
+            **Suitability Assessment** section that appears before the dependency graph."
+
+            Do NOT include the `---` horizontal rule that precedes the section (line 137)
+            or follows it (line 261).
+
+            ### Verification
+
+            After creating the file, verify:
+            1. The file starts with the back-link HTML comment
+            2. All 5 suitability questions are present
+            3. The verdict section (SUITABLE/NOT_SUITABLE/SUITABLE_WITH_CAVEATS) is present
+            4. The time-to-value estimate format is present
+            5. No content from the Implementation Process section leaked in
+
+            ### Constraints
+            - Do NOT modify any other file
+            - Do NOT paraphrase content — extract verbatim
+            - Preserve all markdown formatting exactly
+          files:
+            - implementations/claude-code/prompts/references/scout-suitability-gate.md
+        - id: B
+          task: |
+            ## What to implement
+
+            Create TWO reference files extracted from the current scout.md.
+
+            ### File 1: scout-implementation-process.md
+
+            Create `implementations/claude-code/prompts/references/scout-implementation-process.md`.
+
+            Read `implementations/claude-code/prompts/agents/scout.md` fully. Extract the
+            Implementation Process section (lines 263-694), which contains steps 1-17
+            of how to produce an IMPL doc.
+
+            **IMPORTANT — Program Contract Awareness separation:**
+            The "## Program Contract Awareness" subsection (lines 385-404) must be
+            EXCLUDED from this file. It goes into the separate scout-program-contracts.md
+            file instead. The implementation process file should contain:
+
+            - The introductory note ("The numbered steps below are YOUR INSTRUCTIONS...")
+            - Steps 1-5 (Read project memory through Define interface contracts)
+              BUT step 5 ends at line 384, just before "## Program Contract Awareness"
+            - Steps 6-17 (Detect shared types through Brief accuracy self-check)
+              These start at line 406 with step 6.
+
+            Note that in the current scout.md, step 5 ends and then "## Program Contract
+            Awareness" appears as a subsection before step 6 continues. When extracting,
+            concatenate step 5's content directly with step 6 onward, omitting the
+            Program Contract Awareness subsection entirely. Add a note at the join point:
+
+            ```
+            > **Note:** When `--program` flag is provided, additional contract handling
+            > rules apply. See `references/scout-program-contracts.md`.
+            ```
+
+            Start the file with:
+            ```
+            <!-- Part of scout agent procedure. Loaded by validate_agent_launch hook. -->
+            # Implementation Process (Instructions - NOT Output Format)
+            ```
+
+            ### File 2: scout-program-contracts.md
+
+            Create `implementations/claude-code/prompts/references/scout-program-contracts.md`.
+
+            Extract the "## Program Contract Awareness" section from scout.md (lines 385-404).
+            This is the content about handling frozen program contracts when `--program` flag
+            is provided. It includes:
+            1. Recognize frozen contracts
+            2. Consume, don't redefine
+            3. Immutability rule
+            4. Escalation
+
+            Start the file with:
+            ```
+            <!-- Part of scout agent procedure. Loaded conditionally when --program flag is present. -->
+            # Program Contract Awareness
+            ```
+
+            ### Verification
+
+            After creating both files, verify:
+            1. scout-implementation-process.md contains steps 1-17 (all numbered steps)
+            2. scout-implementation-process.md does NOT contain the Program Contract
+               Awareness content (no "frozen contracts", "IMMUTABLE", "Planner re-engagement")
+            3. scout-program-contracts.md contains exactly the 4 program contract rules
+            4. No content is duplicated between the two files
+            5. Both files start with the back-link HTML comment header
+
+            ### Constraints
+            - Do NOT modify any other file
+            - Do NOT paraphrase content — extract verbatim (except the join-point note)
+            - Preserve all markdown formatting exactly
+            - The join between step 5 and step 6 must be seamless — no missing content
+          files:
+            - implementations/claude-code/prompts/references/scout-implementation-process.md
+            - implementations/claude-code/prompts/references/scout-program-contracts.md
+        - id: C
+          task: |
+            ## What to implement
+
+            Rewrite `implementations/claude-code/prompts/agents/scout.md` to be the slim
+            core prompt (~166 lines) by removing the extracted sections and adding
+            reference loading instructions.
+
+            ### What to KEEP (in order)
+
+            1. **Frontmatter** (lines 1-6) — keep exactly as-is
+            2. **Version comment and title** (lines 8-9) — keep as-is
+            3. **Identity/role paragraphs** (lines 11-17) — keep as-is
+            4. **Your Task section** (lines 19-109) — keep the full YAML schema reference,
+               critical output format requirements, valid top-level keys list, and the
+               important notes about arrays/structs. This is lines 19 through 109.
+            5. **Horizontal rule** (line 111)
+            6. **CRITICAL INVARIANTS section** (lines 113-134) — keep all of I1, I2, I3
+               and the validation checkpoint paragraph
+            7. **NEW: Reference Files section** — Insert the reference loading block here
+               (see below)
+            8. **Output Format section** (lines 695-717) — keep as-is
+            9. **Rules section** (lines 718-741) — keep as-is, including the final line
+
+            ### What to REMOVE
+
+            - The `---` separator at line 137
+            - The entire Suitability Gate section (lines 138-260)
+            - The `---` separator at line 261
+            - The entire Implementation Process section (lines 263-694), which includes:
+              - Steps 1-17
+              - Program Contract Awareness subsection
+
+            ### Reference Files section to INSERT
+
+            After the CRITICAL INVARIANTS section (after line 134) and before the
+            Output Format section, insert this new section:
+
+            ```markdown
+            ---
+
+            ## Reference Files
+
+            The following reference files contain the detailed procedure for producing
+            an IMPL doc. They are normally injected into your context by the
+            validate_agent_launch hook before this prompt is delivered.
+
+            **Dedup check:** If you see `<!-- injected: references/scout-X.md -->` markers
+            in your context, the content is already loaded. Do NOT re-read those files.
+
+            If the markers are absent (e.g., hook not installed), read these files yourself:
+            1. `${CLAUDE_SKILL_DIR}/references/scout-suitability-gate.md` — The 5-question
+               suitability checklist. Always required.
+            2. `${CLAUDE_SKILL_DIR}/references/scout-implementation-process.md` — Steps 1-17
+               for analyzing the codebase and producing the IMPL doc. Always required.
+            3. `${CLAUDE_SKILL_DIR}/references/scout-program-contracts.md` — Program contract
+               handling rules. Only required when `--program` flag is present in your prompt.
+
+            ---
+            ```
+
+            ### Verification
+
+            After rewriting, verify:
+            1. The frontmatter is intact (name, description, tools, color, background fields)
+            2. The YAML schema reference in "Your Task" is complete
+            3. All three invariants (I1, I2, I3) are present
+            4. The Reference Files section lists all 3 reference files with dedup instructions
+            5. The Output Format section is intact
+            6. The Rules section is intact and ends with the same final line
+            7. NO suitability gate content remains (no "five questions", no "SUITABLE/NOT_SUITABLE")
+            8. NO implementation process steps remain (no "Read project memory", no "sawtools analyze-deps")
+            9. NO program contract awareness content remains (no "frozen contracts")
+            10. The file is approximately 150-180 lines (rough check)
+
+            ### Constraints
+            - This is the ONLY file you modify
+            - Preserve exact frontmatter format
+            - Keep the version comment `<!-- scout v0.13.0 -->`
+            - Do NOT change any content in the kept sections — copy verbatim
+          files:
+            - implementations/claude-code/prompts/agents/scout.md
+    - number: 2
+      agents:
+        - id: D
+          task: |
+            ## What to implement
+
+            Modify TWO files to complete the hook-enforced context injection for
+            scout agent launches.
+
+            ### File 1: validate_agent_launch hook
+
+            Modify `implementations/claude-code/hooks/validate_agent_launch` to add
+            scout reference injection after all existing validation checks pass.
+
+            The current hook (193 lines) validates SAW agent launches with 8 checks.
+            Add a new section AFTER Check 8 (scaffold check) and BEFORE the final
+            "All checks passed / exit 0" block.
+
+            **New section: Scout reference injection (Check 9)**
+
+            ```bash
+            # --- Check 9: Scout reference injection ---
+            # When launching a scout agent, inject reference files as additionalContext
+            # This provides the suitability gate and implementation process without
+            # the scout needing to read them manually.
+
+            # Detect scout agent type from description or prompt
+            is_scout=false
+            if [[ "$description" =~ \[SAW:scout ]] || \
+               [[ "$prompt" =~ "subagent_type: scout" ]] || \
+               [[ "$prompt" =~ "# Scout Agent: Pre-Flight Dependency Mapping" ]]; then
+              is_scout=true
+            fi
+
+            if [[ "$is_scout" == "true" ]]; then
+              # Resolve references directory
+              ref_dir=""
+              # Try skill directory first
+              skill_dir="${CLAUDE_SKILL_DIR:-${HOME}/.claude/skills/saw}"
+              if [[ -d "${skill_dir}/references" ]]; then
+                ref_dir="${skill_dir}/references"
+              fi
+
+              if [[ -n "$ref_dir" ]]; then
+                inject_content=""
+
+                # Always inject suitability gate
+                ref_file="${ref_dir}/scout-suitability-gate.md"
+                if [[ -f "$ref_file" ]] && ! echo "$prompt" | grep -q '<!-- injected: references/scout-suitability-gate.md -->'; then
+                  inject_content+="<!-- injected: references/scout-suitability-gate.md -->"$'\n'
+                  inject_content+="$(cat "$ref_file")"$'\n\n'
+                fi
+
+                # Always inject implementation process
+                ref_file="${ref_dir}/scout-implementation-process.md"
+                if [[ -f "$ref_file" ]] && ! echo "$prompt" | grep -q '<!-- injected: references/scout-implementation-process.md -->'; then
+                  inject_content+="<!-- injected: references/scout-implementation-process.md -->"$'\n'
+                  inject_content+="$(cat "$ref_file")"$'\n\n'
+                fi
+
+                # Conditionally inject program contracts (only with --program flag)
+                if echo "$prompt" | grep -q '\-\-program'; then
+                  ref_file="${ref_dir}/scout-program-contracts.md"
+                  if [[ -f "$ref_file" ]] && ! echo "$prompt" | grep -q '<!-- injected: references/scout-program-contracts.md -->'; then
+                    inject_content+="<!-- injected: references/scout-program-contracts.md -->"$'\n'
+                    inject_content+="$(cat "$ref_file")"$'\n\n'
+                  fi
+                fi
+
+                # Prepend injected content to the agent's prompt via updatedInput
+                if [[ -n "$inject_content" ]]; then
+                  jq -n --arg inject "$inject_content" --arg orig "$prompt" \
+                    '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow", "updatedInput": {"prompt": ($inject + "\n\n" + $orig)}}}'
+                  exit 0
+                fi
+              fi
+            fi
+            ```
+
+            **IMPORTANT implementation notes:**
+            - Use `command cat` (not bare `cat`) for reading reference files — avoids
+              brewprune-shim issues. The existing `input=$(cat)` at line 32 reads from
+              stdin; leave it as-is.
+            - The dedup check uses grep on `$prompt` (the original agent prompt, parsed
+              from the hook's JSON input at the top of the hook). If the marker is already
+              present, skip that reference file.
+            - **updatedInput, NOT additionalContext.** PreToolUse `additionalContext`
+              injects into the orchestrator's context, not the subagent being launched.
+              The correct mechanism is `updatedInput.prompt` — this modifies the Agent
+              tool's `prompt` parameter before execution, so the subagent receives the
+              reference content as part of its initial context.
+            - `permissionDecision: "allow"` is required alongside `updatedInput` to
+              signal the hook approves the tool call with the modified input.
+            - The `$prompt` jq variable holds the original prompt string; concatenate
+              injected content before it so reference files appear before the task.
+
+            ### File 2: saw-skill.md routing table
+
+            Modify `implementations/claude-code/prompts/saw-skill.md` to document the
+            new scout reference files in the "On-Demand References" section.
+
+            Find the table at approximately lines 89-93:
+            ```
+            | Subcommand | Reference file |
+            |------------|----------------|
+            | `/saw program *` | Read `${CLAUDE_SKILL_DIR}/references/program-flow.md` |
+            | `/saw amend *` | Read `${CLAUDE_SKILL_DIR}/references/amend-flow.md` |
+            | Agent failure or post-merge integration | Read `${CLAUDE_SKILL_DIR}/references/failure-routing.md` |
+            ```
+
+            Add three new rows to this table:
+            ```
+            | Scout agent launch (always) | Injected by `validate_agent_launch` hook: `references/scout-suitability-gate.md` |
+            | Scout agent launch (always) | Injected by `validate_agent_launch` hook: `references/scout-implementation-process.md` |
+            | Scout agent launch (with --program) | Injected by `validate_agent_launch` hook: `references/scout-program-contracts.md` |
+            ```
+
+            Also update the paragraph after the table. Currently it says:
+            "Do not pre-load these files. The core wave loop below handles `/saw scout`,
+            `/saw wave`, `/saw status`, `/saw bootstrap`, and `/saw interview` directly."
+
+            Change to:
+            "Do not pre-load these files. The core wave loop below handles `/saw scout`,
+            `/saw wave`, `/saw status`, `/saw bootstrap`, and `/saw interview` directly.
+            Scout reference files are injected automatically by the `validate_agent_launch`
+            hook — the orchestrator does not need to load them manually."
+
+            ### Verification
+
+            After modifying both files:
+            1. Run `bash -n implementations/claude-code/hooks/validate_agent_launch` to
+               verify shell syntax is valid
+            2. Verify the existing 8 checks are unchanged (do NOT modify checks 1-8)
+            3. Verify the on-demand references table in saw-skill.md has 6 rows total
+            4. Verify the scout injection code has dedup checks for all 3 reference files
+
+            ### File 3: implementations/claude-code/prompts/README.md
+
+            Update the directory tree (lines 8-24) to add 3 new scout reference files
+            under `references/`:
+            ```
+            └── references/
+                ├── program-flow.md
+                ├── amend-flow.md
+                ├── failure-routing.md
+                ├── scout-suitability-gate.md       ← NEW
+                ├── scout-implementation-process.md  ← NEW
+                └── scout-program-contracts.md       ← NEW
+            ```
+
+            Update the On-Demand References table (lines 62-66) to add 3 new rows for
+            the scout reference files with trigger "Scout agent launch (hook-injected)".
+
+            Update the scout.md description in the Agent Type Definitions table (line 40)
+            to reflect that it is now a slim core with procedure in references:
+            "Slim identity core (~166 lines). Suitability gate, IMPL production steps, and
+            program contract rules extracted to `references/scout-*.md` and injected by
+            `validate_agent_launch` hook. Cannot edit source files (I6 enforcement)."
+
+            ### File 4: docs/INSTALLATION.md
+
+            Update the skill files directory tree (around lines 96-99) to add the 3 new
+            scout reference files under `references/`:
+            ```
+            ├── references/
+            │   ├── amend-flow.md     -> prompts/references/amend-flow.md
+            │   ├── failure-routing.md -> prompts/references/failure-routing.md
+            │   ├── program-flow.md   -> prompts/references/program-flow.md
+            │   ├── scout-suitability-gate.md -> prompts/references/scout-suitability-gate.md
+            │   ├── scout-implementation-process.md -> prompts/references/scout-implementation-process.md
+            │   └── scout-program-contracts.md -> prompts/references/scout-program-contracts.md
+            ```
+
+            ### File 5: implementations/claude-code/hooks/README.md
+
+            This file documents all hooks including validate_agent_launch. Add documentation
+            for the new Check 9 (scout reference injection) to the validate_agent_launch
+            section. Include:
+            - What Check 9 does: detects scout agent launches, injects reference files
+            - The dedup marker format: `<!-- injected: references/scout-X.md -->`
+            - Conditional injection: scout-program-contracts.md only with --program
+            - That non-scout agents are unaffected (check is gated behind detection)
+
+            ### File 6: docs/skills-progressive-disclosure.md
+
+            Add a brief section or paragraph noting that the scout agent prompt itself
+            now uses the same progressive disclosure pattern as the orchestrator skill.
+            The scout is the second application: references extracted from a subagent
+            prompt (Tier 3 inside what is itself a Tier 2 file). Mention that the
+            validate_agent_launch hook provides deterministic injection for subagents,
+            paralleling inject_skill_context for the orchestrator skill.
+
+            ### Constraints
+            - Do NOT modify checks 1-8 in validate_agent_launch — only add after them
+            - Do NOT change any other sections of saw-skill.md besides the On-Demand
+              References table and its following paragraph
+            - The hook must remain backward-compatible: non-scout agents must still
+              pass through with exit 0 as before
+          files:
+            - implementations/claude-code/hooks/validate_agent_launch
+            - implementations/claude-code/prompts/saw-skill.md
+            - implementations/claude-code/prompts/README.md
+            - docs/INSTALLATION.md
+            - implementations/claude-code/hooks/README.md
+            - docs/skills-progressive-disclosure.md
+          dependencies:
+            - A
+            - B
+            - C
+quality_gates:
+    level: standard
+    gates:
+        - type: custom
+          command: 'echo ''docs-only: no compilation'''
+          required: true
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: Content boundary mismatch between extracted references and slim core
+          likelihood: medium
+          impact: medium
+          mitigation: |
+            Each agent brief specifies exact line ranges from current scout.md.
+            Wave 2 agent D depends on Wave 1 completing, so reference files exist
+            before hook injection is wired. Post-merge verification checks that
+            no content is lost or duplicated.
+        - scenario: Hook injection breaks non-scout agent launches
+          likelihood: low
+          impact: high
+          mitigation: |
+            The scout detection is gated behind explicit checks (description pattern,
+            prompt content). Non-scout agents skip the entire injection block.
+            Existing checks 1-8 are not modified.
+        - scenario: Dedup markers not recognized due to whitespace or encoding differences
+          likelihood: low
+          impact: low
+          mitigation: |
+            Markers use a simple grep-based check. The exact marker format is
+            specified in the interface contract and used consistently across
+            all files.
+        - scenario: brewprune-shim breaks cat in hook subshell
+          likelihood: medium
+          impact: medium
+          mitigation: |
+            Agent D brief explicitly instructs using "command cat" for reading
+            reference files in the hook, avoiding the brewprune-shim issue
+            documented in project memory.
+critic_report:
+    verdict: PASS
+    agent_reviews:
+        A:
+            agent_id: A
+            verdict: PASS
+        B:
+            agent_id: B
+            verdict: PASS
+        C:
+            agent_id: C
+            verdict: PASS
+        D:
+            agent_id: D
+            verdict: PASS
+            issues:
+                - check: pattern_accuracy
+                  severity: warning
+                  description: Agent D introduces a new hook output pattern (updatedInput + permissionDecision in hookSpecificOutput) that is not demonstrated by any existing PreToolUse hook in this codebase. All existing PreToolUse hooks (validate_agent_launch, check_scout_boundaries, block_claire_paths, check_wave_ownership) only emit exit 0 or exit 2 — none emit JSON with updatedInput. The mechanism is internally consistent and the brief correctly specifies updatedInput (not additionalContext, which would be wrong), but if the Claude Code runtime does not support updatedInput for Agent tool PreToolUse hooks, the injection will silently fail and scout agents will launch without reference file content.
+                  file: implementations/claude-code/hooks/validate_agent_launch
+                  symbol: updatedInput
+    summary: 'Agents A, B, and C have accurate briefs with no issues. File existence checks pass: the three new reference files (scout-suitability-gate.md, scout-implementation-process.md, scout-program-contracts.md) do not yet exist in implementations/claude-code/prompts/references/ (action: new is correct), and all six files Agent D will modify exist. Line ranges are verified against the live scout.md (741 lines): the Suitability Gate section runs lines 138-260 as stated for Agent A; the Implementation Process section runs lines 263-694 as stated for Agent B; the Program Contract Awareness subsection runs lines 385-404 as stated for Agent B; Agent C''s referenced sections (frontmatter 1-6, version comment line 8, identity 11-17, Your Task 19-109, CRITICAL INVARIANTS 113-134, Output Format 695-717, Rules 718-741) are all accurate. The validate_agent_launch hook is confirmed at 193 lines. The saw-skill.md On-Demand References table is at lines 89-93 with the following paragraph at lines 95-96, as stated for Agent D. Agent D''s brief correctly specifies the updatedInput mechanism (not additionalContext) — the prior critic_report''s error description was factually wrong about what the brief says. The updatedInput PreToolUse hook pattern is not yet demonstrated in any existing hook in this codebase (validate_agent_launch, check_scout_boundaries, block_claire_paths, check_wave_ownership all exit 0/2 only), but this is a warning-level concern because the mechanism is internally consistent, documented in interface contracts, and the brief explicitly warns against using the wrong mechanism.'
+    reviewed_at: "2026-03-25T23:14:25Z"
+    issue_count: 1
+state: SCOUT_PENDING
