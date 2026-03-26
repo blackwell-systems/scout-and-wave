@@ -22,93 +22,26 @@ They create new exported functions (e.g., `NewObserver()`, `BuildRouter()`,
 After merge, the Integration Agent scans for these unconnected exports and writes
 the call-sites.
 
-## Understanding integration_connectors
+## Reference Files
 
-`integration_connectors` is a field in the IMPL doc that declares which files the
-Integration Agent is allowed to modify, and what wiring work is expected. They exist
-because wave agents work in isolation with disjoint file ownership -- an agent that
-creates `pkg/auth/handler.go` cannot also modify `cmd/server/main.go` to register
-the handler, because `main.go` belongs to a different agent or is outside all agents'
-ownership.
+The following reference files contain detailed background and completion
+instructions. They are normally injected by the validate_agent_launch hook
+before this prompt is delivered.
 
-### When integration_connectors are used
+**Dedup check:** If you see `<!-- injected: references/integration-connectors-reference.md -->`
+markers in your context, the content is already loaded. Do NOT re-read
+those files.
 
-Integration connectors are used in two scenarios:
+If the markers are absent (e.g., hook not installed), read these files:
+1. `${CLAUDE_SKILL_DIR}/references/integration-connectors-reference.md` —
+   Background on integration_connectors, AllowedPathPrefixes,
+   relationship with type: integration waves, YAML examples, and common
+   wiring patterns. Always required.
+2. `${CLAUDE_SKILL_DIR}/references/integration-agent-completion-report.md` —
+   sawtools set-completion command examples for complete and partial status.
+   Always required.
 
-1. **Reactive gap detection (E25/E26):** After a wave merges, `sawtools scan-stubs`
-   detects unconnected exports -- new functions or types that exist but are never
-   called. The Orchestrator launches an Integration Agent with these gaps plus the
-   connector file list.
-
-2. **Planned integration waves:** The Scout creates a `type: integration` wave in
-   the IMPL doc when wiring work is predictable at planning time. The wave's agent
-   `files` list serves the same role as `integration_connectors`, constraining which
-   files the integration agent may touch.
-
-When both a planned integration wave and `integration_connectors` exist, the planned
-wave handles known wiring first, and E25/E26 catches any gaps the plan missed.
-
-### AllowedPathPrefixes
-
-The `AllowedPathPrefixes` field constrains which files the Integration Agent may
-modify. It is derived from the `integration_connectors` entries in the IMPL doc.
-The agent MUST NOT modify any file whose path does not start with one of the
-allowed prefixes.
-
-**Example IMPL doc integration_connectors:**
-
-```yaml
-integration_connectors:
-  - file: cmd/saw/main.go
-    description: "Register new CLI commands"
-  - file: pkg/engine/finalize.go
-    description: "Wire freeze-contracts into finalize-wave"
-  - file: pkg/api/routes.go
-    description: "Register new HTTP handlers"
-```
-
-This translates to `AllowedPathPrefixes: ["cmd/saw/main.go", "pkg/engine/finalize.go", "pkg/api/routes.go"]`. The agent may only modify these exact files.
-
-### Relationship with type: integration waves
-
-A `type: integration` wave in the IMPL doc is the preferred mechanism for planned
-integration work. It is explicit, visible in the wave structure, and gives the human
-a review opportunity. The wave's agent receives:
-
-- The merged codebase (all prior waves applied)
-- A task description specifying what to wire
-- A `files` list constraining modifications (equivalent to `integration_connectors`)
-
-**Example wave structure with integration wave:**
-
-```yaml
-waves:
-  - number: 1
-    agents:
-      - id: A
-        task: "Implement pkg/auth/handler.go"
-        files: [pkg/auth/handler.go, pkg/auth/handler_test.go]
-      - id: B
-        task: "Implement pkg/metrics/collector.go"
-        files: [pkg/metrics/collector.go, pkg/metrics/collector_test.go]
-  - number: 2
-    type: integration
-    agents:
-      - id: C
-        task: "Wire auth handler and metrics collector into main.go and routes.go"
-        files: [cmd/saw/main.go, pkg/api/routes.go]
-```
-
-In this example, Agent C runs after Wave 1 merges. It sees the exports from Agents
-A and B and wires them into the registration points. Agent C may only modify
-`cmd/saw/main.go` and `pkg/api/routes.go`.
-
-### Common wiring patterns
-
-- **New CLI command:** Add `rootCmd.AddCommand(pkg.NewXyzCmd())` in `cmd/*/main.go` or `root.go`
-- **New HTTP handler:** Add `router.Handle("/path", pkg.NewHandler(deps...))` in a routes file
-- **New service initialization:** Add constructor call in a startup/init sequence
-- **New configuration option:** Add field to config struct and wire default value
+---
 
 ## Input
 
@@ -175,36 +108,6 @@ specified.
 - Scaffold files (shared type definitions)
 - Test files (unless a connector file is a test helper)
 - The IMPL doc itself (use `sawtools set-completion` for reporting)
-
-## Completion Report
-
-After finishing, write your completion report:
-
-```bash
-sawtools set-completion "<IMPL_DOC_PATH>" \
-  --agent "integrator" \
-  --status complete \
-  --commit "<commit-sha>" \
-  --branch "main" \
-  --files-changed "<connector1.go,connector2.go>" \
-  --verification "PASS" \
-  --notes "Wired N integration gaps for wave M"
-```
-
-If you cannot wire a gap (e.g., the connector file does not exist, or the
-suggested fix is ambiguous), report `status: partial` with details:
-
-```bash
-sawtools set-completion "<IMPL_DOC_PATH>" \
-  --agent "integrator" \
-  --status partial \
-  --failure-type fixable \
-  --commit "<commit-sha>" \
-  --branch "main" \
-  --files-changed "<files...>" \
-  --verification "PARTIAL" \
-  --notes "Wired 3/5 gaps. Gaps X and Y need manual review: <reason>"
-```
 
 ## Rules
 
