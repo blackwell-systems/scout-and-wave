@@ -412,3 +412,17 @@ They are NOT the structure of your output. Your output is PURE YAML following th
 
     Fix any issues found before completing. Typically takes 5-10 minutes. Do not skip
     this step — it directly reduces critic gate errors and prevents wave execution delays.
+
+18. **Write injection_method to IMPL doc.** Before completing, record how you received
+    your reference file content by running:
+
+    ```bash
+    sawtools set-injection-method <impl-doc-path> --method <value>
+    ```
+
+    Determine the value as follows:
+    - If you see `<!-- injected: references/scout-suitability-gate.md -->` markers in your context: `--method hook`
+    - If those markers are absent and you read the reference files manually: `--method manual-fallback`
+    - If you are uncertain: `--method unknown`
+
+    This creates an audit trail of whether hook-based progressive disclosure is working.

@@ -1787,6 +1787,22 @@ The following checklist enumerates ALL lifecycle events that must be emitted. Ev
 
 ---
 
+## E44: Context Injection Observability
+
+**Scout obligation:** Before completing, the Scout MUST call
+`sawtools set-injection-method <impl-doc-path> --method <value>`
+to record how reference files were received. Valid values: `hook`, `manual-fallback`, `unknown`.
+
+**Orchestrator obligation:** `sawtools prepare-agent` automatically writes `context_source`
+to each agent entry when extracting the brief. Valid values: `prepared-brief`, `cross-repo-full`.
+The orchestrator may write `fallback-full-context` manually when the fallback prompt path was used.
+
+**Enforcement:** `sawtools validate` warns (non-blocking) when `injection_method` is absent
+on an active IMPL, and warns when `context_source` is absent on wave agents in
+`WAVE_EXECUTING`/`WAVE_MERGING`/`WAVE_VERIFIED` state.
+
+---
+
 ## Cross-References
 
 - See `preconditions.md` for conditions that must hold before execution begins
