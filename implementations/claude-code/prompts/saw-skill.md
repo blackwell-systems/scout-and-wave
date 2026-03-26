@@ -23,6 +23,39 @@ triggers:
   # reference loaded after agents report back, not at dispatch time. The skill
   # body contains "failure", "blocked", etc. which would false-positive on every
   # invocation since UserPromptSubmit receives the expanded prompt.
+agent-references:
+  # Read by inject-agent-context (vendor-neutral) and validate_agent_launch hook.
+  # Each entry: agent-type + inject (path relative to skill dir) + optional when (regex on prompt).
+  - agent-type: scout
+    inject: references/scout-suitability-gate.md
+  - agent-type: scout
+    inject: references/scout-implementation-process.md
+  - agent-type: scout
+    inject: references/scout-program-contracts.md
+    when: "--program"
+  - agent-type: wave-agent
+    inject: references/wave-agent-worktree-isolation.md
+  - agent-type: wave-agent
+    inject: references/wave-agent-completion-report.md
+  - agent-type: wave-agent
+    inject: references/wave-agent-build-diagnosis.md
+  - agent-type: wave-agent
+    inject: references/wave-agent-program-contracts.md
+    when: "frozen_contracts_hash|frozen: true"
+  - agent-type: critic-agent
+    inject: references/critic-agent-verification-checks.md
+  - agent-type: critic-agent
+    inject: references/critic-agent-completion-format.md
+  - agent-type: planner
+    inject: references/planner-suitability-gate.md
+  - agent-type: planner
+    inject: references/planner-implementation-process.md
+  - agent-type: planner
+    inject: references/planner-example-manifest.md
+  - agent-type: integration-agent
+    inject: references/integration-connectors-reference.md
+  - agent-type: integration-agent
+    inject: references/integration-agent-completion-report.md
 ---
 
 # Scout-and-Wave: Parallel Agent Coordination
