@@ -23,7 +23,7 @@ Every token loaded into the Orchestrator's context window is a token that cannot
 - **Amend commands** — `/saw amend --add-wave/--redirect-agent/--extend-scope` (~39 lines)
 - **Failure routing** — E7a/E19 failure type routing, E25/E26/E35 integration gap detection (~69 lines)
 
-Loading all of this unconditionally would consume ~715 lines on every `/saw` invocation. A `/saw wave` call has no need for the program execution tier graph or the amend flow. Loading them wastes roughly 40% of the skill's effective context budget on content that will never be referenced.
+Loading all of this unconditionally would consume ~765 lines on every `/saw` invocation. A `/saw wave` call has no need for the program execution tier graph or the amend flow. Loading them wastes roughly 40% of the skill's effective context budget on content that will never be referenced.
 
 Progressive disclosure defers these on-demand references until the matching subcommand is actually invoked.
 
@@ -94,7 +94,7 @@ allowed-tools: |
 
 **Target:** ~17 lines. Nothing in the frontmatter should grow beyond what the Skills API needs to route and present the skill.
 
-### Tier 2 — Core SKILL.md (loaded on invocation, ~283 lines)
+### Tier 2 — Core SKILL.md (loaded on invocation, ~323 lines)
 
 *Maps to Agent Skills spec: **Instructions** tier (<5000 tokens recommended).*
 
@@ -119,7 +119,7 @@ Three on-demand references live in `implementations/claude-code/prompts/referenc
 
 | File | Subcommand trigger | Lines |
 |------|--------------------|-------|
-| `references/program-flow.md` | `/saw program *` | ~324 |
+| `references/program-flow.md` | `/saw program *` | ~334 |
 | `references/amend-flow.md` | `/saw amend *` | ~39 |
 | `references/failure-routing.md` | Agent failure or post-merge integration | ~69 |
 
@@ -347,19 +347,20 @@ The same heuristics apply as for skill references, scoped to the agent type:
 
 | Agent type | Core prompt | Reference files |
 |-----------|-------------|-----------------|
-| `scout` | ~166 lines | `scout-suitability-gate.md`, `scout-implementation-process.md`, `scout-program-contracts.md` |
-| `wave-agent` | ~133 lines | `worktree-isolation.md`, `build-diagnosis.md`, `completion-report.md` |
-| `critic-agent` | ~75 lines | `critic-agent-verification-checks.md`, `critic-agent-completion-format.md` |
-| `planner` | ~148 lines | `planner-suitability-gate.md`, `planner-implementation-process.md`, `planner-example-manifest.md` |
-| `integration-agent` | ~121 lines | `integration-connectors-reference.md`, `integration-agent-completion-report.md` |
+| `scout` | ~208 lines | `scout-suitability-gate.md`, `scout-implementation-process.md`, `scout-program-contracts.md` |
+| `wave-agent` | ~151 lines | `wave-agent-worktree-isolation.md`, `wave-agent-build-diagnosis.md`, `wave-agent-completion-report.md` |
+| `critic-agent` | ~90 lines | `critic-agent-verification-checks.md`, `critic-agent-completion-format.md` |
+| `planner` | ~143 lines | `planner-suitability-gate.md`, `planner-implementation-process.md`, `planner-example-manifest.md` |
+| `integration-agent` | ~133 lines | `integration-connectors-reference.md`, `integration-agent-completion-report.md` |
+| `scaffold-agent` | ~159 lines | (no extracted references — all content kept in core prompt) |
 
-Injection is implemented in `validate_agent_launch` checks 9+ (see `implementations/claude-code/hooks/README.md` § Hook 9).
+Injection is implemented in `validate_agent_launch` as named check blocks (Scout path, Check 10 wave-agent, Check 11 critic, Check 12 planner, Check 13 integration-agent) that run before the main wave-agent validation gate (Check 1).
 
 ### Wave-agent as the first progressive disclosure surface
 
 The wave agent is the first subagent type to fully apply the progressive disclosure pattern at the subagent level. The wave agent's worktree isolation protocol (Steps 0/0.5, absolute path patterns, go.mod warning), completion report reference (`sawtools set-completion` with examples for all status/failure types), and H7 build failure diagnosis have been extracted from the core `agents/wave-agent.md` prompt into three always-injected reference files. A fourth file (`wave-agent-program-contracts.md`) is injected conditionally only when the IMPL has frozen interface contracts.
 
-The extraction reduces the wave-agent type prompt from a large self-contained document to a slim identity core (~133 lines), with heavy procedural content deferred to `references/wave-agent-*.md`. This means every wave agent launch saves the context cost of the full procedure — paying it only via the hook, which prepends the references before the agent's first step.
+The extraction reduces the wave-agent type prompt from a large self-contained document to a slim identity core (~151 lines), with heavy procedural content deferred to `references/wave-agent-*.md`. This means every wave agent launch saves the context cost of the full procedure — paying it only via the hook, which prepends the references before the agent's first step.
 
 The injection mechanism is `updatedInput.prompt` via the `validate_agent_launch` PreToolUse/Agent hook. Detection fires on `subagent_type: wave-agent` in tool input or `[SAW:wave` in the description. Dedup markers (`<!-- injected: references/wave-agent-X.md -->`) ensure idempotency.
 
@@ -382,9 +383,9 @@ The critic agent is the third core SAW agent type to fully apply the progressive
 
 Unlike wave-agent (conditional injection for program contracts) and scout (conditional injection for `--program` flag), critic-agent has no conditional references — both files are always injected. This reflects the critic's role: every critic launch performs the full verification procedure and writes a completion report, with no scenario-specific paths.
 
-Detection in `validate_agent_launch` fires on `subagent_type: critic-agent` in tool input or `[SAW:critic` in the description. Dedup markers (`<!-- injected: references/critic-agent-X.md -->`) prevent double-injection. The slim `critic-agent.md` core (~75 lines) carries identity, role invariants, and a reference loading block instructing the agent to skip re-reading files whose markers are already in context.
+Detection in `validate_agent_launch` fires on `subagent_type: critic-agent` in tool input or `[SAW:critic` in the description. Dedup markers (`<!-- injected: references/critic-agent-X.md -->`) prevent double-injection. The slim `critic-agent.md` core (~90 lines) carries identity, role invariants, and a reference loading block instructing the agent to skip re-reading files whose markers are already in context.
 
-With scout, wave-agent, and critic-agent all using hook-based progressive disclosure, the pattern is now applied to all three core SAW agent types that perform the primary SAW workflow: analysis (scout), implementation (wave-agent), and review (critic-agent).
+With scout, wave-agent, and critic-agent all using hook-based progressive disclosure, the pattern is now applied to all three primary SAW workflow agent types: analysis (scout), implementation (wave-agent), and review (critic-agent).
 
 ### Planner as the fourth progressive disclosure surface
 
@@ -392,13 +393,19 @@ The planner agent is the fourth SAW agent type to fully apply the progressive di
 
 Like critic-agent, planner has no conditional references — all three files are always injected. Every planner launch evaluates program suitability, runs the full implementation process, and can benefit from an example manifest as a structural guide.
 
-Detection in `validate_agent_launch` fires on `subagent_type: planner` in tool input or `[SAW:planner` in the description. Dedup markers (`<!-- injected: references/planner-X.md -->`) prevent double-injection. The slim `planner.md` core (~148 lines) carries identity, role definition, and a reference loading block instructing the agent to skip re-reading files whose markers are already in context.
+Detection in `validate_agent_launch` fires on `subagent_type: planner` in tool input or `[SAW:planner` in the description. Dedup markers (`<!-- injected: references/planner-X.md -->`) prevent double-injection. The slim `planner.md` core (~143 lines) carries identity, role definition, and a reference loading block instructing the agent to skip re-reading files whose markers are already in context.
 
-With scout, wave-agent, critic-agent, and planner all using hook-based progressive disclosure, the pattern now covers all four major SAW agent types: analysis (scout), implementation (wave-agent), review (critic-agent), and program planning (planner).
+With scout, wave-agent, critic-agent, and planner all using hook-based progressive disclosure, the pattern now covers four of the five progressive-disclosure-enabled agent types: analysis (scout), implementation (wave-agent), review (critic-agent), and program planning (planner). Integration-agent (Check 13) is the fifth.
+
+### Integration-agent as the fifth progressive disclosure surface
+
+The integration agent is the fifth SAW agent type to use hook-based progressive disclosure. Two reference files have been extracted from the core `agents/integration-agent.md` prompt: `references/integration-connectors-reference.md` (connector and gap-detection reference) and `references/integration-agent-completion-report.md` (completion report format). Both are always injected — like critic-agent, the integration agent has no conditional references.
+
+Detection in `validate_agent_launch` (Check 13) fires on `subagent_type: integration-agent` in tool input or `[SAW:integration` in the description. Dedup markers (`<!-- injected: references/integration-X.md -->`) prevent double-injection.
 
 ### The generalized pattern
 
-With scout, wave-agent, critic-agent, and planner all using hook-based progressive disclosure, the pattern is fully generalized. Any SAW agent type can apply it:
+With scout, wave-agent, critic-agent, planner, and integration-agent all using hook-based progressive disclosure, the pattern is fully generalized. Any SAW agent type can apply it:
 
 1. Extract heavy procedural content from the core type prompt into `references/<type>-<name>.md` files
 2. Add a detection block in `validate_agent_launch` for the new `subagent_type`
@@ -409,12 +416,9 @@ The dedup marker protocol (`<!-- injected: references/X.md -->`) is shared acros
 
 ### How to extend — adding a new agent type reference
 
-1. Write `implementations/claude-code/prompts/agents/<type>/references/<name>.md` with the extracted content
+1. Write `implementations/claude-code/prompts/references/<type>-<name>.md` with the extracted content (all reference files live in the top-level `references/` directory, not in a per-agent subdirectory)
 2. Add a back-link in the reference file pointing to the core type prompt for shared logic it defers to
-3. Add a stub in the core type prompt: "For X, see `${CLAUDE_SKILL_DIR}/agents/<type>/references/<name>.md`"
-4. Add a case branch to `validate_agent_launch` checks 9+:
-   ```bash
-   new-agent-type) refs=("name.md") ;;
-   ```
-5. Add symlink in `install.sh` for the new reference file
+3. Add a stub in the core type prompt: "For X, see `${CLAUDE_SKILL_DIR}/references/<type>-<name>.md`"
+4. Add a detection block and injection loop to `validate_agent_launch` following the pattern of the existing Scout, Check 10–13 blocks
+5. No installer changes required — `install.sh` dynamically discovers all `*.md` files in `references/` and symlinks them automatically
 6. Verify: launch a `new-agent-type` agent and confirm the reference marker appears in its initial context
