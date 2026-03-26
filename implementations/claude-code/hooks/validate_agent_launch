@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
-# H5 pre-launch validation gate for SAW Wave agents
+# H5 pre-launch validation gate for SAW agents
 # PreToolUse hook with matcher "Agent"
 #
-# Fires before every Agent tool call. Validates SAW agent launch preconditions.
-# Non-SAW agents (no [SAW:waveN:agent-ID] tag in description) pass through.
+# Fires before every Agent tool call. Two dispatch paths:
+#
+#   Scout agents ([SAW:scout:*] description):
+#     → inject reference files via updatedInput, exit 0
+#
+#   Wave agents ([SAW:wave{N}:agent-{ID}] description):
+#     → run Checks 2-8 (IMPL exists, agent in wave, scaffold committed, etc.)
+#
+#   All other agents: pass through (exit 0)
 #
 # Manual test commands:
 #
@@ -35,9 +42,91 @@ input=$(cat)
 tool_name=$(echo "$input" | jq -r '.tool_name // empty')
 description=$(echo "$input" | jq -r '.tool_input.description // empty')
 prompt=$(echo "$input" | jq -r '.tool_input.prompt // empty')
+subagent_type=$(echo "$input" | jq -r '.tool_input.subagent_type // empty')
 
 # Only enforce on Agent tool calls
 if [[ "$tool_name" != "Agent" ]]; then
+  exit 0
+fi
+
+# --- Scout path: reference injection ---
+# Scouts use [SAW:scout:*] descriptions — they need reference injection
+# but NOT the wave-agent validation checks (Checks 2-8).
+# This block must run BEFORE Check 1 which early-exits all non-wave-agent calls.
+#
+# Detection: reliable via subagent_type=="scout" field in tool_input.
+# The [SAW:scout:slug] description tag is also checked and warned-on if absent —
+# the tag is the SAW session fingerprint used by monitoring and E42 validation.
+is_scout=false
+if [[ "$subagent_type" == "scout" ]] || [[ "$description" =~ \[SAW:scout ]]; then
+  is_scout=true
+fi
+
+if [[ "$is_scout" == "true" ]]; then
+  # Auto-fix description tag if missing.
+  # If subagent_type=scout but description lacks [SAW:scout:slug], extract slug
+  # from prompt (IMPL doc path or feature description) and inject it via updatedInput.
+  # This enforces the SAW session fingerprint without requiring orchestrator discipline.
+  fixed_description="$description"
+  if ! [[ "$description" =~ \[SAW:scout ]]; then
+    # Try to extract slug from IMPL doc path in prompt: IMPL-<slug>.yaml
+    slug=$(echo "$prompt" | grep -oE 'IMPL-[a-z0-9-]+\.yaml' | head -1 | sed 's/IMPL-//;s/\.yaml//' || true)
+    if [[ -n "$slug" ]]; then
+      fixed_description="[SAW:scout:${slug}] ${description}"
+    else
+      fixed_description="[SAW:scout:unknown] ${description}"
+    fi
+    echo "H5 NOTE: Auto-tagged scout description as '${fixed_description}' (was missing [SAW:scout:slug])." >&2
+  fi
+
+  # Resolve references directory
+  ref_dir=""
+  skill_dir="${CLAUDE_SKILL_DIR:-${HOME}/.claude/skills/saw}"
+  if [[ -d "${skill_dir}/references" ]]; then
+    ref_dir="${skill_dir}/references"
+  fi
+
+  if [[ -n "$ref_dir" ]]; then
+    inject_content=""
+
+    # Always inject suitability gate
+    ref_file="${ref_dir}/scout-suitability-gate.md"
+    if [[ -f "$ref_file" ]] && ! echo "$prompt" | grep -q '<!-- injected: references/scout-suitability-gate.md -->'; then
+      inject_content+="<!-- injected: references/scout-suitability-gate.md -->"$'\n'
+      inject_content+="$(command cat "$ref_file")"$'\n\n'
+    fi
+
+    # Always inject implementation process
+    ref_file="${ref_dir}/scout-implementation-process.md"
+    if [[ -f "$ref_file" ]] && ! echo "$prompt" | grep -q '<!-- injected: references/scout-implementation-process.md -->'; then
+      inject_content+="<!-- injected: references/scout-implementation-process.md -->"$'\n'
+      inject_content+="$(command cat "$ref_file")"$'\n\n'
+    fi
+
+    # Conditionally inject program contracts (only with --program flag)
+    if echo "$prompt" | grep -q '\-\-program'; then
+      ref_file="${ref_dir}/scout-program-contracts.md"
+      if [[ -f "$ref_file" ]] && ! echo "$prompt" | grep -q '<!-- injected: references/scout-program-contracts.md -->'; then
+        inject_content+="<!-- injected: references/scout-program-contracts.md -->"$'\n'
+        inject_content+="$(command cat "$ref_file")"$'\n\n'
+      fi
+    fi
+
+    # Emit updatedInput with both injected prompt and fixed description
+    if [[ -n "$inject_content" ]]; then
+      jq -n --arg inject "$inject_content" --arg orig "$prompt" --arg desc "$fixed_description" \
+        '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow", "updatedInput": {"prompt": ($inject + "\n\n" + $orig), "description": $desc}}}'
+      exit 0
+    fi
+  fi
+
+  # No references dir — still fix description if needed
+  if [[ "$fixed_description" != "$description" ]]; then
+    jq -n --arg desc "$fixed_description" \
+      '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow", "updatedInput": {"description": $desc}}}'
+  fi
+
+  # No references to inject — allow through
   exit 0
 fi
 
@@ -189,23 +278,20 @@ else
   fi
 fi
 
-# --- Check 9: Scout reference injection ---
-# When launching a scout agent, inject reference files as updatedInput
-# This provides the suitability gate and implementation process without
-# the scout needing to read them manually.
+# --- Check 10: Wave-agent reference injection ---
+# When launching a wave agent, inject reference files as updatedInput
+# This provides worktree isolation protocol, completion report, and build
+# diagnosis without the agent needing to read them manually.
 
-# Detect scout agent type from description or prompt
-is_scout=false
-if [[ "$description" =~ \[SAW:scout ]] || \
-   [[ "$prompt" =~ "subagent_type: scout" ]] || \
-   [[ "$prompt" =~ "# Scout Agent: Pre-Flight Dependency Mapping" ]]; then
-  is_scout=true
+# Detect wave agent type from description or prompt
+is_wave_agent=false
+if [[ "$subagent_type" == "wave-agent" ]] || [[ "$description" =~ \[SAW:wave ]]; then
+  is_wave_agent=true
 fi
 
-if [[ "$is_scout" == "true" ]]; then
+if [[ "$is_wave_agent" == "true" ]]; then
   # Resolve references directory
   ref_dir=""
-  # Try skill directory first
   skill_dir="${CLAUDE_SKILL_DIR:-${HOME}/.claude/skills/saw}"
   if [[ -d "${skill_dir}/references" ]]; then
     ref_dir="${skill_dir}/references"
@@ -214,25 +300,32 @@ if [[ "$is_scout" == "true" ]]; then
   if [[ -n "$ref_dir" ]]; then
     inject_content=""
 
-    # Always inject suitability gate
-    ref_file="${ref_dir}/scout-suitability-gate.md"
-    if [[ -f "$ref_file" ]] && ! echo "$prompt" | grep -q '<!-- injected: references/scout-suitability-gate.md -->'; then
-      inject_content+="<!-- injected: references/scout-suitability-gate.md -->"$'\n'
+    # Always inject worktree isolation protocol
+    ref_file="${ref_dir}/wave-agent-worktree-isolation.md"
+    if [[ -f "$ref_file" ]] && ! echo "$prompt" | grep -q '<!-- injected: references/wave-agent-worktree-isolation.md -->'; then
+      inject_content+="<!-- injected: references/wave-agent-worktree-isolation.md -->"$'\n'
       inject_content+="$(command cat "$ref_file")"$'\n\n'
     fi
 
-    # Always inject implementation process
-    ref_file="${ref_dir}/scout-implementation-process.md"
-    if [[ -f "$ref_file" ]] && ! echo "$prompt" | grep -q '<!-- injected: references/scout-implementation-process.md -->'; then
-      inject_content+="<!-- injected: references/scout-implementation-process.md -->"$'\n'
+    # Always inject completion report
+    ref_file="${ref_dir}/wave-agent-completion-report.md"
+    if [[ -f "$ref_file" ]] && ! echo "$prompt" | grep -q '<!-- injected: references/wave-agent-completion-report.md -->'; then
+      inject_content+="<!-- injected: references/wave-agent-completion-report.md -->"$'\n'
       inject_content+="$(command cat "$ref_file")"$'\n\n'
     fi
 
-    # Conditionally inject program contracts (only with --program flag)
-    if echo "$prompt" | grep -q '\-\-program'; then
-      ref_file="${ref_dir}/scout-program-contracts.md"
-      if [[ -f "$ref_file" ]] && ! echo "$prompt" | grep -q '<!-- injected: references/scout-program-contracts.md -->'; then
-        inject_content+="<!-- injected: references/scout-program-contracts.md -->"$'\n'
+    # Always inject build diagnosis
+    ref_file="${ref_dir}/wave-agent-build-diagnosis.md"
+    if [[ -f "$ref_file" ]] && ! echo "$prompt" | grep -q '<!-- injected: references/wave-agent-build-diagnosis.md -->'; then
+      inject_content+="<!-- injected: references/wave-agent-build-diagnosis.md -->"$'\n'
+      inject_content+="$(command cat "$ref_file")"$'\n\n'
+    fi
+
+    # Conditionally inject program contracts (only when frozen contracts present)
+    if echo "$prompt" | grep -qE 'frozen_contracts_hash|frozen: true'; then
+      ref_file="${ref_dir}/wave-agent-program-contracts.md"
+      if [[ -f "$ref_file" ]] && ! echo "$prompt" | grep -q '<!-- injected: references/wave-agent-program-contracts.md -->'; then
+        inject_content+="<!-- injected: references/wave-agent-program-contracts.md -->"$'\n'
         inject_content+="$(command cat "$ref_file")"$'\n\n'
       fi
     fi

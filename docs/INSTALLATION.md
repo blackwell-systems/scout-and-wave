@@ -99,7 +99,11 @@ After installation, the skill directory structure looks like this:
 │   ├── program-flow.md   -> prompts/references/program-flow.md
 │   ├── scout-suitability-gate.md -> prompts/references/scout-suitability-gate.md
 │   ├── scout-implementation-process.md -> prompts/references/scout-implementation-process.md
-│   └── scout-program-contracts.md -> prompts/references/scout-program-contracts.md
+│   ├── scout-program-contracts.md -> prompts/references/scout-program-contracts.md
+│   ├── wave-agent-worktree-isolation.md -> prompts/references/wave-agent-worktree-isolation.md
+│   ├── wave-agent-completion-report.md -> prompts/references/wave-agent-completion-report.md
+│   ├── wave-agent-build-diagnosis.md -> prompts/references/wave-agent-build-diagnosis.md
+│   └── wave-agent-program-contracts.md -> prompts/references/wave-agent-program-contracts.md
 └── hooks/
     └── pre-commit-guard.sh
 ```

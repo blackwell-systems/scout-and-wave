@@ -23,7 +23,11 @@ prompts/
     ├── failure-routing.md
     ├── scout-suitability-gate.md       ← Scout agent reference (hook-injected)
     ├── scout-implementation-process.md  ← Scout agent reference (hook-injected)
-    └── scout-program-contracts.md       ← Scout agent reference (hook-injected)
+    ├── scout-program-contracts.md       ← Scout agent reference (hook-injected)
+    ├── wave-agent-worktree-isolation.md  ← NEW
+    ├── wave-agent-completion-report.md   ← NEW
+    ├── wave-agent-build-diagnosis.md     ← NEW
+    └── wave-agent-program-contracts.md   ← NEW
 ```
 
 ## Entry Point
@@ -41,7 +45,7 @@ uses to enforce tool restrictions and behavioral invariants. Launched via
 | File | Agent | Purpose |
 |------|-------|---------|
 | [`agents/scout.md`](agents/scout.md) | Scout | Slim identity core (~166 lines). Suitability gate, IMPL production steps, and program contract rules extracted to `references/scout-*.md` and injected by `validate_agent_launch` hook. Cannot edit source files (I6 enforcement). |
-| [`agents/wave-agent.md`](agents/wave-agent.md) | Wave Agent | TYPE LAYER shared by all wave agents. Worktree isolation protocol, workflow checklist, session recovery, completion report format. Cannot spawn sub-agents. |
+| [`agents/wave-agent.md`](agents/wave-agent.md) | Wave Agent | Slim identity core (~133 lines). Worktree isolation protocol, completion report reference, build diagnosis, and program contract rules extracted to `references/wave-agent-*.md` and injected by `validate_agent_launch` hook. Cannot spawn sub-agents. |
 | [`agents/scaffold-agent.md`](agents/scaffold-agent.md) | Scaffold Agent | Materializes approved interface contracts as type scaffold source files. Runs between Scout and Wave 1. Creates only files listed in IMPL doc Scaffolds section. |
 | [`agents/integration-agent.md`](agents/integration-agent.md) | Integration Agent | Post-merge wiring agent (E26/E27). Wires unconnected exports into connector files. Runs on main branch after wave merge. |
 | [`agents/critic-agent.md`](agents/critic-agent.md) | Critic Agent | Pre-wave brief review (E37). Reads every agent brief, reads every owned file, verifies accuracy across 6 checks. Writes verdict to IMPL doc. Never modifies source files. |
@@ -70,6 +74,10 @@ See `docs/skills-progressive-disclosure.md` for the design.
 | [`references/scout-suitability-gate.md`](references/scout-suitability-gate.md) | Scout agent launch (hook-injected) | 5-question suitability checklist. Injected by `validate_agent_launch` into every scout agent prompt. |
 | [`references/scout-implementation-process.md`](references/scout-implementation-process.md) | Scout agent launch (hook-injected) | Steps 1-17 for IMPL doc production. Injected by `validate_agent_launch` into every scout agent prompt. |
 | [`references/scout-program-contracts.md`](references/scout-program-contracts.md) | Scout agent launch with --program (hook-injected) | Program contract handling rules. Injected by `validate_agent_launch` only when `--program` flag present in prompt. |
+| [`references/wave-agent-worktree-isolation.md`](references/wave-agent-worktree-isolation.md) | Wave agent launch (hook-injected) | Worktree isolation protocol (Steps 0/0.5, absolute path patterns, go.mod warning). Injected by `validate_agent_launch` into every wave agent prompt. |
+| [`references/wave-agent-completion-report.md`](references/wave-agent-completion-report.md) | Wave agent launch (hook-injected) | Full `sawtools set-completion` reference with examples for all status/failure types. Injected by `validate_agent_launch` into every wave agent prompt. |
+| [`references/wave-agent-build-diagnosis.md`](references/wave-agent-build-diagnosis.md) | Wave agent launch (hook-injected) | H7 build failure diagnosis tool usage (all languages). Injected by `validate_agent_launch` into every wave agent prompt. |
+| [`references/wave-agent-program-contracts.md`](references/wave-agent-program-contracts.md) | Wave agent launch with frozen contracts (hook-injected) | Program contract handling rules. Injected by `validate_agent_launch` only when `frozen_contracts_hash` or `frozen: true` present in prompt. |
 
 ## Protocol Invariants Referenced
 

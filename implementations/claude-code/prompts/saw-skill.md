@@ -94,11 +94,18 @@ Load these files ONLY when the matching subcommand is invoked:
 | Scout agent launch (always) | Injected by `validate_agent_launch` hook: `references/scout-suitability-gate.md` |
 | Scout agent launch (always) | Injected by `validate_agent_launch` hook: `references/scout-implementation-process.md` |
 | Scout agent launch (with --program) | Injected by `validate_agent_launch` hook: `references/scout-program-contracts.md` |
+| Wave agent launch (always) | Injected by `validate_agent_launch` hook: `references/wave-agent-worktree-isolation.md` |
+| Wave agent launch (always) | Injected by `validate_agent_launch` hook: `references/wave-agent-completion-report.md` |
+| Wave agent launch (always) | Injected by `validate_agent_launch` hook: `references/wave-agent-build-diagnosis.md` |
+| Wave agent launch (frozen contracts) | Injected by `validate_agent_launch` hook: `references/wave-agent-program-contracts.md` |
 
 Do not pre-load these files. The core wave loop below handles `/saw scout`,
 `/saw wave`, `/saw status`, `/saw bootstrap`, and `/saw interview` directly.
 Scout reference files are injected automatically by the `validate_agent_launch`
 hook — the orchestrator does not need to load them manually.
+Wave agent reference files are also injected automatically by the
+`validate_agent_launch` hook — the orchestrator does not need to pass them
+in the agent prompt.
 
 E44: sawtools prepare-agent automatically writes context_source to each agent entry when extracting its brief, recording whether the prepared-brief path or cross-repo-full path was used (see protocol/execution-rules.md E44).
 

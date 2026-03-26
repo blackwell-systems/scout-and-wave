@@ -354,9 +354,17 @@ The same heuristics apply as for skill references, scoped to the agent type:
 
 Injection is implemented in `validate_agent_launch` checks 9+ (see `implementations/claude-code/hooks/README.md` § Hook 9).
 
+### Wave-agent as the first progressive disclosure surface
+
+The wave agent is the first subagent type to fully apply the progressive disclosure pattern at the subagent level. The wave agent's worktree isolation protocol (Steps 0/0.5, absolute path patterns, go.mod warning), completion report reference (`sawtools set-completion` with examples for all status/failure types), and H7 build failure diagnosis have been extracted from the core `agents/wave-agent.md` prompt into three always-injected reference files. A fourth file (`wave-agent-program-contracts.md`) is injected conditionally only when the IMPL has frozen interface contracts.
+
+The extraction reduces the wave-agent type prompt from a large self-contained document to a slim identity core (~133 lines), with heavy procedural content deferred to `references/wave-agent-*.md`. This means every wave agent launch saves the context cost of the full procedure — paying it only via the hook, which prepends the references before the agent's first step.
+
+The injection mechanism is `updatedInput.prompt` via the `validate_agent_launch` PreToolUse/Agent hook. Detection fires on `subagent_type: wave-agent` in tool input or `[SAW:wave` in the description. Dedup markers (`<!-- injected: references/wave-agent-X.md -->`) ensure idempotency.
+
 ### Scout as the second progressive disclosure surface
 
-The scout agent is the second subagent type — after `wave-agent` — to fully apply the progressive disclosure pattern at the subagent level. The scout's suitability gate, IMPL production steps (1–17), and program contract handling rules have been extracted from the core `agents/scout.md` prompt into three reference files in `references/scout-*.md`.
+The scout agent is the second subagent type to fully apply the progressive disclosure pattern at the subagent level. The scout's suitability gate, IMPL production steps (1–17), and program contract handling rules have been extracted from the core `agents/scout.md` prompt into three reference files in `references/scout-*.md`.
 
 This creates a nested application of the pattern: the skill (`saw-skill.md`) is itself a Tier 2 file that defers to Tier 3 on-demand references; the scout agent type prompt is a Tier 2 subagent prompt that defers to its own Tier 3 references. The scout is a Tier 3 reference *from the orchestrator's perspective*, but a Tier 2 document *from the subagent perspective* — with its own progressive disclosure layer beneath it.
 
@@ -366,6 +374,17 @@ The injection mechanism differs between the two layers:
 - **Scout references** (`validate_agent_launch`, PreToolUse/Agent): `updatedInput.prompt` into the scout subagent's initial prompt
 
 `validate_agent_launch` provides deterministic injection for subagents, paralleling `inject_skill_context` for the orchestrator skill. The dedup mechanism (`<!-- injected: references/scout-X.md -->` markers) ensures idempotency — if the orchestrator manually prepends a reference, the hook skips that file. This makes the injection transparent and composable.
+
+### The generalized pattern
+
+With both wave-agent and scout now using hook-based progressive disclosure, the pattern is fully generalized. Any SAW agent type can apply it:
+
+1. Extract heavy procedural content from the core type prompt into `references/<type>-<name>.md` files
+2. Add a detection block in `validate_agent_launch` for the new `subagent_type`
+3. Inject using `updatedInput.prompt` with dedup markers `<!-- injected: references/<type>-<name>.md -->`
+4. The core type prompt stays as a slim identity core; references carry the procedure
+
+The dedup marker protocol (`<!-- injected: references/X.md -->`) is shared across all agent types. It prevents double-injection regardless of whether the orchestrator or the hook is the injection source, making the system composable and order-independent.
 
 ### How to extend — adding a new agent type reference
 
