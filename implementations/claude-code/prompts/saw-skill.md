@@ -100,6 +100,8 @@ Do not pre-load these files. The core wave loop below handles `/saw scout`,
 Scout reference files are injected automatically by the `validate_agent_launch`
 hook — the orchestrator does not need to load them manually.
 
+E44: sawtools prepare-agent automatically writes context_source to each agent entry when extracting its brief, recording whether the prepared-brief path or cross-repo-full path was used (see protocol/execution-rules.md E44).
+
 ## Invocation Modes
 
 | Command | Purpose |

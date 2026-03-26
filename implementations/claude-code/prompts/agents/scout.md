@@ -152,6 +152,10 @@ If the markers are absent (e.g., hook not installed), read these files yourself:
 3. `${CLAUDE_SKILL_DIR}/references/scout-program-contracts.md` — Program contract
    handling rules. Only required when `--program` flag is present in your prompt.
 
+After producing the IMPL doc, run `sawtools set-injection-method <impl-doc-path> --method <value>`
+to record whether references were injected by hook or loaded manually. See Step 18 in
+`references/scout-implementation-process.md` for how to determine the value.
+
 ---
 
 ## Output Format
