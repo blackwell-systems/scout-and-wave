@@ -3,6 +3,7 @@
 **Status:** Implemented — pattern encoded in `IMPL-{scout,wave-agent,critic-agent,planner,integration-agent}-prompt-extraction.yaml`; injection blocks are the Scout path and Checks 10–13 in `validate_agent_launch`.
 **Created:** 2026-03-25
 **Relates to:** `docs/proposals/agentskills-subcommand-dispatch.md`, `docs/skills-progressive-disclosure.md`
+**Previously named:** `agentskills-agent-type-injection.md` (renamed: mechanism is SAW-internal, not an Agent Skills spec contribution)
 
 ---
 

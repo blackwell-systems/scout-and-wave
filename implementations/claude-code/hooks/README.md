@@ -61,7 +61,7 @@ Fires when the orchestrator calls the `Agent` tool to launch a subagent. Dispatc
 }
 ```
 
-**Why `updatedInput`, not `additionalContext`:** `additionalContext` in a `PreToolUse` hook adds content to the *calling model's* context (the orchestrator). `updatedInput` modifies the tool call parameters before execution — the only mechanism that reaches inside a subagent's initial prompt. See `docs/proposals/agentskills-agent-type-injection.md` for the full decision record.
+**Why `updatedInput`, not `additionalContext`:** `additionalContext` in a `PreToolUse` hook adds content to the *calling model's* context (the orchestrator). `updatedInput` modifies the tool call parameters before execution — the only mechanism that reaches inside a subagent's initial prompt. See `docs/proposals/subagent-prompt-injection.md` for the full decision record.
 
 **Coverage:** `scout`, `wave-agent`, `critic-agent`, `planner`, `integration-agent`. Dispatch is a sequence of `if` blocks on `subagent_type`. Adding a new agent type requires adding one `if` block — no new hook registration needed.
 

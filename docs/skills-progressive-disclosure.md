@@ -328,7 +328,7 @@ PreToolUse/Agent hook fires
   → subagent has reference content before its first step
 ```
 
-See `docs/proposals/agentskills-agent-type-injection.md` for the full decision record (including why this was a non-obvious discovery — `additionalContext` was tried first and blocked by critic review).
+See `docs/proposals/subagent-prompt-injection.md` for the full decision record (including why this was a non-obvious discovery — `additionalContext` was tried first and blocked by critic review).
 
 ### What to extract from agent type prompts
 
@@ -436,7 +436,7 @@ The injection system has three layers, each targeting a different deployment con
 
 `inject-agent-context` mirrors the hook's reference mapping and dedup markers exactly, so output from either layer is idempotent when combined. Platforms that register the hook get Layer 1 automatically. Platforms without Claude Code hooks but with Bash can use the script as Layer 2. The routing table in `saw-skill.md` remains the always-available Layer 3 fallback.
 
-See `docs/proposals/agentskills-agent-type-injection.md` for the full decision record on why `updatedInput` (not `additionalContext`) is required for subagent injection.
+See `docs/proposals/subagent-prompt-injection.md` for the full decision record on why `updatedInput` (not `additionalContext`) is required for subagent injection.
 
 ### How to extend — adding a new agent type reference
 
