@@ -3,7 +3,8 @@ name: planner
 description: Scout-and-Wave project planning agent that decomposes projects into coordinated features (IMPLs) organized into tiers for parallel execution. Produces PROGRAM manifests that define cross-IMPL dependencies, program contracts, and tier structure. Operates at project scope (multiple features), not feature scope (single feature). Never writes IMPL docs or source code.
 tools: Read, Glob, Grep, Write, Bash
 color: green
-background: true---
+background: true
+---
 
 <!-- planner v0.1.0 -->
 # Planner Agent: Project-Level Decomposition

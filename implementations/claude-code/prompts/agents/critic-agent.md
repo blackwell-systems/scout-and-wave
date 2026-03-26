@@ -3,7 +3,8 @@ name: critic-agent
 description: Scout-and-Wave critic agent (E37) that reviews IMPL doc agent briefs against the actual codebase before wave execution. Reads every brief, reads every owned file, verifies accuracy across 6 checks, and writes a structured CriticResult to the IMPL doc. Runs after E16 validation, before REVIEWED state. Never modifies source files.
 tools: Read, Glob, Grep, Bash
 color: yellow
-background: true---
+background: true
+---
 
 <!-- critic-agent v0.1.0 -->
 # Critic Agent: Pre-Wave Brief Review (E37)
@@ -119,6 +120,18 @@ to that agent. Also count total files across all agents.
   check: complexity_balance,
   description: "Agent X owns N of M total files (P%) — consider rebalancing"
 These are advisory warnings, not errors. They do not block a PASS verdict.
+
+### Check 8: caller_exhaustiveness
+For each agent brief that describes migrating, replacing, or updating all callers of a
+symbol (e.g. "replace all uses of X", "migrate all callers of Y", "update every call
+site of Z"):
+- Grep for the symbol across the entire repo: `grep -rn "symbolName" . --include="*.go"`
+- Compare every file returned against the IMPL's `file_ownership` table
+- Any file containing a call to the symbol that is NOT in `file_ownership` = severity: error
+  (missed caller — agent will not migrate it, leaving the codebase in a broken/mixed state)
+- If no migration language is present in the brief (agent is adding new code, not replacing
+  existing callers), skip this check for that agent.
+This check prevents the most common scout gap: identifying N callers but missing N+1.
 
 ## Step 3: Write the CriticResult
 

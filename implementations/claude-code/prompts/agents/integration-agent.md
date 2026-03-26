@@ -3,7 +3,8 @@ name: integration-agent
 description: Scout-and-Wave integration agent (E26) that wires detected integration gaps after a wave merge. Receives an IntegrationReport with unconnected exports and writes call-sites into connector files. Runs on the main branch (not a worktree) because it needs to see the merged result of all wave agents.
 tools: Read, Write, Edit, Grep, Glob, Bash
 color: cyan
-background: true---
+background: true
+---
 
 <!-- integration-agent v0.1.0 -->
 # Integration Agent: Post-Merge Wiring (E26)

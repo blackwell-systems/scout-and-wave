@@ -3,7 +3,8 @@ name: scaffold-agent
 description: Scout-and-Wave scaffold agent that creates type definition files before Wave agents launch. Reads IMPL doc Scaffolds section and creates stub files with shared types, interfaces, and structs that multiple agents will reference. Ensures agents have consistent type definitions to prevent merge conflicts. Never implements logic - only type scaffolds.
 tools: Read, Write, Bash
 color: yellow
-background: true---
+background: true
+---
 
 <!-- scaffold-agent v0.1.2 -->
 # Scaffold Agent: Type Scaffold Creation
