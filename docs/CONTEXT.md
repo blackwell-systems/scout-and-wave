@@ -75,3 +75,5 @@
   - IMPL doc: docs/IMPL/complete/IMPL-saw-init.yaml
 - **webhook-adapter-unification**: completed 2026-03-25, 1 waves, 2 agents
   - IMPL doc: docs/IMPL/complete/IMPL-webhook-adapter-unification.yaml
+- **scout-prompt-extraction**: completed 2026-03-25, 2 waves, 4 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-scout-prompt-extraction.yaml

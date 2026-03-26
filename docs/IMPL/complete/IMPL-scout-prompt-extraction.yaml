@@ -1,3 +1,4 @@
+completion_date: "2026-03-25"
 title: Extract scout agent prompt into layered progressive disclosure
 feature_slug: scout-prompt-extraction
 verdict: SUITABLE
@@ -347,6 +348,7 @@ waves:
             - Do NOT change any content in the kept sections — copy verbatim
           files:
             - implementations/claude-code/prompts/agents/scout.md
+      base_commit: 175ae92ced768e882c5ea4a9bf0657b831f25c42
     - number: 2
       agents:
         - id: D
@@ -562,6 +564,46 @@ quality_gates:
         - type: custom
           command: 'echo ''docs-only: no compilation'''
           required: true
+completion_reports:
+    A:
+        status: complete
+        branch: saw/scout-prompt-extraction/wave1-agent-A
+        commit: e9da9f2
+        files_changed:
+            - implementations/claude-code/prompts/references/scout-suitability-gate.md
+        files_created:
+            - implementations/claude-code/prompts/references/scout-suitability-gate.md
+        verification: PASS
+    B:
+        status: complete
+        branch: saw/scout-prompt-extraction/wave1-agent-B
+        commit: 4c50f65
+        files_changed:
+            - implementations/claude-code/prompts/references/scout-implementation-process.md
+            - implementations/claude-code/prompts/references/scout-program-contracts.md
+        files_created:
+            - implementations/claude-code/prompts/references/scout-implementation-process.md
+            - implementations/claude-code/prompts/references/scout-program-contracts.md
+        verification: PASS
+    C:
+        status: complete
+        branch: saw/scout-prompt-extraction/wave1-agent-C
+        commit: "2689225"
+        files_changed:
+            - implementations/claude-code/prompts/agents/scout.md
+        verification: PASS
+    D:
+        status: complete
+        branch: main
+        commit: bdb2b46
+        files_changed:
+            - implementations/claude-code/hooks/validate_agent_launch
+            - implementations/claude-code/prompts/saw-skill.md
+            - implementations/claude-code/prompts/README.md
+            - docs/INSTALLATION.md
+            - implementations/claude-code/hooks/README.md
+            - docs/skills-progressive-disclosure.md
+        verification: PASS
 pre_mortem:
     overall_risk: low
     rows:
@@ -618,4 +660,4 @@ critic_report:
     summary: 'Agents A, B, and C have accurate briefs with no issues. File existence checks pass: the three new reference files (scout-suitability-gate.md, scout-implementation-process.md, scout-program-contracts.md) do not yet exist in implementations/claude-code/prompts/references/ (action: new is correct), and all six files Agent D will modify exist. Line ranges are verified against the live scout.md (741 lines): the Suitability Gate section runs lines 138-260 as stated for Agent A; the Implementation Process section runs lines 263-694 as stated for Agent B; the Program Contract Awareness subsection runs lines 385-404 as stated for Agent B; Agent C''s referenced sections (frontmatter 1-6, version comment line 8, identity 11-17, Your Task 19-109, CRITICAL INVARIANTS 113-134, Output Format 695-717, Rules 718-741) are all accurate. The validate_agent_launch hook is confirmed at 193 lines. The saw-skill.md On-Demand References table is at lines 89-93 with the following paragraph at lines 95-96, as stated for Agent D. Agent D''s brief correctly specifies the updatedInput mechanism (not additionalContext) — the prior critic_report''s error description was factually wrong about what the brief says. The updatedInput PreToolUse hook pattern is not yet demonstrated in any existing hook in this codebase (validate_agent_launch, check_scout_boundaries, block_claire_paths, check_wave_ownership all exit 0/2 only), but this is a warning-level concern because the mechanism is internally consistent, documented in interface contracts, and the brief explicitly warns against using the wrong mechanism.'
     reviewed_at: "2026-03-25T23:14:25Z"
     issue_count: 1
-state: SCOUT_PENDING
+state: COMPLETE

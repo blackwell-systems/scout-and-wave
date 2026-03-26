@@ -232,6 +232,18 @@
         "cached_at": "2026-03-17T19:25:49.453625-07:00"
       }
     },
+    "79fa00af371795b62b954cbde14ee70b": {
+      "custom": {
+        "gate_type": "custom",
+        "command": "echo 'docs-only: no compilation'",
+        "passed": true,
+        "exit_code": 0,
+        "stdout": "docs-only: no compilation\n",
+        "stderr": "",
+        "from_cache": true,
+        "cached_at": "2026-03-25T20:11:44.673416-07:00"
+      }
+    },
     "7e988bfd280b7e3c74644859eb8a7d9b": {
       "lint": {
         "gate_type": "lint",
@@ -820,6 +832,18 @@
         "stderr": "",
         "from_cache": true,
         "cached_at": "2026-03-18T12:37:28.169499-07:00"
+      }
+    },
+    "dded16e18aa709af378869f164687ba3": {
+      "custom": {
+        "gate_type": "custom",
+        "command": "echo 'docs-only: no compilation'",
+        "passed": true,
+        "exit_code": 0,
+        "stdout": "docs-only: no compilation\n",
+        "stderr": "",
+        "from_cache": true,
+        "cached_at": "2026-03-25T20:16:19.5014-07:00"
       }
     },
     "e1006d1ae8ccbb1174004f42a5a6da9b": {
