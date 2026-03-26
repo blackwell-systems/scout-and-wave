@@ -1,6 +1,6 @@
 # Decision Record: Deterministic Agent Type Reference Injection
 
-**Status:** Implemented — pattern encoded in `IMPL-{scout,wave-agent,critic-agent,planner}-prompt-extraction.yaml`; `validate_agent_launch` checks 9+ are Wave 2 Agent D in each IMPL.
+**Status:** Implemented — pattern encoded in `IMPL-{scout,wave-agent,critic-agent,planner,integration-agent}-prompt-extraction.yaml`; injection blocks are the Scout path and Checks 10–13 in `validate_agent_launch`.
 **Created:** 2026-03-25
 **Relates to:** `docs/proposals/agentskills-subcommand-dispatch.md`, `docs/skills-progressive-disclosure.md`
 
@@ -10,7 +10,7 @@
 
 The `agentskills-subcommand-dispatch.md` proposal solves Tier 3 reference loading for **orchestrator-level** subcommands — `/saw program execute`, `/saw amend` — using the `UserPromptSubmit` hook and `additionalContext`. Content is injected into the orchestrator's context before it runs.
 
-Extracting heavy procedure content from agent type prompts (`wave-agent.md`, `critic-agent.md`, `scout.md`, `planner.md`) into `references/` files requires a second, distinct injection mechanism. Convention-based loading ("read this file if you need it") is insufficient — the agent may not follow the instruction, or reads it too late.
+Extracting heavy procedure content from agent type prompts (`wave-agent.md`, `critic-agent.md`, `scout.md`, `planner.md`, `integration-agent.md`) into `references/` files requires a second, distinct injection mechanism. Convention-based loading ("read this file if you need it") is insufficient — the agent may not follow the instruction, or reads it too late.
 
 `UserPromptSubmit` cannot solve this. It fires when the user submits a prompt; by the time the orchestrator calls the `Agent` tool to launch a subagent, `UserPromptSubmit` is long past. There is no mechanism within that hook to target a subagent's initial context.
 
@@ -37,44 +37,96 @@ For subagent injection, `additionalContext` is wrong: it augments the orchestrat
     "hookEventName": "PreToolUse",
     "permissionDecision": "allow",
     "updatedInput": {
-      "prompt": "<!-- injected: references/wave-agent-isolation.md -->\n[reference content]\n\n[original prompt]"
+      "prompt": "<!-- injected: references/wave-agent-worktree-isolation.md -->\n[reference content]\n\n[original prompt]",
+      "description": "[original description]",
+      "run_in_background": false
     }
   }
 }
 ```
 
+The `updatedInput` object is derived from the full original `tool_input` — not constructed from scratch — so all fields (`run_in_background`, `model`, `name`, `isolation`, etc.) survive the hook unmodified. Only `prompt` (and `description`, when auto-fixing scout tags) is overwritten.
+
 ### jq implementation
 
 ```bash
-inject_content="<!-- injected: $ref_file -->\n$(cat "$ref_path")"
-jq -n --arg inject "$inject_content" --arg orig "$prompt" \
+# tool_input is the full original tool_input object captured at hook entry
+inject_content="<!-- injected: $ref_file -->\n$(command cat "$ref_path")"
+jq -n --arg inject "$inject_content" --arg orig "$prompt" --argjson orig_input "$tool_input" \
   '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow",
-    "updatedInput": {"prompt": ($inject + "\n\n" + $orig)}}}'
+    "updatedInput": ($orig_input | .prompt = ($inject + "\n\n" + $orig))}}'
 ```
+
+The `$orig_input | .prompt = (...)` pattern modifies `prompt` in place on the original object, preserving all other fields.
 
 ---
 
 ## Decision: Single-Hook Type Dispatch
 
-Rather than one hook per agent type, a single `PreToolUse` hook on the `Agent` tool dispatches by `subagent_type`:
+Rather than one hook per agent type, a single `PreToolUse` hook on the `Agent` tool dispatches by `subagent_type` (with description-tag fallback). Each agent type is handled by a separate `if` block — not a single `case` statement — because each block may exit the hook independently:
 
 ```bash
 subagent_type=$(echo "$input" | jq -r '.tool_input.subagent_type // empty')
 
-case "$subagent_type" in
-  wave-agent)   refs=("worktree-isolation.md" "build-diagnosis.md" "completion-report.md") ;;
-  critic-agent) refs=("verification-checks.md" "completion-format.md") ;;
-  scout)        refs=("suitability-gate.md" "scout-procedure.md") ;;
-  planner)      refs=("suitability-gate.md" "implementation-process.md" "example-manifest.md") ;;
-  *)            exit 0 ;;
-esac
+# Scout path — before Check 1
+if [[ "$subagent_type" == "scout" ]] || [[ "$description" =~ \[SAW:scout ]]; then
+  # inject scout-suitability-gate.md, scout-implementation-process.md
+  # conditional: scout-program-contracts.md (only when prompt has --program)
+  # ... emit updatedInput, exit 0
+fi
+
+# Check 11: critic-agent — before Check 1
+if [[ "$subagent_type" == "critic-agent" ]] || [[ "$description" =~ \[SAW:critic ]]; then
+  # inject critic-agent-verification-checks.md, critic-agent-completion-format.md
+  # ... emit updatedInput, exit 0
+fi
+
+# Check 12: planner — before Check 1
+if [[ "$subagent_type" == "planner" ]] || [[ "$description" =~ \[SAW:planner ]]; then
+  # inject planner-suitability-gate.md, planner-implementation-process.md, planner-example-manifest.md
+  # ... emit updatedInput, exit 0
+fi
+
+# Check 13: integration-agent — before Check 1
+if [[ "$subagent_type" == "integration-agent" ]] || [[ "$description" =~ \[SAW:integration ]]; then
+  # inject integration-connectors-reference.md, integration-agent-completion-report.md
+  # ... emit updatedInput, exit 0
+fi
+
+# Check 1: wave-agent tag extraction — non-wave-agent calls exit here
+if ! [[ "$description" =~ \[SAW:wave([0-9]+):agent-([A-Za-z0-9]+)\] ]]; then
+  exit 0
+fi
+
+# Checks 2–8: IMPL exists, IMPL valid, agent in wave, ownership file, worktree branch, scaffold committed
+
+# Check 10: wave-agent injection — runs after Checks 2–8 pass
+if [[ "$subagent_type" == "wave-agent" ]] || [[ "$description" =~ \[SAW:wave ]]; then
+  # inject wave-agent-worktree-isolation.md, wave-agent-completion-report.md, wave-agent-build-diagnosis.md
+  # conditional: wave-agent-program-contracts.md (only when frozen_contracts_hash present)
+  # ... emit updatedInput, exit 0
+fi
 ```
 
 For each matched type, the hook reads the corresponding reference files from `~/.claude/skills/saw/references/`, prepends them to the agent prompt, and returns the `updatedInput` JSON. If reference files are missing, the hook skips injection silently (graceful degradation) and falls through to the original prompt.
 
-This hook already exists as `validate_agent_launch` (registered as `PreToolUse/Agent` in `settings.json`). Checks 1–8 are enforcement (blocking bad agent launches). Injection is appended as checks 9+ — same hook, same registration, same test path.
+This hook already exists as `validate_agent_launch` (registered as `PreToolUse/Agent` in `settings.json`). Checks 1–8 are enforcement (blocking bad agent launches). Injection uses named blocks: Scout path, Checks 10–13 — same hook, same registration, same test path.
 
 **One registration, one file, unified dedup logic.**
+
+### Execution order in the hook
+
+The ordering is structurally significant:
+
+1. **Scout path** — before Check 1; injects scout references, emits `updatedInput`, exits 0
+2. **Check 11 (critic-agent)** — before Check 1; injects critic references, emits `updatedInput`, exits 0
+3. **Check 12 (planner)** — before Check 1; injects planner references, emits `updatedInput`, exits 0
+4. **Check 13 (integration-agent)** — before Check 1; injects integration references, emits `updatedInput`, exits 0
+5. **Check 1** — extracts `[SAW:wave{N}:agent-{ID}]` tag; non-wave-agent calls exit here
+6. **Checks 2–8** — IMPL existence, validation, agent-in-wave, ownership file, worktree branch, scaffold committed
+7. **Check 10 (wave-agent)** — runs after Checks 2–8 pass; injects wave-agent references
+
+Checks 11–13 and the Scout path must run before Check 1 because Check 1 exits 0 for any description that does not match the wave-agent pattern — those agent types would never reach their injection blocks if positioned after it. Check 10 is positioned after Checks 2–8 because wave-agent injection should only fire when the structural pre-launch checks have passed.
 
 ---
 
@@ -94,8 +146,8 @@ UserPromptSubmit → inject_skill_context
       │
       ▼  (orchestrator runs, calls Agent tool)
 
-PreToolUse/Agent → validate_agent_launch (checks 9+)
-  Matches:  subagent_type ∈ {wave-agent, critic-agent, scout, planner}
+PreToolUse/Agent → validate_agent_launch (Scout path + Checks 10–13)
+  Matches:  subagent_type ∈ {scout, critic-agent, planner, integration-agent, wave-agent}
   Injects:  agent type reference files
   Target:   Subagent initial prompt (updatedInput)
   Hook:     PreToolUse
@@ -112,7 +164,7 @@ Neither layer can substitute for the other:
 Injection uses HTML comment markers to prevent double-injection across layers:
 
 ```
-<!-- injected: references/wave-agent-isolation.md -->
+<!-- injected: references/wave-agent-worktree-isolation.md -->
 ```
 
 Before injecting, the hook checks whether the marker already appears in the prompt. If present, skip. This handles cases where the orchestrator manually prepended the reference (e.g., for debugging) or where multiple hook layers might otherwise stack.
@@ -144,7 +196,7 @@ The Agent Skills specification defines Tier 3 (Resources) as convention-based. T
 | Layer | Hook event | Target | Enforcement | Scope |
 |-------|-----------|--------|-------------|-------|
 | `inject_skill_context` | `UserPromptSubmit` | Orchestrator | Deterministic | Subcommands |
-| `validate_agent_launch` checks 9+ | `PreToolUse/Agent` | Subagents | Deterministic | Agent types |
+| `validate_agent_launch` Scout path + Checks 10–13 | `PreToolUse/Agent` | Subagents | Deterministic | Agent types |
 | Routing table in SKILL.md | — | All | Convention-based | All scenarios |
 
 The `updatedInput` mechanism is Claude Code-specific. The concept is generalizable — any agent framework with a pre-tool-use hook that supports parameter modification could implement the same pattern. The `inject-context` script layer from `agentskills-subcommand-dispatch.md` does not extend to this case because it runs at user prompt time, not at agent launch time.
