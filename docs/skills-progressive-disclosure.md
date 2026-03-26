@@ -424,6 +424,20 @@ With scout, wave-agent, critic-agent, planner, and integration-agent all using h
 
 The dedup marker protocol (`<!-- injected: references/X.md -->`) is shared across all agent types. It prevents double-injection regardless of whether the orchestrator or the hook is the injection source, making the system composable and order-independent.
 
+### Three-layer injection architecture
+
+The injection system has three layers, each targeting a different deployment context:
+
+| Layer | Mechanism | Platform | Enforcement |
+|-------|-----------|----------|-------------|
+| Hook | `validate_agent_launch` PreToolUse/Agent | Claude Code | Deterministic (always fires) |
+| Script | `scripts/inject-agent-context` | Any platform with Bash | Model-initiated |
+| Fallback | Routing table in SKILL.md | Any platform | Convention-based |
+
+`inject-agent-context` mirrors the hook's reference mapping and dedup markers exactly, so output from either layer is idempotent when combined. Platforms that register the hook get Layer 1 automatically. Platforms without Claude Code hooks but with Bash can use the script as Layer 2. The routing table in `saw-skill.md` remains the always-available Layer 3 fallback.
+
+See `docs/proposals/agentskills-agent-type-injection.md` for the full decision record on why `updatedInput` (not `additionalContext`) is required for subagent injection.
+
 ### How to extend — adding a new agent type reference
 
 1. Write `implementations/claude-code/prompts/references/<type>-<name>.md` with the extracted content (all reference files live in the top-level `references/` directory, not in a per-agent subdirectory)

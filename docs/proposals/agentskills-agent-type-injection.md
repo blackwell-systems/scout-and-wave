@@ -197,6 +197,16 @@ The Agent Skills specification defines Tier 3 (Resources) as convention-based. T
 |-------|-----------|--------|-------------|-------|
 | `inject_skill_context` | `UserPromptSubmit` | Orchestrator | Deterministic | Subcommands |
 | `validate_agent_launch` Scout path + Checks 10–13 | `PreToolUse/Agent` | Subagents | Deterministic | Agent types |
+| `scripts/inject-agent-context` | (none — model-initiated) | Subagents | Convention-based | Agent types |
 | Routing table in SKILL.md | — | All | Convention-based | All scenarios |
 
-The `updatedInput` mechanism is Claude Code-specific. The concept is generalizable — any agent framework with a pre-tool-use hook that supports parameter modification could implement the same pattern. The `inject-context` script layer from `agentskills-subcommand-dispatch.md` does not extend to this case because it runs at user prompt time, not at agent launch time.
+The `updatedInput` mechanism is Claude Code-specific. The concept is generalizable — any agent framework with a pre-tool-use hook that supports parameter modification could implement the same pattern.
+
+For platforms without Claude Code hooks (raw API, other LLMs, CI/CD), `scripts/inject-agent-context` provides a vendor-neutral fallback. It mirrors the same reference mapping and dedup marker protocol as the hook, but runs as a model-initiated bash script:
+
+```bash
+inject=$(bash ${SKILL_DIR}/scripts/inject-agent-context --type wave-agent --prompt "$agent_prompt")
+full_prompt="${inject}${agent_prompt}"
+```
+
+The key trade-off: the hook fires deterministically (always), while the script fires only if the orchestrator on that platform knows to call it. The orchestrator skill prompt (or its equivalent on the target platform) must reference the script. The dedup markers are shared between layers, so if both run, double-injection is prevented.
