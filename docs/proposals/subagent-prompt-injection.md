@@ -111,6 +111,27 @@ fi
 
 For each matched type, the hook reads the corresponding reference files from `~/.claude/skills/saw/references/`, prepends them to the agent prompt, and returns the `updatedInput` JSON. If reference files are missing, the hook skips injection silently (graceful degradation) and falls through to the original prompt.
 
+### The mapping is declared in frontmatter, not hardcoded
+
+The type→file mapping is not hardcoded in the hook or the script. It lives in `saw-skill.md` frontmatter under `agent-references:`, using the same flat-list structure as `triggers:`:
+
+```yaml
+agent-references:
+  - agent-type: scout
+    inject: references/scout-suitability-gate.md
+  - agent-type: scout
+    inject: references/scout-program-contracts.md
+    when: "--program"
+  - agent-type: wave-agent
+    inject: references/wave-agent-worktree-isolation.md
+  - agent-type: wave-agent
+    inject: references/wave-agent-program-contracts.md
+    when: "frozen_contracts_hash|frozen: true"
+  # ... etc
+```
+
+Each entry has `agent-type`, `inject` (path relative to skill dir), and optional `when` (regex applied to the agent prompt for conditional injection). `scripts/inject-agent-context` reads this block at runtime using the same awk-based frontmatter parser as `inject-context`. The hook's `if` blocks are the Claude Code enforcement layer; the frontmatter is the single source of truth for what gets injected. Adding a new agent type requires one frontmatter entry and one hook block — no changes to either script.
+
 This hook already exists as `validate_agent_launch` (registered as `PreToolUse/Agent` in `settings.json`). Checks 1–8 are enforcement (blocking bad agent launches). Injection uses named blocks: Scout path, Checks 10–13 — same hook, same registration, same test path.
 
 **One registration, one file, unified dedup logic.**
@@ -169,6 +190,62 @@ Injection uses HTML comment markers to prevent double-injection across layers:
 ```
 
 Before injecting, the hook checks whether the marker already appears in the prompt. If present, skip. This handles cases where the orchestrator manually prepended the reference (e.g., for debugging) or where multiple hook layers might otherwise stack.
+
+---
+
+## How to Extend — Adding a New Agent Type
+
+**Step 1: Declare the mapping in `saw-skill.md` frontmatter.**
+
+Add one entry per reference file under `agent-references:`:
+
+```yaml
+agent-references:
+  - agent-type: my-agent
+    inject: references/my-agent-procedure.md
+  - agent-type: my-agent
+    inject: references/my-agent-completion.md
+    when: "some-condition-regex"   # omit if always-inject
+```
+
+`scripts/inject-agent-context` picks this up automatically — no script changes needed.
+
+**Step 2: Add a detection block to `validate_agent_launch`.**
+
+Insert an `if` block **before Check 1** (the wave-agent tag gate). Non-wave-agent types must exit before Check 1 or they will be silently passed through.
+
+```bash
+# Check N: my-agent reference injection — before Check 1
+is_my_agent=false
+if [[ "$subagent_type" == "my-agent" ]] || [[ "$description" =~ \[SAW:my-agent ]]; then
+  is_my_agent=true
+fi
+
+if [[ "$is_my_agent" == "true" ]]; then
+  skill_dir="${CLAUDE_SKILL_DIR:-${HOME}/.claude/skills/saw}"
+  ref_dir="${skill_dir}/references"
+  inject_content=""
+
+  for ref_file in my-agent-procedure.md my-agent-completion.md; do
+    ref_path="${ref_dir}/${ref_file}"
+    if [[ -f "$ref_path" ]] && ! echo "$prompt" | grep -qF "<!-- injected: references/${ref_file} -->"; then
+      inject_content+="<!-- injected: references/${ref_file} -->"$'\n'
+      inject_content+="$(command cat "$ref_path")"$'\n\n'
+    fi
+  done
+
+  if [[ -n "$inject_content" ]]; then
+    jq -n --arg inject "$inject_content" --arg orig "$prompt" --argjson orig_input "$tool_input" \
+      '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow",
+        "updatedInput": ($orig_input | .prompt = ($inject + "\n\n" + $orig))}}'
+    exit 0
+  fi
+fi
+```
+
+**Step 3: No installer changes needed.** `install.sh` dynamically discovers all `*.md` files in `references/` — adding a new reference file requires no installer update.
+
+**Step 4: Verify.** Launch the new agent type and confirm the injection markers appear in its initial context before it takes its first step.
 
 ---
 
