@@ -96,7 +96,10 @@ After installation, the skill directory structure looks like this:
 ├── references/
 │   ├── amend-flow.md     -> prompts/references/amend-flow.md
 │   ├── failure-routing.md -> prompts/references/failure-routing.md
-│   └── program-flow.md   -> prompts/references/program-flow.md
+│   ├── program-flow.md   -> prompts/references/program-flow.md
+│   ├── scout-suitability-gate.md -> prompts/references/scout-suitability-gate.md
+│   ├── scout-implementation-process.md -> prompts/references/scout-implementation-process.md
+│   └── scout-program-contracts.md -> prompts/references/scout-program-contracts.md
 └── hooks/
     └── pre-commit-guard.sh
 ```

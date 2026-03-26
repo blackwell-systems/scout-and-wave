@@ -347,12 +347,25 @@ The same heuristics apply as for skill references, scoped to the agent type:
 
 | Agent type | Core prompt | Reference files |
 |-----------|-------------|-----------------|
-| `scout` | ~100 lines | `suitability-gate.md`, `scout-procedure.md` |
+| `scout` | ~166 lines | `scout-suitability-gate.md`, `scout-implementation-process.md`, `scout-program-contracts.md` |
 | `wave-agent` | ~133 lines | `worktree-isolation.md`, `build-diagnosis.md`, `completion-report.md` |
 | `critic-agent` | ~75 lines | `verification-checks.md`, `completion-format.md` |
 | `planner` | ~148 lines | `suitability-gate.md`, `implementation-process.md`, `example-manifest.md` |
 
 Injection is implemented in `validate_agent_launch` checks 9+ (see `implementations/claude-code/hooks/README.md` § Hook 9).
+
+### Scout as the second progressive disclosure surface
+
+The scout agent is the second subagent type — after `wave-agent` — to fully apply the progressive disclosure pattern at the subagent level. The scout's suitability gate, IMPL production steps (1–17), and program contract handling rules have been extracted from the core `agents/scout.md` prompt into three reference files in `references/scout-*.md`.
+
+This creates a nested application of the pattern: the skill (`saw-skill.md`) is itself a Tier 2 file that defers to Tier 3 on-demand references; the scout agent type prompt is a Tier 2 subagent prompt that defers to its own Tier 3 references. The scout is a Tier 3 reference *from the orchestrator's perspective*, but a Tier 2 document *from the subagent perspective* — with its own progressive disclosure layer beneath it.
+
+The injection mechanism differs between the two layers:
+
+- **Orchestrator references** (`inject_skill_context`, UserPromptSubmit): `additionalContext` into the orchestrator's context
+- **Scout references** (`validate_agent_launch`, PreToolUse/Agent): `updatedInput.prompt` into the scout subagent's initial prompt
+
+`validate_agent_launch` provides deterministic injection for subagents, paralleling `inject_skill_context` for the orchestrator skill. The dedup mechanism (`<!-- injected: references/scout-X.md -->` markers) ensures idempotency — if the orchestrator manually prepends a reference, the hook skips that file. This makes the injection transparent and composable.
 
 ### How to extend — adding a new agent type reference
 

@@ -91,9 +91,14 @@ Load these files ONLY when the matching subcommand is invoked:
 | `/saw program *` | Read `${CLAUDE_SKILL_DIR}/references/program-flow.md` |
 | `/saw amend *` | Read `${CLAUDE_SKILL_DIR}/references/amend-flow.md` |
 | Agent failure or post-merge integration | Read `${CLAUDE_SKILL_DIR}/references/failure-routing.md` |
+| Scout agent launch (always) | Injected by `validate_agent_launch` hook: `references/scout-suitability-gate.md` |
+| Scout agent launch (always) | Injected by `validate_agent_launch` hook: `references/scout-implementation-process.md` |
+| Scout agent launch (with --program) | Injected by `validate_agent_launch` hook: `references/scout-program-contracts.md` |
 
 Do not pre-load these files. The core wave loop below handles `/saw scout`,
 `/saw wave`, `/saw status`, `/saw bootstrap`, and `/saw interview` directly.
+Scout reference files are injected automatically by the `validate_agent_launch`
+hook — the orchestrator does not need to load them manually.
 
 ## Invocation Modes
 

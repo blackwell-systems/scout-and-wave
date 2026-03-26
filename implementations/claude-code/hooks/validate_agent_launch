@@ -189,5 +189,62 @@ else
   fi
 fi
 
+# --- Check 9: Scout reference injection ---
+# When launching a scout agent, inject reference files as updatedInput
+# This provides the suitability gate and implementation process without
+# the scout needing to read them manually.
+
+# Detect scout agent type from description or prompt
+is_scout=false
+if [[ "$description" =~ \[SAW:scout ]] || \
+   [[ "$prompt" =~ "subagent_type: scout" ]] || \
+   [[ "$prompt" =~ "# Scout Agent: Pre-Flight Dependency Mapping" ]]; then
+  is_scout=true
+fi
+
+if [[ "$is_scout" == "true" ]]; then
+  # Resolve references directory
+  ref_dir=""
+  # Try skill directory first
+  skill_dir="${CLAUDE_SKILL_DIR:-${HOME}/.claude/skills/saw}"
+  if [[ -d "${skill_dir}/references" ]]; then
+    ref_dir="${skill_dir}/references"
+  fi
+
+  if [[ -n "$ref_dir" ]]; then
+    inject_content=""
+
+    # Always inject suitability gate
+    ref_file="${ref_dir}/scout-suitability-gate.md"
+    if [[ -f "$ref_file" ]] && ! echo "$prompt" | grep -q '<!-- injected: references/scout-suitability-gate.md -->'; then
+      inject_content+="<!-- injected: references/scout-suitability-gate.md -->"$'\n'
+      inject_content+="$(command cat "$ref_file")"$'\n\n'
+    fi
+
+    # Always inject implementation process
+    ref_file="${ref_dir}/scout-implementation-process.md"
+    if [[ -f "$ref_file" ]] && ! echo "$prompt" | grep -q '<!-- injected: references/scout-implementation-process.md -->'; then
+      inject_content+="<!-- injected: references/scout-implementation-process.md -->"$'\n'
+      inject_content+="$(command cat "$ref_file")"$'\n\n'
+    fi
+
+    # Conditionally inject program contracts (only with --program flag)
+    if echo "$prompt" | grep -q '\-\-program'; then
+      ref_file="${ref_dir}/scout-program-contracts.md"
+      if [[ -f "$ref_file" ]] && ! echo "$prompt" | grep -q '<!-- injected: references/scout-program-contracts.md -->'; then
+        inject_content+="<!-- injected: references/scout-program-contracts.md -->"$'\n'
+        inject_content+="$(command cat "$ref_file")"$'\n\n'
+      fi
+    fi
+
+    # Prepend injected content to the agent's prompt via updatedInput
+    if [[ -n "$inject_content" ]]; then
+      jq -n --arg inject "$inject_content" --arg orig "$prompt" \
+        '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow", "updatedInput": {"prompt": ($inject + "\n\n" + $orig)}}}'
+      exit 0
+    fi
+  fi
+fi
+
 # All checks passed
 exit 0

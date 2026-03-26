@@ -541,6 +541,7 @@ echo $?  # 0 (if on expected branch)
 6. **Ownership file match** — Cross-reference `.saw-ownership.json` agent ID and wave
 7. **Branch verification** — Verify worktree branch matches `saw/{slug}/wave{N}-agent-{ID}`
 8. **Scaffold check** — Verify all scaffolds are committed (if any in IMPL doc)
+9. **Scout reference injection** — When launching a scout agent, inject reference files into the subagent prompt via `updatedInput`. Detection: fires if `[SAW:scout` appears in description, `subagent_type: scout` appears in prompt, or `# Scout Agent: Pre-Flight Dependency Mapping` appears in prompt. Always injects `scout-suitability-gate.md` and `scout-implementation-process.md`. Conditionally injects `scout-program-contracts.md` only when `--program` appears in the prompt. Dedup: uses HTML comment markers `<!-- injected: references/scout-X.md -->` to skip files already present in the prompt. Non-scout agents are unaffected — Check 9 is gated behind scout detection and falls through to `exit 0` if the agent is not a scout.
 
 ### Checks 9+: Agent Type Injection
 
@@ -550,11 +551,11 @@ After enforcement passes, dispatch on `subagent_type` and inject matching refere
 |---------------|--------------------------|
 | `wave-agent` | `worktree-isolation.md`, `build-diagnosis.md`, `completion-report.md` |
 | `critic-agent` | `verification-checks.md`, `completion-format.md` |
-| `scout` | `suitability-gate.md`, `scout-procedure.md` |
+| `scout` | `scout-suitability-gate.md`, `scout-implementation-process.md` (always); `scout-program-contracts.md` (with --program) |
 | `planner` | `suitability-gate.md`, `implementation-process.md`, `example-manifest.md` |
 | other | pass through (exit 0) |
 
-**Status:** Checks 1–8 implemented. Checks 9+ implemented by Wave 2 Agent D across `IMPL-{scout,wave-agent,critic-agent,planner}-prompt-extraction.yaml`.
+**Status:** Checks 1–9 implemented. Check 9 (scout reference injection) added by Wave 2 Agent D in `IMPL-scout-prompt-extraction.yaml`.
 
 ### Manual Installation
 
