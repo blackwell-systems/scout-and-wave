@@ -130,6 +130,129 @@ if [[ "$is_scout" == "true" ]]; then
   exit 0
 fi
 
+# --- Check 11: Critic-agent reference injection ---
+# Must run BEFORE Check 1 which early-exits all non-wave-agent calls.
+# Both reference files are always injected — no conditional injection.
+
+is_critic=false
+if [[ "$subagent_type" == "critic-agent" ]] || [[ "$description" =~ \[SAW:critic ]]; then
+  is_critic=true
+fi
+
+if [[ "$is_critic" == "true" ]]; then
+  ref_dir=""
+  skill_dir="${CLAUDE_SKILL_DIR:-${HOME}/.claude/skills/saw}"
+  if [[ -d "${skill_dir}/references" ]]; then
+    ref_dir="${skill_dir}/references"
+  fi
+
+  if [[ -n "$ref_dir" ]]; then
+    inject_content=""
+
+    ref_file="${ref_dir}/critic-agent-verification-checks.md"
+    if [[ -f "$ref_file" ]] && ! echo "$prompt" | grep -q '<!-- injected: references/critic-agent-verification-checks.md -->'; then
+      inject_content+="<!-- injected: references/critic-agent-verification-checks.md -->"$'\n'
+      inject_content+="$(command cat "$ref_file")"$'\n\n'
+    fi
+
+    ref_file="${ref_dir}/critic-agent-completion-format.md"
+    if [[ -f "$ref_file" ]] && ! echo "$prompt" | grep -q '<!-- injected: references/critic-agent-completion-format.md -->'; then
+      inject_content+="<!-- injected: references/critic-agent-completion-format.md -->"$'\n'
+      inject_content+="$(command cat "$ref_file")"$'\n\n'
+    fi
+
+    if [[ -n "$inject_content" ]]; then
+      jq -n --arg inject "$inject_content" --arg orig "$prompt" \
+        '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow", "updatedInput": {"prompt": ($inject + "\n\n" + $orig)}}}'
+      exit 0
+    fi
+  fi
+fi
+
+# --- Check 12: Planner reference injection ---
+# Must run BEFORE Check 1 which early-exits all non-wave-agent calls.
+# All three reference files are always injected — no conditional injection.
+
+is_planner=false
+if [[ "$subagent_type" == "planner" ]] || [[ "$description" =~ \[SAW:planner ]]; then
+  is_planner=true
+fi
+
+if [[ "$is_planner" == "true" ]]; then
+  ref_dir=""
+  skill_dir="${CLAUDE_SKILL_DIR:-${HOME}/.claude/skills/saw}"
+  if [[ -d "${skill_dir}/references" ]]; then
+    ref_dir="${skill_dir}/references"
+  fi
+
+  if [[ -n "$ref_dir" ]]; then
+    inject_content=""
+
+    ref_file="${ref_dir}/planner-suitability-gate.md"
+    if [[ -f "$ref_file" ]] && ! echo "$prompt" | grep -q '<!-- injected: references/planner-suitability-gate.md -->'; then
+      inject_content+="<!-- injected: references/planner-suitability-gate.md -->"$'\n'
+      inject_content+="$(command cat "$ref_file")"$'\n\n'
+    fi
+
+    ref_file="${ref_dir}/planner-implementation-process.md"
+    if [[ -f "$ref_file" ]] && ! echo "$prompt" | grep -q '<!-- injected: references/planner-implementation-process.md -->'; then
+      inject_content+="<!-- injected: references/planner-implementation-process.md -->"$'\n'
+      inject_content+="$(command cat "$ref_file")"$'\n\n'
+    fi
+
+    ref_file="${ref_dir}/planner-example-manifest.md"
+    if [[ -f "$ref_file" ]] && ! echo "$prompt" | grep -q '<!-- injected: references/planner-example-manifest.md -->'; then
+      inject_content+="<!-- injected: references/planner-example-manifest.md -->"$'\n'
+      inject_content+="$(command cat "$ref_file")"$'\n\n'
+    fi
+
+    if [[ -n "$inject_content" ]]; then
+      jq -n --arg inject "$inject_content" --arg orig "$prompt" \
+        '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow", "updatedInput": {"prompt": ($inject + "\n\n" + $orig)}}}'
+      exit 0
+    fi
+  fi
+fi
+
+# --- Check 13: Integration-agent reference injection ---
+# Must run BEFORE Check 1 which early-exits all non-wave-agent calls.
+# Both reference files are always injected — no conditional injection.
+
+is_integration=false
+if [[ "$subagent_type" == "integration-agent" ]] || [[ "$description" =~ \[SAW:integration ]]; then
+  is_integration=true
+fi
+
+if [[ "$is_integration" == "true" ]]; then
+  ref_dir=""
+  skill_dir="${CLAUDE_SKILL_DIR:-${HOME}/.claude/skills/saw}"
+  if [[ -d "${skill_dir}/references" ]]; then
+    ref_dir="${skill_dir}/references"
+  fi
+
+  if [[ -n "$ref_dir" ]]; then
+    inject_content=""
+
+    ref_file="${ref_dir}/integration-connectors-reference.md"
+    if [[ -f "$ref_file" ]] && ! echo "$prompt" | grep -q '<!-- injected: references/integration-connectors-reference.md -->'; then
+      inject_content+="<!-- injected: references/integration-connectors-reference.md -->"$'\n'
+      inject_content+="$(command cat "$ref_file")"$'\n\n'
+    fi
+
+    ref_file="${ref_dir}/integration-agent-completion-report.md"
+    if [[ -f "$ref_file" ]] && ! echo "$prompt" | grep -q '<!-- injected: references/integration-agent-completion-report.md -->'; then
+      inject_content+="<!-- injected: references/integration-agent-completion-report.md -->"$'\n'
+      inject_content+="$(command cat "$ref_file")"$'\n\n'
+    fi
+
+    if [[ -n "$inject_content" ]]; then
+      jq -n --arg inject "$inject_content" --arg orig "$prompt" \
+        '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow", "updatedInput": {"prompt": ($inject + "\n\n" + $orig)}}}'
+      exit 0
+    fi
+  fi
+fi
+
 # --- Check 1: SAW tag extraction ---
 # Parse [SAW:wave{N}:agent-{ID}] from description
 if [[ "$description" =~ \[SAW:wave([0-9]+):agent-([A-Za-z0-9]+)\] ]]; then
@@ -328,131 +451,6 @@ if [[ "$is_wave_agent" == "true" ]]; then
         inject_content+="<!-- injected: references/wave-agent-program-contracts.md -->"$'\n'
         inject_content+="$(command cat "$ref_file")"$'\n\n'
       fi
-    fi
-
-    # Prepend injected content to the agent's prompt via updatedInput
-    if [[ -n "$inject_content" ]]; then
-      jq -n --arg inject "$inject_content" --arg orig "$prompt" \
-        '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow", "updatedInput": {"prompt": ($inject + "\n\n" + $orig)}}}'
-      exit 0
-    fi
-  fi
-fi
-
-# --- Check 11: Critic-agent reference injection ---
-# When launching a critic agent, inject reference files as additionalContext.
-# Both reference files are always injected — no conditional injection.
-
-is_critic=false
-if [[ "$subagent_type" == "critic-agent" ]] || [[ "$description" =~ \[SAW:critic ]]; then
-  is_critic=true
-fi
-
-if [[ "$is_critic" == "true" ]]; then
-  ref_dir=""
-  skill_dir="${CLAUDE_SKILL_DIR:-${HOME}/.claude/skills/saw}"
-  if [[ -d "${skill_dir}/references" ]]; then
-    ref_dir="${skill_dir}/references"
-  fi
-
-  if [[ -n "$ref_dir" ]]; then
-    inject_content=""
-
-    ref_file="${ref_dir}/critic-agent-verification-checks.md"
-    if [[ -f "$ref_file" ]] && ! echo "$prompt" | grep -q '<!-- injected: references/critic-agent-verification-checks.md -->'; then
-      inject_content+="<!-- injected: references/critic-agent-verification-checks.md -->"$'\n'
-      inject_content+="$(command cat "$ref_file")"$'\n\n'
-    fi
-
-    ref_file="${ref_dir}/critic-agent-completion-format.md"
-    if [[ -f "$ref_file" ]] && ! echo "$prompt" | grep -q '<!-- injected: references/critic-agent-completion-format.md -->'; then
-      inject_content+="<!-- injected: references/critic-agent-completion-format.md -->"$'\n'
-      inject_content+="$(command cat "$ref_file")"$'\n\n'
-    fi
-
-    # Prepend injected content to the agent's prompt via updatedInput
-    if [[ -n "$inject_content" ]]; then
-      jq -n --arg inject "$inject_content" --arg orig "$prompt" \
-        '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow", "updatedInput": {"prompt": ($inject + "\n\n" + $orig)}}}'
-      exit 0
-    fi
-  fi
-fi
-
-# --- Check 12: Planner reference injection ---
-# When launching a planner agent, inject reference files via updatedInput.
-# All three reference files are always injected — no conditional injection.
-
-is_planner=false
-if [[ "$subagent_type" == "planner" ]] || [[ "$description" =~ \[SAW:planner ]]; then
-  is_planner=true
-fi
-
-if [[ "$is_planner" == "true" ]]; then
-  ref_dir=""
-  skill_dir="${CLAUDE_SKILL_DIR:-${HOME}/.claude/skills/saw}"
-  if [[ -d "${skill_dir}/references" ]]; then
-    ref_dir="${skill_dir}/references"
-  fi
-
-  if [[ -n "$ref_dir" ]]; then
-    inject_content=""
-
-    ref_file="${ref_dir}/planner-suitability-gate.md"
-    if [[ -f "$ref_file" ]] && ! echo "$prompt" | grep -q '<!-- injected: references/planner-suitability-gate.md -->'; then
-      inject_content+="<!-- injected: references/planner-suitability-gate.md -->"$'\n'
-      inject_content+="$(command cat "$ref_file")"$'\n\n'
-    fi
-
-    ref_file="${ref_dir}/planner-implementation-process.md"
-    if [[ -f "$ref_file" ]] && ! echo "$prompt" | grep -q '<!-- injected: references/planner-implementation-process.md -->'; then
-      inject_content+="<!-- injected: references/planner-implementation-process.md -->"$'\n'
-      inject_content+="$(command cat "$ref_file")"$'\n\n'
-    fi
-
-    ref_file="${ref_dir}/planner-example-manifest.md"
-    if [[ -f "$ref_file" ]] && ! echo "$prompt" | grep -q '<!-- injected: references/planner-example-manifest.md -->'; then
-      inject_content+="<!-- injected: references/planner-example-manifest.md -->"$'\n'
-      inject_content+="$(command cat "$ref_file")"$'\n\n'
-    fi
-
-    if [[ -n "$inject_content" ]]; then
-      jq -n --arg inject "$inject_content" --arg orig "$prompt" \
-        '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow", "updatedInput": {"prompt": ($inject + "\n\n" + $orig)}}}'
-      exit 0
-    fi
-  fi
-fi
-
-# --- Check 13: Integration-agent reference injection ---
-# When launching an integration agent, inject reference files via updatedInput.
-# Both reference files are always injected — no conditional injection.
-
-is_integration=false
-if [[ "$subagent_type" == "integration-agent" ]] || [[ "$description" =~ \[SAW:integration ]]; then
-  is_integration=true
-fi
-
-if [[ "$is_integration" == "true" ]]; then
-  ref_dir=""
-  skill_dir="${CLAUDE_SKILL_DIR:-${HOME}/.claude/skills/saw}"
-  if [[ -d "${skill_dir}/references" ]]; then
-    ref_dir="${skill_dir}/references"
-  fi
-
-  if [[ -n "$ref_dir" ]]; then
-    inject_content=""
-
-    ref_file="${ref_dir}/integration-connectors-reference.md"
-    if [[ -f "$ref_file" ]] && ! echo "$prompt" | grep -q '<!-- injected: references/integration-connectors-reference.md -->'; then
-      inject_content+="<!-- injected: references/integration-connectors-reference.md -->"$'\n'
-      inject_content+="$(command cat "$ref_file")"$'\n\n'
-    fi
-
-    ref_file="${ref_dir}/integration-agent-completion-report.md"
-    if [[ -f "$ref_file" ]] && ! echo "$prompt" | grep -q '<!-- injected: references/integration-agent-completion-report.md -->'; then
-      inject_content+="<!-- injected: references/integration-agent-completion-report.md -->"$'\n'
-      inject_content+="$(command cat "$ref_file")"$'\n\n'
     fi
 
     # Prepend injected content to the agent's prompt via updatedInput
