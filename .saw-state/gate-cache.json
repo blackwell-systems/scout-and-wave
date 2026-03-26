@@ -1,5 +1,17 @@
 {
   "entries": {
+    "03a2b2cd5b130ea70dbeeffd2dcba453": {
+      "custom": {
+        "gate_type": "custom",
+        "command": "echo 'docs-only: no compilation'",
+        "passed": true,
+        "exit_code": 0,
+        "stdout": "docs-only: no compilation\n",
+        "stderr": "",
+        "from_cache": true,
+        "cached_at": "2026-03-26T03:44:39.047212-07:00"
+      }
+    },
     "0973c71085453ccdd4b905b489362e39": {
       "custom": {
         "gate_type": "custom",
@@ -84,6 +96,18 @@
         "cached_at": "2026-03-25T13:09:40.20158-07:00"
       }
     },
+    "30f2e59b25013f24cf97bb9b2f0b7275": {
+      "custom": {
+        "gate_type": "custom",
+        "command": "echo 'docs-only: no compilation'",
+        "passed": true,
+        "exit_code": 0,
+        "stdout": "docs-only: no compilation\n",
+        "stderr": "",
+        "from_cache": true,
+        "cached_at": "2026-03-26T03:51:36.615377-07:00"
+      }
+    },
     "3538fee64250538ea62414158451c2c1": {
       "custom": {
         "gate_type": "custom",
@@ -94,6 +118,18 @@
         "stderr": "",
         "from_cache": true,
         "cached_at": "2026-03-19T22:53:59.561538-07:00"
+      }
+    },
+    "3de21b2675373ad29d99292a8f3e146e": {
+      "test": {
+        "gate_type": "test",
+        "command": "go test ./... -timeout 120s",
+        "passed": false,
+        "exit_code": 1,
+        "stdout": "FAIL\t./... [setup failed]\nFAIL\n",
+        "stderr": "# ./...\npattern ./...: directory prefix . does not contain main module or its selected dependencies\n",
+        "from_cache": true,
+        "cached_at": "2026-03-26T10:18:34.131785-07:00"
       }
     },
     "3fb370792140a24a7e7a94b93c0d0cb5": {
@@ -120,6 +156,42 @@
         "cached_at": "2026-03-24T18:24:53.73513-07:00"
       }
     },
+    "4fd33f453691386e0e8583c2e5b2c12e": {
+      "build": {
+        "gate_type": "build",
+        "command": "go build ./...",
+        "passed": false,
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "pattern ./...: directory prefix . does not contain main module or its selected dependencies\n",
+        "from_cache": true,
+        "cached_at": "2026-03-26T10:18:33.903964-07:00"
+      }
+    },
+    "52e8f2f1aa0806c47680a9c4ad336b58": {
+      "custom": {
+        "gate_type": "custom",
+        "command": "echo 'docs-only: no compilation'",
+        "passed": true,
+        "exit_code": 0,
+        "stdout": "docs-only: no compilation\n",
+        "stderr": "",
+        "from_cache": true,
+        "cached_at": "2026-03-26T03:47:21.715134-07:00"
+      }
+    },
+    "54e93707807ca77db2b8657bc21db6b6": {
+      "custom": {
+        "gate_type": "custom",
+        "command": "echo 'docs-only: no compilation'",
+        "passed": true,
+        "exit_code": 0,
+        "stdout": "docs-only: no compilation\n",
+        "stderr": "",
+        "from_cache": true,
+        "cached_at": "2026-03-26T09:27:34.025518-07:00"
+      }
+    },
     "551686224e9f0bcc549d98408d761d60": {
       "lint": {
         "gate_type": "lint",
@@ -130,6 +202,30 @@
         "stderr": "pattern ./...: directory prefix . does not contain main module or its selected dependencies\n",
         "from_cache": true,
         "cached_at": "2026-03-23T01:41:40.358969-07:00"
+      }
+    },
+    "57d09638d163a097cee194664774a3e6": {
+      "custom": {
+        "gate_type": "custom",
+        "command": "echo 'docs-only: no compilation'",
+        "passed": true,
+        "exit_code": 0,
+        "stdout": "docs-only: no compilation\n",
+        "stderr": "",
+        "from_cache": true,
+        "cached_at": "2026-03-26T03:59:27.392349-07:00"
+      }
+    },
+    "5f4341d556b9636996a53a86ae727a91": {
+      "custom": {
+        "gate_type": "custom",
+        "command": "echo 'docs-only: no compilation'",
+        "passed": true,
+        "exit_code": 0,
+        "stdout": "docs-only: no compilation\n",
+        "stderr": "",
+        "from_cache": true,
+        "cached_at": "2026-03-26T04:01:26.655978-07:00"
       }
     },
     "61bf2c809504bb7c9345875add68204e": {
@@ -186,6 +282,18 @@
         "stderr": "pattern ./...: directory prefix . does not contain main module or its selected dependencies\n",
         "from_cache": true,
         "cached_at": "2026-03-24T18:25:29.990504-07:00"
+      }
+    },
+    "697976a03998bee08fe09e078f244273": {
+      "custom": {
+        "gate_type": "custom",
+        "command": "echo 'docs-only: no compilation'",
+        "passed": true,
+        "exit_code": 0,
+        "stdout": "docs-only: no compilation\n",
+        "stderr": "",
+        "from_cache": true,
+        "cached_at": "2026-03-26T09:25:49.401331-07:00"
       }
     },
     "6f627e0cc33b8cdb284ef4305d222607": {
@@ -518,6 +626,18 @@
         "cached_at": "2026-03-19T04:34:33.980504-07:00"
       }
     },
+    "b066035c98758a5c4f6cf83118ee4018": {
+      "custom": {
+        "gate_type": "custom",
+        "command": "grep -rn \"exec.Command(\\\"git\\\"\" . --include=\"*.go\" | grep -v \"_test.go\" | grep -v \"internal/git/commands.go\"",
+        "passed": false,
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "",
+        "from_cache": true,
+        "cached_at": "2026-03-26T10:18:34.279334-07:00"
+      }
+    },
     "b3324dea4f0064af4810ef9b35e06636": {
       "build": {
         "gate_type": "build",
@@ -678,6 +798,18 @@
         "cached_at": "2026-03-18T21:23:58.737676-07:00"
       }
     },
+    "ce7b5471dd2dc1f484274f6df7ae52c3": {
+      "lint": {
+        "gate_type": "lint",
+        "command": "go vet ./...",
+        "passed": false,
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "pattern ./...: directory prefix . does not contain main module or its selected dependencies\n",
+        "from_cache": true,
+        "cached_at": "2026-03-26T10:18:34.026512-07:00"
+      }
+    },
     "d162cbd21c28f78f7561fdd514672c72": {
       "custom": {
         "gate_type": "custom",
@@ -788,6 +920,18 @@
         "stderr": "# ./...\npattern ./...: directory prefix . does not contain main module or its selected dependencies\n",
         "from_cache": true,
         "cached_at": "2026-03-19T14:23:09.135827-07:00"
+      }
+    },
+    "d6a678a7590dd0379aa284070f17e1f1": {
+      "custom": {
+        "gate_type": "custom",
+        "command": "echo 'docs-only: no compilation'",
+        "passed": true,
+        "exit_code": 0,
+        "stdout": "docs-only: no compilation\n",
+        "stderr": "",
+        "from_cache": true,
+        "cached_at": "2026-03-26T03:53:30.678859-07:00"
       }
     },
     "d6e41a8ba18084e14c3136034894baa6": {
