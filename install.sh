@@ -89,7 +89,8 @@ install_skill_files() {
     [ -f "$src" ] || continue
     ln -sf "$src" "${skill_dir}/scripts/$(basename "$src")"
   done
-  echo "   Scripts: inject-context"
+  SCRIPT_COUNT=$(ls "${PROMPTS_DIR}"/scripts/* 2>/dev/null | wc -l | tr -d ' ')
+  echo "   Scripts: ${SCRIPT_COUNT} files (inject-context, inject-agent-context)"
   echo ""
 }
 

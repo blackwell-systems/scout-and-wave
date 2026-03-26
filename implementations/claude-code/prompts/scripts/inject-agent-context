@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+# inject-agent-context — vendor-neutral agent reference injection
+#
+# Outputs reference file contents to prepend to an agent's prompt.
+# Mirrors the injection logic in hooks/validate_agent_launch for platforms
+# without Claude Code PreToolUse hook support (raw API, other LLMs, CI/CD).
+#
+# Usage:
+#   inject=$(bash scripts/inject-agent-context --type wave-agent --prompt "$agent_prompt")
+#   full_prompt="${inject}${agent_prompt}"
+#
+# Arguments:
+#   --type    Agent type: scout|wave-agent|critic-agent|planner|integration-agent
+#   --prompt  Agent prompt text (used for conditional injection decisions)
+#
+# Output:
+#   Concatenated reference file contents, each preceded by an injection marker.
+#   Empty output if skill directory not found or no references apply.
+#
+# Exit codes:
+#   0  Success (output may be empty)
+#   1  Error (--type missing)
+
+set -euo pipefail
+
+agent_type=""
+prompt=""
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --type)   agent_type="$2"; shift 2 ;;
+    --prompt) prompt="$2";     shift 2 ;;
+    *)        shift ;;
+  esac
+done
+
+if [[ -z "$agent_type" ]]; then
+  echo "error: --type is required" >&2
+  exit 1
+fi
+
+# Resolve skill directory: prefer CLAUDE_SKILL_DIR env var,
+# fall back to parent of this script's directory. Works for both
+# direct execution (scripts/) and symlinked installs (~/.claude/skills/saw/scripts/).
+SKILL_DIR="${CLAUDE_SKILL_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
+ref_dir="${SKILL_DIR}/references"
+
+# No references directory — nothing to inject
+[ -d "$ref_dir" ] || exit 0
+
+inject_content=""
+
+# Append a reference file with dedup guard (same markers as the hook).
+# Skips silently if already injected or file not found.
+inject_ref() {
+  local file="$1"
+  local ref_path="${ref_dir}/${file}"
+  local marker="<!-- injected: references/${file} -->"
+
+  # Dedup: skip if marker already present in prompt
+  echo "$prompt" | grep -qF "$marker" && return 0
+
+  if [[ -f "$ref_path" ]]; then
+    inject_content+="${marker}"$'\n'
+    inject_content+="$(command cat "$ref_path")"$'\n\n'
+  else
+    echo "warn: inject target not found: ${ref_path}" >&2
+  fi
+}
+
+case "$agent_type" in
+  scout)
+    inject_ref "scout-suitability-gate.md"
+    inject_ref "scout-implementation-process.md"
+    # Conditional: only with --program flag
+    if echo "$prompt" | grep -q '\-\-program'; then
+      inject_ref "scout-program-contracts.md"
+    fi
+    ;;
+  wave-agent)
+    inject_ref "wave-agent-worktree-isolation.md"
+    inject_ref "wave-agent-completion-report.md"
+    inject_ref "wave-agent-build-diagnosis.md"
+    # Conditional: only when frozen contracts are present
+    if echo "$prompt" | grep -qE 'frozen_contracts_hash|frozen: true'; then
+      inject_ref "wave-agent-program-contracts.md"
+    fi
+    ;;
+  critic-agent)
+    inject_ref "critic-agent-verification-checks.md"
+    inject_ref "critic-agent-completion-format.md"
+    ;;
+  planner)
+    inject_ref "planner-suitability-gate.md"
+    inject_ref "planner-implementation-process.md"
+    inject_ref "planner-example-manifest.md"
+    ;;
+  integration-agent)
+    inject_ref "integration-connectors-reference.md"
+    inject_ref "integration-agent-completion-report.md"
+    ;;
+  *)
+    echo "warn: unknown agent type '${agent_type}' — no references injected" >&2
+    exit 0
+    ;;
+esac
+
+# Output injected content (empty string = no output = caller prepends nothing)
+if [[ -n "$inject_content" ]]; then
+  printf '%s' "$inject_content"
+fi

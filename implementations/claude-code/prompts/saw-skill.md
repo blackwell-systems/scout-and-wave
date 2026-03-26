@@ -120,6 +120,11 @@ Planner agent reference files are also injected automatically by the
 Integration agent reference files are also injected automatically by the
 `validate_agent_launch` hook.
 
+**Vendor-neutral fallback:** On platforms without Claude Code hooks, run
+`bash ${CLAUDE_SKILL_DIR}/scripts/inject-agent-context --type <agent-type> --prompt "<prompt>"`
+before launching each agent and prepend the output to the prompt. Agent types:
+`scout`, `wave-agent`, `critic-agent`, `planner`, `integration-agent`.
+
 E44: sawtools prepare-agent automatically writes context_source to each agent entry when extracting its brief, recording whether the prepared-brief path or cross-repo-full path was used (see protocol/execution-rules.md E44).
 
 ## Invocation Modes
