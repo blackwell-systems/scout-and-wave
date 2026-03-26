@@ -63,7 +63,7 @@ Fires when the orchestrator calls the `Agent` tool to launch a subagent. Dispatc
 
 **Why `updatedInput`, not `additionalContext`:** `additionalContext` in a `PreToolUse` hook adds content to the *calling model's* context (the orchestrator). `updatedInput` modifies the tool call parameters before execution — the only mechanism that reaches inside a subagent's initial prompt. See `docs/proposals/agentskills-agent-type-injection.md` for the full decision record.
 
-**Coverage:** `scout`, `wave-agent`, `critic-agent`, `planner`. Dispatch is a sequence of `if` blocks on `subagent_type`. Adding a new agent type requires adding one `if` block — no new hook registration needed.
+**Coverage:** `scout`, `wave-agent`, `critic-agent`, `planner`, `integration-agent`. Dispatch is a sequence of `if` blocks on `subagent_type`. Adding a new agent type requires adding one `if` block — no new hook registration needed.
 
 **Dedup:** Injection markers (`<!-- injected: references/X.md -->`) prevent double-injection if the orchestrator also manually prepended the reference.
 
@@ -80,9 +80,9 @@ UserPromptSubmit → inject_skill_context
       │
       ▼  orchestrator runs, calls Agent tool
 
-PreToolUse/Agent → validate_agent_launch (checks 9-11+)
+PreToolUse/Agent → validate_agent_launch (checks 9-13+)
   Target: subagent initial prompt (updatedInput)
-  Matches: subagent_type ∈ {wave-agent, critic-agent, scout, planner}
+  Matches: subagent_type ∈ {wave-agent, critic-agent, scout, planner, integration-agent}
 ```
 
 ## Installation
@@ -556,9 +556,10 @@ After enforcement passes, dispatch on `subagent_type` and inject matching refere
 | `critic-agent` | `critic-agent-verification-checks.md`, `critic-agent-completion-format.md` (always) |
 | `scout` | `scout-suitability-gate.md`, `scout-implementation-process.md` (always); `scout-program-contracts.md` (with --program) |
 | `planner` | `planner-suitability-gate.md`, `planner-implementation-process.md`, `planner-example-manifest.md` (always) |
+| `integration-agent` | `integration-connectors-reference.md`, `integration-agent-completion-report.md` |
 | other | pass through (exit 0) |
 
-**Status:** Checks 1–12 implemented. Check 9 (scout reference injection) added by Wave 2 Agent D in `IMPL-scout-prompt-extraction.yaml`. Check 10 (wave-agent reference injection) added by Wave 2 Agent D in `IMPL-wave-agent-prompt-extraction.yaml`. Check 11 (critic-agent reference injection) added by Wave 2 Agent D in `IMPL-critic-agent-prompt-extraction.yaml`. Check 12 (planner reference injection) added by Wave 2 Agent D in `IMPL-planner-prompt-extraction.yaml`.
+**Status:** Checks 1–13 implemented. Checks 9+ implemented by Wave 2 agents across all 5 extraction IMPLs (scout, wave-agent, critic-agent, planner, integration-agent).
 
 ### Manual Installation
 

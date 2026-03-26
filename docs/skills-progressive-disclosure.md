@@ -351,6 +351,7 @@ The same heuristics apply as for skill references, scoped to the agent type:
 | `wave-agent` | ~133 lines | `worktree-isolation.md`, `build-diagnosis.md`, `completion-report.md` |
 | `critic-agent` | ~75 lines | `critic-agent-verification-checks.md`, `critic-agent-completion-format.md` |
 | `planner` | ~148 lines | `planner-suitability-gate.md`, `planner-implementation-process.md`, `planner-example-manifest.md` |
+| `integration-agent` | ~121 lines | `integration-connectors-reference.md`, `integration-agent-completion-report.md` |
 
 Injection is implemented in `validate_agent_launch` checks 9+ (see `implementations/claude-code/hooks/README.md` § Hook 9).
 
