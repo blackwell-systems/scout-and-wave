@@ -349,7 +349,7 @@ The same heuristics apply as for skill references, scoped to the agent type:
 |-----------|-------------|-----------------|
 | `scout` | ~166 lines | `scout-suitability-gate.md`, `scout-implementation-process.md`, `scout-program-contracts.md` |
 | `wave-agent` | ~133 lines | `worktree-isolation.md`, `build-diagnosis.md`, `completion-report.md` |
-| `critic-agent` | ~75 lines | `verification-checks.md`, `completion-format.md` |
+| `critic-agent` | ~75 lines | `critic-agent-verification-checks.md`, `critic-agent-completion-format.md` |
 | `planner` | ~148 lines | `suitability-gate.md`, `implementation-process.md`, `example-manifest.md` |
 
 Injection is implemented in `validate_agent_launch` checks 9+ (see `implementations/claude-code/hooks/README.md` § Hook 9).
@@ -375,9 +375,19 @@ The injection mechanism differs between the two layers:
 
 `validate_agent_launch` provides deterministic injection for subagents, paralleling `inject_skill_context` for the orchestrator skill. The dedup mechanism (`<!-- injected: references/scout-X.md -->` markers) ensures idempotency — if the orchestrator manually prepends a reference, the hook skips that file. This makes the injection transparent and composable.
 
+### Critic-agent as the third progressive disclosure surface
+
+The critic agent is the third core SAW agent type to fully apply the progressive disclosure pattern at the subagent level. The critic's verification checks procedure and completion format reference have been extracted from the core `agents/critic-agent.md` prompt into two always-injected reference files: `references/critic-agent-verification-checks.md` and `references/critic-agent-completion-format.md`.
+
+Unlike wave-agent (conditional injection for program contracts) and scout (conditional injection for `--program` flag), critic-agent has no conditional references — both files are always injected. This reflects the critic's role: every critic launch performs the full verification procedure and writes a completion report, with no scenario-specific paths.
+
+Detection in `validate_agent_launch` fires on `subagent_type: critic-agent` in tool input or `[SAW:critic` in the description. Dedup markers (`<!-- injected: references/critic-agent-X.md -->`) prevent double-injection. The slim `critic-agent.md` core (~75 lines) carries identity, role invariants, and a reference loading block instructing the agent to skip re-reading files whose markers are already in context.
+
+With scout, wave-agent, and critic-agent all using hook-based progressive disclosure, the pattern is now applied to all three core SAW agent types that perform the primary SAW workflow: analysis (scout), implementation (wave-agent), and review (critic-agent).
+
 ### The generalized pattern
 
-With both wave-agent and scout now using hook-based progressive disclosure, the pattern is fully generalized. Any SAW agent type can apply it:
+With scout, wave-agent, and critic-agent all using hook-based progressive disclosure, the pattern is fully generalized. Any SAW agent type can apply it:
 
 1. Extract heavy procedural content from the core type prompt into `references/<type>-<name>.md` files
 2. Add a detection block in `validate_agent_launch` for the new `subagent_type`

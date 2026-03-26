@@ -27,7 +27,9 @@ prompts/
     ├── wave-agent-worktree-isolation.md  ← NEW
     ├── wave-agent-completion-report.md   ← NEW
     ├── wave-agent-build-diagnosis.md     ← NEW
-    └── wave-agent-program-contracts.md   ← NEW
+    ├── wave-agent-program-contracts.md   ← NEW
+    ├── critic-agent-verification-checks.md  ← NEW
+    └── critic-agent-completion-format.md    ← NEW
 ```
 
 ## Entry Point
@@ -48,7 +50,7 @@ uses to enforce tool restrictions and behavioral invariants. Launched via
 | [`agents/wave-agent.md`](agents/wave-agent.md) | Wave Agent | Slim identity core (~133 lines). Worktree isolation protocol, completion report reference, build diagnosis, and program contract rules extracted to `references/wave-agent-*.md` and injected by `validate_agent_launch` hook. Cannot spawn sub-agents. |
 | [`agents/scaffold-agent.md`](agents/scaffold-agent.md) | Scaffold Agent | Materializes approved interface contracts as type scaffold source files. Runs between Scout and Wave 1. Creates only files listed in IMPL doc Scaffolds section. |
 | [`agents/integration-agent.md`](agents/integration-agent.md) | Integration Agent | Post-merge wiring agent (E26/E27). Wires unconnected exports into connector files. Runs on main branch after wave merge. |
-| [`agents/critic-agent.md`](agents/critic-agent.md) | Critic Agent | Pre-wave brief review (E37). Reads every agent brief, reads every owned file, verifies accuracy across 6 checks. Writes verdict to IMPL doc. Never modifies source files. |
+| [`agents/critic-agent.md`](agents/critic-agent.md) | Critic Agent | Slim identity core (~75 lines). Verification checks (7 checks) and completion format extracted to `references/critic-agent-*.md` and injected by `validate_agent_launch` hook. Never modifies source files. |
 | [`agents/planner.md`](agents/planner.md) | Planner | Program-level planning agent. Produces PROGRAM manifest with tiered IMPL execution plan for `/saw program plan/execute`. |
 
 ## Scout Payload Files (root)
@@ -78,6 +80,8 @@ See `docs/skills-progressive-disclosure.md` for the design.
 | [`references/wave-agent-completion-report.md`](references/wave-agent-completion-report.md) | Wave agent launch (hook-injected) | Full `sawtools set-completion` reference with examples for all status/failure types. Injected by `validate_agent_launch` into every wave agent prompt. |
 | [`references/wave-agent-build-diagnosis.md`](references/wave-agent-build-diagnosis.md) | Wave agent launch (hook-injected) | H7 build failure diagnosis tool usage (all languages). Injected by `validate_agent_launch` into every wave agent prompt. |
 | [`references/wave-agent-program-contracts.md`](references/wave-agent-program-contracts.md) | Wave agent launch with frozen contracts (hook-injected) | Program contract handling rules. Injected by `validate_agent_launch` only when `frozen_contracts_hash` or `frozen: true` present in prompt. |
+| [`references/critic-agent-verification-checks.md`](references/critic-agent-verification-checks.md) | Critic agent launch (hook-injected) | Verification checks procedure for critic agents. Injected by `validate_agent_launch` into every critic agent prompt. |
+| [`references/critic-agent-completion-format.md`](references/critic-agent-completion-format.md) | Critic agent launch (hook-injected) | `sawtools set-critic-review` command reference and output format. Injected by `validate_agent_launch` into every critic agent prompt. |
 
 ## Protocol Invariants Referenced
 

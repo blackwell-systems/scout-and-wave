@@ -339,5 +339,45 @@ if [[ "$is_wave_agent" == "true" ]]; then
   fi
 fi
 
+# --- Check 11: Critic-agent reference injection ---
+# When launching a critic agent, inject reference files as additionalContext.
+# Both reference files are always injected — no conditional injection.
+
+is_critic=false
+if [[ "$subagent_type" == "critic-agent" ]] || [[ "$description" =~ \[SAW:critic ]]; then
+  is_critic=true
+fi
+
+if [[ "$is_critic" == "true" ]]; then
+  ref_dir=""
+  skill_dir="${CLAUDE_SKILL_DIR:-${HOME}/.claude/skills/saw}"
+  if [[ -d "${skill_dir}/references" ]]; then
+    ref_dir="${skill_dir}/references"
+  fi
+
+  if [[ -n "$ref_dir" ]]; then
+    inject_content=""
+
+    ref_file="${ref_dir}/critic-agent-verification-checks.md"
+    if [[ -f "$ref_file" ]] && ! echo "$prompt" | grep -q '<!-- injected: references/critic-agent-verification-checks.md -->'; then
+      inject_content+="<!-- injected: references/critic-agent-verification-checks.md -->"$'\n'
+      inject_content+="$(command cat "$ref_file")"$'\n\n'
+    fi
+
+    ref_file="${ref_dir}/critic-agent-completion-format.md"
+    if [[ -f "$ref_file" ]] && ! echo "$prompt" | grep -q '<!-- injected: references/critic-agent-completion-format.md -->'; then
+      inject_content+="<!-- injected: references/critic-agent-completion-format.md -->"$'\n'
+      inject_content+="$(command cat "$ref_file")"$'\n\n'
+    fi
+
+    # Prepend injected content to the agent's prompt via updatedInput
+    if [[ -n "$inject_content" ]]; then
+      jq -n --arg inject "$inject_content" --arg orig "$prompt" \
+        '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow", "updatedInput": {"prompt": ($inject + "\n\n" + $orig)}}}'
+      exit 0
+    fi
+  fi
+fi
+
 # All checks passed
 exit 0

@@ -103,7 +103,9 @@ After installation, the skill directory structure looks like this:
 │   ├── wave-agent-worktree-isolation.md -> prompts/references/wave-agent-worktree-isolation.md
 │   ├── wave-agent-completion-report.md -> prompts/references/wave-agent-completion-report.md
 │   ├── wave-agent-build-diagnosis.md -> prompts/references/wave-agent-build-diagnosis.md
-│   └── wave-agent-program-contracts.md -> prompts/references/wave-agent-program-contracts.md
+│   ├── wave-agent-program-contracts.md -> prompts/references/wave-agent-program-contracts.md
+│   ├── critic-agent-verification-checks.md -> prompts/references/critic-agent-verification-checks.md
+│   └── critic-agent-completion-format.md -> prompts/references/critic-agent-completion-format.md
 └── hooks/
     └── pre-commit-guard.sh
 ```

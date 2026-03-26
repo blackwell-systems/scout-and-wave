@@ -80,7 +80,7 @@ UserPromptSubmit → inject_skill_context
       │
       ▼  orchestrator runs, calls Agent tool
 
-PreToolUse/Agent → validate_agent_launch (checks 9-10+)
+PreToolUse/Agent → validate_agent_launch (checks 9-11+)
   Target: subagent initial prompt (updatedInput)
   Matches: subagent_type ∈ {wave-agent, critic-agent, scout, planner}
 ```
@@ -543,6 +543,7 @@ echo $?  # 0 (if on expected branch)
 8. **Scaffold check** — Verify all scaffolds are committed (if any in IMPL doc)
 9. **Scout reference injection** — When launching a scout agent, inject reference files into the subagent prompt via `updatedInput`. Detection: fires if `[SAW:scout` appears in description, `subagent_type: scout` appears in prompt, or `# Scout Agent: Pre-Flight Dependency Mapping` appears in prompt. Always injects `scout-suitability-gate.md` and `scout-implementation-process.md`. Conditionally injects `scout-program-contracts.md` only when `--program` appears in the prompt. Dedup: uses HTML comment markers `<!-- injected: references/scout-X.md -->` to skip files already present in the prompt. Non-scout agents are unaffected — Check 9 is gated behind scout detection and falls through to `exit 0` if the agent is not a scout.
 10. **Wave-agent reference injection** — When launching a wave agent, inject reference files into the subagent prompt via `updatedInput`. Detection: fires if `[SAW:wave` appears in description or `subagent_type: wave-agent` appears in tool input. Always injects `wave-agent-worktree-isolation.md`, `wave-agent-completion-report.md`, and `wave-agent-build-diagnosis.md`. Conditionally injects `wave-agent-program-contracts.md` only when `frozen_contracts_hash` or `frozen: true` appears in the prompt (indicating a PROGRAM-managed IMPL with frozen interface contracts). Dedup: uses HTML comment markers `<!-- injected: references/wave-agent-X.md -->` to skip files already present in the prompt. Non-wave agents are unaffected — Check 10 is gated behind wave-agent detection.
+11. **Critic-agent reference injection** — When launching a critic agent, inject reference files into the subagent prompt via `updatedInput`. Detection: fires if `[SAW:critic` appears in description or `subagent_type: critic-agent` appears in tool input. Always injects both `critic-agent-verification-checks.md` and `critic-agent-completion-format.md` — there is no conditional injection for critic agents. Dedup: uses HTML comment markers `<!-- injected: references/critic-agent-X.md -->` to skip files already present in the prompt. Non-critic agents are unaffected — Check 11 is gated behind critic-agent detection.
 
 ### Checks 9+: Agent Type Injection
 
@@ -551,12 +552,12 @@ After enforcement passes, dispatch on `subagent_type` and inject matching refere
 | subagent_type | Reference files injected |
 |---------------|--------------------------|
 | `wave-agent` | `wave-agent-worktree-isolation.md`, `wave-agent-completion-report.md`, `wave-agent-build-diagnosis.md` (always); `wave-agent-program-contracts.md` (when frozen contracts present) |
-| `critic-agent` | `verification-checks.md`, `completion-format.md` |
+| `critic-agent` | `critic-agent-verification-checks.md`, `critic-agent-completion-format.md` (always) |
 | `scout` | `scout-suitability-gate.md`, `scout-implementation-process.md` (always); `scout-program-contracts.md` (with --program) |
 | `planner` | `suitability-gate.md`, `implementation-process.md`, `example-manifest.md` |
 | other | pass through (exit 0) |
 
-**Status:** Checks 1–10 implemented. Check 9 (scout reference injection) added by Wave 2 Agent D in `IMPL-scout-prompt-extraction.yaml`. Check 10 (wave-agent reference injection) added by Wave 2 Agent D in `IMPL-wave-agent-prompt-extraction.yaml`.
+**Status:** Checks 1–11 implemented. Check 9 (scout reference injection) added by Wave 2 Agent D in `IMPL-scout-prompt-extraction.yaml`. Check 10 (wave-agent reference injection) added by Wave 2 Agent D in `IMPL-wave-agent-prompt-extraction.yaml`. Check 11 (critic-agent reference injection) added by Wave 2 Agent D in `IMPL-critic-agent-prompt-extraction.yaml`.
 
 ### Manual Installation
 
