@@ -198,9 +198,9 @@ If no `docs/IMPL/IMPL-*.yaml` file exists for the current feature:
 1. Launch a **Scout agent** using the Agent tool with `subagent_type: scout` and `run_in_background: true`. The prompt parameter is the feature description (the type definition carries the full behavioral instructions). The Scout analyzes the codebase, runs the suitability gate, and writes the IMPL doc; the Orchestrator does not perform this analysis itself. Inform the user that the Scout is running.
 2. When the Scout completes, read the resulting `docs/IMPL/IMPL-<feature-slug>.yaml`. Then record the injection method:
    ```bash
-   sawtools set-injection-method "<absolute-path-to-impl-doc>" --method manual-fallback
+   sawtools set-injection-method "<absolute-path-to-impl-doc>" --method hook
    ```
-   (CLI Scout always reads reference files explicitly — `manual-fallback` is always correct here.)
+   (The `validate_agent_launch` PreToolUse hook automatically injects reference files into the Scout's prompt via `updatedInput` — `hook` is always correct in CLI mode.)
 3. **E16: Validate IMPL doc before review.** After Scout writes the IMPL doc, run:
    ```bash
    sawtools validate --fix "<absolute-path-to-impl-doc>"
