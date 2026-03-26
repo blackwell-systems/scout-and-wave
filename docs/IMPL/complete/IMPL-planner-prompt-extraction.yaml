@@ -1,0 +1,632 @@
+completion_date: "2026-03-26"
+title: Extract planner agent prompt into layered progressive disclosure
+feature_slug: planner-prompt-extraction
+verdict: SUITABLE
+suitability_assessment: |
+    File decomposition: 6 distinct files across 4 agents with disjoint ownership.
+    Three new reference files (extract from planner.md), one modified core prompt
+    (planner.md slim-down), one modified hook (validate_agent_launch), and
+    4 doc updates.
+
+    Investigation-first: None. Extraction boundaries are precisely defined with
+    line ranges from the current planner.md (551 lines).
+
+    Interface discoverability: Yes. Uses the exact same pattern as
+    IMPL-scout-prompt-extraction as blueprint.
+
+    Pre-implementation status: Fresh feature, nothing implemented yet.
+
+    Parallelization value: Same extraction pattern. Wave 1 agents A/B/C work in
+    parallel with fully disjoint file ownership. Wave 2 Agent D wires the hook
+    and updates docs.
+
+    Estimated times:
+    - Agent execution: ~8 min (3 wave 1 agents + 1 wave 2 agent, ~5 min avg)
+    - Merge & verification: ~2 min
+    Total SAW time: ~10 min
+
+    Note: All three planner reference files are always-injected — no conditional
+    injection (unlike scout's --program or wave-agent's frozen contracts).
+test_command: 'echo ''docs-only: no tests'''
+lint_command: none
+file_ownership:
+    - file: implementations/claude-code/prompts/references/planner-suitability-gate.md
+      agent: A
+      wave: 1
+      action: new
+    - file: implementations/claude-code/prompts/references/planner-example-manifest.md
+      agent: A
+      wave: 1
+      action: new
+    - file: implementations/claude-code/prompts/references/planner-implementation-process.md
+      agent: B
+      wave: 1
+      action: new
+    - file: implementations/claude-code/prompts/agents/planner.md
+      agent: C
+      wave: 1
+      action: modify
+    - file: implementations/claude-code/hooks/validate_agent_launch
+      agent: D
+      wave: 2
+      action: modify
+    - file: implementations/claude-code/prompts/saw-skill.md
+      agent: D
+      wave: 2
+      action: modify
+    - file: implementations/claude-code/prompts/README.md
+      agent: D
+      wave: 2
+      action: modify
+    - file: docs/INSTALLATION.md
+      agent: D
+      wave: 2
+      action: modify
+    - file: implementations/claude-code/hooks/README.md
+      agent: D
+      wave: 2
+      action: modify
+    - file: docs/skills-progressive-disclosure.md
+      agent: D
+      wave: 2
+      action: modify
+interface_contracts:
+    - name: Dedup marker format (planner)
+      description: |
+        HTML comment markers wrapping injected reference content. Used by
+        validate_agent_launch hook to avoid double-injection.
+      definition: |
+        Format: <!-- injected: references/planner-{name}.md -->
+        Where {name} is one of: suitability-gate, implementation-process,
+        example-manifest
+
+        The hook checks the agent prompt for these markers before injecting.
+        The planner.md core file instructs: "skip reading reference if marker
+        already in context."
+      location: implementations/claude-code/hooks/validate_agent_launch
+    - name: Reference file back-link header (planner)
+      description: |
+        Each extracted reference file begins with a back-link comment.
+      definition: |
+        First line of each reference file:
+        <!-- Part of planner agent procedure. Loaded by validate_agent_launch hook. -->
+      location: implementations/claude-code/prompts/references/
+    - name: Planner core reference loading block
+      description: |
+        Block in slim planner.md that instructs the agent about reference files
+        and dedup behavior.
+      definition: |
+        ## Reference Files
+
+        The following reference files contain detailed procedure steps. They are
+        normally injected by the validate_agent_launch hook before this prompt
+        is delivered. If you see `<!-- injected: references/planner-X.md -->`
+        markers in your context, the content is already loaded — do not re-read
+        those files.
+
+        If the markers are absent (e.g., hook not installed), read these files:
+        - `${CLAUDE_SKILL_DIR}/references/planner-suitability-gate.md` — The
+          4-question program suitability gate with verdicts and time estimate format.
+          Always required.
+        - `${CLAUDE_SKILL_DIR}/references/planner-implementation-process.md` —
+          Steps 1-10 for analyzing the project and producing the PROGRAM manifest.
+          Always required.
+        - `${CLAUDE_SKILL_DIR}/references/planner-example-manifest.md` — A complete
+          annotated example PROGRAM manifest for a fictional project. Always required.
+      location: implementations/claude-code/prompts/agents/planner.md
+    - name: Hook injection for planner subagent_type
+      description: |
+        New check in validate_agent_launch that detects planner agent launches
+        and injects all three reference files via updatedInput.prompt.
+        All three files are always injected — no conditional injection.
+      definition: |
+        Detection: If description contains "[SAW:planner" OR tool_input contains
+        "subagent_type: planner" OR prompt contains
+        "# Planner Agent: Project-Level Decomposition":
+
+        1. Resolve reference directory
+        2. Always inject: planner-suitability-gate.md, planner-implementation-process.md,
+           planner-example-manifest.md
+        3. Dedup: skip injection if <!-- injected: references/planner-X.md --> already in prompt
+        4. Output: JSON using updatedInput to prepend injected content into the
+           agent's prompt parameter:
+           {"hookSpecificOutput": {"hookEventName": "PreToolUse",
+            "permissionDecision": "allow",
+            "updatedInput": {"prompt": "<injected>\n\n<orig>"}}}
+      location: implementations/claude-code/hooks/validate_agent_launch
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## What to implement
+
+            Create TWO reference files extracted from the current planner.md.
+
+            ### File 1: planner-suitability-gate.md
+
+            Create `implementations/claude-code/prompts/references/planner-suitability-gate.md`
+            by extracting the Program Suitability Gate section from planner.md.
+
+            Read `implementations/claude-code/prompts/agents/planner.md` fully.
+            Extract lines 37-86 (the `## Program Suitability Gate` section). This includes:
+            - The intro sentence ("Before beginning project analysis, run this gate...")
+            - Question 1: Feature Independence (with explanation)
+            - Question 2: Tier Depth (with explanation)
+            - Question 3: Shared Types (with explanation)
+            - Question 4: Scale Justification (with explanation)
+            - Verdicts: PROGRAM_SUITABLE, SINGLE_IMPL_SUFFICIENT, NOT_DECOMPOSABLE
+              (with full descriptions for each)
+            - Time-to-value estimate format template (the full code block)
+
+            **File structure:**
+
+            Start the file with:
+            ```
+            <!-- Part of planner agent procedure. Loaded by validate_agent_launch hook. -->
+            # Program Suitability Gate
+            ```
+
+            Then include ALL content from lines 37-86 verbatim, preserving exact
+            formatting, markdown structure, and bold text.
+            Do NOT include the `## Program Suitability Gate` header (line 37) since
+            the file's own header replaces it.
+
+            The section starts with "Before beginning project analysis, run this gate"
+            and ends with the time-to-value Recommendation line.
+
+            ### File 2: planner-example-manifest.md
+
+            Create `implementations/claude-code/prompts/references/planner-example-manifest.md`
+            by extracting the Example PROGRAM Manifest section from planner.md.
+
+            Extract lines 310-467 (the `## Example PROGRAM Manifest` section). This includes:
+            - The intro sentence ("Here's a complete example for a fictional greenfield project")
+            - The complete YAML block (the task-manager-app example with program_contracts,
+              impls, tiers, tier_gates, completion, and pre_mortem)
+
+            **File structure:**
+
+            Start the file with:
+            ```
+            <!-- Part of planner agent procedure. Loaded by validate_agent_launch hook. -->
+            # Example PROGRAM Manifest
+            ```
+
+            Then include ALL content from lines 310-467 verbatim.
+            Do NOT include the `## Example PROGRAM Manifest` header (line 310).
+
+            The section starts with "Here's a complete example for a fictional greenfield project"
+            and ends with the closing ``` of the YAML block (the line after the last pre_mortem entry).
+
+            ### Verification
+
+            After creating both files, verify:
+            1. planner-suitability-gate.md starts with the back-link HTML comment
+            2. All 4 suitability questions are present
+            3. All 3 verdict types (PROGRAM_SUITABLE, SINGLE_IMPL_SUFFICIENT,
+               NOT_DECOMPOSABLE) are present
+            4. The time-to-value estimate format code block is present
+            5. planner-example-manifest.md starts with the back-link HTML comment
+            6. The complete task-manager-app YAML block is present (data-model, auth,
+               api-routes, frontend, integration-tests IMPLs)
+            7. The pre_mortem section within the example is present
+            8. No content from Implementation Process leaked into either file
+
+            ### Constraints
+            - Do NOT modify any other file
+            - Do NOT paraphrase — extract verbatim
+            - Preserve all markdown and YAML formatting exactly
+          files:
+            - implementations/claude-code/prompts/references/planner-suitability-gate.md
+            - implementations/claude-code/prompts/references/planner-example-manifest.md
+        - id: B
+          task: |
+            ## What to implement
+
+            Create `implementations/claude-code/prompts/references/planner-implementation-process.md`
+            by extracting the Implementation Process section from planner.md.
+
+            ### Content to extract
+
+            Read `implementations/claude-code/prompts/agents/planner.md` fully.
+            Extract lines 87-289 (the `## Implementation Process` section). This includes
+            all 10 steps:
+
+            - Step 1: Read Project Context (CONTEXT.md, REQUIREMENTS.md)
+            - Step 2: Run Suitability Gate
+            - Step 3: Identify Feature Boundaries (existing codebases + greenfield)
+            - Step 4: Define Cross-IMPL Dependencies (4 dependency types, topo sort note)
+            - Step 5: Identify Program Contracts (what to look for, per-contract fields)
+            - Step 6: Group IMPLs into Tiers (rules + tier assignment logic)
+            - Step 7: Estimate Complexity Per IMPL
+            - Step 8: Define Tier Gates (extract-commands bash block, mapping table)
+            - Step 9: Write Pre-Mortem Risk Assessment (5 program-level risks)
+            - Step 10: Write the PROGRAM Manifest (YAML schema with all fields
+              including program_contracts, impls, tiers, tier_gates, completion,
+              pre_mortem structure + valid status/state value lists)
+
+            **IMPORTANT — Schema section boundary:**
+            Lines 290-308 contain valid IMPL status values and valid program state values.
+            These should be INCLUDED in this file (they are part of Step 10's schema
+            reference). The section ends at line 308 ("Set `state: PLANNING` when you
+            write the manifest.").
+
+            Do NOT include lines 310 onward (that's the Example PROGRAM Manifest section,
+            which goes in a separate reference file owned by Agent A).
+
+            ### File structure
+
+            Start the file with:
+            ```
+            <!-- Part of planner agent procedure. Loaded by validate_agent_launch hook. -->
+            # Implementation Process (Steps 1-10)
+            ```
+
+            Then include ALL content from lines 87-308 verbatim, preserving exact
+            formatting, markdown structure, bash blocks, and YAML schema example.
+            Do NOT include the `## Implementation Process` header (line 87).
+
+            The section starts with "### Step 1: Read Project Context"
+            and ends with "Set `state: PLANNING` when you write the manifest."
+
+            ### Verification
+
+            After creating the file, verify:
+            1. The file starts with the back-link HTML comment
+            2. All 10 steps (Step 1 through Step 10) are present with `###` headers
+            3. The YAML schema block in Step 10 is present (program_contracts,
+               impls, tiers, tier_gates, completion, pre_mortem fields)
+            4. The valid IMPL status values (pending/scouting/reviewed/executing/complete)
+               are present
+            5. The valid program state values (PLANNING/VALIDATING/REVIEWED/etc.) are present
+            6. The sawtools extract-commands bash block in Step 8 is present
+            7. The file does NOT contain the example PROGRAM manifest (no task-manager-app)
+
+            ### Constraints
+            - Do NOT modify any other file
+            - Do NOT paraphrase — extract verbatim
+            - Preserve all markdown formatting exactly
+          files:
+            - implementations/claude-code/prompts/references/planner-implementation-process.md
+        - id: C
+          task: |
+            ## What to implement
+
+            Rewrite `implementations/claude-code/prompts/agents/planner.md` to be the slim
+            core prompt (~148 lines) by removing extracted sections and adding reference
+            loading instructions.
+
+            ### What to KEEP (in order)
+
+            1. **Frontmatter** (lines 1-6) — keep exactly as-is
+            2. **Version comment and title** (lines 8-9) — keep as-is
+            3. **Identity paragraph** (lines 11-13) — keep as-is
+            4. **Your Role in the SAW Hierarchy section** (lines 15-23) — keep the
+               code block hierarchy diagram and explanation paragraph
+            5. **Your Task section** (lines 25-35) — keep the 6-item numbered list
+               and the Write tool instruction
+            6. **NEW: Reference Files section** — insert HERE, after "Your Task"
+               and before the first wave agent content (see below)
+            7. **Program-Level Invariants section** (lines 469-501) — keep all of
+               P1, P2, P3, P4 with their Enforcement notes
+            8. **Critical Rules section** (lines 503-525) — keep the full "You do NOT"
+               and "You do" lists, and the "If you discover" conditional block
+            9. **Completion section** (lines 526-536) — keep the 5-step orchestrator
+               workflow list
+            10. **Rules section** (lines 537-552) — keep all rules and the Agent Type
+                Identification paragraph
+
+            ### What to REMOVE
+
+            - The entire `## Program Suitability Gate` section (lines 37-86)
+            - The entire `## Implementation Process` section (lines 87-289)
+            - The valid status/state values block (lines 290-308) — these are
+              included in planner-implementation-process.md
+            - The entire `## Example PROGRAM Manifest` section (lines 310-467)
+
+            ### Reference Files section to INSERT
+
+            After the "Your Task" section (after line 35) and before the Invariants,
+            insert this new section:
+
+            ```markdown
+            ## Reference Files
+
+            The following reference files contain the detailed procedure for producing
+            a PROGRAM manifest. They are normally injected by the validate_agent_launch
+            hook before this prompt is delivered.
+
+            **Dedup check:** If you see `<!-- injected: references/planner-X.md -->`
+            markers in your context, the content is already loaded. Do NOT re-read
+            those files.
+
+            If the markers are absent (e.g., hook not installed), read these files:
+            1. `${CLAUDE_SKILL_DIR}/references/planner-suitability-gate.md` — The
+               4-question program suitability gate with verdicts and time estimate format.
+               Always required.
+            2. `${CLAUDE_SKILL_DIR}/references/planner-implementation-process.md` —
+               Steps 1-10 for analyzing the project and producing the PROGRAM manifest,
+               including the full YAML schema reference and valid state values.
+               Always required.
+            3. `${CLAUDE_SKILL_DIR}/references/planner-example-manifest.md` — A complete
+               annotated example PROGRAM manifest for a fictional project. Always required.
+
+            ---
+            ```
+
+            ### Verification
+
+            After rewriting, verify:
+            1. Frontmatter is intact (name, description, tools, color, background fields)
+            2. Version comment `<!-- planner v0.1.0 -->` is present
+            3. Role hierarchy code block is present
+            4. The 6-item "Your Task" numbered list is present
+            5. Reference Files section lists all 3 reference files with dedup instructions
+            6. All four invariants (P1, P2, P3, P4) with Enforcement notes are present
+            7. Critical Rules "You do NOT" and "You do" lists are present
+            8. Completion 5-step list is present
+            9. Rules section and Agent Type Identification are intact
+            10. NO suitability gate content remains (no "Feature Independence", no
+                "PROGRAM_SUITABLE", no "SINGLE_IMPL_SUFFICIENT")
+            11. NO implementation process remains (no "Step 1:", no "Step 8:", no
+                "sawtools extract-commands")
+            12. NO example manifest remains (no "task-manager-app", no "data-model",
+                no "api-routes")
+            13. NO valid-state-values block remains (no "pending — IMPL not yet scouted")
+            14. File is approximately 140-160 lines
+
+            ### Constraints
+            - This is the ONLY file you modify
+            - Preserve exact frontmatter format
+            - Keep version comment `<!-- planner v0.1.0 -->`
+            - Do NOT change any content in the kept sections — copy verbatim
+          files:
+            - implementations/claude-code/prompts/agents/planner.md
+      base_commit: f9bf2ea65e639bfeef866f479021bbcdcfd0b524
+    - number: 2
+      agents:
+        - id: D
+          task: |
+            ## What to implement
+
+            Modify SIX files to complete the hook-enforced context injection for
+            planner agent launches.
+
+            **Important context:** The scout, wave-agent, and critic-agent extraction
+            IMPLs are running in parallel with this IMPL. When you read
+            validate_agent_launch, it may already have additional checks (up to Check
+            11). Either way, add the planner injection as the NEXT check after whatever
+            is already there, BEFORE the final exit 0 block. Use `grep -n` to find the
+            current structure before editing.
+
+            ### File 1: validate_agent_launch hook
+
+            Read the current file first to find the last check number. Add the new
+            planner check AFTER the last existing check and BEFORE the final exit 0.
+
+            **New section: Planner reference injection**
+
+            ```bash
+            # --- Check 12: Planner reference injection ---
+            # (Number may differ based on concurrent IMPLs; use the next available number)
+            # When launching a planner agent, inject reference files via updatedInput.
+            # All three reference files are always injected — no conditional injection.
+
+            is_planner=false
+            if [[ "$subagent_type" == "planner" ]] || [[ "$description" =~ \[SAW:planner ]]; then
+              is_planner=true
+            fi
+
+            if [[ "$is_planner" == "true" ]]; then
+              ref_dir=""
+              skill_dir="${CLAUDE_SKILL_DIR:-${HOME}/.claude/skills/saw}"
+              if [[ -d "${skill_dir}/references" ]]; then
+                ref_dir="${skill_dir}/references"
+              fi
+
+              if [[ -n "$ref_dir" ]]; then
+                inject_content=""
+
+                ref_file="${ref_dir}/planner-suitability-gate.md"
+                if [[ -f "$ref_file" ]] && ! echo "$prompt" | grep -q '<!-- injected: references/planner-suitability-gate.md -->'; then
+                  inject_content+="<!-- injected: references/planner-suitability-gate.md -->"$'\n'
+                  inject_content+="$(command cat "$ref_file")"$'\n\n'
+                fi
+
+                ref_file="${ref_dir}/planner-implementation-process.md"
+                if [[ -f "$ref_file" ]] && ! echo "$prompt" | grep -q '<!-- injected: references/planner-implementation-process.md -->'; then
+                  inject_content+="<!-- injected: references/planner-implementation-process.md -->"$'\n'
+                  inject_content+="$(command cat "$ref_file")"$'\n\n'
+                fi
+
+                ref_file="${ref_dir}/planner-example-manifest.md"
+                if [[ -f "$ref_file" ]] && ! echo "$prompt" | grep -q '<!-- injected: references/planner-example-manifest.md -->'; then
+                  inject_content+="<!-- injected: references/planner-example-manifest.md -->"$'\n'
+                  inject_content+="$(command cat "$ref_file")"$'\n\n'
+                fi
+
+                if [[ -n "$inject_content" ]]; then
+                  jq -n --arg inject "$inject_content" --arg orig "$prompt" \
+                    '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow", "updatedInput": {"prompt": ($inject + "\n\n" + $orig)}}}'
+                  exit 0
+                fi
+              fi
+            fi
+            ```
+
+            **Notes:**
+            - Use `command cat` (not bare `cat`) — avoids brewprune-shim issues.
+            - `\[SAW:planner` — backslash before bracket is intentional bash regex escaping.
+            - Number the check comment based on what's currently in the file when you edit it.
+            - **updatedInput, NOT additionalContext.** Use `updatedInput.prompt` to prepend
+              reference content into the agent's initial prompt. Include
+              `permissionDecision: "allow"` alongside `updatedInput`.
+
+            ### File 2: saw-skill.md
+
+            Add three rows to the On-Demand References table:
+            ```
+            | Planner agent launch (always) | Injected by `validate_agent_launch` hook: `references/planner-suitability-gate.md` |
+            | Planner agent launch (always) | Injected by `validate_agent_launch` hook: `references/planner-implementation-process.md` |
+            | Planner agent launch (always) | Injected by `validate_agent_launch` hook: `references/planner-example-manifest.md` |
+            ```
+
+            Append to the paragraph following the table:
+            "Planner agent reference files are also injected automatically by the
+            `validate_agent_launch` hook."
+
+            ### File 3: implementations/claude-code/prompts/README.md
+
+            Add 3 new planner reference files to the directory tree under `references/`.
+            Update the On-Demand References table to add 3 rows with trigger
+            "Planner agent launch (hook-injected)".
+            Update the planner.md description in the Agent Type Definitions table:
+            "Slim identity core (~148 lines). Suitability gate, implementation process,
+            and example manifest extracted to `references/planner-*.md` and injected
+            by `validate_agent_launch` hook. Produces PROGRAM manifests only."
+
+            ### File 4: docs/INSTALLATION.md
+
+            Add 3 new planner reference files to the symlink tree under `references/`:
+            ```
+            │   ├── planner-suitability-gate.md -> prompts/references/planner-suitability-gate.md
+            │   ├── planner-implementation-process.md -> prompts/references/planner-implementation-process.md
+            │   └── planner-example-manifest.md -> prompts/references/planner-example-manifest.md
+            ```
+
+            ### File 5: implementations/claude-code/hooks/README.md
+
+            Add documentation for the planner reference injection check:
+            - Detection: `[SAW:planner` in description, `subagent_type: planner`, or
+              `# Planner Agent: Project-Level Decomposition` in prompt
+            - Always-injected: suitability-gate, implementation-process, example-manifest
+            - No conditional injection
+            - Dedup marker: `<!-- injected: references/planner-X.md -->`
+
+            ### File 6: docs/skills-progressive-disclosure.md
+
+            Extend the agent prompt extraction section to include the planner as
+            the fourth agent type using progressive disclosure. The pattern now covers
+            all major SAW agent types: scout, wave-agent, critic-agent, and planner.
+
+            ### Verification
+
+            1. `bash -n implementations/claude-code/hooks/validate_agent_launch` — valid syntax
+            2. Earlier checks unchanged
+            3. saw-skill.md has planner rows in On-Demand References table
+            4. Dedup checks present for all 3 planner reference files
+            5. `command cat` used (not bare `cat`)
+            6. `updatedInput` used (not `additionalContext`)
+
+            ### Constraints
+            - Do NOT modify earlier checks in validate_agent_launch
+            - Do NOT undo changes from other extraction IMPLs — extend them
+            - Non-planner agents must pass through with exit 0 as before
+          files:
+            - implementations/claude-code/hooks/validate_agent_launch
+            - implementations/claude-code/prompts/saw-skill.md
+            - implementations/claude-code/prompts/README.md
+            - docs/INSTALLATION.md
+            - implementations/claude-code/hooks/README.md
+            - docs/skills-progressive-disclosure.md
+          dependencies:
+            - A
+            - B
+            - C
+          context_source: prepared-brief
+quality_gates:
+    level: standard
+    gates:
+        - type: custom
+          command: 'echo ''docs-only: no compilation'''
+          required: true
+completion_reports:
+    A:
+        status: complete
+        branch: saw/planner-prompt-extraction/wave1-agent-A
+        commit: 096746d
+        files_changed:
+            - implementations/claude-code/prompts/references/planner-suitability-gate.md
+            - implementations/claude-code/prompts/references/planner-example-manifest.md
+        files_created:
+            - implementations/claude-code/prompts/references/planner-suitability-gate.md
+            - implementations/claude-code/prompts/references/planner-example-manifest.md
+        verification: PASS
+    B:
+        status: complete
+        branch: saw/planner-prompt-extraction/wave1-agent-B
+        commit: 7fdc643
+        files_changed:
+            - implementations/claude-code/prompts/references/planner-implementation-process.md
+        files_created:
+            - implementations/claude-code/prompts/references/planner-implementation-process.md
+        verification: PASS
+    C:
+        status: complete
+        branch: saw/planner-prompt-extraction/wave1-agent-C
+        commit: 0af7637
+        files_changed:
+            - implementations/claude-code/prompts/agents/planner.md
+        verification: 'PASS: 143 lines (target 140-160). All 14 checks pass. No suitability gate, implementation process, valid state values, or example manifest content remains.'
+    D:
+        status: complete
+        branch: main
+        commit: 6e68451
+        files_changed:
+            - implementations/claude-code/hooks/validate_agent_launch
+            - implementations/claude-code/prompts/saw-skill.md
+            - implementations/claude-code/prompts/README.md
+            - docs/INSTALLATION.md
+            - implementations/claude-code/hooks/README.md
+            - docs/skills-progressive-disclosure.md
+        verification: PASS
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: Schema section boundary (lines 290-308) incorrectly excluded
+          likelihood: medium
+          impact: medium
+          mitigation: |
+            Agent B brief explicitly states lines 290-308 (valid status/state values)
+            are part of Step 10 and MUST be included. Agent C brief explicitly states
+            these lines are removed from core (they moved to the reference file).
+            Verification checks confirm neither file has the other's content.
+        - scenario: Example manifest YAML block truncated during extraction
+          likelihood: low
+          impact: medium
+          mitigation: |
+            Agent A brief specifies the exact start (line 310) and end (line 467,
+            closing ``` of YAML block). Verification requires the pre_mortem section
+            within the example to be present as a completeness check.
+        - scenario: Four concurrent Agent Ds modifying validate_agent_launch
+          likelihood: high
+          impact: medium
+          mitigation: |
+            All four extraction IMPLs have Agent D in wave 2 sharing validate_agent_launch.
+            The brief explicitly checks current file state and adds after whatever checks
+            exist. These must run sequentially, not concurrently.
+        - scenario: brewprune-shim breaks command cat
+          likelihood: medium
+          impact: medium
+          mitigation: |
+            Agent D brief explicitly instructs `command cat`. Documented in project memory.
+critic_report:
+    verdict: PASS
+    agent_reviews:
+        A:
+            agent_id: A
+            verdict: PASS
+        B:
+            agent_id: B
+            verdict: PASS
+        C:
+            agent_id: C
+            verdict: PASS
+        D:
+            agent_id: D
+            verdict: PASS
+    summary: All four agent briefs verified against the codebase. Agent A creates two new reference files (planner-suitability-gate.md and planner-example-manifest.md) — neither exists, correct for action:new. Line ranges cited (37-86 for suitability gate, 310-467 for example manifest) match the actual planner.md content exactly. Agent B creates planner-implementation-process.md — does not exist, correct for action:new; lines 87-308 match the Implementation Process section through the valid-state-values block boundary. Agent C modifies the existing planner.md — file exists; all kept-section line references (469-501, 503-525, 526-536, 537-552) align with actual content. Agent D modifies six existing files, all confirmed present. The updatedInput injection pattern is consistent with the scout/wave-agent/critic-agent extraction IMPLs running in parallel. The note that docs/skills-progressive-disclosure.md has no pre-existing agent prompt extraction section is advisory — Agent D's brief uses adaptive language (the same approach used for validate_agent_launch check numbering). No blocking errors found.
+    reviewed_at: "2026-03-25T23:18:11Z"
+    issue_count: 0
+state: COMPLETE
