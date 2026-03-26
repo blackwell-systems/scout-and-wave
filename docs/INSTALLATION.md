@@ -108,7 +108,9 @@ After installation, the skill directory structure looks like this:
 │   ├── critic-agent-completion-format.md -> prompts/references/critic-agent-completion-format.md
 │   ├── planner-suitability-gate.md -> prompts/references/planner-suitability-gate.md
 │   ├── planner-implementation-process.md -> prompts/references/planner-implementation-process.md
-│   └── planner-example-manifest.md -> prompts/references/planner-example-manifest.md
+│   ├── planner-example-manifest.md -> prompts/references/planner-example-manifest.md
+│   ├── integration-connectors-reference.md -> prompts/references/integration-connectors-reference.md
+│   └── integration-agent-completion-report.md -> prompts/references/integration-agent-completion-report.md
 └── hooks/
     └── pre-commit-guard.sh
 ```

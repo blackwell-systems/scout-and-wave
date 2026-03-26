@@ -103,6 +103,8 @@ Load these files ONLY when the matching subcommand is invoked:
 | Planner agent launch (always) | Injected by `validate_agent_launch` hook: `references/planner-suitability-gate.md` |
 | Planner agent launch (always) | Injected by `validate_agent_launch` hook: `references/planner-implementation-process.md` |
 | Planner agent launch (always) | Injected by `validate_agent_launch` hook: `references/planner-example-manifest.md` |
+| Integration agent launch (always) | Injected by `validate_agent_launch` hook: `references/integration-connectors-reference.md` |
+| Integration agent launch (always) | Injected by `validate_agent_launch` hook: `references/integration-agent-completion-report.md` |
 
 Do not pre-load these files. The core wave loop below handles `/saw scout`,
 `/saw wave`, `/saw status`, `/saw bootstrap`, and `/saw interview` directly.
@@ -114,6 +116,8 @@ in the agent prompt.
 Critic agent reference files are also injected automatically by the
 `validate_agent_launch` hook.
 Planner agent reference files are also injected automatically by the
+`validate_agent_launch` hook.
+Integration agent reference files are also injected automatically by the
 `validate_agent_launch` hook.
 
 E44: sawtools prepare-agent automatically writes context_source to each agent entry when extracting its brief, recording whether the prepared-brief path or cross-repo-full path was used (see protocol/execution-rules.md E44).

@@ -24,15 +24,17 @@ prompts/
     ├── scout-suitability-gate.md       ← Scout agent reference (hook-injected)
     ├── scout-implementation-process.md  ← Scout agent reference (hook-injected)
     ├── scout-program-contracts.md       ← Scout agent reference (hook-injected)
-    ├── wave-agent-worktree-isolation.md  ← NEW
-    ├── wave-agent-completion-report.md   ← NEW
-    ├── wave-agent-build-diagnosis.md     ← NEW
-    ├── wave-agent-program-contracts.md   ← NEW
-    ├── critic-agent-verification-checks.md  ← NEW
-    ├── critic-agent-completion-format.md    ← NEW
-    ├── planner-suitability-gate.md          ← NEW
-    ├── planner-implementation-process.md    ← NEW
-    └── planner-example-manifest.md          ← NEW
+    ├── wave-agent-worktree-isolation.md  ← Wave agent reference (hook-injected)
+    ├── wave-agent-completion-report.md   ← Wave agent reference (hook-injected)
+    ├── wave-agent-build-diagnosis.md     ← Wave agent reference (hook-injected)
+    ├── wave-agent-program-contracts.md   ← Wave agent reference (hook-injected, frozen contracts only)
+    ├── critic-agent-verification-checks.md  ← Critic agent reference (hook-injected)
+    ├── critic-agent-completion-format.md    ← Critic agent reference (hook-injected)
+    ├── planner-suitability-gate.md          ← Planner agent reference (hook-injected)
+    ├── planner-implementation-process.md    ← Planner agent reference (hook-injected)
+    ├── planner-example-manifest.md          ← Planner agent reference (hook-injected)
+    ├── integration-connectors-reference.md  ← Integration agent reference (hook-injected)
+    └── integration-agent-completion-report.md ← Integration agent reference (hook-injected)
 ```
 
 ## Entry Point
@@ -88,6 +90,8 @@ See `docs/skills-progressive-disclosure.md` for the design.
 | [`references/planner-suitability-gate.md`](references/planner-suitability-gate.md) | Planner agent launch (hook-injected) | 4-question program suitability gate with verdicts and time estimate format. Injected by `validate_agent_launch` into every planner agent prompt. |
 | [`references/planner-implementation-process.md`](references/planner-implementation-process.md) | Planner agent launch (hook-injected) | Steps 1-10 for analyzing the project and producing the PROGRAM manifest. Injected by `validate_agent_launch` into every planner agent prompt. |
 | [`references/planner-example-manifest.md`](references/planner-example-manifest.md) | Planner agent launch (hook-injected) | Complete annotated example PROGRAM manifest for a fictional project. Injected by `validate_agent_launch` into every planner agent prompt. |
+| [`references/integration-connectors-reference.md`](references/integration-connectors-reference.md) | Integration agent launch (hook-injected) | Background on integration_connectors, AllowedPathPrefixes, type: integration waves, and common wiring patterns. Injected by `validate_agent_launch` into every integration agent prompt. |
+| [`references/integration-agent-completion-report.md`](references/integration-agent-completion-report.md) | Integration agent launch (hook-injected) | `sawtools set-completion` command examples for complete and partial status. Injected by `validate_agent_launch` into every integration agent prompt. |
 
 ## Protocol Invariants Referenced
 
