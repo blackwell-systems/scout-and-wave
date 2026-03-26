@@ -200,8 +200,10 @@ the IMPL — waves merge to the IMPL branch, NOT to main.
 - For each reviewed IMPL in tier N:
   - Compute IMPL branch: `saw/program/{slug}/tier{N}-impl-{implSlug}`
   - Execute the full IMPL lifecycle with IMPL branch as merge target:
-    - prepare-wave: `sawtools prepare-wave <impl-doc> --wave W --merge-target <impl-branch>`
-    - finalize-wave: `sawtools finalize-wave <impl-doc> --wave W --merge-target <impl-branch>`
+    - prepare-wave: `sawtools prepare-wave <impl-doc> --wave W --repo-dir "<repo-path>" --merge-target <impl-branch>`
+    - finalize-wave: `sawtools finalize-wave <impl-doc> --wave W --repo-dir "<repo-path>" --merge-target <impl-branch>`
+    - The engine detects when `--merge-target` is already checked out as a worktree and skips the checkout (no manual workaround needed).
+    - `verify-build` automatically runs in the IMPL branch worktree when `--merge-target` is set, so it sees merged changes rather than the pre-merge state of main.
     - Waves merge to the IMPL branch, isolating each IMPL's work
   - Use existing `/saw wave --auto` flow per IMPL (with merge target threading)
   - Update IMPL status in PROGRAM manifest as each completes (E32):
