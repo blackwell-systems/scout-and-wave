@@ -83,3 +83,5 @@
   - IMPL doc: docs/IMPL/complete/IMPL-critic-agent-prompt-extraction.yaml
 - **planner-prompt-extraction**: completed 2026-03-26, 2 waves, 4 agents
   - IMPL doc: docs/IMPL/complete/IMPL-planner-prompt-extraction.yaml
+- **integration-agent-prompt-extraction**: completed 2026-03-26, 2 waves, 3 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-integration-agent-prompt-extraction.yaml
