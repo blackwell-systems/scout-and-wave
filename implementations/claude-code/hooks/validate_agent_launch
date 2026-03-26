@@ -43,6 +43,9 @@ tool_name=$(echo "$input" | jq -r '.tool_name // empty')
 description=$(echo "$input" | jq -r '.tool_input.description // empty')
 prompt=$(echo "$input" | jq -r '.tool_input.prompt // empty')
 subagent_type=$(echo "$input" | jq -r '.tool_input.subagent_type // empty')
+# Preserve full tool_input for updatedInput responses — ensures run_in_background,
+# model, name, isolation, and other fields survive hook-injected prompt updates.
+tool_input=$(echo "$input" | jq '.tool_input')
 
 # Only enforce on Agent tool calls
 if [[ "$tool_name" != "Agent" ]]; then
@@ -112,18 +115,18 @@ if [[ "$is_scout" == "true" ]]; then
       fi
     fi
 
-    # Emit updatedInput with both injected prompt and fixed description
+    # Emit updatedInput preserving all original tool_input fields (run_in_background, model, etc.)
     if [[ -n "$inject_content" ]]; then
-      jq -n --arg inject "$inject_content" --arg orig "$prompt" --arg desc "$fixed_description" \
-        '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow", "updatedInput": {"prompt": ($inject + "\n\n" + $orig), "description": $desc}}}'
+      jq -n --arg inject "$inject_content" --arg orig "$prompt" --arg desc "$fixed_description" --argjson orig_input "$tool_input" \
+        '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow", "updatedInput": ($orig_input | .prompt = ($inject + "\n\n" + $orig) | .description = $desc)}}'
       exit 0
     fi
   fi
 
   # No references dir — still fix description if needed
   if [[ "$fixed_description" != "$description" ]]; then
-    jq -n --arg desc "$fixed_description" \
-      '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow", "updatedInput": {"description": $desc}}}'
+    jq -n --arg desc "$fixed_description" --argjson orig_input "$tool_input" \
+      '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow", "updatedInput": ($orig_input | .description = $desc)}}'
   fi
 
   # No references to inject — allow through
@@ -162,8 +165,8 @@ if [[ "$is_critic" == "true" ]]; then
     fi
 
     if [[ -n "$inject_content" ]]; then
-      jq -n --arg inject "$inject_content" --arg orig "$prompt" \
-        '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow", "updatedInput": {"prompt": ($inject + "\n\n" + $orig)}}}'
+      jq -n --arg inject "$inject_content" --arg orig "$prompt" --argjson orig_input "$tool_input" \
+        '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow", "updatedInput": ($orig_input | .prompt = ($inject + "\n\n" + $orig))}}'
       exit 0
     fi
   fi
@@ -207,8 +210,8 @@ if [[ "$is_planner" == "true" ]]; then
     fi
 
     if [[ -n "$inject_content" ]]; then
-      jq -n --arg inject "$inject_content" --arg orig "$prompt" \
-        '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow", "updatedInput": {"prompt": ($inject + "\n\n" + $orig)}}}'
+      jq -n --arg inject "$inject_content" --arg orig "$prompt" --argjson orig_input "$tool_input" \
+        '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow", "updatedInput": ($orig_input | .prompt = ($inject + "\n\n" + $orig))}}'
       exit 0
     fi
   fi
@@ -246,8 +249,8 @@ if [[ "$is_integration" == "true" ]]; then
     fi
 
     if [[ -n "$inject_content" ]]; then
-      jq -n --arg inject "$inject_content" --arg orig "$prompt" \
-        '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow", "updatedInput": {"prompt": ($inject + "\n\n" + $orig)}}}'
+      jq -n --arg inject "$inject_content" --arg orig "$prompt" --argjson orig_input "$tool_input" \
+        '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow", "updatedInput": ($orig_input | .prompt = ($inject + "\n\n" + $orig))}}'
       exit 0
     fi
   fi
@@ -453,10 +456,11 @@ if [[ "$is_wave_agent" == "true" ]]; then
       fi
     fi
 
-    # Prepend injected content to the agent's prompt via updatedInput
+    # Prepend injected content to the agent's prompt via updatedInput,
+    # preserving all original tool_input fields (run_in_background, model, etc.)
     if [[ -n "$inject_content" ]]; then
-      jq -n --arg inject "$inject_content" --arg orig "$prompt" \
-        '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow", "updatedInput": {"prompt": ($inject + "\n\n" + $orig)}}}'
+      jq -n --arg inject "$inject_content" --arg orig "$prompt" --argjson orig_input "$tool_input" \
+        '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow", "updatedInput": ($orig_input | .prompt = ($inject + "\n\n" + $orig))}}'
       exit 0
     fi
   fi
