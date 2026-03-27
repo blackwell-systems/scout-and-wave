@@ -266,7 +266,7 @@ The observability event schema (E40) defines three event types -- `cost` (token 
 
 **Finalization:** Post-merge build verification, E20 stub scanning, E25/E26 integration gap detection and automated wiring, E35 wiring obligation verification, IMPL archival with CONTEXT.md history (E18), gate caching (E38) for idempotent re-runs.
 
-**Recovery:** Session resume detection with progress percentage and suggested actions, structured retry context with error classification, multi-language build failure diagnosis (Go, JS/TS), error parsing with file/line extraction, prior-work context injection via tool journals.
+**Recovery:** E19 failure type classification (transient/fixable/needs_replan/escalate/timeout) with automatic orchestrator action routing; E19.1 per-IMPL `reactions:` block overrides default routing per failure type with custom action and max_attempts; autonomy gating (gated/supervised/autonomous) controls which stages require human approval; daemon-mode auto-remediation loop retries build failures up to a configurable limit before escalating. Session resume detection with progress percentage and suggested actions, structured retry context with error classification, multi-language build failure diagnosis (Go, JS/TS), error parsing with file/line extraction, prior-work context injection via tool journals.
 
 **Observability:** Structured completion reports, hook enforcement audit trail, cost/agent_performance/activity event schema (E40), tool call event streaming (SSE), agent progress tracking, CONTEXT.md project history, web dashboard with 15+ review panels and real-time monitoring.
 

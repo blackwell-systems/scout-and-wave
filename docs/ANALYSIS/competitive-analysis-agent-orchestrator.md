@@ -1,6 +1,7 @@
 # Competitive Analysis: Scout-and-Wave vs Agent Orchestrator
 
 **Date:** 2026-03-24
+**Last updated:** 2026-03-26 (reactions system update)
 **Analyst scope:** Full codebase review of both systems
 **AO commit base:** ComposioHQ/agent-orchestrator (main branch, March 2026)
 
@@ -127,8 +128,8 @@ Key architectural properties:
 | Batch issue processing | None | `ao batch-spawn INT-1 INT-2 INT-3` | **SAW weakness** |
 | **Notification Channels** | | | |
 | Desktop notifications | Browser push notifications + in-app toasts (9 event types, per-event muting) | Native desktop notifications (node-notifier) | Both have push notifications |
-| Slack | None | Slack webhook plugin | **SAW weakness** |
-| Generic webhooks | None | Webhook notifier plugin | **SAW weakness** |
+| Slack | Webhook adapter in `saw.config.json` (Slack, Discord, Telegram) | Slack webhook plugin | SAW added webhook adapter support |
+| Generic webhooks | `webhooks.adapters` in `saw.config.json`; configurable via Web UI Settings | Webhook notifier plugin | Gap narrowed; AO's routing-by-priority still more sophisticated |
 | Composio integration | None | Composio notifier plugin | |
 | Priority-based routing | None | Notification routing by priority level | **SAW weakness** |
 | **Web Dashboard** | | | |
@@ -148,20 +149,22 @@ Key architectural properties:
 | Mobile app | None | React Native app with 7 screens | **SAW weakness** |
 | **CLI Experience** | | | |
 | Command count | 60+ commands (sawtools) | ~15 commands (ao) | SAW has more granular commands |
-| Quick start | Requires Claude Code + skill installation | `npm install -g @composio/ao && ao start` | **AO is dramatically easier to start** |
-| One-command setup | None | `ao start https://github.com/org/repo` | **AO's killer onboarding feature** |
+| Quick start | `git clone` + `./install.sh` + `go install sawtools` + `sawtools init` (4 steps, largely automated) | `npm install -g @composio/ao && ao start` | **AO still wins on simplicity; SAW gap narrowed** |
+| One-command setup | None; `./install.sh` automates Claude Code config (hooks, settings.json, Agent permission); `sawtools init` auto-detects project | `ao start https://github.com/org/repo` | **AO's killer onboarding feature remains; SAW automation improved** |
+| Homebrew install | `brew install blackwell-systems/tap/sawtools` | npm global install | Both support package manager install |
+| Install verification | `sawtools verify-install` command | None documented | SAW added structured install verification |
 | Daemon mode | sawtools daemon (queue-based) | ao start (lifecycle manager) | Both support long-running operation |
 | **Onboarding / Quick Start** | | | |
-| Time to first use | Install Claude Code + install hooks + learn /saw commands | `npm install -g @composio/ao && ao start` | **AO wins decisively** |
-| Config complexity | saw.config.json + hook installation + prompt files | agent-orchestrator.yaml (or auto-generated) | |
-| Documentation | Protocol spec + scattered docs | README + SETUP.md + DEVELOPMENT.md + examples/ | |
+| Time to first use | `git clone` + `./install.sh` (auto-configures Claude Code) + `brew/go install sawtools` + `sawtools init` | `npm install -g @composio/ao && ao start` | **AO still faster; SAW reduced from 5+ manual steps to 4 with automation** |
+| Config complexity | `sawtools init` auto-generates `saw.config.json`; `./install.sh` handles all hook registration | agent-orchestrator.yaml (or auto-generated) | Both now have auto-detection |
+| Documentation | Installation guide, quickstart with worked example, protocol spec (13 docs), hooks reference, 4-part blog series | README + SETUP.md + DEVELOPMENT.md + examples/ | SAW documentation substantially more organized than previously |
 | **Plugin / Extensibility Model** | | | |
 | Extension model | Go SDK (import packages) | TypeScript plugin system (8 slots, manifest+create) | AO's plugin model is more accessible |
 | Plugin hot-loading | No | Dynamic import at startup | |
 | Custom plugins | Write Go packages | npm packages or local files | |
 | **CI/CD Integration** | | | |
 | CI-driven execution | sawtools CLI callable from pipelines | ao CLI callable from pipelines | Both support it |
-| CI failure handling | Build diagnostics (pkg/builddiag), error parsing (pkg/errparse) | Reaction system auto-sends fix instructions to agent | AO's reaction system is more automated |
+| CI failure handling | E19 failure classification (5 types) + E19.1 per-IMPL reactions override; daemon mode auto-remediation via `pkg/engine/auto_remediate.go` with 3-level autonomy gating (gated/supervised/autonomous) | Reaction system auto-sends fix instructions to agent | Both have automated failure handling; AO's is lifecycle-polling-based and CI-aware; SAW's is classification-based and triggers at wave finalization |
 | Webhook support | None | GitHub webhook endpoint for push events | **SAW weakness** |
 | **Recovery / Retry** | | | |
 | Session resume | resume-detect with progress %, suggested actions | Session restore with workspace recreation | |
@@ -228,13 +231,21 @@ SAW's 13 protocol documents (invariants, execution rules, state machine, partici
 
 ## 5. AO Strengths (things SAW should learn from)
 
-### Onboarding is Orders of Magnitude Easier
+### Onboarding is Still Meaningfully Easier
 
-AO's `npm install -g @composio/ao && ao start https://github.com/org/repo` gets a user from zero to working system in under a minute. SAW requires installing Claude Code, configuring hooks, understanding the /saw skill syntax, and manually running commands. This is not a minor UX difference -- it is the difference between a product someone tries and a product someone reads about.
+*(Updated 2026-03-26: SAW's installation story has improved substantially; the gap has narrowed.)*
+
+AO's `npm install -g @composio/ao && ao start https://github.com/org/repo` gets a user from zero to working system in under a minute. SAW now has a more automated path: `git clone` + `./install.sh` (which auto-configures Claude Code's settings.json, registers 11 hooks, and adds Agent permission) + `brew install blackwell-systems/tap/sawtools` + `sawtools init` (auto-detects language and build commands). The installer is idempotent, verifiable with `sawtools verify-install`, and includes smoke tests. This is meaningfully better than the previous manual multi-step process.
+
+However, the structural gap remains. SAW requires cloning a separate protocol repo to obtain skill files, then separately installing a Go binary. AO is one npm package. The minimum prerequisite surface for SAW (Git 2.20+, Go 1.25+, jq) is heavier than AO's (npm). Until SAW can be installed without cloning the protocol repo, the first-use experience will remain more involved than AO's one-command flow.
+
+The honest framing: SAW went from "requires reading docs to figure out 5+ manual steps" to "4 commands with automation and verification." AO remains "one command." The difference still matters for first impressions.
 
 **Specific code reference:** `packages/cli/src/commands/start.ts` handles the entire bootstrap: clone repo if URL, find/create config, init workspace hooks, spawn orchestrator, start lifecycle manager, launch dashboard. One command does everything.
 
-### The Reaction Engine is Genuinely Valuable
+### The Reaction Engine is Genuinely Valuable (but the gap has narrowed)
+
+*(Updated 2026-03-26)*
 
 AO's lifecycle manager (`packages/core/src/lifecycle-manager.ts`, 921 lines) implements a polling-based state machine that:
 - Detects 14 state transitions (spawning -> working -> pr_open -> ci_failed -> etc.)
@@ -243,9 +254,16 @@ AO's lifecycle manager (`packages/core/src/lifecycle-manager.ts`, 921 lines) imp
 - Escalates to human notification after configurable retry counts
 - Tracks reaction attempts per session with fingerprinting to avoid duplicate dispatches
 
-This is production-grade operational automation. SAW has nothing comparable. When a SAW wave agent encounters a CI failure, the human must intervene. When an AO agent's CI fails, the system automatically tells the agent to fix it, retries twice, then escalates.
-
 **Specific code reference:** `lifecycle-manager.ts:368-492` -- the `executeReaction` function with attempt tracking, escalation thresholds, and configurable retry counts.
+
+SAW now has a meaningful failure-handling stack of its own, though it works differently:
+
+- **E19 failure classification** (`pkg/protocol/failure.go`, `pkg/orchestrator/failure.go`) — agents tag completion reports with one of 5 failure types (`transient`, `fixable`, `needs_replan`, `escalate`, `timeout`). `RouteFailure()` maps each type to an orchestrator action (retry, apply-fix-and-relaunch, replan, escalate, retry-with-scope). Fully implemented and wired in both `orchestrator.go` and `structured_wave.go`.
+- **E19.1 per-IMPL reactions override** (`pkg/protocol/reactions_validation.go`) — the IMPL manifest can include a `reactions:` block that overrides E19 defaults per failure type, specifying action and max_attempts. Validated by `ValidateReactions()` and displayed in the web UI's ReactionsPanel. The override routing functions (`RouteFailureWithReactions`, `MaxAttemptsFor`) are fully implemented and tested but are classified as an advisory gap by the wiring audit — they are not yet called from the production orchestrator code path.
+- **Autonomous post-merge remediation** (`pkg/engine/auto_remediate.go`, `pkg/engine/daemon.go`) — in daemon mode with `autonomy: supervised` or `autonomous`, `AutoRemediate()` runs a configurable retry loop after a failed wave finalization, calling a fix agent (`FixBuildFailure`) then re-running `VerifyBuild`. Wired in the daemon run loop at `daemon.go:303`.
+- **Three-level autonomy gating** (`pkg/autonomy/`) — `gated` (all stages require human approval), `supervised` (wave advance, gate failure, and queue advance are auto-approved; IMPL review is not), `autonomous` (all stages auto-approved). Controls whether `AutoRemediate` fires automatically.
+
+The remaining gap relative to AO: AO's reaction engine is triggered by external state (CI checks, review comments, PR status changes) detected via polling. SAW's auto-remediation triggers at wave finalization boundaries only and is not yet integrated with external CI state or review comment routing. For pure build/test failures during wave teardown, SAW's daemon mode now handles this automatically. For CI failures that occur asynchronously after merge, or for PR review comment routing, SAW has no equivalent.
 
 ### Agent-Agnostic Plugin Architecture
 
@@ -312,23 +330,31 @@ AO uses SHA-256 of the config file path to namespace all runtime data. Multiple 
 
 ### 1. One-Command Start Experience
 
+*(Updated 2026-03-26: Partially addressed. `sawtools init` now exists and auto-detects projects; `./install.sh` handles Claude Code configuration automation. The remaining gap is removing the clone-the-protocol-repo requirement from the install flow.)*
+
 **What it is:** `ao start` bootstraps everything -- config creation, hook installation, dashboard launch, orchestrator spawn -- in a single command.
 
-**Why it matters:** SAW's installation requires 5+ steps across multiple tools. Every step is a point where users abandon. The first-use experience is the single biggest barrier to adoption.
+**Why it matters:** SAW's installation required 5+ manual steps. That is now 4 steps with automation, but still not one command.
 
-**Rough effort:** Medium (2-3 weeks). Would require a `sawtools init` that detects the repo, generates saw.config.json, installs Claude Code hooks, and optionally launches the web dashboard.
+**Remaining work:** Package the skill files and install script so users don't need to clone the protocol repo. A `sawtools install-skill` subcommand that downloads skill files from a release artifact would complete this. The `sawtools init` and `./install.sh` work is done; the missing piece is eliminating the manual clone step.
 
-**Repos affected:** scout-and-wave-go (CLI), scout-and-wave-web (dashboard auto-launch)
+**Rough effort:** Small-Medium (1 week). The scaffolding (`sawtools init`, `./install.sh`) already exists; the remaining work is distributing skill files via the Go binary or a hosted artifact.
 
-### 2. Reaction Engine for CI/Review Feedback
+**Repos affected:** scout-and-wave-go (embed or download skill files), scout-and-wave (release artifact packaging)
 
-**What it is:** A polling loop that detects CI failures and review comments, automatically sends fix instructions to agents, retries with configurable limits, and escalates to human notification.
+### 2. External CI/Review Feedback Loop (Partially Addressed)
 
-**Why it matters:** SAW agents currently require human intervention for CI failures and review comments. Automating this feedback loop would dramatically reduce the need for human babysitting during wave execution.
+*(Updated 2026-03-26)*
 
-**Rough effort:** Medium-Large (3-4 weeks). Would need to add a lifecycle polling system to the engine, CI/review state detection (via gh CLI or GitHub API), configurable reaction definitions, and retry/escalation logic.
+**What it is:** A polling loop that detects CI failures and review comments on open PRs, automatically sends fix instructions to agents, retries with configurable limits, and escalates to human notification.
 
-**Repos affected:** scout-and-wave-go (engine), scout-and-wave-web (dashboard integration)
+**What's already built:** SAW's daemon mode now has automated build-failure remediation (`pkg/engine/auto_remediate.go`) with three-level autonomy gating and configurable retries. This handles the most common failure case (build/test fails at wave teardown) automatically.
+
+**Remaining gap:** AO's lifecycle polling detects CI failures that occur asynchronously after push, and routes PR review comments back to agents. SAW has neither. Closing this gap requires: (1) polling GitHub CI check status after wave merge, (2) detecting review comments and routing them to a re-launch of the responsible agent. This is a bounded addition to the existing daemon polling loop.
+
+**Rough effort:** Medium (1-2 weeks). The remediation loop is already built; the remaining work is CI status polling (via gh CLI) and review comment detection. No new autonomy infrastructure is needed.
+
+**Repos affected:** scout-and-wave-go (daemon polling extension), scout-and-wave-web (dashboard integration)
 
 ### 3. Issue Tracker Integration
 
@@ -374,25 +400,37 @@ AO uses SHA-256 of the config file path to namespace all runtime data. Multiple 
 
 ## 7. SAW Weaknesses Exposed
 
-### The Installation Cliff
+### The Installation Cliff (Partially Addressed)
 
-AO's one-command start reveals SAW's biggest weakness: the installation process. SAW requires Claude Code, hook installation scripts, understanding the /saw skill format, and manual CLAUDE.md configuration. A potential user evaluating both tools will have AO running in 2 minutes while still reading SAW's installation docs.
+*(Updated 2026-03-26)*
+
+AO's one-command start still reveals a gap. SAW's install process has been substantially automated: `./install.sh` now auto-configures Claude Code's settings.json, registers 11 enforcement hooks, and adds the Agent permission. `sawtools init` auto-detects project language and generates `saw.config.json`. `sawtools verify-install` provides structured post-install verification with smoke tests. The process is now 4 commands rather than 5+ manual steps with no verification.
+
+The remaining cliff: users must clone the protocol repo before they can run `./install.sh`. This git clone step — before any functionality is available — is still a barrier AO does not have. A developer who finds SAW via the README cannot install it with a single command.
 
 ### No Issue Tracker Integration
 
 SAW has no concept of external work items. Every feature must be described ad hoc in natural language. Teams with hundreds of issues in Linear or GitHub Issues cannot feed them into SAW. AO lets users `ao batch-spawn INT-1 INT-2 INT-3` and walk away.
 
-### No Autonomous Feedback Loop
+### Autonomous Feedback Loop: Implemented for Build Failures, Not for External CI
 
-When an AO agent's CI fails, the system automatically tells it to fix it. When a SAW wave agent's build fails, the human must notice (via the dashboard or wave finalization failure) and manually intervene. SAW's finalize-wave catches failures, but it does not automatically retry with guidance.
+*(Updated 2026-03-26)*
 
-### No Push Notifications
+SAW now has automated failure remediation in daemon mode. When a wave finalization fails (build or test failure), `AutoRemediate()` in `pkg/engine/auto_remediate.go` runs a configurable retry loop — calling a fix agent and re-running `VerifyBuild` until the build passes or retries are exhausted. This is wired in the daemon run loop (`pkg/engine/daemon.go`) and gated by the three-level autonomy system: `supervised` or `autonomous` mode enables it automatically; `gated` mode (the default) requires human approval.
 
-SAW requires active monitoring via the web dashboard. AO sends desktop notifications, Slack messages, and webhooks. For autonomous operation, push notifications are essential.
+What remains unimplemented relative to AO: AO's reaction engine responds to external events — specifically CI check results on open PRs and review comments. SAW's remediation fires only at wave finalization and only for in-process build/test failures it can observe directly. If an agent's work passes local gates but fails CI after being pushed, or if a code reviewer leaves a comment, SAW has no automatic response. AO handles both of these cases via its lifecycle polling loop.
+
+### Push Notifications: Webhook Support Added, Desktop Not Yet
+
+*(Updated 2026-03-26)*
+
+SAW's `saw.config.json` now has a `webhooks` section supporting Slack, Discord, and Telegram adapters, configurable from the Web UI Settings page. This addresses the "no outbound notifications" gap for teams that can configure a webhook endpoint. What remains missing relative to AO: proactive desktop notifications (SAW's web dashboard requires you to have the browser open; AO sends system-level notifications), and priority-based routing (AO routes by urgency level; SAW's webhook config is simpler). The "completely dark" characterization is no longer accurate, but AO's notification story is still more capable for unattended operation.
 
 ### No Multi-Agent-Tool Support
 
 SAW's agent skill targets Claude Code specifically. The Go SDK's Backend interface supports different LLM providers (Anthropic, Bedrock, OpenAI), but the agent execution model assumes Claude-like tool use. AO wraps Codex, Aider, and OpenCode as first-class alternatives. Users locked into a specific agent tool may choose AO for compatibility.
+
+*(Note: SAW's README now explicitly references Agent Skills compatibility with Cursor, GitHub Copilot, and other tools, though reference implementations beyond Claude Code are not yet provided.)*
 
 ### No Mobile Presence
 
@@ -442,29 +480,37 @@ No. These products overlap in the "AI agents on codebases" space but target fund
 
 **Moderate for SAW's expansion market.** If SAW wants to move into "general agent fleet management" or "issue backlog processing," AO is already there with a mature product. SAW would need to build issue tracking, reaction engines, and fleet management to compete in that space.
 
-**High for mindshare.** AO's one-command start, 3,288 test cases, active Discord community, and Composio backing give it marketing advantages. A developer who discovers AO first may not look further. SAW needs to be findable and immediately impressive.
+**High for mindshare.** AO's one-command start, 3,288 test cases, active Discord community, and Composio backing give it marketing advantages. A developer who discovers AO first may not look further. SAW's documentation and installation experience have improved (structured install guide, quickstart, Homebrew install, `sawtools init`), and SAW is now published as an [Agent Skills](https://agentskills.io) standard package with positioned compatibility across Claude Code, Cursor, and GitHub Copilot. These improve discoverability and first impressions. The remaining gap is the install flow's repo-clone requirement and the absence of a compelling demo-from-zero experience.
+
+*(Updated 2026-03-26)*
 
 ---
 
 ## 9. Recommendations
 
-### Priority 1: Onboarding (Critical)
+### Priority 1: Complete the Onboarding Story (High — was Critical, now High)
 
-**Action:** Build `sawtools init` and `sawtools quickstart` commands that reduce installation to 2-3 steps.
-**Rationale:** The installation cliff is SAW's biggest adoption barrier. No amount of technical superiority matters if users cannot get started.
-**Effort:** 2-3 weeks
+*(Updated 2026-03-26: `sawtools init`, `./install.sh` automation, `sawtools verify-install`, and Homebrew install are all done. Priority reduced from Critical to High. Remaining gap is smaller.)*
 
-### Priority 2: Reaction Engine for CI/Review Feedback (High)
+**Action:** Eliminate the protocol-repo clone requirement by bundling skill files with the `sawtools` binary (or via a `sawtools install-skill` command that fetches from a release artifact). Goal: reduce installation to 2 steps: `brew install sawtools && sawtools install-skill && sawtools init`.
+**Rationale:** The automated install scaffolding is in place. The remaining barrier is requiring users to clone a git repo before any tooling is available. Removing this step would bring SAW's first-use experience to "almost competitive" with AO.
+**Effort:** 1 week (scaffolding exists; just needs distribution mechanism)
 
-**Action:** Add a lifecycle polling system that detects CI failures and review comments during wave execution, automatically retries with structured guidance, and escalates to human notification after configurable limits.
-**Rationale:** This is the single most valuable feature AO has that SAW lacks. It directly reduces human babysitting during wave execution.
-**Effort:** 3-4 weeks
+### Priority 2: External CI/Review Polling (Medium — was High)
 
-### Priority 3: Push Notifications (High)
+*(Updated 2026-03-26: Build-failure auto-remediation in daemon mode is done. Priority and effort reduced.)*
 
-**Action:** Add desktop notification support (Go native), Slack webhook integration, and generic webhook support for wave completions, failures, and events requiring attention.
-**Rationale:** Enables "fire and forget" workflows. Required for daemon mode to be practically useful.
+**Action:** Extend the daemon polling loop to detect CI check failures on pushed branches and PR review comments, then trigger the existing `AutoRemediate` machinery or a targeted agent relaunch.
+**Rationale:** The auto-remediation engine is built and wired. The remaining gap is hooking external CI state (GitHub check runs) and review comment events into it. This is a bounded addition, not a greenfield build.
 **Effort:** 1-2 weeks
+
+### Priority 3: Desktop Push Notifications (Medium — was High)
+
+*(Updated 2026-03-26: Webhook adapters for Slack/Discord/Telegram added. Desktop notifications remain unimplemented.)*
+
+**Action:** Add native desktop notification support (Go notification library) for wave completions, failures, and events requiring human attention.
+**Rationale:** Webhook support is now in place for users who configure endpoints. Desktop notifications are the remaining gap for unattended local operation — the common case for individual developers.
+**Effort:** 3-5 days
 
 ### Priority 4: Issue Tracker Integration (Medium)
 
