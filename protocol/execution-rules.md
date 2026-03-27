@@ -1803,6 +1803,42 @@ on an active IMPL, and warns when `context_source` is absent on wave agents in
 
 ---
 
+## E45: Shared Data Structure Scaffold Detection
+
+**Trigger:** Scout phase, after defining agent tasks but before finalizing IMPL doc
+
+**Required Action:** Scout scans agent task prompts, file_ownership, and
+interface_contracts to detect data structures (structs, enums, type aliases,
+traits) referenced by 2+ agents. For each detected shared type, Scout adds an
+entry to the Scaffolds section of the IMPL doc.
+
+**Detection heuristics:**
+- Agent A owns file X, Agent B's task says "import TypeName from X"
+- Type appears in interface_contracts AND 2+ agent tasks reference it
+- Same struct/enum name mentioned in multiple agents' "Interfaces to implement"
+
+**Does NOT trigger for:**
+- Types from external packages (stdlib, third-party dependencies)
+- Types in existing codebase files not owned by any agent
+- Types mentioned in only one agent's task (no cross-agent dependency)
+
+**Automated tool:** `sawtools detect-shared-types <impl-doc>` automates this
+detection. Scout should invoke it after writing agent prompts (step 10 of Scout
+procedure) and merge the output into the Scaffolds section.
+
+**Rationale:** Agents cannot coordinate at runtime. If Agent A defines
+`PreviewData` in fileA and Agent B also defines it in fileB (because B's task
+says "create PreviewData struct"), the merge fails with duplicate declarations.
+Scaffolding the shared type before Wave 1 prevents this I1 violation.
+
+**Failure Handling:** If Scout omits a shared type from scaffolds and agents
+create duplicate definitions, E11 (conflict prediction) will catch it at merge
+time. However, this is a late failure — E45 exists to prevent it proactively.
+
+**Related Invariants:** See I2 (interface contracts precede parallel implementation)
+
+---
+
 ## Cross-References
 
 - See `preconditions.md` for conditions that must hold before execution begins
@@ -1835,3 +1871,4 @@ on an active IMPL, and warns when `context_source` is absent on wave agents in
 - E40: Observability Event Emission — orchestrator emits cost, agent_performance, and activity events at lifecycle transitions; non-blocking; batch writes preferred; stored as JSONB — see also E19, E21, E28, E29, E33, `observability-events.md`
 - E41: Type Collision Detection — pre-flight check during prepare-wave; AST-based detection of duplicate type/function/const names across agents in same package; blocks wave launch on collision — see also E3, E22, I1
 - E42: SubagentStop Validation — SubagentStop lifecycle hook validates protocol obligations before agent session closes; checks I1 ownership, I5 commit, and completion reports for wave agents; agent-type-specific validation matrix; exit 2 blocks completion — see also I1, I4, I5, E3, E21, E40
+- E45: Shared Data Structure Scaffold Detection — Scout scans agent tasks and file ownership to detect types referenced by 2+ agents; emits scaffold entries before Wave 1; prevents duplicate definitions and merge-time I1 violations — see also I2, E11, E22, `procedures.md` (Scout Agent step 10), `message-formats.md` (Scaffolds Section Format)
