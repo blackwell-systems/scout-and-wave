@@ -1,0 +1,157 @@
+#!/usr/bin/env bash
+# inject_worktree_env - SubagentStart hook for SAW worktree environment injection
+#
+# Lifecycle: SubagentStart (fires when wave agent threads are created)
+# Purpose: Set SAW_AGENT_WORKTREE, SAW_AGENT_ID, SAW_WAVE_NUMBER, SAW_IMPL_PATH, SAW_BRANCH
+#          environment variables for wave agents to enable absolute path patterns
+#
+# Convention: Hooks receive JSON on stdin, must return JSON on stdout, exit 0 always
+#
+# Test Cases:
+# Test 1: Non-SAW agent (no [SAW:wave tag)
+#   - Should exit 0 immediately, no env file created
+#   - echo '{}' | CLAUDE_AGENT_DESCRIPTION="Generic agent" ./inject_worktree_env
+#
+# Test 2: SAW wave agent with worktree
+#   - Should detect [SAW:wave1:agent-A] tag
+#   - Should find .saw-ownership.json and set SAW_AGENT_WORKTREE
+#   - Should set all 5 environment variables
+#   - cd /path/to/worktree && echo '{}' | CLAUDE_AGENT_DESCRIPTION="[SAW:wave1:agent-A] Implement feature" ./inject_worktree_env
+#
+# Test 3: SAW solo agent (no worktree)
+#   - Should detect [SAW:wave tag but no worktree
+#   - Should set 4 vars (SAW_AGENT_WORKTREE empty)
+#   - echo '{}' | CLAUDE_AGENT_DESCRIPTION="[SAW:wave1:agent-A] Solo task" ./inject_worktree_env
+
+set -euo pipefail
+
+# Read JSON from stdin (not used for SubagentStart, but stdin is open)
+read -r _ || true  # Consume stdin, ignore content
+
+# Extract agent description from environment (set by Claude Code)
+agent_desc="${CLAUDE_AGENT_DESCRIPTION:-}"
+
+# Check if this is a SAW wave agent
+if ! [[ "$agent_desc" =~ \[SAW:wave ]]; then
+  # Not a SAW agent, exit cleanly (no side effects)
+  echo '{"hookSpecificOutput": {"hookEventName": "SubagentStart", "sawAgent": false}}'
+  exit 0
+fi
+
+# Parse wave number and agent ID from [SAW:wave{N}:agent-{ID}] tag
+if [[ "$agent_desc" =~ \[SAW:wave([0-9]+):agent-([A-Z0-9]+)\] ]]; then
+  wave_num="${BASH_REMATCH[1]}"
+  agent_id="${BASH_REMATCH[2]}"
+else
+  # Malformed tag, exit cleanly
+  echo '{"hookSpecificOutput": {"hookEventName": "SubagentStart", "sawAgent": true, "error": "malformed SAW tag"}}'
+  exit 0
+fi
+
+# Detect worktree path
+worktree_path=""
+current_dir="$PWD"
+
+# Method 1: Walk up directories looking for .saw-ownership.json (up to 5 levels)
+check_dir="$current_dir"
+for _ in {1..5}; do
+  if [[ -f "$check_dir/.saw-ownership.json" ]]; then
+    worktree_path="$check_dir"
+    break
+  fi
+  parent="$(dirname "$check_dir")"
+  if [[ "$parent" == "$check_dir" ]]; then
+    break  # Reached filesystem root
+  fi
+  check_dir="$parent"
+done
+
+# Method 2: If not found, check if PWD contains .claude/worktrees/saw/
+if [[ -z "$worktree_path" ]] && [[ "$current_dir" =~ \.claude/worktrees/saw/ ]]; then
+  # Extract worktree path (everything up to and including agent directory)
+  if [[ "$current_dir" =~ (.*\.claude/worktrees/saw/[^/]+/wave[0-9]+-agent-[A-Z0-9]+) ]]; then
+    worktree_path="${BASH_REMATCH[1]}"
+  fi
+fi
+
+# Detect IMPL doc path
+impl_path=""
+
+# Method 1: Check .saw-state/active-impl (walk up to repo root)
+check_dir="$current_dir"
+while [[ "$check_dir" != "/" ]]; do
+  if [[ -f "$check_dir/.saw-state/active-impl" ]]; then
+    impl_path="$(cat "$check_dir/.saw-state/active-impl")"
+    break
+  fi
+  parent="$(dirname "$check_dir")"
+  if [[ "$parent" == "$check_dir" ]]; then
+    break
+  fi
+  check_dir="$parent"
+done
+
+# Method 2: If not found, look for IMPL doc path in agent description or PWD
+if [[ -z "$impl_path" ]] && [[ "$agent_desc" =~ docs/IMPL/IMPL-[^.]+\.yaml ]]; then
+  relative_impl="${BASH_REMATCH[0]}"
+  # Find repo root (look for .git directory)
+  check_dir="$current_dir"
+  while [[ "$check_dir" != "/" ]]; do
+    if [[ -d "$check_dir/.git" ]]; then
+      impl_path="$check_dir/$relative_impl"
+      break
+    fi
+    parent="$(dirname "$check_dir")"
+    if [[ "$parent" == "$check_dir" ]]; then
+      break
+    fi
+    check_dir="$parent"
+  done
+fi
+
+# Detect branch name
+branch_name=""
+
+# Method 1: If worktree found, query git
+if [[ -n "$worktree_path" ]] && [[ -d "$worktree_path/.git" ]]; then
+  branch_name="$(git -C "$worktree_path" branch --show-current 2>/dev/null || true)"
+fi
+
+# Method 2: If not found, construct from slug/wave/agent
+if [[ -z "$branch_name" ]] && [[ -n "$impl_path" ]]; then
+  # Extract slug from IMPL doc filename: IMPL-{slug}.yaml
+  if [[ "$impl_path" =~ IMPL-([^/]+)\.yaml ]]; then
+    slug="${BASH_REMATCH[1]}"
+    branch_name="saw/${slug}/wave${wave_num}-agent-${agent_id}"
+  fi
+fi
+
+# Write environment variables to temp file
+env_file="/tmp/saw-agent-env-$$"
+{
+  echo "export SAW_AGENT_WORKTREE=\"$worktree_path\""
+  echo "export SAW_AGENT_ID=\"$agent_id\""
+  echo "export SAW_WAVE_NUMBER=\"$wave_num\""
+  echo "export SAW_IMPL_PATH=\"$impl_path\""
+  echo "export SAW_BRANCH=\"$branch_name\""
+} > "$env_file"
+
+# Return JSON with env file path
+cat <<EOF
+{
+  "hookSpecificOutput": {
+    "hookEventName": "SubagentStart",
+    "sawAgent": true,
+    "envFile": "$env_file",
+    "variables": {
+      "SAW_AGENT_WORKTREE": "$worktree_path",
+      "SAW_AGENT_ID": "$agent_id",
+      "SAW_WAVE_NUMBER": "$wave_num",
+      "SAW_IMPL_PATH": "$impl_path",
+      "SAW_BRANCH": "$branch_name"
+    }
+  }
+}
+EOF
+
+exit 0
