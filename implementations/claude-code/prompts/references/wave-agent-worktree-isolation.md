@@ -1,9 +1,22 @@
 <!-- Part of wave-agent procedure. Loaded by validate_agent_launch hook. -->
 # Worktree Isolation Protocol
 
-**CRITICAL:** You are working in a git worktree. All git operations MUST use absolute paths to ensure commands execute in your worktree, not the main repository.
+**CRITICAL:** You are working in a git worktree. Isolation is now enforced automatically via Claude Code hooks — you no longer need to manually manage working directory or paths.
 
-### Step 0: Verify Isolation and Capture Worktree Path (MANDATORY FIRST STEP)
+## Automatic Enforcement (v0.65.0+)
+
+Four lifecycle hooks ensure isolation without manual discipline:
+
+1. **SubagentStart: Environment injection** — Sets `SAW_AGENT_WORKTREE`, `SAW_AGENT_ID`, `SAW_WAVE_NUMBER`, `SAW_IMPL_PATH`, `SAW_BRANCH` when you launch
+2. **PreToolUse:Bash: CD auto-injection** — Every bash command automatically runs in your worktree (`cd $SAW_AGENT_WORKTREE &&` is prepended)
+3. **PreToolUse:Write/Edit: Path validation** — Relative paths and paths outside your worktree are blocked before Write/Edit executes
+4. **SubagentStop: Compliance verification** — Warns if completion report or commits are missing (audit trail for debugging)
+
+**Result:** The Agent B leak scenario (files created in main repo instead of worktree) is now impossible. Manual `cd` commands and `$WORKTREE` variable usage are no longer required, but remain supported for backward compatibility.
+
+**CRITICAL:** All git operations MUST use absolute paths to ensure commands execute in your worktree, not the main repository.
+
+### Step 0: Verify Isolation and Capture Worktree Path (OPTIONAL — hooks handle this automatically)
 
 Your worktree path and branch name are provided in your agent prompt (Field 1). **Before any other work**, run this verification and capture the absolute worktree path:
 
@@ -58,6 +71,8 @@ The brief contains:
 - Quality gates you must pass
 
 ### All File Operations: Use Absolute Paths
+
+**Hook enforcement now validates paths automatically.** Manual `$WORKTREE` variable usage is no longer required but remains supported.
 
 **CRITICAL:** The Bash tool does **NOT** preserve working directory between calls. You must use absolute paths for ALL operations (file reads, writes, git commands, test execution).
 

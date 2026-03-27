@@ -71,8 +71,8 @@ cd scout-and-wave
 The installer auto-detects Claude Code (checks for `~/.claude`) and does four things:
 
 1. **Symlinks skill files** to `~/.claude/skills/saw/` (SKILL.md, agent definitions, references, scripts).
-2. **Symlinks hook scripts** to `~/.local/bin/` (11 enforcement hooks, see [Hooks](#hooks-10-total) below).
-3. **Registers hooks** in `~/.claude/settings.json` under `PreToolUse`, `PostToolUse`, `SubagentStop`, and `UserPromptSubmit` lifecycle events.
+2. **Symlinks hook scripts** to `~/.local/bin/` (15 enforcement hooks, see [Hooks](#hooks-15-total) below).
+3. **Registers hooks** in `~/.claude/settings.json` under `PreToolUse`, `PostToolUse`, `SubagentStart`, `SubagentStop`, and `UserPromptSubmit` lifecycle events.
 4. **Adds `Agent` permission** to `~/.claude/settings.json` so SAW can launch agents without manual approval.
 
 The installer is idempotent — safe to run multiple times. It backs up `settings.json` before modifying it. Run `./install.sh --generic` to install to `~/.agents/skills/saw/` without Claude Code-specific configuration.
@@ -185,11 +185,17 @@ Start the server with:
 ./saw serve
 ```
 
-## Hooks (10 total)
+## Hooks (15 total)
 
-The hook installer registers 10 hooks across three lifecycle events. All hook scripts live in `implementations/claude-code/hooks/` and are symlinked to `~/.local/bin/`.
+The hook installer registers 15 hooks across four lifecycle events. All hook scripts live in `implementations/claude-code/hooks/` and are symlinked to `~/.local/bin/`.
 
-### PreToolUse (4 hooks — fire before tool execution)
+### SubagentStart (1 hook — fire when an agent session starts)
+
+| Hook | Matcher | Purpose |
+|---|---|---|
+| `inject_worktree_env` | *(all)* | Sets 5 environment variables (worktree path, agent ID, wave number, IMPL path, branch name) |
+
+### PreToolUse (6 hooks — fire before tool execution)
 
 | Hook | Matcher | Purpose |
 |---|---|---|
@@ -197,6 +203,8 @@ The hook installer registers 10 hooks across three lifecycle events. All hook sc
 | `block_claire_paths` | `Write\|Edit\|Bash` | Blocks operations targeting `.claire` paths (common typo for `.claude`) |
 | `check_wave_ownership` | `Write\|Edit\|NotebookEdit` | Blocks Wave agents from writing files outside their ownership manifest |
 | `validate_agent_launch` | `Agent` | Full pre-launch validation gate: checks IMPL doc, agent existence, scaffolds, branch |
+| `inject_bash_cd` | `Bash` | Auto-prepends `cd $SAW_AGENT_WORKTREE &&` to every bash command when agent is in worktree |
+| `validate_write_paths` | `Write\|Edit` | Blocks relative paths and paths outside worktree boundaries |
 
 ### PostToolUse (4 hooks — fire after tool execution)
 
@@ -207,12 +215,26 @@ The hook installer registers 10 hooks across three lifecycle events. All hook sc
 | `warn_stubs` | `Write\|Edit` | Warns on stub patterns (TODO, FIXME, panic) in written files |
 | `check_branch_drift` | `Bash` | Blocks commits directly to `main` or `master` |
 
-### SubagentStop (2 hooks — fire when an agent session ends)
+### SubagentStop (4 hooks — fire when an agent session ends)
 
 | Hook | Matcher | Purpose |
 |---|---|---|
 | `validate_agent_completion` | *(all)* | Blocks completion if protocol obligations are unfulfilled (timeout: 10s) |
 | `emit_agent_completion` | *(all, async)* | Emits observability events for monitoring and the web dashboard |
+| `verify_worktree_compliance` | *(all)* | Verifies completion report and commits exist (warn-only, creates audit trail) |
+
+#### Hook-Based Enforcement (E43)
+
+As of v0.65.0, worktree isolation is enforced automatically via lifecycle hooks. Wave agents no longer need manual `cd` commands or `$WORKTREE` variable usage — hooks inject working directory changes and validate paths before tool execution.
+
+This prevents the Agent B leak scenario where files are accidentally created in the main repository instead of the agent's assigned worktree. Four hooks work together to provide defense-in-depth isolation:
+
+1. Environment injection (SubagentStart)
+2. Bash command rewriting (PreToolUse:Bash)
+3. Write/Edit path validation (PreToolUse:Write/Edit)
+4. Protocol compliance verification (SubagentStop)
+
+See `implementations/claude-code/hooks/README.md` for full hook documentation.
 
 For detailed hook documentation, see [HOOKS.md](HOOKS.md).
 
@@ -221,16 +243,20 @@ For detailed hook documentation, see [HOOKS.md](HOOKS.md).
 The installer creates these symlinks in `~/.local/bin/`:
 
 ```
+~/.local/bin/inject_worktree_env
 ~/.local/bin/check_scout_boundaries
 ~/.local/bin/block_claire_paths
 ~/.local/bin/check_wave_ownership
 ~/.local/bin/validate_agent_launch
+~/.local/bin/inject_bash_cd
+~/.local/bin/validate_write_paths
 ~/.local/bin/validate_impl_on_write
 ~/.local/bin/check_git_ownership
 ~/.local/bin/warn_stubs
 ~/.local/bin/check_branch_drift
 ~/.local/bin/validate_agent_completion
 ~/.local/bin/emit_agent_completion
+~/.local/bin/verify_worktree_compliance
 ```
 
 Note: The installer script also references `check_impl_path` in its uninstall instructions, but this hook has been superseded by `validate_agent_launch` and is no longer installed or registered.

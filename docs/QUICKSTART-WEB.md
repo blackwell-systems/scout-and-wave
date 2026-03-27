@@ -65,6 +65,8 @@ If the plan looks correct, you are ready to launch. If something needs changing,
 
 Click the **Launch Wave** button on the IMPL review page.
 
+**Isolation enforcement:** When using Claude Code as the agent backend, worktree isolation is enforced automatically via hooks. When using API-based execution, isolation relies on manual worktree pre-creation and merge-time verification.
+
 [Screenshot: Launch Wave button on IMPL review page]
 
 The view switches to the **Wave Dashboard**, which shows live progress for each agent:

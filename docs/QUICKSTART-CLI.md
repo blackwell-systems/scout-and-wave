@@ -119,6 +119,8 @@ sawtools prepare-wave docs/IMPL/IMPL-add-caching.yaml --wave 1
 
 Agent execution requires Claude Code or the Claude API. Each agent receives a brief extracted from the IMPL doc and works in its own worktree.
 
+**Hook-based enforcement (Claude Code only):** If using the `/saw` skill in Claude Code, worktree isolation is enforced automatically via 4 hooks (environment injection, bash cd injection, path validation, compliance verification). API-based execution uses Layer 1 (manual pre-creation) and Layer 4 (merge-time trip wire) for isolation.
+
 If you are using the `/saw` skill in Claude Code, run `/saw wave` to launch agents automatically. For API-based execution, pass each agent's brief file (`.saw-agent-brief.md` in the worktree root) to your Claude API client.
 
 Agents run in parallel, implement their assigned files, run tests, and write completion reports back to the IMPL doc.
