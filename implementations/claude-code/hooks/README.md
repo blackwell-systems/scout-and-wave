@@ -1,6 +1,6 @@
 # SAW Claude Code Hooks
 
-Enforcement and injection hooks for CLI-based SAW agents. 12 hooks across PreToolUse, PostToolUse, SubagentStop, and UserPromptSubmit events.
+Enforcement and injection hooks for CLI-based SAW agents. 16 hooks across SubagentStart, PreToolUse, PostToolUse, SubagentStop, and UserPromptSubmit events.
 
 ## Hook Summary
 
@@ -8,6 +8,10 @@ Enforcement and injection hooks for CLI-based SAW agents. 12 hooks across PreToo
 
 | Hook | Event | Matcher | Rule | Description |
 |------|-------|---------|------|-------------|
+| inject_worktree_env | SubagentStart | — | E43 | Sets 5 env vars (worktree path, agent ID, wave num, IMPL path, branch) |
+| inject_bash_cd | PreToolUse | Bash | E43 | Auto-prepends `cd $SAW_AGENT_WORKTREE &&` to bash commands |
+| validate_write_paths | PreToolUse | Write\|Edit | E43 | Blocks relative paths and paths outside worktree |
+| verify_worktree_compliance | SubagentStop | — | E42/I5 | Verifies completion report and commits (warn-only) |
 | check_scout_boundaries | PreToolUse | Write\|Edit | I6 | Scouts can only write IMPL docs |
 | block_claire_paths | PreToolUse | Write\|Edit\|Bash | — | Blocks `.claire` typo paths |
 | check_wave_ownership | PreToolUse | Write\|Edit\|NotebookEdit | I1 | Wave agents write only owned files |
@@ -95,7 +99,7 @@ cd ~/code/scout-and-wave/implementations/claude-code/hooks
 ```
 
 The installer:
-- Creates symlinks in `~/.local/bin/` for all 11 hook scripts
+- Creates symlinks in `~/.local/bin/` for all 16 hook scripts
 - Merges hook configs into `~/.claude/settings.json` (preserves existing hooks)
 - Verifies installation and runs basic tests
 
@@ -601,6 +605,243 @@ echo $?  # 0 (if all preconditions met)
 # SAW agent launch with missing IMPL — should exit 1
 echo '{"tool_name":"Agent","agent_type":"wave-agent","tool_input":{"prompt":"no impl path here","description":"[SAW:wave1:agent-A] implement feature"}}' | validate_agent_launch 2>&1
 echo $?  # 1 (blocked: no IMPL path found)
+```
+
+---
+
+## Hook 10: Worktree Environment Injection (E43)
+
+**SubagentStart** — Sets 5 environment variables for worktree-based agents at launch time.
+
+### How It Works
+
+1. Claude Code calls the script when a subagent launches (before first tool execution)
+2. Script parses agent description for `[SAW:wave{N}:agent-{ID}]` tag
+3. Extracts IMPL doc path from agent prompt or reads from `.saw-state/active-impl`
+4. Determines worktree path from `.saw-state/worktrees.json` or returns empty if solo wave
+5. Returns `updatedEnvironment` with 5 variables:
+   - `SAW_AGENT_WORKTREE`: Absolute worktree path (empty if solo wave)
+   - `SAW_AGENT_ID`: Agent ID (e.g., "A", "B2")
+   - `SAW_WAVE_NUMBER`: Wave number (e.g., "1")
+   - `SAW_IMPL_PATH`: Absolute IMPL doc path
+   - `SAW_BRANCH`: Expected branch name (e.g., "saw/feature/wave1-agent-A")
+
+These variables are consumed by other E43 hooks (`inject_bash_cd`, `validate_write_paths`) and can be read by agents for debugging.
+
+### Manual Installation
+
+1. Symlink:
+   ```bash
+   ln -sf ~/code/scout-and-wave/implementations/claude-code/hooks/inject_worktree_env ~/.local/bin/inject_worktree_env
+   ```
+
+2. Add to `~/.claude/settings.json`:
+   ```json
+   {
+     "hooks": {
+       "SubagentStart": [
+         {
+           "hooks": [
+             {
+               "type": "command",
+               "command": "$HOME/.local/bin/inject_worktree_env"
+             }
+           ]
+         }
+       ]
+     }
+   }
+   ```
+
+### Testing
+
+```bash
+# Test with SAW agent description
+echo '{"description":"[SAW:wave1:agent-A] implement feature","prompt":"IMPL doc: /path/to/IMPL-feature.yaml"}' | inject_worktree_env
+# Should return JSON with updatedEnvironment containing 5 variables
+
+# Test with non-SAW agent (should pass through)
+echo '{"description":"helper agent","prompt":"Do some work"}' | inject_worktree_env
+echo $?  # 0 (no environment changes)
+```
+
+---
+
+## Hook 11: Bash CD Injection (E43)
+
+**PreToolUse** — Auto-prepends `cd $SAW_AGENT_WORKTREE &&` to bash commands when in worktree context.
+
+### How It Works
+
+1. Claude Code calls the script before executing a Bash tool
+2. Script checks if `SAW_AGENT_WORKTREE` environment variable is set (injected by Hook 10)
+3. If unset or empty -> pass through (exit 0, no modification)
+4. If command already starts with `cd $SAW_AGENT_WORKTREE` -> pass through (no double-injection)
+5. Otherwise -> return `updatedInput` with command modified to `cd $SAW_AGENT_WORKTREE && <original command>`
+
+This eliminates the "Agent B leak" scenario where agents forget to use absolute paths and create files in the main repo instead of their worktree.
+
+### Manual Installation
+
+1. Symlink:
+   ```bash
+   ln -sf ~/code/scout-and-wave/implementations/claude-code/hooks/inject_bash_cd ~/.local/bin/inject_bash_cd
+   ```
+
+2. Add to `~/.claude/settings.json`:
+   ```json
+   {
+     "hooks": {
+       "PreToolUse": [
+         {
+           "matcher": "Bash",
+           "hooks": [
+             {
+               "type": "command",
+               "command": "$HOME/.local/bin/inject_bash_cd"
+             }
+           ]
+         }
+       ]
+     }
+   }
+   ```
+
+### Testing
+
+```bash
+# Test without worktree env (should pass through unchanged)
+echo '{"tool_name":"Bash","tool_input":{"command":"echo hello"}}' | inject_bash_cd
+# Should return original input
+
+# Test with worktree env (should inject cd)
+export SAW_AGENT_WORKTREE="/path/to/worktree"
+echo '{"tool_name":"Bash","tool_input":{"command":"go test ./..."}}' | inject_bash_cd
+# Should return: {"hookSpecificOutput": {"updatedInput": {"command": "cd /path/to/worktree && go test ./..."}}}
+```
+
+---
+
+## Hook 12: Write Path Validation (E43)
+
+**PreToolUse** — Blocks Write/Edit operations with relative paths or paths outside worktree boundaries.
+
+### How It Works
+
+1. Claude Code calls the script before executing Write/Edit tools
+2. Script checks if `SAW_AGENT_WORKTREE` environment variable is set
+3. If unset or empty -> pass through (solo wave agents use different isolation)
+4. If `file_path` is relative (doesn't start with `/`) -> block (exit 2) with error message
+5. If `file_path` doesn't start with `$SAW_AGENT_WORKTREE` -> block (exit 2) with boundary violation message
+6. Otherwise -> allow (exit 0)
+
+This is the hard enforcement layer for worktree isolation, catching attempts to write outside boundaries even if bash cd injection failed.
+
+### Manual Installation
+
+1. Symlink:
+   ```bash
+   ln -sf ~/code/scout-and-wave/implementations/claude-code/hooks/validate_write_paths ~/.local/bin/validate_write_paths
+   ```
+
+2. Add to `~/.claude/settings.json`:
+   ```json
+   {
+     "hooks": {
+       "PreToolUse": [
+         {
+           "matcher": "Write|Edit",
+           "hooks": [
+             {
+               "type": "command",
+               "command": "$HOME/.local/bin/validate_write_paths"
+             }
+           ]
+         }
+       ]
+     }
+   }
+   ```
+
+### Testing
+
+```bash
+# Test without worktree env (should pass through)
+echo '{"tool_name":"Write","tool_input":{"file_path":"/tmp/test.txt"}}' | validate_write_paths
+echo $?  # 0
+
+# Test with relative path (should block)
+export SAW_AGENT_WORKTREE="/Users/user/worktree"
+echo '{"tool_name":"Write","tool_input":{"file_path":"relative/path.go"}}' | validate_write_paths 2>&1
+echo $?  # 2 (blocked)
+
+# Test with path outside worktree (should block)
+echo '{"tool_name":"Write","tool_input":{"file_path":"/Users/user/other/path.go"}}' | validate_write_paths 2>&1
+echo $?  # 2 (blocked)
+
+# Test with valid worktree path (should allow)
+echo '{"tool_name":"Write","tool_input":{"file_path":"/Users/user/worktree/pkg/module/file.go"}}' | validate_write_paths
+echo $?  # 0
+```
+
+---
+
+## Hook 13: Worktree Compliance Verification (E42/I5)
+
+**SubagentStop** — Verifies completion report and commits exist when agent finishes (warn-only, non-blocking).
+
+### How It Works
+
+1. Claude Code calls the script when a subagent stops (after last tool execution)
+2. Script checks if `SAW_AGENT_ID` and `SAW_IMPL_PATH` environment variables are set
+3. If unset -> pass through (non-SAW agent)
+4. Reads IMPL doc and extracts completion report for the agent
+5. If completion report missing -> warn to stderr (exit 0, non-blocking)
+6. If `SAW_BRANCH` is set, checks that the branch has at least one commit
+7. If no commits found -> warn to stderr (exit 0, non-blocking)
+8. Otherwise -> exit 0 silently
+
+This hook is warn-only because SubagentStop fires after the agent completes — blocking here would not prevent protocol violations, only prevent the agent from stopping. Warnings are logged for debugging and observability.
+
+### Manual Installation
+
+1. Symlink:
+   ```bash
+   ln -sf ~/code/scout-and-wave/implementations/claude-code/hooks/verify_worktree_compliance ~/.local/bin/verify_worktree_compliance
+   ```
+
+2. Add to `~/.claude/settings.json`:
+   ```json
+   {
+     "hooks": {
+       "SubagentStop": [
+         {
+           "hooks": [
+             {
+               "type": "command",
+               "command": "$HOME/.local/bin/verify_worktree_compliance"
+             }
+           ]
+         }
+       ]
+     }
+   }
+   ```
+
+### Testing
+
+```bash
+# Test without SAW context (should pass through)
+echo '{}' | verify_worktree_compliance
+echo $?  # 0
+
+# Test with SAW context but no completion report (should warn)
+export SAW_AGENT_ID="A"
+export SAW_IMPL_PATH="/path/to/IMPL-feature.yaml"
+export SAW_BRANCH="saw/feature/wave1-agent-A"
+echo '{}' | verify_worktree_compliance 2>&1
+# Should output warning to stderr but exit 0
+echo $?  # 0
 ```
 
 ---
