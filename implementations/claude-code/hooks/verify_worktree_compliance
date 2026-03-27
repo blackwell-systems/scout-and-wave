@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# verify_worktree_compliance - SubagentStop hook for SAW protocol compliance
+#
+# Verifies that wave agents:
+# - Wrote completion reports (E42/I4)
+# - Committed changes before reporting (I5)
+#
+# This is a warn-only hook — SubagentStop fires AFTER agent completion, so
+# returning exit 2 would not prevent completion. The real enforcement happens at:
+# - Wave finalization (I5 verification via sawtools finalize-wave)
+# - E42 hook in validate_agent_completion (completion report check)
+#
+# Test cases:
+# Test 1: Agent with completion report + commits — should pass silently
+# Test 2: Agent without completion report — should warn (exit 0)
+# Test 3: Agent without commits — should warn (exit 0)
+# Test 4: Non-SAW agent — should passthrough (no checks)
+
+set -euo pipefail
+
+# Read SubagentStop JSON from stdin
+input=$(cat)
+
+# Extract fields
+agent_description=$(echo "$input" | jq -r '.agent_description // ""')
+_session_id=$(echo "$input" | jq -r '.session_id // ""')
+_exit_reason=$(echo "$input" | jq -r '.exit_reason // ""')
+
+# Passthrough condition 1: Not a SAW wave agent
+if ! [[ "$agent_description" =~ \[SAW:wave ]]; then
+  exit 0
+fi
+
+# Passthrough condition 2: Solo wave (no worktree)
+if [[ -z "${SAW_AGENT_WORKTREE:-}" ]]; then
+  exit 0
+fi
+
+# Parse agent metadata from description tag [SAW:wave{N}:agent-{ID}]
+if [[ "$agent_description" =~ \[SAW:wave([0-9]+):agent-([A-Z0-9]+)\] ]]; then
+  _wave_number="${BASH_REMATCH[1]}"
+  agent_id="${BASH_REMATCH[2]}"
+else
+  # Can't parse metadata — skip verification
+  exit 0
+fi
+
+# Read environment variables set by inject_worktree_env
+impl_path="${SAW_IMPL_PATH:-}"
+branch_name="${SAW_BRANCH:-}"
+
+# Verification Check 1: Completion report exists (E42/I4)
+if command -v sawtools &>/dev/null; then
+  if [[ -n "$impl_path" ]]; then
+    if ! sawtools check-completion "$impl_path" --agent "$agent_id" &>/dev/null; then
+      echo "WARNING: No completion report found for agent $agent_id" >&2
+      echo "  Protocol violation (E42/I4): Agents must write completion reports." >&2
+      echo "  IMPL doc: $impl_path" >&2
+    fi
+  fi
+fi
+
+# Verification Check 2: Commits exist on branch (I5)
+if [[ -n "$branch_name" ]]; then
+  commit_count=$(git rev-list --count "$branch_name" 2>/dev/null || echo "0")
+  if [[ "$commit_count" -eq 0 ]]; then
+    echo "WARNING: No commits on branch $branch_name" >&2
+    echo "  Protocol violation (I5): Agents must commit before reporting." >&2
+  fi
+fi
+
+# Always exit 0 (warn-only, never block)
+exit 0
