@@ -31,7 +31,7 @@ suitability_assessment: |
     but spans multiple files with clear ownership. Each agent owns a distinct hook + its tests +
     its documentation sections. No build cycles (bash scripts), but comprehensive testing required.
     The 3-wave structure reflects natural dependencies: Wave 1 creates hooks, Wave 2 integrates
-    into install/docs, Wave 3 adds E46 protocol rule. Estimated 2-3 hours per agent for
+    into install/docs, Wave 3 adds E43 protocol rule. Estimated 2-3 hours per agent for
     implementation + testing.
 
     **Estimated times:**
@@ -723,9 +723,9 @@ waves:
 
                | Hook | Event | Matcher | Rule | Description |
                |------|-------|---------|------|-------------|
-               | inject_worktree_env | SubagentStart | — | E46 | Sets 5 env vars (worktree path, agent ID, wave num, IMPL path, branch) |
-               | inject_bash_cd | PreToolUse | Bash | E46 | Auto-prepends `cd $SAW_AGENT_WORKTREE &&` to bash commands |
-               | validate_write_paths | PreToolUse | Write\|Edit | E46 | Blocks relative paths and paths outside worktree |
+               | inject_worktree_env | SubagentStart | — | E43 | Sets 5 env vars (worktree path, agent ID, wave num, IMPL path, branch) |
+               | inject_bash_cd | PreToolUse | Bash | E43 | Auto-prepends `cd $SAW_AGENT_WORKTREE &&` to bash commands |
+               | validate_write_paths | PreToolUse | Write\|Edit | E43 | Blocks relative paths and paths outside worktree |
                | verify_worktree_compliance | SubagentStop | — | E42/I5 | Verifies completion report and commits (warn-only) |
 
                Update the total hook count in the opening paragraph (currently 12 hooks,
@@ -839,11 +839,11 @@ waves:
                **Find the worktree creation section** (search for "sawtools prepare-wave"):
                Add a note about hook-based enforcement:
                ```markdown
-               **E46: Hook-Based Isolation Enforcement.** Wave agents run in git worktrees with
+               **E43: Hook-Based Isolation Enforcement.** Wave agents run in git worktrees with
                automatic isolation enforcement via 4 lifecycle hooks (SubagentStart, PreToolUse:Bash,
                PreToolUse:Write/Edit, SubagentStop). Agents no longer need manual `cd` commands or
                `$WORKTREE` variable usage — hooks inject working directory changes and validate
-               paths automatically. See `protocol/execution-rules.md` E46 for full specification.
+               paths automatically. See `protocol/execution-rules.md` E43 for full specification.
                ```
 
                **Update Field 1 template** (agent prompt worktree path):
@@ -877,7 +877,7 @@ waves:
 
                **Add "Hook-Based Enforcement" subsection**:
                ```markdown
-               #### Hook-Based Enforcement (E46)
+               #### Hook-Based Enforcement (E43)
 
                As of v0.65.0, worktree isolation is enforced automatically via lifecycle hooks.
                Wave agents no longer need manual `cd` commands or `$WORKTREE` variable usage —
@@ -975,13 +975,13 @@ waves:
             **Quality gates:**
             - All 3 files must pass markdown lint (no broken links)
             - Hook count must be consistent across all docs (15 total)
-            - E46 reference must appear in saw-skill.md
+            - E43 reference must appear in saw-skill.md
 
             **Verification:**
             ```bash
             cd $WORKTREE
-            # Check for E46 references
-            grep -c "E46" implementations/claude-code/prompts/saw-skill.md  # should be ≥1
+            # Check for E43 references
+            grep -c "E43" implementations/claude-code/prompts/saw-skill.md  # should be ≥1
             grep -c "Hook-Based Enforcement" docs/INSTALLATION.md  # should be ≥1
             # Check hook count consistency
             grep "15 enforcement hooks" docs/INSTALLATION.md
@@ -1215,21 +1215,27 @@ critic_report:
             verdict: PASS
         E:
             agent_id: E
-            verdict: PASS
-        F:
-            agent_id: F
-            verdict: PASS
-        G:
-            agent_id: G
             verdict: ISSUES
             issues:
                 - check: symbol_accuracy
                   severity: error
-                  description: 'Agent brief references E46 as the next execution rule number, but protocol/execution-rules.md has a gap: E43 is missing (sequence goes E42, E44, E45). Adding E46 would create non-sequential numbering. The brief should either: (a) use E43 as the rule number, or (b) Scout should have identified and documented the E43 gap before assigning E46.'
-                  file: protocol/execution-rules.md
+                  description: Agent E brief references E46 in README.md hook table (lines 726-728). The execution rule sequence has a gap at E43 (E42→E44→E45). Agent G correctly uses E43 to fill this gap, but Agent E still references E46, creating a cross-agent inconsistency. All E46 references must be changed to E43.
+                  file: implementations/claude-code/hooks/README.md
                   symbol: E46
-    summary: 'Hook-based worktree isolation IMPL reviewed. 6 of 7 agents passed all verification checks. Agent G has an execution rule numbering error: the brief references E46, but protocol/execution-rules.md has a gap at E43 (sequence goes E42, E44, E45). Adding E46 without filling E43 would create non-sequential numbering, violating protocol documentation conventions. This must be corrected before wave execution.'
-    reviewed_at: "2026-03-27T22:04:16Z"
-    issue_count: 1
+        F:
+            agent_id: F
+            verdict: ISSUES
+            issues:
+                - check: symbol_accuracy
+                  severity: error
+                  description: Agent F brief references E46 in multiple documentation sections (lines 842, 846, 880, 978, 984) for saw-skill.md and INSTALLATION.md updates. The execution rule sequence has a gap at E43 (E42→E44→E45). Agent G correctly uses E43 to fill this gap, but Agent F still references E46, creating cross-agent inconsistency. All E46 references must be changed to E43.
+                  file: implementations/claude-code/prompts/saw-skill.md
+                  symbol: E46
+        G:
+            agent_id: G
+            verdict: PASS
+    summary: 'Hook-based worktree isolation IMPL reviewed. Agents A, B, C, D create new hook scripts with correct structure and dependencies. Agent E integrates hooks into install.sh correctly. However, there is a critical execution rule numbering inconsistency: Agent G''s brief correctly uses E43 to fill the gap in the execution rule sequence (E42→E44→E45), but Agent E''s brief (line 726-728) and Agent F''s brief (lines 842, 846, 880, 978, 984) still contain references to E46. This cross-agent inconsistency will result in documentation that references a non-existent E46 rule number. All E46 references in Agent E and F briefs must be changed to E43 before wave execution.'
+    reviewed_at: "2026-03-27T22:06:44Z"
+    issue_count: 2
 state: SCOUT_PENDING
 injection_method: hook
