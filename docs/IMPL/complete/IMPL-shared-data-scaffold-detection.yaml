@@ -1,3 +1,4 @@
+completion_date: "2026-03-27"
 title: Expand Scaffold Agent trigger to include shared data structures
 feature_slug: shared-data-scaffold-detection
 verdict: SUITABLE
@@ -410,6 +411,7 @@ waves:
             ```
           files:
             - protocol/procedures.md
+      base_commit: 9597ace899d181be8a5244eef82300691879159d
     - number: 2
       agents:
         - id: D
@@ -623,6 +625,8 @@ waves:
             - cmd/sawtools/detect_shared_types_cmd.go
             - cmd/sawtools/detect_shared_types_cmd_test.go
             - cmd/sawtools/main.go
+          context_source: prepared-brief
+      base_commit: 1da58d8c15101b47daff12bcc8bc3a09a5786698
     - number: 3
       agents:
         - id: F
@@ -720,6 +724,7 @@ waves:
             ```
           files:
             - implementations/claude-code/prompts/references/scout-implementation-process.md
+          context_source: prepared-brief
 quality_gates:
     level: standard
     gates:
@@ -735,6 +740,69 @@ quality_gates:
           command: go vet ./pkg/analyzer/... ./cmd/sawtools/...
           required: true
           repo: scout-and-wave-go
+completion_reports:
+    A:
+        status: complete
+        branch: saw/shared-data-scaffold-detection/wave1-agent-A
+        commit: 39ba8d7
+        files_changed:
+            - protocol/invariants.md
+        verification: PASS
+    B:
+        status: complete
+        branch: saw/shared-data-scaffold-detection/wave1-agent-B
+        commit: 4d5bb0c
+        files_changed:
+            - protocol/execution-rules.md
+        verification: PASS
+    C:
+        status: complete
+        branch: saw/shared-data-scaffold-detection/wave1-agent-C
+        commit: 00bee08
+        files_changed:
+            - protocol/procedures.md
+        verification: PASS
+    D:
+        status: complete
+        branch: saw/shared-data-scaffold-detection/wave2-agent-D
+        commit: 54fc2b21f9b101568adfaee70d0d0a4e24e608fe
+        files_changed:
+            - pkg/analyzer/shared_types.go
+            - pkg/analyzer/shared_types_test.go
+        files_created:
+            - pkg/analyzer/shared_types.go
+            - pkg/analyzer/shared_types_test.go
+        tests_added:
+            - TestDetectSharedTypes_BasicCase
+            - TestDetectSharedTypes_NoSharing
+            - TestDetectSharedTypes_MultipleRefs
+            - TestDetectSharedTypes_TypeExistsInCodebase
+            - TestDetectSharedTypes_CircularDep
+            - TestDetectSharedTypes_NilManifest
+            - TestDetectSharedTypes_EmptyManifest
+            - TestDetectSharedTypes_SingleReference
+            - TestDetectSharedTypes_TypeScriptImports
+            - TestDetectSharedTypes_PythonImports
+            - TestDetectSharedTypes_MultipleTypesFromSameFile
+            - TestDetectSharedTypes_NotOwnedByAnyAgent
+        verification: PASS
+    E:
+        status: complete
+        branch: saw/shared-data-scaffold-detection/wave2-agent-E
+        commit: c1a137a
+        files_changed:
+            - cmd/sawtools/detect_shared_types_cmd.go
+            - cmd/sawtools/detect_shared_types_cmd_test.go
+            - cmd/sawtools/main.go
+            - pkg/analyzer/shared_types.go
+        verification: PASS
+    F:
+        status: complete
+        branch: main
+        commit: e793d9c197d33be262f210b26111bce9626acce1
+        files_changed:
+            - implementations/claude-code/prompts/references/scout-implementation-process.md
+        verification: PASS
 pre_mortem:
     overall_risk: medium
     rows:
@@ -777,5 +845,29 @@ pre_mortem:
             branches first, verify cross-repo integration, then merge all 3 feature branches to main
             simultaneously. Document commit SHAs in completion reports for audit trail. Verify
             .github/workflows/ CI passes in scout-and-wave-go before Wave 2 completion.
-state: SCOUT_PENDING
+critic_report:
+    verdict: PASS
+    agent_reviews:
+        A:
+            agent_id: A
+            verdict: PASS
+        B:
+            agent_id: B
+            verdict: PASS
+        C:
+            agent_id: C
+            verdict: PASS
+        D:
+            agent_id: D
+            verdict: PASS
+        E:
+            agent_id: E
+            verdict: PASS
+        F:
+            agent_id: F
+            verdict: PASS
+    summary: 'All agent briefs verified against codebase. Files to modify exist, files to create do not exist (no conflicts). All referenced symbols (protocol.Load, protocol.IMPLManifest, cobra.Command patterns, yaml.Marshal, json.Marshal) exist and are correctly named. Line number references in agent briefs match actual file structure. Interface contracts reference valid Go packages (gopkg.in/yaml.v3, encoding/json, github.com/blackwell-systems/scout-and-wave-go/pkg/protocol). E45 is next available E-rule number (E43 missing but E44 is last rule). No complexity warnings (max 3 files/agent). Cross-repo structure correctly specified with repo: tags.'
+    reviewed_at: "2026-03-27T19:27:03Z"
+    issue_count: 0
+state: COMPLETE
 injection_method: hook

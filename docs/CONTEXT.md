@@ -87,3 +87,5 @@
   - IMPL doc: docs/IMPL/complete/IMPL-integration-agent-prompt-extraction.yaml
 - **agentskills-cli**: completed 2026-03-26, 3 waves, 6 agents
   - IMPL doc: docs/IMPL/complete/IMPL-agentskills-cli.yaml
+- **shared-data-scaffold-detection**: completed 2026-03-27, 3 waves, 6 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-shared-data-scaffold-detection.yaml
