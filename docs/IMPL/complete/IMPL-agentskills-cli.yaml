@@ -1,0 +1,1010 @@
+completion_date: "2026-03-26"
+title: Agent Skills CLI Tool
+feature_slug: agentskills-cli
+verdict: SUITABLE
+suitability_assessment: |
+    This is a from-scratch Rust CLI project with clear module boundaries. Work
+    decomposes into 6 agents across 3 waves with disjoint file ownership. No
+    investigation needed - all requirements are well-specified (base spec
+    validation, extension awareness, progressive disclosure checks, upgrade
+    automation).
+
+    File decomposition: ~18 files across project setup, validation logic, upgrade
+    logic, CLI commands, and tests. Natural boundaries at module level
+    (commands/, validation/, upgrade/, models).
+
+    Interface discoverability: All cross-agent types can be defined upfront
+    (SkillMetadata, ValidationResult, UpgradeOptions, etc.). No downstream
+    agents blocked on upstream implementation details.
+
+    Parallelization value: Rust build cycles (30-60s) amplify benefit of
+    parallel execution. Wave 1 runs 4 independent agents (project setup, models,
+    validation core, upgrade core). Wave 2 wires CLI commands (1 agent). Wave 3
+    adds main.rs and integration tests (1 agent).
+
+    Time estimate: ~30 min total (8 min Scout, 18 min agents, 4 min merge)
+    vs ~60 min sequential baseline. 50% speedup from parallelization.
+
+    Target repository: /Users/dayna.blackwell/code/agentskills-cli
+    Current state: Empty directory (not yet git-initialized)
+
+    Suitability verdict: SUITABLE - clear speedup from Rust build parallelization.
+test_command: cargo test --all
+lint_command: cargo clippy -- -D warnings
+file_ownership:
+    - file: Cargo.toml
+      agent: A
+      wave: 1
+      action: new
+    - file: .gitignore
+      agent: A
+      wave: 1
+      action: new
+    - file: README.md
+      agent: A
+      wave: 1
+      action: new
+    - file: src/lib.rs
+      agent: B
+      wave: 1
+      action: new
+    - file: src/lib.rs
+      agent: E
+      wave: 2
+      action: modify
+    - file: src/models.rs
+      agent: B
+      wave: 1
+      action: new
+    - file: src/error.rs
+      agent: B
+      wave: 1
+      action: new
+    - file: src/validation/mod.rs
+      agent: C
+      wave: 1
+      action: new
+    - file: src/validation/base_spec.rs
+      agent: C
+      wave: 1
+      action: new
+    - file: src/validation/extensions.rs
+      agent: C
+      wave: 1
+      action: new
+    - file: src/validation/progressive_disclosure.rs
+      agent: C
+      wave: 1
+      action: new
+    - file: src/upgrade/mod.rs
+      agent: D
+      wave: 1
+      action: new
+    - file: src/upgrade/analyzer.rs
+      agent: D
+      wave: 1
+      action: new
+    - file: src/upgrade/splitter.rs
+      agent: D
+      wave: 1
+      action: new
+    - file: src/upgrade/generator.rs
+      agent: D
+      wave: 1
+      action: new
+    - file: src/commands/mod.rs
+      agent: E
+      wave: 2
+      action: new
+    - file: src/commands/lint.rs
+      agent: E
+      wave: 2
+      action: new
+    - file: src/commands/upgrade.rs
+      agent: E
+      wave: 2
+      action: new
+    - file: src/main.rs
+      agent: F
+      wave: 3
+      action: new
+    - file: tests/integration_test.rs
+      agent: F
+      wave: 3
+      action: new
+interface_contracts:
+    - name: SkillMetadata
+      description: |
+        Parsed representation of Agent Skill SKILL.md frontmatter. Contains
+        required fields (name, description) and optional extension fields
+        (triggers, agent-references, model, model-context, version).
+      definition: |
+        pub struct SkillMetadata {
+            pub name: String,
+            pub description: String,
+            pub triggers: Option<Vec<String>>,
+            pub agent_references: Option<Vec<String>>,
+            pub model: Option<String>,
+            pub model_context: Option<String>,
+            pub version: Option<String>,
+            pub unknown_fields: HashMap<String, serde_yaml::Value>,
+        }
+
+        impl SkillMetadata {
+            pub fn from_path(path: &Path) -> Result<Self, Error>;
+            pub fn from_str(content: &str) -> Result<Self, Error>;
+        }
+      location: src/models.rs
+    - name: ValidationError
+      description: |
+        Represents a single validation error or warning. Contains error type,
+        message, optional file location, and severity level (error vs warning).
+      definition: |
+        #[derive(Debug, Clone, PartialEq)]
+        pub struct ValidationError {
+            pub error_type: String,
+            pub message: String,
+            pub file: Option<PathBuf>,
+            pub line: Option<usize>,
+            pub severity: Severity,
+        }
+
+        #[derive(Debug, Clone, PartialEq)]
+        pub enum Severity {
+            Error,
+            Warning,
+        }
+      location: src/error.rs
+    - name: ValidationResult
+      description: |
+        Aggregates validation errors and warnings. Provides methods to check
+        if validation passed (no errors) and to format output for CLI display.
+      definition: |
+        #[derive(Debug, Default)]
+        pub struct ValidationResult {
+            pub errors: Vec<ValidationError>,
+            pub warnings: Vec<ValidationError>,
+        }
+
+        impl ValidationResult {
+            pub fn new() -> Self;
+            pub fn add_error(&mut self, error: ValidationError);
+            pub fn add_warning(&mut self, warning: ValidationError);
+            pub fn is_valid(&self) -> bool;
+            pub fn format_output(&self) -> String;
+        }
+      location: src/error.rs
+    - name: validate_skill
+      description: |
+        Main validation entry point. Runs base spec checks, extension validation,
+        and progressive disclosure checks. Returns aggregated ValidationResult.
+      definition: |
+        pub fn validate_skill(path: &Path) -> Result<ValidationResult, Error> {
+            let metadata = SkillMetadata::from_path(path)?;
+            let mut result = ValidationResult::new();
+
+            validate_base_spec(&metadata, &mut result);
+            validate_extensions(&metadata, &mut result);
+            validate_progressive_disclosure(path, &mut result)?;
+
+            Ok(result)
+        }
+      location: src/validation/mod.rs
+    - name: validate_base_spec
+      description: |
+        Checks that required fields (name, description) are present and non-empty.
+        Verifies SKILL.md file exists.
+      definition: |
+        pub fn validate_base_spec(metadata: &SkillMetadata, result: &mut ValidationResult);
+      location: src/validation/base_spec.rs
+    - name: validate_extensions
+      description: |
+        Validates known extension fields (triggers format, agent-references format,
+        model values). Warns on unknown fields without blocking (encourages innovation).
+      definition: |
+        pub fn validate_extensions(metadata: &SkillMetadata, result: &mut ValidationResult);
+      location: src/validation/extensions.rs
+    - name: validate_progressive_disclosure
+      description: |
+        Checks progressive disclosure patterns: SKILL.md length (<200 lines),
+        references/ structure, inject-context script existence, dedup markers.
+      definition: |
+        pub fn validate_progressive_disclosure(skill_path: &Path, result: &mut ValidationResult) -> Result<(), Error>;
+      location: src/validation/progressive_disclosure.rs
+    - name: BloatAnalysis
+      description: |
+        Analysis result from scanning SKILL.md for upgrade opportunities.
+        Identifies sections that should move to references/ and suggests
+        trigger patterns.
+      definition: |
+        pub struct BloatAnalysis {
+            pub total_lines: usize,
+            pub suggested_splits: Vec<SplitSuggestion>,
+            pub trigger_patterns: Vec<String>,
+            pub needs_agent_references: bool,
+        }
+
+        pub struct SplitSuggestion {
+            pub section_name: String,
+            pub start_line: usize,
+            pub end_line: usize,
+            pub target_file: String,
+        }
+      location: src/upgrade/analyzer.rs
+    - name: analyze_bloat
+      description: |
+        Semantic analysis of SKILL.md to detect bloat and suggest upgrades.
+        Returns BloatAnalysis with split suggestions and trigger patterns.
+      definition: |
+        pub fn analyze_bloat(skill_path: &Path) -> Result<BloatAnalysis, Error>;
+      location: src/upgrade/analyzer.rs
+    - name: SplitResult
+      description: |
+        Result of splitting SKILL.md into core + references/. Contains new
+        content for each file and list of created reference files.
+      definition: |
+        pub struct SplitResult {
+            pub core_content: String,
+            pub reference_files: HashMap<String, String>,
+            pub triggers: Vec<String>,
+        }
+      location: src/upgrade/splitter.rs
+    - name: split_content
+      description: |
+        Splits SKILL.md based on BloatAnalysis. Extracts sections to references/,
+        adds dedup markers, generates triggers frontmatter.
+      definition: |
+        pub fn split_content(
+            skill_path: &Path,
+            analysis: &BloatAnalysis,
+        ) -> Result<SplitResult, Error>;
+      location: src/upgrade/splitter.rs
+    - name: generate_inject_script
+      description: |
+        Generates portable bash script (scripts/inject-context) that injects
+        references/ content into agent context before SKILL.md is delivered.
+      definition: |
+        pub fn generate_inject_script(
+            skill_path: &Path,
+            reference_files: &[String],
+        ) -> Result<String, Error>;
+      location: src/upgrade/generator.rs
+    - name: UpgradeOptions
+      description: |
+        Configuration for upgrade command. Controls dry-run mode and
+        agent-references generation.
+      definition: |
+        pub struct UpgradeOptions {
+            pub dry_run: bool,
+            pub with_agent_references: bool,
+        }
+      location: src/models.rs
+    - name: upgrade_skill
+      description: |
+        Main upgrade entry point. Analyzes skill, splits content, generates
+        inject script, writes files (or prints dry-run output).
+      definition: |
+        pub fn upgrade_skill(
+            skill_path: &Path,
+            options: &UpgradeOptions,
+        ) -> Result<(), Error>;
+      location: src/upgrade/mod.rs
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            Bootstrap Rust project structure for agentskills-cli.
+
+            **What to implement:**
+
+            Create `Cargo.toml` with package metadata:
+            ```toml
+            [package]
+            name = "agentskills"
+            version = "0.1.0"
+            edition = "2021"
+            authors = ["Your Name <your.email@example.com>"]
+            description = "CLI tool for validating and upgrading Agent Skills"
+            license = "MIT OR Apache-2.0"
+
+            [[bin]]
+            name = "agentskills"
+            path = "src/main.rs"
+
+            [dependencies]
+            serde = { version = "1.0", features = ["derive"] }
+            serde_yaml = "0.9"
+            serde_json = "1.0"
+            thiserror = "1.0"
+            colored = "2.0"
+            clap = { version = "4.4", features = ["derive"] }
+            walkdir = "2.3"
+            regex = "1.10"
+
+            [dev-dependencies]
+            assert_cmd = "2.0"
+            predicates = "3.0"
+            tempfile = "3.8"
+            ```
+
+            Create `.gitignore`:
+            ```
+            /target
+            Cargo.lock
+            **/*.rs.bk
+            .DS_Store
+            .idea/
+            *.swp
+            *.swo
+            *~
+            ```
+
+            Create `README.md`:
+            ```markdown
+            # agentskills-cli
+
+            CLI tool for validating and upgrading Agent Skills.
+
+            ## Features
+
+            - **Lint**: Validate Agent Skills against base spec and extensions
+            - **Upgrade**: Convert skills to progressive disclosure pattern
+
+            ## Installation
+
+            ```bash
+            cargo install --path .
+            ```
+
+            ## Usage
+
+            ```bash
+            # Validate a skill
+            agentskills lint /path/to/skill
+
+            # Upgrade a skill (dry-run)
+            agentskills upgrade /path/to/skill --dry-run
+
+            # Upgrade with agent-references
+            agentskills upgrade /path/to/skill --with-agent-references
+            ```
+
+            ## Development
+
+            ```bash
+            cargo build
+            cargo test
+            cargo clippy
+            ```
+            ```
+
+            **Interface contracts:**
+            This agent provides project infrastructure. No functional contracts.
+
+            **Tests:**
+            No unit tests. Verify Cargo.toml is valid by attempting `cargo init`
+            verification in completion report.
+
+            **Verification gate:**
+            1. Verify Cargo.toml parses: `cargo metadata --format-version 1 --no-deps`
+            2. Verify .gitignore exists and is non-empty
+
+            **Constraints:**
+            - Use edition = "2021" (latest stable Rust)
+            - Include MIT OR Apache-2.0 dual license (standard Rust convention)
+            - List ALL dependencies upfront (Wave 2-3 agents should not need to modify Cargo.toml)
+          files:
+            - Cargo.toml
+            - .gitignore
+            - README.md
+        - id: B
+          task: |-
+            Define core data models and error types for agentskills-cli.
+
+            **What to implement:**
+
+            Create `src/lib.rs` as the library root, re-exporting public modules:
+            ```rust
+            pub mod models;
+            pub mod error;
+            pub mod validation;
+            pub mod upgrade;
+            ```
+
+            Create `src/models.rs` with:
+            - `SkillMetadata` struct (name, description, triggers, agent_references, model, model_context, version, unknown_fields)
+            - `impl SkillMetadata::from_path(path: &Path) -> Result<Self, Error>` — reads SKILL.md, parses YAML frontmatter using serde_yaml
+            - `impl SkillMetadata::from_str(content: &str) -> Result<Self, Error>` — parses YAML frontmatter from string
+            - `UpgradeOptions` struct (dry_run: bool, with_agent_references: bool)
+
+            Frontmatter parsing:
+            - Detect `---` delimiters at start of file
+            - Extract content between delimiters
+            - Use `serde_yaml::from_str::<HashMap<String, serde_yaml::Value>>()`
+            - Map known fields to struct fields (name, description, triggers, etc.)
+            - Collect unknown fields into `unknown_fields` HashMap
+            - Handle missing frontmatter (return error)
+            - Handle malformed YAML (propagate serde_yaml error)
+
+            Create `src/error.rs` with:
+            - `Error` enum using thiserror:
+              * `IoError(std::io::Error)`
+              * `ParseError(String)`
+              * `ValidationError(String)`
+              * `YamlError(serde_yaml::Error)`
+            - `ValidationError` struct (error_type, message, file, line, severity)
+            - `Severity` enum (Error, Warning)
+            - `ValidationResult` struct (errors: Vec<ValidationError>, warnings: Vec<ValidationError>)
+            - `impl ValidationResult` methods: new(), add_error(), add_warning(), is_valid(), format_output()
+
+            `format_output()` should produce colored terminal output:
+            - Red for errors (using `colored` crate)
+            - Yellow for warnings
+            - Show file:line for each issue
+            - Summary line at end (e.g., "2 errors, 1 warning")
+
+            **Dependencies:**
+            Uses serde, serde_yaml, thiserror, colored from Cargo.toml.
+
+            **Interface contracts:**
+            All types defined in this agent are consumed by Wave 2-3 agents.
+            See interface_contracts section for exact signatures.
+
+            **Tests:**
+            Create unit tests in src/models.rs:
+            - Test frontmatter parsing with valid YAML
+            - Test malformed YAML error handling
+            - Test unknown field collection
+            - Test missing frontmatter error
+
+            Create unit tests in src/error.rs:
+            - Test ValidationResult aggregation
+            - Test format_output() colored output
+            - Test is_valid() logic (valid if no errors)
+
+            **Verification gate:**
+            1. `cargo fmt`
+            2. `cargo build`
+            3. `cargo clippy -- -D warnings`
+            4. `cargo test --lib`
+
+            **Constraints:**
+            - Use `thiserror` for Error derive (not manual Display impls)
+            - Use `colored` crate for terminal output (not ANSI escape codes)
+            - Frontmatter must be strict: `---` on first line, closing `---` required
+            - Unknown fields are warnings, not errors (don't block innovation)
+            - Note: commands module is created in Wave 2 — do NOT export it in lib.rs
+          files:
+            - src/lib.rs
+            - src/models.rs
+            - src/error.rs
+        - id: C
+          task: |
+            Implement validation logic for Agent Skills base spec, extensions,
+            and progressive disclosure patterns.
+
+            **What to implement:**
+
+            Create `src/validation/mod.rs` as the validation module root:
+            - Re-export submodules (base_spec, extensions, progressive_disclosure)
+            - Define `pub fn validate_skill(path: &Path) -> Result<ValidationResult, Error>`
+            - Call base_spec, extensions, progressive_disclosure validators
+            - Aggregate results into single ValidationResult
+
+            Create `src/validation/base_spec.rs`:
+            - `pub fn validate_base_spec(metadata: &SkillMetadata, result: &mut ValidationResult)`
+            - Check `name` is present and non-empty
+            - Check `description` is present and non-empty
+            - Check SKILL.md file exists at expected path (metadata should contain path context)
+            - Add errors to result for missing required fields
+
+            Create `src/validation/extensions.rs`:
+            - `pub fn validate_extensions(metadata: &SkillMetadata, result: &mut ValidationResult)`
+            - Validate `triggers` format (if present): array of strings, each string non-empty
+            - Validate `agent-references` format (if present): array of strings, each string non-empty
+            - Validate `model` (if present): non-empty string
+            - Validate `model-context` (if present): non-empty string
+            - Validate `version` (if present): semver-like format (warn if invalid, e.g., missing dots or non-numeric)
+            - For each unknown field in `metadata.unknown_fields`, add warning (not error) with message like "Unknown field 'X' - this may be a platform-specific extension"
+
+            Create `src/validation/progressive_disclosure.rs`:
+            - `pub fn validate_progressive_disclosure(skill_path: &Path, result: &mut ValidationResult) -> Result<(), Error>`
+            - Check SKILL.md length: warn if >200 lines (suggest running upgrade command)
+            - Check for references/ directory: if exists, validate structure (only .md files, each file has dedup marker at top)
+            - Dedup marker format: `<!-- injected: references/filename.md -->` (exact match, case-sensitive)
+            - Check for scripts/inject-context: if references/ exists, script must exist and be executable
+            - Script validation: must have shebang `#!/usr/bin/env bash`, must contain reference to references/ directory
+            - If SKILL.md has `triggers:` frontmatter but no references/, add warning (progressive disclosure not fully adopted)
+
+            Use `walkdir` crate for references/ directory traversal.
+
+            **Dependencies:**
+            Uses Agent B's types: SkillMetadata, ValidationResult, ValidationError, Severity, Error.
+            Uses walkdir from Cargo.toml.
+
+            **Interface contracts:**
+            See interface_contracts section for exact signatures of validate_skill,
+            validate_base_spec, validate_extensions, validate_progressive_disclosure.
+
+            **Tests:**
+            Create unit tests in each submodule:
+            - base_spec: test missing name, missing description
+            - extensions: test invalid trigger patterns, invalid version format, unknown fields as warnings
+            - progressive_disclosure: test >200 line detection, missing inject-context, invalid dedup markers
+
+            **Verification gate:**
+            1. `cargo fmt`
+            2. `cargo build`
+            3. `cargo clippy -- -D warnings`
+            4. `cargo test --lib`
+
+            **Constraints:**
+            - Unknown extension fields MUST be warnings, not errors
+            - Progressive disclosure checks are advisory (warnings) not mandatory (errors)
+            - Dedup marker must be exact format `<!-- injected: references/X.md -->`
+          files:
+            - src/validation/mod.rs
+            - src/validation/base_spec.rs
+            - src/validation/extensions.rs
+            - src/validation/progressive_disclosure.rs
+        - id: D
+          task: |
+            Implement upgrade logic for converting Agent Skills to progressive
+            disclosure pattern.
+
+            **What to implement:**
+
+            Create `src/upgrade/mod.rs` as the upgrade module root:
+            - Re-export submodules (analyzer, splitter, generator)
+            - Define `pub fn upgrade_skill(skill_path: &Path, options: &UpgradeOptions) -> Result<(), Error>`
+            - Call analyzer to get BloatAnalysis
+            - If dry_run: print analysis + suggested changes to stdout, return Ok(()) early
+            - Call splitter to get SplitResult
+            - Call generator to create inject-context script content
+            - Write files: update SKILL.md, create references/ dir + files, create scripts/inject-context
+            - Set inject-context executable using `std::fs::set_permissions` with mode 0o755 (Unix only, no-op on Windows)
+
+            Create `src/upgrade/analyzer.rs`:
+            - `pub struct BloatAnalysis` (total_lines, suggested_splits, trigger_patterns, needs_agent_references)
+            - `pub struct SplitSuggestion` (section_name, start_line, end_line, target_file)
+            - `pub fn analyze_bloat(skill_path: &Path) -> Result<BloatAnalysis, Error>`
+            - Read SKILL.md, count lines
+            - Detect markdown sections using regex (## headers)
+            - Heuristics for split suggestions:
+              * Sections with "Reference", "Procedure", "Implementation", "Steps" in title → move to references/
+              * Sections >50 lines → move to references/
+              * Code blocks (triple backticks) >30 lines → move to references/
+            - Generate trigger patterns from skill name (extract from frontmatter) + common prefixes (e.g., `/skillname`, `skillname:`)
+            - Set `needs_agent_references: true` if UpgradeOptions.with_agent_references flag set
+
+            Create `src/upgrade/splitter.rs`:
+            - `pub struct SplitResult` (core_content, reference_files, triggers)
+            - `pub fn split_content(skill_path: &Path, analysis: &BloatAnalysis) -> Result<SplitResult, Error>`
+            - Read SKILL.md content
+            - For each SplitSuggestion: extract section lines, remove from core, add to reference_files map
+            - Add dedup markers to start of each reference file content: `<!-- injected: references/filename.md -->\n`
+            - Generate triggers frontmatter YAML from analysis.trigger_patterns
+            - Prepend triggers to core_content as YAML frontmatter block (between `---` delimiters)
+            - If needs_agent_references: add `agent-references:` field to frontmatter listing reference files
+
+            Create `src/upgrade/generator.rs`:
+            - `pub fn generate_inject_script(skill_path: &Path, reference_files: &[String]) -> Result<String, Error>`
+            - Generate bash script content with:
+              * Shebang `#!/usr/bin/env bash`
+              * Comments explaining purpose and auto-generation
+              * Logic to detect SKILL_DIR (directory containing SKILL.md)
+              * For each reference file: inject content into agent context before SKILL.md is delivered
+              * Dedup check: if agent context already contains `<!-- injected: references/X.md -->`, skip injection
+            - Script template structure:
+              ```bash
+              #!/usr/bin/env bash
+              # Auto-generated by agentskills upgrade
+              # Injects references/ content into agent context before SKILL.md delivery
+
+              SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+              for ref in "$SKILL_DIR"/references/*.md; do
+                marker="<!-- injected: $(basename "$ref") -->"
+                if ! grep -q "$marker" "$AGENT_CONTEXT" 2>/dev/null; then
+                  cat "$ref" >> "$AGENT_CONTEXT"
+                fi
+              done
+              ```
+
+            **Dependencies:**
+            Uses Agent B's types: SkillMetadata, UpgradeOptions, Error.
+            Uses regex from Cargo.toml.
+
+            **Interface contracts:**
+            See interface_contracts section for exact signatures of upgrade_skill,
+            analyze_bloat, split_content, generate_inject_script, BloatAnalysis,
+            SplitResult.
+
+            **Tests:**
+            Create unit tests in each submodule:
+            - analyzer: test bloat detection (>200 lines), section detection with regex, trigger generation
+            - splitter: test section extraction, dedup marker insertion, frontmatter generation
+            - generator: test script generation, dedup logic
+
+            **Verification gate:**
+            1. `cargo fmt`
+            2. `cargo build`
+            3. `cargo clippy -- -D warnings`
+            4. `cargo test --lib`
+
+            **Constraints:**
+            - Dry-run mode must NOT write files, only print analysis to stdout
+            - Inject script must be portable bash (no bashisms requiring bash 4+, no arrays)
+            - Dedup markers must be exact format for progressive disclosure spec
+            - chmod +x (0o755) must work on Unix systems, be no-op on Windows
+          files:
+            - src/upgrade/mod.rs
+            - src/upgrade/analyzer.rs
+            - src/upgrade/splitter.rs
+            - src/upgrade/generator.rs
+      base_commit: 1e92d33316f3cf380dd48ca5ba9c60f87ce6ee6d
+    - number: 2
+      agents:
+        - id: E
+          task: |-
+            Implement CLI commands for `agentskills lint` and `agentskills upgrade`.
+
+            **What to implement:**
+
+            Update `src/lib.rs` to add commands module export:
+            ```rust
+            pub mod commands;
+            ```
+
+            Create `src/commands/mod.rs` as the commands module root:
+            - Re-export lint and upgrade submodules
+            - Define shared command utilities if needed
+
+            Create `src/commands/lint.rs`:
+            - Define clap subcommand struct:
+              ```rust
+              #[derive(Parser)]
+              pub struct LintCommand {
+                  /// Path to Agent Skill directory
+                  path: PathBuf,
+                  /// Output as JSON instead of colored text
+                  #[arg(long)]
+                  json: bool,
+              }
+              ```
+            - Implement `pub fn run(cmd: &LintCommand) -> Result<(), Error>`
+            - Call `validation::validate_skill(&cmd.path)`
+            - If `--json`: serialize ValidationResult as JSON using serde_json
+            - Else: print colored output using `ValidationResult::format_output()`
+            - Exit logic: return Ok(()) if valid, return Err if errors found
+            - Print summary: "✓ Valid Agent Skill" (green) or "✗ Validation failed" (red)
+
+            Create `src/commands/upgrade.rs`:
+            - Define clap subcommand struct:
+              ```rust
+              #[derive(Parser)]
+              pub struct UpgradeCommand {
+                  /// Path to Agent Skill directory
+                  path: PathBuf,
+                  /// Show changes without applying them
+                  #[arg(long)]
+                  dry_run: bool,
+                  /// Add agent-references frontmatter field
+                  #[arg(long)]
+                  with_agent_references: bool,
+              }
+              ```
+            - Implement `pub fn run(cmd: &UpgradeCommand) -> Result<(), Error>`
+            - Build `UpgradeOptions` from command flags
+            - Call `upgrade::upgrade_skill(&cmd.path, &options)`
+            - Print progress to stderr: "Analyzing...", "Splitting content...", "Generating script..."
+            - On success: print summary to stdout (files created, lines moved)
+            - On dry-run: print analysis + diff preview to stdout
+            - Exit logic: return Ok(()) on success, propagate Err on failure
+
+            **Dependencies:**
+            Uses Wave 1 types: validation::validate_skill, upgrade::upgrade_skill,
+            SkillMetadata, ValidationResult, UpgradeOptions, Error.
+            Uses clap, serde_json from Cargo.toml.
+
+            **Interface contracts:**
+            Commands call Wave 1 functions. No new contracts introduced.
+
+            **Tests:**
+            Create unit tests for command argument parsing (use clap's `try_parse_from`):
+            - Test lint command parsing (valid path, --json flag)
+            - Test upgrade command parsing (valid path, --dry-run, --with-agent-references)
+            - Test error handling for missing path
+
+            **Verification gate:**
+            1. `cargo fmt`
+            2. `cargo build`
+            3. `cargo clippy -- -D warnings`
+            4. `cargo test --lib`
+
+            **Constraints:**
+            - Exit codes via Result: Ok(()) = success (exit 0), Err = error (exit 1)
+            - --json output must be valid JSON (use serde_json::to_string_pretty)
+            - Progress messages go to stderr, results to stdout
+            - MUST update lib.rs to export commands module before creating commands files
+          files:
+            - src/commands/mod.rs
+            - src/commands/lint.rs
+            - src/commands/upgrade.rs
+          dependencies:
+            - B
+            - C
+            - D
+      base_commit: ed2d9af6108e48f8d20172e238cd9a076e4fbae4
+    - number: 3
+      agents:
+        - id: F
+          task: |
+            Create CLI entry point (main.rs) and integration tests.
+
+            **What to implement:**
+
+            Create `src/main.rs`:
+            - Define root clap CLI struct:
+              ```rust
+              #[derive(Parser)]
+              #[command(name = "agentskills")]
+              #[command(version, about = "Tool for validating and upgrading Agent Skills")]
+              struct Cli {
+                  #[command(subcommand)]
+                  command: Commands,
+              }
+
+              #[derive(Subcommand)]
+              enum Commands {
+                  Lint(LintCommand),
+                  Upgrade(UpgradeCommand),
+              }
+              ```
+            - In main():
+              * Parse args using `Cli::parse()`
+              * Dispatch to `commands::lint::run()` or `commands::upgrade::run()`
+              * Handle Result: if Err, print error to stderr and exit with code 1
+              * Use `std::process::exit()` for explicit exit codes
+            - Version info: clap derives from `env!("CARGO_PKG_VERSION")`
+
+            Create `tests/integration_test.rs`:
+            - Use `assert_cmd::Command` for CLI testing
+            - Use `tempfile::TempDir` for test fixtures
+            - Create test fixtures:
+              * valid-skill/SKILL.md: minimal valid skill with name, description, <200 lines
+              * invalid-skill/SKILL.md: missing description field (only has name)
+              * bloated-skill/SKILL.md: 250 lines with "## Implementation Procedure" section (triggers upgrade suggestions)
+
+            Test cases:
+            1. `agentskills lint <valid-skill>` → exit 0, stdout contains "✓ Valid"
+            2. `agentskills lint <invalid-skill>` → exit 1, stdout contains "missing description"
+            3. `agentskills lint <valid-skill> --json` → exit 0, stdout is valid JSON
+            4. `agentskills upgrade <bloated-skill> --dry-run` → exit 0, stdout contains "Analysis", no files written
+            5. `agentskills upgrade <bloated-skill>` → exit 0, creates references/ dir and scripts/inject-context
+            6. `agentskills upgrade <bloated-skill> --with-agent-references` → exit 0, SKILL.md frontmatter contains `agent-references:`
+
+            Use `predicates` crate for assertions:
+            - `.success()` for exit 0
+            - `.failure()` for exit 1
+            - `.stdout(predicate::str::contains("text"))`
+
+            **Dependencies:**
+            Uses all Wave 1 + Wave 2 modules. This is the final integration point.
+            Uses assert_cmd, predicates, tempfile from Cargo.toml (dev-dependencies).
+
+            **Interface contracts:**
+            No new contracts. Main.rs wires existing commands.
+
+            **Tests:**
+            Integration tests in tests/ directory cover end-to-end CLI workflows.
+            No unit tests needed in main.rs (trivial dispatch logic).
+
+            **Verification gate:**
+            1. `cargo fmt`
+            2. `cargo build`
+            3. `cargo clippy -- -D warnings`
+            4. `cargo test --all` (integration tests pass)
+
+            **Constraints:**
+            - main.rs should be minimal (clap setup + dispatch)
+            - All logic lives in library crates (commands/, validation/, upgrade/)
+            - Integration tests must clean up temp directories (use tempfile::TempDir, dropped automatically)
+            - Test fixtures must be realistic (based on actual Agent Skills format with `---` frontmatter delimiters)
+          files:
+            - src/main.rs
+            - tests/integration_test.rs
+          dependencies:
+            - E
+      base_commit: eceb3bbdf8e0fb46fc6f09723d845cc9d351d840
+quality_gates:
+    level: standard
+    gates:
+        - type: format
+          command: cargo fmt --check
+          required: true
+          fix: true
+        - type: build
+          command: cargo build --all
+          required: true
+        - type: lint
+          command: cargo clippy -- -D warnings
+          required: true
+        - type: test
+          command: cargo test --all
+          required: true
+completion_reports:
+    A:
+        status: complete
+        branch: saw/agentskills-cli/wave1-agent-A
+        commit: af727948cb6a6e21a1cc515b952cdfa2d6ca1aa6
+        files_changed:
+            - Cargo.toml
+            - .gitignore
+            - README.md
+        files_created:
+            - .gitignore
+            - README.md
+        verification: PASS (Cargo.toml parses, .gitignore exists)
+    B:
+        status: complete
+        branch: saw/agentskills-cli/wave1-agent-B
+        commit: b0bfbc7
+        files_changed:
+            - src/lib.rs
+            - src/models.rs
+            - src/error.rs
+            - Cargo.lock
+        verification: 'PASS: All 19 tests passing. Cargo.toml not modified (Agent A already has complete version).'
+    C:
+        status: complete
+        branch: saw/agentskills-cli/wave1-agent-C
+        commit: 8a630d2
+        files_created:
+            - src/validation/mod.rs
+            - src/validation/base_spec.rs
+            - src/validation/extensions.rs
+            - src/validation/progressive_disclosure.rs
+        tests_added:
+            - TestValidateBaseSpec (6 tests)
+            - TestValidateExtensions (8 tests)
+            - TestValidateProgressiveDisclosure (10 tests)
+        verification: PASS (fmt), PENDING (build/test requires Agent B lib.rs export). All interface contracts implemented. 24 test cases. Code correct, will build after merge when Agent B exports validation module in lib.rs.
+    D:
+        status: complete
+        branch: saw/agentskills-cli/wave1-agent-D
+        commit: 0cedae9
+        files_changed:
+            - src/upgrade/mod.rs
+            - src/upgrade/analyzer.rs
+            - src/upgrade/splitter.rs
+            - src/upgrade/generator.rs
+        verification: 'PASS: Module imports corrected to use crate::models and crate::error. All 17 tests passing.'
+    E:
+        status: complete
+        branch: saw/agentskills-cli/wave2-agent-E
+        commit: 1d5237ce08f1de8cbcd62ba125c5e5e45f24a021
+        files_changed:
+            - src/lib.rs
+            - Cargo.lock
+            - src/validation/extensions.rs
+            - src/validation/progressive_disclosure.rs
+        files_created:
+            - src/commands/mod.rs
+            - src/commands/lint.rs
+            - src/commands/upgrade.rs
+        tests_added:
+            - test_lint_command_parsing
+            - test_lint_command_with_json_flag
+            - test_lint_command_missing_path
+            - test_lint_command_help
+            - test_upgrade_command_parsing
+            - test_upgrade_command_with_dry_run
+            - test_upgrade_command_with_agent_references
+            - test_upgrade_command_all_flags
+            - test_upgrade_command_missing_path
+            - test_upgrade_command_help
+        verification: PASS
+    F:
+        status: complete
+        branch: saw/agentskills-cli/wave3-agent-F
+        commit: 9b3ba23
+        files_changed:
+            - src/main.rs
+            - tests/integration_test.rs
+        files_created:
+            - tests/integration_test.rs
+        tests_added:
+            - test_lint_valid_skill_succeeds
+            - test_lint_invalid_skill_fails
+            - test_lint_json_output_valid
+            - test_upgrade_dry_run_no_files_written
+            - test_upgrade_creates_directory_structure
+            - test_upgrade_with_agent_references_flag
+            - test_cli_version_flag
+            - test_cli_help_flag
+            - test_lint_nonexistent_path
+        verification: PASS
+pre_mortem:
+    overall_risk: medium
+    rows:
+        - scenario: YAML frontmatter parsing edge cases (malformed YAML, non-string values, nested structures)
+          likelihood: medium
+          impact: high
+          mitigation: |
+            Agent B includes comprehensive unit tests for frontmatter parsing. Test cases:
+            missing closing `---`, invalid YAML syntax, non-string field values,
+            deeply nested structures. Use serde_yaml error handling, propagate errors,
+            never use unwrap() on user input.
+        - scenario: Progressive disclosure dedup marker detection fails for non-standard formats
+          likelihood: low
+          impact: medium
+          mitigation: |
+            Agent C uses exact string match `<!-- injected: references/X.md -->` for
+            dedup markers. Document marker format in validation error messages.
+            If exact match proves too brittle, agent can suggest regex-based detection
+            in completion report, but start with simple exact match.
+        - scenario: Upgrade splitter breaks markdown formatting (code blocks, lists, tables)
+          likelihood: medium
+          impact: medium
+          mitigation: |
+            Agent D tests with complex markdown fixtures (nested lists, fenced code
+            blocks, tables). Use line-based splitting (preserve original formatting).
+            Dry-run mode lets users preview changes before applying. Warn users to
+            review output before committing.
+        - scenario: Inject script generates non-portable bash (bashisms, non-POSIX features)
+          likelihood: low
+          impact: medium
+          mitigation: |
+            Agent D uses conservative bash subset (no bash 4+ features, no arrays).
+            Test script template manually on bash 3.2 (macOS default). Stick to
+            simple loops and variable substitution. Document that script requires
+            bash (not sh/dash).
+        - scenario: Cross-platform issues (Windows path handling, chmod +x on Windows)
+          likelihood: medium
+          impact: low
+          mitigation: |
+            Agent D uses `std::fs::set_permissions` with Unix-specific mode bits (0o755).
+            On Windows, this is a no-op. Document that inject-context script is
+            Unix-only. Lint command works cross-platform (pure Rust, no shell
+            dependencies). Windows users can still validate, just not auto-upgrade.
+        - scenario: Integration tests fail due to filesystem race conditions (parallel test execution)
+          likelihood: low
+          impact: medium
+          mitigation: |
+            Agent F uses `tempfile::TempDir` for isolated test fixtures. Each test
+            gets unique temp directory that auto-cleans on drop. Cargo test runner
+            handles parallelism safely with isolated temp dirs.
+critic_report:
+    verdict: PASS
+    agent_reviews:
+        A:
+            agent_id: A
+            verdict: PASS
+        B:
+            agent_id: B
+            verdict: PASS
+        C:
+            agent_id: C
+            verdict: PASS
+        D:
+            agent_id: D
+            verdict: PASS
+        E:
+            agent_id: E
+            verdict: PASS
+        F:
+            agent_id: F
+            verdict: PASS
+            issues:
+                - check: pattern_accuracy
+                  severity: warning
+                  description: 'Brief shows clap struct definitions and dispatch logic but omits import statements needed in main.rs. Agent will need to add: use agentskills::commands::{LintCommand, UpgradeCommand}; and use agentskills::Error;. While experienced Rust developers will infer these imports, explicit guidance would reduce ambiguity.'
+                  file: src/main.rs
+                  symbol: LintCommand
+    summary: 'All agent briefs verified against interface contracts. File ownership correctly includes src/lib.rs modification in Agent E (wave 2) to export commands module. Minor advisory warning for Agent F: brief could be clearer about import statements needed in main.rs, but the required exports are properly configured in upstream agents.'
+    reviewed_at: "2026-03-27T02:23:05Z"
+    issue_count: 1
+state: COMPLETE
+injection_method: hook
