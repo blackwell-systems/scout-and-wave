@@ -45,8 +45,8 @@ suitability_assessment: |
 
     Recommendation: Clear speedup. Coordination value is high even if time savings were marginal —
     this creates a durable reference architecture for future hook additions.
-test_command: "find implementations/claude-code/hooks -type f ! -name '*.md' ! -name 'install.sh' -exec shellcheck -S error {} +"
-lint_command: "find implementations/claude-code/hooks -type f ! -name '*.md' ! -name 'install.sh' -exec shellcheck -S error {} + 2>/dev/null || true"
+test_command: find implementations/claude-code/hooks -type f ! -name '*.md' ! -name 'install.sh' -exec shellcheck -S error {} +
+lint_command: find implementations/claude-code/hooks -type f ! -name '*.md' ! -name 'install.sh' -exec shellcheck -S error {} + 2>/dev/null || true
 file_ownership:
     - file: implementations/claude-code/hooks/inject_worktree_env
       agent: A
@@ -998,21 +998,22 @@ waves:
     - number: 3
       agents:
         - id: G
-          task: |
-            **Agent G: Protocol Documentation (E46 Execution Rule + Protocol-Wide Updates)**
+          task: |-
+            **Agent G: Protocol Documentation (E43 Execution Rule + Protocol-Wide Updates)**
 
-            Add E46 to `protocol/execution-rules.md` and update 6 protocol docs plus README.md
-            to reference hook-based enforcement as the primary isolation mechanism.
+            Add E43 (not E46 - filling the gap in execution rule sequence) to protocol/execution-rules.md and update 6 protocol docs plus README.md to reference hook-based enforcement as the primary isolation mechanism.
+
+            **CRITICAL: Use E43 as the execution rule number.** The sequence goes E42, E44, E45 (E43 was accidentally skipped). This IMPL fills that gap.
 
             **What to implement:**
 
-            1. **execution-rules.md: Add E46**
+            1. **execution-rules.md: Add E43** (same content as originally planned for E46)
 
-               **Find E4 (Worktree Isolation)** — insert E46 immediately after E4's section ends.
+               **Find E45 (Shared Data Structure Scaffold Detection)** — insert E43 BEFORE E45's section (maintaining sequential order: E42, E43, E44, E45).
 
-               **Write E46 section**:
+               **Write E43 section**:
                ```markdown
-               ## E46: Hook-Based Isolation Enforcement
+               ## E43: Hook-Based Isolation Enforcement
 
                **Trigger:** Wave agents launch in worktree context (multi-agent waves)
 
@@ -1022,31 +1023,31 @@ waves:
 
                ### Four-Hook Defense-in-Depth
 
-               **Hook 1: SubagentStart environment injection (`inject_worktree_env`)**
+               **Hook 1: SubagentStart environment injection (inject_worktree_env)**
                - Sets 5 environment variables when wave agents launch:
-                 - `SAW_AGENT_WORKTREE` (absolute worktree path)
-                 - `SAW_AGENT_ID` (agent identifier, e.g., "A", "B2")
-                 - `SAW_WAVE_NUMBER` (1-based wave number)
-                 - `SAW_IMPL_PATH` (absolute path to IMPL doc)
-                 - `SAW_BRANCH` (agent's branch name, e.g., "saw/{slug}/wave1-agent-A")
+                 - SAW_AGENT_WORKTREE (absolute worktree path)
+                 - SAW_AGENT_ID (agent identifier, e.g., "A", "B2")
+                 - SAW_WAVE_NUMBER (1-based wave number)
+                 - SAW_IMPL_PATH (absolute path to IMPL doc)
+                 - SAW_BRANCH (agent's branch name, e.g., "saw/{slug}/wave1-agent-A")
                - Non-blocking (always exits 0)
-               - Solo waves and integration waves: `SAW_AGENT_WORKTREE` is empty string
+               - Solo waves and integration waves: SAW_AGENT_WORKTREE is empty string
 
-               **Hook 2: PreToolUse:Bash cd auto-injection (`inject_bash_cd`)**
-               - Prepends `cd $SAW_AGENT_WORKTREE &&` to every bash command via `updatedInput`
-               - Fires only when `SAW_AGENT_WORKTREE` is non-empty (skips solo waves)
-               - Skips if command already starts with `cd $SAW_AGENT_WORKTREE`
+               **Hook 2: PreToolUse:Bash cd auto-injection (inject_bash_cd)**
+               - Prepends cd $SAW_AGENT_WORKTREE && to every bash command via updatedInput
+               - Fires only when SAW_AGENT_WORKTREE is non-empty (skips solo waves)
+               - Skips if command already starts with cd $SAW_AGENT_WORKTREE
                - Non-blocking (always exits 0, injection is best-effort)
-               - Eliminates manual `cd` commands and `$WORKTREE` variable usage
+               - Eliminates manual cd commands and $WORKTREE variable usage
 
-               **Hook 3: PreToolUse:Write/Edit path validation (`validate_write_paths`)**
+               **Hook 3: PreToolUse:Write/Edit path validation (validate_write_paths)**
                - Blocks relative paths in worktree context (exit 2)
                - Blocks paths outside worktree boundaries (exit 2)
-               - Fires only when `SAW_AGENT_WORKTREE` is non-empty (skips solo waves)
-               - Error messages reference worktree path and protocol rule (E46)
+               - Fires only when SAW_AGENT_WORKTREE is non-empty (skips solo waves)
+               - Error messages reference worktree path and protocol rule (E43)
                - Prevents Agent B leak scenario (files created in main repo)
 
-               **Hook 4: SubagentStop compliance verification (`verify_worktree_compliance`)**
+               **Hook 4: SubagentStop compliance verification (verify_worktree_compliance)**
                - Checks completion report exists (E42/I4 compliance)
                - Checks commits exist on branch (I5 compliance)
                - Non-blocking (always exits 0, warnings logged to stderr)
@@ -1054,28 +1055,28 @@ waves:
 
                ### Relationship to E4
 
-               E46 enforces E4 mechanically. E4 (Worktree Isolation) states the requirement:
-               all wave agents MUST use worktree isolation. E46 specifies the enforcement
+               E43 enforces E4 mechanically. E4 (Worktree Isolation) states the requirement:
+               all wave agents MUST use worktree isolation. E43 specifies the enforcement
                mechanism: lifecycle hooks that make isolation violations impossible rather
                than merely documented.
 
-               **Before E46 (instruction-based isolation):** Agents followed written protocol
-               in `wave-agent-worktree-isolation.md`. Violations were possible via agent error,
+               **Before E43 (instruction-based isolation):** Agents followed written protocol
+               in wave-agent-worktree-isolation.md. Violations were possible via agent error,
                context compaction loss, or rate-limit recovery gaps.
 
-               **After E46 (hook-based enforcement):** Claude Code hooks intercept tool calls
+               **After E43 (hook-based enforcement):** Claude Code hooks intercept tool calls
                before execution. Relative paths and out-of-bounds writes are blocked at the
                tool boundary. Bash commands run in the correct working directory automatically.
 
                ### Implementation Notes
 
-               - **Claude Code-specific:** E46 hooks use Claude Code lifecycle API (SubagentStart,
+               - **Claude Code-specific:** E43 hooks use Claude Code lifecycle API (SubagentStart,
                  PreToolUse, SubagentStop). Other platforms must implement equivalent enforcement
                  at their tool invocation boundary.
                - **Vendor-neutral fallback:** When hooks are unavailable, fall back to
                  instruction-based isolation (E4 Layer 3: Field 0 self-verification). Agents
                  manually verify working directory at startup.
-               - **Defense-in-depth:** E46 hooks complement E4 layers (pre-creation, task tool
+               - **Defense-in-depth:** E43 hooks complement E4 layers (pre-creation, task tool
                  isolation, merge-time trip wire). All layers remain active.
 
                **Related Invariants:** See I1 (disjoint file ownership), E4 (worktree isolation)
@@ -1083,166 +1084,52 @@ waves:
                **Related Rules:** See E12 (isolation verification at agent startup)
                ```
 
-            2. **procedures.md updates**
+            2. **procedures.md updates** (same as before, just reference E43 not E46)
 
-               **Find Wave Agent procedure** (search for "Wave Agent Procedure"):
+            3. **README.md updates** (reference E43 instead of E46)
 
-               **Update Field 0 (Worktree Path)**:
-               Change from:
-               ```
-               Your worktree: /absolute/path
-               IMPORTANT: Change directory before any operations. Run sawtools verify-isolation.
-               ```
-               To:
-               ```
-               Your worktree: /absolute/path
-               Isolation is enforced automatically via hooks (E46). Manual cd commands are
-               no longer required but remain supported for backward compatibility.
-               ```
+            4. **protocol/README.md updates** (E43 in changelog, not E46)
 
-               **Add reference to E46 in Wave Agent responsibilities**:
-               ```markdown
-               **E46 note:** When hooks are active (Claude Code with installed hooks), working
-               directory management and path validation are automatic. Field 0 verification
-               remains in the agent prompt for platforms without hook support.
-               ```
+            5. **protocol/invariants.md updates** (E43 amendment to I1)
 
-            3. **README.md (root repo README) updates**
+            6. **protocol/participants.md updates** (E43 enforcement note)
 
-               **Find "Worktree Isolation Defense (5 layers)" section** (~line 165):
+            7. **protocol/preconditions.md updates** (E43 enforcement note)
 
-               Add a new subsection after Layer 4 introducing E46:
-
-               ```markdown
-               ### E46: Hook-Based Enforcement (Layer 0.5)
-
-               v0.65.0 adds automated hook-based enforcement as Layer 0.5 (between
-               prevention and manual pre-creation). Four lifecycle hooks enforce isolation
-               at the Claude Code tool boundary:
-
-               1. **SubagentStart environment injection** — Sets SAW_AGENT_WORKTREE and 4 other
-                  env vars when agents launch
-               2. **PreToolUse:Bash cd injection** — Auto-prepends `cd $SAW_AGENT_WORKTREE &&`
-                  to every bash command
-               3. **PreToolUse:Write/Edit path validation** — Blocks relative paths and
-                  out-of-bounds writes
-               4. **SubagentStop compliance verification** — Verifies completion report and
-                  commits exist (audit trail)
-
-               This makes the "Agent B leak" scenario (files created in main repo instead of
-               worktree) structurally impossible. See `protocol/execution-rules.md` E46 for
-               full specification.
-               ```
-
-            4. **protocol/README.md updates**
-
-               **Find "Protocol Guarantees" section** (~line 48):
-
-               Add to the list:
-               ```markdown
-               - **Hook-based isolation enforcement** via E46 — Automated tool-level enforcement of worktree boundaries (SubagentStart environment injection, PreToolUse:Bash cd injection, PreToolUse:Write/Edit path validation, SubagentStop compliance verification)
-               ```
-
-               **Update changelog** (add as first entry after current version):
-               ```markdown
-               - **0.58.0** — E46: Hook-based worktree isolation enforcement (SubagentStart environment injection, PreToolUse:Bash cd injection, PreToolUse:Write/Edit path validation, SubagentStop compliance verification)
-               ```
-
-            5. **protocol/invariants.md updates**
-
-               **Find I1 (Disjoint File Ownership) section**:
-
-               Add a subsection after "I1 Amendment: Identical-Edit Allowance at Merge Time":
-
-               ```markdown
-               ### I1 Amendment: E46 Hook-Based Enforcement
-
-               E46 (Hook-Based Isolation Enforcement) provides mechanical enforcement of I1 at
-               the tool invocation boundary. When hooks are active (Claude Code with installed
-               hooks), path validation blocks writes outside worktree boundaries before
-               Write/Edit tools execute. This prevents I1 violations at the infrastructure
-               layer rather than relying on agent cooperation.
-
-               **Related Rules:** See E46 (hook-based isolation enforcement)
-               ```
-
-            6. **protocol/participants.md updates**
-
-               **Find "Wave Agent" section** and the "Forbidden actions" subsection:
-
-               Add after the existing forbidden actions list:
-
-               ```markdown
-               **E46: Hook-based enforcement.** When hooks are installed (Claude Code), worktree
-               isolation is enforced mechanically via SubagentStart environment injection,
-               PreToolUse:Bash cd injection, PreToolUse:Write/Edit path validation, and
-               SubagentStop compliance verification. Agents cannot violate isolation even by
-               accident. See E46 in execution-rules.md for full specification.
-               ```
-
-            7. **protocol/preconditions.md updates**
-
-               **Find P1 (File Decomposition) section**:
-
-               Add a note at the end of the section:
-
-               ```markdown
-               **E46 enforcement note:** When hooks are active, Write/Edit path validation
-               blocks file modifications outside declared ownership at the tool boundary,
-               preventing accidental I1 violations regardless of agent behavior.
-               ```
-
-            8. **docs/architecture.md updates**
-
-               **Find "Git Worktree Isolation" section** (~line 60):
-
-               Add a subsection after the "Benefits" list:
-
-               ```markdown
-               ### Hook-Based Enforcement (E46)
-
-               v0.65.0 adds mechanical enforcement via 4 Claude Code lifecycle hooks:
-
-               - **inject_worktree_env** (SubagentStart) — Sets SAW_AGENT_WORKTREE and metadata env vars
-               - **inject_bash_cd** (PreToolUse:Bash) — Auto-prepends `cd $SAW_AGENT_WORKTREE &&` to commands
-               - **validate_write_paths** (PreToolUse:Write/Edit) — Blocks relative paths and out-of-bounds writes
-               - **verify_worktree_compliance** (SubagentStop) — Verifies completion report and commits (audit)
-
-               This enforces isolation at the infrastructure layer (hooks intercept tool calls
-               before execution) rather than the cooperation layer (agents following written
-               protocol). See `protocol/execution-rules.md` E46 for full specification.
-               ```
+            8. **docs/architecture.md updates** (E43 hook-based enforcement section)
 
             **Files you own:**
-            - `protocol/execution-rules.md` (MODIFY — add E46 section)
-            - `protocol/procedures.md` (MODIFY — update Wave Agent procedure)
-            - `README.md` (MODIFY — add E46 to isolation defense layers)
-            - `protocol/README.md` (MODIFY — add E46 to protocol guarantees and changelog)
-            - `protocol/invariants.md` (MODIFY — add E46 amendment to I1)
-            - `protocol/participants.md` (MODIFY — add E46 note to Wave Agent section)
-            - `protocol/preconditions.md` (MODIFY — add E46 note to P1)
-            - `docs/architecture.md` (MODIFY — add hook-based enforcement section)
+            - protocol/execution-rules.md (MODIFY — add E43 section BEFORE E45)
+            - protocol/procedures.md (MODIFY — update Wave Agent procedure)
+            - README.md (MODIFY — add E43 to isolation defense layers)
+            - protocol/README.md (MODIFY — add E43 to protocol guarantees and changelog)
+            - protocol/invariants.md (MODIFY — add E43 amendment to I1)
+            - protocol/participants.md (MODIFY — add E43 note to Wave Agent section)
+            - protocol/preconditions.md (MODIFY — add E43 note to P1)
+            - docs/architecture.md (MODIFY — add hook-based enforcement section)
 
             **Interface contracts you consume:**
             - Hook specifications from agents A, B, C, D (documented behavior only)
 
             **Quality gates:**
-            - E46 numbering must follow E45 (no gaps in E-rule sequence)
-            - E46 must cross-reference E4 and I1
+            - E43 numbering must come BEFORE E45 (fills the gap in E-rule sequence)
+            - E43 must cross-reference E4 and I1
             - All protocol files must pass markdown lint
 
             **Verification:**
             ```bash
             cd $WORKTREE
-            # Check E46 exists and is properly numbered
-            grep -A 5 "## E46:" protocol/execution-rules.md
+            # Check E43 exists and is properly numbered
+            grep -A 5 "## E43:" protocol/execution-rules.md
+            # Verify it appears before E45
+            grep -n "^## E4[0-9]:" protocol/execution-rules.md | grep -A1 "E43"
             # Check cross-references
-            grep -c "E46" protocol/procedures.md  # should be ≥1
+            grep -c "E43" protocol/procedures.md  # should be ≥1
             ```
 
             **Constraints:**
-            - E46 must be vendor-neutral in specification (Claude Code is one implementation)
-            - Don't remove E4 (E46 enhances E4, doesn't replace it)
+            - E43 must be vendor-neutral in specification (Claude Code is one implementation)
+            - Don't remove E4 (E43 enhances E4, doesn't replace it)
             - Maintain protocol version number consistency
           files:
             - protocol/execution-rules.md
@@ -1254,7 +1141,7 @@ quality_gates:
     level: standard
     gates:
         - type: lint
-          command: "find implementations/claude-code/hooks -type f ! -name '*.md' ! -name 'install.sh' -exec shellcheck {} +"
+          command: find implementations/claude-code/hooks -type f ! -name '*.md' ! -name 'install.sh' -exec shellcheck {} +
           required: true
           repo: scout-and-wave
           timing: post-merge
@@ -1311,5 +1198,38 @@ pre_mortem:
             inject_worktree_env must walk up to repo root to find .saw-state/active-impl.
             Test with scout-and-wave-go IMPL docs (cross-repo scenario). If detection fails,
             agent falls back to grep-based IMPL path extraction from prompt.
+critic_report:
+    verdict: ISSUES
+    agent_reviews:
+        A:
+            agent_id: A
+            verdict: PASS
+        B:
+            agent_id: B
+            verdict: PASS
+        C:
+            agent_id: C
+            verdict: PASS
+        D:
+            agent_id: D
+            verdict: PASS
+        E:
+            agent_id: E
+            verdict: PASS
+        F:
+            agent_id: F
+            verdict: PASS
+        G:
+            agent_id: G
+            verdict: ISSUES
+            issues:
+                - check: symbol_accuracy
+                  severity: error
+                  description: 'Agent brief references E46 as the next execution rule number, but protocol/execution-rules.md has a gap: E43 is missing (sequence goes E42, E44, E45). Adding E46 would create non-sequential numbering. The brief should either: (a) use E43 as the rule number, or (b) Scout should have identified and documented the E43 gap before assigning E46.'
+                  file: protocol/execution-rules.md
+                  symbol: E46
+    summary: 'Hook-based worktree isolation IMPL reviewed. 6 of 7 agents passed all verification checks. Agent G has an execution rule numbering error: the brief references E46, but protocol/execution-rules.md has a gap at E43 (sequence goes E42, E44, E45). Adding E46 without filling E43 would create non-sequential numbering, violating protocol documentation conventions. This must be corrected before wave execution.'
+    reviewed_at: "2026-03-27T22:04:16Z"
+    issue_count: 1
 state: SCOUT_PENDING
 injection_method: hook
