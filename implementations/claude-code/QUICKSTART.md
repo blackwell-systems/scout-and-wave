@@ -214,6 +214,8 @@ Creating worktrees:
     Base: main (abc123def)
 
 Pre-commit hook installed: guards against accidental commits to main
+
+**Hook-based enforcement:** The installer registers 15 enforcement hooks (up from 11 in earlier versions). Four new hooks enforce worktree isolation automatically: environment injection, bash cd auto-injection, path validation, and compliance verification. Agents no longer need manual `cd` commands or `$WORKTREE` variable usage. See `implementations/claude-code/hooks/README.md` for details.
 ```
 
 Each agent gets its own isolated working directory (git worktree). They share git history but have separate file trees.

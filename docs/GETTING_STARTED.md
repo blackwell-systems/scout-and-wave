@@ -14,6 +14,8 @@ The most common way to use SAW. Install the skill, then run `/saw scout "feature
 
 **Best for:** Day-to-day feature development, teams already using Claude Code.
 
+**Isolation enforcement:** Worktree isolation is enforced automatically via hooks (environment injection, cd auto-injection, path validation, compliance verification). No manual `cd` commands required.
+
 ### Web UI (`saw serve`)
 
 A browser-based interface for reviewing IMPL docs, monitoring wave progress, and chatting with the orchestrator. Gives you visual feedback on agent status and file ownership.

@@ -296,6 +296,8 @@ If a `docs/IMPL/IMPL-*.yaml` file already exists:
    ```
    This atomic operation combines worktree creation and per-agent preparation (brief extraction + journal initialization) into a single command. Exit code 1 = failure (baseline gate, uncommitted scaffolds, freeze violations, or worktree errors) — do not proceed until resolved.
 
+   **E43: Hook-Based Isolation Enforcement.** Wave agents run in git worktrees with automatic isolation enforcement via 4 lifecycle hooks (SubagentStart, PreToolUse:Bash, PreToolUse:Write/Edit, SubagentStop). Agents no longer need manual `cd` commands or `$WORKTREE` variable usage — hooks inject working directory changes and validate paths automatically. See `protocol/execution-rules.md` E43 for full specification.
+
    - **E21A baseline failure:** If `baseline_verification_failed`, the codebase was already broken. Fix it and re-run `prepare-wave`.
    - **Interface freeze checkpoint:** Contracts become immutable when worktrees are created — last moment to revise type signatures.
    - Returns JSON with all worktree paths and agent brief metadata.
@@ -310,6 +312,7 @@ For **YAML manifests** (`.yaml`/`.yml`):
 ```
 <!-- IMPL doc: /abs/path/to/IMPL-feature.yaml | Wave N | Agent X -->
 <!-- Worktree: /abs/path/to/.claude/worktrees/saw/{slug}/wave{N}-agent-{X} | Branch: saw/{slug}/wave{N}-agent-{X} -->
+<!-- Isolation is enforced automatically via hooks — see wave-agent-worktree-isolation.md. -->
 
 MANDATORY FIRST STEP - Verify isolation before any work:
 1. cd /abs/path/to/.claude/worktrees/saw/{slug}/wave{N}-agent-{X}

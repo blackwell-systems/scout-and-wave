@@ -8,7 +8,7 @@ Scout-and-Wave is an open protocol for safely parallelizing human-guided agentic
 
 **Path:** [`claude-code/`](claude-code/)
 
-A complete automated implementation using Claude Code's agent runtime. The protocol runs within a single Claude Code session with background agents executing in parallel git worktrees.
+Fully automated implementation using Claude Code's agent runtime and git worktree isolation. Includes 15 enforcement hooks (SubagentStart, PreToolUse, PostToolUse, SubagentStop) for mechanical worktree isolation and protocol compliance. The protocol runs within a single Claude Code session with background agents executing in parallel git worktrees.
 
 **Best for:**
 - Automated parallel execution of complex features
