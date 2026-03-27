@@ -83,6 +83,19 @@ repo/
 - Each agent has full git history and can commit independently
 - Merge happens after all agents complete (I3: wave sequencing)
 
+**E43 Hook-Based Enforcement (v0.65.0+):**
+
+In Claude Code implementations, worktree isolation is enforced mechanically via four lifecycle hooks rather than relying on agent cooperation:
+
+1. **SubagentStart: Environment injection** — Sets `SAW_AGENT_WORKTREE`, `SAW_AGENT_ID`, `SAW_WAVE_NUMBER`, `SAW_IMPL_PATH`, `SAW_BRANCH` when wave agents launch
+2. **PreToolUse:Bash: CD auto-injection** — Prepends `cd $SAW_AGENT_WORKTREE &&` to every bash command, ensuring commands run in the correct working directory automatically
+3. **PreToolUse:Write/Edit: Path validation** — Blocks relative paths and paths outside worktree boundaries at the tool boundary (exit 2), preventing the "Agent B leak" scenario where files are created in the main repo instead of the worktree
+4. **SubagentStop: Compliance verification** — Checks completion report exists and commits exist on branch, creating an audit trail for post-hoc violation analysis
+
+This defense-in-depth approach makes isolation violations impossible at the tool boundary rather than merely detected after merge. Other implementations must provide equivalent enforcement at their tool invocation boundary or fall back to instruction-based isolation (Field 0 self-verification).
+
+See E43 in `protocol/execution-rules.md` for full specification.
+
 ### 3. Protocol SDK (sawtools CLI)
 
 The `sawtools` binary provides 71+ commands covering all protocol operations. Key commands include:

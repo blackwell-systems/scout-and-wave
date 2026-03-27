@@ -23,6 +23,8 @@ The work decomposes into ≥2 disjoint file groups. No two agents require confli
 
 Append-only additions to a shared file (config registries, module manifests, index files) are not a decomposition blocker; the scout makes such files orchestrator-owned and the orchestrator applies them post-merge. Generated files (build artifacts, compiled outputs) are excluded from ownership and must not appear in any agent's ownership list.
 
+**E43 enforcement:** In Claude Code implementations, lifecycle hooks mechanically prevent agents from modifying files outside their ownership via path validation at the tool boundary (PreToolUse:Write/Edit). This turns P1 violations from detection-after-merge into prevention-at-write-time.
+
 ### Append-Only Definition
 
 An agent's change to a shared file qualifies as append-only if and only if:
