@@ -1,0 +1,781 @@
+title: Expand Scaffold Agent trigger to include shared data structures
+feature_slug: shared-data-scaffold-detection
+verdict: SUITABLE
+suitability_assessment: |
+    Q1: File decomposition — Yes. The work spans 3 repositories but decomposes cleanly:
+
+    scout-and-wave (protocol repo):
+    - protocol/invariants.md (I2 clarification)
+    - protocol/execution-rules.md (update or new E-rule for scaffold detection)
+    - protocol/procedures.md (Procedure 2: Scaffold Agent section update)
+    - implementations/claude-code/prompts/agents/scout.md (update step 6 detection logic)
+    - implementations/claude-code/prompts/references/scout-implementation-process.md (update step 6)
+
+    scout-and-wave-go (engine/SDK):
+    - pkg/analyzer/analyzer.go (add type reference detection beyond imports)
+    - pkg/analyzer/shared_types.go (new: detect types referenced by 2+ agents)
+    - cmd/sawtools/detect_shared_types_cmd.go (new: CLI command for Scout to invoke)
+    - pkg/protocol/types.go (possibly extend Scaffold schema if needed)
+
+    scout-and-wave-web (web app):
+    - No changes expected (engine does the work, web just displays scaffolds section)
+
+    No conflicting modifications. Each repo's files have clear ownership boundaries.
+
+    Q2: Investigation-first items — No. The feature is well-understood from the dry-run-preview
+    failure case. We know exactly what to detect: when Agent B imports types from Agent A's
+    file_ownership, Scout should create a scaffold for those types.
+
+    Q3: Interface discoverability — Yes. Key interfaces are clear:
+    - sawtools detect-shared-types <impl-doc> → YAML output with scaffold candidates
+    - Scout calls this after creating initial agent prompts but before finalizing IMPL doc
+    - Output schema: {file: path, types: [name1, name2], referencing_agents: [A, B]}
+
+    Q4: Pre-implementation status check — Greenfield feature. Scout currently detects shared
+    types only when they appear in interface_contracts (step 6 heuristic). This extends detection
+    to "Agent B's brief says 'import X from crate::models' where models.rs is in Agent A's
+    file_ownership".
+
+    Q5: Parallelization value — Low to moderate. This is mostly documentation + one focused
+    Go implementation file. Build/test cycles are fast (<10s for protocol docs, ~15-20s for Go).
+    Main value is coordination across 3 repos and ensuring protocol-engine-docs stay aligned.
+
+    Estimated times:
+    - Scout phase: ~10 min (cross-repo analysis, understanding current scaffold logic)
+    - Wave 1 (protocol docs): ~8 min (3 agents, parallel, mostly markdown)
+    - Wave 2 (Go implementation): ~15 min (2 agents, parallel, shared_types.go + CLI command)
+    - Wave 3 (integration validation): ~5 min (1 agent, update Scout prompt to call new tool)
+    - Merge & verification: ~5 min per wave (~15 min total across 3 waves)
+    Total: ~53 min
+
+    Sequential baseline: ~45 min (mostly sequential anyway due to cross-repo coordination)
+
+    Recommendation: SUITABLE WITH CAVEATS. Parallelization gains are minimal (~15% speedup),
+    but the IMPL doc provides high value as:
+    1. Cross-repo coordination specification (prevents protocol-engine drift)
+    2. Interface contract documentation for the new detection API
+    3. Audit trail showing which E-rule governs this behavior
+    4. Progress tracker across 3 repos with different merge dependencies
+
+    The coordination value justifies SAW even with marginal speed gains.
+test_command: |-
+    # Cross-repo: run per repo
+    cd scout-and-wave && echo 'no tests (docs only)'
+    cd scout-and-wave-go && go test ./pkg/analyzer/... ./cmd/sawtools/...
+lint_command: |-
+    # Cross-repo: run per repo
+    cd scout-and-wave-go && go vet ./pkg/analyzer/... ./cmd/sawtools/...
+file_ownership:
+    - file: protocol/invariants.md
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: protocol/execution-rules.md
+      agent: B
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: protocol/procedures.md
+      agent: C
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: pkg/analyzer/shared_types.go
+      agent: D
+      wave: 2
+      action: new
+      repo: scout-and-wave-go
+    - file: cmd/sawtools/detect_shared_types_cmd.go
+      agent: E
+      wave: 2
+      action: new
+      repo: scout-and-wave-go
+    - file: implementations/claude-code/prompts/references/scout-implementation-process.md
+      agent: F
+      wave: 3
+      action: modify
+      repo: scout-and-wave
+    - file: pkg/analyzer/shared_types_test.go
+      agent: D
+      wave: 2
+      action: new
+      repo: scout-and-wave-go
+    - file: cmd/sawtools/detect_shared_types_cmd_test.go
+      agent: E
+      wave: 2
+      action: new
+      repo: scout-and-wave-go
+    - file: cmd/sawtools/main.go
+      agent: E
+      wave: 2
+      action: modify
+      repo: scout-and-wave-go
+interface_contracts:
+    - name: DetectSharedTypes
+      description: Analyzes IMPL doc and detects data structures referenced by 2+ agents
+      definition: |
+        // pkg/analyzer/shared_types.go
+
+        package analyzer
+
+        import "github.com/blackwell-systems/scout-and-wave-go/pkg/protocol"
+
+        // SharedTypeCandidate represents a type that should be scaffolded because
+        // multiple agents reference it.
+        type SharedTypeCandidate struct {
+            TypeName          string   `json:"type_name" yaml:"type_name"`
+            DefiningAgent     string   `json:"defining_agent" yaml:"defining_agent"`
+            DefiningFile      string   `json:"defining_file" yaml:"defining_file"`
+            ReferencingAgents []string `json:"referencing_agents" yaml:"referencing_agents"`
+            ReferencingFiles  []string `json:"referencing_files" yaml:"referencing_files"`
+            Reason            string   `json:"reason" yaml:"reason"`
+        }
+
+        // DetectSharedTypes scans an IMPL doc's file_ownership, interface_contracts,
+        // and agent task prompts to find types that multiple agents reference.
+        // Returns scaffold candidates with metadata for Scout to review.
+        //
+        // Detection heuristics:
+        // 1. Agent A owns file X, Agent B's task says "import Type from X"
+        // 2. Type appears in interface_contracts AND 2+ agents reference it in tasks
+        // 3. Same struct name mentioned in multiple agents' "Interfaces to implement"
+        //
+        // Does NOT trigger for:
+        // - Types imported from external packages (stdlib, third-party deps)
+        // - Types in files not owned by any agent (existing codebase infrastructure)
+        // - Types mentioned in only one agent's task
+        func DetectSharedTypes(manifest *protocol.IMPLManifest, repoRoot string) ([]SharedTypeCandidate, error)
+      location: pkg/analyzer/shared_types.go
+    - name: detect-shared-types CLI command
+      description: CLI wrapper for DetectSharedTypes, invoked by Scout agent
+      definition: |
+        # cmd/sawtools/detect_shared_types_cmd.go
+
+        sawtools detect-shared-types <impl-doc-path> [--format yaml|json]
+
+        Reads IMPL doc, analyzes agent tasks and file ownership, outputs scaffold candidates.
+
+        Output format (YAML):
+        ```yaml
+        shared_types:
+          - type_name: PreviewData
+            defining_agent: A
+            defining_file: src/models.rs
+            referencing_agents: [B, C]
+            referencing_files: [src/upgrade/splitter.rs, src/upgrade/mod.rs]
+            reason: "Agent B task says 'import PreviewData from crate::models'; Agent C task says 'use PreviewData from models'"
+          - type_name: SectionTiming
+            defining_agent: A
+            defining_file: src/models.rs
+            referencing_agents: [B]
+            referencing_files: [src/upgrade/splitter.rs]
+            reason: "Agent B task says 'import SectionTiming from crate::models'"
+        ```
+
+        Exit code 0 if analysis succeeds (even if no candidates found).
+        Exit code 1 if IMPL doc is malformed or repo root cannot be determined.
+      location: cmd/sawtools/detect_shared_types_cmd.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## What to implement
+
+            Strengthen I2 (Interface Contracts Precede Parallel Implementation) to explicitly
+            cover shared data structures, not just function/method signatures. Clarify that
+            "interface contracts" includes structs, enums, type aliases, and traits when they
+            are referenced by 2+ agents.
+
+            ## File to modify
+
+            protocol/invariants.md (I2 section, lines 56-71)
+
+            ## Changes required
+
+            1. **Expand I2's scope statement** (after line 57):
+               Current: "The Scout defines all interfaces that cross agent boundaries"
+               Add: "This includes function signatures, method contracts, AND shared data
+               structures (structs, enums, type aliases, traits) referenced by 2+ agents."
+
+            2. **Add new paragraph after "Mechanism:" section** (after line 67):
+               ```
+               **Shared Data Structure Detection:** Scout detects types that multiple agents
+               reference by scanning agent task prompts for import statements, type references,
+               and data structure definitions. When Agent B imports a type from a file in
+               Agent A's ownership, Scout creates a scaffold for that type to prevent duplicate
+               definitions and I1 violations.
+
+               Detection applies to:
+               - Structs/classes defined in one agent's file and imported by another
+               - Enums/sum types used across agent boundaries
+               - Type aliases shared between agents
+               - Traits/interfaces implemented or consumed by multiple agents
+
+               Does NOT apply to:
+               - Types from external dependencies (stdlib, third-party packages)
+               - Types in existing codebase files not owned by any agent
+               - Types mentioned in only one agent's task (no cross-agent dependency)
+               ```
+
+            3. **Update "Related Rules"** (line 70):
+               Add reference to the new E-rule created by Agent B: "See E2 (interface freeze),
+               E8 (same-wave interface failure handling), and E45 (shared data structure
+               scaffold detection)"
+
+            ## Constraints
+
+            - Do not renumber I2 or change its formal statement
+            - Keep existing mechanism description intact
+            - New content must integrate smoothly with existing I2 text
+            - Cross-reference E45 (Shared Data Structure Scaffold Detection) created by Agent B
+
+            ## Verification
+
+            Read protocol/invariants.md in full after changes. Verify:
+            - I2's scope now explicitly includes data structures
+            - New detection paragraph appears after Mechanism section
+            - Related Rules includes cross-reference to Agent B's E-rule
+            - No markdown syntax errors
+
+            ## Completion report
+
+            Append structured completion report to IMPL doc:
+            ```yaml
+            completion_reports:
+              A:
+                status: complete|partial|blocked
+                branch: saw/shared-data-scaffold-detection/wave1-agent-A
+                commit: <sha>
+                files_changed: [protocol/invariants.md]
+                summary: |
+                  Expanded I2 to cover shared data structures. Added detection paragraph
+                  and cross-reference to E45.
+            ```
+          files:
+            - protocol/invariants.md
+        - id: B
+          task: |
+            ## What to implement
+
+            Create a new execution rule E45 defining Scout's responsibility to detect
+            shared data structures and emit scaffolds for them.
+
+            ## File to modify
+
+            protocol/execution-rules.md (append new rule at end, before "Cross-References")
+
+            ## Rule to add
+
+            **Rule number:** E45 (verified: last rule is currently E44, E45 is next available)
+
+            **Rule content:**
+            ```markdown
+            ## E45: Shared Data Structure Scaffold Detection
+
+            **Trigger:** Scout phase, after defining agent tasks but before finalizing IMPL doc
+
+            **Required Action:** Scout scans agent task prompts, file_ownership, and
+            interface_contracts to detect data structures (structs, enums, type aliases,
+            traits) referenced by 2+ agents. For each detected shared type, Scout adds an
+            entry to the Scaffolds section of the IMPL doc.
+
+            **Detection heuristics:**
+            - Agent A owns file X, Agent B's task says "import TypeName from X"
+            - Type appears in interface_contracts AND 2+ agent tasks reference it
+            - Same struct/enum name mentioned in multiple agents' "Interfaces to implement"
+
+            **Does NOT trigger for:**
+            - Types from external packages (stdlib, third-party dependencies)
+            - Types in existing codebase files not owned by any agent
+            - Types mentioned in only one agent's task (no cross-agent dependency)
+
+            **Automated tool:** `sawtools detect-shared-types <impl-doc>` automates this
+            detection. Scout should invoke it after writing agent prompts (step 10 of Scout
+            procedure) and merge the output into the Scaffolds section.
+
+            **Rationale:** Agents cannot coordinate at runtime. If Agent A defines
+            `PreviewData` in fileA and Agent B also defines it in fileB (because B's task
+            says "create PreviewData struct"), the merge fails with duplicate declarations.
+            Scaffolding the shared type before Wave 1 prevents this I1 violation.
+
+            **Failure Handling:** If Scout omits a shared type from scaffolds and agents
+            create duplicate definitions, E11 (conflict prediction) will catch it at merge
+            time. However, this is a late failure — E45 exists to prevent it proactively.
+
+            **Related Invariants:** See I2 (interface contracts precede parallel implementation)
+            ```
+
+            ## Placement
+
+            Insert after E44 (Context Injection Observability) and before the "Cross-References"
+            section at the end of the document.
+
+            ## Constraints
+
+            - Use the next available E-number (check existing rules to confirm)
+            - Follow the standard E-rule format: trigger, required action, rationale, failure handling
+            - Cross-reference I2 in "Related Invariants"
+            - Do not modify existing rules
+
+            ## Verification
+
+            Read protocol/execution-rules.md in full after changes. Verify:
+            - New rule appears after E44
+            - Rule number is E45 (sequential, no gaps)
+            - Format matches existing E-rules
+            - Cross-reference to I2 is present
+
+            ## Completion report
+
+            Append structured completion report to IMPL doc:
+            ```yaml
+            completion_reports:
+              B:
+                status: complete|partial|blocked
+                branch: saw/shared-data-scaffold-detection/wave1-agent-B
+                commit: <sha>
+                files_changed: [protocol/execution-rules.md]
+                summary: |
+                  Added E45 (Shared Data Structure Scaffold Detection) after E44.
+                  Defines Scout's responsibility to detect shared types and emit scaffolds.
+            ```
+          files:
+            - protocol/execution-rules.md
+        - id: C
+          task: |
+            ## What to implement
+
+            Update Procedure 2 (Scaffold Agent) in protocol/procedures.md to clarify that
+            scaffolds apply to shared data structures, not just interface contracts defined
+            in the interface_contracts section.
+
+            ## File to modify
+
+            protocol/procedures.md (Procedure 2: Scaffold Agent section, lines 105-159)
+
+            ## Changes required
+
+            1. **Update step 2 (Read contracts)** (around line 116):
+               Current text says "Scaffold Agent reads IMPL doc Scaffolds section".
+               Add clarification: "Scaffolds may include types from interface_contracts
+               section AND shared data structures detected by E45 (shared data structure
+               scaffold detection)."
+
+            2. **Add new paragraph in Steps section** (after step 2, before step 3):
+               ```markdown
+               **Shared data structures:** Scaffolds section may contain types that are not
+               in interface_contracts but were detected by Scout because multiple agents
+               reference them. Example: Agent A owns models.rs and defines PreviewData;
+               Agent B's task says "import PreviewData from models". Scout detects this
+               cross-agent reference and adds PreviewData to scaffolds even if it's not
+               a function signature. Scaffold Agent treats these types identically to
+               interface contract types — create the file, define the type, commit to HEAD.
+               ```
+
+            3. **Update "Skip condition"** (line 110):
+               Current: "If IMPL doc Scaffolds section empty, skip directly to WAVE_PENDING"
+               Change to: "If IMPL doc Scaffolds section empty OR all types already exist
+               in the codebase (scaffold status: 'exists'), skip directly to WAVE_PENDING"
+
+            ## Constraints
+
+            - Do not change the procedure's structure or step numbers
+            - Reference E45 (Shared Data Structure Scaffold Detection) from Agent B's new rule
+            - Keep existing Interface Freeze subsection intact
+            - Maintain consistent markdown formatting with the rest of the document
+
+            ## Verification
+
+            Read protocol/procedures.md Procedure 2 section in full after changes. Verify:
+            - Step 2 mentions E45 and shared data structures
+            - New paragraph explaining shared data structures appears after step 2
+            - Skip condition updated to handle pre-existing types
+            - No broken cross-references
+
+            ## Completion report
+
+            Append structured completion report to IMPL doc:
+            ```yaml
+            completion_reports:
+              C:
+                status: complete|partial|blocked
+                branch: saw/shared-data-scaffold-detection/wave1-agent-C
+                commit: <sha>
+                files_changed: [protocol/procedures.md]
+                summary: |
+                  Updated Procedure 2 (Scaffold Agent) to clarify scaffolds include shared
+                  data structures detected by E45, not just interface contracts.
+            ```
+          files:
+            - protocol/procedures.md
+    - number: 2
+      agents:
+        - id: D
+          task: |
+            ## What to implement
+
+            Create pkg/analyzer/shared_types.go implementing DetectSharedTypes function.
+            This function scans an IMPL doc and detects data structures that 2+ agents
+            reference, returning scaffold candidates for Scout to review.
+
+            ## Interface to implement
+
+            See interface_contracts section for DetectSharedTypes signature. Key requirements:
+            - Input: *protocol.IMPLManifest, repoRoot string
+            - Output: []SharedTypeCandidate, error
+            - Detection heuristics: scan agent task prompts for import statements and type
+              references where the imported file is in another agent's file_ownership
+
+            ## Implementation approach
+
+            1. **Parse agent tasks:** For each agent in each wave, extract text from the
+               `task` field. Look for patterns:
+               - Go: `import "path/to/package"` or type references in function signatures
+               - Rust: `use crate::module::Type` or `pub use X from Y`
+               - TypeScript: `import { Type } from "./module"`
+               - Python: `from module import Type`
+
+            2. **Cross-reference file_ownership:** When Agent B's task mentions importing
+               from path X, check if any agent owns a file matching X. If yes, that file
+               is a candidate for shared type scaffolding.
+
+            3. **Extract type names:** Parse the import statement to extract type names.
+               Example: "import PreviewData from crate::models" → type_name: PreviewData,
+               defining_file: src/models.rs (resolved from file_ownership for Agent A).
+
+            4. **Deduplicate and count references:** Build a map of type_name → list of
+               agents that reference it. If len(referencing_agents) >= 2, add to candidates.
+
+            5. **Also check interface_contracts:** If a type appears in interface_contracts
+               AND appears in 2+ agent tasks (even without explicit imports), add it to
+               candidates. This catches cases where Scout already documented the type but
+               didn't add it to scaffolds.
+
+            ## Edge cases to handle
+
+            - **Type already exists in codebase:** If defining_file already exists and contains
+              the type (check via AST parsing or grep), mark reason as "type exists but not
+              scaffolded; verify agents import correctly".
+            - **Circular references:** Agent A imports from B, B imports from A. Return error
+              explaining the circular dependency — this is a planning error Scout must fix.
+            - **External dependencies:** Skip types from external packages (check if file path
+              starts with go.mod module path for local packages only).
+
+            ## Tests to write
+
+            Create pkg/analyzer/shared_types_test.go:
+            - TestDetectSharedTypes_BasicCase: Agent A owns models.rs, Agent B task imports
+              PreviewData from models → candidate emitted
+            - TestDetectSharedTypes_NoSharing: Each agent imports only from external packages
+              → no candidates
+            - TestDetectSharedTypes_MultipleRefs: Agent A owns X, Agents B and C both import
+              from X → one candidate with 2 referencing agents
+            - TestDetectSharedTypes_TypeExistsInCodebase: Type already defined in existing file
+              → candidate with "exists" reason
+            - TestDetectSharedTypes_CircularDep: A imports from B, B imports from A → error
+
+            ## Pre-implementation check
+
+            Verify CI exists before starting work:
+            ```bash
+            ls .github/workflows/
+            ```
+            If workflows exist, review test.yml or ci.yml to understand test execution pattern.
+
+            ## Verification gate
+
+            Run in worktree:
+            ```bash
+            go build ./pkg/analyzer
+            go test ./pkg/analyzer -run TestDetectSharedTypes
+            go vet ./pkg/analyzer
+            ```
+
+            All must pass before committing.
+
+            ## Constraints
+
+            - Do not modify existing pkg/analyzer/analyzer.go (import detection)
+            - DetectSharedTypes is a pure function (no side effects, no file writes)
+            - Return empty slice (not nil) when no candidates found
+            - Error only on malformed IMPL doc or missing file_ownership data
+
+            ## Completion report
+
+            Append structured completion report to IMPL doc:
+            ```yaml
+            completion_reports:
+              D:
+                status: complete|partial|blocked
+                branch: saw/shared-data-scaffold-detection/wave2-agent-D
+                commit: <sha>
+                files_changed: [pkg/analyzer/shared_types.go, pkg/analyzer/shared_types_test.go]
+                tests_added: [TestDetectSharedTypes_BasicCase, TestDetectSharedTypes_NoSharing, TestDetectSharedTypes_MultipleRefs, TestDetectSharedTypes_TypeExistsInCodebase, TestDetectSharedTypes_CircularDep]
+                verification: PASS|FAIL
+                summary: |
+                  Implemented DetectSharedTypes with 5 test cases. Handles basic detection,
+                  multi-agent references, circular deps, and existing types.
+            ```
+          files:
+            - pkg/analyzer/shared_types.go
+            - pkg/analyzer/shared_types_test.go
+        - id: E
+          task: |
+            ## What to implement
+
+            Create cmd/sawtools/detect_shared_types_cmd.go implementing the CLI command that
+            Scout will invoke. Wraps DetectSharedTypes function from pkg/analyzer.
+
+            ## Interface to implement
+
+            See interface_contracts section for CLI command signature. Key requirements:
+            - Input: <impl-doc-path> as positional arg, --format flag (yaml or json)
+            - Output: YAML or JSON to stdout with shared_types array
+            - Exit code 0 on success (even if no candidates), 1 on error
+
+            ## Implementation approach
+
+            1. **Parse CLI args:** Use cobra to define command with:
+               - Use: "detect-shared-types <impl-doc-path>"
+               - Flags: --format (default: yaml)
+               - Args: cobra.ExactArgs(1)
+
+            2. **Load IMPL doc:** Use protocol.LoadIMPLManifest(implDocPath) to read and
+               parse the YAML file.
+
+            3. **Determine repo root:** Use filepath.Dir(implDocPath) to get the directory
+               containing the IMPL doc, then walk up to find repository root (directory
+               containing go.mod, Cargo.toml, package.json, or .git directory). Alternatively,
+               use manifest.Repository field if populated.
+
+            4. **Call DetectSharedTypes:** Pass manifest and repoRoot to analyzer.DetectSharedTypes.
+
+            5. **Format output:** Marshal candidates to YAML or JSON based on --format flag.
+               Use yaml.Marshal or json.Marshal from encoding/* packages.
+
+            6. **Write to stdout:** Print formatted output. Scout will parse this output and
+               merge it into the Scaffolds section.
+
+            ## Error handling
+
+            - IMPL doc not found: "error: IMPL doc not found at <path>"
+            - IMPL doc malformed: "error: failed to parse IMPL doc: <details>"
+            - Repo root not found: "error: could not determine repo root from <path>"
+            - DetectSharedTypes returns error: "error: detection failed: <details>"
+
+            ## Tests to write
+
+            Create cmd/sawtools/detect_shared_types_cmd_test.go:
+            - TestDetectSharedTypesCmd_ValidInput: Runs command with valid IMPL doc → exit 0,
+              YAML output matches expected structure
+            - TestDetectSharedTypesCmd_NoCandidates: IMPL doc with no shared types → exit 0,
+              empty shared_types array
+            - TestDetectSharedTypesCmd_JSONFormat: --format json flag → JSON output
+            - TestDetectSharedTypesCmd_MissingFile: IMPL doc doesn't exist → exit 1, error message
+
+            ## Integration with main CLI
+
+            Add command to cmd/sawtools/main.go rootCmd:
+            ```go
+            rootCmd.AddCommand(newDetectSharedTypesCmd())
+            ```
+
+            Check main.go to see where other analyze-* commands are registered and follow
+            the same pattern.
+
+            ## Verification gate
+
+            Run in worktree:
+            ```bash
+            go build ./cmd/sawtools
+            go test ./cmd/sawtools -run TestDetectSharedTypesCmd
+            ./sawtools detect-shared-types <test-impl-doc> --format yaml
+            ```
+
+            All must pass. Final command should print valid YAML with shared_types key.
+
+            ## Constraints
+
+            - Do not modify pkg/analyzer (Agent D owns that)
+            - Command name must be "detect-shared-types" (no aliases)
+            - Output format must match schema in interface_contracts section
+            - Do not write files — only read IMPL doc and write to stdout
+
+            ## Completion report
+
+            Append structured completion report to IMPL doc:
+            ```yaml
+            completion_reports:
+              E:
+                status: complete|partial|blocked
+                branch: saw/shared-data-scaffold-detection/wave2-agent-E
+                commit: <sha>
+                files_changed: [cmd/sawtools/detect_shared_types_cmd.go, cmd/sawtools/detect_shared_types_cmd_test.go, cmd/sawtools/main.go]
+                tests_added: [TestDetectSharedTypesCmd_ValidInput, TestDetectSharedTypesCmd_NoCandidates, TestDetectSharedTypesCmd_JSONFormat, TestDetectSharedTypesCmd_MissingFile]
+                verification: PASS|FAIL
+                summary: |
+                  Implemented detect-shared-types CLI command with 4 test cases. Integrated
+                  into sawtools main command. Outputs YAML/JSON to stdout for Scout consumption.
+            ```
+          files:
+            - cmd/sawtools/detect_shared_types_cmd.go
+            - cmd/sawtools/detect_shared_types_cmd_test.go
+            - cmd/sawtools/main.go
+    - number: 3
+      agents:
+        - id: F
+          task: |
+            ## What to implement
+
+            Update Scout implementation process (step 6) to invoke `sawtools detect-shared-types`
+            and merge the output into the Scaffolds section of the IMPL doc.
+
+            ## File to modify
+
+            implementations/claude-code/prompts/references/scout-implementation-process.md
+            (step 6, lines 127-158)
+
+            ## Changes required
+
+            1. **Add new subsection after "Detection heuristics:"** (after line 139):
+               ```markdown
+               **Automated detection tool:** After writing agent prompts (step 10), Scout should
+               invoke `sawtools detect-shared-types <impl-doc-path>` to automate shared type
+               detection. This tool scans agent task prompts for import statements and cross-
+               references them against file_ownership to find types that 2+ agents reference.
+
+               Example workflow:
+               1. Scout writes agent prompts in step 10 (including "import X from Y" instructions)
+               2. Scout invokes: `sawtools detect-shared-types docs/IMPL/IMPL-feature.yaml --format yaml`
+               3. Tool outputs scaffold candidates with metadata (type name, defining agent,
+                  referencing agents, reason)
+               4. Scout reviews candidates and adds appropriate entries to Scaffolds section
+               5. Scout writes final IMPL doc with scaffolds included
+
+               The tool output format:
+               ```yaml
+               shared_types:
+                 - type_name: PreviewData
+                   defining_agent: A
+                   defining_file: src/models.rs
+                   referencing_agents: [B, C]
+                   referencing_files: [src/upgrade/splitter.rs, src/upgrade/mod.rs]
+                   reason: "Agent B imports from models; Agent C imports from models"
+               ```
+
+               Scout should convert each candidate to a Scaffolds section entry with:
+               - file: <defining_file>
+               - contents: <type definition from interface_contracts, or placeholder>
+               - import_path: <inferred from file path and language conventions>
+               - status: pending
+               ```
+
+            2. **Update "Why this matters" paragraph** (line 141):
+               Add sentence at end: "The `sawtools detect-shared-types` command automates
+               detection by scanning agent task prompts for import statements and type
+               references, reducing the risk of missed scaffolds that cause I1 violations."
+
+            3. **Clarify the manual heuristics** (lines 135-139):
+               Add note: "These heuristics are implemented by `sawtools detect-shared-types`
+               but Scout should understand them to review the tool's output critically."
+
+            ## Step placement
+
+            The automated tool invocation happens AFTER step 10 (Write agent prompts) but
+            BEFORE step 11 (Determine verification gates). Update the step numbering if needed
+            to insert this as a substep of step 6 or a new step 6a.
+
+            ## Constraints
+
+            - Do not change the overall structure of the 18-step process
+            - Keep existing manual detection heuristics visible (they're still valuable for
+              Scout to understand)
+            - Make it clear the tool is an automation aid, not a replacement for Scout's judgment
+            - Cross-reference E45 (Shared Data Structure Scaffold Detection) from Wave 1 Agent B
+
+            ## Verification
+
+            Read scout-implementation-process.md in full after changes. Verify:
+            - Automated tool workflow is clear and actionable
+            - Tool invocation happens at the right point (after agent prompts written)
+            - Manual heuristics are still documented for Scout's understanding
+            - No markdown syntax errors or broken section references
+
+            ## Completion report
+
+            Append structured completion report to IMPL doc:
+            ```yaml
+            completion_reports:
+              F:
+                status: complete|partial|blocked
+                branch: saw/shared-data-scaffold-detection/wave3-agent-F
+                commit: <sha>
+                files_changed: [implementations/claude-code/prompts/references/scout-implementation-process.md]
+                summary: |
+                  Updated step 6 to include sawtools detect-shared-types invocation. Added
+                  automated detection workflow after agent prompt writing step. Cross-referenced
+                  E45 from protocol updates.
+            ```
+          files:
+            - implementations/claude-code/prompts/references/scout-implementation-process.md
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./cmd/sawtools
+          required: true
+          repo: scout-and-wave-go
+        - type: test
+          command: go test ./pkg/analyzer/... ./cmd/sawtools/...
+          required: true
+          repo: scout-and-wave-go
+        - type: lint
+          command: go vet ./pkg/analyzer/... ./cmd/sawtools/...
+          required: true
+          repo: scout-and-wave-go
+pre_mortem:
+    overall_risk: medium
+    rows:
+        - scenario: Protocol-engine drift - Wave 1 completes but Wave 2 implements detection logic that doesn't match the protocol spec
+          likelihood: medium
+          impact: high
+          mitigation: |
+            Agent D must read protocol/execution-rules.md E45 rule created by Agent B before
+            implementing DetectSharedTypes. Interface contract explicitly references I2 and E45.
+            Wave structure ensures protocol docs are committed before Go implementation starts.
+            Verification: Agent D's worktree must have Wave 1 changes merged before starting work.
+        - scenario: Scout prompt becomes stale - New tool exists but Scout never calls it because prompt wasn't updated
+          likelihood: low
+          impact: high
+          mitigation: |
+            Wave 3 Agent F updates Scout prompt to call the tool. This is explicit in the IMPL
+            doc. After Wave 3 completion, run manual E2E test: Launch Scout agent with a feature
+            that has cross-agent type dependencies, verify `sawtools detect-shared-types` appears
+            in Scout's tool invocations. Add automated E2E test to CI if infrastructure exists.
+        - scenario: Detection heuristics too broad - Tool flags every type as shared, creating excessive scaffolds
+          likelihood: medium
+          impact: medium
+          mitigation: |
+            Agent D's tests include negative cases (TestDetectSharedTypes_NoSharing). Tool only
+            triggers when 2+ agents reference a type AND that type is in an agent's file_ownership.
+            External dependencies are explicitly excluded.
+        - scenario: Detection heuristics too narrow - Tool misses legitimate shared types, agents still create duplicates
+          likelihood: low
+          impact: medium
+          mitigation: |
+            Manual heuristics remain documented in scout-implementation-process.md. Scout can
+            review tool output and add missed types manually. E11 (conflict prediction) catches
+            duplicates at merge time as final safety net.
+        - scenario: Cross-repo coordination failure - Protocol repo changes merge but Go SDK changes don't, leaving references dangling
+          likelihood: low
+          impact: high
+          mitigation: |
+            Use feature branch strategy across all 3 repos: create branch `feature/shared-data-scaffold-E45`
+            in scout-and-wave, scout-and-wave-go, and scout-and-wave-web. Merge each wave to feature
+            branches first, verify cross-repo integration, then merge all 3 feature branches to main
+            simultaneously. Document commit SHAs in completion reports for audit trail. Verify
+            .github/workflows/ CI passes in scout-and-wave-go before Wave 2 completion.
+state: SCOUT_PENDING
+injection_method: hook
