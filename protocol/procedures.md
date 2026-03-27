@@ -107,7 +107,7 @@ SAW procedures are executed by the Orchestrator (synchronous agent in the user's
 **Entry state:** SCAFFOLD_PENDING
 **Exit state:** WAVE_PENDING (if all scaffolds committed) or BLOCKED (if compilation fails)
 **Executor:** Scaffold Agent (asynchronous)
-**Skip condition:** If IMPL doc Scaffolds section empty, skip directly to WAVE_PENDING
+**Skip condition:** If IMPL doc Scaffolds section empty OR all types already exist in the codebase (scaffold status: 'exists'), skip directly to WAVE_PENDING
 
 ### Steps
 
@@ -115,6 +115,9 @@ SAW procedures are executed by the Orchestrator (synchronous agent in the user's
 
 2. **Read contracts:** Scaffold Agent reads IMPL doc Scaffolds section
    - Each row specifies: File path, Contents (exact types/interfaces), Import path, Status
+   - Scaffolds may include types from interface_contracts section AND shared data structures detected by E45 (shared data structure scaffold detection)
+
+   **Shared data structures:** Scaffolds section may contain types that are not in interface_contracts but were detected by Scout because multiple agents reference them. Example: Agent A owns models.rs and defines PreviewData; Agent B's task says "import PreviewData from models". Scout detects this cross-agent reference and adds PreviewData to scaffolds even if it's not a function signature. Scaffold Agent treats these types identically to interface contract types — create the file, define the type, commit to HEAD.
 
 3. **Create scaffold files:** For each row with `status: pending`:
    - Create file at specified path
