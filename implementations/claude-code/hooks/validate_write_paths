@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# PreToolUse hook: Validates file paths before Write/Edit operations
+# Blocks relative paths and paths outside worktree boundaries when agent is
+# working in a worktree context (SAW_AGENT_WORKTREE is set).
+#
+# This hook prevents the "Agent B leak" scenario where agents accidentally
+# create files in the main repo instead of their assigned worktree.
+
+set -euo pipefail
+
+# Test cases (manual verification):
+# Test 1: Write inside worktree — should allow (exit 0)
+#   echo '{"tool_name":"Write","tool_input":{"file_path":"'"$SAW_AGENT_WORKTREE"'/pkg/module/file.go"}}' | SAW_AGENT_WORKTREE=/path/to/worktree ./validate_write_paths
+#   Expected: exit 0
+#
+# Test 2: Write outside worktree — should block (exit 2)
+#   echo '{"tool_name":"Write","tool_input":{"file_path":"/tmp/file.go"}}' | SAW_AGENT_WORKTREE=/path/to/worktree ./validate_write_paths
+#   Expected: exit 2, error message to stderr
+#
+# Test 3: Write with relative path — should block (exit 2)
+#   echo '{"tool_name":"Write","tool_input":{"file_path":"pkg/module/file.go"}}' | SAW_AGENT_WORKTREE=/path/to/worktree ./validate_write_paths
+#   Expected: exit 2, error message to stderr
+#
+# Test 4: Write with no worktree set — should allow (exit 0)
+#   echo '{"tool_name":"Write","tool_input":{"file_path":"/tmp/file.go"}}' | ./validate_write_paths
+#   Expected: exit 0
+#
+# Test 5: Edit on IMPL doc (orchestrator-owned) — should allow (exit 0)
+#   echo '{"tool_name":"Edit","tool_input":{"file_path":"/Users/user/repo/docs/IMPL/IMPL-feature.yaml"}}' | SAW_AGENT_WORKTREE=/path/to/worktree ./validate_write_paths
+#   Expected: exit 0 (IMPL doc is outside worktree but orchestrator-owned)
+
+# Read JSON input from stdin
+input=$(cat)
+
+# Extract fields from JSON
+tool_name=$(echo "$input" | jq -r '.tool_name // empty')
+file_path=$(echo "$input" | jq -r '.tool_input.file_path // empty')
+
+# Passthrough conditions: Only validate Write/Edit operations
+if [[ "$tool_name" != "Write" && "$tool_name" != "Edit" ]]; then
+  exit 0  # Allow (not a file write operation)
+fi
+
+# Passthrough condition: No enforcement if worktree is not set
+# (solo wave, integration wave, or orchestrator context)
+if [[ -z "${SAW_AGENT_WORKTREE:-}" ]]; then
+  exit 0  # Allow (no worktree context)
+fi
+
+# Passthrough condition: Allow empty file paths
+if [[ -z "$file_path" ]]; then
+  exit 0  # Allow (no file path to validate)
+fi
+
+# Normalize paths by removing trailing slashes
+file_path="${file_path%/}"
+worktree_path="${SAW_AGENT_WORKTREE%/}"
+
+# Check 1: Block relative paths
+if ! [[ "$file_path" =~ ^/ ]]; then
+  echo "Error: Relative paths not allowed in worktree context. Use absolute paths." >&2
+  echo "  Attempted path: $file_path" >&2
+  echo "  Worktree: $worktree_path" >&2
+  echo "" >&2
+  echo "  Solution: Use absolute paths starting with \$SAW_AGENT_WORKTREE" >&2
+  echo "  Example: \$SAW_AGENT_WORKTREE/pkg/module/file.go" >&2
+  echo "" >&2
+  echo "  See: references/wave-agent-worktree-isolation.md for protocol details" >&2
+  exit 2  # Block operation
+fi
+
+# Check 2: Block paths outside worktree
+if ! [[ "$file_path" =~ ^$worktree_path ]]; then
+  echo "Error: Path outside worktree boundaries." >&2
+  echo "  Attempted path: $file_path" >&2
+  echo "  Worktree: $worktree_path" >&2
+  echo "" >&2
+  echo "  All file operations must target files within your assigned worktree." >&2
+  echo "  Use Read tool to inspect worktree structure: Read \$SAW_AGENT_WORKTREE" >&2
+  echo "" >&2
+  echo "  If you need to modify files outside your worktree, report them as" >&2
+  echo "  out_of_scope_deps in your completion report." >&2
+  echo "" >&2
+  echo "  See: references/wave-agent-worktree-isolation.md for protocol details" >&2
+  exit 2  # Block operation
+fi
+
+# All checks passed
+exit 0
