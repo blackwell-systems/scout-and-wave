@@ -133,15 +133,51 @@ They are NOT the structure of your output. Your output is PURE YAML following th
    add it to the Scaffolds section.
 
    **Detection heuristics:**
+   These heuristics are implemented by `sawtools detect-shared-types` but Scout
+   should understand them to review the tool's output critically:
    - Agent A's prompt says "define type X" AND Agent B's prompt says "consume type X"
    - Agent A returns type X from a function AND Agent B calls that function
    - A type name appears in multiple agent file ownership lists
    - Same struct name would be created by multiple agents in different files
 
+   **Automated detection tool:** After writing agent prompts (step 10), Scout should
+   invoke `sawtools detect-shared-types <impl-doc-path>` to automate shared type
+   detection. This tool scans agent task prompts for import statements and cross-
+   references them against file_ownership to find types that 2+ agents reference.
+
+   Example workflow:
+   1. Scout writes agent prompts in step 10 (including "import X from Y" instructions)
+   2. Scout invokes: `sawtools detect-shared-types docs/IMPL/IMPL-feature.yaml --format yaml`
+   3. Tool outputs scaffold candidates with metadata (type name, defining agent,
+      referencing agents, reason)
+   4. Scout reviews candidates and adds appropriate entries to Scaffolds section
+   5. Scout writes final IMPL doc with scaffolds included
+
+   The tool output format:
+   ```yaml
+   shared_types:
+     - type_name: PreviewData
+       defining_agent: A
+       defining_file: src/models.rs
+       referencing_agents: [B, C]
+       referencing_files: [src/upgrade/splitter.rs, src/upgrade/mod.rs]
+       reason: "Agent B imports from models; Agent C imports from models"
+   ```
+
+   Scout should convert each candidate to a Scaffolds section entry with:
+   - file: <defining_file>
+   - contents: <type definition from interface_contracts, or placeholder>
+   - import_path: <inferred from file path and language conventions>
+   - status: pending
+
+   See E45 (Shared Data Structure Scaffold Detection) for full specification.
+
    **Why this matters:** Agents cannot coordinate at runtime. If Agent A defines
    `MetricSnapshot` in `fileA.go` and Agent B defines it in `fileB.go`, the merge
    will fail with duplicate declarations. Creating the shared type in a scaffold
-   file before Wave 1 launches prevents this.
+   file before Wave 1 launches prevents this. The `sawtools detect-shared-types`
+   command automates detection by scanning agent task prompts for import statements
+   and type references, reducing the risk of missed scaffolds that cause I1 violations.
 
    **Scaffolds section format:**
 
