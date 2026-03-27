@@ -1,0 +1,1312 @@
+title: Hook-Based Worktree Isolation Enforcement
+feature_slug: hook-worktree-isolation
+verdict: SUITABLE
+suitability_assessment: |
+    **Verdict: SUITABLE**
+
+    **1. File decomposition:** Clear decomposition across 4 new hooks, 10+ documentation files,
+    install script updates. Each hook has distinct responsibility (SubagentStart environment
+    injection, PreToolUse:Bash cd injection, PreToolUse:Write/Edit path validation, SubagentStop
+    verification). Documentation updates span protocol docs (execution-rules.md, procedures.md),
+    agent prompts (wave-agent-worktree-isolation.md), skill orchestrator (saw-skill.md), and
+    installation guide. No conflicting modifications to same files.
+
+    **2. Investigation-first:** No unknowns. Hook mechanism is well-understood (11 existing hooks
+    in production). Environment variable contract is straightforward. Path validation logic is
+    simple string matching. This is pure implementation work.
+
+    **3. Interface discoverability:** All interfaces are already specified by Claude Code hook API:
+    - SubagentStart: no input, return void (env vars set via side effect)
+    - PreToolUse: JSON input with tool_name/tool_input, return updatedInput or exit 2
+    - SubagentStop: JSON input with session metadata, return exit 0/2
+    Hook response format is standardized across all 11 existing hooks.
+
+    **4. Pre-implementation status:** All new work. The current isolation mechanism is
+    instruction-based (agents follow written protocol in wave-agent-worktree-isolation.md).
+    No existing hooks for environment injection, cd auto-injection, or path validation. The
+    validate_agent_launch hook exists but does not set environment variables or modify bash
+    commands.
+
+    **5. Parallelization value:** MEDIUM-HIGH. Work is documentation-heavy (~40% docs, ~60% code)
+    but spans multiple files with clear ownership. Each agent owns a distinct hook + its tests +
+    its documentation sections. No build cycles (bash scripts), but comprehensive testing required.
+    The 3-wave structure reflects natural dependencies: Wave 1 creates hooks, Wave 2 integrates
+    into install/docs, Wave 3 adds E46 protocol rule. Estimated 2-3 hours per agent for
+    implementation + testing.
+
+    **Estimated times:**
+    - Scout phase: ~8 min (dependency mapping, hook contracts, doc updates inventory)
+    - Agent execution: ~25 min (4 agents × 6 min avg, 1 wave parallelism)
+    - Merge & verification: ~5 min (bash linting, hook installation test)
+    Total SAW time: ~38 min
+
+    Sequential baseline: ~55 min (4 agents × 10 min sequential + 15 min integration)
+    Time savings: ~17 min (31% faster)
+
+    Recommendation: Clear speedup. Coordination value is high even if time savings were marginal —
+    this creates a durable reference architecture for future hook additions.
+test_command: "find implementations/claude-code/hooks -type f ! -name '*.md' ! -name 'install.sh' -exec shellcheck -S error {} +"
+lint_command: "find implementations/claude-code/hooks -type f ! -name '*.md' ! -name 'install.sh' -exec shellcheck -S error {} + 2>/dev/null || true"
+file_ownership:
+    - file: implementations/claude-code/hooks/inject_worktree_env
+      agent: A
+      wave: 1
+      action: new
+    - file: implementations/claude-code/hooks/inject_bash_cd
+      agent: B
+      wave: 1
+      action: new
+    - file: implementations/claude-code/hooks/validate_write_paths
+      agent: C
+      wave: 1
+      action: new
+    - file: implementations/claude-code/hooks/verify_worktree_compliance
+      agent: D
+      wave: 1
+      action: new
+    - file: install.sh
+      agent: E
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+        - B
+        - C
+        - D
+    - file: implementations/claude-code/hooks/README.md
+      agent: E
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+        - B
+        - C
+        - D
+    - file: implementations/claude-code/prompts/references/wave-agent-worktree-isolation.md
+      agent: F
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+        - B
+    - file: implementations/claude-code/prompts/saw-skill.md
+      agent: F
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+        - B
+    - file: docs/INSTALLATION.md
+      agent: F
+      wave: 2
+      action: modify
+    - file: protocol/execution-rules.md
+      agent: G
+      wave: 3
+      action: modify
+      depends_on:
+        - E
+        - F
+    - file: protocol/procedures.md
+      agent: G
+      wave: 3
+      action: modify
+      depends_on:
+        - E
+        - F
+    - file: README.md
+      agent: G
+      wave: 3
+      action: modify
+      depends_on:
+        - E
+        - F
+    - file: implementations/claude-code/QUICKSTART.md
+      agent: F
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+        - B
+    - file: protocol/README.md
+      agent: G
+      wave: 3
+      action: modify
+      depends_on:
+        - E
+        - F
+    - file: protocol/invariants.md
+      agent: G
+      wave: 3
+      action: modify
+      depends_on:
+        - E
+        - F
+    - file: protocol/participants.md
+      agent: G
+      wave: 3
+      action: modify
+      depends_on:
+        - E
+        - F
+    - file: protocol/preconditions.md
+      agent: G
+      wave: 3
+      action: modify
+      depends_on:
+        - E
+        - F
+    - file: docs/architecture.md
+      agent: G
+      wave: 3
+      action: modify
+      depends_on:
+        - E
+        - F
+    - file: docs/GETTING_STARTED.md
+      agent: F
+      wave: 2
+      action: modify
+    - file: docs/QUICKSTART-CLI.md
+      agent: F
+      wave: 2
+      action: modify
+    - file: docs/QUICKSTART-WEB.md
+      agent: F
+      wave: 2
+      action: modify
+    - file: implementations/README.md
+      agent: F
+      wave: 2
+      action: modify
+interface_contracts:
+    - name: SAW_AGENT_WORKTREE
+      description: Environment variable containing absolute worktree path
+      definition: |
+        export SAW_AGENT_WORKTREE="/absolute/path/to/worktree"
+        Set by inject_worktree_env hook at SubagentStart time.
+        Empty string if agent is not in worktree (solo wave, integration wave).
+      location: implementations/claude-code/hooks/inject_worktree_env
+    - name: SAW_AGENT_ID
+      description: Environment variable containing agent ID (e.g. "A", "B2")
+      definition: |
+        export SAW_AGENT_ID="A"
+        Set by inject_worktree_env hook at SubagentStart time.
+        Matches the agent ID from the [SAW:wave{N}:agent-{ID}] description tag.
+      location: implementations/claude-code/hooks/inject_worktree_env
+    - name: SAW_WAVE_NUMBER
+      description: Environment variable containing wave number
+      definition: |
+        export SAW_WAVE_NUMBER="1"
+        Set by inject_worktree_env hook at SubagentStart time.
+        Matches the wave number from the [SAW:wave{N}:agent-{ID}] description tag.
+      location: implementations/claude-code/hooks/inject_worktree_env
+    - name: SAW_IMPL_PATH
+      description: Environment variable containing absolute IMPL doc path
+      definition: |
+        export SAW_IMPL_PATH="/absolute/path/to/docs/IMPL/IMPL-feature.yaml"
+        Set by inject_worktree_env hook at SubagentStart time.
+        Extracted from agent prompt or read from .saw-state/active-impl.
+      location: implementations/claude-code/hooks/inject_worktree_env
+    - name: SAW_BRANCH
+      description: Environment variable containing agent branch name
+      definition: |
+        export SAW_BRANCH="saw/feature-slug/wave1-agent-A"
+        Set by inject_worktree_env hook at SubagentStart time.
+        Derived from slug + wave + agent ID, or queried from worktree git.
+      location: implementations/claude-code/hooks/inject_worktree_env
+    - name: cd_injection_logic
+      description: Bash command auto-injection for worktree navigation
+      definition: |
+        # If SAW_AGENT_WORKTREE is set and command doesn't already start with cd
+        if [[ -n "$SAW_AGENT_WORKTREE" ]] && ! [[ "$command" =~ ^cd\ \$SAW_AGENT_WORKTREE ]]; then
+          updated_command="cd \$SAW_AGENT_WORKTREE && $command"
+          return updatedInput with updated_command
+        fi
+      location: implementations/claude-code/hooks/inject_bash_cd
+    - name: path_validation_logic
+      description: Write/Edit path validation against worktree boundaries
+      definition: |
+        # Block relative paths
+        if ! [[ "$file_path" =~ ^/ ]]; then
+          exit 2 with error "Relative paths not allowed in worktree context"
+        fi
+        # Block paths outside worktree
+        if [[ -n "$SAW_AGENT_WORKTREE" ]] && ! [[ "$file_path" =~ ^$SAW_AGENT_WORKTREE ]]; then
+          exit 2 with error "Path outside worktree boundaries"
+        fi
+      location: implementations/claude-code/hooks/validate_write_paths
+    - name: compliance_verification_logic
+      description: SubagentStop protocol compliance checks
+      definition: |
+        # Check completion report exists (E42)
+        # Check commits exist on branch (I5)
+        # Warn but don't block (SubagentStop can't prevent completion)
+        # Log violations to stderr for debugging
+      location: implementations/claude-code/hooks/verify_worktree_compliance
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            **Agent A: SubagentStart Environment Injection Hook**
+
+            Create `implementations/claude-code/hooks/inject_worktree_env` — a SubagentStart
+            lifecycle hook that sets 5 environment variables when wave agents launch.
+
+            **What to implement:**
+
+            1. **Hook script basics**
+               - Shebang: `#!/usr/bin/env bash`
+               - set -euo pipefail
+               - Read JSON from stdin (no input for SubagentStart, but stdin is open)
+               - Extract agent metadata from environment or Claude Code context
+
+            2. **Environment variable detection**
+               Parse agent description tag `[SAW:wave{N}:agent-{ID}]`:
+               - Extract wave number → `SAW_WAVE_NUMBER`
+               - Extract agent ID → `SAW_AGENT_ID`
+
+               Find worktree path via multiple methods (priority order):
+               - Check for `.saw-ownership.json` in parent directories (walk up 5 levels)
+               - If found: `dirname` of that file → `SAW_AGENT_WORKTREE`
+               - If not found: check `$PWD` contains `.claude/worktrees/saw/` → use that path
+               - If not found: leave `SAW_AGENT_WORKTREE` empty (solo wave or integration wave)
+
+               Find IMPL doc path:
+               - Check `.saw-state/active-impl` (walk up to repo root)
+               - If found: read absolute path from file → `SAW_IMPL_PATH`
+               - If not found: grep agent prompt for `docs/IMPL/IMPL-*.yaml` pattern
+               - Convert relative to absolute using repo root
+
+               Find branch name:
+               - If worktree path found: `git -C $worktree branch --show-current` → `SAW_BRANCH`
+               - If not found: construct from slug/wave/agent: `saw/{slug}/wave{N}-agent-{ID}`
+
+            3. **Export via exit convention**
+               SubagentStart hooks cannot modify parent process environment directly.
+               Two options:
+               (a) Write to a temp file that the orchestrator sources
+               (b) Use Claude Code's `hookSpecificOutput` with custom env_vars field
+
+               For now, implement option (a):
+               ```bash
+               echo "export SAW_AGENT_WORKTREE=\"$worktree_path\"" > /tmp/saw-agent-env-$$
+               echo "export SAW_AGENT_ID=\"$agent_id\"" >> /tmp/saw-agent-env-$$
+               echo "export SAW_WAVE_NUMBER=\"$wave_num\"" >> /tmp/saw-agent-env-$$
+               echo "export SAW_IMPL_PATH=\"$impl_path\"" >> /tmp/saw-agent-env-$$
+               echo "export SAW_BRANCH=\"$branch_name\"" >> /tmp/saw-agent-env-$$
+               ```
+
+               Return JSON:
+               ```json
+               {
+                 "hookSpecificOutput": {
+                   "hookEventName": "SubagentStart",
+                   "envFile": "/tmp/saw-agent-env-$$"
+                 }
+               }
+               ```
+
+            4. **Non-SAW agent passthrough**
+               If no `[SAW:wave` tag in description → exit 0 immediately
+               This hook only fires for wave agents
+
+            5. **Testing**
+               Write manual test cases in hook header comments:
+               ```bash
+               # Test 1: Non-SAW agent — should exit 0 (no env file created)
+               # Test 2: SAW wave agent with worktree — should set all 5 vars
+               # Test 3: SAW solo agent (no worktree) — should set 4 vars (worktree empty)
+               ```
+
+            **Files you own:**
+            - `implementations/claude-code/hooks/inject_worktree_env` (NEW)
+
+            **Interface contracts you implement:**
+            - `SAW_AGENT_WORKTREE` (exported env var)
+            - `SAW_AGENT_ID` (exported env var)
+            - `SAW_WAVE_NUMBER` (exported env var)
+            - `SAW_IMPL_PATH` (exported env var)
+            - `SAW_BRANCH` (exported env var)
+
+            **Quality gates:**
+            - shellcheck must pass with no warnings
+            - Manual test cases must pass (documented in header)
+            - Hook must exit 0 for non-SAW agents (no side effects)
+
+            **Verification:**
+            ```bash
+            cd $WORKTREE
+            shellcheck implementations/claude-code/hooks/inject_worktree_env
+            # Run manual tests from header comments
+            ```
+
+            **Constraints:**
+            - Hook must not block agent launch (always exit 0)
+            - Environment variables must use absolute paths (no relative paths)
+            - If any metadata is unavailable, use empty string (don't fail)
+            - Keep detection logic simple (no network calls, no heavy parsing)
+          files:
+            - implementations/claude-code/hooks/inject_worktree_env
+        - id: B
+          task: |
+            **Agent B: PreToolUse:Bash CD Auto-Injection Hook**
+
+            Create `implementations/claude-code/hooks/inject_bash_cd` — a PreToolUse hook
+            that prepends `cd $SAW_AGENT_WORKTREE &&` to every bash command when the agent
+            is in a worktree.
+
+            **What to implement:**
+
+            1. **Hook script basics**
+               - Shebang: `#!/usr/bin/env bash`
+               - set -euo pipefail
+               - Read JSON from stdin: `input=$(cat)`
+               - Extract fields: `tool_name`, `tool_input.command`, `agent_type`
+
+            2. **Passthrough conditions**
+               Exit 0 (no modification) if:
+               - `tool_name != "Bash"` (only modify Bash tool calls)
+               - `$SAW_AGENT_WORKTREE` is empty (solo wave or integration wave)
+               - Command already starts with `cd $SAW_AGENT_WORKTREE &&`
+
+            3. **CD injection logic**
+               If passthrough conditions don't apply:
+               ```bash
+               original_cmd=$(echo "$input" | jq -r '.tool_input.command')
+               # Check if already has cd prefix
+               if [[ "$original_cmd" =~ ^cd\ \$SAW_AGENT_WORKTREE ]]; then
+                 exit 0  # already prefixed, don't double-inject
+               fi
+               # Prepend cd
+               updated_cmd="cd \$SAW_AGENT_WORKTREE && $original_cmd"
+               ```
+
+            4. **Return via updatedInput**
+               Use the same pattern as validate_agent_launch Check 10+ injection:
+               ```bash
+               tool_input=$(echo "$input" | jq '.tool_input')
+               jq -n --arg cmd "$updated_cmd" --argjson orig_input "$tool_input" \
+                 '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow", "updatedInput": ($orig_input | .command = $cmd)}}'
+               ```
+
+               **Preserve all tool_input fields** (timeout, run_in_background, etc.)
+
+            5. **Edge cases**
+               - Multi-line commands: injection should work (bash will execute after cd)
+               - Commands with semicolons: `cmd1; cmd2` → `cd $WT && cmd1; cmd2` (cd only affects cmd1)
+               - Commands with pipes: `cmd1 | cmd2` → `cd $WT && cmd1 | cmd2` (works correctly)
+               - Don't try to parse complex bash — simple prepend is sufficient
+
+            6. **Testing**
+               Write manual test cases in hook header comments:
+               ```bash
+               # Test 1: Bash tool with worktree set — should inject cd
+               # Test 2: Bash tool without worktree — should passthrough
+               # Test 3: Non-Bash tool — should passthrough
+               # Test 4: Command already has cd prefix — should not double-inject
+               ```
+
+            **Files you own:**
+            - `implementations/claude-code/hooks/inject_bash_cd` (NEW)
+
+            **Interface contracts you implement:**
+            - `cd_injection_logic` (reads SAW_AGENT_WORKTREE, modifies Bash commands)
+
+            **Interface contracts you consume:**
+            - `SAW_AGENT_WORKTREE` (from Agent A's inject_worktree_env)
+
+            **Quality gates:**
+            - shellcheck must pass with no warnings
+            - Manual test cases must pass
+            - Must preserve all tool_input fields (timeout, etc.)
+            - Must not double-inject on retry
+
+            **Verification:**
+            ```bash
+            cd $WORKTREE
+            shellcheck implementations/claude-code/hooks/inject_bash_cd
+            # Run manual tests from header comments
+            ```
+
+            **Constraints:**
+            - Hook must always exit 0 (never block bash commands)
+            - Injection is best-effort (if cd fails, bash command still runs)
+            - Don't parse command syntax (treat as opaque string)
+          files:
+            - implementations/claude-code/hooks/inject_bash_cd
+        - id: C
+          task: |
+            **Agent C: PreToolUse:Write/Edit Path Validation Hook**
+
+            Create `implementations/claude-code/hooks/validate_write_paths` — a PreToolUse
+            hook that validates file paths before Write/Edit operations, blocking relative
+            paths and paths outside worktree boundaries.
+
+            **What to implement:**
+
+            1. **Hook script basics**
+               - Shebang: `#!/usr/bin/env bash`
+               - set -euo pipefail
+               - Read JSON from stdin: `input=$(cat)`
+               - Extract fields: `tool_name`, `tool_input.file_path`
+
+            2. **Passthrough conditions**
+               Exit 0 (allow) if:
+               - `tool_name` not in ["Write", "Edit"] (only validate file operations)
+               - `$SAW_AGENT_WORKTREE` is empty (solo wave or integration wave — no enforcement)
+
+            3. **Validation logic**
+               If agent is in worktree (`$SAW_AGENT_WORKTREE` set):
+
+               **Check 1: Block relative paths**
+               ```bash
+               file_path=$(echo "$input" | jq -r '.tool_input.file_path')
+               if ! [[ "$file_path" =~ ^/ ]]; then
+                 echo "Error: Relative paths not allowed in worktree context. Use absolute paths." >&2
+                 echo "  Attempted path: $file_path" >&2
+                 echo "  Worktree: $SAW_AGENT_WORKTREE" >&2
+                 exit 2  # block
+               fi
+               ```
+
+               **Check 2: Block paths outside worktree**
+               ```bash
+               if ! [[ "$file_path" =~ ^$SAW_AGENT_WORKTREE ]]; then
+                 echo "Error: Path outside worktree boundaries." >&2
+                 echo "  Attempted path: $file_path" >&2
+                 echo "  Worktree: $SAW_AGENT_WORKTREE" >&2
+                 echo "  All file operations must target files within your assigned worktree." >&2
+                 exit 2  # block
+               fi
+               ```
+
+               If both checks pass: `exit 0` (allow)
+
+            4. **Error messages**
+               When blocking (exit 2), provide actionable guidance:
+               - Show the attempted path
+               - Show the worktree boundary
+               - Suggest using Read tool to inspect worktree structure
+               - Reference wave-agent-worktree-isolation.md for protocol
+
+            5. **Edge cases**
+               - Symlinks: Don't resolve — check the literal path string
+               - Case sensitivity: Treat paths as case-sensitive (Linux/macOS default)
+               - Trailing slashes: Normalize by removing before comparison
+
+            6. **Testing**
+               Write manual test cases in hook header comments:
+               ```bash
+               # Test 1: Write inside worktree — should allow (exit 0)
+               # Test 2: Write outside worktree — should block (exit 2)
+               # Test 3: Write with relative path — should block (exit 2)
+               # Test 4: Write with no worktree set — should allow (exit 0)
+               # Test 5: Edit on IMPL doc (orchestrator-owned) — should allow (exit 0)
+               ```
+
+            **Files you own:**
+            - `implementations/claude-code/hooks/validate_write_paths` (NEW)
+
+            **Interface contracts you implement:**
+            - `path_validation_logic` (validates Write/Edit file paths)
+
+            **Interface contracts you consume:**
+            - `SAW_AGENT_WORKTREE` (from Agent A's inject_worktree_env)
+
+            **Quality gates:**
+            - shellcheck must pass with no warnings
+            - Manual test cases must pass
+            - Error messages must be actionable (not just "blocked")
+            - Must not block orchestrator operations (IMPL doc writes, etc.)
+
+            **Verification:**
+            ```bash
+            cd $WORKTREE
+            shellcheck implementations/claude-code/hooks/validate_write_paths
+            # Run manual tests from header comments
+            ```
+
+            **Constraints:**
+            - Hook must exit 2 to block (not exit 1)
+            - Validation is string-based (don't stat files or resolve symlinks)
+            - Must work correctly when worktree is empty (solo wave)
+          files:
+            - implementations/claude-code/hooks/validate_write_paths
+        - id: D
+          task: |
+            **Agent D: SubagentStop Protocol Compliance Hook**
+
+            Create `implementations/claude-code/hooks/verify_worktree_compliance` — a
+            SubagentStop hook that verifies protocol compliance (completion report exists,
+            commits exist on branch) when wave agents complete.
+
+            **What to implement:**
+
+            1. **Hook script basics**
+               - Shebang: `#!/usr/bin/env bash`
+               - set -euo pipefail
+               - Read JSON from stdin: `input=$(cat)`
+               - Extract fields: `agent_description`, `session_id`, `exit_reason`
+
+            2. **Passthrough conditions**
+               Exit 0 (no verification) if:
+               - No `[SAW:wave` tag in `agent_description` (not a SAW wave agent)
+               - `$SAW_AGENT_WORKTREE` is empty (solo wave — different verification path)
+
+            3. **Parse agent metadata**
+               From description tag `[SAW:wave{N}:agent-{ID}]`:
+               - Extract wave number
+               - Extract agent ID
+
+               From environment:
+               - Read `$SAW_IMPL_PATH` (set by inject_worktree_env)
+               - Read `$SAW_BRANCH` (set by inject_worktree_env)
+
+            4. **Verification checks** (warn-only, don't block)
+
+               **Check 1: Completion report exists (E42/I4)**
+               ```bash
+               if command -v sawtools &>/dev/null; then
+                 if ! sawtools check-completion "$SAW_IMPL_PATH" --agent "$agent_id" &>/dev/null; then
+                   echo "WARNING: No completion report found for agent $agent_id" >&2
+                   echo "  Protocol violation (E42/I4): Agents must write completion reports." >&2
+                 fi
+               fi
+               ```
+
+               **Check 2: Commits exist on branch (I5)**
+               ```bash
+               if [[ -n "$SAW_BRANCH" ]]; then
+                 commit_count=$(git rev-list --count "$SAW_BRANCH" 2>/dev/null || echo "0")
+                 if [[ "$commit_count" -eq 0 ]]; then
+                   echo "WARNING: No commits on branch $SAW_BRANCH" >&2
+                   echo "  Protocol violation (I5): Agents must commit before reporting." >&2
+                 fi
+               fi
+               ```
+
+               Always exit 0 (never block — SubagentStop can't prevent completion)
+
+            5. **Why warn-only:**
+               SubagentStop fires AFTER the agent has already completed and reported success
+               to Claude Code. Returning exit 2 here would log an error but wouldn't prevent
+               the agent from being marked complete. The validation is informational — it
+               creates an audit trail for post-hoc analysis.
+
+               The real enforcement happens at:
+               - Wave finalization (I5 verification via sawtools finalize-wave)
+               - E42 hook in validate_agent_completion (completion report check)
+
+            6. **Testing**
+               Write manual test cases in hook header comments:
+               ```bash
+               # Test 1: Agent with completion report + commits — should pass silently
+               # Test 2: Agent without completion report — should warn (exit 0)
+               # Test 3: Agent without commits — should warn (exit 0)
+               # Test 4: Non-SAW agent — should passthrough (no checks)
+               ```
+
+            **Files you own:**
+            - `implementations/claude-code/hooks/verify_worktree_compliance` (NEW)
+
+            **Interface contracts you implement:**
+            - `compliance_verification_logic` (checks E42/I5 compliance)
+
+            **Interface contracts you consume:**
+            - `SAW_AGENT_WORKTREE` (from Agent A)
+            - `SAW_AGENT_ID` (from Agent A)
+            - `SAW_IMPL_PATH` (from Agent A)
+            - `SAW_BRANCH` (from Agent A)
+
+            **Quality gates:**
+            - shellcheck must pass with no warnings
+            - Manual test cases must pass
+            - Must always exit 0 (never block completion)
+            - Warnings must reference specific protocol rules (E42, I5)
+
+            **Verification:**
+            ```bash
+            cd $WORKTREE
+            shellcheck implementations/claude-code/hooks/verify_worktree_compliance
+            # Run manual tests from header comments
+            ```
+
+            **Constraints:**
+            - Hook must always exit 0 (informational only)
+            - Warnings logged to stderr for debugging/audit
+            - Don't attempt to fix violations (just report them)
+          files:
+            - implementations/claude-code/hooks/verify_worktree_compliance
+    - number: 2
+      agents:
+        - id: E
+          task: |
+            **Agent E: Install Script and Hook Documentation Integration**
+
+            Update `install.sh` and `implementations/claude-code/hooks/README.md` to register
+            the 4 new hooks and document their behavior.
+
+            **What to implement:**
+
+            1. **install.sh updates**
+
+               **Add to HOOK_SCRIPTS array** (line ~26):
+               ```bash
+               HOOK_SCRIPTS=(
+                 # ... existing hooks ...
+                 "inject_worktree_env"
+                 "inject_bash_cd"
+                 "validate_write_paths"
+                 "verify_worktree_compliance"
+               )
+               ```
+
+               **Add settings.json registration** (find the hook registration section):
+               This is tricky — the installer dynamically builds settings.json. Find where
+               PreToolUse/PostToolUse/SubagentStop hooks are registered and add:
+
+               ```json
+               {
+                 "hooks": {
+                   "SubagentStart": [
+                     {
+                       "hooks": [
+                         {
+                           "type": "command",
+                           "command": "$HOME/.local/bin/inject_worktree_env"
+                         }
+                       ]
+                     }
+                   ],
+                   "PreToolUse": [
+                     {
+                       "matcher": "Bash",
+                       "hooks": [
+                         {
+                           "type": "command",
+                           "command": "$HOME/.local/bin/inject_bash_cd"
+                         }
+                       ]
+                     },
+                     {
+                       "matcher": "Write|Edit",
+                       "hooks": [
+                         {
+                           "type": "command",
+                           "command": "$HOME/.local/bin/validate_write_paths"
+                         }
+                       ]
+                     }
+                   ],
+                   "SubagentStop": [
+                     {
+                       "hooks": [
+                         {
+                           "type": "command",
+                           "command": "$HOME/.local/bin/verify_worktree_compliance"
+                         }
+                       ]
+                     }
+                   ]
+                 }
+               }
+               ```
+
+               Find the JSON merge logic in install_claude_code() function and ensure these
+               hooks are added to the appropriate lifecycle events.
+
+            2. **README.md Hook Summary table updates**
+
+               Add 4 rows to the "Enforcement hooks" table (~line 10):
+
+               | Hook | Event | Matcher | Rule | Description |
+               |------|-------|---------|------|-------------|
+               | inject_worktree_env | SubagentStart | — | E46 | Sets 5 env vars (worktree path, agent ID, wave num, IMPL path, branch) |
+               | inject_bash_cd | PreToolUse | Bash | E46 | Auto-prepends `cd $SAW_AGENT_WORKTREE &&` to bash commands |
+               | validate_write_paths | PreToolUse | Write\|Edit | E46 | Blocks relative paths and paths outside worktree |
+               | verify_worktree_compliance | SubagentStop | — | E42/I5 | Verifies completion report and commits (warn-only) |
+
+               Update the total hook count in the opening paragraph (currently 12 hooks,
+               will be 16 after this IMPL).
+
+            3. **README.md Hook Detail sections**
+
+               Add full documentation for each hook following the existing pattern:
+               - "How It Works" (numbered steps)
+               - "Manual Installation" (symlink + settings.json registration)
+               - "Testing" (example test commands)
+
+               Place these sections after Hook 9 (validate_agent_launch) and before the
+               "Maintenance" section.
+
+            4. **Smoke test updates**
+
+               Add a test case to the smoke_test() function in install.sh:
+               ```bash
+               # Test inject_bash_cd passthrough (no worktree)
+               local no_worktree='{"tool_name":"Bash","tool_input":{"command":"echo hello"}}'
+               if echo "$no_worktree" | "${BIN_DIR}/inject_bash_cd" &> /dev/null; then
+                 echo "   OK  Bash CD injection hook (passthrough)"
+               else
+                 echo "   FAIL  Bash CD injection hook" >&2
+                 errors=$((errors + 1))
+               fi
+               ```
+
+            **Files you own:**
+            - `install.sh` (MODIFY)
+            - `implementations/claude-code/hooks/README.md` (MODIFY)
+
+            **Interface contracts you consume:**
+            - All 4 hooks from Wave 1 agents (A, B, C, D)
+
+            **Quality gates:**
+            - shellcheck install.sh must pass
+            - Run `./install.sh --test` must pass (smoke tests)
+            - Hook count in README must match HOOK_SCRIPTS array
+            - All 4 hooks must appear in settings.json registration logic
+
+            **Verification:**
+            ```bash
+            cd $WORKTREE
+            shellcheck install.sh
+            ./install.sh --test
+            grep -c "inject_worktree_env" install.sh  # should be ≥2
+            grep -c "inject_bash_cd" install.sh  # should be ≥2
+            ```
+
+            **Constraints:**
+            - Preserve existing hooks (don't break them)
+            - Maintain install.sh idempotency (safe to run multiple times)
+            - Keep README.md format consistent with existing hooks
+          files:
+            - install.sh
+            - implementations/claude-code/hooks/README.md
+          dependencies:
+            - A
+            - B
+            - C
+            - D
+        - id: F
+          task: |
+            **Agent F: Documentation Updates (Agent Prompts, Skill, Installation Guide, Quickstarts)**
+
+            Update 7 documentation files to reference the new hook-based enforcement and
+            update installation/quickstart guides to mention the new hooks.
+
+            **What to implement:**
+
+            1. **wave-agent-worktree-isolation.md updates**
+
+               **Add new "Hook-Based Enforcement" section** (insert at top, before "Step 0"):
+               ```markdown
+               # Worktree Isolation Protocol
+
+               **CRITICAL:** You are working in a git worktree. Isolation is now enforced
+               automatically via Claude Code hooks — you no longer need to manually manage
+               working directory or paths.
+
+               ## Automatic Enforcement (v0.65.0+)
+
+               Four lifecycle hooks ensure isolation without manual discipline:
+
+               1. **SubagentStart: Environment injection** — Sets `SAW_AGENT_WORKTREE`,
+                  `SAW_AGENT_ID`, `SAW_WAVE_NUMBER`, `SAW_IMPL_PATH`, `SAW_BRANCH` when you launch
+               2. **PreToolUse:Bash: CD auto-injection** — Every bash command automatically runs
+                  in your worktree (`cd $SAW_AGENT_WORKTREE &&` is prepended)
+               3. **PreToolUse:Write/Edit: Path validation** — Relative paths and paths outside
+                  your worktree are blocked before Write/Edit executes
+               4. **SubagentStop: Compliance verification** — Warns if completion report or
+                  commits are missing (audit trail for debugging)
+
+               **Result:** The Agent B leak scenario (files created in main repo instead of
+               worktree) is now impossible. Manual `cd` commands and `$WORKTREE` variable
+               usage are no longer required, but remain supported for backward compatibility.
+               ```
+
+               **Update Step 0** (Verify Isolation and Capture Worktree Path):
+               Change "MANDATORY FIRST STEP" to "OPTIONAL (hooks handle this automatically)".
+               Keep the step but mark it as legacy for non-hook workflows.
+
+               **Update "All File Operations: Use Absolute Paths" section**:
+               Add note: "Hook enforcement now validates paths automatically. Manual
+               `$WORKTREE` variable usage is no longer required but remains supported."
+
+            2. **saw-skill.md updates** (orchestrator prompt)
+
+               **Find the worktree creation section** (search for "sawtools prepare-wave"):
+               Add a note about hook-based enforcement:
+               ```markdown
+               **E46: Hook-Based Isolation Enforcement.** Wave agents run in git worktrees with
+               automatic isolation enforcement via 4 lifecycle hooks (SubagentStart, PreToolUse:Bash,
+               PreToolUse:Write/Edit, SubagentStop). Agents no longer need manual `cd` commands or
+               `$WORKTREE` variable usage — hooks inject working directory changes and validate
+               paths automatically. See `protocol/execution-rules.md` E46 for full specification.
+               ```
+
+               **Update Field 1 template** (agent prompt worktree path):
+               Change from:
+               ```
+               Your worktree: /absolute/path/to/.claude/worktrees/saw/{slug}/wave{N}-agent-{ID}
+               IMPORTANT: Read wave-agent-worktree-isolation.md for cd discipline and $WORKTREE usage.
+               ```
+               To:
+               ```
+               Your worktree: /absolute/path/to/.claude/worktrees/saw/{slug}/wave{N}-agent-{ID}
+               Isolation is enforced automatically via hooks — see wave-agent-worktree-isolation.md.
+               ```
+
+            3. **docs/INSTALLATION.md updates**
+
+               **Update "Hooks" section** (around line 74):
+               Change hook count from "11 enforcement hooks" to "15 enforcement hooks".
+
+               **Add to hook list**:
+               ```markdown
+               - `inject_worktree_env` — SubagentStart hook that sets 5 environment variables
+                 (worktree path, agent ID, wave number, IMPL path, branch name)
+               - `inject_bash_cd` — PreToolUse:Bash hook that auto-prepends `cd $SAW_AGENT_WORKTREE &&`
+                 to every bash command when agent is in worktree
+               - `validate_write_paths` — PreToolUse:Write/Edit hook that blocks relative paths
+                 and paths outside worktree boundaries
+               - `verify_worktree_compliance` — SubagentStop hook that verifies completion report
+                 and commits exist (warn-only, creates audit trail)
+               ```
+
+               **Add "Hook-Based Enforcement" subsection**:
+               ```markdown
+               #### Hook-Based Enforcement (E46)
+
+               As of v0.65.0, worktree isolation is enforced automatically via lifecycle hooks.
+               Wave agents no longer need manual `cd` commands or `$WORKTREE` variable usage —
+               hooks inject working directory changes and validate paths before tool execution.
+
+               This prevents the Agent B leak scenario where files are accidentally created in
+               the main repository instead of the agent's assigned worktree. Four hooks work
+               together to provide defense-in-depth isolation:
+
+               1. Environment injection (SubagentStart)
+               2. Bash command rewriting (PreToolUse:Bash)
+               3. Write/Edit path validation (PreToolUse:Write/Edit)
+               4. Protocol compliance verification (SubagentStop)
+
+               See `implementations/claude-code/hooks/README.md` for full hook documentation.
+               ```
+
+            4. **implementations/claude-code/QUICKSTART.md updates**
+
+               **Find "Step 7: Verify Installation" section** (~line 173):
+
+               Add a note about hooks after the verification step:
+
+               ```markdown
+               **Hook-based enforcement:** The installer registers 15 enforcement hooks (up from
+               11 in earlier versions). Four new hooks enforce worktree isolation automatically:
+               environment injection, bash cd auto-injection, path validation, and compliance
+               verification. Agents no longer need manual `cd` commands or `$WORKTREE` variable
+               usage. See `implementations/claude-code/hooks/README.md` for details.
+               ```
+
+            5. **docs/GETTING_STARTED.md updates**
+
+               **Find "Claude Code Skill" subsection** (~line 11):
+
+               Add a note after "Best for:" line:
+
+               ```markdown
+               **Isolation enforcement:** Worktree isolation is enforced automatically via hooks
+               (environment injection, cd auto-injection, path validation, compliance
+               verification). No manual `cd` commands required.
+               ```
+
+            6. **docs/QUICKSTART-CLI.md updates**
+
+               **Find "Step 5: Launch Agents" section** (~line 118):
+
+               Add a note about hooks:
+
+               ```markdown
+               **Hook-based enforcement (Claude Code only):** If using the `/saw` skill in
+               Claude Code, worktree isolation is enforced automatically via 4 hooks
+               (environment injection, bash cd injection, path validation, compliance
+               verification). API-based execution uses Layer 1 (manual pre-creation) and
+               Layer 4 (merge-time trip wire) for isolation.
+               ```
+
+            7. **docs/QUICKSTART-WEB.md updates**
+
+               **Find "Step 4: Launching a Wave" section** (~line 64):
+
+               Add a note about isolation:
+
+               ```markdown
+               **Isolation enforcement:** When using Claude Code as the agent backend, worktree
+               isolation is enforced automatically via hooks. When using API-based execution,
+               isolation relies on manual worktree pre-creation and merge-time verification.
+               ```
+
+            8. **implementations/README.md updates**
+
+               **Find the "Claude Code" row in the table** (~line 15):
+
+               Update the "Description" cell to mention hooks:
+
+               ```markdown
+               Fully automated implementation using Claude Code's agent runtime and git worktree
+               isolation. Includes 15 enforcement hooks (SubagentStart, PreToolUse, PostToolUse,
+               SubagentStop) for mechanical worktree isolation and protocol compliance.
+               ```
+
+            **Files you own:**
+            - `implementations/claude-code/prompts/references/wave-agent-worktree-isolation.md` (MODIFY)
+            - `implementations/claude-code/prompts/saw-skill.md` (MODIFY)
+            - `docs/INSTALLATION.md` (MODIFY)
+            - `implementations/claude-code/QUICKSTART.md` (MODIFY)
+            - `docs/GETTING_STARTED.md` (MODIFY)
+            - `docs/QUICKSTART-CLI.md` (MODIFY)
+            - `docs/QUICKSTART-WEB.md` (MODIFY)
+            - `implementations/README.md` (MODIFY)
+
+            **Interface contracts you consume:**
+            - Hook behavior from agents A, B, C, D (documented, not called directly)
+
+            **Quality gates:**
+            - All 3 files must pass markdown lint (no broken links)
+            - Hook count must be consistent across all docs (15 total)
+            - E46 reference must appear in saw-skill.md
+
+            **Verification:**
+            ```bash
+            cd $WORKTREE
+            # Check for E46 references
+            grep -c "E46" implementations/claude-code/prompts/saw-skill.md  # should be ≥1
+            grep -c "Hook-Based Enforcement" docs/INSTALLATION.md  # should be ≥1
+            # Check hook count consistency
+            grep "15 enforcement hooks" docs/INSTALLATION.md
+            ```
+
+            **Constraints:**
+            - Don't remove existing manual instructions (mark as "legacy" or "optional")
+            - Maintain backward compatibility (hooks + manual discipline both work)
+            - Keep existing step numbers in wave-agent-worktree-isolation.md (just update labels)
+          files:
+            - implementations/claude-code/prompts/references/wave-agent-worktree-isolation.md
+            - implementations/claude-code/prompts/saw-skill.md
+            - docs/INSTALLATION.md
+    - number: 3
+      agents:
+        - id: G
+          task: |
+            **Agent G: Protocol Documentation (E46 Execution Rule + Protocol-Wide Updates)**
+
+            Add E46 to `protocol/execution-rules.md` and update 6 protocol docs plus README.md
+            to reference hook-based enforcement as the primary isolation mechanism.
+
+            **What to implement:**
+
+            1. **execution-rules.md: Add E46**
+
+               **Find E4 (Worktree Isolation)** — insert E46 immediately after E4's section ends.
+
+               **Write E46 section**:
+               ```markdown
+               ## E46: Hook-Based Isolation Enforcement
+
+               **Trigger:** Wave agents launch in worktree context (multi-agent waves)
+
+               **Required Action:** Orchestrator ensures lifecycle hooks are installed and active
+               before launching wave agents. Hook-based enforcement supersedes instruction-based
+               isolation (agents following written protocol).
+
+               ### Four-Hook Defense-in-Depth
+
+               **Hook 1: SubagentStart environment injection (`inject_worktree_env`)**
+               - Sets 5 environment variables when wave agents launch:
+                 - `SAW_AGENT_WORKTREE` (absolute worktree path)
+                 - `SAW_AGENT_ID` (agent identifier, e.g., "A", "B2")
+                 - `SAW_WAVE_NUMBER` (1-based wave number)
+                 - `SAW_IMPL_PATH` (absolute path to IMPL doc)
+                 - `SAW_BRANCH` (agent's branch name, e.g., "saw/{slug}/wave1-agent-A")
+               - Non-blocking (always exits 0)
+               - Solo waves and integration waves: `SAW_AGENT_WORKTREE` is empty string
+
+               **Hook 2: PreToolUse:Bash cd auto-injection (`inject_bash_cd`)**
+               - Prepends `cd $SAW_AGENT_WORKTREE &&` to every bash command via `updatedInput`
+               - Fires only when `SAW_AGENT_WORKTREE` is non-empty (skips solo waves)
+               - Skips if command already starts with `cd $SAW_AGENT_WORKTREE`
+               - Non-blocking (always exits 0, injection is best-effort)
+               - Eliminates manual `cd` commands and `$WORKTREE` variable usage
+
+               **Hook 3: PreToolUse:Write/Edit path validation (`validate_write_paths`)**
+               - Blocks relative paths in worktree context (exit 2)
+               - Blocks paths outside worktree boundaries (exit 2)
+               - Fires only when `SAW_AGENT_WORKTREE` is non-empty (skips solo waves)
+               - Error messages reference worktree path and protocol rule (E46)
+               - Prevents Agent B leak scenario (files created in main repo)
+
+               **Hook 4: SubagentStop compliance verification (`verify_worktree_compliance`)**
+               - Checks completion report exists (E42/I4 compliance)
+               - Checks commits exist on branch (I5 compliance)
+               - Non-blocking (always exits 0, warnings logged to stderr)
+               - Creates audit trail for post-hoc violation analysis
+
+               ### Relationship to E4
+
+               E46 enforces E4 mechanically. E4 (Worktree Isolation) states the requirement:
+               all wave agents MUST use worktree isolation. E46 specifies the enforcement
+               mechanism: lifecycle hooks that make isolation violations impossible rather
+               than merely documented.
+
+               **Before E46 (instruction-based isolation):** Agents followed written protocol
+               in `wave-agent-worktree-isolation.md`. Violations were possible via agent error,
+               context compaction loss, or rate-limit recovery gaps.
+
+               **After E46 (hook-based enforcement):** Claude Code hooks intercept tool calls
+               before execution. Relative paths and out-of-bounds writes are blocked at the
+               tool boundary. Bash commands run in the correct working directory automatically.
+
+               ### Implementation Notes
+
+               - **Claude Code-specific:** E46 hooks use Claude Code lifecycle API (SubagentStart,
+                 PreToolUse, SubagentStop). Other platforms must implement equivalent enforcement
+                 at their tool invocation boundary.
+               - **Vendor-neutral fallback:** When hooks are unavailable, fall back to
+                 instruction-based isolation (E4 Layer 3: Field 0 self-verification). Agents
+                 manually verify working directory at startup.
+               - **Defense-in-depth:** E46 hooks complement E4 layers (pre-creation, task tool
+                 isolation, merge-time trip wire). All layers remain active.
+
+               **Related Invariants:** See I1 (disjoint file ownership), E4 (worktree isolation)
+
+               **Related Rules:** See E12 (isolation verification at agent startup)
+               ```
+
+            2. **procedures.md updates**
+
+               **Find Wave Agent procedure** (search for "Wave Agent Procedure"):
+
+               **Update Field 0 (Worktree Path)**:
+               Change from:
+               ```
+               Your worktree: /absolute/path
+               IMPORTANT: Change directory before any operations. Run sawtools verify-isolation.
+               ```
+               To:
+               ```
+               Your worktree: /absolute/path
+               Isolation is enforced automatically via hooks (E46). Manual cd commands are
+               no longer required but remain supported for backward compatibility.
+               ```
+
+               **Add reference to E46 in Wave Agent responsibilities**:
+               ```markdown
+               **E46 note:** When hooks are active (Claude Code with installed hooks), working
+               directory management and path validation are automatic. Field 0 verification
+               remains in the agent prompt for platforms without hook support.
+               ```
+
+            3. **README.md (root repo README) updates**
+
+               **Find "Worktree Isolation Defense (5 layers)" section** (~line 165):
+
+               Add a new subsection after Layer 4 introducing E46:
+
+               ```markdown
+               ### E46: Hook-Based Enforcement (Layer 0.5)
+
+               v0.65.0 adds automated hook-based enforcement as Layer 0.5 (between
+               prevention and manual pre-creation). Four lifecycle hooks enforce isolation
+               at the Claude Code tool boundary:
+
+               1. **SubagentStart environment injection** — Sets SAW_AGENT_WORKTREE and 4 other
+                  env vars when agents launch
+               2. **PreToolUse:Bash cd injection** — Auto-prepends `cd $SAW_AGENT_WORKTREE &&`
+                  to every bash command
+               3. **PreToolUse:Write/Edit path validation** — Blocks relative paths and
+                  out-of-bounds writes
+               4. **SubagentStop compliance verification** — Verifies completion report and
+                  commits exist (audit trail)
+
+               This makes the "Agent B leak" scenario (files created in main repo instead of
+               worktree) structurally impossible. See `protocol/execution-rules.md` E46 for
+               full specification.
+               ```
+
+            4. **protocol/README.md updates**
+
+               **Find "Protocol Guarantees" section** (~line 48):
+
+               Add to the list:
+               ```markdown
+               - **Hook-based isolation enforcement** via E46 — Automated tool-level enforcement of worktree boundaries (SubagentStart environment injection, PreToolUse:Bash cd injection, PreToolUse:Write/Edit path validation, SubagentStop compliance verification)
+               ```
+
+               **Update changelog** (add as first entry after current version):
+               ```markdown
+               - **0.58.0** — E46: Hook-based worktree isolation enforcement (SubagentStart environment injection, PreToolUse:Bash cd injection, PreToolUse:Write/Edit path validation, SubagentStop compliance verification)
+               ```
+
+            5. **protocol/invariants.md updates**
+
+               **Find I1 (Disjoint File Ownership) section**:
+
+               Add a subsection after "I1 Amendment: Identical-Edit Allowance at Merge Time":
+
+               ```markdown
+               ### I1 Amendment: E46 Hook-Based Enforcement
+
+               E46 (Hook-Based Isolation Enforcement) provides mechanical enforcement of I1 at
+               the tool invocation boundary. When hooks are active (Claude Code with installed
+               hooks), path validation blocks writes outside worktree boundaries before
+               Write/Edit tools execute. This prevents I1 violations at the infrastructure
+               layer rather than relying on agent cooperation.
+
+               **Related Rules:** See E46 (hook-based isolation enforcement)
+               ```
+
+            6. **protocol/participants.md updates**
+
+               **Find "Wave Agent" section** and the "Forbidden actions" subsection:
+
+               Add after the existing forbidden actions list:
+
+               ```markdown
+               **E46: Hook-based enforcement.** When hooks are installed (Claude Code), worktree
+               isolation is enforced mechanically via SubagentStart environment injection,
+               PreToolUse:Bash cd injection, PreToolUse:Write/Edit path validation, and
+               SubagentStop compliance verification. Agents cannot violate isolation even by
+               accident. See E46 in execution-rules.md for full specification.
+               ```
+
+            7. **protocol/preconditions.md updates**
+
+               **Find P1 (File Decomposition) section**:
+
+               Add a note at the end of the section:
+
+               ```markdown
+               **E46 enforcement note:** When hooks are active, Write/Edit path validation
+               blocks file modifications outside declared ownership at the tool boundary,
+               preventing accidental I1 violations regardless of agent behavior.
+               ```
+
+            8. **docs/architecture.md updates**
+
+               **Find "Git Worktree Isolation" section** (~line 60):
+
+               Add a subsection after the "Benefits" list:
+
+               ```markdown
+               ### Hook-Based Enforcement (E46)
+
+               v0.65.0 adds mechanical enforcement via 4 Claude Code lifecycle hooks:
+
+               - **inject_worktree_env** (SubagentStart) — Sets SAW_AGENT_WORKTREE and metadata env vars
+               - **inject_bash_cd** (PreToolUse:Bash) — Auto-prepends `cd $SAW_AGENT_WORKTREE &&` to commands
+               - **validate_write_paths** (PreToolUse:Write/Edit) — Blocks relative paths and out-of-bounds writes
+               - **verify_worktree_compliance** (SubagentStop) — Verifies completion report and commits (audit)
+
+               This enforces isolation at the infrastructure layer (hooks intercept tool calls
+               before execution) rather than the cooperation layer (agents following written
+               protocol). See `protocol/execution-rules.md` E46 for full specification.
+               ```
+
+            **Files you own:**
+            - `protocol/execution-rules.md` (MODIFY — add E46 section)
+            - `protocol/procedures.md` (MODIFY — update Wave Agent procedure)
+            - `README.md` (MODIFY — add E46 to isolation defense layers)
+            - `protocol/README.md` (MODIFY — add E46 to protocol guarantees and changelog)
+            - `protocol/invariants.md` (MODIFY — add E46 amendment to I1)
+            - `protocol/participants.md` (MODIFY — add E46 note to Wave Agent section)
+            - `protocol/preconditions.md` (MODIFY — add E46 note to P1)
+            - `docs/architecture.md` (MODIFY — add hook-based enforcement section)
+
+            **Interface contracts you consume:**
+            - Hook specifications from agents A, B, C, D (documented behavior only)
+
+            **Quality gates:**
+            - E46 numbering must follow E45 (no gaps in E-rule sequence)
+            - E46 must cross-reference E4 and I1
+            - All protocol files must pass markdown lint
+
+            **Verification:**
+            ```bash
+            cd $WORKTREE
+            # Check E46 exists and is properly numbered
+            grep -A 5 "## E46:" protocol/execution-rules.md
+            # Check cross-references
+            grep -c "E46" protocol/procedures.md  # should be ≥1
+            ```
+
+            **Constraints:**
+            - E46 must be vendor-neutral in specification (Claude Code is one implementation)
+            - Don't remove E4 (E46 enhances E4, doesn't replace it)
+            - Maintain protocol version number consistency
+          files:
+            - protocol/execution-rules.md
+            - protocol/procedures.md
+          dependencies:
+            - E
+            - F
+quality_gates:
+    level: standard
+    gates:
+        - type: lint
+          command: "find implementations/claude-code/hooks -type f ! -name '*.md' ! -name 'install.sh' -exec shellcheck {} +"
+          required: true
+          repo: scout-and-wave
+        - type: test
+          command: bash /Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/hooks/install.sh --test
+          required: true
+          repo: scout-and-wave
+        - type: custom
+          command: |
+            # Verify hook registration in install script
+            grep -q "inject_worktree_env" implementations/claude-code/hooks/install.sh || exit 1
+            grep -q "inject_bash_cd" implementations/claude-code/hooks/install.sh || exit 1
+            grep -q "validate_write_paths" implementations/claude-code/hooks/install.sh || exit 1
+            grep -q "verify_worktree_compliance" implementations/claude-code/hooks/install.sh || exit 1
+          required: true
+          repo: scout-and-wave
+pre_mortem:
+    overall_risk: medium
+    rows:
+        - scenario: SubagentStart hook doesn't have environment write capability
+          likelihood: medium
+          impact: high
+          mitigation: |
+            Test SubagentStart hooks early (Wave 1). If env var export via hookSpecificOutput
+            doesn't work, fall back to writing a temp file that orchestrator sources. Document
+            the workaround in hook header comments.
+        - scenario: Bash cd injection breaks complex multi-line commands
+          likelihood: low
+          impact: medium
+          mitigation: |
+            Keep injection simple (literal prepend, no parsing). Test with common patterns
+            (pipes, semicolons, here-docs) in Wave 1. If edge cases break, document them
+            and fall back to manual cd discipline for those patterns.
+        - scenario: Path validation blocks legitimate orchestrator writes to IMPL doc
+          likelihood: low
+          impact: high
+          mitigation: |
+            validate_write_paths must check if agent is orchestrator (no SAW_AGENT_WORKTREE set).
+            If worktree is empty, skip validation entirely. Test orchestrator IMPL writes in
+            Wave 2 integration testing.
+        - scenario: Hook registration conflicts with existing hooks in settings.json
+          likelihood: low
+          impact: medium
+          mitigation: |
+            install.sh already handles hook merging (backs up settings.json, uses jq to merge).
+            Test on a clean settings.json and on a settings.json with all 11 existing hooks.
+            Verify no duplicates after install.
+        - scenario: Cross-repo IMPL docs break environment variable detection
+          likelihood: medium
+          impact: low
+          mitigation: |
+            inject_worktree_env must walk up to repo root to find .saw-state/active-impl.
+            Test with scout-and-wave-go IMPL docs (cross-repo scenario). If detection fails,
+            agent falls back to grep-based IMPL path extraction from prompt.
+state: SCOUT_PENDING
+injection_method: hook
