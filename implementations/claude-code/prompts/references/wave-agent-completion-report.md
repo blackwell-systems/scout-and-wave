@@ -16,9 +16,23 @@ sawtools set-completion "<absolute-impl-doc-path>" \
 ```
 
 **Status values:**
-- `complete` — All work finished, tests pass, ready to merge
-- `partial` — Some work done but incomplete; requires `--failure-type`
-- `blocked` — Cannot proceed due to interface contract issues; requires `--failure-type`
+
+**Status reflects YOUR scope completion, not downstream dependencies.**
+
+- `complete` — Your assigned scope is done. Implementation finished, tests pass, verification clean.
+  - **Out-of-scope dependencies are NOT a reason for partial status**
+  - Example: "Hook created and tested. Registration is Agent E's scope."
+  - Use `--notes` to document what downstream agents must do
+
+- `partial` — You completed SOME but not ALL of your assigned scope.
+  - Requires `--failure-type` (typically `timeout` or `fixable`)
+  - Example: "Created 3 of 5 functions. Ran out of context."
+  - Do NOT use for "my work is done but someone else needs to integrate it"
+
+- `blocked` — Cannot proceed due to external blocker within your scope.
+  - Requires `--failure-type` (typically `needs_replan` or `escalate`)
+  - Example: "Scaffold file missing. Cannot implement interface."
+  - Do NOT use for "I finished but quality gates fail on unrelated files"
 
 **Failure types** (required when status is partial or blocked):
 - `transient` — Temporary failure, retry will likely succeed
@@ -53,6 +67,18 @@ sawtools set-completion "/Users/user/repo/docs/IMPL/IMPL-feature.yaml" \
   --tests-added "TestNewObserver_CreatesDirectories,TestSync_FirstRun,TestSync_Incremental" \
   --verification "PASS" \
   --notes "Core observer complete. All 9 tests passing."
+```
+
+**Example for complete agent with out-of-scope dependencies:**
+```bash
+sawtools set-completion "/Users/user/repo/docs/IMPL/IMPL-hooks.yaml" \
+  --agent "D" \
+  --status complete \
+  --commit "d3dd9a4" \
+  --branch "saw/hook-worktree-isolation/wave1-agent-D" \
+  --files-created "implementations/claude-code/hooks/verify_worktree_compliance" \
+  --verification "PASS - Hook implementation complete. Shellcheck clean. Manual tests pass. Registration is Wave 2 scope (Agent E)." \
+  --notes "Hook implementation complete and ready for integration. Out-of-scope: Hook registration in install.sh (Agent E's responsibility in Wave 2)."
 ```
 
 **Example for blocked agent:**
