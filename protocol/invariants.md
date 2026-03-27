@@ -54,7 +54,7 @@ This allowance applies only at merge time. The declared ownership table must sti
 
 ## I2: Interface Contracts Precede Parallel Implementation
 
-**Formal Statement:** The Scout defines all interfaces that cross agent boundaries in the IMPL doc. The Scaffold Agent implements them as type scaffold files committed to HEAD after human review, before any Wave Agent launches. Agents implement against the spec; they never coordinate directly.
+**Formal Statement:** The Scout defines all interfaces that cross agent boundaries in the IMPL doc. This includes function signatures, method contracts, AND shared data structures (structs, enums, type aliases, traits) referenced by 2+ agents. The Scaffold Agent implements them as type scaffold files committed to HEAD after human review, before any Wave Agent launches. Agents implement against the spec; they never coordinate directly.
 
 **Enforcement:** The orchestrator verifies all scaffold files show `committed` status before creating worktrees. Interface contracts are frozen when worktrees are created (see E2).
 
@@ -65,9 +65,22 @@ This allowance applies only at merge time. The declared ownership table must sti
 - Wave Agents branch from HEAD and import from committed scaffold files
 - Agents implement against scaffold files without seeing each other's code
 
+**Shared Data Structure Detection:** Scout detects types that multiple agents reference by scanning agent task prompts for import statements, type references, and data structure definitions. When Agent B imports a type from a file in Agent A's ownership, Scout creates a scaffold for that type to prevent duplicate definitions and I1 violations.
+
+Detection applies to:
+- Structs/classes defined in one agent's file and imported by another
+- Enums/sum types used across agent boundaries
+- Type aliases shared between agents
+- Traits/interfaces implemented or consumed by multiple agents
+
+Does NOT apply to:
+- Types from external dependencies (stdlib, third-party packages)
+- Types in existing codebase files not owned by any agent
+- Types mentioned in only one agent's task (no cross-agent dependency)
+
 **Freeze Enforcement:** `PrepareWave` records a `worktrees_created_at` timestamp and computes JSON hashes of `interface_contracts` and `scaffolds` when worktrees are first created. On subsequent calls (re-entrant resume), `CheckFreeze()` (`pkg/protocol/freeze.go`) recomputes those hashes and compares them. Any modification to interface contracts or scaffold entries after the freeze timestamp is a blocking violation — the wave cannot re-enter preparation with modified contracts.
 
-**Related Rules:** See E2 (interface freeze) and E8 (same-wave interface failure handling)
+**Related Rules:** See E2 (interface freeze), E8 (same-wave interface failure handling), and E45 (shared data structure scaffold detection)
 
 ---
 
