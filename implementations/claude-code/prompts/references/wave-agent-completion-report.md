@@ -27,13 +27,19 @@ sawtools set-completion "<absolute-impl-doc-path>" \
 - `escalate` — Human intervention required
 - `timeout` — Approaching turn limit, commit partial work
 
+**Verification field format (STRICT):**
+- Success: `--verification "PASS"`
+- Failure: `--verification "FAIL (brief reason)"` — keep reason under 80 chars
+- **Never use free-form text, status prefixes like "BLOCKED:", or multi-line explanations**
+- **This field is machine-parseable — validator will reject non-standard formats**
+
 **Optional flags:**
 - `--repo <path>` — Only needed for cross-repo waves (omit for single-repo)
 - `--files-created "file1.go,file2.go"` — Files you created (not modified)
 - `--interface-deviations "deviation1,deviation2"` — If you had to deviate from contracts
 - `--out-of-scope-deps "dep1,dep2"` — Dependencies discovered outside your scope
 - `--tests-added "Test1,Test2"` — Test names you added
-- `--notes "Free-form notes about key decisions, surprises, warnings"` — Additional context
+- `--notes "Free-form notes about key decisions, surprises, warnings"` — Additional context for multi-line explanations
 
 **Example for complete agent:**
 ```bash

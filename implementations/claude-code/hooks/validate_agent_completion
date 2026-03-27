@@ -264,6 +264,27 @@ case "$agent_type" in
       echo "E42: Agent ${agent_id} (wave ${wave_num}) has no completion report in IMPL doc. Use 'sawtools set-completion' before completing." >&2
       exit 2
     fi
+
+    # Verify verification field format (must be "PASS" or "FAIL (...)")
+    verification=""
+    if command -v yq &>/dev/null; then
+      verification=$(yq -r ".completion_reports.${agent_id}.verification // empty" "$impl_path" 2>/dev/null || true)
+    else
+      # Grep fallback: extract verification field for this agent
+      verification=$(sed -n "/^completion_reports:/,/^[a-z_]*:/p" "$impl_path" 2>/dev/null | \
+                     sed -n "/^\s\+${agent_id}:/,/^\s\+[A-Z]:/p" | \
+                     grep -E '^\s+verification:' | \
+                     sed 's/^\s*verification:\s*//' | \
+                     sed "s/^['\"]//; s/['\"]$//" || true)
+    fi
+
+    if [[ -n "$verification" ]]; then
+      if [[ ! "$verification" =~ ^PASS$ ]] && [[ ! "$verification" =~ ^FAIL\ \(.+\)$ ]]; then
+        echo "E42: Agent ${agent_id} verification field has invalid format: \"${verification}\"" >&2
+        echo "     Must be 'PASS' or 'FAIL (brief reason)' — no free-form text or status prefixes." >&2
+        exit 2
+      fi
+    fi
     ;;
 
   critic)
