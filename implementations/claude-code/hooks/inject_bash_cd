@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+# PreToolUse hook for automatic cd injection into Bash commands in worktree agents
+#
+# When SAW_AGENT_WORKTREE is set, this hook prepends `cd $SAW_AGENT_WORKTREE &&`
+# to every Bash tool invocation, ensuring agents work in their isolated worktree
+# without needing to manually specify absolute paths or cd in every command.
+#
+# Hook behavior:
+#   - Fires on every tool call (PreToolUse event)
+#   - If tool_name != "Bash", passthrough (exit 0)
+#   - If SAW_AGENT_WORKTREE is empty, passthrough (solo/integration waves)
+#   - If command already starts with "cd $SAW_AGENT_WORKTREE &&", passthrough
+#   - Otherwise, inject "cd $SAW_AGENT_WORKTREE && " prefix via updatedInput
+#
+# Manual test cases:
+#
+# Test 1: Bash tool with worktree set — should inject cd
+#   export SAW_AGENT_WORKTREE="/tmp/test-worktree"
+#   echo '{"tool_name":"Bash","tool_input":{"command":"ls -la","description":"list files"}}' \
+#     | bash implementations/claude-code/hooks/inject_bash_cd
+#   # Should output JSON with updatedInput.command = "cd $SAW_AGENT_WORKTREE && ls -la"
+#   # Exit code: 0
+#
+# Test 2: Bash tool without worktree — should passthrough
+#   unset SAW_AGENT_WORKTREE
+#   echo '{"tool_name":"Bash","tool_input":{"command":"echo hello","description":"test"}}' \
+#     | bash implementations/claude-code/hooks/inject_bash_cd
+#   # No output (exit 0 = allow original input)
+#   # Exit code: 0
+#
+# Test 3: Non-Bash tool — should passthrough
+#   export SAW_AGENT_WORKTREE="/tmp/test-worktree"
+#   echo '{"tool_name":"Read","tool_input":{"file_path":"/tmp/test.txt"}}' \
+#     | bash implementations/claude-code/hooks/inject_bash_cd
+#   # No output (exit 0 = allow original input)
+#   # Exit code: 0
+#
+# Test 4: Command already has cd prefix — should not double-inject
+#   export SAW_AGENT_WORKTREE="/tmp/test-worktree"
+#   echo '{"tool_name":"Bash","tool_input":{"command":"cd \$SAW_AGENT_WORKTREE && echo test","description":"test"}}' \
+#     | bash implementations/claude-code/hooks/inject_bash_cd
+#   # No output (exit 0 = already has prefix)
+#   # Exit code: 0
+#
+# Test 5: Preserve other tool_input fields (timeout, run_in_background)
+#   export SAW_AGENT_WORKTREE="/tmp/test-worktree"
+#   echo '{"tool_name":"Bash","tool_input":{"command":"sleep 5","description":"test","timeout":10000,"run_in_background":true}}' \
+#     | bash implementations/claude-code/hooks/inject_bash_cd
+#   # Should output JSON with timeout and run_in_background preserved
+#   # Exit code: 0
+
+set -euo pipefail
+
+# Hook receives JSON input on stdin with fields:
+# - tool_name: string
+# - tool_input: object (contains command and other fields)
+# - agent_type: string
+
+input=$(cat)
+
+# Extract fields from JSON
+tool_name=$(echo "$input" | jq -r '.tool_name // empty')
+
+# Only modify Bash tool calls
+if [[ "$tool_name" != "Bash" ]]; then
+  exit 0
+fi
+
+# Check if SAW_AGENT_WORKTREE is set
+if [[ -z "${SAW_AGENT_WORKTREE:-}" ]]; then
+  # No worktree set — solo wave or integration wave, passthrough
+  exit 0
+fi
+
+# Extract command from tool_input
+original_cmd=$(echo "$input" | jq -r '.tool_input.command // empty')
+
+# Check if command already starts with "cd $SAW_AGENT_WORKTREE"
+# Note: We check for literal "$SAW_AGENT_WORKTREE" string, not expanded value,
+# because the hook injects the variable reference and bash expands it at runtime.
+if [[ "$original_cmd" =~ ^cd\ \$SAW_AGENT_WORKTREE ]]; then
+  # Already has cd prefix — don't double-inject
+  exit 0
+fi
+
+# Inject cd prefix
+updated_cmd="cd \$SAW_AGENT_WORKTREE && $original_cmd"
+
+# Preserve all tool_input fields (timeout, run_in_background, description, etc.)
+tool_input=$(echo "$input" | jq '.tool_input')
+
+# Return updatedInput via hookSpecificOutput
+jq -n --arg cmd "$updated_cmd" --argjson orig_input "$tool_input" \
+  '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow", "updatedInput": ($orig_input | .command = $cmd)}}'
+
+exit 0
