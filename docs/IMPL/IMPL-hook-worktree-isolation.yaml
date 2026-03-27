@@ -1257,10 +1257,12 @@ quality_gates:
           command: "find implementations/claude-code/hooks -type f ! -name '*.md' ! -name 'install.sh' -exec shellcheck {} +"
           required: true
           repo: scout-and-wave
+          timing: post-merge
         - type: test
           command: bash /Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/hooks/install.sh --test
           required: true
           repo: scout-and-wave
+          timing: post-merge
         - type: custom
           command: |
             # Verify hook registration in install script
@@ -1270,6 +1272,7 @@ quality_gates:
             grep -q "verify_worktree_compliance" implementations/claude-code/hooks/install.sh || exit 1
           required: true
           repo: scout-and-wave
+          timing: post-merge
 pre_mortem:
     overall_risk: medium
     rows:
