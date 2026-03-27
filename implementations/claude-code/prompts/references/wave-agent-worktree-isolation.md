@@ -1,114 +1,93 @@
 <!-- Part of wave-agent procedure. Loaded by validate_agent_launch hook. -->
 # Worktree Isolation Protocol
 
-**CRITICAL:** You are working in a git worktree. Isolation is now enforced automatically via Claude Code hooks — you no longer need to manually manage working directory or paths.
+You are working in a git worktree. Four lifecycle hooks enforce isolation automatically:
 
-## Automatic Enforcement (v0.65.0+)
+1. **SubagentStart** → `inject_worktree_env` sets `SAW_AGENT_WORKTREE`, `SAW_AGENT_ID`, `SAW_WAVE_NUMBER`, `SAW_IMPL_PATH`, `SAW_BRANCH`
+2. **PreToolUse:Bash** → `inject_bash_cd` prepends `cd $SAW_AGENT_WORKTREE &&` to every bash command
+3. **PreToolUse:Write|Edit** → `validate_write_paths` blocks relative paths and out-of-worktree writes
+4. **SubagentStop** → `verify_worktree_compliance` checks completion report exists
 
-Four lifecycle hooks ensure isolation without manual discipline:
+**Why automatic enforcement?** The Bash tool starts each command in the orchestrator's directory (not your worktree). The `inject_bash_cd` hook solves this by prepending `cd $SAW_AGENT_WORKTREE &&` automatically.
 
-1. **SubagentStart: Environment injection** — Sets `SAW_AGENT_WORKTREE`, `SAW_AGENT_ID`, `SAW_WAVE_NUMBER`, `SAW_IMPL_PATH`, `SAW_BRANCH` when you launch
-2. **PreToolUse:Bash: CD auto-injection** — Every bash command automatically runs in your worktree (`cd $SAW_AGENT_WORKTREE &&` is prepended)
-3. **PreToolUse:Write/Edit: Path validation** — Relative paths and paths outside your worktree are blocked before Write/Edit executes
-4. **SubagentStop: Compliance verification** — Warns if completion report or commits are missing (audit trail for debugging)
+## Step 1: Read Your Pre-Extracted Brief (MANDATORY)
 
-**Result:** The Agent B leak scenario (files created in main repo instead of worktree) is now impossible. Manual `cd` commands and `$WORKTREE` variable usage are no longer required, but remain supported for backward compatibility.
-
-**CRITICAL:** All git operations MUST use absolute paths to ensure commands execute in your worktree, not the main repository.
-
-### Step 0: Verify Isolation and Capture Worktree Path (OPTIONAL — hooks handle this automatically)
-
-Your worktree path and branch name are provided in your agent prompt (Field 1). **Before any other work**, run this verification and capture the absolute worktree path:
+Your brief is pre-extracted before launch to eliminate startup latency:
 
 ```bash
-# Verify isolation (this also validates you're in a worktree, not main repo)
-cd /full/path/to/your/worktree && sawtools verify-isolation --branch saw/{slug}/wave{N}-agent-{ID}
+Read .saw-agent-brief.md
 ```
 
-**Expected output:**
-```json
-{
-  "ok": true,
-  "branch": "saw/my-feature/wave1-agent-A"
-}
-```
-
-**If verification fails** (exit code 1, `"ok": false`): STOP immediately. Do not create any files. The JSON output will contain an `"errors"` array explaining the failure. Report the isolation failure in your completion report with `status: blocked` and `failure_type: escalate`.
-
-**After verification passes, save your worktree path as an environment variable for all subsequent operations:**
-
-```bash
-WORKTREE=/full/path/to/your/worktree
-```
-
-**Why this matters:**
-- `verify-isolation` now checks that your current directory path contains `.claude/worktrees/` — if you accidentally run it in the main repo, it will fail
-- The Bash tool **does not preserve working directory** between calls — `cd` in one command doesn't affect the next
-- You **must use absolute paths** (via `$WORKTREE` variable or explicit paths) for ALL file operations
-- This prevents the Agent B leak scenario where files are created in the main repo instead of the worktree
-
-### Step 0.5: Read Your Pre-Extracted Brief (MANDATORY SECOND STEP)
-
-After verification passes, read your agent brief from the pre-extracted file:
-
-**For worktree agents:**
-```bash
-Read $WORKTREE/.saw-agent-brief.md
-```
-
-**For solo agents (no worktree):**
-```bash
-Read .saw-state/wave{N}/agent-{ID}/brief.md
-```
-
-The orchestrator runs `sawtools prepare-agent` before launching you, which extracts your task, file ownership, interface contracts, and quality gates from the IMPL doc into this file. This eliminates the ~10s latency of calling `extract-context` at startup.
-
-The brief contains:
+Contains:
 - Your agent ID and wave number
 - Files you own (Field 1)
 - Task instructions (Field 2)
 - Interface contracts you must implement or call
 - Quality gates you must pass
 
-### All File Operations: Use Absolute Paths
+## Step 2: File Operations
 
-**Hook enforcement now validates paths automatically.** Manual `$WORKTREE` variable usage is no longer required but remains supported.
-
-**CRITICAL:** The Bash tool does **NOT** preserve working directory between calls. You must use absolute paths for ALL operations (file reads, writes, git commands, test execution).
-
-**Pattern: Use $WORKTREE variable**
-
-After Step 0 verification, reference your worktree path via the `$WORKTREE` variable:
+### Read/Write/Edit - Use Absolute Paths
+The `$SAW_AGENT_WORKTREE` environment variable is set automatically by hooks:
 
 ```bash
-# File operations with Read/Write/Edit tools
-Read: $WORKTREE/pkg/module/file.go
-Write: $WORKTREE/pkg/module/newfile.go
-Edit: $WORKTREE/pkg/module/file.go
-
-# Git operations (use -C flag)
-git -C $WORKTREE status
-git -C $WORKTREE add pkg/module/
-git -C $WORKTREE commit -m "message"
-
-# Test execution (use -C flag to change directory before running)
-cd $WORKTREE && go test ./pkg/module
-# OR for one-liners:
-git -C $WORKTREE rev-parse --show-toplevel | xargs -I {} sh -c 'cd {} && go test ./pkg/module'
+Read $SAW_AGENT_WORKTREE/pkg/module/file.go
+Write $SAW_AGENT_WORKTREE/pkg/module/newfile.go
+Edit $SAW_AGENT_WORKTREE/pkg/module/file.go
 ```
 
-**NEVER do this:**
+**Note:** Relative paths are blocked by the `validate_write_paths` hook.
+
+### Bash Commands - Work Naturally
+The `inject_bash_cd` hook makes relative paths work in bash:
+
 ```bash
-# WRONG: cd doesn't persist to next Bash call
-cd $WORKTREE
-go test ./pkg/module  # This runs in a DIFFERENT directory!
-
-# WRONG: Relative paths assume current directory
-Write: pkg/module/file.go  # Where is "pkg"? Might be main repo!
+go test ./pkg/module
+# Hook transforms to: cd $SAW_AGENT_WORKTREE && go test ./pkg/module
 ```
 
-**Why this matters:** Every Bash tool invocation starts fresh in the orchestrator's working directory (usually the main repo). If you use relative paths or rely on `cd`, file operations will execute in the main repo, causing the Agent B leak scenario.
+### Git Operations - Use -C Flag
+Hooks don't modify git commands, so use explicit worktree targeting:
+
+```bash
+git -C $SAW_AGENT_WORKTREE status
+git -C $SAW_AGENT_WORKTREE add pkg/module/
+git -C $SAW_AGENT_WORKTREE commit -m "message"
+```
+
+**For tests requiring repo root:**
+```bash
+cd $SAW_AGENT_WORKTREE && go test ./pkg/module
+```
+
+## Special Cases
 
 ### go.mod replace directives (Go projects)
+**Do NOT modify `replace` directives.** Relative paths (e.g. `../sibling-module`) are correct relative to the repo root, not your worktree. Your worktree is nested inside `.claude/worktrees/saw/{slug}/wave{N}-agent-{ID}/`, so paths look wrong from your perspective — but they resolve correctly after merge. If you rewrite them to match your worktree depth (e.g. `../../../../sibling-module`), they will break after merge.
 
-**Do NOT modify `replace` directives in `go.mod`.** Relative paths in replace blocks (e.g. `../sibling-module`) are correct relative to the **repo root**, not your worktree. Your worktree is nested deep inside `.claude/worktrees/saw/{slug}/wave{N}-agent-{ID}/`, so the relative paths look wrong from your perspective — but they resolve correctly when the branch is merged back to main. If you rewrite them to match your worktree depth (e.g. `../../../../sibling-module`), they will break after merge.
+## Troubleshooting
+
+### Verify hooks are active
+```bash
+jq '.hooks.SubagentStart, .hooks.PreToolUse[] | select(.hooks[].command | contains("inject_"))' ~/.claude/settings.json
+```
+
+**Expected:** Should show `inject_worktree_env`, `inject_bash_cd`, `validate_write_paths`
+
+### If hooks aren't registered
+Run `./install.sh --claude-code` from scout-and-wave repo.
+
+### If you encounter isolation violations
+Report in your completion report with:
+```bash
+sawtools set-completion --status blocked --failure-type escalate --notes "Isolation violation: [describe issue]"
+```
+
+## Environment Variables Available
+
+The `inject_worktree_env` hook sets these automatically:
+- `$SAW_AGENT_WORKTREE` - Your worktree path
+- `$SAW_AGENT_ID` - Your agent ID (A, B, C, etc.)
+- `$SAW_WAVE_NUMBER` - Current wave number
+- `$SAW_IMPL_PATH` - Path to IMPL doc
+- `$SAW_BRANCH` - Your worktree branch name
