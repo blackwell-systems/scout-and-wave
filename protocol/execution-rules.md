@@ -1787,6 +1787,64 @@ The following checklist enumerates ALL lifecycle events that must be emitted. Ev
 
 ---
 
+## E43: Hook-Based Isolation Enforcement
+
+**Trigger:** Wave agents launch in worktree context (multi-agent waves)
+
+**Required Action:** Orchestrator ensures lifecycle hooks are installed and active before launching wave agents. Hook-based enforcement supersedes instruction-based isolation (agents following written protocol).
+
+### Four-Hook Defense-in-Depth
+
+**Hook 1: SubagentStart environment injection (inject_worktree_env)**
+- Sets 5 environment variables when wave agents launch:
+  - SAW_AGENT_WORKTREE (absolute worktree path)
+  - SAW_AGENT_ID (agent identifier, e.g., "A", "B2")
+  - SAW_WAVE_NUMBER (1-based wave number)
+  - SAW_IMPL_PATH (absolute path to IMPL doc)
+  - SAW_BRANCH (agent's branch name, e.g., "saw/{slug}/wave1-agent-A")
+- Non-blocking (always exits 0)
+- Solo waves and integration waves: SAW_AGENT_WORKTREE is empty string
+
+**Hook 2: PreToolUse:Bash cd auto-injection (inject_bash_cd)**
+- Prepends cd $SAW_AGENT_WORKTREE && to every bash command via updatedInput
+- Fires only when SAW_AGENT_WORKTREE is non-empty (skips solo waves)
+- Skips if command already starts with cd $SAW_AGENT_WORKTREE
+- Non-blocking (always exits 0, injection is best-effort)
+- Eliminates manual cd commands and $WORKTREE variable usage
+
+**Hook 3: PreToolUse:Write/Edit path validation (validate_write_paths)**
+- Blocks relative paths in worktree context (exit 2)
+- Blocks paths outside worktree boundaries (exit 2)
+- Fires only when SAW_AGENT_WORKTREE is non-empty (skips solo waves)
+- Error messages reference worktree path and protocol rule (E43)
+- Prevents Agent B leak scenario (files created in main repo)
+
+**Hook 4: SubagentStop compliance verification (verify_worktree_compliance)**
+- Checks completion report exists (E42/I4 compliance)
+- Checks commits exist on branch (I5 compliance)
+- Non-blocking (always exits 0, warnings logged to stderr)
+- Creates audit trail for post-hoc violation analysis
+
+### Relationship to E4
+
+E43 enforces E4 mechanically. E4 (Worktree Isolation) states the requirement: all wave agents MUST use worktree isolation. E43 specifies the enforcement mechanism: lifecycle hooks that make isolation violations impossible rather than merely documented.
+
+**Before E43 (instruction-based isolation):** Agents followed written protocol in wave-agent-worktree-isolation.md. Violations were possible via agent error, context compaction loss, or rate-limit recovery gaps.
+
+**After E43 (hook-based enforcement):** Claude Code hooks intercept tool calls before execution. Relative paths and out-of-bounds writes are blocked at the tool boundary. Bash commands run in the correct working directory automatically.
+
+### Implementation Notes
+
+- **Claude Code-specific:** E43 hooks use Claude Code lifecycle API (SubagentStart, PreToolUse, SubagentStop). Other platforms must implement equivalent enforcement at their tool invocation boundary.
+- **Vendor-neutral fallback:** When hooks are unavailable, fall back to instruction-based isolation (E4 Layer 3: Field 0 self-verification). Agents manually verify working directory at startup.
+- **Defense-in-depth:** E43 hooks complement E4 layers (pre-creation, task tool isolation, merge-time trip wire). All layers remain active.
+
+**Related Invariants:** See I1 (disjoint file ownership), E4 (worktree isolation)
+
+**Related Rules:** See E12 (isolation verification at agent startup)
+
+---
+
 ## E44: Context Injection Observability
 
 **Scout obligation:** Before completing, the Scout MUST call

@@ -112,6 +112,8 @@ An asynchronous agent launched by the orchestrator after human review of the IMP
 
 An asynchronous agent launched by the orchestrator. Owns a disjoint set of files, implements against the interface contracts defined in the IMPL doc, runs the verification gate, commits its work, and writes a structured completion report to the IMPL doc. Multiple wave agents run concurrently within a wave. Wave agents never coordinate directly with each other; the IMPL doc is the only coordination surface. The orchestrator collects all completion notifications before advancing to WAVE_MERGING.
 
+**E43 hook-based enforcement:** In Claude Code implementations, lifecycle hooks automatically enforce worktree isolation by injecting environment variables, prepending cd commands to bash calls, and blocking writes outside worktree boundaries. This makes isolation violations impossible at the tool boundary rather than merely detected after-the-fact.
+
 **Required capabilities:**
 
 - Read source files (own files + dependency files from prior waves)

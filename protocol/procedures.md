@@ -276,6 +276,7 @@ The agent runs on the main branch directly. `finalize-wave` auto-detects that no
 **Each agent independently:**
 
 1. **Field 0: Isolation verification (mandatory pre-flight):**
+   - **E43 hook-based enforcement:** For Claude Code implementations, lifecycle hooks automatically inject environment variables (SAW_AGENT_WORKTREE, SAW_AGENT_ID, SAW_WAVE_NUMBER, SAW_IMPL_PATH, SAW_BRANCH), prepend cd commands to bash calls, and block out-of-bounds writes. Agents still verify isolation, but violations are now prevented mechanically rather than detected after-the-fact.
    - Step 1: Navigate to worktree via strict `cd` (fails fast if worktree doesn't exist)
    - Step 2: Verify working directory matches expected worktree path
    - Step 3: Verify git branch matches expected branch name

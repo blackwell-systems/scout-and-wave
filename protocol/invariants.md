@@ -24,7 +24,7 @@ To audit consistency, search implementation files for `I{N}` and verify the embe
 
 **Cross-repo scope:** In cross-repo waves, I1 applies per-repository. Files in different repositories are inherently disjoint — no two agents can conflict on a file that exists in only one repo's filesystem. The disjoint ownership constraint still applies within each repository: no two agents in the same wave may own the same file path within the same repository.
 
-**Related Rules:** See E3 (pre-launch ownership verification), E11 (conflict prediction before merge), and E42 (post-completion I1 ownership verification at SubagentStop time)
+**Related Rules:** See E3 (pre-launch ownership verification), E11 (conflict prediction before merge), E42 (post-completion I1 ownership verification at SubagentStop time), and E43 (hook-based isolation enforcement prevents violations at tool boundary)
 
 ### I1 Amendment: Integration Agent Exemption
 

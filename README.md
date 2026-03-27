@@ -162,21 +162,22 @@ Neither constraint substitutes for the other. Disjoint ownership without worktre
 
 **Cascade failures:** These happen when Agent A changes a function signature and Agent B's code breaks at integration time, even though both passed isolated tests. The post-merge verification gate catches these cross-package issues that individual agents can't see in their isolated worktrees.
 
-### Worktree Isolation Defense (5 layers)
+### Worktree Isolation Defense (6 layers)
 
-Agents don't always respect isolation instructions. v0.6.0 adds a layered defense model that treats worktree isolation as an infrastructure problem, not a cooperation problem:
+Agents don't always respect isolation instructions. v0.6.0 adds a layered defense model that treats worktree isolation as an infrastructure problem, not a cooperation problem. v0.65.0+ adds hook-based enforcement (E43) as the primary mechanism.
 
-(Layers numbered 0-4. Layer 0 is the foundational prevention layer; higher layers add defense-in-depth.)
+(Layers numbered 0-4, plus E43 hook-based enforcement. Layer 0 is the foundational prevention layer; higher layers add defense-in-depth.)
 
 | Layer | Mechanism | Type |
 |-------|-----------|------|
+| **E43** | **Hook-based enforcement** - Claude Code lifecycle hooks (SubagentStart, PreToolUse:Bash, PreToolUse:Write/Edit, SubagentStop) automatically inject environment variables, prepend cd commands to bash calls, and block out-of-bounds writes at the tool boundary. Violations become impossible rather than merely detected. See E43 in `protocol/execution-rules.md`. | **Prevention (Primary)** |
 | 0 | **Pre-commit hook** - installed automatically by `sawtools create-worktrees` (embedded in Go SDK at `pkg/worktree/manager.go`). Blocks commits to main during active waves. Agents receive an instructive error. Orchestrator bypasses via `SAW_ALLOW_MAIN_COMMIT=1`. | Prevention |
 | 1 | **Manual worktree pre-creation** - Orchestrator creates all worktrees before any agent launches | Deterministic |
 | 2 | **`isolation: "worktree"` parameter** - each agent launch specifies worktree isolation at the tool level. **Omitted for cross-repo waves** (would create worktrees in the wrong repo); Layer 1 and Layer 3 provide isolation instead. See `saw-worktree.md` Cross-Repo Mode. | Tool-level |
 | 3 | **Field 0 self-verification** - agents verify their own branch and working directory on startup | Cooperative |
 | 4 | **Merge-time trip wire** - Orchestrator counts commits per worktree branch before merging. Zero commits = isolation failure. Stops with recovery options. | Deterministic |
 
-Layers 0 and 4 are the structural guarantees: Layer 0 prevents agents from committing to main, Layer 4 detects if isolation failed by any mechanism. Layers 1-3 are defense-in-depth.
+E43 (hook-based enforcement) and Layers 0 and 4 are the structural guarantees: E43 prevents violations at the tool boundary, Layer 0 prevents agents from committing to main, Layer 4 detects if isolation failed by any mechanism. Layers 1-3 are defense-in-depth.
 
 ## Building a New Implementation
 
