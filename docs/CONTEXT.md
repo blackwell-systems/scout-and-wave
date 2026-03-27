@@ -89,3 +89,5 @@
   - IMPL doc: docs/IMPL/complete/IMPL-agentskills-cli.yaml
 - **shared-data-scaffold-detection**: completed 2026-03-27, 3 waves, 6 agents
   - IMPL doc: docs/IMPL/complete/IMPL-shared-data-scaffold-detection.yaml
+- **agentskills-routing-generation**: completed 2026-03-27, 3 waves, 4 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-agentskills-routing-generation.yaml

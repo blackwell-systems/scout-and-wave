@@ -14,7 +14,7 @@ impls:
         - Reference file back-link header
         - Scout core reference loading block
         - Hook injection for scout subagent_type
-      status: pending
+      status: complete
     - slug: wave-agent-prompt-extraction
       title: Extract wave-agent prompt into layered progressive disclosure
       tier: 2
@@ -27,7 +27,7 @@ impls:
         - Reference file back-link header (wave-agent)
         - Wave-agent core reference loading block
         - Hook injection for wave-agent subagent_type
-      status: pending
+      status: complete
     - slug: critic-agent-prompt-extraction
       title: Extract critic-agent prompt into layered progressive disclosure
       tier: 3
@@ -41,7 +41,7 @@ impls:
         - Reference file back-link header (critic-agent)
         - Critic-agent core reference loading block
         - Hook injection for critic-agent subagent_type
-      status: pending
+      status: complete
     - slug: planner-prompt-extraction
       title: Extract planner agent prompt into layered progressive disclosure
       tier: 4
@@ -56,7 +56,7 @@ impls:
         - Reference file back-link header (planner)
         - Planner core reference loading block
         - Hook injection for planner subagent_type
-      status: pending
+      status: complete
     - slug: integration-agent-prompt-extraction
       title: Extract integration-agent prompt into layered progressive disclosure
       tier: 5
@@ -72,7 +72,7 @@ impls:
         - Reference file back-link headers (integration-agent)
         - Integration-agent core reference loading block
         - Hook injection for integration-agent subagent_type
-      status: pending
+      status: complete
 tiers:
     - number: 1
       impls:
@@ -90,9 +90,9 @@ tiers:
       impls:
         - integration-agent-prompt-extraction
 completion:
-    tiers_complete: 0
+    tiers_complete: 5
     tiers_total: 5
-    impls_complete: 0
+    impls_complete: 5
     impls_total: 5
     total_agents: 19
     total_waves: 10

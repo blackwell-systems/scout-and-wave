@@ -1,0 +1,689 @@
+completion_date: "2026-03-27"
+title: Agentskills CLI - Automatic Routing Generation
+feature_slug: agentskills-routing-generation
+verdict: SUITABLE
+suitability_assessment: |
+    Adding automatic routing generation to the `upgrade` command in agentskills-cli.
+    Work decomposes into 3 agents across 2 waves with disjoint file ownership (Agent A
+    owns models.rs in wave 1, preventing I1 violations).
+
+    File decomposition: ~10 files split across routing detection, routing generation,
+    interactive preview, CLI flag extensions, and comprehensive tests. Natural boundaries
+    at module level (upgrade/routing_detector.rs, upgrade/routing_generator.rs,
+    upgrade/interactive_recommender.rs).
+
+    Interface discoverability: All cross-agent types can be defined upfront
+    (RoutingDetectionResult, RoutingStyle enum, RoutingOutput). Agent A defines shared
+    types in models.rs first, then agents B and C depend on those exports (sequential
+    within wave 1 due to cross-wave dependency rule I2).
+
+    Actually, I2 says cross-wave dependencies only (agents in same wave cannot depend
+    on each other). This requires restructuring: either (1) Agent A in wave 1 defines
+    types, agents B/C in wave 2, or (2) all types in a scaffold file created before
+    wave 1.
+
+    Choosing option 2 (scaffold file approach) but without using wave 0 (invalid per V004).
+    Instead: Document scaffolds section with status: pending, and instruct orchestrator
+    to create them before Wave 1 launches.
+
+    Parallelization value: Rust build cycles (30-60s) amplify parallel execution benefit.
+    Wave 1 runs 3 independent agents (routing detector, routing generator, interactive
+    preview) after scaffolds created. Wave 2 wires CLI flags and integration tests (1 agent).
+
+    Time estimate: ~25 min total (5 min Scout, 16 min agents, 4 min merge)
+    vs ~40 min sequential baseline. 38% speedup from parallelization.
+
+    Target repository: /Users/dayna.blackwell/code/agentskills-cli
+    Current state: Existing Rust project with upgrade command infrastructure
+
+    Suitability verdict: SUITABLE - clear speedup from Rust build parallelization
+    and independent module boundaries.
+test_command: cargo test --all
+lint_command: cargo clippy -- -D warnings
+file_ownership:
+    - file: src/models.rs
+      agent: A
+      wave: 1
+      action: modify
+    - file: src/upgrade/routing_detector.rs
+      agent: A
+      wave: 1
+      action: new
+    - file: src/upgrade/routing_generator.rs
+      agent: B
+      wave: 2
+      action: new
+    - file: src/upgrade/interactive_recommender.rs
+      agent: C
+      wave: 2
+      action: new
+    - file: src/upgrade/mod.rs
+      agent: D
+      wave: 3
+      action: modify
+    - file: src/commands/upgrade.rs
+      agent: D
+      wave: 3
+      action: modify
+    - file: src/upgrade/splitter.rs
+      agent: D
+      wave: 3
+      action: modify
+    - file: tests/routing_integration_test.rs
+      agent: D
+      wave: 3
+      action: new
+interface_contracts:
+    - name: RoutingStyle
+      description: |
+        Enum representing routing strategy selection. Determines whether to use
+        inline breadcrumbs, routing table, or no routing in upgraded skills.
+      definition: |
+        #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+        pub enum RoutingStyle {
+            Smart,    // Auto-select based on subcommand count (inline if <4, table if ≥4)
+            Inline,   // Always use inline breadcrumbs
+            Table,    // Always use routing table
+            None,     // No routing generation
+        }
+
+        impl Default for RoutingStyle {
+            fn default() -> Self { RoutingStyle::Smart }
+        }
+      location: src/models.rs
+    - name: RoutingDetectionResult
+      description: |
+        Aggregates all detected routing patterns from frontmatter and content analysis.
+        Used by routing generator to decide output format.
+      definition: |
+        #[derive(Debug, Clone)]
+        pub struct RoutingDetectionResult {
+            pub subcommands: Vec<String>,
+            pub agent_types: Vec<String>,
+            pub timing_sections: Vec<TimingSection>,
+            pub recommended_style: RoutingStyle,
+        }
+
+        #[derive(Debug, Clone)]
+        pub struct TimingSection {
+            pub name: String,
+            pub timing: SectionTiming,  // Invocation or Runtime
+            pub trigger_pattern: Option<String>,
+        }
+      location: src/models.rs
+    - name: RoutingOutput
+      description: |
+        Contains generated routing artifacts. Returned by routing generator for
+        insertion into core SKILL.md and reference files.
+      definition: |
+        #[derive(Debug, Clone)]
+        pub struct RoutingOutput {
+            pub routing_table: Option<String>,      // Markdown table if table style
+            pub inline_breadcrumbs: Vec<InlineBreadcrumb>,
+            pub back_link_headers: HashMap<String, String>,  // ref_file -> header
+        }
+
+        #[derive(Debug, Clone)]
+        pub struct InlineBreadcrumb {
+            pub section_name: String,
+            pub reference_file: String,
+            pub condition: Option<String>,
+        }
+      location: src/models.rs
+    - name: UpgradeOptions extension
+      description: |
+        Add new fields to existing UpgradeOptions struct for routing flags.
+      definition: |
+        pub struct UpgradeOptions {
+            pub dry_run: bool,
+            pub with_agent_references: bool,
+            pub interactive: Option<bool>,
+            pub provider: Option<String>,
+            // New fields:
+            pub routing_style: Option<RoutingStyle>,
+            pub show_timing: bool,
+            pub back_links: bool,
+        }
+      location: src/models.rs
+    - name: detect_routing_patterns
+      description: |
+        Main detection entry point. Analyzes SKILL.md content and returns structured
+        routing detection results with recommended style.
+      definition: |
+        pub fn detect_routing_patterns(
+            skill_path: &Path,
+            options: &UpgradeOptions,
+        ) -> Result<RoutingDetectionResult, Error> {
+            // Extract subcommands from argument-hint
+            let subcommands = extract_subcommands(content)?;
+            // Extract agent types from allowed-tools
+            let agent_types = extract_agent_types(content)?;
+            // Classify timing sections (invocation vs runtime)
+            let timing_sections = classify_timing_sections(content, analyzer)?;
+            // Recommend routing style based on subcommand count
+            let recommended_style = if subcommands.len() >= 4 {
+                RoutingStyle::Table
+            } else {
+                RoutingStyle::Inline
+            };
+
+            Ok(RoutingDetectionResult {
+                subcommands,
+                agent_types,
+                timing_sections,
+                recommended_style,
+            })
+        }
+      location: src/upgrade/routing_detector.rs
+    - name: generate_routing
+      description: |
+        Takes detection results and selected style, generates all routing artifacts.
+        Returns RoutingOutput with table, breadcrumbs, and back-link headers.
+      definition: |
+        pub fn generate_routing(
+            detection: &RoutingDetectionResult,
+            style: RoutingStyle,
+            skill_name: &str,
+        ) -> Result<RoutingOutput, Error> {
+            let routing_table = if style == RoutingStyle::Table {
+                Some(generate_routing_table(detection, skill_name))
+            } else {
+                None
+            };
+
+            let inline_breadcrumbs = if style != RoutingStyle::Table {
+                generate_inline_breadcrumbs(detection)
+            } else {
+                vec![]
+            };
+
+            let back_link_headers = generate_back_link_headers(detection);
+
+            Ok(RoutingOutput {
+                routing_table,
+                inline_breadcrumbs,
+                back_link_headers,
+            })
+        }
+      location: src/upgrade/routing_generator.rs
+    - name: show_interactive_preview
+      description: |
+        Displays routing detection results and recommendations, gets user confirmation
+        before applying changes. Returns user's selected routing style or None if cancelled.
+      definition: |
+        pub fn show_interactive_preview(
+            detection: &RoutingDetectionResult,
+            options: &UpgradeOptions,
+        ) -> Result<Option<RoutingStyle>, Error> {
+            eprintln!("\n--- Routing Analysis ---");
+            eprintln!("Detected {} subcommands: {:?}",
+                detection.subcommands.len(), detection.subcommands);
+            eprintln!("Detected {} agent types: {:?}",
+                detection.agent_types.len(), detection.agent_types);
+            eprintln!("Recommended routing style: {:?}", detection.recommended_style);
+
+            if options.routing_style.is_some() {
+                // User specified style via flag, skip prompt
+                return Ok(options.routing_style.clone());
+            }
+
+            eprintln!("\nApply recommended routing? [y/N/custom]: ");
+            // ... stdin read and parsing logic
+
+            Ok(Some(selected_style))
+        }
+      location: src/upgrade/interactive_recommender.rs
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            # Agent A: Shared Types & Routing Pattern Detector
+
+            ## What to Implement
+
+            1. Add shared routing types to `src/models.rs`
+            2. Create `src/upgrade/routing_detector.rs` for routing pattern detection
+
+            **Core responsibilities:**
+            - Define RoutingStyle, RoutingDetectionResult, RoutingOutput, InlineBreadcrumb, TimingSection structs
+            - Extend UpgradeOptions struct with routing_style, show_timing, back_links fields
+            - Aggregate existing pattern detection (subcommands, agent types)
+            - Classify sections by timing (invocation vs runtime) using semantic analyzer
+            - Recommend routing style (inline if <4 subcommands, table if ≥4)
+
+            ## Interfaces This Agent Depends On
+
+            - `pattern_detector::extract_subcommands(content: &str)` (existing)
+            - `pattern_detector::extract_agent_types(content: &str)` (existing)
+            - `semantic_analyzer::SemanticAnalyzer::analyze_section()` (existing)
+            - `SectionTiming` enum (existing in models.rs)
+
+            ## Interfaces This Agent Exports
+
+            - All types in interface_contracts above (in src/models.rs)
+            - `detect_routing_patterns()` function (in src/upgrade/routing_detector.rs)
+
+            ## Part 1: Extend src/models.rs
+
+            Add the following types at the end of the file:
+
+            ```rust
+            use std::collections::HashMap;
+            use serde::{Serialize, Deserialize};
+
+            #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+            pub enum RoutingStyle {
+                Smart,    // Auto-select based on subcommand count (inline if <4, table if ≥4)
+                Inline,   // Always use inline breadcrumbs
+                Table,    // Always use routing table
+                None,     // No routing generation
+            }
+
+            impl Default for RoutingStyle {
+                fn default() -> Self { RoutingStyle::Smart }
+            }
+
+            #[derive(Debug, Clone)]
+            pub struct RoutingDetectionResult {
+                pub subcommands: Vec<String>,
+                pub agent_types: Vec<String>,
+                pub timing_sections: Vec<TimingSection>,
+                pub recommended_style: RoutingStyle,
+            }
+
+            #[derive(Debug, Clone)]
+            pub struct TimingSection {
+                pub name: String,
+                pub timing: SectionTiming,  // Invocation or Runtime (existing enum)
+                pub trigger_pattern: Option<String>,
+            }
+
+            #[derive(Debug, Clone)]
+            pub struct RoutingOutput {
+                pub routing_table: Option<String>,
+                pub inline_breadcrumbs: Vec<InlineBreadcrumb>,
+                pub back_link_headers: HashMap<String, String>,
+            }
+
+            #[derive(Debug, Clone)]
+            pub struct InlineBreadcrumb {
+                pub section_name: String,
+                pub reference_file: String,
+                pub condition: Option<String>,
+            }
+            ```
+
+            **ALSO extend the existing UpgradeOptions struct** (do not replace it):
+            ```rust
+            pub struct UpgradeOptions {
+                pub dry_run: bool,
+                pub with_agent_references: bool,
+                pub interactive: Option<bool>,
+                pub provider: Option<String>,
+                // NEW FIELDS (add these):
+                pub routing_style: Option<RoutingStyle>,
+                pub show_timing: bool,
+                pub back_links: bool,
+            }
+            ```
+
+            Update the `Default` implementation for UpgradeOptions:
+            ```rust
+            impl Default for UpgradeOptions {
+                fn default() -> Self {
+                    UpgradeOptions {
+                        dry_run: false,
+                        with_agent_references: false,
+                        interactive: None,
+                        provider: None,
+                        routing_style: None,
+                        show_timing: false,
+                        back_links: true,
+                    }
+                }
+            }
+            ```
+
+            ## Part 2: Create src/upgrade/routing_detector.rs
+
+            Implement the detect_routing_patterns function as specified in interface_contracts.
+
+            ## Tests Required
+
+            Create unit tests in `src/upgrade/routing_detector.rs`:
+            1. `test_detect_patterns_recommends_inline_for_few_subcommands`
+            2. `test_detect_patterns_recommends_table_for_many_subcommands`
+            3. `test_classify_timing_sections_invocation`
+            4. `test_classify_timing_sections_runtime`
+            5. `test_detect_patterns_with_no_semantic_analyzer`
+
+            ## Verification Gate
+
+            ```bash
+            cargo build
+            cargo clippy -- -D warnings
+            cargo test routing_detector
+            ```
+
+            ## Constraints
+
+            - Do not modify existing types in models.rs besides extending UpgradeOptions
+            - Append new types at end of models.rs
+            - Reuse existing pattern_detector and semantic_analyzer modules
+            - Handle missing semantic analyzer gracefully (timing = Unknown)
+          files:
+            - src/models.rs
+            - src/upgrade/routing_detector.rs
+          context_source: prepared-brief
+    - number: 2
+      agents:
+        - id: B
+          task: |
+            # Agent B: Routing Output Generator
+
+            ## What to Implement
+
+            Create `src/upgrade/routing_generator.rs` to generate routing artifacts.
+
+            ## Interfaces This Agent Depends On
+
+            - All types from Agent A (RoutingDetectionResult, RoutingStyle, RoutingOutput, InlineBreadcrumb)
+
+            ## Interfaces This Agent Exports
+
+            - `generate_routing()` function
+
+            ## Tests Required
+
+            1. `test_generate_routing_table_format`
+            2. `test_generate_inline_breadcrumbs_for_runtime_sections`
+            3. `test_generate_back_link_headers_with_core_reference`
+            4. `test_generate_routing_none_style_returns_empty`
+            5. `test_routing_table_uses_skill_name_in_triggers`
+
+            ## Verification Gate
+
+            ```bash
+            cargo build
+            cargo clippy -- -D warnings
+            cargo test routing_generator
+            ```
+
+            ## Constraints
+
+            - Routing table format: `| Subcommand | Reference file |`
+            - Inline breadcrumbs: `## Section — [See references/file.md when X]`
+            - Back-link headers: `<!-- Core flow: see SKILL.md section Y -->`
+          files:
+            - src/upgrade/routing_generator.rs
+          dependencies:
+            - A
+        - id: C
+          task: |
+            # Agent C: Interactive Routing Preview
+
+            ## What to Implement
+
+            Create `src/upgrade/interactive_recommender.rs` for interactive routing previews.
+
+            ## Interfaces This Agent Depends On
+
+            - All types from Agent A (RoutingDetectionResult, RoutingStyle, UpgradeOptions)
+
+            ## Interfaces This Agent Exports
+
+            - `show_interactive_preview()` function
+
+            ## Tests Required
+
+            1. `test_format_detection_summary`
+            2. `test_skip_prompt_when_routing_style_specified`
+            3. `test_format_recommendation_rationale`
+
+            ## Verification Gate
+
+            ```bash
+            cargo build
+            cargo clippy -- -D warnings
+            cargo test interactive_recommender
+            ```
+
+            ## Constraints
+
+            - Display timing only if options.show_timing is true
+            - Skip prompt if options.routing_style is already set
+            - Use eprintln! for preview output (stderr)
+          files:
+            - src/upgrade/interactive_recommender.rs
+          dependencies:
+            - A
+      base_commit: 259fc6f368be915e43b174c8717701605adb031e
+    - number: 3
+      agents:
+        - id: D
+          task: |
+            # Agent D: Integration & CLI Wiring
+
+            ## What to Implement
+
+            Wire routing detection and generation into upgrade command flow.
+            Add CLI flags, integrate with splitter, write integration tests.
+
+            ## Interfaces This Agent Depends On
+
+            - `routing_detector::detect_routing_patterns()` (Agent A)
+            - `routing_generator::generate_routing()` (Agent B)
+            - `interactive_recommender::show_interactive_preview()` (Agent C)
+            - All routing types (Agent A)
+
+            ## Changes Required
+
+            ### 1. src/commands/upgrade.rs
+            Add CLI flags:
+            ```rust
+            #[arg(long, value_name = "STYLE")]
+            pub routing_style: Option<String>,
+
+            #[arg(long)]
+            pub timing: bool,
+
+            #[arg(long, default_value = "true")]
+            pub back_links: bool,
+            ```
+
+            ### 2. src/upgrade/mod.rs
+            Add module declarations:
+            ```rust
+            pub mod routing_detector;
+            pub mod routing_generator;
+            pub mod interactive_recommender;
+            ```
+
+            Insert routing detection before splitter (after Step 1):
+            ```rust
+            // Step 1.5: Detect routing patterns
+            let detection = routing_detector::detect_routing_patterns(skill_path, options)?;
+
+            // Step 1.6: Interactive preview (if enabled)
+            let routing_style = if options.interactive.unwrap_or(false) {
+                interactive_recommender::show_interactive_preview(&detection, options)?
+                    .unwrap_or(detection.recommended_style)
+            } else {
+                options.routing_style.unwrap_or(detection.recommended_style)
+            };
+
+            // Step 1.7: Generate routing artifacts
+            let skill_name = extract_skill_name(&content)?;
+            let routing_output = routing_generator::generate_routing(&detection, routing_style, &skill_name)?;
+
+            // Step 2: Split content (pass routing_output)
+            let split_result = splitter::split_content(skill_path, &analysis, detection.analyzer, Some(&routing_output)).await?;
+            ```
+
+            ### 3. src/upgrade/splitter.rs
+            Modify signature:
+            ```rust
+            pub async fn split_content(
+                skill_path: &Path,
+                analysis: &BloatAnalysis,
+                analyzer: Option<Box<dyn SemanticAnalyzer>>,
+                routing: Option<&RoutingOutput>,
+            ) -> Result<SplitResult, Error>
+            ```
+
+            Integration logic:
+            - Prepend routing_table to core SKILL.md if present
+            - Use routing.inline_breadcrumbs instead of generate_breadcrumb calls
+            - Prepend back_link_headers to reference files
+
+            ### 4. tests/routing_integration_test.rs (new)
+            End-to-end tests:
+            ```rust
+            #[tokio::test]
+            async fn test_upgrade_with_routing_table_style()
+
+            #[tokio::test]
+            async fn test_upgrade_with_inline_style()
+
+            #[tokio::test]
+            async fn test_upgrade_with_back_links_disabled()
+            ```
+
+            ## Tests Required
+
+            Integration tests + verify existing tests pass (no regressions).
+
+            ## Verification Gate
+
+            ```bash
+            cargo build
+            cargo clippy -- -D warnings
+            cargo test --all
+            ```
+
+            ## Constraints
+
+            - Preserve existing splitter behavior when routing=None (backwards compatibility)
+            - --routing-style values: "smart", "inline", "table", "none" (case-insensitive)
+            - Do not break existing tests
+          files:
+            - src/commands/upgrade.rs
+            - src/upgrade/mod.rs
+            - src/upgrade/splitter.rs
+            - tests/routing_integration_test.rs
+          dependencies:
+            - A
+            - B
+            - C
+          context_source: prepared-brief
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: cargo build --all
+          required: true
+        - type: format
+          command: cargo fmt --check
+          required: false
+          fix: true
+        - type: lint
+          command: cargo clippy -- -D warnings
+          required: true
+        - type: test
+          command: cargo test --all
+          required: true
+completion_reports:
+    A:
+        status: complete
+        branch: main
+        commit: 259fc6f
+        files_changed:
+            - src/models.rs
+            - src/upgrade/routing_detector.rs
+            - src/upgrade/mod.rs
+            - src/commands/upgrade.rs
+        files_created:
+            - src/upgrade/routing_detector.rs
+        tests_added:
+            - test_detect_patterns_recommends_inline_for_few_subcommands
+            - test_detect_patterns_recommends_table_for_many_subcommands
+            - test_classify_timing_sections_invocation
+            - test_classify_timing_sections_runtime
+            - test_detect_patterns_with_no_semantic_analyzer
+            - test_detect_patterns_handles_missing_fields
+        verification: PASS
+        notes: Core routing detection complete. All 6 tests passing. Added RoutingStyle enum, RoutingDetectionResult, TimingSection, RoutingOutput, InlineBreadcrumb types to models.rs. Extended UpgradeOptions with routing_style, show_timing, back_links fields. Implemented detect_routing_patterns() using existing pattern_detector functions. Mechanical section classification implemented - semantic analysis integration deferred to Agent B (routing generator). Modified src/commands/upgrade.rs and src/upgrade/mod.rs test files to use ..Default::default() pattern for UpgradeOptions initialization (necessary to make code compile after adding required fields).
+    B:
+        status: complete
+        branch: saw/agentskills-routing-generation/wave2-agent-B
+        commit: 0d1dddb4420e25be80c3407e1f73c4d659672c6f
+        files_changed:
+            - src/upgrade/routing_generator.rs
+            - src/upgrade/mod.rs
+        files_created:
+            - src/upgrade/routing_generator.rs
+        tests_added:
+            - test_generate_routing_table_format
+            - test_generate_inline_breadcrumbs_for_runtime_sections
+            - test_generate_back_link_headers_with_core_reference
+            - test_generate_routing_none_style_returns_empty
+            - test_routing_table_uses_skill_name_in_triggers
+        verification: PASS
+        notes: 'Routing generator implementation complete. All 5 required tests passing. Implements routing table generation (markdown format with subcommand triggers), inline breadcrumbs for runtime sections, and back-link headers for reference files. Supports all routing styles: Table, Inline, Smart (auto-select), and None.'
+    C:
+        status: complete
+        branch: saw/agentskills-routing-generation/wave2-agent-C
+        commit: 8c91cbf
+        files_changed:
+            - src/upgrade/interactive_recommender.rs
+            - src/upgrade/mod.rs
+        files_created:
+            - src/upgrade/interactive_recommender.rs
+        tests_added:
+            - test_format_detection_summary
+            - test_skip_prompt_when_routing_style_specified
+            - test_format_recommendation_rationale
+        verification: PASS
+        notes: 'Implemented show_interactive_preview() with user confirmation flow. Added helper functions for formatting detection summary and recommendation rationale. All constraints respected: timing display conditional on show_timing flag, prompt skip when routing_style is pre-configured, stderr output via eprintln!. All 3 required tests passing.'
+    D:
+        status: complete
+        branch: main
+        commit: be3f3bf
+        files_changed:
+            - src/commands/upgrade.rs
+            - src/upgrade/mod.rs
+            - src/upgrade/splitter.rs
+        files_created:
+            - tests/routing_integration_test.rs
+        tests_added:
+            - test_upgrade_with_routing_table_style
+            - test_upgrade_with_inline_style
+            - test_upgrade_with_back_links_disabled
+            - test_upgrade_backwards_compatibility
+            - test_routing_style_parsing_case_insensitive
+            - test_timing_flag
+            - test_back_links_default
+        verification: PASS
+        notes: CLI wiring complete. Added --routing-style, --timing, --back-links flags. Integrated routing detection (step 1.5), interactive preview (step 1.6), and routing generation (step 1.7) into upgrade flow. Modified splitter to accept routing artifacts and use inline breadcrumbs, back-link headers, and routing table. All 7 integration tests passing. Build/lint/test gates passed. Backwards compatible when routing=None.
+pre_mortem:
+    overall_risk: medium
+    rows:
+        - scenario: Routing table format doesn't match saw-skill.md proven pattern
+          likelihood: medium
+          impact: high
+          mitigation: Agent B tests must verify exact markdown table structure. Scout extracted example from saw-skill.md lines 118-141 as reference.
+        - scenario: Splitter integration breaks existing upgrade flow
+          likelihood: medium
+          impact: high
+          mitigation: Agent D preserves existing splitter behavior when routing=None. Run full test suite (cargo test --all) to catch regressions.
+        - scenario: Wave 2 agents start before Agent A completes type definitions
+          likelihood: low
+          impact: high
+          mitigation: Agents B and C explicitly depend on Agent A. Orchestrator must enforce cross-wave dependencies (I2).
+        - scenario: Interactive mode UX is confusing
+          likelihood: low
+          impact: medium
+          mitigation: Agent C follows established patterns from commands/upgrade.rs (lines 54-72). Manual testing required before merge.
+state: COMPLETE
+injection_method: hook
