@@ -99,3 +99,5 @@
   - IMPL doc: docs/IMPL/complete/IMPL-saw-skill-phase1.yaml
 - **friction-fixes-phase1-execution**: completed 2026-03-28, 2 waves, 6 agents
   - IMPL doc: docs/IMPL/complete/IMPL-friction-fixes-phase1-execution.yaml
+- **quality-gate-parallelization**: completed 2026-03-28, 3 waves, 4 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-quality-gate-parallelization.yaml
