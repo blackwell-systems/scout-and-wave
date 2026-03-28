@@ -59,15 +59,13 @@ Issues discovered during first real PROGRAM execution (unification-phase3, 2026-
 
 Each item specifies SDK (engine function in `scout-and-wave-go`), CLI (`sawtools` command), and Web (API route + UI in `scout-and-wave-web`) implementation scope. The pattern: SDK provides business logic, CLI and Web are thin I/O wrappers over the same SDK function.
 
-### P1: `prepare-wave` Branch Restoration (Critical)
+### ~~P1: `prepare-wave` Branch Restoration~~ ✅ FIXED
 
-`prepare-wave` checks out the merge-target branch for baseline verification but never restores the original branch. Leaves HEAD on a transient IMPL branch, causing downstream chaos when the orchestrator makes inline fixes on the wrong branch. **Must fix before P7** — wrong-branch state affects P7's worktree/branch detection logic.
+**Status:** Fixed in scout-and-wave-go@ad87f05
 
-| Layer | Scope |
-|-------|-------|
-| **SDK** | No engine-level `PrepareWave` function exists yet — the logic is in the CLI command. Either: (a) extract `PrepareWave` into `pkg/engine/wave_prepare.go` with branch save/restore built in, or (b) fix directly in `cmd/sawtools/prepare_wave.go` lines 222-226 (the `--merge-target` checkout path). Save `git branch --show-current` before checkout, restore with `git checkout <saved>` in a `defer` after baseline verification completes (success or failure). Add `OriginalBranch string` to the CLI's `PrepareWaveResult` for observability. |
-| **CLI** | `cmd/sawtools/prepare_wave.go` — primary fix location. The checkout + restore logic lives here. |
-| **Web** | `pkg/api/wave_runner.go` — if SDK extraction (option a), web calls the same function. If CLI-only fix (option b), web's `runPrepareWave` needs the same save/restore pattern. Add `original_branch` field to SSE `wave_prepare_complete` event. |
+`prepare-wave` now saves the current branch before checking out merge-target and restores it via defer on all exit paths (success or failure). Added `OriginalBranch` field to `PrepareWaveResult` for observability.
+
+**Implementation:** `pkg/engine/prepare.go` lines 253-265 — saves branch with `git branch --show-current`, deferred restore in all cases. `pkg/engine/step_types.go` line 40 — added `OriginalBranch string` field to result struct.
 
 ### P2: Cross-Repo Build in `finalize-wave`
 
