@@ -2,7 +2,6 @@
 name: saw
 description: "Parallel agent coordination: Scout analyzes the codebase and produces a plan; Wave agents implement in parallel. Use for multi-package features, parallel refactors, coordinated changes."
 argument-hint: "[bootstrap <project-name> | interview <description> | scout [--model <m>] <feature> | wave [--impl <id>] [--auto] [--model <m>] | status [--impl <id>]]"
-disable-model-invocation: true
 user-invocable: true
 allowed-tools: |
   Read, Write, Glob, Grep, Bash(git *), Bash(cd *), Bash(mkdir *),
