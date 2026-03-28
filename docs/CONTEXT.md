@@ -95,3 +95,5 @@
   - IMPL doc: docs/IMPL/complete/IMPL-hook-worktree-isolation.yaml
 - **integration-agent-cli-workflow**: completed 2026-03-28, 1 waves, 4 agents
   - IMPL doc: docs/IMPL/complete/IMPL-integration-agent-cli-workflow.yaml
+- **saw-skill-phase1**: completed 2026-03-28, 1 waves, 2 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-saw-skill-phase1.yaml

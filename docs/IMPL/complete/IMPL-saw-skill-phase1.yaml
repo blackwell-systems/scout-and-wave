@@ -1,0 +1,387 @@
+completion_date: "2026-03-28"
+title: saw-skill.md Optimization Phase 1
+feature_slug: saw-skill-phase1
+verdict: SUITABLE
+suitability_assessment: |
+    Phase 1 optimization of saw-skill.md per roadmap (lines 13-138 in saw-skill-optimization-roadmap.md).
+    Two high-priority items: extract integration gap detection workflow (§1a) and create sawtools
+    resolve-impl command (§2a).
+
+    **Suitability Gate Results:**
+
+    1. **File decomposition**: YES — Work cleanly separates into 4 files across 3 repos:
+       - Protocol repo: saw-skill.md (§1a + §2a updates), new reference file (§1a)
+       - Go SDK repo: new resolve_impl_cmd.go (§2a)
+       - Symlinks via install.sh automatically propagate changes
+       No conflicting modifications — disjoint ownership achieved.
+
+    2. **Investigation-first items**: NO — Purely mechanical extraction and command creation.
+       No unknowns. Line numbers and file paths are all specified in roadmap.
+
+    3. **Interface discoverability**: YES — JSON schema for resolve-impl already specified in
+       roadmap (lines 110-118). Reference file content is prose documentation with no
+       cross-agent interfaces. No coordination issues.
+
+    4. **Pre-implementation status**: Manual inspection shows:
+       - integration-gap-detection.md does NOT exist (new file)
+       - resolve-impl command does NOT exist (checked cmd/sawtools/main.go, no reference)
+       - impl-targeting.md EXISTS but does not reference resolve-impl script
+       Status: All work is TODO. No partial implementations.
+
+    5. **Parallelization value check**:
+       - Build/test cycle: Go SDK has ~30s test cycle (go test ./...)
+       - Files per agent: 2 agents × 2 files avg = high implementation time
+       - Agent independence: Wave 1 agents are fully independent (§1a and §2a touch different files)
+       - Task complexity: Code generation + documentation — non-trivial
+       **Assessment**: Clear speedup. Wave 1 parallelizes two independent tasks (10 min sequential → 5 min parallel).
+
+    **Estimated times:**
+    - Scout phase: ~5 min (simple 2-agent structure, no complex dependencies)
+    - Agent execution: ~5 min (2 agents × 4 min avg, fully parallel in Wave 1)
+    - Merge & verification: ~3 min (quality gates, build + test)
+    Total SAW time: ~13 min
+
+    Sequential baseline: ~18 min (2 agents × 9 min avg with context switches)
+    Time savings: ~5 min (28% faster)
+
+    **Recommendation**: Clear speedup. Parallelization benefit outweighs coordination overhead.
+    Work is well-specified with no unknowns. Proceed with SAW.
+test_command: |
+    # Protocol repo tests
+    cd /Users/dayna.blackwell/code/scout-and-wave
+    echo "Protocol repo has no automated tests (docs only)"
+
+    # Go SDK tests
+    cd /Users/dayna.blackwell/code/scout-and-wave-go
+    go test ./cmd/sawtools/... ./pkg/protocol/...
+lint_command: |
+    # Go SDK lint
+    cd /Users/dayna.blackwell/code/scout-and-wave-go
+    go vet ./cmd/sawtools/... ./pkg/protocol/...
+file_ownership:
+    - file: implementations/claude-code/prompts/references/integration-gap-detection.md
+      agent: A
+      wave: 1
+      action: new
+      repo: scout-and-wave
+    - file: implementations/claude-code/prompts/saw-skill.md
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: cmd/sawtools/resolve_impl_cmd.go
+      agent: B
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: cmd/sawtools/main.go
+      agent: B
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: implementations/claude-code/prompts/references/impl-targeting.md
+      agent: B
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+interface_contracts:
+    - name: ResolveImplData
+      description: JSON output schema for sawtools resolve-impl command
+      definition: |
+        // ResolveImplData is the structured JSON output for resolve-impl command.
+        // Used by orchestrator to parse IMPL targeting flags and auto-select logic.
+        type ResolveImplData struct {
+          ImplPath         string `json:"impl_path"`          // Absolute path to IMPL doc
+          Slug             string `json:"slug"`               // Feature slug
+          ResolutionMethod string `json:"resolution_method"`  // "auto-select" | "explicit-slug" | "explicit-filename" | "explicit-path"
+          PendingCount     int    `json:"pending_count"`      // Number of pending IMPLs found (for diagnostics)
+        }
+      location: cmd/sawtools/resolve_impl_cmd.go (scout-and-wave-go)
+    - name: newResolveImplCmd
+      description: Cobra command factory for resolve-impl CLI command
+      definition: |
+        // newResolveImplCmd returns a cobra.Command that implements IMPL doc resolution logic.
+        // Parses --impl flag (slug, filename, or path) and auto-selects if exactly 1 pending IMPL exists.
+        // Always returns JSON (ResolveImplData) on success.
+        func newResolveImplCmd() *cobra.Command
+      location: cmd/sawtools/resolve_impl_cmd.go (scout-and-wave-go)
+    - name: integration-gap-detection.md
+      description: Reference file documenting E25/E26/E35 integration gap detection workflow
+      definition: |
+        # Integration Gap Detection (E25/E26/E35)
+
+        **Trigger:** After `sawtools finalize-wave` succeeds.
+
+        ## 7-Step Workflow
+
+        1. Check `finalize-wave` JSON output for `integration_report.valid` field
+        2. If `valid == false`, integration gaps were detected
+        3. Read stderr output for gap summary and next-step guidance
+        4. Run the command shown in stderr (typically: `sawtools run-integration-agent "<manifest-path>" --wave <N>`)
+        5. Read integration agent's completion report from IMPL doc (agent ID: `integrator`)
+        6. If completion report shows `status: complete`, proceed to next wave or IMPL completion
+        7. If `status: blocked` or `status: partial`, apply E19 failure routing (see `references/failure-routing.md`)
+
+        ## Integration Agent Model Config
+
+        Integration agent model is read from `saw.config.json` under `agent.integration_model`.
+        If empty, inherits parent session's model.
+
+        ## E27 Planned Integration Waves
+
+        If the IMPL doc includes a wave with `type: integration`, use `sawtools run-integration-wave`
+        instead of reactive gap detection. Planned integration waves run before gap detection.
+      location: implementations/claude-code/prompts/references/integration-gap-detection.md (scout-and-wave)
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## Agent A: Extract Integration Gap Detection Reference
+
+            **Role:** Extract the E25/E26/E35 integration gap detection workflow from saw-skill.md
+            into a new reference file, following progressive disclosure pattern.
+
+            **What to Implement:**
+
+            Create `implementations/claude-code/prompts/references/integration-gap-detection.md`:
+            - Extract 7-step workflow from saw-skill.md lines 177-188 (step 8a)
+            - Include "Integration Agent Model Config" section (saw.config.json reference)
+            - Include "E27 Planned Integration Waves" distinction
+            - Use markdown heading structure for clarity
+            - Add YAML frontmatter documenting trigger condition
+
+            Update `implementations/claude-code/prompts/saw-skill.md`:
+            - Replace lines 177-188 with one-line reference to new file:
+              "After finalization succeeds, read `references/integration-gap-detection.md` for
+              the 7-step E25/E26/E35 integration gap detection workflow."
+            - Preserve line 189 (E27 comment about planned integration waves)
+            - Maintain surrounding context (lines 176 and 190+)
+
+            **Interfaces/Contracts:**
+            - Reference file path: `references/integration-gap-detection.md`
+            - File is auto-symlinked by install.sh Phase 1 (lines 84-90) — no install.sh changes needed
+            - Loaded on-demand by orchestrator when `finalize-wave` returns `integration_report.valid == false`
+
+            **Tests:**
+            None — documentation file, validated by E16 hook on Write.
+
+            **Verification Gate:**
+            ```bash
+            # Verify reference file exists and is well-formed
+            test -f implementations/claude-code/prompts/references/integration-gap-detection.md
+            grep -q "7-Step Workflow" implementations/claude-code/prompts/references/integration-gap-detection.md
+
+            # Verify saw-skill.md references it
+            grep -q "references/integration-gap-detection.md" implementations/claude-code/prompts/saw-skill.md
+
+            # Verify line count reduction (~10 lines saved)
+            LINES=$(wc -l < implementations/claude-code/prompts/saw-skill.md)
+            test "$LINES" -lt 190
+            ```
+
+            **Constraints:**
+            - DO NOT modify install.sh (Phase 1 already symlinks all references/*.md files)
+            - DO NOT change the 7-step workflow semantics, only extract it
+            - DO NOT add new execution rules or modify E25/E26/E35 behavior
+            - Preserve markdown formatting for readability
+
+            **Context:**
+            Lines saved: ~10 (specified in roadmap line 46)
+            Pattern: Progressive disclosure (detail loads on-demand when gaps occur)
+            Cross-repo: Protocol repo only (scout-and-wave)
+          files:
+            - implementations/claude-code/prompts/references/integration-gap-detection.md
+            - implementations/claude-code/prompts/saw-skill.md
+        - id: B
+          task: |
+            ## Agent B: sawtools resolve-impl Command
+
+            **Role:** Create new Go CLI command to replace manual IMPL targeting logic in
+            orchestrator, enabling deterministic resolution of --impl flag values.
+
+            **What to Implement:**
+
+            Create `cmd/sawtools/resolve_impl_cmd.go`:
+            - Implement `newResolveImplCmd() *cobra.Command` function
+            - Parse `--impl <value>` flag (accepts slug, filename, or absolute/relative path)
+            - Resolution logic (in priority order):
+              1. If `--impl` is absolute path and file exists → use directly
+              2. If `--impl` is relative path → resolve from cwd, verify exists
+              3. If `--impl` is filename (IMPL-*.yaml) → resolve to `docs/IMPL/<filename>`
+              4. If `--impl` is slug → call `protocol.ListIMPLs()`, find matching `feature_slug`
+              5. If `--impl` omitted → auto-select if exactly 1 pending IMPL exists
+            - Return JSON (ResolveImplData struct) on success
+            - Exit 1 with error message on failure (multiple pending, no match, etc.)
+            - Use `protocol.ListIMPLs()` function from scout-and-wave-go/pkg/protocol/discovery.go
+
+            Update `cmd/sawtools/main.go`:
+            - Add `newResolveImplCmd()` to rootCmd.AddCommand() list (insert after newRetryCmd)
+            - No other changes needed
+
+            Update `implementations/claude-code/prompts/references/impl-targeting.md`:
+            - Add new "sawtools resolve-impl" section after "IMPL Discovery" (after line 40)
+            - Document command usage: `sawtools resolve-impl --impl <value> --repo-dir <path>`
+            - Document JSON output schema (ResolveImplData)
+            - Add note: "Orchestrator calls this command instead of manual parsing logic."
+            - Update "Integration with Orchestrator Flow" section to reference resolve-impl
+
+            **Interfaces/Contracts:**
+            - Command: `sawtools resolve-impl --impl <value> --repo-dir <path>`
+            - JSON output: ResolveImplData (see interface_contracts section above)
+            - Input: --impl flag (slug | filename | path) or omitted (auto-select)
+            - Exit codes: 0 = success, 1 = failure (no match, multiple pending, etc.)
+            - Reuses `protocol.ListIMPLs()` function (no new protocol functions needed)
+
+            **Tests:**
+            Create `cmd/sawtools/resolve_impl_cmd_test.go`:
+            - Test explicit slug resolution (finds matching IMPL)
+            - Test explicit filename resolution (resolves to docs/IMPL/)
+            - Test explicit absolute path resolution (uses directly)
+            - Test auto-select (exactly 1 pending IMPL)
+            - Test auto-select failure (multiple pending IMPLs)
+            - Test auto-select failure (no pending IMPLs)
+            - Test invalid slug (no match)
+
+            **Verification Gate:**
+            ```bash
+            # Build command
+            cd /Users/dayna.blackwell/code/scout-and-wave-go
+            go build ./cmd/sawtools
+
+            # Lint
+            go vet ./cmd/sawtools/resolve_impl_cmd.go
+
+            # Run tests
+            go test ./cmd/sawtools/resolve_impl_cmd_test.go
+
+            # Integration smoke test (requires active IMPL in protocol repo)
+            cd /Users/dayna.blackwell/code/scout-and-wave
+            sawtools resolve-impl --impl saw-skill-phase1 --repo-dir . | jq -e '.slug == "saw-skill-phase1"'
+            ```
+
+            **Constraints:**
+            - DO NOT modify protocol package (reuse existing ListIMPLs function)
+            - DO NOT change saw-skill.md (Agent A handles that in parallel)
+            - Use cobra.Command pattern matching existing sawtools commands (see list_impls.go)
+            - JSON output must be valid and match schema exactly
+            - Command must be idempotent (safe to call multiple times)
+
+            **Context:**
+            Lines saved in saw-skill.md: ~5 (specified in roadmap line 120)
+            Pattern: Determinism via scripts (eliminate manual parsing)
+            Cross-repo: Go SDK (scout-and-wave-go) + protocol repo (impl-targeting.md update)
+            Web app integration: Optional future improvement (not in this IMPL scope)
+          files:
+            - cmd/sawtools/resolve_impl_cmd.go
+            - cmd/sawtools/main.go
+            - implementations/claude-code/prompts/references/impl-targeting.md
+      base_commit: 3a1504eb798384afb1f7c6244fd47629ebb9700e
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./cmd/sawtools
+          required: true
+          repo: scout-and-wave-go
+        - type: lint
+          command: go vet ./cmd/sawtools/... ./pkg/protocol/...
+          required: true
+          repo: scout-and-wave-go
+        - type: test
+          command: go test ./cmd/sawtools/... ./pkg/protocol/...
+          required: true
+          repo: scout-and-wave-go
+completion_reports:
+    A:
+        status: complete
+        branch: saw/saw-skill-phase1/wave1-agent-A
+        commit: 4af83ff
+        files_changed:
+            - implementations/claude-code/prompts/references/integration-gap-detection.md
+            - implementations/claude-code/prompts/saw-skill.md
+        files_created:
+            - implementations/claude-code/prompts/references/integration-gap-detection.md
+        verification: PASS
+        notes: Extracted 7-step E25/E26/E35 integration gap detection workflow from saw-skill.md (lines 177-188) into new reference file. Reduced saw-skill.md from 195 to 184 lines (11 lines saved). Progressive disclosure pattern applied successfully. No install.sh changes needed - Phase 1 already symlinks all references/*.md files.
+    B:
+        status: complete
+        branch: saw/saw-skill-phase1/wave1-agent-B
+        commit: 9280ac7
+        files_changed:
+            - cmd/sawtools/resolve_impl_cmd.go
+            - cmd/sawtools/resolve_impl_cmd_test.go
+            - cmd/sawtools/main.go
+        files_created:
+            - cmd/sawtools/resolve_impl_cmd.go
+            - cmd/sawtools/resolve_impl_cmd_test.go
+        tests_added:
+            - TestResolveImplCmd_ExplicitSlug
+            - TestResolveImplCmd_ExplicitFilename
+            - TestResolveImplCmd_ExplicitAbsolutePath
+            - TestResolveImplCmd_AutoSelect
+            - TestResolveImplCmd_AutoSelectMultipleFails
+            - TestResolveImplCmd_AutoSelectNoneFails
+            - TestResolveImplCmd_InvalidSlug
+        verification: PASS
+        notes: sawtools resolve-impl command complete. Implements all resolution patterns (slug, filename, path, auto-select) with structured JSON output. All 7 tests passing. Documentation updated in protocol repo (commit 4fbd448). Integration smoke test verified. Command ready for orchestrator integration.
+integration_reports:
+    wave1:
+        wave: 1
+        gaps: []
+        valid: true
+        summary: 'Wave 1: all exports are integrated (no gaps detected)'
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: Agent A modifies saw-skill.md line numbers incorrectly (lines 177-188 are stale)
+          likelihood: medium
+          impact: low
+          mitigation: |
+            Agent A must grep for exact text "E25/E26/E35: Integration gap detection" before
+            modifying. If line numbers don't match roadmap, search for section heading and
+            update from there. Roadmap is ~2 weeks old; saw-skill.md may have changed.
+        - scenario: Agent B creates command but forgets to register in main.go
+          likelihood: low
+          impact: medium
+          mitigation: |
+            Agent B task explicitly calls out main.go registration step. Verification gate
+            includes build test — unregistered command won't appear in `sawtools --help`.
+        - scenario: Agent B resolve-impl logic doesn't match orchestrator expectations
+          likelihood: low
+          impact: medium
+          mitigation: |
+            JSON schema is binding contract. Agent B tests must verify all 3 resolution paths
+            (slug, filename, path) and auto-select behavior. Web app future integration will
+            use same schema.
+        - scenario: Cross-repo file ownership causes merge conflicts (A and B both modify install.sh)
+          likelihood: low
+          impact: low
+          mitigation: |
+            Suitability assessment confirms install.sh does NOT need changes (Phase 1 already
+            symlinks all references/*.md). Agent A task explicitly says "DO NOT modify install.sh".
+        - scenario: sawtools rebuild after merge causes web app breakage
+          likelihood: low
+          impact: low
+          mitigation: |
+            New command is CLI-only (no web app dependencies in this IMPL). Web app uses
+            protocol.ListIMPLs directly, not sawtools CLI. Future web integration is optional.
+critic_report:
+    verdict: PASS
+    agent_reviews:
+        A:
+            agent_id: A
+            verdict: ISSUES
+            issues:
+                - check: pattern_accuracy
+                  severity: warning
+                  description: 'Brief references saw-skill.md lines 177-188 for extraction. Line 177 contains the target section heading "E25/E26/E35: Integration gap detection", but line numbers may have shifted since roadmap was written. Pre-mortem (lines 296-302) already documents this risk and provides mitigation: grep for exact text instead of relying on line numbers. Section is findable but may require search.'
+                  file: implementations/claude-code/prompts/saw-skill.md
+        B:
+            agent_id: B
+            verdict: PASS
+    summary: 'Two agents reviewed for saw-skill.md optimization Phase 1. Agent A (documentation extraction) has one WARNING: line numbers in brief (177-188) may be stale due to saw-skill.md changes since roadmap was written 2 weeks ago. Pre-mortem already documents this risk and provides mitigation (grep for section text instead of line numbers). Agent B (resolve-impl command) passes all checks cleanly. All files exist as expected, all symbols are accurate, all patterns match, no missing registrations. One advisory warning does not block execution.'
+    reviewed_at: "2026-03-28T15:54:50Z"
+    issue_count: 1
+state: COMPLETE
+injection_method: hook
