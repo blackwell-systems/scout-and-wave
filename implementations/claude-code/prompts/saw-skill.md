@@ -7,7 +7,8 @@ user-invocable: true
 allowed-tools: |
   Read, Write, Glob, Grep, Bash(git *), Bash(cd *), Bash(mkdir *),
   Agent(subagent_type=scout), Agent(subagent_type=scaffold-agent),
-  Agent(subagent_type=wave-agent), Agent(subagent_type=integration-agent), Agent(subagent_type=critic-agent),
+  Agent(subagent_type=wave-agent), Agent(subagent_type=integration-agent),
+  Agent(subagent_type=critic-agent), Agent(subagent_type=planner),
   Agent(subagent_type=general-purpose)
 license: MIT OR Apache-2.0
 compatibility: Requires Claude Code (Skills API). Git 2.20+ required for worktree support.
@@ -26,6 +27,7 @@ triggers:
 agent-references:
   # Read by inject-agent-context (vendor-neutral) and validate_agent_launch hook.
   # Each entry: agent-type + inject (path relative to skill dir) + optional when (regex on prompt).
+  # scaffold-agent intentionally not listed - uses IMPL doc Scaffolds section directly.
   - agent-type: scout
     inject: references/scout-suitability-gate.md
   - agent-type: scout
@@ -75,7 +77,7 @@ You launch Scout and Wave agents; you do not do their work yourself.
 
 ## Supporting Files & References
 
-Files in `${CLAUDE_SKILL_DIR}/` (defaults to `~/.claude/skills/saw/`). Read `agent-template.md` for 9-field format. Load `saw-bootstrap.md` for bootstrap. On-demand: `/saw program *` → `program-flow.md`, `/saw amend *` → `amend-flow.md`, agent failure → `failure-routing.md`. Agent references auto-injected by `validate_agent_launch` hook (see frontmatter). Vendor-neutral fallback: `scripts/inject-agent-context --type <agent-type>`.
+Files in `${CLAUDE_SKILL_DIR}/` (defaults to `~/.claude/skills/saw/`). Read `agent-template.md` for 9-field format. Load `saw-bootstrap.md` for bootstrap. On-demand: `/saw program *` → `program-flow.md`, `/saw amend *` → `amend-flow.md`, agent failure → `failure-routing.md`. Orchestrator triggers auto-injected by `inject_skill_context` hook (see frontmatter). Agent references auto-injected by `validate_agent_launch` hook (see frontmatter). Vendor-neutral fallback: orchestrator triggers use `scripts/inject-context "$prompt"`, agent references use `scripts/inject-agent-context --type <agent-type>`.
 
 ## Invocation Modes
 
