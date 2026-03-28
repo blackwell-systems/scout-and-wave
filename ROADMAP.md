@@ -77,16 +77,20 @@ Each item specifies SDK (engine function in `scout-and-wave-go`), CLI (`sawtools
 | **CLI** | `cmd/sawtools/finalize_wave.go` — add `--cross-repo-verify` flag, pass to SDK. Include cross-repo results in JSON output. |
 | **Web** | `pkg/api/wave_runner.go` — always enable cross-repo verify in web flows (web users can't easily fix post-merge). Emit `cross_repo_verify` SSE event with per-repo pass/fail status. Add red/green indicators to wave finalization UI. |
 
-### P3: Brief Re-Validation at `prepare-wave` Time
+### P3: Stale Briefs in Pre-Existing IMPLs (Program Mode Only)
 
-IMPL briefs scouted before prerequisite tiers run go stale. Tier 1 changes function names, deletes types, and adds new APIs — but Tier 2 briefs still reference the old state. Required 20 manual replacements in repo-entry-unification.
+**Scope:** Pre-existing IMPLs (status "reviewed") imported into Tier 2+ via `import-impls`. Newly scouted IMPLs don't have this problem — E31 launches Scouts per-tier, so they see the post-Tier-1 codebase.
+
+**Problem:** Tier 1 changes function names, deletes types, and adds new APIs — but pre-existing Tier 2 briefs still reference the old state. Required 20 manual replacements in repo-entry-unification.
+
+**Root cause:** Pre-existing IMPLs skip Scout (E28A) — they were scouted outside program context and imported wholesale. Their briefs reference the codebase state at their original Scout time, not at tier-boundary time.
 
 | Layer | Scope |
 |-------|-------|
-| **SDK** | `pkg/protocol/brief_validate.go` (new) — `ValidateBriefSymbols(briefPath, repoDir string) []BriefWarning`. Parse the brief markdown for Go symbol references (function names, type names, import paths). Verify each exists in the codebase via `go doc` or grep. Return warnings for missing symbols. Non-blocking (informational). |
-| **CLI** | `cmd/sawtools/prepare_wave.go` — add `--revalidate-briefs` flag. When set, run `ValidateBriefSymbols` on each extracted brief before creating worktrees. Print warnings but don't block (briefs may reference symbols the agent will create). |
-| **Web** | `pkg/api/wave_runner.go` — always run brief validation before wave launch. Display warnings in the wave preparation UI panel. User can dismiss and proceed. |
-| **Alternative** | Add `sawtools revalidate-briefs <impl-doc> --wave N` standalone command for manual use. Re-scout Tier 2 IMPLs after Tier 1 completes (heavier but more accurate). |
+| **Protocol** | Document the limitation in `program-flow.md` E28A section: "Pre-existing IMPLs imported to Tier 2+ may have stale briefs if Tier 1 modifies their dependencies. Recommend re-scouting with `--refresh-brief` after importing." |
+| **CLI** | Add `sawtools run-scout --resume <impl-doc> --refresh-brief` flag: re-runs Scout but preserves file ownership/wave structure, only updates agent briefs to reflect current codebase state. |
+| **Orchestrator** | Add tier-boundary checklist after Tier N completes: list pre-existing IMPLs in Tier N+1, ask "These IMPLs may have stale briefs. Re-scout? (y/n)", run `--refresh-brief` if confirmed. |
+| **Alternative (rejected)** | Symbol validation at prepare-wave time: high false-positive rate (briefs may reference symbols the agent will create), doesn't fix stale briefs (user still does 20 manual replacements), language-specific. |
 
 ### P4: Cross-Tier Dependency Graph Validation
 
