@@ -38,6 +38,53 @@ sawtools list-impls --dir "<repo-path>/docs/IMPL"
 - IMPL doc selection (when `--impl` is omitted or provided)
 - Resume detection (finding interrupted sessions)
 
+## sawtools resolve-impl
+
+**Purpose:** Deterministic command-line tool to replace manual IMPL targeting logic in orchestrator. Handles all resolution patterns (slug, filename, path, auto-select) in a single command.
+
+**Command:**
+```bash
+sawtools resolve-impl --impl <value> --repo-dir <path>
+```
+
+**Behavior:**
+- Accepts `--impl` flag with slug, filename, or absolute/relative path
+- If `--impl` omitted, auto-selects when exactly 1 pending IMPL exists
+- Returns JSON (ResolveImplData) on success
+- Exits 1 with error message on failure (multiple pending, no match, etc.)
+
+**Resolution priority order:**
+1. If `--impl` is absolute path and file exists → use directly
+2. If `--impl` is relative path → resolve from cwd, verify exists
+3. If `--impl` is filename (IMPL-*.yaml) → resolve to `docs/IMPL/<filename>`
+4. If `--impl` is slug → scan pending IMPLs for matching `feature_slug`
+5. If `--impl` omitted → auto-select if exactly 1 pending IMPL exists
+
+**JSON Output Schema (ResolveImplData):**
+```json
+{
+  "impl_path": "/abs/path/to/docs/IMPL/IMPL-feature.yaml",
+  "slug": "feature-slug",
+  "resolution_method": "explicit-slug",
+  "pending_count": 3
+}
+```
+
+**Resolution method values:**
+- `"auto-select"` — Auto-selected (exactly 1 pending IMPL)
+- `"explicit-slug"` — Matched by feature_slug
+- `"explicit-filename"` — Resolved filename to docs/IMPL/
+- `"explicit-path"` — Absolute or relative path provided
+
+**Error cases:**
+- Auto-select with 0 pending IMPLs → "no pending IMPLs found"
+- Auto-select with N>1 pending IMPLs → "multiple pending IMPLs found (N), cannot auto-select"
+- Slug not found → "no pending IMPL found with slug 'X'"
+- Filename not found → "filename not found in docs/IMPL/"
+- Path does not exist → "path does not exist: X"
+
+**Orchestrator integration note:** Orchestrator calls this command instead of manual parsing logic. This eliminates ~5 lines of parsing code from saw-skill.md and ensures consistent resolution across CLI/web/API.
+
 ## IMPL Targeting (--impl Flag)
 
 For `wave` and `status` commands, parse `--impl <value>` from arguments if present.
@@ -189,7 +236,9 @@ sawtools build-retry-context --impl-doc "<path>" --wave <N> --agent <ID>
 ## Integration with Orchestrator Flow
 
 1. User invokes `/saw wave` or `/saw status`
-2. Parse `--impl` if present → resolve to absolute path
-3. If `--impl` omitted → run auto-selection logic
+2. Call `sawtools resolve-impl --impl <value>` (or omit --impl for auto-select)
+3. Parse JSON output to get `impl_path` and `slug`
 4. Run `sawtools resume-detect` → check for interrupted session
 5. Proceed with wave/status logic using resolved IMPL path
+
+**Note:** Step 2 replaces manual parsing logic. The orchestrator no longer needs to implement resolution order, path handling, or auto-selection — `resolve-impl` handles all cases deterministically.
