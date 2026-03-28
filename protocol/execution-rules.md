@@ -788,25 +788,99 @@ Exit code of `sawtools scan-stubs` is always 0 — stub detection is information
 
 ---
 
-## E21: Automated Post-Wave Verification
+## E21: Automated Post-Wave Verification (Three-Phase Execution)
 
 **Trigger:** After all wave agents in a wave report complete and after E20 stub scan, before merge.
 
-**Required Action:** If the IMPL doc contains a `## Quality Gates` section, the Orchestrator reads the configured gates and runs each command:
+**Required Action:** If the IMPL doc contains a `quality_gates` section, the Orchestrator reads the configured gates and executes them in three phases:
 
-| Gate type   | Example command              |
-|-------------|------------------------------|
-| `typecheck` | `tsc --noEmit`, `mypy .`     |
-| `test`      | `go test ./...`, `npm test`  |
-| `lint`      | `go vet ./...`, `ruff check` |
-| `custom`    | Any command in the IMPL doc  |
+### Phase 1: PRE_VALIDATION (Sequential)
+
+Gates with `phase: PRE_VALIDATION` run sequentially before validation gates. These gates typically auto-fix issues (format, lint --fix) and modify source files in place. Format gates with `fix: true` invalidate the gate cache after running so subsequent phases see the reformatted code.
+
+**CRITICAL CONSTRAINT (BLOCKER 2):** Format gates with `fix: true` MUST be placed in PRE_VALIDATION phase. The validator enforces this at gate execution time. Placing fix-mode gates in VALIDATION or POST_VALIDATION phases will cause validation errors because cache invalidation during parallel execution leads to undefined behavior.
+
+Example:
+```yaml
+quality_gates:
+  level: standard
+  gates:
+    - type: format
+      phase: PRE_VALIDATION
+      command: gofmt -w .
+      fix: true
+      required: true
+```
+
+### Phase 2: VALIDATION (Parallel)
+
+Gates with `phase: VALIDATION` (or gates with empty `phase` field, for backward compatibility) run after PRE_VALIDATION completes. Gates in the same `parallel_group` execute concurrently using goroutines. Gates with empty `parallel_group` run sequentially.
+
+Example:
+```yaml
+quality_gates:
+  level: standard
+  gates:
+    - type: typecheck
+      phase: VALIDATION
+      parallel_group: validation
+      command: go vet ./...
+      required: true
+    - type: test
+      phase: VALIDATION
+      parallel_group: validation
+      command: go test ./...
+      required: true
+    - type: lint
+      phase: VALIDATION
+      parallel_group: validation
+      command: golangci-lint run
+      required: true
+```
+
+All three gates above run simultaneously. Results are collected and reported together.
+
+### Phase 3: POST_VALIDATION (Parallel)
+
+Gates with `phase: POST_VALIDATION` run after VALIDATION completes. These gates typically review code quality but don't affect correctness (code_review, implementation_verify). Parallel execution within POST_VALIDATION follows the same `parallel_group` rules as VALIDATION.
+
+Example:
+```yaml
+quality_gates:
+  level: standard
+  gates:
+    - type: custom
+      phase: POST_VALIDATION
+      parallel_group: review
+      command: sawtools code-review --impl IMPL-feature.yaml --wave 1
+      required: false
+```
+
+### Execution Order Summary
+
+1. PRE_VALIDATION gates run sequentially (fix mode gates modify source)
+2. VALIDATION gates run in parallel groups (independent checks)
+3. POST_VALIDATION gates run in parallel groups (non-blocking reviews)
+
+Phases execute sequentially. Within each phase, gates with the same `parallel_group` run concurrently. Gates with empty `parallel_group` run sequentially in declaration order.
+
+### Backward Compatibility
+
+- Gates with empty `phase` field default to `VALIDATION`
+- Gates with empty `parallel_group` run sequentially (no behavior change)
+- Existing IMPL docs continue to work without modification
+
+### Thread Safety
+
+The gate cache (`pkg/gatecache`) is protected by `sync.RWMutex` to ensure concurrent gate execution does not cause data races. Multiple goroutines can read from the cache simultaneously (RLock), but cache writes and invalidations acquire exclusive locks (Lock).
+
+### Required vs. Advisory Gates
 
 For each gate:
 - `required: true` — non-zero exit code **blocks merge**. Report failure to user.
 - `required: false` — non-zero exit code is a **warning only**. Log and continue.
 
-**Flow levels** (set in `## Quality Gates` section):
-- `quick`, `standard`, `full` — stored in the manifest for operator reference, but not currently used to filter gate execution. All gates run regardless of level; `required: true/false` on each gate controls blocking vs. warning behavior.
+This applies across all phases. A failed PRE_VALIDATION gate with `required: true` blocks execution of VALIDATION and POST_VALIDATION phases.
 
 ### Format Gate Fix Mode
 
@@ -816,20 +890,7 @@ Quality gates with `fix: true` in their configuration run in **fix mode** — th
 2. Report pass/fail based on exit code (0 = pass)
 3. Invalidate the gate cache so subsequent gates see the reformatted files
 
-Note: Fix-mode gates modify files in-place but do not `git add` or commit — that is the caller's responsibility. Gates run in **declaration order** from the IMPL doc; the engine does not auto-sort fix-mode gates ahead of check-only gates. To ensure formatting runs before lint/test, list fix-mode gates first in the IMPL doc.
-
-**When to use fix mode:**
-- Formatting tools with deterministic, safe auto-fix (gofmt, prettier, black)
-- Import sorting tools (goimports, isort)
-
-**When NOT to use fix mode:**
-- Linters with opinionated auto-fix that may change logic (eslint --fix with non-style rules)
-- Test commands (never fix mode)
-- Build commands (never fix mode)
-
-**Default:** `fix: false`. Gates are check-only unless explicitly configured with `fix: true`.
-
-**Out of scope:** AI Verification Gate (an agent that reviews implementation correctness). Subprocess-based gates only.
+**CRITICAL:** Fix-mode gates MUST be placed in PRE_VALIDATION phase. The validator enforces this constraint. Fix-mode gates modify files in-place but do not `git add` or commit — that is the caller's responsibility.
 
 **Closed-loop gate retry (CLI path only):** When a required pre-merge gate fails, `sawtools finalize-wave` automatically calls `engine.ClosedLoopGateRetry` (up to 2 retries) before reporting failure. The retry spawns a repair agent that receives the gate output and attempts to fix the failing code in the agent's worktree. If the retry succeeds, gates are re-run to confirm before merge proceeds. This auto-retry is a CLI-only behavior — the engine path (`engine.FinalizeWave`) does not retry automatically.
 
@@ -837,7 +898,9 @@ Note: Fix-mode gates modify files in-place but do not `git add` or commit — th
 
 **Rationale:** Individual agents run gates in isolation (their own package scope). The orchestrator's post-wave gate runs unscoped — catching cross-package cascade failures that agent-scoped gates miss.
 
-**Related Rules:** See E20 (stub detection), E22 (scaffold build verification), `message-formats.md` (## Quality Gates Section Format). See also E21A (pre-wave baseline), E21B (parallel gate execution).
+### Related Rules
+
+See E21A (pre-wave baseline verification), E21B (parallel gate execution within phase), message-formats.md (Quality Gates Section Format)
 
 ---
 
