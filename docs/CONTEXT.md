@@ -93,3 +93,5 @@
   - IMPL doc: docs/IMPL/complete/IMPL-agentskills-routing-generation.yaml
 - **hook-worktree-isolation**: completed 2026-03-27, 3 waves, 7 agents
   - IMPL doc: docs/IMPL/complete/IMPL-hook-worktree-isolation.yaml
+- **integration-agent-cli-workflow**: completed 2026-03-28, 1 waves, 4 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-integration-agent-cli-workflow.yaml
