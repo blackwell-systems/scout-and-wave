@@ -97,3 +97,5 @@
   - IMPL doc: docs/IMPL/complete/IMPL-integration-agent-cli-workflow.yaml
 - **saw-skill-phase1**: completed 2026-03-28, 1 waves, 2 agents
   - IMPL doc: docs/IMPL/complete/IMPL-saw-skill-phase1.yaml
+- **friction-fixes-phase1-execution**: completed 2026-03-28, 2 waves, 6 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-friction-fixes-phase1-execution.yaml

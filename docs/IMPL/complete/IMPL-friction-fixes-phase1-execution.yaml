@@ -1,0 +1,554 @@
+completion_date: "2026-03-28"
+title: Fix Phase 1 Execution Friction Points
+feature_slug: friction-fixes-phase1-execution
+verdict: SUITABLE
+suitability_assessment: |
+    All five suitability gate questions resolve cleanly:
+
+    **Q1: File decomposition** — Yes. 4 friction items map to 8 distinct files across 2 repos
+    with no conflicts. Agents A/D/E (Wave 1) work in scout-and-wave-go. Agents B/C (Wave 2)
+    work in scout-and-wave-go. Agent F (Wave 2) works in scout-and-wave (protocol docs only).
+
+    **Q2: Investigation-first** — No investigation needed. All issues have known root
+    causes from dogfooding execution. F2: prepare-wave blocks on "ISSUES" verdict without
+    checking severity (ROADMAP P5). F3: close-impl state transition warning. F4: finalize-wave
+    single-repo limitation.
+
+    **Q3: Interface discoverability** — Yes. F2 requires CriticGatePasses helper (Wave 1
+    Agent A), consumed by Wave 2 Agents B/C. F3 and F4 are independent changes.
+
+    **Q4: Pre-implementation status check** — All TODO except F1. F1 already implemented
+    (set-impl-state command exists at cmd/sawtools/set_impl_state_cmd.go). F2/F3/F4 confirmed
+    missing via grep.
+
+    **Q5: Parallelization value** — High. Wave 1: 3 parallel agents (A/D/E) × 5 min = 15 min
+    wall time. Wave 2: 3 parallel agents (B/C/F) × 4 min = 4 min wall time. Sequential would
+    be 6 agents × 6 min = 36 min. SAW overhead ~8 min. Net: 27 min SAW vs 36 min sequential,
+    25% faster. Agent F (docs) runs alongside B/C with no additional wall time.
+
+    **Estimated times:**
+    - Scout phase: ~3 min (8 files, 1 interface contract)
+    - Wave 1 execution: ~15 min (3 agents × 5 min avg, parallel)
+    - Wave 2 execution: ~4 min (3 agents × 4 min avg, parallel; B/C wait for A, F waits for A/D/E)
+    - Merge & verification: ~4 min (2 waves)
+    Total SAW time: ~26 min
+
+    Sequential baseline: ~36 min (6 agents × 6 min avg sequential time)
+    Time savings: ~10 min (28% faster)
+
+    Recommendation: Marginal speed gains, but coordination value justifies SAW.
+test_command: go test ./... -timeout 120s
+lint_command: go vet ./...
+file_ownership:
+    - file: pkg/protocol/critic_gate.go
+      agent: A
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: cmd/sawtools/prepare_wave.go
+      agent: B
+      wave: 2
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/protocol/program_tier_prepare.go
+      agent: C
+      wave: 2
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/protocol/state_transition.go
+      agent: D
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: cmd/sawtools/finalize_wave.go
+      agent: E
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: protocol/state-machine.md
+      agent: F
+      wave: 2
+      action: modify
+      repo: scout-and-wave
+    - file: ROADMAP.md
+      agent: F
+      wave: 2
+      action: modify
+      repo: scout-and-wave
+    - file: protocol/message-formats.md
+      agent: F
+      wave: 2
+      action: modify
+      repo: scout-and-wave
+interface_contracts:
+    - name: CriticGatePasses
+      description: |
+        Shared helper function for E37 critic gate enforcement. Encapsulates the
+        severity-aware logic: PASS always passes, ISSUES with warnings-only passes
+        in auto mode, ISSUES with any errors always blocks. Defined by Agent A (Wave 1),
+        consumed by Agents B and C (Wave 2).
+      definition: |
+        func CriticGatePasses(m *IMPLManifest, autoMode bool) bool {
+          if m.CriticReport == nil {
+            return false // No critic report found — block
+          }
+          if m.CriticReport.Verdict == CriticVerdictPass {
+            return true
+          }
+          if m.CriticReport.Verdict != CriticVerdictIssues {
+            return false // Unknown verdict — block
+          }
+          // Verdict is ISSUES — check severity of all issues
+          hasError := false
+          for _, review := range m.CriticReport.AgentReviews {
+            for _, issue := range review.Issues {
+              if issue.Severity == CriticSeverityError {
+                hasError = true
+                break
+              }
+            }
+            if hasError {
+              break
+            }
+          }
+          if hasError {
+            return false // ISSUES with errors — block
+          }
+          // ISSUES with warnings only
+          if autoMode {
+            return true // Auto mode — proceed
+          }
+          return false // Manual mode — surface to user
+        }
+      location: pkg/protocol/critic_gate.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## Agent A: Create CriticGatePasses Helper (F2 SDK Foundation)
+
+            **What to implement:** New file `pkg/protocol/critic_gate.go` containing the
+            `CriticGatePasses(m *IMPLManifest, autoMode bool) bool` helper function.
+            This is the shared E37 enforcement logic for both prepare-wave and prepare-tier.
+
+            **Interface contract:** Implement the `CriticGatePasses` signature exactly as
+            shown in interface_contracts above. Return `true` when the critic gate passes
+            (PASS verdict, or ISSUES with warnings-only in auto mode), `false` otherwise.
+
+            **Tests:** Create `pkg/protocol/critic_gate_test.go` with test cases:
+            - `TestCriticGatePasses_PassVerdict` — PASS verdict returns true
+            - `TestCriticGatePasses_IssuesWithErrorsBlocks` — ISSUES with severity:error returns false
+            - `TestCriticGatePasses_IssuesWithWarningsOnlyAutoMode` — ISSUES with severity:warning returns true when autoMode=true
+            - `TestCriticGatePasses_IssuesWithWarningsOnlyManualMode` — ISSUES with severity:warning returns false when autoMode=false
+            - `TestCriticGatePasses_NoCriticReport` — nil CriticReport returns false
+            - `TestCriticGatePasses_MixedSeverity` — ISSUES with 2 warnings + 1 error returns false
+
+            **Verification gate:**
+            ```bash
+            cd $SAW_WORKTREE_ROOT
+            go build ./pkg/protocol
+            go test ./pkg/protocol -run TestCriticGatePasses
+            go vet ./pkg/protocol
+            ```
+
+            **Constraints:**
+            - Use existing `CriticVerdictPass`, `CriticVerdictIssues`, `CriticSeverityError`, `CriticSeverityWarning` constants from `pkg/protocol/critic.go`
+            - Function must be exported (capital C in `CriticGatePasses`)
+            - No dependencies on engine or cmd packages (this is protocol-layer logic)
+            - Handle nil manifest.CriticReport gracefully (return false)
+          files:
+            - pkg/protocol/critic_gate.go
+        - id: D
+          task: |
+            ## Agent D: Fix F3 (REVIEWED → COMPLETE State Transition)
+
+            **What to implement:** Add REVIEWED → COMPLETE to allowed state transitions.
+            This handles the close-impl case where Scout completes (REVIEWED) but no waves
+            execute, so the IMPL goes directly to COMPLETE.
+
+            **Current code location:** `pkg/protocol/state_transition.go` line 30 (the
+            `StateReviewed` entry in `allowedTransitions` map).
+
+            **Implementation steps:**
+            1. Find the `allowedTransitions` map at line 26
+            2. Update the `StateReviewed` entry (line 30) to include `StateComplete`:
+               ```go
+               StateReviewed: {StateScaffoldPending, StateWavePending, StateWaveExecuting, StateBlocked, StateComplete},
+               ```
+            3. Add documentation comment explaining the REVIEWED → COMPLETE transition:
+               ```go
+               // StateReviewed allows direct transition to COMPLETE for close-impl
+               // without wave execution (e.g., NOT_SUITABLE after review, or manual closure)
+               ```
+
+            **Tests:** Update `pkg/protocol/state_transition_test.go` to verify:
+            - REVIEWED → COMPLETE transition is allowed
+            - SetImplState(manifest, StateComplete, opts) succeeds when current state is REVIEWED
+
+            **Verification gate:**
+            ```bash
+            cd $SAW_WORKTREE_ROOT
+            go build ./pkg/protocol
+            go test ./pkg/protocol -run TestSetImplState
+            go vet ./pkg/protocol
+            ```
+
+            **Constraints:**
+            - Only modify the `allowedTransitions` map, do NOT change SetImplState logic
+            - Preserve all existing transitions for StateReviewed
+            - Add inline comment documenting the REVIEWED → COMPLETE use case
+          files:
+            - pkg/protocol/state_transition.go
+        - id: E
+          task: |
+            ## Agent E: Implement F4 (Cross-Repo finalize-wave Support)
+
+            **What to implement:** Update `cmd/sawtools/finalize_wave.go` to detect
+            cross-repo waves (multiple distinct `repo:` values in file_ownership) and run
+            merge-agents + verify-build per repo, aggregating results.
+
+            **Current limitation:** finalize-wave runs in one repo, can't find commits from
+            other repos. The `extractReposFromManifest` helper already exists (line 578)
+            but is only used for worktree detection, not for merge aggregation.
+
+            **Implementation steps:**
+            1. Locate the MergeAgents section (lines 437-457, Step 4)
+            2. The code already loops over repos at line 442 — verify it merges per repo:
+               ```go
+               for repoKey, repoPath := range repos {
+                 mergeRes, err := protocol.MergeAgents(manifestPath, waveNum, repoPath, mergeTarget)
+                 if err != nil {
+                   return fmt.Errorf("finalize-wave: merge-agents failed in %s: %w", repoKey, err)
+                 }
+                 // Store result per repo
+                 result.MergeResult[repoKey] = &mergeResult
+               }
+               ```
+            3. If the loop is missing or incomplete, add it. The pattern matches VerifyCommits (line 204) and VerifyBuild (line 474).
+            4. Ensure `result.MergeResult` is populated per repo (already declared as `map[string]*protocol.MergeAgentsData` at line 29)
+
+            **Tests:** No new test file needed. Manually test with a cross-repo IMPL doc
+            (e.g., saw-skill-phase1 which has scout-and-wave + scout-and-wave-go repos).
+
+            **Verification gate:**
+            ```bash
+            cd $SAW_WORKTREE_ROOT
+            go build ./cmd/sawtools
+            go vet ./cmd/sawtools
+            ```
+
+            **Constraints:**
+            - Preserve existing single-repo behavior (when `len(repos) == 1`)
+            - Use `extractReposFromManifest` return value (already called at line 80)
+            - Store per-repo merge results in `result.MergeResult[repoKey]`
+            - Aggregate failures: any repo merge failure returns error
+            - Do NOT change verify-build logic (already multi-repo aware at line 474)
+          files:
+            - cmd/sawtools/finalize_wave.go
+      base_commit: be6ceb07405509b64d972b5974b61ba82d136462
+    - number: 2
+      agents:
+        - id: B
+          task: |
+            ## Agent B: Update prepare-wave CLI for F2 (E37 Severity-Aware Logic)
+
+            **What to implement:** Replace prepare-wave's E37 enforcement (currently missing
+            or incomplete) with `CriticGatePasses(manifest, false)` call. The false argument
+            means manual mode (user must review warnings).
+
+            **Current code location:** `cmd/sawtools/prepare_wave.go` — E37 enforcement should
+            run after manifest load (line 44) and before worktree creation (line 71). Check if
+            it already exists by searching for "CriticVerdictIssues" or "CriticReport".
+
+            **Implementation steps:**
+            1. Import `github.com/blackwell-systems/scout-and-wave-go/pkg/protocol` (already imported)
+            2. After line 44 (manifest load), add E37 enforcement:
+               ```go
+               // E37: Critic gate enforcement (manual mode)
+               if !protocol.CriticGatePasses(manifest, false) {
+                 return nil, fmt.Errorf("prepare-wave: E37 critic gate failed — ISSUES verdict with errors")
+               }
+               ```
+            3. If E37 enforcement already exists inline, replace it with the helper call
+
+            **Tests:** Run existing `cmd/sawtools/prepare_wave_test.go` to ensure no
+            regressions. The test suite should already cover E37 enforcement paths.
+
+            **Verification gate:**
+            ```bash
+            cd $SAW_WORKTREE_ROOT
+            go build ./cmd/sawtools
+            go test ./cmd/sawtools -run TestPrepareWave
+            go vet ./cmd/sawtools
+            ```
+
+            **Constraints:**
+            - Preserve existing error messages and output format
+            - Do NOT add --auto flag to prepare-wave (that's for prepare-tier only)
+            - E37 enforcement happens after manifest load, before worktree creation
+            - Use manual mode (autoMode=false) for CLI workflow
+          files:
+            - cmd/sawtools/prepare_wave.go
+          dependencies:
+            - A
+        - id: C
+          task: |
+            ## Agent C: Update prepare-tier SDK for F2 (Auto Mode Support)
+
+            **What to implement:** Update `pkg/protocol/program_tier_prepare.go` to use
+            `CriticGatePasses(manifest, true)` for E37 enforcement in program tier execution.
+            The true argument enables auto mode (warnings-only ISSUES auto-pass).
+
+            **Current code location:** `pkg/protocol/program_tier_prepare.go` — the function
+            does NOT currently have E37 enforcement. Add it after IMPL validation (Step 4)
+            and before worktree creation (Step 5).
+
+            **Implementation steps:**
+            1. After line 112 (after IMPL validation loop), add E37 enforcement per IMPL:
+               ```go
+               // Step 4.5: E37 critic gate enforcement (auto mode for program execution)
+               if !CriticGatePasses(m, true) {
+                 vr := IMPLValidationResult{
+                   ImplSlug: slug,
+                   Valid:    false,
+                   Errors:   []string{"E37 critic gate failed — ISSUES verdict with errors"},
+                 }
+                 result.Validations = append(result.Validations, vr)
+                 result.Success = false
+                 return result, nil
+               }
+               ```
+            2. The check runs per-IMPL (inside the validation loop at lines 79-112)
+
+            **Tests:** Run `pkg/protocol/program_tier_prepare_test.go` (if it exists) or
+            add basic test case for E37 enforcement in tier preparation.
+
+            **Verification gate:**
+            ```bash
+            cd $SAW_WORKTREE_ROOT
+            go build ./pkg/protocol
+            go test ./pkg/protocol -run TestPrepareTier
+            go vet ./pkg/protocol
+            ```
+
+            **Constraints:**
+            - Use auto mode (autoMode=true) — program execution is autonomous
+            - Return partial result with Success=false on E37 failure
+            - Add to existing PrepareTier function, don't create new function
+            - Check runs per-IMPL, not once per tier
+          files:
+            - pkg/protocol/program_tier_prepare.go
+          dependencies:
+            - A
+        - id: F
+          task: |
+            ## Agent F: Documentation Updates for F2, F3, F4
+
+            **What to implement:** Update protocol documentation to reflect the friction fixes
+            implemented by Agents A-E (Wave 1) and B-C (Wave 2).
+
+            **Files to update:**
+
+            ### 1. protocol/state-machine.md (F3: REVIEWED → COMPLETE transition)
+
+            **Location:** State transition table and diagram sections
+
+            **Changes needed:**
+            - Add REVIEWED → COMPLETE transition to the state diagram
+            - Update the REVIEWED row in the state table to include COMPLETE as a valid target:
+              ```
+              | **REVIEWED** | IMPL doc produced, awaiting human review and approval. | Scout complete | Human approves plan OR direct completion |
+              ```
+            - Add to "Special Transitions" section (if exists):
+              ```markdown
+              **REVIEWED → COMPLETE (Direct Completion)**
+              - Occurs when: Scout completes but no waves execute
+              - Use cases: Manual closure after review, NOT_SUITABLE verdict corrected to suitable but work cancelled
+              - Command: `sawtools close-impl` allows this transition as of friction-fixes-phase1
+              ```
+
+            ### 2. ROADMAP.md (Mark P5 complete, document F3/F4)
+
+            **Location:** Lines 105-120 (P5 section)
+
+            **Changes needed:**
+            - Update P5 section header from "P5: Critic Verdict..." to "~~P5: Critic Verdict...~~ ✅ FIXED"
+            - Add implementation note after P5 description:
+              ```markdown
+              **Status:** Fixed in scout-and-wave-go@[commit-sha] (friction-fixes-phase1-execution IMPL)
+
+              **Implementation:** Created `pkg/protocol/CriticGatePasses(m *IMPLManifest, autoMode bool)`
+              helper function. Updated prepare-wave CLI and prepare-tier SDK to use severity-aware logic.
+              ```
+            - Add F3 and F4 entries under "Protocol Hardening" section (after P13):
+              ```markdown
+              ### ~~F3: REVIEWED → COMPLETE State Transition~~ ✅ FIXED
+
+              **Status:** Fixed in scout-and-wave-go@[commit-sha]
+
+              Added REVIEWED → COMPLETE to allowed state transitions in `pkg/protocol/state_transition.go`.
+              Allows `close-impl` to complete IMPLs without wave execution (e.g., manual closure,
+              or cancelled work after review).
+
+              ### ~~F4: Cross-Repo finalize-wave Support~~ ✅ FIXED
+
+              **Status:** Fixed in scout-and-wave-go@[commit-sha]
+
+              Updated `cmd/sawtools/finalize_wave.go` to properly aggregate merge results across
+              multiple repos. Detects cross-repo waves from file_ownership `repo:` values and runs
+              merge-agents per repo.
+              ```
+
+            ### 3. protocol/message-formats.md (Optional: F3 state transitions)
+
+            **Location:** State field documentation (if it documents valid transitions)
+
+            **Changes needed:**
+            - If `state` enum lists valid transitions, add REVIEWED → COMPLETE
+            - If state progression examples exist, add example showing direct completion path
+
+            **Verification gate:**
+            ```bash
+            cd $SAW_WORKTREE_ROOT
+            # Documentation files — no build/test needed
+            # Visual inspection: verify markdown renders correctly
+            # Check links still work (state-machine.md references)
+            ```
+
+            **Constraints:**
+            - Use ~~strikethrough~~ for completed items (ROADMAP.md pattern)
+            - Include commit SHA placeholders: `[commit-sha]` — will be updated after merge
+            - Maintain existing markdown structure and formatting
+            - Do NOT modify execution-rules.md E37 section (already documents severity-aware behavior)
+          files:
+            - protocol/state-machine.md
+            - ROADMAP.md
+            - protocol/message-formats.md
+          dependencies:
+            - A
+            - D
+            - E
+      base_commit: be6ceb07405509b64d972b5974b61ba82d136462
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./...
+          required: true
+          repo: scout-and-wave-go
+        - type: test
+          command: go test ./... -timeout 120s
+          required: true
+          repo: scout-and-wave-go
+        - type: lint
+          command: go vet ./...
+          required: true
+          repo: scout-and-wave-go
+completion_reports:
+    A:
+        status: complete
+        branch: saw/friction-fixes-phase1-execution/wave1-agent-A
+        commit: b93e801
+        files_created:
+            - pkg/protocol/critic_gate.go
+            - pkg/protocol/critic_gate_test.go
+        tests_added:
+            - TestCriticGatePasses_PassVerdict
+            - TestCriticGatePasses_IssuesWithErrorsBlocks
+            - TestCriticGatePasses_IssuesWithWarningsOnlyAutoMode
+            - TestCriticGatePasses_IssuesWithWarningsOnlyManualMode
+            - TestCriticGatePasses_NoCriticReport
+            - TestCriticGatePasses_MixedSeverity
+        verification: PASS
+        notes: CriticGatePasses helper implemented with full test coverage. All 6 test cases passing. Function is exported and ready for consumption by Agents B and C in Wave 2.
+    B:
+        status: complete
+        branch: saw/friction-fixes-phase1-execution/wave2-agent-B
+        commit: 4f7e6b2da94213bdb7110259508d55a858af7982
+        files_changed:
+            - cmd/sawtools/prepare_wave.go
+        verification: PASS
+        notes: Added E37 critic gate enforcement to prepare-wave CLI. Replaced inline logic with CriticGatePasses(manifest, false) helper call. Pre-flight check runs after manifest load (line 47) and before engine call (line 71). All 15 existing tests pass.
+    C:
+        status: complete
+        branch: saw/friction-fixes-phase1-execution/wave2-agent-C
+        commit: 4cb9810
+        files_changed:
+            - pkg/protocol/program_tier_prepare.go
+            - pkg/protocol/program_tier_prepare_test.go
+        tests_added:
+            - TestPrepareTier_E37CriticGateEnforcement
+        verification: PASS
+        notes: E37 critic gate enforcement integrated into PrepareTier. Uses CriticGatePasses(m, true) for auto mode (program execution context). Check runs per-IMPL after validation, blocks on ISSUES verdict with errors, allows warnings-only to proceed. All verification gates pass (build, test, vet).
+    D:
+        status: complete
+        branch: saw/friction-fixes-phase1-execution/wave1-agent-D
+        commit: 1e59c45688807ef2564a9079176918cffcd701e5
+        files_changed:
+            - pkg/protocol/state_transition.go
+            - pkg/protocol/state_transition_test.go
+        tests_added:
+            - TestSetImplState_ReviewedToComplete
+        verification: PASS
+        notes: Added StateComplete to StateReviewed allowed transitions. Added documentation comment explaining close-impl use case. All tests pass including new test for REVIEWED → COMPLETE transition.
+    E:
+        status: complete
+        branch: saw/friction-fixes-phase1-execution/wave1-agent-E
+        commit: 897095b
+        verification: PASS
+        notes: F4 cross-repo finalize-wave support already implemented and verified. Lines 442-457 loop over repos, call MergeAgents per repo, and store results in result.MergeResult[repoKey]. Pattern matches VerifyCommits (line 204) and VerifyBuild (line 474). Single-repo behavior preserved. Build and vet pass.
+    F:
+        status: complete
+        branch: saw/friction-fixes-phase1-execution/wave2-agent-F
+        commit: 18c9e7e
+        files_changed:
+            - protocol/state-machine.md
+            - ROADMAP.md
+        verification: PASS
+        notes: 'Documentation updates complete. Added REVIEWED → COMPLETE transition to state machine (3 locations: state catalog exit condition, alternate paths section, and allowed transitions table). Marked P5 complete with implementation summary. Added F3 and F4 completion entries with commit SHA placeholders (will be updated after merge).'
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: F2 severity check logic incorrect (allows errors through)
+          likelihood: low
+          impact: medium
+          mitigation: Agent A writes 6 test cases covering all severity combinations. Agents B and C both call the same helper, so correctness is proven once.
+        - scenario: F3 state transition breaks existing flows (REVIEWED used elsewhere)
+          likelihood: low
+          impact: low
+          mitigation: State machine diagram in protocol/state-machine.md shows REVIEWED → COMPLETE is a valid terminal path. Adding it to allowedTransitions formalizes existing behavior.
+        - scenario: F4 cross-repo merge aggregation misses a repo
+          likelihood: low
+          impact: high
+          mitigation: extractReposFromManifest already extracts all repos from file_ownership. Agent E verifies the existing loop pattern or adds it. Manual test with saw-skill-phase1 IMPL.
+        - scenario: Wave 2 agents B/C cannot import CriticGatePasses (not merged yet)
+          likelihood: low
+          impact: high
+          mitigation: Two-wave structure. Agent A (Wave 1) creates CriticGatePasses and merges before Wave 2 launches. Wave 2 agents import from merged main branch.
+critic_report:
+    verdict: PASS
+    agent_reviews:
+        A:
+            agent_id: A
+            verdict: PASS
+        B:
+            agent_id: B
+            verdict: PASS
+        C:
+            agent_id: C
+            verdict: PASS
+        D:
+            agent_id: D
+            verdict: PASS
+        E:
+            agent_id: E
+            verdict: PASS
+        F:
+            agent_id: F
+            verdict: PASS
+    summary: All agent briefs verified against codebase. All file ownership entries are accurate (new files do not exist, modify targets exist). All referenced symbols exist in their specified locations. Interface contract is valid and references existing types. No complexity balance issues detected (max 3 files per agent). No registration gaps detected. Wave execution may proceed.
+    reviewed_at: "2026-03-28T16:33:58Z"
+    issue_count: 0
+state: COMPLETE
+injection_method: hook
