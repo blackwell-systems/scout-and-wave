@@ -99,4 +99,3 @@ If toolchain missing, skip that gate with warning (not failure).
 - [ ] Cross-repo commits succeed without `--no-verify`
 - [ ] Missing toolchain is caught as a configuration error (not silently skipped)
 - [ ] Test case: IMPL-X in repo A targeting repo B does not block commits to repo A
-# Test change
