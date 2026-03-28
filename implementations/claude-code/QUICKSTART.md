@@ -292,17 +292,27 @@ completion_reports:
 
 Both agents report `status: complete`. If either reported `status: partial` or `status: blocked`, the wave would not proceed to merge.
 
-### Step 5: Orchestrator merges
+### Step 5: Wave finalization (atomic batch operation)
 
-The orchestrator verifies both agents succeeded, then merges sequentially using `sawtools`:
+The orchestrator verifies both agents succeeded, then runs the atomic finalization command:
 
 ```
-All agents completed successfully. Beginning merge...
+All agents completed successfully. Beginning wave finalization...
 
-Running: sawtools verify-commits docs/IMPL/IMPL-simple-cache.yaml --wave 1
+Running: sawtools finalize-wave docs/IMPL/IMPL-simple-cache.yaml --wave 1 --repo-dir .
+
+[1/6] Verifying commits...
   OK All agents have commits on their branches
 
-Running: sawtools merge-agents docs/IMPL/IMPL-simple-cache.yaml --wave 1
+[2/6] Scanning for stub implementations (E20)...
+  OK No stub patterns found (pass/TODO/FIXME)
+
+[3/6] Running quality gates (E21)...
+  OK Lint: go vet ./... (clean)
+  OK Build: go build ./... (success)
+  OK Tests: go test ./src/cache ./src/client (13/13 passing)
+
+[4/6] Merging agents...
   Merging wave1-agent-A...
     -> git merge --no-ff wave1-agent-A
     OK Merged (no conflicts)
@@ -310,56 +320,76 @@ Running: sawtools merge-agents docs/IMPL/IMPL-simple-cache.yaml --wave 1
   Merging wave1-agent-B...
     -> git merge --no-ff wave1-agent-B
     OK Merged (no conflicts)
-```
 
-**Why no conflicts?**
+[5/6] Post-merge verification...
+  Linter auto-fix:
+    -> go fmt ./...
+    OK No formatting changes needed
 
-Disjoint file ownership guarantees conflict-free merges. Agent A and Agent B never touched the same file.
+  Build:
+    -> go build ./...
+    OK Build successful
 
-### Step 6: Post-merge verification
+  Tests (unscoped):
+    -> go test ./...
+    OK 13/13 tests passing
+      - src/cache: 8 tests
+      - src/client: 5 tests
 
-```
-Running: sawtools verify-build docs/IMPL/IMPL-simple-cache.yaml
-
-Linter auto-fix:
-  -> go fmt ./...
-  OK No formatting changes needed
-
-Build:
-  -> go build ./...
-  OK Build successful
-
-Tests (unscoped):
-  -> go test ./...
-  OK 13/13 tests passing
-    - src/cache: 8 tests
-    - src/client: 5 tests
-```
-
-**Why unscoped tests matter:**
-
-Individual agents ran scoped tests (`go test ./src/cache`). The orchestrator runs **unscoped** tests (`go test ./...`) to catch cross-package issues.
-
-Example: Agent B added a cache field to `Client` struct. If a test in a different package constructs `Client{}` directly, it will fail here (missing cache field).
-
-### Step 7: Cleanup and completion
-
-```
-Running: sawtools cleanup docs/IMPL/IMPL-simple-cache.yaml --wave 1
-
-Cleaning up worktrees:
+[6/6] Cleanup...
   -> Removed .claude/worktrees/wave1-agent-A
   -> Removed wave1-agent-A branch
   -> Removed .claude/worktrees/wave1-agent-B
   -> Removed wave1-agent-B branch
 
-Running: sawtools mark-complete docs/IMPL/IMPL-simple-cache.yaml
+OK Wave 1 finalized successfully
+```
 
-  -> Writing SAW:COMPLETE marker to IMPL doc
-  -> Archiving to docs/IMPL/complete/IMPL-simple-cache.yaml
+**Why no conflicts?**
 
-OK Wave 1 complete and merged to main
+Disjoint file ownership (I1) guarantees conflict-free merges. Agent A and Agent B never touched the same file.
 
+**What finalize-wave does:**
+
+This is an **atomic batching command** that combines 6 operations: (1) verify-commits, (2) scan-stubs, (3) run-gates, (4) merge-agents, (5) verify-build, (6) cleanup. If any step fails, the command stops and returns diagnostics. You never run these steps individually — `finalize-wave` handles the entire post-agent pipeline.
+
+**Why unscoped tests matter:**
+
+Individual agents ran scoped tests (`go test ./src/cache`). Step 5 runs **unscoped** tests (`go test ./...`) to catch cross-package issues.
+
+Example: Agent B added a cache field to `Client` struct. If a test in a different package constructs `Client{}` directly, it will fail here (missing cache field).
+
+### Step 6: IMPL completion (final wave only)
+
+If this was the last wave (no Wave 2 pending), the orchestrator closes the IMPL:
+
+```
+Running: sawtools close-impl docs/IMPL/IMPL-simple-cache.yaml --date "2026-03-28"
+
+[1/4] Writing SAW:COMPLETE marker...
+  OK Updated docs/IMPL/IMPL-simple-cache.yaml
+
+[2/4] Archiving to complete/ directory...
+  OK Moved to docs/IMPL/complete/IMPL-simple-cache.yaml
+
+[3/4] Updating docs/CONTEXT.md...
+  OK Added completion entry (E18)
+
+[4/4] Cleaning stale worktrees...
+  OK No stale worktrees found
+
+OK IMPL closed successfully
+```
+
+**What close-impl does:**
+
+Another **atomic batching command** that combines 4 operations: (1) write SAW:COMPLETE marker, (2) archive to complete/ directory, (3) update CONTEXT.md, (4) clean stale worktrees. This finalizes the entire feature, not just a single wave.
+
+**If more waves remain:** Skip this step. Run `/saw wave` again for Wave 2, and only close the IMPL after all waves complete.
+
+### Step 7: Review the changes
+
+```
 Summary:
   Agents: 2 (parallel)
   Files changed: 6 (3 new, 3 modified)
@@ -369,13 +399,13 @@ Summary:
   Duration: 4m 23s
 ```
 
-### Step 8: Review the changes
+You can also review what was implemented:
 
 ```
 You: show me what was implemented
 ```
 
-The orchestrator summarizes the changes:
+The orchestrator can summarize the changes:
 
 ```
 Cache Layer (Agent A):
