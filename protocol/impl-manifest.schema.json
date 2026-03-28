@@ -659,8 +659,8 @@
         },
         "integration_pattern": {
           "type": "string",
-          "enum": ["append", "register", "inject", "call"],
-          "description": "How the symbol is integrated into the caller."
+          "enum": ["append", "register", "inject", "call", "prop-pass"],
+          "description": "How the symbol is integrated into the caller. 'prop-pass' is TSX-specific for React component props."
         }
       }
     },
