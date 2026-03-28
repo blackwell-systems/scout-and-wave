@@ -679,23 +679,39 @@ In the web app, the "New Plan" button already uses "Plan" language. This makes C
 
 ## 5. Implementation Priority
 
+**Last Updated:** 2026-03-28 (completion audit)
+**Overall Completion:** ~15% (2 of 13 actionable items complete)
+
+### ✅ Completed Items
+- **4.1 `sawtools init`** (Tier 2) — Completed 2026-03-25, documented in CHANGELOG v0.69.0
+- **4.4 Web UI tooltips** (Tier 1, partial) — Completed 2026-03-20 via IMPL-webapp-ux-onboarding.yaml
+
+### 🚫 Rejected/Deferred Items
+- **4.7 `saw plan` alias** — Deferred (second review, line 730)
+- **4.4 Hide advanced model selectors** — Rejected (line 746, all 7 stay visible)
+
+---
+
+## 5. Implementation Priority
+
 ### Tier 1: Highest Impact, Lowest Effort (do first)
 
-| # | Proposal | Impact | Effort | Repos | Dependencies |
-|---|---|---|---|---|---|
-| 1 | **4.5 Error messages as teaching moments** (skill prompt templates) | High — every new user hits at least one error | Small | scout-and-wave | None |
-| 2 | **4.7 `saw plan` alias** | High — removes first jargon barrier | Small | scout-and-wave-go, scout-and-wave | None |
-| 3 | **4.8 `saw run` alias** (if needed; `saw wave` is acceptable) | Low — "wave" is distinctive and learnable | Small | scout-and-wave-go, scout-and-wave | None |
-| 4 | **4.4 Concept renaming** (UI labels only) | High — reduces cognitive load on every page | Small-Medium | scout-and-wave-web | None |
+| # | Proposal | Impact | Effort | Repos | Dependencies | Status |
+|---|---|---|---|---|---|---|
+| 1 | **4.5 Error messages as teaching moments** (skill prompt templates) | High — every new user hits at least one error | Small | scout-and-wave | None | **INCOMPLETE** — No verbatim templates in saw-skill.md |
+| 2 | **4.7 `saw plan` alias** | ~~High~~ Low — removes first jargon barrier | Small | scout-and-wave-go, scout-and-wave | None | **DEFERRED** — Overloads "plan", no standalone CLI (see line 730) |
+| 3 | **4.8 `saw run` alias** (if needed; `saw wave` is acceptable) | Low — "wave" is distinctive and learnable | Small | scout-and-wave-go, scout-and-wave | None | **NOT STARTED** |
+| 4 | **4.4 Concept renaming** (UI labels only) | High — reduces cognitive load on every page | Small-Medium | scout-and-wave-web | None | **PARTIAL** — Tooltips done (IMPL-webapp-ux-onboarding, 2026-03-20), model selectors kept visible (REJECTED) |
+| 5 | **README screenshot/recording** (from Tier 1 revised, line 748) | High — 10-second GIF converts evaluators | Small | scout-and-wave | None | **INCOMPLETE** — No visual in first 20 lines |
 
 ### Tier 2: High Impact, Medium Effort (do second)
 
-| # | Proposal | Impact | Effort | Repos | Dependencies |
-|---|---|---|---|---|---|
-| 5 | **4.2 Guided first run** (CLI skill prompt changes) | High — transforms first experience | Medium | scout-and-wave | None |
-| 6 | **4.3 Web app empty state** redesign | High — eliminates dead-end first impression | Medium | scout-and-wave-web | None |
-| 7 | **~~4.1 `sawtools init`~~** | — | — | COMPLETE (2026-03-25) | — |
-| 8 | **4.5 Error messages** (Go-side UserMessage fields) | Medium — better diagnostics compound over time | Medium | scout-and-wave-go | None |
+| # | Proposal | Impact | Effort | Repos | Dependencies | Status |
+|---|---|---|---|---|---|---|
+| 5 | **4.2 Guided first run** (CLI skill prompt changes) | High — transforms first experience | Medium | scout-and-wave | None | **INCOMPLETE** |
+| 6 | **4.3 Web app empty state** redesign | High — eliminates dead-end first impression | Medium | scout-and-wave-web | None | **INCOMPLETE** |
+| 7 | **~~4.1 `sawtools init`~~** | — | — | COMPLETE (2026-03-25) | — | ✅ **COMPLETE** |
+| 8 | **4.5 Error messages** (Go-side UserMessage fields) | Medium — better diagnostics compound over time | Medium | scout-and-wave-go | None | **INCOMPLETE** |
 
 ### Tier 3: High Impact, Large Effort (do third)
 

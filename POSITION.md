@@ -72,17 +72,136 @@ The primary interactive experience. The `/saw` skill is a YAML-frontmatter + mar
 - Interview mode (E39): structured 6-phase requirements gathering (`/saw interview`) that produces a REQUIREMENTS.md for Scout consumption -- an alternative entry point when the user needs guided decomposition before planning
 - Because the skill conforms to the open standard, it is not structurally locked to Claude Code. Any agent runtime that supports the skills standard can load the same `saw-skill.md` file
 
+### Advanced Progressive Disclosure Architecture
+
+SAW implements a **hook-based deterministic injection architecture** that extends the Agent Skills specification's three-tier model with automatic context loading. Rather than relying on models to follow routing instructions ("read this file when needed"), SAW uses lifecycle hooks and frontmatter declarations to inject references before the model runs. This section documents the complete architecture.
+
+#### Four-Tier Structure
+
 The skill uses a four-tier progressive disclosure model to keep the Orchestrator's context window lean:
 
 - **Tier 0** (CLAUDE.md) -- discovery index, always present, zero invocation cost
-- **Tier 1** (frontmatter metadata, ~17 lines) -- parsed by the Skills API before context construction
+- **Tier 1** (frontmatter metadata, ~60 lines) -- parsed by the Skills API before context construction; includes `triggers:` and `agent-references:` declarations
 - **Tier 2** (core skill body, ~183 lines after v0.73.0 simplification) -- loads on invocation; covers scout, wave, status, bootstrap, and interview (the operations needed on >90% of sessions); 50% reduction from original via extraction to reference files
 - **Tier 3** (on-demand reference files) -- loads only when a subcommand match fires: program execution, IMPL amendment, and failure routing stay out of context until needed
 - **Tier 3 reference files:** `model-selection.md` (81 lines), `pre-wave-validation.md` (151 lines), `wave-agent-contracts.md` (137 lines), `impl-targeting.md` (195 lines)
 
-The `triggers:` frontmatter extension enables deterministic Tier 3 injection via the `UserPromptSubmit` hook. A `/saw wave` invocation never pays the context cost of program coordination logic. The `install.sh` script uses wildcard patterns to automatically symlink new reference files as they're added.
+#### Frontmatter Dispatch Mechanism
 
-Progressive disclosure extends to agent type prompts. Each agent type (`wave-agent`, `scout`, `critic-agent`, `planner`, `integration-agent`) has a slim core prompt and a set of reference files injected at launch -- worktree isolation procedures (simplified to 93 lines in v0.72.0 by removing manual verification steps handled by E43 hooks), build diagnosis steps, completion report format, verification checklists. The injection mechanism is different from skill Tier 3: `UserPromptSubmit` targets the Orchestrator's context; injecting into a subagent requires `PreToolUse(updatedInput)`, which modifies the Agent tool's `prompt` parameter before Claude Code launches the subagent. The `validate_agent_launch` hook handles both roles: enforcement checks (1–8) block bad launches; injection blocks (Scout path and Checks 10–13) prepend reference content to the matching agent type's prompt. The Go engine mirrors this via `LoadTypePromptWithRefs`, which reads reference files alongside each type prompt file when constructing prompts for the API or Bedrock path. A `/saw wave` launch never loads critic verification checklists; a `/saw scout` launch never loads wave agent worktree isolation procedures. Both the CLI hook layer and the engine layer enforce this -- neither path is a second-class citizen.
+The skill's YAML frontmatter declares two dispatch tables that drive automatic injection:
+
+**Orchestrator triggers** (`triggers:` block) -- Loaded via `UserPromptSubmit` hook into orchestrator context:
+
+```yaml
+triggers:
+  - match: "^/saw program"
+    inject: references/program-flow.md
+  - match: "^/saw amend"
+    inject: references/amend-flow.md
+```
+
+When a user invokes `/saw program execute`, the `inject_skill_context` hook reads the `triggers:` block, matches the regex against the prompt, and returns `additionalContext` containing `program-flow.md` before the model runs. The model receives the reference automatically -- no routing decision required.
+
+**Agent references** (`agent-references:` block) -- Loaded via `PreToolUse/Agent` hook into subagent prompts:
+
+```yaml
+agent-references:
+  - agent-type: scout
+    inject: references/scout-suitability-gate.md
+  - agent-type: scout
+    inject: references/scout-implementation-process.md
+  - agent-type: scout
+    inject: references/scout-program-contracts.md
+    when: "--program"
+  - agent-type: wave-agent
+    inject: references/wave-agent-worktree-isolation.md
+  - agent-type: wave-agent
+    inject: references/wave-agent-completion-report.md
+  - agent-type: wave-agent
+    inject: references/wave-agent-build-diagnosis.md
+  - agent-type: wave-agent
+    inject: references/wave-agent-program-contracts.md
+    when: "frozen_contracts_hash|frozen: true"
+```
+
+When the orchestrator launches a `wave-agent`, the `validate_agent_launch` hook (Check 10) reads the `agent-references:` block, filters entries matching `agent-type: wave-agent`, checks `when:` conditions against the prompt, and returns `updatedInput.prompt` with the reference content prepended. The subagent receives procedural content before its first step.
+
+**Conditional injection** -- The `when:` field enables scenario-specific loading. Scout's `scout-program-contracts.md` only injects when `--program` appears in the prompt. Wave agent's `wave-agent-program-contracts.md` only injects when the IMPL doc contains frozen interface contracts. This prevents context pollution for scenarios where the content is irrelevant.
+
+#### Three-Layer Injection Architecture
+
+The injection system has three layers, each targeting a different deployment context:
+
+| Layer | Mechanism | Platform | Enforcement |
+|-------|-----------|----------|-------------|
+| **Hook** (Layer 1) | `inject_skill_context` (UserPromptSubmit) + `validate_agent_launch` (PreToolUse/Agent) | Claude Code | Deterministic (always fires) |
+| **Script** (Layer 2) | `scripts/inject-context` + `scripts/inject-agent-context` | Any platform with Bash | Model-initiated |
+| **Fallback** (Layer 3) | Routing table in SKILL.md | Any platform | Convention-based |
+
+**Hook layer** -- Claude Code's lifecycle hooks provide deterministic injection. `UserPromptSubmit` fires before the orchestrator runs; `PreToolUse/Agent` fires before subagent launch. Both read the frontmatter dispatch tables and inject matching references. The orchestrator and agents receive context automatically -- no model cooperation required. This is the primary mechanism for Claude Code users.
+
+**Script layer** -- Vendor-neutral Bash scripts bundled in `scripts/`. The skill's instructions include: "Before executing, run `scripts/inject-context` with the user's prompt" (for orchestrator) or call `scripts/inject-agent-context --type <agent-type> --prompt "$prompt"` (for subagents). The scripts parse the same frontmatter declarations and output matching reference content. Any agent runtime with Bash support can use this. The model must follow the instruction, making this model-initiated but simpler than a multi-entry routing table.
+
+**Fallback layer** -- The traditional routing table in SKILL.md: "If the argument starts with `program `, read `references/program-flow.md`". Convention-based -- the model must follow routing instructions. This is the always-available fallback for platforms without hooks or script execution.
+
+All three layers read from the same `triggers:` and `agent-references:` frontmatter source. A new reference file is added by updating frontmatter -- no hook or script changes required.
+
+#### updatedInput vs additionalContext
+
+The hook architecture uses two distinct output fields for different injection targets:
+
+| Field | Target | Hook | Use case |
+|-------|--------|------|----------|
+| `additionalContext` | Orchestrator's context | `UserPromptSubmit` | Inject orchestrator references (program-flow, amend-flow) |
+| `updatedInput.prompt` | Subagent's initial prompt | `PreToolUse/Agent` | Inject agent type references (wave-agent-worktree-isolation, scout-suitability-gate) |
+
+`additionalContext` in `UserPromptSubmit` adds content to the orchestrator before it starts. `updatedInput.prompt` in `PreToolUse/Agent` modifies the `Agent` tool's `prompt` parameter before Claude Code launches the subagent. The subagent receives the modified prompt as its initial message -- the reference content is present before it takes its first step.
+
+**This distinction is non-obvious.** Early implementations tried `additionalContext` in `PreToolUse` -- this augmented the orchestrator's context, not the subagent's. Three critic review cycles caught the error before any agent ran. The correct mechanism is documented in `docs/proposals/subagent-prompt-injection.md`.
+
+#### Agent Type Progressive Disclosure
+
+Progressive disclosure extends to agent type prompts. Each agent type (`wave-agent`, `scout`, `critic-agent`, `planner`, `integration-agent`) has a slim core prompt and a set of reference files injected at launch -- worktree isolation procedures (simplified to 93 lines in v0.72.0 by removing manual verification steps handled by E43 hooks), build diagnosis steps, completion report format, verification checklists.
+
+| Agent Type | Core Prompt Lines | Reference Files | Conditional Injection |
+|------------|------------------|-----------------|----------------------|
+| `scout` | ~208 | suitability-gate, implementation-process, program-contracts | `when: "--program"` for contracts |
+| `wave-agent` | ~151 | worktree-isolation, completion-report, build-diagnosis, program-contracts | `when: "frozen_contracts_hash\|frozen: true"` for contracts |
+| `critic-agent` | ~90 | verification-checks, completion-format | Always inject both |
+| `planner` | ~143 | suitability-gate, implementation-process, example-manifest | Always inject all |
+| `integration-agent` | ~133 | connectors-reference, completion-report | Always inject both |
+| `scaffold-agent` | ~159 | (none) | All content in core prompt |
+
+**Detection in `validate_agent_launch`:**
+
+The hook dispatches by `subagent_type` field or description tag (`[SAW:scout:*]`, `[SAW:critic:*]`). Agent-specific blocks run **before Check 1** (the wave-agent tag gate), allowing early exit for non-wave-agent types:
+
+```bash
+# Scout path — before Check 1
+if [[ "$subagent_type" == "scout" ]] || [[ "$description" =~ \[SAW:scout ]]; then
+  # inject scout-suitability-gate.md, scout-implementation-process.md
+  # conditional: scout-program-contracts.md (only when prompt has --program)
+  # emit updatedInput, exit 0
+fi
+
+# Check 11: critic-agent — before Check 1
+if [[ "$subagent_type" == "critic-agent" ]] || [[ "$description" =~ \[SAW:critic ]]; then
+  # inject critic-agent-verification-checks.md, critic-agent-completion-format.md
+  # emit updatedInput, exit 0
+fi
+
+# Check 1: wave-agent tag extraction — non-wave-agent calls exit here
+```
+
+Dedup markers (`<!-- injected: references/wave-agent-worktree-isolation.md -->`) prevent double-injection if the orchestrator manually prepended content. This makes the injection transparent and composable.
+
+**Go engine mirror** -- The Go SDK's `LoadTypePromptWithRefs` reads reference files alongside each agent type prompt file when constructing prompts for the API or Bedrock path. A `/saw wave` launch never loads critic verification checklists; a `/saw scout` launch never loads wave agent worktree isolation procedures. Both the CLI hook layer and the engine layer enforce this -- neither path is a second-class citizen.
+
+#### Observability
+
+**E44: Context Injection Observability.** Scout records how reference files were received (`injection_method`: hook/manual-fallback/unknown), and `prepare-agent` writes `context_source` to each agent entry (prepared-brief/cross-repo-full/fallback-full-context) for telemetry and debugging. This enables detection of hook failures, script fallback usage, and pure convention-based loading.
+
+The `install.sh` script uses wildcard patterns to automatically symlink new reference files as they're added. Adding a new reference requires: (1) write the `.md` file in `references/`, (2) add an entry to `triggers:` or `agent-references:` frontmatter, (3) re-run `install.sh`. The hook and script layers read the updated frontmatter automatically.
 
 ### CLI (`sawtools` binary)
 
