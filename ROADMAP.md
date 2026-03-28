@@ -104,7 +104,7 @@ Tier 1 created `config/state.go` importing `protocol`, making `protocol → conf
 
 ### ~~P5: Critic Verdict "ISSUES" with 0 Errors Should Auto-Pass~~ ✅ FIXED
 
-**Status:** Fixed in scout-and-wave-go@[commit-sha] (friction-fixes-phase1-execution IMPL)
+**Status:** Fixed in scout-and-wave-go@5d8432f (friction-fixes-phase1-execution IMPL)
 
 **Implementation:** Created `pkg/protocol/CriticGatePasses(m *IMPLManifest, autoMode bool)` helper function. Updated prepare-wave CLI and prepare-tier SDK to use severity-aware logic. ISSUES verdicts with warnings-only now pass in auto mode. ISSUES verdicts with any errors always block, regardless of mode.
 
@@ -159,13 +159,13 @@ The code at `cmd/sawtools/finalize_wave.go` has two checks: `WorktreesAbsent()` 
 
 ### ~~F3: REVIEWED → COMPLETE State Transition~~ ✅ FIXED
 
-**Status:** Fixed in scout-and-wave-go@[commit-sha] (friction-fixes-phase1-execution IMPL)
+**Status:** Fixed in scout-and-wave-go@5d8432f (friction-fixes-phase1-execution IMPL)
 
 Added REVIEWED → COMPLETE to allowed state transitions in `pkg/protocol/state_transition.go`. Allows `close-impl` to complete IMPLs without wave execution (e.g., manual closure, or cancelled work after review). Protocol documentation updated in `protocol/state-machine.md`.
 
-### ~~F4: Cross-Repo finalize-wave Support~~ ✅ FIXED
+### ~~F4: Cross-Repo finalize-Wave Support~~ ✅ FIXED
 
-**Status:** Fixed in scout-and-wave-go@[commit-sha] (friction-fixes-phase1-execution IMPL)
+**Status:** Fixed in scout-and-wave-go@5d8432f (friction-fixes-phase1-execution IMPL)
 
 Updated `cmd/sawtools/finalize_wave.go` to properly aggregate merge results across multiple repos. Detects cross-repo waves from file_ownership `repo:` values and runs merge-agents per repo. Cross-repo IMPL docs now finalize correctly without manual intervention.
 
