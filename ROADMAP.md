@@ -4,14 +4,6 @@ Items are grouped by theme, not priority. Nothing here is committed or scheduled
 
 ---
 
-## Completed
-
-- **Tool Journaling / E23A** (v0.27.0) -- External log observer for compaction safety. Core journal in `scout-and-wave-go/pkg/journal/`, CLI via `sawtools journal-init` / `journal-context`.
-- **Multi-Generation Agent IDs** -- `[Letter][Generation]` format (A, B, A2, B3, ...) implemented in `scout-and-wave-go/pkg/idgen/`. Supports >26 agents per wave with family-based color grouping.
-- **Short IMPL-Referencing Prompts** (saw-skill v0.7.2) -- Wave agent prompts reference the IMPL doc path (~60 tokens) instead of copy-pasting the full brief (~1000 tokens). 10-15x faster parallel launch.
-- **Explicit IMPL Targeting** (v0.24.0 / saw-skill v0.9.0) -- `--impl <id>` flag on `/saw wave` and `/saw status`. Supports slug, filename, or path resolution.
-- **Engine Extraction** (2026-03-08) -- `scout-and-wave-go` is the standalone engine module; `scout-and-wave-web` imports it. Both the `/saw` skill and web UI are clients on top.
-
 ---
 
 ## Protocol Enhancements
@@ -35,11 +27,11 @@ Add tiered resolution to `saw-merge.md` Step 4:
 
 ### NOT SUITABLE Full Research Output
 
-**Status:** UI shipped (v0.17.0, `NotSuitableResearchPanel`). Protocol spec updates pending.
+**Status:** UI shipped (v0.17.0, `NotSuitableResearchPanel`). **Protocol spec updates still pending.**
 
 Decouple verdict from research. NOT SUITABLE IMPL docs should contain full file survey, dependency map, risk assessment, actionable "why not suitable" explanation, conditions for re-scouting, and serial implementation notes. Only agent prompts and wave execution loop are omitted.
 
-**Protocol changes:** Updated `message-formats.md` (required sections for NOT SUITABLE), updated `agents/scout.md` (research always completes regardless of verdict).
+**Protocol changes needed:** Update `message-formats.md` (required sections for NOT SUITABLE), update `agents/scout.md` (research always completes regardless of verdict).
 
 ---
 
@@ -149,23 +141,6 @@ The code at `cmd/sawtools/finalize_wave.go` has two checks: `WorktreesAbsent()` 
 | **CLI** | `cmd/sawtools/finalize_wave.go` — same reorder at lines 109-143. |
 | **Web** | `pkg/api/wave_runner.go` — no changes (SDK fix). |
 
-### P8: `finalize-tier` Auto-Update IMPL Statuses
-
-`finalize-tier` required manual `update-program-impl --status complete` for each IMPL before the tier gate would pass. Successfully-merged IMPL branches are by definition complete.
-
-**Status:** Fixed (2026-03-24). `finalize-tier` now auto-updates IMPL statuses to "complete" via `SaveProgramManifest` before running the tier gate. Works identically from CLI and web.
-
-### P9: `CreateProgramWorktrees` Creates Branches, Not Worktrees
-
-IMPL branches are merge targets — nobody works directly in them. The function was creating checked-out worktrees, which conflicted with `prepare-wave`'s own worktree creation.
-
-**Status:** Fixed (2026-03-24). Now uses `git branch` instead of `git worktree add`. SDK function (`protocol.CreateProgramWorktrees`), CLI (`sawtools create-program-worktrees`), and web all use the same SDK function.
-
-### P10: Cross-Repo IMPL Resolution in `prepare-tier`
-
-`prepare-tier` resolved IMPL docs relative to `--repo-dir` (code repo), but IMPL docs live in the protocol repo. Cross-repo setups are the norm, not the exception.
-
-**Status:** Fixed (2026-03-24). SDK function (`protocol.PrepareTier`) derives IMPL path from the PROGRAM manifest's directory. CLI and web both call the same SDK function.
 
 ### P11: `mark-program-complete` Should Archive PROGRAM Manifest
 
@@ -200,15 +175,6 @@ The `/saw program execute` flow (skill prompt) doesn't call `mark-program-comple
 
 ---
 
-## Technical Debt
-
-Items found via codebase `TODO` scan. Not P-priority but should be tracked.
-
-- **`merge_agents.go:149`** — `MergeAgentsData.Success` backward-compat field should be removed once all consumers use `result.Result[T].IsSuccess()`
-- **`engine/chat.go:109`** — `TODO: Extend backend.Backend interface to accept message arrays` (multi-turn chat support)
-- **`engine/resolve_conflicts.go:172`** — `TODO: Filter contracts based on file location or agent dependencies` (contract filtering for conflict resolution)
-- **Undocumented `sawtools` commands** — `freeze-contracts`, `detect-cascades`, `solve`, `daemon`, `run-review`, `interview`, `import-impls`, `create-program` exist but are not referenced in ROADMAP or protocol docs
-
 ---
 
 ## Future Work
@@ -239,10 +205,11 @@ Future phases: interface contracts as compiled types (verify scaffold stubs impl
 
 ## E23A Integration Backlog
 
-Core journal shipped (v0.27.0). Remaining integration work:
+**Status:** Core journal shipped (v0.27.0). E23A documented in execution-rules.md. CLI commands (`journal-init`, `journal-context`) exist.
+
+Remaining integration work:
 
 - **Backend integration** -- Hook journaling into all agent backends (Anthropic API, CLI, OpenAI). Each has different tool call shapes; journal must normalize to common schema.
 - **Runner integration** -- Load journal before agent launch, inject `context.md` into prompt, periodic sync during execution.
 - **E19 failure recovery** -- Preserve journal across retries, include "you tried X before" context, detect retry loops from journal.
 - **Web UI** -- Real-time journal display in Observatory, agent detail tabs (Tool History, Raw Journal, Checkpoints), failed agent debugging panel.
-- **Protocol docs** -- E23A in `execution-rules.md`, I4 clarification in `invariants.md`, journal entry format in `message-formats.md`.
