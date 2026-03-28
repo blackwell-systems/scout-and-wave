@@ -70,18 +70,29 @@ does not read them directly; it includes the path in the Scout's prompt.
 
 ## On-Demand References (`references/`)
 
-Loaded by the Orchestrator only when the matching subcommand is invoked.
+Loaded by the Orchestrator only when the matching subcommand is invoked, or injected by hooks at agent launch time.
 See `docs/skills-progressive-disclosure.md` for the design.
+
+### Orchestrator References (skill-loaded)
 
 | File | Trigger | Purpose |
 |------|---------|---------|
 | [`references/program-flow.md`](references/program-flow.md) | `/saw program *` | Program plan/execute/status/replan flow. ~324 lines. Includes lifecycle analogy table and per-subcommand Orchestrator steps. |
 | [`references/amend-flow.md`](references/amend-flow.md) | `/saw amend *` | Amend subcommands: `--add-wave`, `--redirect-agent`, `--extend-scope`. |
 | [`references/failure-routing.md`](references/failure-routing.md) | Agent failure or post-merge integration gaps | E7a retry context, E19 failure type routing, E19.1 reactions override, E8 interface failures, E20 stub scanning, E25/E26/E35 integration gap detection. |
+| [`references/impl-targeting.md`](references/impl-targeting.md) | `/saw wave --impl`, `/saw status --impl` | IMPL doc targeting and resume logic. Supports slug, filename, or path resolution. |
+| [`references/model-selection.md`](references/model-selection.md) | All agent launches | Model selection hierarchy (skill argument → config file → parent session). Config file lookup order and saw.config.json schema. |
+| [`references/pre-wave-validation.md`](references/pre-wave-validation.md) | `/saw wave` | E16 IMPL validation, E37 critic gate, E21A baseline verification. Pre-flight validation sequence before worktree creation. |
+| [`references/wave-agent-contracts.md`](references/wave-agent-contracts.md) | `/saw wave` | I1/I2/I5/E35/E42 protocol rules. Disjoint ownership enforcement, interface freeze contracts, commit requirements, wiring obligations. |
+
+### Agent References (hook-injected)
+
+| File | Trigger | Purpose |
+|------|---------|---------|
 | [`references/scout-suitability-gate.md`](references/scout-suitability-gate.md) | Scout agent launch (hook-injected) | 5-question suitability checklist. Injected by `validate_agent_launch` into every scout agent prompt. |
 | [`references/scout-implementation-process.md`](references/scout-implementation-process.md) | Scout agent launch (hook-injected) | Steps 1-17 for IMPL doc production. Injected by `validate_agent_launch` into every scout agent prompt. |
 | [`references/scout-program-contracts.md`](references/scout-program-contracts.md) | Scout agent launch with --program (hook-injected) | Program contract handling rules. Injected by `validate_agent_launch` only when `--program` flag present in prompt. |
-| [`references/wave-agent-worktree-isolation.md`](references/wave-agent-worktree-isolation.md) | Wave agent launch (hook-injected) | Worktree isolation protocol (Steps 0/0.5, absolute path patterns, go.mod warning). Injected by `validate_agent_launch` into every wave agent prompt. |
+| [`references/wave-agent-worktree-isolation.md`](references/wave-agent-worktree-isolation.md) | Wave agent launch (hook-injected) | Worktree isolation protocol (E43 hook-based enforcement, environment variables, absolute path patterns, go.mod warning). Injected by `validate_agent_launch` into every wave agent prompt. |
 | [`references/wave-agent-completion-report.md`](references/wave-agent-completion-report.md) | Wave agent launch (hook-injected) | Full `sawtools set-completion` reference with examples for all status/failure types. Injected by `validate_agent_launch` into every wave agent prompt. |
 | [`references/wave-agent-build-diagnosis.md`](references/wave-agent-build-diagnosis.md) | Wave agent launch (hook-injected) | H7 build failure diagnosis tool usage (all languages). Injected by `validate_agent_launch` into every wave agent prompt. |
 | [`references/wave-agent-program-contracts.md`](references/wave-agent-program-contracts.md) | Wave agent launch with frozen contracts (hook-injected) | Program contract handling rules. Injected by `validate_agent_launch` only when `frozen_contracts_hash` or `frozen: true` present in prompt. |

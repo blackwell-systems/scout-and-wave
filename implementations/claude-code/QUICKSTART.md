@@ -1,5 +1,7 @@
 # First Run Walkthrough
 
+**Protocol Version:** 0.26.0
+
 This guide walks you through your first SAW session step-by-step, showing exactly what to expect at each stage.
 
 ## Prerequisites
@@ -80,6 +82,8 @@ IMPL doc written to: docs/IMPL/IMPL-simple-cache.yaml
 Review the IMPL doc. This is your last chance to change interface signatures.
 Ready to proceed?
 ```
+
+**What Scout checks:** Suitability gate (5 questions), interface contracts completeness, shared data structure detection (E45 — Scout automatically detects types referenced by 2+ agents and emits scaffolds to prevent I1 violations from duplicate definitions), file ownership disjointness (I1), dependency ordering (I3), integration completeness (every new artifact has its registration/wiring file assigned).
 
 ### Step 3: Review the IMPL doc
 
@@ -215,7 +219,7 @@ Creating worktrees:
 
 Pre-commit hook installed: guards against accidental commits to main
 
-**Hook-based enforcement:** The installer registers 15 enforcement hooks (up from 11 in earlier versions). Four new hooks enforce worktree isolation automatically: environment injection, bash cd auto-injection, path validation, and compliance verification. Agents no longer need manual `cd` commands or `$WORKTREE` variable usage. See `implementations/claude-code/hooks/README.md` for details.
+**Hook-based enforcement (E43):** The installer registers 15 hooks across enforcement, injection, and observability layers. Four E43 hooks enforce worktree isolation automatically: environment injection (SubagentStart), bash cd auto-injection (PreToolUse), path validation (PreToolUse), and compliance verification (SubagentStop). Agents no longer need manual `cd` commands or `$WORKTREE` variable usage. Additional hooks enforce I1 (file ownership), I6 (Scout boundaries), E16 (IMPL validation), E20 (stub warnings), E42 (completion validation), and H2-H5 (pre-launch gates). See `implementations/claude-code/hooks/README.md` for details.
 ```
 
 Each agent gets its own isolated working directory (git worktree). They share git history but have separate file trees.

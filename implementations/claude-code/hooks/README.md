@@ -1,6 +1,6 @@
 # SAW Claude Code Hooks
 
-Enforcement and injection hooks for CLI-based SAW agents. 16 hooks across SubagentStart, PreToolUse, PostToolUse, SubagentStop, and UserPromptSubmit events.
+Enforcement and injection hooks for CLI-based SAW agents. 15 hooks across SubagentStart, PreToolUse, PostToolUse, SubagentStop, and UserPromptSubmit events.
 
 ## Hook Summary
 
@@ -99,7 +99,7 @@ cd ~/code/scout-and-wave/implementations/claude-code/hooks
 ```
 
 The installer:
-- Creates symlinks in `~/.local/bin/` for all 16 hook scripts
+- Creates symlinks in `~/.local/bin/` for all 15 hook scripts
 - Merges hook configs into `~/.claude/settings.json` (preserves existing hooks)
 - Verifies installation and runs basic tests
 
@@ -842,6 +842,64 @@ export SAW_BRANCH="saw/feature/wave1-agent-A"
 echo '{}' | verify_worktree_compliance 2>&1
 # Should output warning to stderr but exit 0
 echo $?  # 0
+```
+
+---
+
+---
+
+## Hook 14: Agent Completion Event Emission (E40)
+
+**SubagentStop** — Emits structured completion event for observability systems (claudewatch, SSE streams).
+
+### How It Works
+
+1. Claude Code calls the script when a subagent stops (after last tool execution)
+2. Script extracts agent metadata (type, ID, wave number, IMPL path) from environment and description
+3. Emits a structured JSON event to stdout with completion timestamp, agent context, and session metadata
+4. Runs asynchronously and non-blocking — always exits 0 regardless of success/failure
+5. If observability systems are unavailable, fails silently without blocking agent completion
+
+This hook provides structured data for external observability systems to track agent lifecycle events, analyze parallel execution patterns, and diagnose coordination issues. It does not affect protocol execution — purely for monitoring and analytics.
+
+### Manual Installation
+
+1. Symlink:
+   ```bash
+   ln -sf ~/code/scout-and-wave/implementations/claude-code/hooks/emit_agent_completion ~/.local/bin/emit_agent_completion
+   ```
+
+2. Add to `~/.claude/settings.json`:
+   ```json
+   {
+     "hooks": {
+       "SubagentStop": [
+         {
+           "hooks": [
+             {
+               "type": "command",
+               "command": "$HOME/.local/bin/emit_agent_completion"
+             }
+           ]
+         }
+       ]
+     }
+   }
+   ```
+
+### Testing
+
+```bash
+# Test with SAW agent context (should emit JSON event)
+export SAW_AGENT_ID="A"
+export SAW_WAVE_NUMBER="1"
+export SAW_IMPL_PATH="/path/to/IMPL-feature.yaml"
+echo '{"description":"[SAW:wave1:agent-A] implement feature"}' | emit_agent_completion
+# Should output JSON event to stdout
+
+# Test with non-SAW agent (should exit silently)
+echo '{"description":"helper agent"}' | emit_agent_completion
+echo $?  # 0 (no output)
 ```
 
 ---

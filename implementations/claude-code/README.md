@@ -1,5 +1,7 @@
 # Claude Code Reference Implementation
 
+**Protocol Version:** 0.26.0
+
 Scout-and-Wave implemented as a Claude Code skill for fully automated parallel agent execution.
 
 ## Prerequisites
@@ -139,28 +141,30 @@ ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agents/planner.
 
 ```bash
 mkdir -p ~/.claude/skills/saw/references
-ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/references/program-flow.md \
-       ~/.claude/skills/saw/references/program-flow.md
-ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/references/failure-routing.md \
-       ~/.claude/skills/saw/references/failure-routing.md
-ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/references/amend-flow.md \
-       ~/.claude/skills/saw/references/amend-flow.md
+cd ~/code/scout-and-wave/implementations/claude-code/prompts/references
+for file in *.md; do
+  ln -sf "$(pwd)/$file" ~/.claude/skills/saw/references/"$file"
+done
 ```
 
-These files are loaded on-demand only when the matching subcommand is invoked (`/saw program *`, `/saw amend *`, agent failure). See `docs/skills-progressive-disclosure.md` for the design.
+This symlinks all 21 reference files:
+- **Orchestrator references** (loaded by skill on `/saw program`, `/saw amend`, agent failure): `program-flow.md`, `amend-flow.md`, `failure-routing.md`, `impl-targeting.md`, `model-selection.md`, `pre-wave-validation.md`, `wave-agent-contracts.md`
+- **Agent references** (injected by hooks at agent launch): `scout-suitability-gate.md`, `scout-implementation-process.md`, `scout-program-contracts.md`, `wave-agent-worktree-isolation.md`, `wave-agent-completion-report.md`, `wave-agent-build-diagnosis.md`, `wave-agent-program-contracts.md`, `critic-agent-verification-checks.md`, `critic-agent-completion-format.md`, `planner-suitability-gate.md`, `planner-implementation-process.md`, `planner-example-manifest.md`, `integration-connectors-reference.md`, `integration-agent-completion-report.md`
+
+These files are loaded on-demand only when the matching subcommand is invoked or agent type is launched. See `docs/skills-progressive-disclosure.md` for the design.
 
 **What you get:** Custom agent types provide runtime-enforced tool restrictions (scout cannot Edit source files, wave agents cannot spawn sub-agents) and better observability. Each agent type has YAML frontmatter that Claude Code uses to enforce behavioral constraints.
 
 ### Step 6: Install Hooks (Required)
 
-Hooks enforce the protocol's correctness guarantees at the Claude Code level — preventing Scout from writing source files (I6), blocking wave agents from touching files they don't own (I1), validating IMPL docs on write (E16), and checking agent launch/completion protocol (E42). **Without hooks, these invariants are advisory only.**
+Hooks enforce the protocol's correctness guarantees at the Claude Code level — preventing Scout from writing source files (I6), blocking wave agents from touching files they don't own (I1), validating IMPL docs on write (E16), checking agent launch/completion protocol (E42/H5), enforcing worktree isolation (E43), detecting stub patterns (E20/H3), preventing branch drift (H4), and emitting observability events (E40). **Without hooks, many invariants are advisory only.**
 
 ```bash
 cd ~/code/scout-and-wave/implementations/claude-code/hooks
 ./install.sh
 ```
 
-The installer symlinks all hook scripts to `~/.local/bin/`, registers them in `~/.claude/settings.json`, and verifies each hook is executable. It will print a summary of what was installed.
+The installer symlinks all 15 hook scripts to `~/.local/bin/`, registers them in `~/.claude/settings.json`, and verifies each hook is executable. It will print a summary of what was installed.
 
 **If `~/.local/bin` is not on your `$PATH`**, add it:
 ```bash
