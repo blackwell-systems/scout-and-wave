@@ -1,8 +1,10 @@
 # Issue: pre-commit-check runs wrong repo's lint gates
 
+**Status:** ✅ RESOLVED (2026-03-28)
 **Date:** 2026-03-28
 **Severity:** Medium (forces `--no-verify` bypass, breaks hook trust)
 **Component:** `sawtools pre-commit-check` (M4 pre-commit hook)
+**Fix:** scout-and-wave-go@1fc6e21
 
 ## Problem
 
@@ -99,3 +101,39 @@ If toolchain missing, skip that gate with warning (not failure).
 - [ ] Cross-repo commits succeed without `--no-verify`
 - [ ] Missing toolchain is caught as a configuration error (not silently skipped)
 - [ ] Test case: IMPL-X in repo A targeting repo B does not block commits to repo A
+
+## Resolution
+
+**Fixed in:** scout-and-wave-go@1fc6e21 (2026-03-28)
+
+Implemented Option 3 (Hybrid approach) with 3-tier validation logic:
+
+### Implementation
+
+Added `IMPLManifest.TargetsRepo(repoDir string) bool` method that checks:
+
+1. **Explicit repository fields** (highest priority):
+   - If `Repository` field exists, compare absolute paths
+   - If `Repositories` list exists, check if repoDir matches any entry
+   
+2. **FileOwnership.Repo field** (medium priority):
+   - Extract repo name from repoDir
+   - Check if any `FileOwnership.Repo` matches repo name
+   
+3. **File existence fallback** (lowest priority):
+   - For old IMPLs with no `Repository` field and empty `Repo` fields
+   - Check if any `FileOwnership.File` path exists in current repo
+   - If no files exist, IMPL targets different repo
+
+Modified `DiscoverLintGate()` to skip IMPLs where `TargetsRepo()` returns false.
+
+### Result
+
+- ✅ Commits to scout-and-wave repo succeed without `--no-verify`
+- ✅ agentskills IMPL (targets Rust project) is correctly skipped
+- ✅ Cross-repo IMPLs with explicit `repo:` fields work correctly
+- ✅ Old IMPLs without `Repository` field handled via file existence check
+
+### Testing
+
+Verified fix by committing to scout-and-wave repo with agentskills IMPL present in `docs/IMPL/`. Pre-commit hook silently skipped the IMPL (no lint gate run), commit succeeded.
