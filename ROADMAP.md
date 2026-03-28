@@ -102,20 +102,11 @@ Tier 1 created `config/state.go` importing `protocol`, making `protocol → conf
 | **CLI** | `cmd/sawtools/check_tier_deps_cmd.go` (new) — `sawtools check-tier-deps <program-manifest> --repo-dir <path>`. Integrate into `prepare-tier` as a pre-flight step (after P1+ conflict check, before IMPL validation). |
 | **Web** | `pkg/api/program_handler.go` — add `POST /api/program/{slug}/check-tier-deps` endpoint. Call `CheckTierDependencyGraph`. Display cycle warnings in program status panel (no graph library currently in web app — use text/table format, not directed graph visualization). |
 
-### P5: Critic Verdict "ISSUES" with 0 Errors Should Auto-Pass
+### ~~P5: Critic Verdict "ISSUES" with 0 Errors Should Auto-Pass~~ ✅ FIXED
 
-`criticPassed()` only accepts verdict "PASS". The critic returns "ISSUES" when there are warnings but 0 errors — which is advisory per protocol ("ISSUES (warnings only): Advisory"). In autonomous mode, this blocks execution unnecessarily.
+**Status:** Fixed in scout-and-wave-go@[commit-sha] (friction-fixes-phase1-execution IMPL)
 
-**Two code paths need the same fix:**
-1. `pkg/protocol/program_tier_prepare.go` — `criticPassed()` at line 166 (PROGRAM flow)
-2. `cmd/sawtools/prepare_wave.go` — E37 enforcement at lines 116-138 (standalone wave flow, blocks on ANY "ISSUES" verdict)
-
-| Layer | Scope |
-|-------|-------|
-| **SDK** | `pkg/protocol/program_tier_prepare.go` — update `criticPassed()` to return true when `CriticReport.Verdict == "PASS"` OR (`Verdict == "ISSUES"` AND all `AgentReviews[*].Issues[*].Severity == "warning"`). Note: issues are nested per-agent in `CriticData.AgentReviews`, not at the top level. Add `AutoMode bool` to `PrepareTierOpts` — when true, auto-pass warnings. |
-| **CLI** | `cmd/sawtools/prepare_wave.go` lines 116-138 — apply the same severity-aware logic. Currently blocks on any ISSUES verdict without checking severity. `cmd/sawtools/prepare_tier_cmd.go` — add `--auto` flag that sets `AutoMode: true`. |
-| **Web** | `pkg/api/program_handler.go` — web always presents warnings to user with "proceed anyway?" dialog. On user confirmation, re-run `prepare-tier` with `AutoMode: true`. |
-| **Protocol** | Update `execution-rules.md` E37 to explicitly state: "ISSUES verdict with 0 errors (warnings only) does not block `prepare-tier --auto`. Warnings are surfaced to the orchestrator but do not require correction." |
+**Implementation:** Created `pkg/protocol/CriticGatePasses(m *IMPLManifest, autoMode bool)` helper function. Updated prepare-wave CLI and prepare-tier SDK to use severity-aware logic. ISSUES verdicts with warnings-only now pass in auto mode. ISSUES verdicts with any errors always block, regardless of mode.
 
 ### P6: Incremental Agent Commits (Rate-Limit Resilience)
 
@@ -165,6 +156,18 @@ The code at `cmd/sawtools/finalize_wave.go` has two checks: `WorktreesAbsent()` 
 | **SDK** | `pkg/protocol/critic.go` — add `CriticGatePasses(m *IMPLManifest, autoMode bool) bool` that encapsulates the E37 verdict logic for both callers. Handles PASS, ISSUES-with-warnings-only (auto-pass when `autoMode`), and ISSUES-with-errors (always block). |
 | **CLI** | Both `prepare_wave.go` and `prepare_tier_cmd.go` call `CriticGatePasses()` instead of inline checks. |
 | **Web** | Web wave/program runners call the same SDK function. |
+
+### ~~F3: REVIEWED → COMPLETE State Transition~~ ✅ FIXED
+
+**Status:** Fixed in scout-and-wave-go@[commit-sha] (friction-fixes-phase1-execution IMPL)
+
+Added REVIEWED → COMPLETE to allowed state transitions in `pkg/protocol/state_transition.go`. Allows `close-impl` to complete IMPLs without wave execution (e.g., manual closure, or cancelled work after review). Protocol documentation updated in `protocol/state-machine.md`.
+
+### ~~F4: Cross-Repo finalize-wave Support~~ ✅ FIXED
+
+**Status:** Fixed in scout-and-wave-go@[commit-sha] (friction-fixes-phase1-execution IMPL)
+
+Updated `cmd/sawtools/finalize_wave.go` to properly aggregate merge results across multiple repos. Detects cross-repo waves from file_ownership `repo:` values and runs merge-agents per repo. Cross-repo IMPL docs now finalize correctly without manual intervention.
 
 ---
 

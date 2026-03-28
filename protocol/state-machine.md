@@ -17,7 +17,7 @@ SAW execution progresses through a series of states orchestrated by the synchron
 | **INTERVIEWING** | User is being guided through structured requirements gathering via `/saw interview`. | `/saw interview` command invoked | Interview completes, REQUIREMENTS.md written (manual: user runs `/saw scout` or `/saw bootstrap` after) |
 | **SCOUT_PENDING** | Initial state. Scout analysis not yet complete. | Protocol invoked | Scout completes, produces IMPL doc |
 | **SCOUT_VALIDATING** | Orchestrator running validator on Scout output; feeding errors back to Scout if needed. | Scout writes IMPL doc | Validation passes OR retry limit exhausted |
-| **REVIEWED** | IMPL doc produced, awaiting human review and approval. | Scout complete | Human approves plan |
+| **REVIEWED** | IMPL doc produced, awaiting human review and approval. | Scout complete | Human approves plan OR direct completion |
 | **SCAFFOLD_PENDING** | Scaffold Agent creating type scaffold files from approved contracts. | Human approved IMPL doc, Scaffolds section non-empty | Scaffold Agent commits all files, updates IMPL doc |
 | **WAVE_PENDING** | Ready to launch wave agents. Worktrees not yet created. | Scaffolds committed (or no scaffolds needed) | Orchestrator creates worktrees, launches all agents |
 | **WAVE_EXECUTING** | Agents running in parallel. | All agents launched | All agents report completion |
@@ -88,6 +88,18 @@ WAVE_EXECUTING → COMPLETE (solo wave on final wave: direct completion)
 ```
 SCOUT_PENDING → REVIEWED (when structured output enforcement makes E16 validation a no-op — the output is already schema-validated, so SCOUT_VALIDATING is bypassed)
 ```
+
+**Direct completion (no wave execution):**
+```
+REVIEWED → COMPLETE (when Scout completes but no waves execute)
+```
+
+This transition occurs when:
+- Human approves the IMPL doc but decides not to proceed with wave execution (manual closure after review)
+- Scout produces NOT_SUITABLE verdict that is later corrected to suitable, but work is cancelled
+- IMPL doc is used for planning purposes only
+
+Command: `sawtools close-impl` allows this transition as of friction-fixes-phase1.
 
 **Next-wave loop:**
 ```
@@ -188,6 +200,17 @@ Transitions are conditional. The following guards determine whether a transition
 ### REVIEWED → WAVE_EXECUTING (solo wave skip)
 
 **Guard:** Human approval received AND Scaffolds section empty AND wave contains exactly one agent. The orchestrator skips WAVE_PENDING (no worktrees to create) and launches the solo agent directly on the main branch.
+
+### REVIEWED → COMPLETE
+
+**Guard:** Human decision to complete the IMPL doc without wave execution. This is an explicit closure operation, not an automatic transition.
+
+**Use cases:**
+- Manual closure after review (planning complete, execution deferred)
+- NOT_SUITABLE verdict corrected to suitable but work cancelled
+- IMPL doc used for design/planning purposes only
+
+**Command:** `sawtools close-impl <impl-doc>` executes this transition.
 
 ### REVIEWED → BLOCKED
 
@@ -421,7 +444,7 @@ The following table is the canonical reference for all allowed state transitions
 | **INTERVIEWING** | *(manual: user invokes /saw scout after interview completes)* |
 | **SCOUT_PENDING** | REVIEWED, NOT_SUITABLE |
 | **SCOUT_VALIDATING** | REVIEWED, NOT_SUITABLE |
-| **REVIEWED** | SCAFFOLD_PENDING, WAVE_PENDING, WAVE_EXECUTING, BLOCKED |
+| **REVIEWED** | SCAFFOLD_PENDING, WAVE_PENDING, WAVE_EXECUTING, BLOCKED, COMPLETE |
 | **SCAFFOLD_PENDING** | WAVE_PENDING, WAVE_EXECUTING, BLOCKED |
 | **WAVE_PENDING** | WAVE_EXECUTING, BLOCKED |
 | **WAVE_EXECUTING** | WAVE_MERGING, WAVE_VERIFIED, BLOCKED, COMPLETE |
