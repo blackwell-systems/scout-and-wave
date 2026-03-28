@@ -17,7 +17,7 @@ The distinction is mechanical, not philosophical. Systems in categories 1-3 rely
 
 ## What SAW Is
 
-SAW is a coordination protocol for safely parallelizing LLM agent work on shared codebases. It is language-agnostic, provider-agnostic, and enforces correctness through six invariants (I1-I6) and 42 execution rules (E1-E42) that govern every phase from planning through post-merge verification.
+SAW is a coordination protocol for safely parallelizing LLM agent work on shared codebases. It is language-agnostic, provider-agnostic, and enforces correctness through six invariants (I1-I6) and 45 execution rules (E1-E45) that govern every phase from planning through post-merge verification.
 
 The protocol has three layers:
 
@@ -76,12 +76,13 @@ The skill uses a four-tier progressive disclosure model to keep the Orchestrator
 
 - **Tier 0** (CLAUDE.md) -- discovery index, always present, zero invocation cost
 - **Tier 1** (frontmatter metadata, ~17 lines) -- parsed by the Skills API before context construction
-- **Tier 2** (core skill body, ~323 lines) -- loads on invocation; covers scout, wave, status, bootstrap, and interview (the operations needed on >90% of sessions)
+- **Tier 2** (core skill body, ~183 lines after v0.73.0 simplification) -- loads on invocation; covers scout, wave, status, bootstrap, and interview (the operations needed on >90% of sessions); 50% reduction from original via extraction to reference files
 - **Tier 3** (on-demand reference files) -- loads only when a subcommand match fires: program execution, IMPL amendment, and failure routing stay out of context until needed
+- **Tier 3 reference files:** `model-selection.md` (81 lines), `pre-wave-validation.md` (151 lines), `wave-agent-contracts.md` (137 lines), `impl-targeting.md` (195 lines)
 
-The `triggers:` frontmatter extension enables deterministic Tier 3 injection via the `UserPromptSubmit` hook. A `/saw wave` invocation never pays the context cost of program coordination logic.
+The `triggers:` frontmatter extension enables deterministic Tier 3 injection via the `UserPromptSubmit` hook. A `/saw wave` invocation never pays the context cost of program coordination logic. The `install.sh` script uses wildcard patterns to automatically symlink new reference files as they're added.
 
-Progressive disclosure extends to agent type prompts. Each agent type (`wave-agent`, `scout`, `critic-agent`, `planner`, `integration-agent`) has a slim core prompt and a set of reference files injected at launch -- worktree isolation procedures, build diagnosis steps, completion report format, verification checklists. The injection mechanism is different from skill Tier 3: `UserPromptSubmit` targets the Orchestrator's context; injecting into a subagent requires `PreToolUse(updatedInput)`, which modifies the Agent tool's `prompt` parameter before Claude Code launches the subagent. The `validate_agent_launch` hook handles both roles: enforcement checks (1–8) block bad launches; injection blocks (Scout path and Checks 10–13) prepend reference content to the matching agent type's prompt. The Go engine mirrors this via `LoadTypePromptWithRefs`, which reads reference files alongside each type prompt file when constructing prompts for the API or Bedrock path. A `/saw wave` launch never loads critic verification checklists; a `/saw scout` launch never loads wave agent worktree isolation procedures. Both the CLI hook layer and the engine layer enforce this -- neither path is a second-class citizen.
+Progressive disclosure extends to agent type prompts. Each agent type (`wave-agent`, `scout`, `critic-agent`, `planner`, `integration-agent`) has a slim core prompt and a set of reference files injected at launch -- worktree isolation procedures (simplified to 93 lines in v0.72.0 by removing manual verification steps handled by E43 hooks), build diagnosis steps, completion report format, verification checklists. The injection mechanism is different from skill Tier 3: `UserPromptSubmit` targets the Orchestrator's context; injecting into a subagent requires `PreToolUse(updatedInput)`, which modifies the Agent tool's `prompt` parameter before Claude Code launches the subagent. The `validate_agent_launch` hook handles both roles: enforcement checks (1–8) block bad launches; injection blocks (Scout path and Checks 10–13) prepend reference content to the matching agent type's prompt. The Go engine mirrors this via `LoadTypePromptWithRefs`, which reads reference files alongside each type prompt file when constructing prompts for the API or Bedrock path. A `/saw wave` launch never loads critic verification checklists; a `/saw scout` launch never loads wave agent worktree isolation procedures. Both the CLI hook layer and the engine layer enforce this -- neither path is a second-class citizen.
 
 ### CLI (`sawtools` binary)
 
@@ -97,9 +98,22 @@ sawtools daemon                           # Continuous autonomous operation from
 
 The CLI is callable from CI/CD pipelines, shell scripts, cron jobs, or other orchestrators. `sawtools run-wave` drives agents through the API or Bedrock backend without a Claude Code session -- this is the path for fully automated pipelines. Pre-built binaries for macOS, Linux, and Windows (amd64/arm64) are published via GoReleaser on each release.
 
-Batching commands (`prepare-wave`, `finalize-wave`, `prepare-tier`, `finalize-tier`) package multi-step workflows as atomic operations. Each succeeds or fails as a unit with structured JSON output. Forgotten steps -- the most common source of silent protocol violations -- are eliminated by design.
+Batching commands (`run-scout`, `prepare-wave`, `finalize-wave`, `finalize-impl`, `prepare-tier`, `finalize-tier`) package multi-step workflows as atomic operations. Each succeeds or fails as a unit with structured JSON output. Forgotten steps -- the most common source of silent protocol violations -- are eliminated by design.
 
-Additional CLI surface includes: `interview` (E39 structured requirements gathering), `amend-impl` (E36 living IMPL mutation), `check-type-collisions` (E41 cross-agent type name conflicts), `validate-integration --wiring` (E35 wiring obligation verification), `solve` (automatic wave assignment from dependency graph), `diagnose-build-failure` (multi-language build error classification), `run-critic` (E37 pre-wave brief review), `code-review` (LLM-powered diff review with dimensional scoring), `queue` (IMPL queue management for daemon mode), and `verify-install` (hook installation verification). Over 60 commands total.
+Additional CLI surface includes 60+ commands across all protocol phases:
+- **Validation:** `validate` (E16 with --fix auto-correction), `run-critic` (E37), `check-type-collisions` (E41), `detect-shared-types` (E45), `validate-program`, `validate-integration --wiring` (E35), `check-impl-conflicts` (P1+), `validate-scaffolds`, `freeze-check`
+- **Execution:** `run-wave`, `create-worktrees`, `prepare-agent`, `journal-init`, `journal-context` (E23A), `install-hooks`, `verify-hook-installed`
+- **Analysis:** `analyze-suitability`, `analyze-deps`, `extract-commands`, `detect-scaffolds`, `detect-cascades`, `diagnose-build-failure` (multi-language error classification), `solve` (wave solver)
+- **Verification:** `verify-commits`, `verify-build`, `scan-stubs` (E20), `run-gates` (E21/E21A with caching E38), `code-review` (LLM-powered diff review)
+- **Merge:** `merge-agents`, `check-conflicts` (E11), `cleanup`
+- **State:** `set-completion`, `check-completion`, `mark-complete`, `close-impl`, `set-impl-state`, `update-status`, `update-context`
+- **Amendment:** `amend-impl` (E36: --add-wave, --redirect-agent, --extend-scope)
+- **Recovery:** `resume-detect`, `build-retry-context`, `retry`
+- **Autonomy:** `daemon`, `queue` (add/list/next)
+- **Program:** `create-program` (top-down/bottom-up), `program-execute`, `program-status`, `program-replan`, `list-programs`, `import-impls`, `tier-gate`, `freeze-contracts`, `mark-program-complete`
+- **Interview:** `interview` (E39 structured requirements gathering with 6-phase state persistence)
+- **Observability:** `metrics`, `query`, `set-injection-method` (E44)
+- **Setup:** `init` (zero-config project initialization), `verify-install`, `version`
 
 ### Go SDK (`pkg/protocol/`, `pkg/engine/`)
 
@@ -124,12 +138,22 @@ eng.RunWaveFull(ctx, result.IMPLPath, 1)
 
 The web application (`scout-and-wave-web`) is built on this SDK. Every CLI command is a thin wrapper over an SDK function. The SDK also provides:
 
-- `engine.RunDaemon()` for continuous autonomous operation -- polls an IMPL queue (`pkg/queue`), picks up work, executes waves, reports results
+- `engine.RunDaemon()` for continuous autonomous operation -- polls an IMPL queue (`pkg/queue`), picks up work, executes waves, reports results, with auto-remediation loop (configurable retry count before escalation)
 - `engine.Chat()` for conversational agent interaction
 - `protocol.Validate()`, `protocol.PrepareWave()`, `protocol.FinalizeWave()` for granular control
 - Constraint enforcement (`pkg/tools`) that implements I1 file ownership, I2 interface freeze, I5 commit tracking, and I6 role separation at the tool execution boundary
 - Wave dependency solver (`pkg/solver`) -- topological sort with level assignment that automatically computes wave numbers from dependency declarations
 - Composable pipeline framework (`pkg/pipeline`) -- step sequencing with conditions, retry strategies, and error aggregation for building custom orchestration flows
+- Multi-language analysis (`pkg/analyzer`) -- dependency graph construction, shared type detection (E45), cascade detection, suitability scoring
+- Build diagnostics (`pkg/builddiag`) -- 27+ error patterns across Go, Rust, JavaScript/TypeScript, Python
+- Error parsing (`pkg/errparse`) -- file/line extraction from compiler output with auto-detection
+- Scaffold validation (`pkg/scaffoldval`) -- correctness verification before wave launch
+- Gate caching (`pkg/gatecache`) -- E38 implementation with 5-minute TTL
+- Resume detection (`pkg/resume`) -- interrupted session identification with progress percentage
+- Tool journaling (`pkg/journal`) -- E23A checkpoint system with archive policy
+- Collision detection (`pkg/collision`) -- E41 AST-based duplicate detection
+- Notification system (`pkg/notify`) -- extractable library with Slack/Discord/Telegram adapters, Block Kit/embed/Markdown formatters
+- Webhook integration -- unified field names with backward compatibility for old configs
 
 ## What Makes SAW Different
 
@@ -151,7 +175,15 @@ The Planner role coordinates at program scope when multiple features execute as 
 
 Most systems skip planning entirely -- they decompose work at launch time or let agents self-organize. SAW runs a dedicated Scout phase that analyzes the codebase, evaluates suitability for parallelization (some features should not be parallelized), builds a dependency graph, assigns disjoint file ownership, and specifies interface contracts. The planning artifact (the IMPL doc) becomes the execution artifact -- there is no divergence between plan and reality (I4).
 
-If the Scout determines a feature is not suitable for parallel execution, it says so. The suitability gate is quantitative, not binary -- `pkg/suitability` computes a score with dimensional breakdown (decomposability, interface clarity, test isolation, dependency depth), and the gate threshold is configurable. This prevents wasted effort on features where serial implementation is the correct approach.
+Scout receives **pre-execution automation analysis** before launch via `runScoutAutomation()` in the engine or explicit tool calls in the CLI skill:
+- **H2: extract-commands** -- detects build/test/lint commands from CI configs (GitHub Actions, GitLab CI, Makefile, package.json, Cargo.toml)
+- **H1a: analyze-suitability** -- conditional requirements file analysis when path detected in feature description, produces quantitative score with dimensional breakdown (decomposability, interface clarity, test isolation, dependency depth)
+- **H3: analyze-deps** -- multi-language dependency graph construction (Go native, Rust/JavaScript/TypeScript/Python via parsers), cascade detection (Go only), fuzzy path resolution
+- **H7: diagnose-build-failure** -- 27+ error patterns across 4 languages, integrated into wave agent workflow for auto-fix when confidence ≥0.85
+
+Results are injected as "Automation Analysis Results" section in Scout prompt. Best-effort execution: tool failures are logged but don't block Scout launch. This shifts Scout from manual codebase exploration to analysis of pre-computed data, reducing scouting time and improving plan quality.
+
+If the Scout determines a feature is not suitable for parallel execution, it says so. The suitability gate is quantitative, not binary, and the gate threshold is configurable. This prevents wasted effort on features where serial implementation is the correct approach.
 
 ### Conflicts Are Structurally Impossible
 
@@ -180,13 +212,22 @@ Protocol compliance is not advisory. Lifecycle hooks enforce invariants mechanic
 - **PreToolUse (`check_wave_ownership`)**: Blocks Write/Edit operations on files the agent does not own. I1 violations are rejected before the tool executes.
 - **PreToolUse (`check_scout_boundaries`)**: Prevents Scout agents from writing source code. I6 role separation enforced at the tool boundary.
 - **PreToolUse (`validate_agent_launch`)**: H5 pre-launch gate -- 8 enforcement checks (SAW tag, IMPL exists, IMPL valid, agent in wave, ownership file match, worktree branch, scaffolds committed, scaffold correctness) before any agent starts; plus agent type reference injection (Scout path and Checks 10–13) that prepends on-demand reference files into the subagent's initial prompt via `updatedInput` before the subagent launches.
-- **SubagentStop (`validate_agent_completion`)**: Blocks agent completion if I5 (commit before reporting), I4 (completion report exists), or I1 (ownership audit) obligations are unmet.
+- **SubagentStop (`validate_agent_completion`)**: E42 validation -- blocks agent completion if I5 (commit before reporting), I4 (completion report exists), or I1 (ownership audit) obligations are unmet. Agent-type-specific validation matrix.
 - **PostToolUse (`check_branch_drift`)**: Detects when an agent has drifted off its assigned worktree branch.
 - **PostToolUse (`check_git_ownership`)**: Catches git operations that modify files outside the ownership list -- the layer-2 defense that catches merge conflict resolutions bypassing Write/Edit hooks.
+- **PostToolUse (`warn_stubs`)**: E20 stub detection -- non-blocking warnings when Write/Edit creates files containing stub patterns (TODO, FIXME, NotImplementedError, panic("not implemented"), etc.) across 8 languages.
+
+**E43: Hook-Based Worktree Isolation.** Four hooks enforce worktree isolation mechanically rather than through agent instructions:
+- `inject_worktree_env` (SubagentStart): Sets 5 environment variables (SAW_AGENT_WORKTREE, SAW_AGENT_ID, SAW_WAVE_NUMBER, SAW_IMPL_PATH, SAW_BRANCH) when wave agents launch
+- `inject_bash_cd` (PreToolUse:Bash): Prepends `cd $SAW_AGENT_WORKTREE &&` to every bash command via `updatedInput`, eliminating manual cd commands
+- `validate_write_paths` (PreToolUse:Write/Edit): Blocks relative paths and out-of-bounds writes in worktree context
+- `verify_worktree_compliance` (SubagentStop): Non-blocking audit trail for post-hoc violation analysis
+
+**E44: Context Injection Observability.** Scout records how reference files were received (`injection_method`: hook/manual-fallback/unknown), and `prepare-agent` writes `context_source` to each agent entry (prepared-brief/cross-repo-full/fallback-full-context) for telemetry and debugging.
 
 Agents cannot violate the protocol even if prompted to. Enforcement lives below the agent's decision layer. The three enforcement layers are:
 
-1. **Claude Code hooks** (Layer 1) -- PreToolUse/PostToolUse/SubagentStop/UserPromptSubmit scripts in three categories: enforcement hooks block protocol violations (ownership I1, role separation I6, branch drift, IMPL validation E16, pre-launch gate H5, git ownership, agent completion I4/I5); injection hooks prepend reference content at two layers (`inject_skill_context` targets the Orchestrator via `UserPromptSubmit` + `additionalContext`, `validate_agent_launch` targets subagents via `PreToolUse` + `updatedInput`); observability hooks emit structured events for monitoring and cost tracking.
+1. **Claude Code hooks** (Layer 1) -- 18 hooks across PreToolUse/PostToolUse/SubagentStop/UserPromptSubmit: enforcement hooks block protocol violations (ownership I1, role separation I6, worktree isolation E43, branch drift, IMPL validation E16, pre-launch gate H5, git ownership, agent completion E42); injection hooks prepend reference content at two layers (`inject_skill_context` targets the Orchestrator via `UserPromptSubmit` + `additionalContext`, `validate_agent_launch` targets subagents via `PreToolUse` + `updatedInput`); observability hooks emit structured events for monitoring and cost tracking.
 2. **Git pre-commit hooks** (Layer 2) -- ownership verification at commit time, catching violations that bypass Layer 1.
 3. **SDK constraint middleware** (Layer 3) -- `tools.Constraints` on every backend, enforcing the same rules programmatically for CLI and daemon execution where Claude Code hooks are not present.
 
@@ -203,6 +244,10 @@ Chat output is ephemeral. The IMPL doc is the record. Downstream agents, the orc
 ### Type Collision Detection
 
 **E41: Cross-Agent Type Name Conflicts.** When multiple agents in a wave define types that will coexist after merge, name collisions cause compilation failures. `check-type-collisions` statically analyzes agent briefs and file ownership to detect type name conflicts before agents launch. This is a pre-flight check in `prepare-wave` -- collisions are reported with specific agent/file/type details so the orchestrator can revise briefs before wasting compute.
+
+### Shared Data Structure Detection
+
+**E45: Scaffold Detection for Shared Types.** Scout automatically detects data structures (structs, enums, type aliases, traits) referenced by 2+ agents by scanning agent task prompts and file ownership. For each detected shared type, Scout adds an entry to the Scaffolds section. The `detect-shared-types` tool automates this via import pattern matching, fuzzy path resolution, and circular dependency detection across Go, Rust, TypeScript, and Python. This prevents I1 violations from duplicate type definitions -- if Agent A and Agent B both define `PreviewData`, the merge fails. Scaffolding shared types before Wave 1 eliminates this class of failure.
 
 ### Wiring Obligation Tracking
 
@@ -224,11 +269,38 @@ The autonomy system (`pkg/autonomy`) supports graduated levels: supervised (huma
 
 ### PROGRAM Layer for Multi-Feature Coordination
 
-For projects spanning multiple features, the PROGRAM layer provides tier-gated execution of multiple IMPLs. Tiers execute sequentially; IMPLs within a tier execute in parallel. P1+ validates that no two IMPLs in the same tier share file ownership -- the same disjoint ownership guarantee that prevents conflicts within a wave, applied at the multi-feature scale. P5 ensures each IMPL's wave merges target a dedicated branch; main advances only when a full tier is verified.
+For projects spanning multiple features, the PROGRAM layer provides tier-gated execution of multiple IMPLs. Tiers execute sequentially; IMPLs within a tier execute in parallel. This is structural coordination with the same correctness guarantees SAW provides within a single feature.
 
-Program creation supports two directions. **Top-down:** `/saw program plan "description"` launches a Planner agent that decomposes the project into features, identifies cross-feature dependencies, and produces a PROGRAM manifest with tier assignments before any Scout runs. Scouts then execute with awareness of their tier context. **Bottom-up:** `/saw program --impl slug1 slug2 ...` assembles a PROGRAM manifest from pre-existing IMPL docs, auto-tiering based on file ownership disjointness. Both paths produce the same PROGRAM manifest format and execute identically from that point forward. The bottom-up path is useful when IMPLs were scouted independently and need to be coordinated; the top-down path is the correct approach for new projects where the decomposition should drive the scouting.
+**PROGRAM invariants:**
+- **P1: IMPL Independence Within a Tier** -- no two IMPLs in the same tier share file ownership (greedy graph coloring for disjoint tier assignment)
+- **P2: Program Contracts Precede Tier Execution** -- cross-IMPL interface contracts freeze at tier boundaries (E30)
+- **P3: Tier Sequencing** -- tier N+1 does not launch until tier N gate verification passes (E29)
+- **P4: PROGRAM Manifest is Source of Truth** -- cross-IMPL progress tracking, contract declarations, tier structure (E32)
+- **P5: IMPL Branch Isolation** -- each IMPL's wave merges target a dedicated branch (E28B); main advances only when a full tier is verified
 
-This is not multi-feature task management -- it is structural coordination with the same correctness guarantees SAW provides within a single feature. A program with 5 IMPLs across 3 tiers executes with the same confidence as a single 3-wave IMPL: file ownership is disjoint, dependencies are ordered, and verification gates fire at every boundary.
+**Program creation supports two directions:**
+
+**Top-down:** `/saw program plan "description"` launches a Planner agent that decomposes the project into features, identifies cross-feature dependencies, and produces a PROGRAM manifest with tier assignments before any Scout runs. Scouts then execute with awareness of their tier context. The Planner uses BFS unblocking score to prioritize IMPLs by critical path and assigns concurrency caps per tier.
+
+**Bottom-up:** `/saw program --from-impls slug1 slug2 ...` assembles a PROGRAM manifest from pre-existing IMPL docs via `create-program`. The `check-impl-conflicts` command runs greedy graph coloring to compute disjoint tier assignments. Both paths produce the same PROGRAM manifest format and execute identically from that point forward.
+
+**Program execution:** `program-execute` runs the tier loop (E28): launches Scouts in parallel (E31), tracks cross-IMPL progress (E32), runs tier gate verification (E29), and auto-advances in `--auto` mode (E33). On tier gate failure, `program-replan` re-engages the Planner to revise the PROGRAM manifest (E34). DAG prioritization scores IMPLs by unblocking value within each tier for optimal parallelism.
+
+A program with 5 IMPLs across 3 tiers executes with the same confidence as a single 3-wave IMPL: file ownership is disjoint (P1+), dependencies are ordered (P3), and verification gates fire at every boundary (E29).
+
+### Batching Commands
+
+SAW uses **atomic batching commands** to combine multi-step workflows into single operations with transactional semantics. Each batching command succeeds or fails as a unit with structured JSON output. This pattern eliminates the most common source of silent protocol violations: forgotten steps in manual orchestration.
+
+**Core batching commands:**
+- **`run-scout`**: Launch Scout → Validate (E16) → Auto-fix → Finalize gates → Detect shared types (E45) → Return validated IMPL
+- **`prepare-wave`**: Baseline gates (E21A) → Repo validation → Create worktrees → Extract briefs → Init journals → Verify hooks (E43) → Type collision check (E41) → Critic review (E37) → Return worktree paths
+- **`finalize-wave`**: Verify commits (I5) → Scan stubs (E20) → Run gates (E21) → Merge → Verify build → Integration gaps (E25/E26) → Wiring validation (E35) → Cleanup → Return result
+- **`finalize-impl`**: Validate (E16) → Populate gates → Validate again → Return status
+- **`prepare-tier`**: Cross-IMPL conflict check (P1+) → Create IMPL branches (E28B, P5) → Coordinate worktree creation → Return tier readiness
+- **`finalize-tier`**: Tier gate verification (E29) → Contract freezing (E30) → Cross-IMPL merge coordination → Return tier completion
+
+The web application and CLI orchestrator both consume these batching commands identically -- there is no divergence in business logic between execution paths.
 
 ### LLM-Powered Code Review
 
@@ -258,17 +330,17 @@ The observability event schema (E40) defines three event types -- `cost` (token 
 
 ## Capabilities by Phase
 
-**Planning:** Scout codebase analysis, quantitative suitability scoring, dependency graph construction, automatic wave assignment (topological solver), file ownership assignment, interface contract specification, PROGRAM manifests with automatic tiering, structured requirements interviews (E39), IMPL amendment for mid-execution adaptation (E36).
+**Planning:** Scout codebase analysis, quantitative suitability scoring, dependency graph construction, automatic wave assignment (topological solver), file ownership assignment, interface contract specification, shared data structure detection (E45), PROGRAM manifests with automatic tiering, structured requirements interviews (E39), IMPL amendment for mid-execution adaptation (E36), `sawtools init` zero-config project initialization with auto-detection (Go/Rust/Node/Python/Ruby/Makefile).
 
-**Validation:** E16 IMPL structural validation with auto-fix, E37 critic brief review, E41 type collision detection, P1+ cross-IMPL file ownership conflict detection, E21A/E21B baseline gate verification (pre-wave build/test verification, including cross-repo), H5 pre-launch agent validation (8 checks), scaffold correctness verification, E35 wiring obligation enforcement.
+**Validation:** E16 IMPL structural validation with auto-fix (`validate --fix` auto-corrects invalid gate types and strips unknown keys), E37 critic brief review with pass/issues/fail verdict, E41 type collision detection (AST-based duplicate detection in same package), E45 shared data structure detection (prevents duplicate type definitions), P1+ cross-IMPL file ownership conflict detection, E21A/E21B baseline gate verification (pre-wave build/test verification with parallel execution and gate result caching E38, including cross-repo), H5 pre-launch agent validation (8 checks), scaffold correctness verification, E35 wiring obligation enforcement.
 
-**Execution:** Wave agents in git worktrees with verified isolation (solo wave optimization for single-agent waves), 3-layer ownership enforcement (hooks, git pre-commit, SDK middleware), tool journal tracking (E23A), incremental commits, cross-repository orchestration with coordinated merge ordering, integration waves (E27) for wiring-only work, LLM-powered code review with dimensional scoring.
+**Execution:** Wave agents in git worktrees with E43 hook-based isolation enforcement (4 hooks: environment injection, auto-cd, path validation, compliance verification), solo wave optimization for single-agent waves (executes directly on branch without worktree overhead), 3-layer ownership enforcement (hooks, git pre-commit, SDK middleware), tool journal tracking (E23A) with checkpoint system and prior-work context injection for retries, incremental commits with auto-commit for API/Bedrock agents, cross-repository orchestration with coordinated merge ordering, integration waves (E27) for wiring-only work, LLM-powered code review with dimensional scoring, agent launch prioritization (critical path depth scheduling), per-role model configuration (Scout/Wave/Critic/Scaffold/Integration/Planner each configurable).
 
-**Finalization:** Post-merge build verification, E20 stub scanning, E25/E26 integration gap detection and automated wiring, E35 wiring obligation verification, IMPL archival with CONTEXT.md history (E18), gate caching (E38) for idempotent re-runs.
+**Finalization:** Post-merge build verification (per-repo for cross-repo IMPLs), E20 stub scanning (8 stub patterns across 8 languages), E25/E26 integration gap detection and automated wiring (AST-based export scanning with action prefix/suffix classification), E35 wiring obligation verification (Layer 3B: validates all declared wiring fulfilled), IMPL archival with CONTEXT.md history (E18), gate caching (E38) for idempotent re-runs (5-minute TTL keyed on headCommit+diffStat+command), gate timing split (pre-merge vs post-merge execution), cross-repo merge coordination (branches checked/merged/cleaned in correct sibling repos), worktree reuse for agent reruns.
 
 **Recovery:** E19 failure type classification (transient/fixable/needs_replan/escalate/timeout) with automatic orchestrator action routing; E19.1 per-IMPL `reactions:` block overrides default routing per failure type with custom action and max_attempts; autonomy gating (gated/supervised/autonomous) controls which stages require human approval; daemon-mode auto-remediation loop retries build failures up to a configurable limit before escalating. Session resume detection with progress percentage and suggested actions, structured retry context with error classification, multi-language build failure diagnosis (Go, JS/TS), error parsing with file/line extraction, prior-work context injection via tool journals.
 
-**Observability:** Structured completion reports, hook enforcement audit trail, cost/agent_performance/activity event schema (E40), tool call event streaming (SSE), agent progress tracking, CONTEXT.md project history, web dashboard with 15+ review panels and real-time monitoring.
+**Observability:** Structured completion reports with context injection metadata (E44), hook enforcement audit trail, cost/agent_performance/activity event schema (E40) with token usage and USD estimates per agent, tool call event streaming (SSE), agent progress tracking, CONTEXT.md project history, web dashboard with 15+ review panels and real-time monitoring, browser push notifications with per-event muting (9 event types: wave complete, agent failed, merge complete/failed, scaffold complete, build verify pass/fail, plan complete, run failed), SQLite observability store with query interface, drift signal detection (stuck reading without implementing).
 
 ## Evidence
 
@@ -278,6 +350,6 @@ Dogfooding surfaces real issues. A Scout analyzing the Go engine's agent prompt 
 
 The critic gate also catches planning errors before compute is wasted. During the progressive disclosure extraction project, a pre-wave critic review caught that the planned hook output format used `additionalContext` (which targets the orchestrator's context) rather than `updatedInput` (which modifies the subagent's prompt). Three critic cycles -- not execution failures -- corrected the mechanism before any agent ran. The correctness of the final implementation is traceable to the review process, not to getting it right on the first try.
 
-The Go SDK contains 33 packages across engine, protocol, hooks, resume, retry, journal, collision detection, autonomy, suitability analysis, wave solver, pipeline framework, build diagnostics, error parsing, code review, scaffold validation, four LLM backends (Anthropic API, Bedrock, OpenAI-compatible, CLI), constraint enforcement, and configuration. The CLI exposes 60+ commands. The web app ships 70+ React components with real-time SSE streaming, Base16 theming, and Bedrock SSO -- all embedded in a single Go binary.
+The Go SDK contains 34 packages across engine, protocol, hooks, resume, retry, journal, collision detection, autonomy, suitability analysis, wave solver, pipeline framework, build diagnostics, error parsing, code review, scaffold validation, notification system, gate caching, worktree management, four LLM backends (Anthropic API, Bedrock, OpenAI-compatible, CLI), constraint enforcement, and configuration. The CLI exposes 60+ commands. The web app ships 70+ React components with real-time SSE streaming, Base16 theming, and Bedrock SSO -- all embedded in a single Go binary.
 
 This is production infrastructure, not a proof of concept.
