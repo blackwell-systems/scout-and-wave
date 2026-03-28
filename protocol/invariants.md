@@ -1,6 +1,6 @@
 # Scout-and-Wave Protocol Invariants
 
-**Version:** 0.21.0
+**Version:** 0.26.0
 
 This document defines the invariants that must hold throughout the entire Scout-and-Wave protocol execution. Violations break the correctness guarantees.
 
@@ -25,6 +25,17 @@ To audit consistency, search implementation files for `I{N}` and verify the embe
 **Cross-repo scope:** In cross-repo waves, I1 applies per-repository. Files in different repositories are inherently disjoint — no two agents can conflict on a file that exists in only one repo's filesystem. The disjoint ownership constraint still applies within each repository: no two agents in the same wave may own the same file path within the same repository.
 
 **Related Rules:** See E3 (pre-launch ownership verification), E11 (conflict prediction before merge), E42 (post-completion I1 ownership verification at SubagentStop time), and E43 (hook-based isolation enforcement prevents violations at tool boundary)
+
+### I1 Enforcement Layers (Defense-in-Depth)
+
+I1 is protected by multiple enforcement layers that work together to prevent, detect, and audit ownership violations:
+
+- **Layer 0 (E43 hooks):** PreToolUse validation blocks writes outside worktree boundaries at the tool invocation boundary. This is the **primary enforcement mechanism** in Claude Code orchestration. The `validate_write_paths` hook (E43) prevents violations before they occur by blocking relative paths and out-of-bounds writes with exit code 2. Other platforms must implement equivalent tool-boundary enforcement or rely on Layer 3 (Field 0 self-verification).
+- **Layer 1 (E3 validation):** Pre-launch ownership table validation. The orchestrator validates the `file_ownership` table for disjoint ownership before creating worktrees, catching Scout planning errors early.
+- **Layer 2 (E11 conflict prediction):** Pre-merge `files_changed` intersection check. Before any merge proceeds, the orchestrator cross-references all agents' `files_changed` and `files_created` lists to detect runtime deviations where an agent touched files outside its declared scope.
+- **Layer 3 (E42 SubagentStop):** Post-completion ownership audit. The SubagentStop hook runs `git diff --name-only` in the worktree and compares changed files against the agent's ownership list from `.saw-ownership.json`. Any unowned modified file triggers exit 2 with an I1 violation message.
+
+**Result:** I1 violations are structurally prevented (Layer 0), validated at planning time (Layer 1), detected at merge time (Layer 2), and audited at completion time (Layer 3). All layers remain active; E43 does not replace the others.
 
 ### I1 Amendment: Integration Agent Exemption
 
@@ -128,9 +139,11 @@ E42 enforces I4 at agent completion time by verifying that completion reports ex
 
 **Rationale:** The orchestrator merges from agent branch commits. If work is uncommitted, the merge step cannot proceed without manual intervention.
 
-E42 performs post-hoc I5 commit verification at SubagentStop time, checking that the agent's worktree branch has at least one commit ahead of the merge base before the agent session closes.
+E42 performs post-hoc I5 commit verification at SubagentStop time, checking that the agent's worktree branch has at least one commit ahead of the merge base before the agent session closes. E43's `verify_worktree_compliance` SubagentStop hook enforces I5 at the tool boundary, creating an audit trail for post-hoc violation analysis.
 
-**Related Rules:** See E4 (worktree isolation), completion report format in [message-formats.md](message-formats.md), and E42 (SubagentStop I5 commit verification)
+**Cross-repo agents:** Agents working in a different repository from the orchestrator may commit directly to that repo's default branch without creating a worktree branch. For these agents, the `commit` field in the completion report serves as I5 proof. `VerifyCommits()` detects this scenario via the completion report's `repo` field and validates the commit SHA is reachable in that repository. This handles cases like documentation agents that commit to a protocol repo while the orchestrator runs in an implementation repo.
+
+**Related Rules:** See E4 (worktree isolation), E43 (hook-based isolation enforcement), completion report format in [message-formats.md](message-formats.md), and E42 (SubagentStop I5 commit verification)
 
 ---
 
@@ -147,6 +160,10 @@ E42 performs post-hoc I5 commit verification at SubagentStop time, checking that
 - Violates the architectural separation between synchronous coordination and asynchronous work
 
 **Scope:** The solo wave agent must still operate in the Wave Agent role: launched by the Orchestrator as an asynchronous agent, not executed directly by the Orchestrator. Executing solo wave work inline violates I6 regardless of wave size. The absence of worktrees changes the isolation mechanism; it does not change the participant roles.
+
+**Enforcement limitation:** I6 is enforced via orchestrator prompt instructions (saw-skill.md line 66) and agent type restrictions (custom `subagent_type` values like `scout`, `wave-agent`, `integration-agent`), not via SDK validators or lifecycle hooks. The orchestrator must self-detect I6 violations by recognizing when it's performing work that should be delegated to an async agent. Unlike I1-I5, which have mechanical enforcement through validators (I1, I2, I3), hooks (I1, I5), and commit checks (I5), I6 relies on orchestrator discipline.
+
+**Future enforcement:** A PreToolUse hook could block the orchestrator's agent session from using Write/Edit tools on files listed in any IMPL doc's `file_ownership` table, providing mechanical I6 enforcement equivalent to I1's E43 hooks.
 
 **Related Rules:** See [participants.md](participants.md)
 
