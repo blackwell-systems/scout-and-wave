@@ -144,26 +144,17 @@ The code at `cmd/sawtools/finalize_wave.go` has two checks: `WorktreesAbsent()` 
 | **Web** | `pkg/api/wave_runner.go` — no changes (SDK fix). |
 
 
-### P11: `mark-program-complete` Should Archive PROGRAM Manifest
+### ~~P11: `mark-program-complete` Archive~~ ✅ ALREADY IMPLEMENTED
 
-`mark-program-complete` sets state to COMPLETE and updates CONTEXT.md but does NOT move the manifest to an archive directory. `close-impl` archives to `docs/IMPL/complete/` — `mark-program-complete` should do the same to `docs/PROGRAM/complete/`.
+**Status:** `mark-program-complete` already archives to `docs/PROGRAM/complete/` (line 89 in mark_program_complete_cmd.go). No code changes needed.
 
-| Layer | Scope |
-|-------|-------|
-| **SDK** | Add archival step to the engine function: `os.MkdirAll("docs/PROGRAM/complete/", 0755)` + `os.Rename`. Same pattern as `CloseIMPL` in `pkg/protocol/close_impl.go`. |
-| **CLI** | `mark-program-complete` CLI command calls the same SDK function. No separate changes. |
-| **Web** | Web's program completion handler should call the same SDK function. Add archive path to API response. |
-| **Protocol** | Update `program-flow.md` Phase 4 step 1 to state the command archives the manifest. |
+**Fix:** Update `program-flow.md` Phase 4 to document that mark-program-complete is a batching command (archives + updates CONTEXT.md + commits).
 
-### P12: Orchestrator Should Call `mark-program-complete` Automatically
+### ~~P12: Orchestrator Auto-Call~~ ✅ DOCUMENTATION FIX ONLY
 
-The `/saw program execute` flow (skill prompt) doesn't call `mark-program-complete` after the final tier gate passes. Currently the orchestrator uses `update-program-state --state COMPLETE` which skips CONTEXT.md update and archival.
+**Status:** `mark-program-complete` already updates CONTEXT.md (line 98) and commits atomically (line 106). The command exists and works correctly.
 
-| Layer | Scope |
-|-------|-------|
-| **Protocol** | Update `references/program-flow.md` Phase 4 to use `mark-program-complete` instead of `update-program-state`. Remove the "(or update state to COMPLETE manually if command not yet available)" hedge — the command exists. |
-| **CLI** | `/saw` skill prompt — after `finalize-tier` succeeds for the final tier, call `sawtools mark-program-complete` instead of `sawtools update-program-state`. |
-| **Web** | Web program runner should call `mark-program-complete` as the final step after tier gate passes. |
+**Fix:** Remove outdated hedge "(or update state to COMPLETE manually if command not yet available)" from `program-flow.md` Phase 4. Remove redundant step 2 (update-context) since mark-program-complete handles it.
 
 ### P13: E37 Enforcement Divergence Between `prepare-tier` and `prepare-wave`
 

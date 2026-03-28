@@ -250,12 +250,14 @@ This merges all IMPL branches (created in Step 3a.5) for the tier to main in ord
 **Phase 4: Program Completion**
 
 After final tier gate passes:
-1. Run: `sawtools mark-program-complete "<manifest>"` (or update state to COMPLETE manually if command not yet available)
-2. Update CONTEXT.md with program-level completion data:
-   ```bash
-   sawtools update-context "<manifest>" --project-root "<repo-path>"
-   ```
-3. Report final program status to user
+1. Run: `sawtools mark-program-complete "<manifest>"`
+   - Verifies all tiers complete (all IMPLs have status "complete")
+   - Updates manifest (state: PROGRAM_COMPLETE, completion_date, SAW:PROGRAM:COMPLETE marker)
+   - Archives manifest to `docs/PROGRAM/complete/`
+   - Updates CONTEXT.md with program-level completion entry
+   - Commits manifest + CONTEXT.md atomically
+   - Atomic batching command (like `close-impl` for IMPLs)
+2. Report final program status to user
 
 **Error handling:**
 - If any IMPL enters BLOCKED during tier execution, that IMPL's failure does not cascade to other IMPLs in the same tier (P1).
