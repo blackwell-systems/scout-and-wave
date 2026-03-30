@@ -132,7 +132,7 @@ The hook architecture uses two distinct output fields for different injection ta
 | Field | Target | Hook | Use case |
 |-------|--------|------|----------|
 | `additionalContext` | Orchestrator's context | `UserPromptSubmit` | Inject orchestrator references (program-flow, amend-flow) |
-| `updatedInput.prompt` | Subagent's initial prompt | `PreToolUse/Agent` | Inject agent type references (wave-agent-worktree-isolation, scout-suitability-gate) |
+| `updatedInput.prompt` | Subagent's initial prompt | `PreToolUse/Agent` | Inject conditional agent references (scout-program-contracts, wave-agent-build-diagnosis, wave-agent-program-contracts) |
 
 `additionalContext` in `UserPromptSubmit` adds content to the orchestrator before it starts. `updatedInput.prompt` in `PreToolUse/Agent` modifies the `Agent` tool's `prompt` parameter before Claude Code launches the subagent. The subagent receives the modified prompt as its initial message -- the reference content is present before it takes its first step.
 

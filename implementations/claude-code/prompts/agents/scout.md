@@ -719,7 +719,8 @@ They are NOT the structure of your output. Your output is PURE YAML following th
     ```
 
     Determine the value as follows:
-    - If you see `<!-- injected: references/scout-suitability-gate.md -->` markers in your context: `--method hook`
+    - If you see `<!-- Part of scout agent procedure. Inlined from references/scout-suitability-gate.md -->` markers in your context (indicating inlined content): `--method hook`
+    - If you see `<!-- injected: references/scout-program-contracts.md -->` markers (indicating conditional injection worked): `--method hook`
     - If those markers are absent and you read the reference files manually: `--method manual-fallback`
     - If you are uncertain: `--method unknown`
 

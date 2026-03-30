@@ -96,21 +96,15 @@ After installation, the skill directory structure looks like this:
 ├── references/
 │   ├── amend-flow.md     -> prompts/references/amend-flow.md
 │   ├── failure-routing.md -> prompts/references/failure-routing.md
+│   ├── impl-targeting.md -> prompts/references/impl-targeting.md
+│   ├── integration-gap-detection.md -> prompts/references/integration-gap-detection.md
+│   ├── model-selection.md -> prompts/references/model-selection.md
+│   ├── pre-wave-validation.md -> prompts/references/pre-wave-validation.md
 │   ├── program-flow.md   -> prompts/references/program-flow.md
-│   ├── scout-suitability-gate.md -> prompts/references/scout-suitability-gate.md
-│   ├── scout-implementation-process.md -> prompts/references/scout-implementation-process.md
 │   ├── scout-program-contracts.md -> prompts/references/scout-program-contracts.md
-│   ├── wave-agent-worktree-isolation.md -> prompts/references/wave-agent-worktree-isolation.md
-│   ├── wave-agent-completion-report.md -> prompts/references/wave-agent-completion-report.md
 │   ├── wave-agent-build-diagnosis.md -> prompts/references/wave-agent-build-diagnosis.md
-│   ├── wave-agent-program-contracts.md -> prompts/references/wave-agent-program-contracts.md
-│   ├── critic-agent-verification-checks.md -> prompts/references/critic-agent-verification-checks.md
-│   ├── critic-agent-completion-format.md -> prompts/references/critic-agent-completion-format.md
-│   ├── planner-suitability-gate.md -> prompts/references/planner-suitability-gate.md
-│   ├── planner-implementation-process.md -> prompts/references/planner-implementation-process.md
-│   ├── planner-example-manifest.md -> prompts/references/planner-example-manifest.md
-│   ├── integration-connectors-reference.md -> prompts/references/integration-connectors-reference.md
-│   └── integration-agent-completion-report.md -> prompts/references/integration-agent-completion-report.md
+│   ├── wave-agent-contracts.md -> prompts/references/wave-agent-contracts.md
+│   └── wave-agent-program-contracts.md -> prompts/references/wave-agent-program-contracts.md
 └── hooks/
     └── pre-commit-guard.sh
 ```

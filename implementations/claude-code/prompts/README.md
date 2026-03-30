@@ -17,16 +17,17 @@ prompts/
 │   ├── integration-agent.md
 │   ├── critic-agent.md
 │   └── planner.md
-└── references/           ← On-demand references (progressive disclosure)
-    ├── program-flow.md
+└── references/           ← On-demand references (11 files, progressive disclosure)
     ├── amend-flow.md
     ├── failure-routing.md
     ├── impl-targeting.md
+    ├── integration-gap-detection.md
     ├── model-selection.md
     ├── pre-wave-validation.md
-    ├── wave-agent-contracts.md
+    ├── program-flow.md
     ├── scout-program-contracts.md       ← Scout agent reference (conditionally injected)
     ├── wave-agent-build-diagnosis.md     ← Wave agent reference (conditionally injected)
+    ├── wave-agent-contracts.md
     └── wave-agent-program-contracts.md   ← Wave agent reference (conditionally injected)
 ```
 
@@ -63,7 +64,7 @@ does not read them directly; it includes the path in the Scout's prompt.
 
 ## On-Demand References (`references/`)
 
-Loaded by the Orchestrator only when the matching subcommand is invoked, or injected by hooks at agent launch time.
+Loaded by the Orchestrator only when the matching subcommand is invoked, or conditionally injected by the `inject-agent-context` script at agent launch time.
 See `docs/skills-progressive-disclosure.md` for the design.
 
 ### Orchestrator References (skill-loaded)

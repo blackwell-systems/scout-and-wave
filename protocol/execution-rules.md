@@ -1892,7 +1892,7 @@ The following checklist enumerates ALL lifecycle events that must be emitted. Ev
 
 E43 enforces E4 mechanically. E4 (Worktree Isolation) states the requirement: all wave agents MUST use worktree isolation. E43 specifies the enforcement mechanism: lifecycle hooks that make isolation violations impossible rather than merely documented.
 
-**Before E43 (instruction-based isolation):** Agents followed written protocol in wave-agent-worktree-isolation.md. Violations were possible via agent error, context compaction loss, or rate-limit recovery gaps.
+**Before E43 (instruction-based isolation):** Agents followed written protocol in the worktree isolation section of wave-agent.md (previously a separate reference file, now inlined). Violations were possible via agent error, context compaction loss, or rate-limit recovery gaps.
 
 **After E43 (hook-based enforcement):** Claude Code hooks intercept tool calls before execution. Relative paths and out-of-bounds writes are blocked at the tool boundary. Bash commands run in the correct working directory automatically.
 

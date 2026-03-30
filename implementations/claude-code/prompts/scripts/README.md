@@ -257,13 +257,12 @@ Scripts can be called from CI/CD pipelines without Claude Code.
 
 ### Empty output (no injection)
 
-**Cause:** No triggers or agent-references matched.
+**Cause:** No conditional patterns matched.
 
 **Solution:**
-- Check trigger patterns in frontmatter match user prompt regex
-- Verify `--type` argument matches `agent-type:` values exactly
-- Test conditional `when:` patterns match prompt content
-- Confirm reference files exist at specified paths
+- Verify `--type` argument matches agent type values exactly (`scout`, `wave-agent`, etc.)
+- Test conditional patterns match prompt content (e.g., `--program` for scout, `baseline_verification_failed` for wave-agent)
+- Confirm reference files exist at specified paths in `references/` directory
 
 ### Duplicate injection
 
