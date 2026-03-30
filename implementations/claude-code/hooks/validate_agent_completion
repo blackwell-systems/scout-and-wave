@@ -190,7 +190,39 @@ if [[ "$agent_type" == "wave" ]]; then
   fi
 fi
 
-# --- Step 4: I5 commit verification (wave agents only) ---
+# --- Step 4: Branch verification (wave agents only) ---
+# E42/I1: Verify agent committed to correct branch
+if [[ "$agent_type" == "wave" && -n "$wave_num" && -n "$agent_id" ]]; then
+  ownership_file=""
+  search_dir="$PWD"
+  for _ in 1 2 3 4 5; do
+    if [[ -f "$search_dir/.saw-ownership.json" ]]; then
+      ownership_file="$search_dir/.saw-ownership.json"
+      break
+    fi
+    parent=$(dirname "$search_dir")
+    if [[ "$parent" == "$search_dir" ]]; then break; fi
+    search_dir="$parent"
+  done
+
+  if [[ -n "$ownership_file" ]]; then
+    worktree_root=$(dirname "$ownership_file")
+    current_branch=$(git -C "$worktree_root" branch --show-current 2>/dev/null || true)
+
+    # Extract feature slug from IMPL path for expected branch name
+    feature_slug=$(basename "$impl_path" .yaml | sed 's/^IMPL-//')
+    expected_branch="saw/${feature_slug}/wave${wave_num}-agent-${agent_id}"
+
+    if [[ -n "$current_branch" && "$current_branch" != "$expected_branch" ]]; then
+      echo "E42/I1 violation: agent ${agent_id} (wave ${wave_num}) committed to wrong branch" >&2
+      echo "     Expected: ${expected_branch}" >&2
+      echo "     Actual:   ${current_branch}" >&2
+      exit 2
+    fi
+  fi
+fi
+
+# --- Step 5: I5 commit verification (wave agents only) ---
 if [[ "$agent_type" == "wave" ]]; then
   ownership_file=""
   search_dir="$PWD"
@@ -243,7 +275,7 @@ if [[ "$agent_type" == "wave" ]]; then
   fi
 fi
 
-# --- Step 5: Protocol report validation ---
+# --- Step 6: Protocol report validation ---
 case "$agent_type" in
   wave)
     # Verify agent ID appears in completion_reports section

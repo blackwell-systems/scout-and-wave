@@ -136,7 +136,7 @@ The hook architecture uses two distinct output fields for different injection ta
 
 `additionalContext` in `UserPromptSubmit` adds content to the orchestrator before it starts. `updatedInput.prompt` in `PreToolUse/Agent` modifies the `Agent` tool's `prompt` parameter before Claude Code launches the subagent. The subagent receives the modified prompt as its initial message -- the reference content is present before it takes its first step.
 
-**This distinction is non-obvious.** Early implementations tried `additionalContext` in `PreToolUse` -- this augmented the orchestrator's context, not the subagent's. Three critic review cycles caught the error before any agent ran. The correct mechanism is documented in `docs/proposals/subagent-prompt-injection.md`.
+**This distinction is non-obvious.** Early implementations tried `additionalContext` in `PreToolUse` -- this augmented the orchestrator's context, not the subagent's. Three critic review cycles caught the error before any agent ran. The correct mechanism is `updatedInput.prompt` in `PreToolUse/Agent`.
 
 #### Agent Type Definitions
 

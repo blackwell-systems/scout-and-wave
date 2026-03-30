@@ -57,7 +57,6 @@ inject=$(bash ${CLAUDE_SKILL_DIR}/scripts/inject-context "$user_prompt")
 - `1` - Error (script directory resolution failure)
 
 **Related documentation:**
-- [agentskills-subcommand-dispatch.md](/Users/dayna.blackwell/code/scout-and-wave/docs/proposals/agentskills-subcommand-dispatch.md) - Original design proposal
 - [inject_skill_context hook](/Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/hooks/inject_skill_context) - Hook orchestrator
 
 ---
@@ -119,8 +118,7 @@ inject=$(bash ${CLAUDE_SKILL_DIR}/scripts/inject-agent-context \
 - `CLAUDE_SKILL_DIR` - Overrides default skill directory resolution (defaults to parent of scripts/)
 
 **Related documentation:**
-- [subagent-prompt-injection.md](/Users/dayna.blackwell/code/scout-and-wave/docs/proposals/subagent-prompt-injection.md) - Original design proposal
-- [validate_agent_launch hook](/Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/hooks/validate_agent_launch) - Hook implementation (lines 55-468)
+- [validate_agent_launch hook](/Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/hooks/validate_agent_launch) - Hook implementation
 - [skills-progressive-disclosure.md](/Users/dayna.blackwell/code/scout-and-wave/docs/skills-progressive-disclosure.md) - Architecture overview
 
 ---
@@ -339,10 +337,8 @@ bash scripts/inject-agent-context --type wave-agent \
 - [execution-rules.md](/Users/dayna.blackwell/code/scout-and-wave/protocol/execution-rules.md) - E42 progressive disclosure
 - [invariants.md](/Users/dayna.blackwell/code/scout-and-wave/protocol/invariants.md) - I6 role separation
 
-**Design proposals:**
-- [agentskills-subcommand-dispatch.md](/Users/dayna.blackwell/code/scout-and-wave/docs/proposals/agentskills-subcommand-dispatch.md) - Context injection design
-- [subagent-prompt-injection.md](/Users/dayna.blackwell/code/scout-and-wave/docs/proposals/subagent-prompt-injection.md) - Agent reference injection design
-- [skills-progressive-disclosure.md](/Users/dayna.blackwell/code/scout-and-wave/docs/skills-progressive-disclosure.md) - Two-layer architecture
+**Pattern documentation:**
+- [skills-progressive-disclosure.md](/Users/dayna.blackwell/code/scout-and-wave/docs/skills-progressive-disclosure.md) - Progressive disclosure architecture
 
 **Hook implementations:**
 - [inject_skill_context](/Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/hooks/inject_skill_context) - UserPromptSubmit hook

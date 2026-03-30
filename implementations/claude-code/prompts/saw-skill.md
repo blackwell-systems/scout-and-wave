@@ -63,6 +63,36 @@ If 1-3 fail, print what's missing (see `docs/INSTALLATION.md`) and stop.
 
 **CLI orchestration (you):** Use Agent tool to launch agents. Manual flow: `create-worktrees` → launch → `merge-agents`. Only way to access Max plan/Bedrock/MCP. **Programmatic:** `sawtools run-wave` for automation (not available in CLI sessions).
 
+## Helper Functions
+
+### SAW Agent Naming (E44)
+
+**Rule:** All agent launches MUST use the standardized SAW tag format for observability.
+
+**Format:** `[SAW:{phase}:{identifier}] {description}`
+
+**Helper function (use for all agent launches):**
+```
+sawAgentName(phase, id, slug, description):
+  if phase == "wave":
+    return f"[SAW:wave{id[0]}:agent-{id[1]}] {description}"
+  elif phase == "scout":
+    return f"[SAW:scout:{slug}] {description}"
+  elif phase == "critic":
+    return f"[SAW:critic:{slug}] {description}"
+  elif phase == "scaffold":
+    return f"[SAW:scaffold:{slug}] {description}"
+  elif phase == "integration":
+    return f"[SAW:integration:wave{id}] {description}"
+```
+
+**Examples:**
+- Wave agent: `sawAgentName("wave", (1, "A"), "logging", "inject logger")` → `[SAW:wave1:agent-A] inject logger`
+- Scout: `sawAgentName("scout", None, "user-auth", "analyze")` → `[SAW:scout:user-auth] analyze`
+- Critic: `sawAgentName("critic", None, "logging", "review briefs")` → `[SAW:critic:logging] review briefs`
+
+**CRITICAL:** Never manually construct agent names. Always use helper to ensure monitoring tools can detect SAW agents.
+
 ## Execution Logic
 
 **IMPL targeting:** Parse `--impl <value>` from arguments (slug / filename / path). When omitted, auto-select if exactly 1 pending IMPL exists. Parse `--impl` before other flags.
@@ -107,6 +137,17 @@ If a `docs/IMPL/IMPL-*.yaml` file already exists:
    Returns JSON with worktree paths and agent metadata.
 
 6. **Agent launching.** For each agent, launch with `subagent_type: wave-agent` and `run_in_background: true`. Prepend journal context if exists. Use short IMPL-referencing prompts (~60 tokens). Agent reads full brief from `.saw-agent-brief.md`.
+
+**E44: Use sawAgentName() helper for name parameter.** Example:
+```python
+Agent(
+  subagent_type="wave-agent",
+  name=sawAgentName("wave", (wave_num, agent_id), feature_slug, f"implement {task_summary}"),
+  description=f"{task_summary}",
+  run_in_background=True,
+  prompt=agent_prompt
+)
+```
 
 **YAML manifest prompt template:**
 ```

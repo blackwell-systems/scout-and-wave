@@ -62,7 +62,7 @@ The [Agent Skills specification](https://agentskills.io/specification) defines a
 3. **Script-based conditional dispatch** — `inject-context` script for orchestrator references, `inject-agent-context` script for conditional subagent references, both using direct conditional logic
 4. **Conditional injection** — Script-based pattern matching enables scenario-specific reference loading
 
-The injection architecture is documented in `docs/proposals/agentskills-subcommand-dispatch.md` and `docs/proposals/subagent-prompt-injection.md`.
+The injection architecture is implemented in `implementations/claude-code/prompts/scripts/inject-context` (orchestrator) and `inject-agent-context` (subagents).
 
 ## Why Progressive Disclosure
 
@@ -122,7 +122,7 @@ A user who types "add caching to the API" in a project with this CLAUDE.md gets 
 
 This is the progressive disclosure model applied at the project level: the index is always loaded; the skill bodies load only when invoked.
 
-**Known limitation:** CLAUDE.md entries are advisory — Claude reads them but there is no enforcement mechanism that prevents the model from ignoring them. The entries should be written to make the correct routing the obvious choice, not to mandate it. The `UserPromptSubmit` hook and `inject-context` script address the same gap the Agent Skills spec leaves open: the spec defines the Resources tier but leaves loading to convention. The script-based conditional dispatch provides deterministic injection for subcommand-anchored references (e.g. `/saw program` → `program-flow.md`). Mid-execution references (failure routing, error states) remain convention-based — see `docs/proposals/agentskills-subcommand-dispatch.md` for scope and known limitations.
+**Known limitation:** CLAUDE.md entries are advisory — Claude reads them but there is no enforcement mechanism that prevents the model from ignoring them. The entries should be written to make the correct routing the obvious choice, not to mandate it. The `UserPromptSubmit` hook and `inject-context` script address the same gap the Agent Skills spec leaves open: the spec defines the Resources tier but leaves loading to convention. The script-based conditional dispatch provides deterministic injection for subcommand-anchored references (e.g. `/saw program` → `program-flow.md`). Mid-execution references (failure routing, error states) remain convention-based.
 
 ### Tier 1 — Metadata (always loaded, ~20 lines)
 
@@ -241,7 +241,7 @@ Both hooks delegate to scripts with direct conditional logic (no YAML frontmatte
 - `additionalContext` (UserPromptSubmit) → adds content to the **orchestrator's** context
 - `updatedInput.prompt` (PreToolUse/Agent) → modifies the **subagent's** initial prompt
 
-This distinction is non-obvious. Early implementations tried `additionalContext` in PreToolUse -- this augmented the orchestrator's context, not the subagent's. The correct mechanism is `updatedInput`, which modifies the Agent tool's `prompt` parameter before Claude Code launches the subagent. See `docs/proposals/subagent-prompt-injection.md` for the full decision record.
+This distinction is non-obvious. Early implementations tried `additionalContext` in PreToolUse -- this augmented the orchestrator's context, not the subagent's. The correct mechanism is `updatedInput`, which modifies the Agent tool's `prompt` parameter before Claude Code launches the subagent.
 
 #### Layer 2: Vendor-Neutral Script Injection
 
@@ -548,7 +548,7 @@ PreToolUse/Agent hook fires
   → subagent has reference content before its first step
 ```
 
-See `docs/proposals/subagent-prompt-injection.md` for the full decision record (including why this was a non-obvious discovery — `additionalContext` was tried first and blocked by critic review).
+The `updatedInput` mechanism was a non-obvious discovery — `additionalContext` was tried first and caught during critic review.
 
 ### What to extract from agent type prompts
 
@@ -595,7 +595,7 @@ The injection system has three layers, each targeting a different deployment con
 
 `inject-agent-context` is the authoritative source for the 3 conditional reference mappings and dedup markers, called by the hook for Layer 1. Output from either layer is idempotent when combined. Platforms that register the hook get Layer 1 automatically. Platforms without Claude Code hooks but with Bash can call the script directly as Layer 2. The routing table in `saw-skill.md` remains the always-available Layer 3 fallback. Always-needed content requires no injection -- it is inlined in agent definitions.
 
-See `docs/proposals/subagent-prompt-injection.md` for the full decision record on why `updatedInput` (not `additionalContext`) is required for subagent injection.
+The `updatedInput` mechanism is required because `additionalContext` only reaches the orchestrator, not the subagent.
 
 ### How to extend — adding a new conditional reference
 
