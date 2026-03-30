@@ -147,11 +147,13 @@ for file in *.md; do
 done
 ```
 
-This symlinks all 21 reference files:
-- **Orchestrator references** (loaded by skill on `/saw program`, `/saw amend`, agent failure): `program-flow.md`, `amend-flow.md`, `failure-routing.md`, `impl-targeting.md`, `model-selection.md`, `pre-wave-validation.md`, `wave-agent-contracts.md`
-- **Agent references** (injected by hooks at agent launch): `scout-suitability-gate.md`, `scout-implementation-process.md`, `scout-program-contracts.md`, `wave-agent-worktree-isolation.md`, `wave-agent-completion-report.md`, `wave-agent-build-diagnosis.md`, `wave-agent-program-contracts.md`, `critic-agent-verification-checks.md`, `critic-agent-completion-format.md`, `planner-suitability-gate.md`, `planner-implementation-process.md`, `planner-example-manifest.md`, `integration-connectors-reference.md`, `integration-agent-completion-report.md`
+This symlinks the 11 remaining reference files (down from 22):
+- **Orchestrator references** (8 files, loaded by skill on matching subcommands): `program-flow.md`, `amend-flow.md`, `failure-routing.md`, `impl-targeting.md`, `model-selection.md`, `pre-wave-validation.md`, `wave-agent-contracts.md`, `integration-gap-detection.md`
+- **Conditional agent references** (3 files, injected by hooks only when specific conditions match): `scout-program-contracts.md`, `wave-agent-build-diagnosis.md`, `wave-agent-program-contracts.md`
 
-These files are loaded on-demand only when the matching subcommand is invoked or agent type is launched. See `docs/skills-progressive-disclosure.md` for the design.
+Most agent reference content is now inlined directly in agent type definitions (`agents/*.md`), eliminating hook-based injection for the common case. Only 3 conditional references remain for context that applies in specific scenarios (program contracts, build diagnosis).
+
+These files are loaded on-demand only when the matching subcommand is invoked or condition is met at agent launch. See `docs/skills-progressive-disclosure.md` for the design.
 
 **What you get:** Custom agent types provide runtime-enforced tool restrictions (scout cannot Edit source files, wave agents cannot spawn sub-agents) and better observability. Each agent type has YAML frontmatter that Claude Code uses to enforce behavioral constraints.
 

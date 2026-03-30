@@ -9,7 +9,7 @@ Scout-and-Wave uses a two-layer progressive disclosure architecture:
 1. **Hook layer** (Claude Code): `validate_agent_launch` and `inject_skill_context` hooks automatically inject reference files when launching agents or processing user prompts
 2. **Script layer** (vendor-neutral): Bash scripts that can be called manually from agent prompts when hooks are unavailable
 
-These scripts mirror the logic of Claude Code hooks but run as model-initiated bash commands. They read configuration from the skill's `saw-skill.md` frontmatter and inject matching reference files based on triggers or agent types.
+These scripts mirror the logic of Claude Code hooks but run as model-initiated bash commands. They use direct conditional logic to inject matching reference files based on prompt patterns or agent types.
 
 ## Scripts
 
@@ -20,17 +20,15 @@ These scripts mirror the logic of Claude Code hooks but run as model-initiated b
 **When used:** Automatically called by the `inject_skill_context` hook when the user types a `/saw` command. Can be manually invoked on platforms without hooks.
 
 **How it works:**
-1. Reads `triggers:` section from `saw-skill.md` frontmatter
-2. Matches user prompt against regex patterns
+1. Receives user prompt as argument or stdin
+2. Uses conditional logic (case/if statements) to match prompt patterns
 3. Outputs concatenated contents of matching reference files with injection markers
 
-**Configuration (saw-skill.md frontmatter):**
-```yaml
-triggers:
-  - match: "^/saw program"
-    inject: references/program-flow.md
-  - match: "^/saw amend"
-    inject: references/amend-flow.md
+**Conditional logic:**
+```bash
+# Direct conditional logic:
+#   "^/saw program" in prompt -> inject references/program-flow.md
+#   "^/saw amend" in prompt -> inject references/amend-flow.md
 ```
 
 **Usage:**
@@ -56,7 +54,7 @@ inject=$(bash ${CLAUDE_SKILL_DIR}/scripts/inject-context "$user_prompt")
 
 **Exit codes:**
 - `0` - Success (output may be empty if no triggers matched)
-- `1` - Error (SKILL.md missing or parse failure)
+- `1` - Error (script directory resolution failure)
 
 **Related documentation:**
 - [agentskills-subcommand-dispatch.md](/Users/dayna.blackwell/code/scout-and-wave/docs/proposals/agentskills-subcommand-dispatch.md) - Original design proposal
@@ -66,41 +64,33 @@ inject=$(bash ${CLAUDE_SKILL_DIR}/scripts/inject-context "$user_prompt")
 
 ### `inject-agent-context`
 
-**Purpose:** Reference injection for subagent launches based on agent type and conditional patterns.
+**Purpose:** Conditional reference injection for subagent launches based on agent type and prompt content.
 
-**When used:** Automatically called by the `validate_agent_launch` hook when spawning Scout, Wave, Critic, Planner, or Integration agents. Can be manually invoked on platforms without hooks.
+**When used:** Called by the `validate_agent_launch` hook when spawning Scout or Wave agents that may need conditional references. Can be manually invoked on platforms without hooks.
 
 **How it works:**
-1. Reads `agent-references:` section from `saw-skill.md` frontmatter
-2. Matches requested agent type (e.g., `scout`, `wave-agent`)
-3. Optionally matches `when:` regex patterns against agent prompt
+1. Receives agent type and prompt text as arguments
+2. Uses conditional logic (case/if statements) to determine which references to inject
+3. Only 3 conditional references remain -- most agent content is now inlined in agent definitions
 4. Outputs concatenated contents of matching reference files with injection markers
 5. Prevents duplicate injection using marker deduplication
 
-**Configuration (saw-skill.md frontmatter):**
-```yaml
-agent-references:
-  - agent-type: scout
-    inject: references/scout-suitability-gate.md
-  - agent-type: scout
-    inject: references/scout-implementation-process.md
-  - agent-type: scout
-    inject: references/scout-program-contracts.md
-    when: "--program"
-  - agent-type: wave-agent
-    inject: references/wave-agent-worktree-isolation.md
-  - agent-type: wave-agent
-    inject: references/wave-agent-program-contracts.md
-    when: "frozen_contracts_hash|frozen: true"
+**Conditional logic:**
+```bash
+# Direct conditional logic:
+#   scout + "--program" in prompt -> inject references/scout-program-contracts.md
+#   wave-agent + "baseline_verification_failed" in prompt -> inject references/wave-agent-build-diagnosis.md
+#   wave-agent + "frozen_contracts" in prompt -> inject references/wave-agent-program-contracts.md
+#   All other agent types -> no injection (empty output)
 ```
 
 **Usage:**
 ```bash
-# Basic usage
-inject=$(bash scripts/inject-agent-context --type scout --prompt "$agent_prompt")
+# Basic usage (scout with --program flag)
+inject=$(bash scripts/inject-agent-context --type scout --prompt "Analyze --program")
 full_prompt="${inject}${agent_prompt}"
 
-# With conditional matching
+# Wave agent with frozen contracts
 inject=$(bash scripts/inject-agent-context \
   --type wave-agent \
   --prompt "IMPL doc: docs/IMPL/IMPL-feature.yaml\nfrozen_contracts_hash: abc123")
@@ -112,21 +102,18 @@ inject=$(bash ${CLAUDE_SKILL_DIR}/scripts/inject-agent-context \
 ```
 
 **Arguments:**
-- `--type <agent-type>` (required) - Agent type to match (must match `agent-type:` value in frontmatter)
-- `--prompt <text>` (optional) - Agent prompt text for conditional `when:` pattern matching
+- `--type <agent-type>` (required) - Agent type (`scout`, `wave-agent`, etc.)
+- `--prompt <text>` (optional) - Agent prompt text for conditional pattern matching
 
 **Output format:**
 ```
-<!-- injected: references/scout-suitability-gate.md -->
-[contents of scout-suitability-gate.md]
-
-<!-- injected: references/scout-implementation-process.md -->
-[contents of scout-implementation-process.md]
+<!-- injected: references/scout-program-contracts.md -->
+[contents of scout-program-contracts.md]
 ```
 
 **Exit codes:**
-- `0` - Success (output may be empty if no matches)
-- `1` - Error (--type missing or SKILL.md parse failure)
+- `0` - Success (output may be empty if no conditions matched)
+- `1` - Error (--type missing)
 
 **Environment variables:**
 - `CLAUDE_SKILL_DIR` - Overrides default skill directory resolution (defaults to parent of scripts/)
@@ -140,32 +127,36 @@ inject=$(bash ${CLAUDE_SKILL_DIR}/scripts/inject-agent-context \
 
 ## Architecture Overview
 
-### Two-Layer Design
+### Three-Layer Design
 
-**Layer 1: Hook-based (Claude Code)**
-- `inject_skill_context` hook: Fires on `UserPromptSubmit`, calls `scripts/inject-context` for all installed skills
-- `validate_agent_launch` hook: Fires on `PreToolUse(Agent)`, calls inline injection logic (mirrors `inject-agent-context`)
-- **Pros:** Automatic, zero model effort, consistent
+**Layer 1: Inlined in agent definitions (primary)**
+- Most reference content is now inlined directly in agent type definitions (`agents/*.md`)
+- Agent definitions are self-contained: no external injection needed for common cases
+- **Pros:** Simpler, no hook dependency, no injection failures, faster agent startup
+- **Cons:** Larger agent definition files
+
+**Layer 2: Hook-based conditional injection (Claude Code)**
+- `inject_skill_context` hook: Fires on `UserPromptSubmit`, calls `scripts/inject-context` for orchestrator references
+- `validate_agent_launch` hook: Fires on `PreToolUse(Agent)`, calls `scripts/inject-agent-context` for 3 conditional agent references
+- **Pros:** Automatic, zero model effort, only injects when conditions match
 - **Cons:** Claude Code only
 
-**Layer 2: Script-based (vendor-neutral)**
+**Layer 3: Script-based (vendor-neutral)**
 - Model reads instruction in skill prompt: "On platforms without hooks, call `scripts/inject-agent-context`"
 - Model makes Bash tool call before launching agent
 - **Pros:** Works anywhere with Bash (raw API, Bedrock, CI/CD)
 - **Cons:** Requires model discipline, costs tokens
 
-### Why Both Layers?
+### Why This Design?
 
-Scout-and-Wave must work in environments without Claude Code (CI/CD, web apps, raw API). The scripts provide a portable fallback that implements the same logic as hooks. The skill prompt (saw-skill.md line 78) documents the fallback pattern:
-
-> Agent references auto-injected by `validate_agent_launch` hook (see frontmatter). Vendor-neutral fallback: `scripts/inject-agent-context --type <agent-type>`.
+Most agent reference content was unconditionally injected at every launch. Inlining it in agent definitions eliminates the injection step entirely for the common case. Only 3 references remain conditional because their content is only relevant in specific scenarios (program contracts, build diagnosis). The hook and script layers handle these conditional cases.
 
 ### Deduplication Protocol
 
 Both scripts and hooks use HTML comment markers to prevent duplicate injection:
 
 ```markdown
-<!-- injected: references/scout-suitability-gate.md -->
+<!-- injected: references/scout-program-contracts.md -->
 ```
 
 Before injecting a reference file, the script checks if the marker already exists in the prompt. This prevents redundant injection when:
@@ -177,7 +168,7 @@ Before injecting a reference file, the script checks if the marker already exist
 
 **Required:**
 - Bash 4.0+ (for `set -euo pipefail`, `${BASH_REMATCH}`)
-- Standard Unix tools: `cat`, `grep`, `awk`, `sed`
+- Standard Unix tools: `cat`, `grep`
 
 **Optional (graceful degradation):**
 - None - scripts work with minimal tooling
@@ -185,13 +176,13 @@ Before injecting a reference file, the script checks if the marker already exist
 **Skill directory structure:**
 ```
 ~/.claude/skills/saw/
-├── saw-skill.md              # Frontmatter with triggers/agent-references
+├── saw-skill.md              # Orchestrator skill definition
 ├── scripts/
-│   ├── inject-context        # This script
-│   └── inject-agent-context  # This script
-└── references/               # Reference files
-    ├── scout-suitability-gate.md
-    ├── wave-agent-worktree-isolation.md
+│   ├── inject-context        # Orchestrator reference injection
+│   └── inject-agent-context  # Conditional agent reference injection
+└── references/               # On-demand reference files (11 total)
+    ├── program-flow.md       # Orchestrator references (8)
+    ├── scout-program-contracts.md    # Conditional agent references (3)
     └── ...
 ```
 
@@ -262,8 +253,7 @@ Scripts can be called from CI/CD pipelines without Claude Code.
 
 **Solution:**
 - Verify `CLAUDE_SKILL_DIR` points to correct directory
-- Check `saw-skill.md` exists and has valid YAML frontmatter
-- Ensure frontmatter is wrapped in `---` delimiters
+- Check that `CLAUDE_SKILL_DIR` resolves to a directory containing `references/`
 
 ### Empty output (no injection)
 
@@ -309,15 +299,12 @@ See protocol documentation for execution rule details:
 
 ### Adding new reference files
 
+**For always-needed content:** Inline directly in the agent definition (`agents/*.md`). This is the preferred approach -- it keeps agent definitions self-contained and eliminates injection complexity.
+
+**For conditional content** (only needed in specific scenarios):
 1. Create reference file in `references/` directory
-2. Add entry to `saw-skill.md` frontmatter:
-   ```yaml
-   agent-references:
-     - agent-type: wave-agent
-       inject: references/new-reference.md
-       when: "optional-pattern"  # Optional
-   ```
-3. No script changes needed - scripts read frontmatter dynamically
+2. Add a case branch in `scripts/inject-agent-context` for the new condition
+3. Update `validate_agent_launch` hook if it has its own injection logic
 
 ### Testing scripts
 
@@ -328,64 +315,23 @@ echo "/saw program plan" | bash scripts/inject-context
 # Should output: <!-- injected: references/program-flow.md --> + file contents
 ```
 
-**Test inject-agent-context:**
+**Test inject-agent-context (conditional injection):**
 ```bash
 cd /Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/prompts
-bash scripts/inject-agent-context \
-  --type scout \
-  --prompt "Analyze codebase for feature X"
-# Should output: scout-suitability-gate.md + scout-implementation-process.md
-```
 
-**Test conditional injection:**
-```bash
-bash scripts/inject-agent-context \
-  --type scout \
-  --prompt "Analyze codebase --program"
-# Should include scout-program-contracts.md
-```
+# Scout without --program: should produce empty output
+bash scripts/inject-agent-context --type scout --prompt "Analyze codebase for feature X"
 
-### Debugging frontmatter parsing
+# Scout with --program: should inject scout-program-contracts.md
+bash scripts/inject-agent-context --type scout --prompt "Analyze codebase --program"
 
-Scripts use `awk` to parse YAML frontmatter. To debug parsing:
+# Wave agent with frozen contracts: should inject wave-agent-program-contracts.md
+bash scripts/inject-agent-context --type wave-agent \
+  --prompt "frozen_contracts_hash: abc123"
 
-```bash
-# Extract triggers
-awk '/^---$/ { if (++delim == 2) exit; next }
-     delim == 1 && /^triggers:/ { in_triggers = 1; next }
-     in_triggers && /^[^ ]/ { exit }
-     in_triggers && /^  - match:/ {
-       m = $0; sub(/.*match: *"?/, "", m); sub(/"? *$/, "", m)
-       current_match = m; next
-     }
-     in_triggers && /^    inject:/ {
-       i = $0; sub(/.*inject: *"?/, "", i); sub(/"? *$/, "", i)
-       if (current_match != "" && i != "") print current_match "\t" i
-       current_match = ""
-     }' saw-skill.md
-
-# Extract agent-references
-awk '/^---$/ { if (++delim == 2) exit; next }
-     delim == 1 && /^agent-references:/ { in_block = 1; next }
-     in_block && /^[^ ]/ { exit }
-     in_block && /^  - agent-type:/ {
-       if (current_type != "" && current_file != "")
-         print current_type "\t" current_file "\t" current_when
-       t = $0; sub(/.*agent-type: *"?/, "", t); sub(/"? *$/, "", t)
-       current_type = t; current_file = ""; current_when = ""; next
-     }
-     in_block && /^    inject:/ {
-       f = $0; sub(/.*inject: *"?/, "", f); sub(/"? *$/, "", f)
-       current_file = f; next
-     }
-     in_block && /^    when:/ {
-       w = $0; sub(/.*when: *"?/, "", w); sub(/"? *$/, "", w)
-       current_when = w; next
-     }
-     END {
-       if (current_type != "" && current_file != "")
-         print current_type "\t" current_file "\t" current_when
-     }' saw-skill.md
+# Wave agent with build failure: should inject wave-agent-build-diagnosis.md
+bash scripts/inject-agent-context --type wave-agent \
+  --prompt "baseline_verification_failed: true"
 ```
 
 ## Cross-References
@@ -404,4 +350,4 @@ awk '/^---$/ { if (++delim == 2) exit; next }
 - [validate_agent_launch](/Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/hooks/validate_agent_launch) - PreToolUse(Agent) hook
 
 **Skill configuration:**
-- [saw-skill.md](/Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/prompts/saw-skill.md) - Frontmatter with triggers and agent-references
+- [saw-skill.md](/Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/prompts/saw-skill.md) - Orchestrator skill definition
