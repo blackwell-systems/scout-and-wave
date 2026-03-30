@@ -1,4 +1,4 @@
-<!-- Part of wave-agent procedure. Loaded conditionally when frozen contracts are present. -->
+<!-- Part of wave-agent procedure. Loaded conditionally by inject-agent-context script when frozen_contracts present in prompt. -->
 # Program Contract Awareness
 
 When working within a PROGRAM-managed IMPL, some interface contracts may be

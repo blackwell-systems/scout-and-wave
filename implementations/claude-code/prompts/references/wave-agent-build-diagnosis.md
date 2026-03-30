@@ -1,4 +1,4 @@
-<!-- Part of wave-agent procedure. Loaded by validate_agent_launch hook. -->
+<!-- Part of wave-agent procedure. Loaded conditionally by inject-agent-context script when baseline_verification_failed present in prompt. -->
 # Build Failure Diagnosis (H7)
 
 If verification gate build or test commands fail, use H7 build failure diagnosis to get structured fix recommendations:
