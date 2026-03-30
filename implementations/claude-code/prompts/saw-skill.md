@@ -108,7 +108,7 @@ If a `docs/IMPL/IMPL-*.yaml` file already exists:
 
 6. **Agent launching.** For each agent, launch with `subagent_type: wave-agent` and `run_in_background: true`. Prepend journal context if exists. Use short IMPL-referencing prompts (~60 tokens). Agent reads full brief from `.saw-agent-brief.md`.
 
-**E44: Agent naming is automatic.** The `auto_format_saw_agent_names` PreToolUse hook automatically reformats agent names to `[SAW:wave{N}:agent-{ID}] {description}` format. The hook extracts wave number, agent ID, and slug from the IMPL doc path in the prompt. You can use any name and it will be corrected automatically.
+**E44: Agent naming from brief metadata.** Read `.saw-agent-brief.md` frontmatter and extract `saw_name` field. Use this as the `name` parameter for the Agent tool call. The brief metadata contains the SAW-formatted name `[SAW:wave{N}:agent-{ID}] {task_summary}`. If frontmatter is missing or `saw_name` field is absent (old briefs), the `auto_format_saw_agent_names` PreToolUse hook provides fallback formatting.
 
 **YAML manifest prompt template:**
 ```

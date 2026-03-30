@@ -1,12 +1,18 @@
 #!/usr/bin/env bash
 # PreToolUse hook: Auto-format SAW agent names (E44)
-# Intercepts Agent tool calls and ensures SAW tag format is used
+# Fallback validator and formatter for SAW agent names
 #
-# If Agent tool is called with prompt/description containing IMPL path and wave/agent info,
-# automatically reformats the name parameter to [SAW:wave{N}:agent-{ID}] format
+# Primary naming path: sawtools prepare-agent writes saw_name to brief frontmatter,
+# orchestrator reads it and uses as Agent tool name parameter.
+#
+# This hook provides:
+# 1. Validation: Pass through names already in SAW format (orchestrator used brief correctly)
+# 2. Fallback formatting: If orchestrator missed the frontmatter or brief is old format,
+#    extract wave/agent/slug from IMPL doc path in prompt and reformat
+# 3. Backwards compatibility: Works with old briefs lacking frontmatter
 #
 # Exit codes:
-#   0 — Allow (name formatted correctly or not a SAW agent)
+#   0 — Allow (name formatted correctly or successfully reformatted)
 #   1 — Block (abort execution)
 
 set -euo pipefail

@@ -15,7 +15,7 @@ Enforcement and injection hooks for CLI-based SAW agents. 15 hooks across Subage
 | check_scout_boundaries | PreToolUse | Write\|Edit | I6 | Scouts can only write IMPL docs |
 | block_claire_paths | PreToolUse | Write\|Edit\|Bash | — | Blocks `.claire` typo paths |
 | check_wave_ownership | PreToolUse | Write\|Edit\|NotebookEdit | I1 | Wave agents write only owned files |
-| auto_format_saw_agent_names | PreToolUse | Agent | E44 | Auto-formats agent names to [SAW:wave{N}:agent-{ID}] format for observability |
+| auto_format_saw_agent_names | PreToolUse | Agent | E44 | Validates/formats SAW agent names (fallback for brief metadata) |
 | validate_agent_launch | PreToolUse | Agent | H5 | Pre-launch validation gate + agent type injection (see below) |
 | validate_impl_on_write | PostToolUse | Write | E16 | Validates IMPL schema after write |
 | check_git_ownership | PostToolUse | Bash | I1 | Catches git-level ownership violations |
