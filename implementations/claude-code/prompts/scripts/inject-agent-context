@@ -1,31 +1,16 @@
 #!/usr/bin/env bash
-# inject-agent-context — vendor-neutral agent reference injection
+# inject-agent-context -- conditional agent reference injection
 #
-# Reads agent-references from the parent skill's SKILL.md frontmatter,
-# matches entries against the requested agent type, and outputs the
-# contents of any matching reference files to prepend to the agent's prompt.
+# Injects conditional reference files based on agent type and prompt content.
+# Always-needed references are inlined in agent definitions (agents/*.md).
+# This script handles only the 3 conditional references.
 #
-# Usage:
-#   inject=$(bash scripts/inject-agent-context --type wave-agent --prompt "$agent_prompt")
-#   full_prompt="${inject}${agent_prompt}"
-#
-# Arguments:
-#   --type    Agent type (must match an agent-type value in SKILL.md frontmatter)
-#   --prompt  Agent prompt text (used for conditional when: pattern matching)
-#
-# Output:
-#   Concatenated reference file contents, each preceded by an injection marker.
-#   Empty output if SKILL.md not found, no agent-references block, or no matches.
-#
-# Exit codes:
-#   0  Success (output may be empty)
-#   1  Error (--type missing or SKILL.md parse failure)
+# Usage: inject-agent-context --type <agent-type> --prompt <prompt-text>
 
 set -euo pipefail
 
 agent_type=""
 prompt=""
-
 while [[ $# -gt 0 ]]; do
   case $1 in
     --type)   agent_type="$2"; shift 2 ;;
@@ -34,82 +19,36 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "$agent_type" ]]; then
-  echo "error: --type is required" >&2
-  exit 1
-fi
+[[ -z "$agent_type" ]] && { echo "error: --type is required" >&2; exit 1; }
 
-# Resolve skill directory: prefer CLAUDE_SKILL_DIR env var,
-# fall back to parent of this script's directory. Works for both
-# direct execution (scripts/) and symlinked installs (~/.claude/skills/saw/scripts/).
 SKILL_DIR="${CLAUDE_SKILL_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
-SKILL_FILE="$SKILL_DIR/SKILL.md"
 
-if [ ! -f "$SKILL_FILE" ]; then
-  echo "error: SKILL.md not found at $SKILL_FILE" >&2
-  exit 1
-fi
+inject_file() {
+  local file="$1"
+  local ref_path="${SKILL_DIR}/${file}"
+  local marker="<!-- injected: ${file} -->"
+  # Dedup: skip if marker already in prompt
+  echo "$prompt" | grep -qF "$marker" && return 0
+  [[ -f "$ref_path" ]] || { echo "warn: not found: ${ref_path}" >&2; return 0; }
+  printf '%s\n' "$marker"
+  command cat "$ref_path"
+  printf '\n\n'
+}
 
-# Parse agent-references from YAML frontmatter.
-# Outputs tab-separated lines: <agent-type>\t<inject-path>\t<when-pattern>
-# <when-pattern> is empty for always-inject entries.
-entries=$(awk '
-  /^---$/ { if (++delim == 2) exit; next }
-  delim == 1 && /^agent-references:/ { in_block = 1; next }
-  in_block && /^[^ ]/ { exit }
-  in_block && /^  - agent-type:/ {
-    if (current_type != "" && current_file != "") {
-      print current_type "\t" current_file "\t" current_when
-    }
-    t = $0; sub(/.*agent-type: *"?/, "", t); sub(/"? *$/, "", t)
-    current_type = t; current_file = ""; current_when = ""
-    next
-  }
-  in_block && /^    inject:/ {
-    f = $0; sub(/.*inject: *"?/, "", f); sub(/"? *$/, "", f)
-    current_file = f
-    next
-  }
-  in_block && /^    when:/ {
-    w = $0; sub(/.*when: *"?/, "", w); sub(/"? *$/, "", w)
-    current_when = w
-    next
-  }
-  END {
-    if (current_type != "" && current_file != "") {
-      print current_type "\t" current_file "\t" current_when
-    }
-  }
-' "$SKILL_FILE")
-
-# No agent-references block — nothing to inject
-[ -z "$entries" ] && exit 0
-
-inject_content=""
-
-while IFS=$'\t' read -r type file when_pattern; do
-  # Only process entries matching the requested agent type
-  [ "$type" != "$agent_type" ] && continue
-
-  # Dedup: skip if marker already present in prompt
-  marker="<!-- injected: ${file} -->"
-  echo "$prompt" | grep -qF "$marker" && continue
-
-  # Conditional injection: skip if when: pattern does not match prompt
-  if [[ -n "$when_pattern" ]]; then
-    echo "$prompt" | grep -qE -- "$when_pattern" || continue
-  fi
-
-  ref_path="${SKILL_DIR}/${file}"
-  if [[ -f "$ref_path" ]]; then
-    inject_content+="${marker}"$'\n'
-    inject_content+="$(command cat "$ref_path")"$'\n\n'
-  else
-    echo "warn: inject target not found: ${ref_path}" >&2
-  fi
-done <<< "$entries"
-
-# Output injected content (empty string = no output = caller prepends nothing)
-if [[ -n "$inject_content" ]]; then
-  printf '%s' "$inject_content"
-fi
+case "$agent_type" in
+  scout)
+    if [[ "$prompt" =~ --program ]]; then
+      inject_file "references/scout-program-contracts.md"
+    fi
+    ;;
+  wave-agent)
+    if [[ "$prompt" =~ baseline_verification_failed ]]; then
+      inject_file "references/wave-agent-build-diagnosis.md"
+    fi
+    if [[ "$prompt" =~ frozen_contracts ]]; then
+      inject_file "references/wave-agent-program-contracts.md"
+    fi
+    ;;
+  # critic-agent, planner, integration-agent: no conditional references
+  # All content inlined in agent definitions
+esac

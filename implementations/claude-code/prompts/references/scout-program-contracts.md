@@ -1,4 +1,4 @@
-<!-- Part of scout agent procedure. Loaded conditionally when --program flag is present. -->
+<!-- Part of scout agent procedure. Loaded conditionally by inject-agent-context script when --program flag present. -->
 # Program Contract Awareness
 
 When the `--program` flag is provided, the Scout receives frozen program contracts
