@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# SAW Agent Naming Helper (E44)
+# Generates standardized [SAW:{phase}:{identifier}] names for agent launches
+#
+# Usage:
+#   saw_agent_name wave 1 A logging-injection "inject logger"
+#   saw_agent_name scout - - user-auth "analyze codebase"
+#   saw_agent_name critic - - logging-injection "review briefs"
+#
+# Output: [SAW:wave1:agent-A] inject logger
+
+set -euo pipefail
+
+phase="$1"
+wave_or_dash="${2:--}"
+agent_or_dash="${3:--}"
+slug="$4"
+description="${5:-}"
+
+case "$phase" in
+  wave)
+    if [[ "$wave_or_dash" == "-" || "$agent_or_dash" == "-" ]]; then
+      echo "Error: wave phase requires wave number and agent ID" >&2
+      exit 1
+    fi
+    echo "[SAW:wave${wave_or_dash}:agent-${agent_or_dash}] ${description}"
+    ;;
+  scout)
+    echo "[SAW:scout:${slug}] ${description}"
+    ;;
+  critic)
+    echo "[SAW:critic:${slug}] ${description}"
+    ;;
+  scaffold)
+    echo "[SAW:scaffold:${slug}] ${description}"
+    ;;
+  integration)
+    if [[ "$wave_or_dash" == "-" ]]; then
+      echo "Error: integration phase requires wave number" >&2
+      exit 1
+    fi
+    echo "[SAW:integration:wave${wave_or_dash}] ${description}"
+    ;;
+  *)
+    echo "Error: unknown phase '$phase'. Valid: wave, scout, critic, scaffold, integration" >&2
+    exit 1
+    ;;
+esac

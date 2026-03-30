@@ -71,27 +71,38 @@ If 1-3 fail, print what's missing (see `docs/INSTALLATION.md`) and stop.
 
 **Format:** `[SAW:{phase}:{identifier}] {description}`
 
-**Helper function (use for all agent launches):**
-```
-sawAgentName(phase, id, slug, description):
-  if phase == "wave":
-    return f"[SAW:wave{id[0]}:agent-{id[1]}] {description}"
-  elif phase == "scout":
-    return f"[SAW:scout:{slug}] {description}"
-  elif phase == "critic":
-    return f"[SAW:critic:{slug}] {description}"
-  elif phase == "scaffold":
-    return f"[SAW:scaffold:{slug}] {description}"
-  elif phase == "integration":
-    return f"[SAW:integration:wave{id}] {description}"
+**Helper script (use for all agent launches):**
+```bash
+${CLAUDE_SKILL_DIR}/hooks/saw_agent_name <phase> <wave|--> <agent|-> <slug> <description>
 ```
 
 **Examples:**
-- Wave agent: `sawAgentName("wave", (1, "A"), "logging", "inject logger")` → `[SAW:wave1:agent-A] inject logger`
-- Scout: `sawAgentName("scout", None, "user-auth", "analyze")` → `[SAW:scout:user-auth] analyze`
-- Critic: `sawAgentName("critic", None, "logging", "review briefs")` → `[SAW:critic:logging] review briefs`
+```bash
+# Wave agent
+$(${CLAUDE_SKILL_DIR}/hooks/saw_agent_name wave 1 A logging-injection "inject logger")
+# Output: [SAW:wave1:agent-A] inject logger
 
-**CRITICAL:** Never manually construct agent names. Always use helper to ensure monitoring tools can detect SAW agents.
+# Scout agent
+$(${CLAUDE_SKILL_DIR}/hooks/saw_agent_name scout - - user-auth "analyze codebase")
+# Output: [SAW:scout:user-auth] analyze codebase
+
+# Critic agent
+$(${CLAUDE_SKILL_DIR}/hooks/saw_agent_name critic - - logging-injection "review briefs")
+# Output: [SAW:critic:logging-injection] review briefs
+```
+
+**Usage in Agent tool:**
+```
+Agent(
+  subagent_type="wave-agent",
+  name=$(bash ${CLAUDE_SKILL_DIR}/hooks/saw_agent_name wave 1 A feature-slug "task summary"),
+  description="task summary",
+  run_in_background=True,
+  prompt=agent_prompt
+)
+```
+
+**CRITICAL:** Never manually construct agent names. Always use helper script to ensure monitoring tools can detect SAW agents.
 
 ## Execution Logic
 
