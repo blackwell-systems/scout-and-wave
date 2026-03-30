@@ -1426,6 +1426,8 @@ wiring:
 - **validate-integration --wiring (Layer 3B):** post-merge grep/AST check that `symbol` actually appears as a call in `must_be_called_from`. Reports severity: error (not info) for declared but missing wiring.
 - **Agent brief injection (Layer 3C):** prepare-wave injects all `wiring:` entries for the agent into `.saw-agent-brief.md` with explicit instruction.
 
+**Detection aid:** Scout can auto-generate wiring declarations from agent task prompts using `sawtools detect-wiring <impl-doc-path>`. This command scans for patterns like "calls `FunctionName()`" and cross-references against file_ownership to detect cross-agent function calls. Output is YAML in wiring: schema format. Pattern matching is ~80% reliable; Scout should review and adjust before committing.
+
 **Rationale:** The heuristic export scanner (E25/E26) detects gaps reactively post-merge. E35 makes wiring intent explicit and machine-checkable before and after execution.
 
 **Relationship to E25/E26:** E25/E26 is reactive — it detects integration gaps post-merge via heuristics. E35 is proactive — the Scout declares wiring obligations at planning time, enabling pre-wave verification (Layer 3A) and precise post-merge checking (Layer 3B). Both mechanisms may apply to the same wave: E35 handles declared obligations, E25/E26 catches any gaps the Scout missed.
