@@ -138,43 +138,22 @@ The hook architecture uses two distinct output fields for different injection ta
 
 **This distinction is non-obvious.** Early implementations tried `additionalContext` in `PreToolUse` -- this augmented the orchestrator's context, not the subagent's. Three critic review cycles caught the error before any agent ran. The correct mechanism is documented in `docs/proposals/subagent-prompt-injection.md`.
 
-#### Agent Type Progressive Disclosure
+#### Agent Type Self-Contained Definitions
 
-Progressive disclosure extends to agent type prompts. Each agent type (`wave-agent`, `scout`, `critic-agent`, `planner`, `integration-agent`) has a slim core prompt and a set of reference files injected at launch -- worktree isolation procedures (simplified to 93 lines in v0.72.0 by removing manual verification steps handled by E43 hooks), build diagnosis steps, completion report format, verification checklists.
+Each agent type has a self-contained definition file with all always-needed content inlined. No hook injection is required for always-needed procedures -- the agent definition IS the delivery mechanism.
 
-| Agent Type | Core Prompt Lines | Reference Files | Conditional Injection |
-|------------|------------------|-----------------|----------------------|
-| `scout` | ~208 | suitability-gate, implementation-process, program-contracts | `when: "--program"` for contracts |
-| `wave-agent` | ~151 | worktree-isolation, completion-report, build-diagnosis, program-contracts | `when: "frozen_contracts_hash\|frozen: true"` for contracts |
-| `critic-agent` | ~90 | verification-checks, completion-format | Always inject both |
-| `planner` | ~143 | suitability-gate, implementation-process, example-manifest | Always inject all |
-| `integration-agent` | ~133 | connectors-reference, completion-report | Always inject both |
-| `scaffold-agent` | ~159 | (none) | All content in core prompt |
+| Agent Type | Definition Size | Inlined Content | Conditional Injection |
+|------------|----------------|-----------------|----------------------|
+| `scout` | ~787 lines | suitability-gate, implementation-process | program-contracts (if --program) |
+| `wave-agent` | ~330 lines | worktree-isolation, completion-report | build-diagnosis (if baseline failed), program-contracts (if frozen) |
+| `critic-agent` | ~210 lines | verification-checks, completion-format | (none) |
+| `planner` | ~557 lines | suitability-gate, implementation-process, example-manifest | (none) |
+| `integration-agent` | ~233 lines | connectors-reference, completion-report | (none) |
+| `scaffold-agent` | ~159 lines | (all content in definition) | (none) |
 
-**Detection in `validate_agent_launch`:**
+**Conditional injection via scripts:** The `validate_agent_launch` hook delegates to the `inject-agent-context` script for the 3 remaining conditional references. The script uses direct case/if logic -- no YAML parsing, no frontmatter reading. For critic-agent, planner, and integration-agent, the hook passes through (all content already inlined). See the [progressive-disclosure-audit-2026-03-28.md](docs/progressive-disclosure-audit-2026-03-28.md) for the full analysis of why this architecture was chosen.
 
-The hook dispatches by `subagent_type` field or description tag (`[SAW:scout:*]`, `[SAW:critic:*]`). Agent-specific blocks run **before Check 1** (the wave-agent tag gate), allowing early exit for non-wave-agent types:
-
-```bash
-# Scout path — before Check 1
-if [[ "$subagent_type" == "scout" ]] || [[ "$description" =~ \[SAW:scout ]]; then
-  # inject scout-suitability-gate.md, scout-implementation-process.md
-  # conditional: scout-program-contracts.md (only when prompt has --program)
-  # emit updatedInput, exit 0
-fi
-
-# Check 11: critic-agent — before Check 1
-if [[ "$subagent_type" == "critic-agent" ]] || [[ "$description" =~ \[SAW:critic ]]; then
-  # inject critic-agent-verification-checks.md, critic-agent-completion-format.md
-  # emit updatedInput, exit 0
-fi
-
-# Check 1: wave-agent tag extraction — non-wave-agent calls exit here
-```
-
-Dedup markers (`<!-- injected: references/wave-agent-worktree-isolation.md -->`) prevent double-injection if the orchestrator manually prepended content. This makes the injection transparent and composable.
-
-**Go engine mirror** -- The Go SDK's `LoadTypePromptWithRefs` reads reference files alongside each agent type prompt file when constructing prompts for the API or Bedrock path. A `/saw wave` launch never loads critic verification checklists; a `/saw scout` launch never loads wave agent worktree isolation procedures. Both the CLI hook layer and the engine layer enforce this -- neither path is a second-class citizen.
+**Go engine mirror** -- The Go SDK's `LoadTypePromptWithRefs` reads reference files alongside each agent type prompt file when constructing prompts for the API or Bedrock path. Both the CLI hook layer and the engine layer enforce agent-type-scoped content delivery -- neither path is a second-class citizen.
 
 #### Observability
 
