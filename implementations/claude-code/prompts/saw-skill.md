@@ -14,49 +14,6 @@ compatibility: Requires Claude Code (Skills API). Git 2.20+ required for worktre
 metadata:
   author: blackwell-systems
   version: "0.55.0"
-triggers:
-  - match: "^/saw program"
-    inject: references/program-flow.md
-  - match: "^/saw amend"
-    inject: references/amend-flow.md
-  # failure-routing.md is intentionally NOT triggered here. It's a mid-execution
-  # reference loaded after agents report back, not at dispatch time. The skill
-  # body contains "failure", "blocked", etc. which would false-positive on every
-  # invocation since UserPromptSubmit receives the expanded prompt.
-agent-references:
-  # Read by inject-agent-context (vendor-neutral) and validate_agent_launch hook.
-  # Each entry: agent-type + inject (path relative to skill dir) + optional when (regex on prompt).
-  # scaffold-agent intentionally not listed - uses IMPL doc Scaffolds section directly.
-  - agent-type: scout
-    inject: references/scout-suitability-gate.md
-  - agent-type: scout
-    inject: references/scout-implementation-process.md
-  - agent-type: scout
-    inject: references/scout-program-contracts.md
-    when: "--program"
-  - agent-type: wave-agent
-    inject: references/wave-agent-worktree-isolation.md
-  - agent-type: wave-agent
-    inject: references/wave-agent-completion-report.md
-  - agent-type: wave-agent
-    inject: references/wave-agent-build-diagnosis.md
-  - agent-type: wave-agent
-    inject: references/wave-agent-program-contracts.md
-    when: "frozen_contracts_hash|frozen: true"
-  - agent-type: critic-agent
-    inject: references/critic-agent-verification-checks.md
-  - agent-type: critic-agent
-    inject: references/critic-agent-completion-format.md
-  - agent-type: planner
-    inject: references/planner-suitability-gate.md
-  - agent-type: planner
-    inject: references/planner-implementation-process.md
-  - agent-type: planner
-    inject: references/planner-example-manifest.md
-  - agent-type: integration-agent
-    inject: references/integration-connectors-reference.md
-  - agent-type: integration-agent
-    inject: references/integration-agent-completion-report.md
 ---
 
 # Scout-and-Wave: Parallel Agent Coordination
@@ -76,7 +33,7 @@ You launch Scout and Wave agents; you do not do their work yourself.
 
 ## Supporting Files & References
 
-Files in `${CLAUDE_SKILL_DIR}/` (defaults to `~/.claude/skills/saw/`). Read `agent-template.md` for 9-field format. Load `saw-bootstrap.md` for bootstrap. On-demand: `/saw program *` → `program-flow.md`, `/saw amend *` → `amend-flow.md`, agent failure → `failure-routing.md`. Orchestrator triggers auto-injected by `inject_skill_context` hook (see frontmatter). Agent references auto-injected by `validate_agent_launch` hook (see frontmatter). Vendor-neutral fallback: orchestrator triggers use `scripts/inject-context "$prompt"`, agent references use `scripts/inject-agent-context --type <agent-type>`.
+Files in `${CLAUDE_SKILL_DIR}/` (defaults to `~/.claude/skills/saw/`). Read `agent-template.md` for 9-field format. Load `saw-bootstrap.md` for bootstrap. On-demand: `/saw program *` → `program-flow.md`, `/saw amend *` → `amend-flow.md`, agent failure → `failure-routing.md`. Orchestrator triggers (`/saw program` -> `program-flow.md`, `/saw amend` -> `amend-flow.md`) auto-injected by `inject_skill_context` hook via `scripts/inject-context`. Agent always-needed references inlined in agent definitions (`agents/*.md`). Conditional agent references (3 files) injected by `validate_agent_launch` hook via `scripts/inject-agent-context`.
 
 ## Invocation Modes
 
