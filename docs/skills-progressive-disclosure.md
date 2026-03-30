@@ -8,12 +8,12 @@ SAW's progressive disclosure goes beyond the Agent Skills spec's convention-base
 
 **What makes it advanced:**
 
-1. **Frontmatter dispatch tables** — `triggers:` (orchestrator) and `agent-references:` (subagents) in YAML frontmatter declare "when X, inject Y" rules
-2. **Hook-based enforcement** — Claude Code lifecycle hooks (`inject_skill_context`, `validate_agent_launch`) read frontmatter and inject references automatically before the model runs
-3. **Conditional injection** — `when:` regex patterns enable scenario-specific loading (e.g., only inject program contracts when `--program` flag present)
+1. **Always-needed agent references inlined in agent definitions** — Content that every launch of an agent type needs is now part of the agent definition itself. Conditional references (3 total) are injected by the `inject-agent-context` script when specific scenarios are detected.
+2. **Hook-based enforcement** — Claude Code lifecycle hooks (`inject_skill_context`, `validate_agent_launch`) inject references automatically before the model runs
+3. **Conditional injection** — Direct conditional logic in scripts enables scenario-specific loading (e.g., only inject program contracts when `--program` flag present)
 4. **Two-surface architecture** — Orchestrator references use `UserPromptSubmit` + `additionalContext`; subagent references use `PreToolUse/Agent` + `updatedInput.prompt`
 5. **Three-layer fallback** — Hooks (Layer 1, deterministic) → Scripts (Layer 2, model-initiated) → Routing table (Layer 3, convention-based)
-6. **Vendor-neutral scripts** — Bash scripts (`inject-context`, `inject-agent-context`) read the same frontmatter for platforms without hooks
+6. **Vendor-neutral scripts** — Bash scripts (`inject-context`, `inject-agent-context`) use direct conditional logic for platforms without hooks
 7. **Dedup markers** — HTML comments prevent double-injection regardless of which layer loaded the content
 
 **The result:** A `/saw wave` invocation never loads program coordination logic. A scout launch never loads wave agent worktree isolation procedures. Conditional references (program contracts, frozen interfaces) only load when the scenario requires them. The model receives exactly the context it needs, automatically, with zero routing decisions.
@@ -25,30 +25,27 @@ User: /saw program execute "add caching"
   ↓
 UserPromptSubmit hook fires
   ↓
-inject_skill_context reads saw-skill.md frontmatter triggers:
-  - match: "^/saw program"
-    inject: references/program-flow.md
+inject_skill_context calls inject-context script with direct conditional matching:
+  prompt matches "^/saw program" → inject references/program-flow.md
   ↓
 Hook returns additionalContext with program-flow.md content
   ↓
 Model receives: [saw-skill.md core] + [program-flow.md] before first step
   ↓
-Model launches Scout (subagent_type: scout)
+Model launches Scout with --program flag (subagent_type: scout)
   ↓
 PreToolUse/Agent hook fires
   ↓
-validate_agent_launch reads saw-skill.md frontmatter agent-references:
-  - agent-type: scout
-    inject: references/scout-suitability-gate.md
-  - agent-type: scout
-    inject: references/scout-implementation-process.md
+validate_agent_launch calls inject-agent-context script:
+  scout + "--program" in prompt → inject scout-program-contracts.md
+  (suitability gate and implementation process already inlined in scout.md)
   ↓
-Hook returns updatedInput.prompt with references prepended
+Hook returns updatedInput.prompt with conditional reference prepended
   ↓
-Scout subagent receives: [references] + [scout.md core] + [orchestrator's prompt] before first step
+Scout subagent receives: [scout-program-contracts.md] + [scout.md with inlined content] + [orchestrator's prompt]
 ```
 
-No routing tables. No "read this file if you need it" instructions. The context is constructed deterministically before the model starts.
+No routing tables. No "read this file if you need it" instructions. Always-needed content is inlined in agent definitions; conditional content is injected deterministically before the model starts.
 
 ## The Agent Skills Spec and SAW Extensions
 
@@ -62,10 +59,10 @@ The [Agent Skills specification](https://agentskills.io/specification) defines a
 
 1. **Tier 0 discovery layer** — `CLAUDE.md` sits outside the skill, providing project-level routing before any skill is activated
 2. **Hook-based injection architecture** — Deterministic loading via `UserPromptSubmit` and `PreToolUse/Agent` hooks (Claude Code) + vendor-neutral script fallbacks
-3. **Frontmatter dispatch mechanism** — `triggers:` for orchestrator references, `agent-references:` for subagent references
-4. **Conditional injection** — `when:` regex patterns enable scenario-specific reference loading
+3. **Script-based conditional dispatch** — `inject-context` script for orchestrator references, `inject-agent-context` script for conditional subagent references, both using direct conditional logic
+4. **Conditional injection** — Script-based pattern matching enables scenario-specific reference loading
 
-The `triggers:` and `agent-references:` extensions are documented in `docs/proposals/agentskills-subcommand-dispatch.md` and `docs/proposals/subagent-prompt-injection.md`.
+The injection architecture is documented in `docs/proposals/agentskills-subcommand-dispatch.md` and `docs/proposals/subagent-prompt-injection.md`.
 
 ## Why Progressive Disclosure
 
@@ -78,7 +75,7 @@ Every token loaded into the Orchestrator's context window is a token that cannot
 
 Loading all of this unconditionally would consume ~765 lines on every `/saw` invocation. A `/saw wave` call has no need for the program execution tier graph or the amend flow. Loading them wastes roughly 40% of the skill's effective context budget on content that will never be referenced.
 
-**The advanced pattern:** Rather than relying on the model to read references on-demand (convention-based), SAW uses **hook-based deterministic injection**. The `triggers:` frontmatter declares "when prompt matches X, inject file Y" — the `UserPromptSubmit` hook enforces this before the model runs. The model receives the context it needs automatically, with zero routing decisions required.
+**The advanced pattern:** Rather than relying on the model to read references on-demand (convention-based), SAW uses **hook-based deterministic injection**. Scripts with direct conditional logic determine "when prompt matches X, inject file Y" -- the `UserPromptSubmit` hook enforces this before the model runs. The model receives the context it needs automatically, with zero routing decisions required.
 
 ## The Four Tiers
 
@@ -125,13 +122,13 @@ A user who types "add caching to the API" in a project with this CLAUDE.md gets 
 
 This is the progressive disclosure model applied at the project level: the index is always loaded; the skill bodies load only when invoked.
 
-**Known limitation:** CLAUDE.md entries are advisory — Claude reads them but there is no enforcement mechanism that prevents the model from ignoring them. The entries should be written to make the correct routing the obvious choice, not to mandate it. The `UserPromptSubmit` hook proposal (`docs/proposals/agentskills-subcommand-dispatch.md`) addresses the same gap the Agent Skills spec leaves open: the spec defines the Resources tier but leaves loading to convention. The `triggers:` frontmatter extension provides deterministic dispatch for subcommand-anchored references (e.g. `/saw program` → `program-flow.md`). Mid-execution references (failure routing, error states) remain convention-based — see the proposal for scope and known limitations.
+**Known limitation:** CLAUDE.md entries are advisory — Claude reads them but there is no enforcement mechanism that prevents the model from ignoring them. The entries should be written to make the correct routing the obvious choice, not to mandate it. The `UserPromptSubmit` hook and `inject-context` script address the same gap the Agent Skills spec leaves open: the spec defines the Resources tier but leaves loading to convention. The script-based conditional dispatch provides deterministic injection for subcommand-anchored references (e.g. `/saw program` → `program-flow.md`). Mid-execution references (failure routing, error states) remain convention-based — see `docs/proposals/agentskills-subcommand-dispatch.md` for scope and known limitations.
 
-### Tier 1 — Metadata (always loaded, ~60 lines)
+### Tier 1 — Metadata (always loaded, ~20 lines)
 
 *Maps to Agent Skills spec: **Metadata** tier (~100 tokens).*
 
-The skill frontmatter is parsed by the Claude Code Skills API before the Orchestrator's context is constructed. It is always present and carries zero variable cost at invocation time. SAW extends the standard metadata with two dispatch tables:
+The skill frontmatter is parsed by the Claude Code Skills API before the Orchestrator's context is constructed. It is always present and carries zero variable cost at invocation time. As of v0.56.0, the frontmatter contains only standard Skills API fields -- no custom frontmatter (`triggers:` or `agent-references:`) remains:
 
 ```yaml
 ---
@@ -146,53 +143,15 @@ license: MIT OR Apache-2.0
 compatibility: Requires Claude Code (Skills API). Git 2.20+ required.
 metadata:
   author: blackwell-systems
-  version: "0.55.0"
-
-# Orchestrator trigger dispatch table (loaded by inject_skill_context hook)
-triggers:
-  - match: "^/saw program"
-    inject: references/program-flow.md
-  - match: "^/saw amend"
-    inject: references/amend-flow.md
-
-# Agent reference dispatch table (loaded by validate_agent_launch hook)
-agent-references:
-  - agent-type: scout
-    inject: references/scout-suitability-gate.md
-  - agent-type: scout
-    inject: references/scout-implementation-process.md
-  - agent-type: scout
-    inject: references/scout-program-contracts.md
-    when: "--program"
-  - agent-type: wave-agent
-    inject: references/wave-agent-worktree-isolation.md
-  - agent-type: wave-agent
-    inject: references/wave-agent-completion-report.md
-  - agent-type: wave-agent
-    inject: references/wave-agent-build-diagnosis.md
-  - agent-type: wave-agent
-    inject: references/wave-agent-program-contracts.md
-    when: "frozen_contracts_hash|frozen: true"
-  - agent-type: critic-agent
-    inject: references/critic-agent-verification-checks.md
-  - agent-type: critic-agent
-    inject: references/critic-agent-completion-format.md
-  - agent-type: planner
-    inject: references/planner-suitability-gate.md
-  - agent-type: planner
-    inject: references/planner-implementation-process.md
-  - agent-type: planner
-    inject: references/planner-example-manifest.md
-  - agent-type: integration-agent
-    inject: references/integration-connectors-reference.md
-  - agent-type: integration-agent
-    inject: references/integration-agent-completion-report.md
+  version: "0.56.0"
 ---
 ```
 
-**The dispatch tables are the core of the advanced pattern.** They declare injection rules that both hooks and scripts read. Adding a new reference file requires: (1) write the `.md` file in `references/`, (2) add an entry here, (3) re-run `install.sh` to symlink. No hook or script changes required.
+**As of v0.56.0, always-needed agent references are inlined directly in agent definitions. The `triggers:` and `agent-references:` custom frontmatter blocks have been removed. Conditional injection (3 references) and orchestrator trigger injection (2 references) are handled by scripts with direct conditional logic. Zero custom frontmatter fields remain.**
 
-**Target:** ~60 lines. The frontmatter has grown from ~17 lines to accommodate the dispatch tables, but this is one-time cost -- the tables are parsed once at skill load time, not on every invocation.
+Orchestrator trigger injection (`inject-context` script) and conditional agent injection (`inject-agent-context` script) use direct conditional matching in bash rather than YAML frontmatter parsing. Adding a new conditional reference requires updating the script logic.
+
+**Target:** ~20 lines. The frontmatter is now minimal standard Skills API metadata only.
 
 ### Tier 2 — Core SKILL.md (loaded on invocation, ~323 lines)
 
@@ -229,53 +188,34 @@ Three on-demand references live in `implementations/claude-code/prompts/referenc
 
 SAW's implementation goes beyond the Agent Skills spec's convention-based loading model. Instead of relying on the model to follow routing instructions, SAW uses **frontmatter-driven hook injection** to load references deterministically.
 
-### Frontmatter Dispatch Tables
+### Script-Based Conditional Dispatch
 
-The skill's YAML frontmatter declares two dispatch tables:
+As of v0.56.0, the former YAML frontmatter dispatch tables (`triggers:` and `agent-references:`) have been replaced by direct conditional logic in scripts.
 
-#### Orchestrator Triggers (`triggers:` block)
+#### Orchestrator Triggers (`inject-context` script)
 
-```yaml
-triggers:
-  - match: "^/saw program"
-    inject: references/program-flow.md
-  - match: "^/saw amend"
-    inject: references/amend-flow.md
-```
+The `inject-context` script matches prompt patterns with direct conditional logic:
 
-- `match`: regex pattern tested against user prompt at invocation time
-- `inject`: path relative to skill directory
-- Multiple matches → all matching references injected (concatenated)
-- No match → no injection, zero overhead
+- `^/saw program` in prompt → inject `references/program-flow.md`
+- `^/saw amend` in prompt → inject `references/amend-flow.md`
 
-The `inject_skill_context` hook (UserPromptSubmit) reads this table, matches against the prompt, and returns `additionalContext` containing the reference file content. The orchestrator receives the context before it runs -- no routing decision required.
+Multiple matches result in all matching references injected (concatenated). No match results in no injection, zero overhead.
 
-#### Agent References (`agent-references:` block)
+The `inject_skill_context` hook (UserPromptSubmit) calls this script, which matches against the prompt and returns `additionalContext` containing the reference file content. The orchestrator receives the context before it runs -- no routing decision required.
 
-```yaml
-agent-references:
-  - agent-type: scout
-    inject: references/scout-suitability-gate.md
-  - agent-type: scout
-    inject: references/scout-implementation-process.md
-  - agent-type: scout
-    inject: references/scout-program-contracts.md
-    when: "--program"
-  - agent-type: wave-agent
-    inject: references/wave-agent-worktree-isolation.md
-  - agent-type: wave-agent
-    inject: references/wave-agent-program-contracts.md
-    when: "frozen_contracts_hash|frozen: true"
-```
+#### Agent Conditional References (`inject-agent-context` script)
 
-- `agent-type`: matches `subagent_type` field in Agent tool call
-- `inject`: path relative to skill directory
-- `when`: optional regex -- reference only injected if pattern matches prompt
-- Multiple entries per type allowed
+The `inject-agent-context` script handles 3 conditional references with direct conditional logic:
 
-The `validate_agent_launch` hook (PreToolUse/Agent) reads this table, filters by agent type, checks `when:` conditions, and returns `updatedInput.prompt` with reference content prepended. The subagent receives procedural content before its first step.
+- `scout` + `--program` in prompt → inject `scout-program-contracts.md`
+- `wave-agent` + `baseline_verification_failed` in prompt → inject `wave-agent-build-diagnosis.md`
+- `wave-agent` + `frozen_contracts` in prompt → inject `wave-agent-program-contracts.md`
 
-**Conditional injection** -- The `when:` field enables scenario-specific loading. Scout's program contracts only inject when `--program` appears in the prompt. Wave agent's program contracts only inject when the IMPL has frozen interfaces. This prevents context pollution for scenarios where the content is irrelevant.
+All other agent types receive no injection -- their always-needed content is inlined directly in their agent definitions.
+
+The `validate_agent_launch` hook (PreToolUse/Agent) calls this script, checks conditions against the prompt, and returns `updatedInput.prompt` with reference content prepended when conditions match.
+
+**Conditional injection** enables scenario-specific loading. Scout's program contracts only inject when `--program` appears in the prompt. Wave agent's program contracts only inject when the IMPL has frozen interfaces. This prevents context pollution for scenarios where the content is irrelevant.
 
 ### Three-Layer Injection Architecture
 
@@ -291,10 +231,10 @@ The injection system has three layers, each targeting a different deployment con
 
 Claude Code's lifecycle hooks provide deterministic injection:
 
-- **`inject_skill_context` (UserPromptSubmit)**: Fires before the orchestrator runs. Reads `triggers:` from frontmatter, matches against prompt, returns `additionalContext` containing reference content.
-- **`validate_agent_launch` (PreToolUse/Agent)**: Fires before subagent launch. Reads `agent-references:` from frontmatter, filters by `agent-type`, checks `when:` conditions, returns `updatedInput.prompt` with reference content prepended.
+- **`inject_skill_context` (UserPromptSubmit)**: Fires before the orchestrator runs. Calls the `inject-context` script which uses direct conditional matching against the prompt, returns `additionalContext` containing reference content.
+- **`validate_agent_launch` (PreToolUse/Agent)**: Fires before subagent launch. Calls the `inject-agent-context` script which uses direct conditional logic to determine which references to inject, returns `updatedInput.prompt` with reference content prepended. Only 3 conditional references remain; all always-needed content is inlined in agent definitions.
 
-Both hooks are thin orchestrators -- they delegate to each skill's own parsing logic by reading frontmatter. Adding a new skill requires zero hook changes. The hooks are installed once during setup and fire automatically on every invocation.
+Both hooks delegate to scripts with direct conditional logic (no YAML frontmatter parsing). The hooks are installed once during setup and fire automatically on every invocation.
 
 **Key distinction: `updatedInput` vs `additionalContext`**
 
@@ -307,12 +247,12 @@ This distinction is non-obvious. Early implementations tried `additionalContext`
 
 Bash scripts bundled in `scripts/` provide portable injection for any platform with Bash:
 
-- **`scripts/inject-context`**: Parses `triggers:` from SKILL.md frontmatter, matches against provided prompt, outputs concatenated reference content
-- **`scripts/inject-agent-context --type <agent-type> --prompt "$prompt"`**: Parses `agent-references:`, filters by type, checks `when:` patterns, outputs reference content
+- **`scripts/inject-context`**: Uses direct conditional matching against provided prompt (`^/saw program` → program-flow.md, `^/saw amend` → amend-flow.md), outputs concatenated reference content
+- **`scripts/inject-agent-context --type <agent-type> --prompt "$prompt"`**: Uses direct conditional logic to match agent type + prompt patterns, outputs reference content for the 3 conditional references
 
-The skill's instructions include: "Before executing, run `scripts/inject-context` with the user's prompt." The model calls Bash, the script matches triggers and outputs reference content, the model has context. Model-initiated, but simpler than following a multi-entry routing table.
+The skill's instructions include: "Before executing, run `scripts/inject-context` with the user's prompt." The model calls Bash, the script matches conditions and outputs reference content, the model has context. Model-initiated, but simpler than following a multi-entry routing table.
 
-Both scripts read from the same frontmatter declarations as the hooks. A new reference file is added by updating frontmatter -- no script changes required.
+Both scripts use direct conditional logic (no YAML frontmatter parsing). Adding a new conditional reference requires updating the script.
 
 #### Layer 3: Routing Table Fallback
 
@@ -436,28 +376,27 @@ Structure:
 
 Include back-links to core SKILL.md for any logic that is already defined there (wave loop, IMPL discovery, agent launching). Do not copy-paste.
 
-### Step 3: Add frontmatter dispatch entry
+### Step 3: Add conditional dispatch logic
 
-**For orchestrator references** (loaded via `UserPromptSubmit`), add to `triggers:` block:
+**For orchestrator references** (loaded via `UserPromptSubmit`), add a conditional block to the `inject-context` script:
 
-```yaml
-triggers:
-  - match: "^/saw <subcommand>"
-    inject: references/<name>-flow.md
+```bash
+# In inject-context script:
+if [[ "$prompt" =~ ^/saw\ <subcommand> ]]; then
+  inject references/<name>-flow.md
+fi
 ```
 
-**For agent type references** (loaded via `PreToolUse/Agent`), add to `agent-references:` block:
+**For agent type conditional references** (loaded via `PreToolUse/Agent`), add a conditional block to the `inject-agent-context` script:
 
-```yaml
-agent-references:
-  - agent-type: <agent-type>
-    inject: references/<type>-<name>.md
-  - agent-type: <agent-type>
-    inject: references/<type>-<name>-conditional.md
-    when: "pattern-to-match"  # optional
+```bash
+# In inject-agent-context script:
+if [[ "$agent_type" == "<type>" ]] && [[ "$prompt" =~ pattern-to-match ]]; then
+  inject references/<type>-<name>.md
+fi
 ```
 
-The `when:` field enables conditional injection -- the reference only loads if the regex matches the agent's prompt.
+Note: Always-needed references should be inlined in the agent definition rather than injected conditionally. Only scenario-specific content (program contracts, build diagnosis) should use conditional injection.
 
 ### Step 4: Add routing table fallback (Layer 3)
 
@@ -715,7 +654,7 @@ The injection system has three layers, each targeting a different deployment con
 | Script | `scripts/inject-agent-context` | Any platform with Bash | Model-initiated |
 | Fallback | Routing table in SKILL.md | Any platform | Convention-based |
 
-`inject-agent-context` mirrors the hook's reference mapping and dedup markers exactly, so output from either layer is idempotent when combined. Platforms that register the hook get Layer 1 automatically. Platforms without Claude Code hooks but with Bash can use the script as Layer 2. The routing table in `saw-skill.md` remains the always-available Layer 3 fallback.
+`inject-agent-context` is the authoritative source for conditional reference mapping and dedup markers, called by the hook for Layer 1. Output from either layer is idempotent when combined. Platforms that register the hook get Layer 1 automatically. Platforms without Claude Code hooks but with Bash can call the script directly as Layer 2. The routing table in `saw-skill.md` remains the always-available Layer 3 fallback.
 
 See `docs/proposals/subagent-prompt-injection.md` for the full decision record on why `updatedInput` (not `additionalContext`) is required for subagent injection.
 
@@ -724,16 +663,14 @@ See `docs/proposals/subagent-prompt-injection.md` for the full decision record o
 1. Write `implementations/claude-code/prompts/references/<type>-<name>.md` with the extracted content (all reference files live in the top-level `references/` directory, not in a per-agent subdirectory)
 2. Add a back-link in the reference file pointing to the core type prompt for shared logic it defers to
 3. Add a stub in the core type prompt: "For X, see `${CLAUDE_SKILL_DIR}/references/<type>-<name>.md`"
-4. Add entry to `agent-references:` frontmatter in `saw-skill.md`:
-   ```yaml
-   agent-references:
-     - agent-type: <new-type>
-       inject: references/<type>-<name>.md
-     - agent-type: <new-type>
-       inject: references/<type>-conditional.md
-       when: "pattern"  # optional
+4. For always-needed content, inline it directly in the agent definition file (`agents/<type>.md`). For conditional content only, add conditional logic to the `inject-agent-context` script:
+   ```bash
+   # In inject-agent-context:
+   if [[ "$agent_type" == "<new-type>" ]] && [[ "$prompt" =~ condition ]]; then
+     inject references/<type>-<name>.md
+   fi
    ```
-5. Add a detection block and injection loop to `validate_agent_launch` **before Check 1** (the wave-agent tag gate), following the pattern of the existing Scout path and Check 11–13 blocks. New non-wave-agent types must exit before Check 1, which is the wave-agent-only structural validation gate.
+5. If conditional injection is needed, add a detection block to `validate_agent_launch` **before Check 1** (the wave-agent tag gate), following the pattern of the existing Scout path. New non-wave-agent types must exit before Check 1, which is the wave-agent-only structural validation gate.
 6. No installer changes required — `install.sh` dynamically discovers all `*.md` files in `references/` and symlinks them automatically
 7. Verify: launch a `new-agent-type` agent and confirm the reference marker appears in its initial context
 
@@ -746,9 +683,9 @@ SAW's progressive disclosure architecture combines **four tiers**, **three layer
 ### Four Tiers
 
 1. **Tier 0** (CLAUDE.md): Discovery index. Always present. Zero invocation cost.
-2. **Tier 1** (Frontmatter): Metadata + dispatch tables (`triggers:`, `agent-references:`). Parsed at skill load time.
+2. **Tier 1** (Frontmatter): Standard Skills API metadata only. No custom frontmatter fields. Parsed at skill load time.
 3. **Tier 2** (Core SKILL.md): ~183 lines covering core flows (scout, wave, status, bootstrap, interview). Loaded on every `/saw` invocation.
-4. **Tier 3** (References): 22+ reference files totaling ~2500 lines. Load only when triggered.
+4. **Tier 3** (References): Conditional reference files loaded only when scenario requires them. Always-needed content inlined in agent definitions.
 
 ### Three Layers
 
@@ -758,13 +695,13 @@ SAW's progressive disclosure architecture combines **four tiers**, **three layer
 
 ### Two Surfaces
 
-1. **Orchestrator surface**: Skill references loaded via `triggers:` + `UserPromptSubmit` + `additionalContext`
-2. **Subagent surface**: Agent type references loaded via `agent-references:` + `PreToolUse/Agent` + `updatedInput.prompt`
+1. **Orchestrator surface**: Skill references loaded via `inject-context` script + `UserPromptSubmit` + `additionalContext`
+2. **Subagent surface**: Conditional agent references loaded via `inject-agent-context` script + `PreToolUse/Agent` + `updatedInput.prompt`; always-needed content inlined in agent definitions
 
 ### Key Mechanisms
 
-- **Frontmatter dispatch**: YAML tables declare "when X, inject Y" rules
-- **Conditional injection**: `when:` regex enables scenario-specific loading
+- **Script-based dispatch**: Direct conditional logic in scripts handles "when X, inject Y" rules
+- **Conditional injection**: Pattern matching in scripts enables scenario-specific loading
 - **Dedup markers**: HTML comments prevent double-injection across layers
 - **updatedInput preservation**: Hook preserves all `tool_input` fields when modifying prompt
 - **Early exit pattern**: Non-wave-agent types exit before wave-agent validation checks
@@ -798,4 +735,4 @@ Model: [begins execution with all context present]
 
 The difference is **determinism**. The model cannot skip routing, misread the table, or forget to load a reference. The context is constructed correctly before the model starts, every time, automatically.
 
-This is the advanced pattern: not just deferred loading, but **deterministic hook-enforced injection with frontmatter-driven dispatch and three-layer platform compatibility**.
+This is the advanced pattern: not just deferred loading, but **deterministic hook-enforced injection with script-based conditional dispatch, inlined always-needed content, and three-layer platform compatibility**.
