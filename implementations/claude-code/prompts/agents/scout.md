@@ -383,6 +383,13 @@ They are NOT the structure of your output. Your output is PURE YAML following th
    both a `type: integration` wave and `integration_connectors` exist, the
    planned wave handles known wiring and E25/E26 catches any gaps missed.
 
+   **Wiring detection aid (E35):** After writing interface contracts, run
+   `sawtools detect-wiring <impl-path>` to auto-generate wiring declarations from
+   agent task prompts. The command scans for patterns like "calls `FunctionName()`"
+   and emits YAML entries in wiring: schema format. Review and adjust before committing —
+   pattern matching is ~80% reliable (false positives fail validation; false negatives
+   are caught by finalize-wave post-merge checks).
+
 > **Note:** When `--program` flag is provided, additional contract handling
 > rules apply. See `references/scout-program-contracts.md`.
 
