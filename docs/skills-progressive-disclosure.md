@@ -556,69 +556,32 @@ The same heuristics apply as for skill references, scoped to the agent type:
 
 | Condition | Decision |
 |-----------|----------|
-| Needed on every launch of this agent type | Keep in core type prompt |
-| Needed only for specific scenarios (errors, edge cases) | Extract to reference file |
-| Procedural steps for a specific sub-flow | Extract to reference file |
-| Long examples, sample outputs, example manifests | Extract to reference file |
-| Identity, role definition, invariants | Always in core type prompt |
-| Completion report format | Extract — only needed at end of work |
+| Needed on every launch of this agent type | Inline in agent definition |
+| Needed only for specific scenarios (errors, edge cases) | Extract to reference file, inject conditionally via script |
+| Identity, role definition, invariants | Inline in agent definition |
+| Completion report format | Inline in agent definition (needed every launch) |
+| Procedural steps for a rare sub-flow | Extract to reference file |
 
-### Current state (post v0.56.0 migration)
+### Agent type definitions
 
-As of v0.56.0, always-needed references have been inlined directly into agent definitions. Agent types are now self-contained:
+Each agent type has a self-contained definition file with all always-needed procedures, checklists, and format specs inlined. The agent definition is the agent's system prompt — everything is there from the first token.
 
-| Agent type | Definition size | Conditional references |
-|-----------|----------------|----------------------|
-| `scout` | ~787 lines | `scout-program-contracts.md` (when `--program` in prompt) |
-| `wave-agent` | ~330 lines | `wave-agent-build-diagnosis.md` (when baseline failed), `wave-agent-program-contracts.md` (when frozen contracts present) |
-| `critic-agent` | ~210 lines | None — fully self-contained |
-| `planner` | ~557 lines | None — fully self-contained |
-| `integration-agent` | ~233 lines | None — fully self-contained |
-| `scaffold-agent` | ~159 lines | None — fully self-contained |
+| Agent Type | What It Contains | Conditional References |
+|------------|-----------------|----------------------|
+| `scout` | Suitability gate, implementation process, output format | `scout-program-contracts.md` (if --program) |
+| `wave-agent` | Worktree isolation, completion report, execution checklist | `wave-agent-build-diagnosis.md` (if baseline failed), `wave-agent-program-contracts.md` (if frozen contracts) |
+| `critic-agent` | 8-check verification procedure, CriticResult format | None |
+| `planner` | Suitability gate, PROGRAM manifest process, example manifest | None |
+| `integration-agent` | Connector wiring patterns, integration report format | None |
+| `scaffold-agent` | Type stub creation rules, scaffold status reporting | None |
 
-Conditional injection is implemented in `validate_agent_launch` via the `inject-agent-context` script. The execution order in the hook is:
+Three references are conditionally injected by the `inject-agent-context` script because they apply only in specific scenarios. The `validate_agent_launch` hook calls the script before each agent launch. For scout and wave-agent, the script checks prompt content and injects matching references. For critic-agent, planner, and integration-agent, the hook passes through — all content is already in the definition.
 
-1. **Scout path** — fires before Check 1; conditionally injects `scout-program-contracts.md`, exits 0
-2. **Check 11 (critic-agent)** — fires before Check 1; no injection (content inlined), exits 0
-3. **Check 12 (planner)** — fires before Check 1; no injection (content inlined), exits 0
-4. **Check 13 (integration-agent)** — fires before Check 1; no injection (content inlined), exits 0
-5. **Check 1** — extracts `[SAW:wave{N}:agent-{ID}]` tag from description; non-wave-agent calls exit here
-6. **Checks 2–8** — IMPL existence, IMPL validation, agent-in-wave, ownership file, worktree branch, scaffold committed
-7. **Check 10 (wave-agent)** — runs after Checks 1–8 pass; conditionally injects `wave-agent-build-diagnosis.md` and `wave-agent-program-contracts.md` into `updatedInput`
+### Adding a new agent type
 
-Checks 11–13 and the Scout path are positioned before Check 1 (the wave-agent gate) because they must exit early on non-wave-agent launches. Check 10 is positioned after Checks 2–8 because wave-agent injection only runs when those structural checks have passed.
-
-### Historical context: the extraction-and-injection phase
-
-Prior to v0.56.0, each agent type had a "slim identity core" with procedural content extracted into separate reference files that were always-injected by the `validate_agent_launch` hook. For example, `wave-agent.md` was ~151 lines with worktree isolation and completion report content in separate `references/wave-agent-*.md` files.
-
-The progressive disclosure audit (2026-03-28) concluded that always-injected references add complexity without benefit over inlining. The hook injection mechanism was the wrong solution for always-needed content -- inlining is simpler and equally effective. However, the hook infrastructure proved to be exactly what was needed for the harder problem of **conditional injection** (content that only applies in specific scenarios).
-
-### Current state: inlined + conditional injection
-
-As of v0.56.0, all 11 always-needed reference files have been inlined directly into their respective agent definitions. Agent types are now self-contained:
-
-- **`scout.md`** (~787 lines): Suitability gate and implementation process inlined. Program contracts conditionally injected via `inject-agent-context` script.
-- **`wave-agent.md`** (~330 lines): Worktree isolation protocol and completion report format inlined. Build diagnosis and program contracts conditionally injected.
-- **`critic-agent.md`** (~210 lines): Verification checks and completion format inlined. Fully self-contained, no injection needed.
-- **`planner.md`** (~557 lines): Suitability gate, implementation process, and example manifest inlined. Fully self-contained, no injection needed.
-- **`integration-agent.md`** (~233 lines): Connectors reference and completion report format inlined. Fully self-contained, no injection needed.
-
-Only 3 conditional references remain, injected by the `inject-agent-context` script when specific scenarios are detected:
-
-- `scout-program-contracts.md` -- when `--program` flag present in scout prompt
-- `wave-agent-build-diagnosis.md` -- when baseline verification has failed
-- `wave-agent-program-contracts.md` -- when frozen interface contracts are present
-
-### The pattern for future agent types
-
-For any new agent type:
-
-1. **Always-needed content** should be inlined directly in the agent definition (`agents/<type>.md`). This is the simplest, most transparent approach.
-2. **Conditional content** (only needed in specific scenarios) should be a reference file in `references/`, with injection logic in the `inject-agent-context` script.
-3. Add a detection block in `validate_agent_launch` **before Check 1** (the wave-agent tag gate) for the new agent type.
-
-The dedup marker protocol (`<!-- injected: references/X.md -->`) prevents double-injection regardless of whether the hook or manual script call loaded the content.
+1. **Always-needed content** goes directly in the agent definition (`agents/<type>.md`). The definition is the system prompt — inline everything the agent needs on every launch.
+2. **Conditional content** (only needed in specific scenarios) goes in `references/`, with injection logic in the `inject-agent-context` script.
+3. Add a detection block in `validate_agent_launch` before the wave-agent tag gate so the new type exits early.
 
 ### Three-layer injection architecture
 
@@ -634,21 +597,20 @@ The injection system has three layers, each targeting a different deployment con
 
 See `docs/proposals/subagent-prompt-injection.md` for the full decision record on why `updatedInput` (not `additionalContext`) is required for subagent injection.
 
-### How to extend — adding a new agent type reference
+### How to extend — adding a new conditional reference
 
-1. Write `implementations/claude-code/prompts/references/<type>-<name>.md` with the extracted content (all reference files live in the top-level `references/` directory, not in a per-agent subdirectory)
-2. Add a back-link in the reference file pointing to the core type prompt for shared logic it defers to
-3. Add a stub in the core type prompt: "For X, see `${CLAUDE_SKILL_DIR}/references/<type>-<name>.md`"
-4. For always-needed content, inline it directly in the agent definition file (`agents/<type>.md`). For conditional content only, add conditional logic to the `inject-agent-context` script:
+1. Write the reference file in `implementations/claude-code/prompts/references/<type>-<name>.md`
+2. Add conditional logic to the `inject-agent-context` script:
    ```bash
-   # In inject-agent-context:
-   if [[ "$agent_type" == "<new-type>" ]] && [[ "$prompt" =~ condition ]]; then
-     inject references/<type>-<name>.md
-   fi
+   <new-type>)
+     [[ "$PROMPT" =~ condition ]] && inject_file "references/<type>-<name>.md"
+     ;;
    ```
-5. If conditional injection is needed, add a detection block to `validate_agent_launch` **before Check 1** (the wave-agent tag gate), following the pattern of the existing Scout path. New non-wave-agent types must exit before Check 1, which is the wave-agent-only structural validation gate.
-6. No installer changes required — `install.sh` dynamically discovers all `*.md` files in `references/` and symlinks them automatically
-7. Verify: launch a `new-agent-type` agent and confirm the reference marker appears in its initial context
+3. Add a detection block in `validate_agent_launch` before the wave-agent gate for the new type
+4. No installer changes — `install.sh` discovers `references/*.md` via wildcard
+5. Verify: launch the agent with/without the condition, confirm injection happens correctly
+
+For always-needed content, skip all of this — just inline it in the agent definition.
 
 ---
 
@@ -676,19 +638,18 @@ SAW's progressive disclosure architecture combines **four tiers**, **three layer
 
 ### Key Mechanisms
 
-- **Script-based dispatch**: Direct conditional logic in scripts handles "when X, inject Y" rules
-- **Conditional injection**: Pattern matching in scripts enables scenario-specific loading
-- **Dedup markers**: HTML comments prevent double-injection across layers
+- **Inlined always-needed content**: Agent definitions contain everything needed on every launch
+- **Script-based conditional dispatch**: Direct case/if logic in scripts handles "when X, inject Y"
 - **updatedInput preservation**: Hook preserves all `tool_input` fields when modifying prompt
 - **Early exit pattern**: Non-wave-agent types exit before wave-agent validation checks
 
 ### The Result
 
-- A `/saw wave` invocation never loads program coordination logic (saves ~324 lines)
-- A `/saw scout` launch never loads wave agent worktree isolation (saves ~93 lines)
-- Conditional references (program contracts, frozen interfaces) only load when scenario requires them
-- Scout reference injection saves ~200+ lines per launch via hook prepending
-- The model receives exactly the context it needs, automatically, with zero routing decisions
+- A `/saw wave` invocation never loads program coordination logic
+- A `/saw scout` launch never loads wave agent worktree isolation (that's in wave-agent.md, not scout.md)
+- Conditional references (program contracts, frozen interfaces) only load when the scenario requires them
+- The orchestrator receives only the references matching the current subcommand
+- Agents receive self-contained definitions with no injection needed for standard operations
 
 ### Why This Matters
 
@@ -711,4 +672,4 @@ Model: [begins execution with all context present]
 
 The difference is **determinism**. The model cannot skip routing, misread the table, or forget to load a reference. The context is constructed correctly before the model starts, every time, automatically.
 
-This is the advanced pattern: not just deferred loading, but **deterministic hook-enforced injection with script-based conditional dispatch, inlined always-needed content, and three-layer platform compatibility**.
+Inline what's always needed. Inject what's conditional. Let hooks handle it before the model starts.
