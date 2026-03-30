@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+# PreToolUse hook: Auto-format SAW agent names (E44)
+# Intercepts Agent tool calls and ensures SAW tag format is used
+#
+# If Agent tool is called with prompt/description containing IMPL path and wave/agent info,
+# automatically reformats the name parameter to [SAW:wave{N}:agent-{ID}] format
+#
+# Exit codes:
+#   0 — Allow (name formatted correctly or not a SAW agent)
+#   1 — Block (abort execution)
+
+set -euo pipefail
+
+# Read JSON from stdin
+input=$(cat)
+
+tool_name=$(echo "$input" | jq -r '.tool_name // empty' 2>/dev/null || true)
+
+# Only process Agent tool calls
+if [[ "$tool_name" != "Agent" ]]; then
+  exit 0
+fi
+
+# Extract parameters
+name=$(echo "$input" | jq -r '.parameters.name // empty' 2>/dev/null || true)
+prompt=$(echo "$input" | jq -r '.parameters.prompt // empty' 2>/dev/null || true)
+description=$(echo "$input" | jq -r '.parameters.description // empty' 2>/dev/null || true)
+subagent_type=$(echo "$input" | jq -r '.parameters.subagent_type // empty' 2>/dev/null || true)
+
+# Fast path: if name already has correct SAW tag format, allow
+if [[ "$name" =~ ^\[SAW:(wave[0-9]+:agent-[A-Za-z0-9]+|scout:[a-z0-9-]+|critic:[a-z0-9-]+|scaffold:[a-z0-9-]+|integration:wave[0-9]+)\]  ]]; then
+  exit 0
+fi
+
+# Detect SAW agent from subagent_type
+phase=""
+case "$subagent_type" in
+  wave-agent) phase="wave" ;;
+  scout) phase="scout" ;;
+  critic-agent) phase="critic" ;;
+  scaffold-agent) phase="scaffold" ;;
+  integration-agent) phase="integration" ;;
+  *) exit 0 ;; # Not a SAW agent, allow as-is
+esac
+
+# Extract wave/agent/slug from prompt or description
+wave_num=""
+agent_id=""
+slug=""
+
+# Pattern 1: IMPL doc comment in prompt
+# <!-- IMPL doc: /path/docs/IMPL/IMPL-feature-slug.yaml | Wave N | Agent X -->
+if [[ "$prompt" =~ IMPL-([a-z0-9-]+)\.yaml.*Wave\ ([0-9]+).*Agent\ ([A-Z0-9]+) ]]; then
+  slug="${BASH_REMATCH[1]}"
+  wave_num="${BASH_REMATCH[2]}"
+  agent_id="${BASH_REMATCH[3]}"
+fi
+
+# Pattern 2: Scout/Critic format (slug from description)
+if [[ -z "$wave_num" && "$prompt" =~ IMPL-([a-z0-9-]+)\.yaml ]]; then
+  slug="${BASH_REMATCH[1]}"
+fi
+
+# If we have enough info, format the name
+formatted_name=""
+case "$phase" in
+  wave)
+    if [[ -n "$wave_num" && -n "$agent_id" && -n "$slug" ]]; then
+      # Extract description after agent instructions
+      desc="implement task"
+      if [[ -n "$description" ]]; then
+        desc="$description"
+      fi
+      formatted_name="[SAW:wave${wave_num}:agent-${agent_id}] ${desc}"
+    fi
+    ;;
+  scout|critic|scaffold)
+    if [[ -n "$slug" ]]; then
+      desc="$description"
+      [[ -z "$desc" ]] && desc="$phase task"
+      formatted_name="[SAW:${phase}:${slug}] ${desc}"
+    fi
+    ;;
+  integration)
+    if [[ -n "$wave_num" ]]; then
+      desc="$description"
+      [[ -z "$desc" ]] && desc="wire integration"
+      formatted_name="[SAW:integration:wave${wave_num}] ${desc}"
+    fi
+    ;;
+esac
+
+# If we successfully formatted, output modified JSON with new name
+if [[ -n "$formatted_name" ]]; then
+  echo "$input" | jq --arg new_name "$formatted_name" '.parameters.name = $new_name'
+  exit 0
+fi
+
+# Couldn't extract enough info to format - allow original
+exit 0

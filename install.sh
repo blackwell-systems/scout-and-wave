@@ -32,6 +32,7 @@ HOOK_SCRIPTS=(
   "check_git_ownership"
   "warn_stubs"
   "check_branch_drift"
+  "auto_format_saw_agent_names"
   "validate_agent_launch"
   "validate_agent_completion"
   "emit_agent_completion"
