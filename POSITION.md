@@ -138,22 +138,30 @@ The hook architecture uses two distinct output fields for different injection ta
 
 **This distinction is non-obvious.** Early implementations tried `additionalContext` in `PreToolUse` -- this augmented the orchestrator's context, not the subagent's. Three critic review cycles caught the error before any agent ran. The correct mechanism is documented in `docs/proposals/subagent-prompt-injection.md`.
 
-#### Agent Type Self-Contained Definitions
+#### Agent Type Definitions
 
-Each agent type has a self-contained definition file with all always-needed content inlined. No hook injection is required for always-needed procedures -- the agent definition IS the delivery mechanism.
+Each agent type (`scout`, `wave-agent`, `critic-agent`, `planner`, `integration-agent`, `scaffold-agent`) has a self-contained definition file. The definition includes all procedures, checklists, and format specifications the agent needs. When Claude Code spawns a subagent, the definition file becomes its system prompt -- everything is there from the first token.
 
-| Agent Type | Definition Size | Inlined Content | Conditional Injection |
-|------------|----------------|-----------------|----------------------|
-| `scout` | ~787 lines | suitability-gate, implementation-process | program-contracts (if --program) |
-| `wave-agent` | ~330 lines | worktree-isolation, completion-report | build-diagnosis (if baseline failed), program-contracts (if frozen) |
-| `critic-agent` | ~210 lines | verification-checks, completion-format | (none) |
-| `planner` | ~557 lines | suitability-gate, implementation-process, example-manifest | (none) |
-| `integration-agent` | ~233 lines | connectors-reference, completion-report | (none) |
-| `scaffold-agent` | ~159 lines | (all content in definition) | (none) |
+| Agent Type | Definition | What It Contains |
+|------------|-----------|-----------------|
+| `scout` | ~787 lines | Suitability gate (5-question assessment), implementation process (18-step IMPL production), output format |
+| `wave-agent` | ~330 lines | Worktree isolation protocol, completion report format, 9-field execution checklist |
+| `critic-agent` | ~210 lines | 8-check verification procedure, structured CriticResult format |
+| `planner` | ~557 lines | Suitability gate, PROGRAM manifest process (10 steps), annotated example manifest |
+| `integration-agent` | ~233 lines | Connector wiring patterns, integration report format |
+| `scaffold-agent` | ~159 lines | Type stub creation rules, scaffold status reporting |
 
-**Conditional injection via scripts:** The `validate_agent_launch` hook delegates to the `inject-agent-context` script for the 3 remaining conditional references. The script uses direct case/if logic -- no YAML parsing, no frontmatter reading. For critic-agent, planner, and integration-agent, the hook passes through (all content already inlined). See the [progressive-disclosure-audit-2026-03-28.md](docs/progressive-disclosure-audit-2026-03-28.md) for the full analysis of why this architecture was chosen.
+Three references are delivered conditionally via the `inject-agent-context` script, because they apply only in specific scenarios:
 
-**Go engine mirror** -- The Go SDK's `LoadTypePromptWithRefs` reads reference files alongside each agent type prompt file when constructing prompts for the API or Bedrock path. Both the CLI hook layer and the engine layer enforce agent-type-scoped content delivery -- neither path is a second-class citizen.
+| Reference | Agent | Condition | Why conditional |
+|-----------|-------|-----------|-----------------|
+| `scout-program-contracts.md` | scout | `--program` flag present | PROGRAM mode contract enforcement adds ~2KB irrelevant to single-IMPL scouts |
+| `wave-agent-build-diagnosis.md` | wave-agent | Baseline gate failed | Diagnosis patterns only useful when the codebase is already broken |
+| `wave-agent-program-contracts.md` | wave-agent | Frozen contracts detected | Contract enforcement only applies in PROGRAM mode waves |
+
+The `validate_agent_launch` hook calls the script before each agent launch. The script checks for the condition (regex match on prompt content) and prepends the reference if matched.
+
+**Go engine parity** -- The Go SDK's `LoadTypePromptWithRefs` reads reference files alongside each agent type definition when constructing prompts for the API or Bedrock path. Both the CLI hook layer and the engine layer deliver agent-type-scoped content -- neither path is a second-class citizen.
 
 #### Observability
 
