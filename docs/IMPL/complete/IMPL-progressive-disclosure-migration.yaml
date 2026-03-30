@@ -1,3 +1,4 @@
+completion_date: "2026-03-29"
 title: 'Progressive Disclosure Migration: Inline Always-Needed Content, Remove Custom Frontmatter'
 feature_slug: progressive-disclosure-migration
 verdict: SUITABLE
@@ -427,6 +428,7 @@ waves:
             - Preserve all content from reference files exactly
           files:
             - implementations/claude-code/prompts/agents/integration-agent.md
+      base_commit: bb1dc0ac4529e927a7cb3f23c8d9cda91bd41e56
     - number: 2
       agents:
         - id: F
@@ -719,6 +721,7 @@ waves:
             - C
             - D
             - E
+      base_commit: cf6716b238b703e1c682c9d14398993bdc915af1
     - number: 3
       agents:
         - id: I
@@ -934,6 +937,7 @@ waves:
             - F
             - G
             - H
+      base_commit: 9b40ed32f307db8e8d05904416154ff1b562a605
 quality_gates:
     level: standard
     gates:
@@ -949,6 +953,112 @@ quality_gates:
         - type: custom
           command: bash -n implementations/claude-code/hooks/inject_skill_context
           required: true
+completion_reports:
+    A:
+        status: complete
+        branch: saw/progressive-disclosure-migration/wave1-agent-A
+        commit: 2a035cb
+        files_changed:
+            - implementations/claude-code/prompts/agents/scout.md
+        verification: PASS
+        notes: 'Inlined scout-suitability-gate.md (123 lines) and scout-implementation-process.md (465 lines) into scout.md. Replaced Reference Files breadcrumb section with actual content. Added Conditional Reference Files section for scout-program-contracts.md. Removed dedup check instructions. All verification checks pass: suitability gate 5-question checklist present, implementation process steps 1-18 present, no breadcrumb instructions remain, conditional reference documented.'
+    B:
+        status: complete
+        branch: saw/progressive-disclosure-migration/wave1-agent-B
+        commit: b9424d3
+        files_changed:
+            - implementations/claude-code/prompts/agents/wave-agent.md
+        verification: PASS
+        notes: 'Inlined wave-agent-worktree-isolation.md and wave-agent-completion-report.md into wave-agent.md. Replaced breadcrumb Reference Files section with full content. Added Conditional Reference Files section for build-diagnosis and program-contracts. Headings demoted one level (## to ###, ### to ####) to fit within wave-agent.md structure.'
+    C:
+        status: complete
+        branch: saw/progressive-disclosure-migration/wave1-agent-C
+        commit: 5dd1f54
+        files_changed:
+            - implementations/claude-code/prompts/agents/critic-agent.md
+        verification: PASS
+        notes: Inlined critic-agent-verification-checks.md (8 checks) and critic-agent-completion-format.md (sawtools set-critic-review reference) into critic-agent.md. Removed breadcrumb and dedup check instructions. No conditional references remain for critic-agent.
+    D:
+        status: complete
+        branch: saw/progressive-disclosure-migration/wave1-agent-D
+        commit: daef940
+        files_changed:
+            - implementations/claude-code/prompts/agents/planner.md
+        verification: PASS
+        notes: Inlined all 3 reference files (suitability gate, implementation process steps 1-10, example manifest) into planner.md. Removed breadcrumb and dedup check instructions. No conditional references needed for planner agent.
+    E:
+        status: complete
+        branch: saw/progressive-disclosure-migration/wave1-agent-E
+        commit: a66a3c6
+        files_changed:
+            - implementations/claude-code/prompts/agents/integration-agent.md
+        verification: PASS
+        notes: Inlined integration-connectors-reference.md and integration-agent-completion-report.md into integration-agent.md. Removed breadcrumb Reference Files section and dedup check instructions. No conditional references remain for this agent.
+    F:
+        status: complete
+        branch: saw/progressive-disclosure-migration/wave2-agent-F
+        commit: b8ce494
+        files_changed:
+            - implementations/claude-code/prompts/saw-skill.md
+        verification: PASS
+        notes: 'Removed triggers: block (9 lines) and agent-references: block (33 lines) from frontmatter. Updated Supporting Files section to replace ''see frontmatter'' references with concrete injection flow description. All standard frontmatter fields preserved.'
+    G:
+        status: complete
+        branch: saw/progressive-disclosure-migration/wave2-agent-G
+        commit: 3c2a9ee
+        files_changed:
+            - implementations/claude-code/prompts/scripts/inject-agent-context
+            - implementations/claude-code/prompts/scripts/inject-context
+            - implementations/claude-code/prompts/references/wave-agent-build-diagnosis.md
+            - implementations/claude-code/prompts/references/wave-agent-program-contracts.md
+            - implementations/claude-code/prompts/references/scout-program-contracts.md
+        verification: PASS
+        notes: 'Rewrote both scripts to remove awk/YAML parsing and SKILL.md dependency. inject-agent-context: 116->53 lines. inject-context: 85->36 lines. Updated comment headers in 3 conditional reference files. All 4 quality gates pass (bash -n on all scripts/hooks).'
+    H:
+        status: complete
+        branch: saw/progressive-disclosure-migration/wave2-agent-H
+        commit: 6e96aaf
+        files_changed:
+            - implementations/claude-code/hooks/validate_agent_launch
+        verification: PASS
+        notes: Removed 215 lines of inline injection for scout, critic, planner, integration, and wave-agent types. Replaced with delegation to inject-agent-context script. Critic/planner/integration now pass through (content inlined in prompts). All enforcement checks 1-8 and scout description auto-fix preserved. File reduced from 471 to 293 lines.
+    I:
+        status: complete
+        worktree: /Users/dayna.blackwell/code/scout-and-wave/.claude/worktrees/saw/progressive-disclosure-migration/wave3-agent-I
+        branch: saw/progressive-disclosure-migration/wave3-agent-I
+        commit: 54fbb16
+        files_changed:
+            - implementations/claude-code/prompts/references/scout-suitability-gate.md
+            - implementations/claude-code/prompts/references/scout-implementation-process.md
+            - implementations/claude-code/prompts/references/planner-suitability-gate.md
+            - implementations/claude-code/prompts/references/planner-implementation-process.md
+            - implementations/claude-code/prompts/references/planner-example-manifest.md
+            - implementations/claude-code/prompts/references/wave-agent-worktree-isolation.md
+            - implementations/claude-code/prompts/references/wave-agent-completion-report.md
+            - implementations/claude-code/prompts/references/critic-agent-verification-checks.md
+            - implementations/claude-code/prompts/references/critic-agent-completion-format.md
+            - implementations/claude-code/prompts/references/integration-connectors-reference.md
+            - implementations/claude-code/prompts/references/integration-agent-completion-report.md
+        verification: All 11 files deleted via git rm. 11 remaining reference files verified. All 4 bash -n syntax checks pass.
+        notes: Deleted 11 reference files whose content was inlined into agent definitions. 1462 lines removed.
+    J:
+        status: complete
+        branch: saw/progressive-disclosure-migration/wave3-agent-J
+        commit: 3d8beee
+        files_changed:
+            - implementations/claude-code/prompts/README.md
+            - implementations/claude-code/README.md
+            - implementations/claude-code/prompts/scripts/README.md
+        verification: PASS
+    K:
+        status: complete
+        branch: saw/progressive-disclosure-migration/wave3-agent-K
+        commit: dc18fa7
+        files_changed:
+            - implementations/claude-code/hooks/README.md
+            - docs/skills-progressive-disclosure.md
+            - POSITION.md
+        notes: 'Updated 3 architecture/design docs to reflect migration from frontmatter-driven dispatch to inlined agent references with script-based conditional injection. Removed triggers: and agent-references: YAML examples. Updated Tier 1 description, injection patterns, three-layer architecture, Hook 9 checks, and extension guides.'
 pre_mortem:
     overall_risk: low
     rows:
@@ -985,5 +1095,49 @@ pre_mortem:
           mitigation: |
             Wave ordering prevents this. Wave 3 depends on Wave 2 completion. The hook
             and scripts must be refactored before reference files are deleted.
-state: REVIEWED
+critic_report:
+    verdict: PASS
+    agent_reviews:
+        A:
+            agent_id: A
+            verdict: PASS
+        B:
+            agent_id: B
+            verdict: PASS
+        C:
+            agent_id: C
+            verdict: PASS
+        D:
+            agent_id: D
+            verdict: PASS
+        E:
+            agent_id: E
+            verdict: PASS
+        F:
+            agent_id: F
+            verdict: PASS
+        G:
+            agent_id: G
+            verdict: PASS
+        H:
+            agent_id: H
+            verdict: PASS
+        I:
+            agent_id: I
+            verdict: PASS
+            issues:
+                - check: complexity_balance
+                  severity: warning
+                  description: Agent I owns 11 files (37% of 30 total) -- exceeds 8-file threshold. All are simple git rm deletions so risk is low.
+                  file: implementations/claude-code/prompts/references/
+        J:
+            agent_id: J
+            verdict: PASS
+        K:
+            agent_id: K
+            verdict: PASS
+    summary: 'All 11 agent briefs verified against codebase. File existence confirmed for all 30 files (29 modify/delete actions with existing files, 0 new files). Line counts and section locations match brief descriptions (scout.md 208 lines, wave-agent.md 151 lines, critic-agent.md 90 lines, planner.md 143 lines, integration-agent.md 133 lines, validate_agent_launch 470 lines, inject-agent-context 115 lines, inject-context 84 lines). Reference Files sections found at exact line ranges cited. Frontmatter triggers: (lines 17-25) and agent-references: (lines 26-59) in saw-skill.md confirmed. Hook injection blocks (Checks 9-13) confirmed at cited line ranges. All 22 reference files exist; 11 deletions + 11 remaining = correct arithmetic. Conditional reference files (program-flow.md, amend-flow.md, scout-program-contracts.md, wave-agent-build-diagnosis.md, wave-agent-program-contracts.md) all exist. One advisory warning: Agent I owns 11 files (37% of 30 total), exceeding 8-file threshold, but all are simple git rm deletions.'
+    reviewed_at: "2026-03-30T00:16:45Z"
+    issue_count: 1
+state: COMPLETE
 injection_method: hook

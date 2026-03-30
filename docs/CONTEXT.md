@@ -101,3 +101,5 @@
   - IMPL doc: docs/IMPL/complete/IMPL-friction-fixes-phase1-execution.yaml
 - **quality-gate-parallelization**: completed 2026-03-28, 3 waves, 4 agents
   - IMPL doc: docs/IMPL/complete/IMPL-quality-gate-parallelization.yaml
+- **progressive-disclosure-migration**: completed 2026-03-29, 3 waves, 11 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-progressive-disclosure-migration.yaml
