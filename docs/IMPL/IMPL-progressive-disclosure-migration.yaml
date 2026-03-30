@@ -1,0 +1,989 @@
+title: 'Progressive Disclosure Migration: Inline Always-Needed Content, Remove Custom Frontmatter'
+feature_slug: progressive-disclosure-migration
+verdict: SUITABLE
+suitability_assessment: |
+    1. File decomposition: YES. 5 agent definitions modified in parallel (Wave 1),
+       hook + script + frontmatter refactored in parallel (Wave 2), reference file
+       deletion + doc updates in parallel (Wave 3). All file ownership is disjoint.
+
+    2. Investigation-first items: NONE. The audit document
+       (docs/progressive-disclosure-audit-2026-03-28.md) provides exhaustive
+       file-by-file analysis with exact line numbers, change types, and effort
+       estimates. No unknowns remain.
+
+    3. Interface discoverability: YES. The inject-agent-context script's new
+       interface is fully specified (case/if for 3 conditional references). No
+       cross-agent runtime interfaces needed.
+
+    4. Pre-implementation status: All items are TODO. No prior implementation exists.
+
+    5. Parallelization value: HIGH. Wave 1 has 5 independent agents each touching
+       1 file. Wave 2 has 3 independent agents (hook, script, frontmatter). Wave 3
+       has deletion + docs. Build/test cycle is N/A (markdown/bash files, no
+       compilation), but agent count and independence justify SAW coordination.
+
+    Estimated times:
+    - Scout phase: ~10 min (dependency mapping, interface contracts, IMPL doc)
+    - Agent execution: ~15 min (5 agents wave 1, 3 agents wave 2, 3 agents wave 3)
+    - Merge & verification: ~5 min per wave
+    Total SAW time: ~40 min
+
+    Sequential baseline: ~90 min (11 agents x ~8 min avg)
+    Time savings: ~50 min (55% faster)
+
+    Recommendation: Clear speedup from 5-way parallelism in Wave 1.
+test_command: echo 'no tests - protocol repo with markdown/bash files only'
+lint_command: none
+file_ownership:
+    - file: implementations/claude-code/prompts/agents/scout.md
+      agent: A
+      wave: 1
+      action: modify
+    - file: implementations/claude-code/prompts/agents/wave-agent.md
+      agent: B
+      wave: 1
+      action: modify
+    - file: implementations/claude-code/prompts/agents/critic-agent.md
+      agent: C
+      wave: 1
+      action: modify
+    - file: implementations/claude-code/prompts/agents/planner.md
+      agent: D
+      wave: 1
+      action: modify
+    - file: implementations/claude-code/prompts/agents/integration-agent.md
+      agent: E
+      wave: 1
+      action: modify
+    - file: implementations/claude-code/prompts/saw-skill.md
+      agent: F
+      wave: 2
+      action: modify
+    - file: implementations/claude-code/prompts/scripts/inject-agent-context
+      agent: G
+      wave: 2
+      action: modify
+    - file: implementations/claude-code/prompts/scripts/inject-context
+      agent: G
+      wave: 2
+      action: modify
+    - file: implementations/claude-code/hooks/validate_agent_launch
+      agent: H
+      wave: 2
+      action: modify
+    - file: implementations/claude-code/prompts/references/wave-agent-build-diagnosis.md
+      agent: G
+      wave: 2
+      action: modify
+    - file: implementations/claude-code/prompts/references/wave-agent-program-contracts.md
+      agent: G
+      wave: 2
+      action: modify
+    - file: implementations/claude-code/prompts/references/scout-program-contracts.md
+      agent: G
+      wave: 2
+      action: modify
+    - file: implementations/claude-code/prompts/references/scout-suitability-gate.md
+      agent: I
+      wave: 3
+      action: delete
+    - file: implementations/claude-code/prompts/references/scout-implementation-process.md
+      agent: I
+      wave: 3
+      action: delete
+    - file: implementations/claude-code/prompts/references/planner-suitability-gate.md
+      agent: I
+      wave: 3
+      action: delete
+    - file: implementations/claude-code/prompts/references/planner-implementation-process.md
+      agent: I
+      wave: 3
+      action: delete
+    - file: implementations/claude-code/prompts/references/planner-example-manifest.md
+      agent: I
+      wave: 3
+      action: delete
+    - file: implementations/claude-code/prompts/references/wave-agent-worktree-isolation.md
+      agent: I
+      wave: 3
+      action: delete
+    - file: implementations/claude-code/prompts/references/wave-agent-completion-report.md
+      agent: I
+      wave: 3
+      action: delete
+    - file: implementations/claude-code/prompts/references/critic-agent-verification-checks.md
+      agent: I
+      wave: 3
+      action: delete
+    - file: implementations/claude-code/prompts/references/critic-agent-completion-format.md
+      agent: I
+      wave: 3
+      action: delete
+    - file: implementations/claude-code/prompts/references/integration-connectors-reference.md
+      agent: I
+      wave: 3
+      action: delete
+    - file: implementations/claude-code/prompts/references/integration-agent-completion-report.md
+      agent: I
+      wave: 3
+      action: delete
+    - file: implementations/claude-code/prompts/README.md
+      agent: J
+      wave: 3
+      action: modify
+    - file: implementations/claude-code/README.md
+      agent: J
+      wave: 3
+      action: modify
+    - file: implementations/claude-code/prompts/scripts/README.md
+      agent: J
+      wave: 3
+      action: modify
+    - file: implementations/claude-code/hooks/README.md
+      agent: K
+      wave: 3
+      action: modify
+    - file: docs/skills-progressive-disclosure.md
+      agent: K
+      wave: 3
+      action: modify
+    - file: POSITION.md
+      agent: K
+      wave: 3
+      action: modify
+interface_contracts:
+    - name: inject-agent-context new interface
+      description: |
+        The refactored inject-agent-context script replaces YAML frontmatter parsing
+        with direct conditional logic. Same CLI interface (--type, --prompt), same
+        output format (injection markers + file content), but no SKILL.md dependency.
+      definition: |
+        #!/usr/bin/env bash
+        # Arguments: --type <agent-type> --prompt <prompt-text>
+        # Output: concatenated reference file contents with injection markers
+        # Exit 0: success (empty output = nothing to inject)
+        # Exit 1: error (--type missing)
+        #
+        # Conditional logic (replaces YAML parsing):
+        #   scout + "--program" in prompt -> inject scout-program-contracts.md
+        #   wave-agent + "baseline_verification_failed" in prompt -> inject wave-agent-build-diagnosis.md
+        #   wave-agent + "frozen_contracts" in prompt -> inject wave-agent-program-contracts.md
+        #   All other agent types -> no injection (empty output)
+      location: implementations/claude-code/prompts/scripts/inject-agent-context
+    - name: inject-context new interface
+      description: |
+        The refactored inject-context script replaces YAML frontmatter parsing
+        with direct conditional logic for 2 orchestrator triggers. Same CLI
+        interface (prompt as $1 or stdin), same output format.
+      definition: |
+        #!/usr/bin/env bash
+        # Arguments: prompt text as $1 or stdin
+        # Output: concatenated reference file contents with injection markers
+        # Exit 0: success
+        #
+        # Conditional logic (replaces YAML parsing):
+        #   "^/saw program" in prompt -> inject references/program-flow.md
+        #   "^/saw amend" in prompt -> inject references/amend-flow.md
+      location: implementations/claude-code/prompts/scripts/inject-context
+    - name: validate_agent_launch simplified injection
+      description: |
+        After removing unconditional injection blocks, the hook delegates
+        conditional injection to inject-agent-context script. Keeps all
+        enforcement checks (1-8), scout description auto-fix, and SAW tag
+        extraction unchanged.
+      definition: |
+        # Injection dispatch (replaces ~200 lines of per-agent-type blocks):
+        #   For scout, wave-agent: call inject-agent-context --type $subagent_type --prompt "$prompt"
+        #   For critic-agent, planner, integration-agent: no injection (content inlined)
+        #   Enforcement checks 1-8: unchanged
+        #   Scout description auto-fix: unchanged
+      location: implementations/claude-code/hooks/validate_agent_launch
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## What to Implement
+
+            Inline the content of 2 reference files into `implementations/claude-code/prompts/agents/scout.md`:
+            - `references/scout-suitability-gate.md` (123 lines)
+            - `references/scout-implementation-process.md` (464 lines)
+
+            ## Detailed Steps
+
+            1. Read the current `agents/scout.md` file (208 lines).
+            2. Read `references/scout-suitability-gate.md` and `references/scout-implementation-process.md`.
+            3. Find the "## Reference Files" section (lines 139-158). This section contains breadcrumb
+               instructions telling the agent to read reference files or check for injection markers.
+            4. Replace that entire section with the actual content of both reference files, preserving
+               clear section boundaries. Use the injection marker comments as section delimiters:
+               ```
+               <!-- Part of scout agent procedure. Inlined from references/scout-suitability-gate.md -->
+               # Suitability Gate
+               [content of scout-suitability-gate.md, excluding any frontmatter]
+
+               <!-- Part of scout agent procedure. Inlined from references/scout-implementation-process.md -->
+               # Implementation Process (Instructions - NOT Output Format)
+               [content of scout-implementation-process.md, excluding any frontmatter]
+               ```
+            5. After the inlined content, add a brief note about the ONE remaining conditional reference:
+               ```
+               ---
+
+               ## Conditional Reference Files
+
+               The following reference file is conditionally injected by the `inject-agent-context` script
+               when specific conditions are met. Do NOT read it unless the condition applies.
+
+               - `scout-program-contracts.md` -- Injected when `--program` flag is present in prompt.
+                 If you see `<!-- injected: references/scout-program-contracts.md -->` in your context,
+                 the content is already loaded.
+               ```
+            6. Remove any references to "dedup check" for the inlined files (no longer relevant).
+            7. Remove the `set-injection-method` instructions from the "Output Format" section
+               (lines 156-158) since injection tracking is no longer meaningful for inlined content.
+               Keep the step numbering intact by adjusting subsequent step numbers.
+
+            ## Verification Gate
+            - File must be valid markdown
+            - File must contain the suitability gate 5-question checklist
+            - File must contain implementation process steps 1-18
+            - File must NOT contain breadcrumb instructions like "read these files yourself"
+            - File must mention scout-program-contracts.md as conditional reference
+
+            ## Constraints
+            - Do NOT modify any other files
+            - Do NOT delete reference files (Wave 3 handles deletion)
+            - Preserve all content from reference files exactly -- do not summarize or rewrite
+          files:
+            - implementations/claude-code/prompts/agents/scout.md
+        - id: B
+          task: |
+            ## What to Implement
+
+            Inline the content of 2 reference files into `implementations/claude-code/prompts/agents/wave-agent.md`:
+            - `references/wave-agent-worktree-isolation.md` (93 lines)
+            - `references/wave-agent-completion-report.md` (94 lines)
+
+            ## Detailed Steps
+
+            1. Read the current `agents/wave-agent.md` file (151 lines).
+            2. Read `references/wave-agent-worktree-isolation.md` and `references/wave-agent-completion-report.md`.
+            3. Find the "## Reference Files" section (lines 18-39). This section contains breadcrumb
+               instructions telling the agent to read reference files or check for injection markers.
+            4. Replace that entire section with the actual content of both reference files:
+               ```
+               <!-- Inlined from references/wave-agent-worktree-isolation.md -->
+               ## Worktree Isolation Protocol
+               [content of wave-agent-worktree-isolation.md]
+
+               <!-- Inlined from references/wave-agent-completion-report.md -->
+               ## Completion Report
+               [content of wave-agent-completion-report.md]
+               ```
+            5. After the inlined content, add a note about the 2 remaining conditional references:
+               ```
+               ---
+
+               ## Conditional Reference Files
+
+               The following reference files are conditionally injected by the `inject-agent-context`
+               script. Do NOT read them unless the condition applies.
+
+               - `wave-agent-build-diagnosis.md` -- Injected when baseline verification failed.
+                 If you see `<!-- injected: references/wave-agent-build-diagnosis.md -->` in your
+                 context, the content is already loaded.
+               - `wave-agent-program-contracts.md` -- Injected when IMPL has frozen_contracts_hash.
+                 If you see `<!-- injected: references/wave-agent-program-contracts.md -->` in your
+                 context, the content is already loaded.
+               ```
+            6. Remove any "dedup check" instructions for the inlined files.
+
+            ## Verification Gate
+            - File must contain worktree isolation protocol content (Step 0, Step 0.5)
+            - File must contain completion report content (sawtools set-completion examples)
+            - File must NOT contain breadcrumb instructions like "read these files yourself"
+            - File must mention wave-agent-build-diagnosis.md and wave-agent-program-contracts.md as conditional
+
+            ## Constraints
+            - Do NOT modify any other files
+            - Preserve all content from reference files exactly
+          files:
+            - implementations/claude-code/prompts/agents/wave-agent.md
+        - id: C
+          task: |
+            ## What to Implement
+
+            Inline the content of 2 reference files into `implementations/claude-code/prompts/agents/critic-agent.md`:
+            - `references/critic-agent-verification-checks.md` (84 lines)
+            - `references/critic-agent-completion-format.md` (54 lines)
+
+            ## Detailed Steps
+
+            1. Read the current `agents/critic-agent.md` file (90 lines).
+            2. Read `references/critic-agent-verification-checks.md` and `references/critic-agent-completion-format.md`.
+            3. Find the "## Reference Files" section (lines 52-69). This section contains breadcrumb
+               instructions telling the agent to read reference files or check for injection markers.
+            4. Replace that entire section with the actual content of both reference files:
+               ```
+               <!-- Inlined from references/critic-agent-verification-checks.md -->
+               ## Verification Checks
+               [content of critic-agent-verification-checks.md]
+
+               <!-- Inlined from references/critic-agent-completion-format.md -->
+               ## Completion Format
+               [content of critic-agent-completion-format.md]
+               ```
+            5. Remove any "dedup check" instructions for the inlined files.
+            6. No conditional references remain for critic-agent, so no conditional section needed.
+
+            ## Verification Gate
+            - File must contain the 8-check verification procedure
+            - File must contain sawtools set-critic-review command reference
+            - File must NOT contain breadcrumb instructions like "read these files yourself"
+
+            ## Constraints
+            - Do NOT modify any other files
+            - Preserve all content from reference files exactly
+          files:
+            - implementations/claude-code/prompts/agents/critic-agent.md
+        - id: D
+          task: |
+            ## What to Implement
+
+            Inline the content of 3 reference files into `implementations/claude-code/prompts/agents/planner.md`:
+            - `references/planner-suitability-gate.md` (50 lines)
+            - `references/planner-implementation-process.md` (223 lines)
+            - `references/planner-example-manifest.md` (159 lines)
+
+            ## Detailed Steps
+
+            1. Read the current `agents/planner.md` file (143 lines).
+            2. Read all 3 reference files.
+            3. Find the "## Reference Files" section (lines 38-58). This section contains breadcrumb
+               instructions telling the agent to read reference files or check for injection markers.
+            4. Replace that entire section with the actual content of all 3 reference files:
+               ```
+               <!-- Inlined from references/planner-suitability-gate.md -->
+               # Suitability Gate
+               [content of planner-suitability-gate.md]
+
+               <!-- Inlined from references/planner-implementation-process.md -->
+               # Implementation Process
+               [content of planner-implementation-process.md]
+
+               <!-- Inlined from references/planner-example-manifest.md -->
+               # Example PROGRAM Manifest
+               [content of planner-example-manifest.md]
+               ```
+            5. Remove any "dedup check" instructions for the inlined files.
+            6. No conditional references remain for planner, so no conditional section needed.
+
+            ## Verification Gate
+            - File must contain the 4-question suitability gate
+            - File must contain implementation process steps 1-10
+            - File must contain the example PROGRAM manifest
+            - File must NOT contain breadcrumb instructions like "read these files yourself"
+
+            ## Constraints
+            - Do NOT modify any other files
+            - Preserve all content from reference files exactly
+          files:
+            - implementations/claude-code/prompts/agents/planner.md
+        - id: E
+          task: |
+            ## What to Implement
+
+            Inline the content of 2 reference files into `implementations/claude-code/prompts/agents/integration-agent.md`:
+            - `references/integration-connectors-reference.md` (88 lines)
+            - `references/integration-agent-completion-report.md` (30 lines)
+
+            ## Detailed Steps
+
+            1. Read the current `agents/integration-agent.md` file (133 lines).
+            2. Read both reference files.
+            3. Find the "## Reference Files" section (lines 25-43). This section contains breadcrumb
+               instructions telling the agent to read reference files or check for injection markers.
+            4. Replace that entire section with the actual content of both reference files:
+               ```
+               <!-- Inlined from references/integration-connectors-reference.md -->
+               ## Integration Connectors Reference
+               [content of integration-connectors-reference.md]
+
+               <!-- Inlined from references/integration-agent-completion-report.md -->
+               ## Completion Report
+               [content of integration-agent-completion-report.md]
+               ```
+            5. Remove any "dedup check" instructions for the inlined files.
+            6. No conditional references remain for integration-agent, so no conditional section needed.
+
+            ## Verification Gate
+            - File must contain integration_connectors background and YAML examples
+            - File must contain sawtools set-completion command examples
+            - File must NOT contain breadcrumb instructions like "read these files yourself"
+
+            ## Constraints
+            - Do NOT modify any other files
+            - Preserve all content from reference files exactly
+          files:
+            - implementations/claude-code/prompts/agents/integration-agent.md
+    - number: 2
+      agents:
+        - id: F
+          task: |
+            ## What to Implement
+
+            Remove BOTH custom frontmatter blocks from `implementations/claude-code/prompts/saw-skill.md`:
+            1. The `triggers:` block (lines 17-25)
+            2. The `agent-references:` block (lines 26-59)
+
+            Also update body text references.
+
+            ## Detailed Steps
+
+            1. Read the current `saw-skill.md` file.
+            2. In the YAML frontmatter (between the `---` delimiters):
+               - DELETE the entire `triggers:` block (lines 17-25, including the comment about failure-routing.md)
+               - DELETE the entire `agent-references:` block (lines 26-59)
+               - Keep all standard frontmatter: name, description, argument-hint, user-invocable,
+                 allowed-tools, license, compatibility, metadata
+            3. Update the "## Supporting Files & References" section (line 79). Current text:
+               "Orchestrator triggers auto-injected by `inject_skill_context` hook (see frontmatter).
+               Agent references auto-injected by `validate_agent_launch` hook (see frontmatter).
+               Vendor-neutral fallback: orchestrator triggers use `scripts/inject-context "$prompt"`,
+               agent references use `scripts/inject-agent-context --type <agent-type>`."
+               Replace with:
+               "Orchestrator triggers (`/saw program` -> `program-flow.md`, `/saw amend` -> `amend-flow.md`)
+               auto-injected by `inject_skill_context` hook via `scripts/inject-context`. Agent
+               always-needed references inlined in agent definitions (`agents/*.md`). Conditional agent
+               references (3 files) injected by `validate_agent_launch` hook via
+               `scripts/inject-agent-context`."
+            4. Check for any other body text that says "see frontmatter" and update accordingly.
+
+            ## Verification Gate
+            - Frontmatter must NOT contain `triggers:` or `agent-references:`
+            - Frontmatter must still contain: name, description, argument-hint, user-invocable,
+              allowed-tools, license, compatibility, metadata
+            - Body text must not reference "see frontmatter" for injection config
+
+            ## Constraints
+            - Do NOT modify agent definition files or scripts
+            - Keep all standard frontmatter fields intact
+          files:
+            - implementations/claude-code/prompts/saw-skill.md
+          dependencies:
+            - A
+            - B
+            - C
+            - D
+            - E
+        - id: G
+          task: |
+            ## What to Implement
+
+            Refactor TWO scripts to replace YAML frontmatter parsing with direct conditional logic.
+            Also update comment headers in 3 conditional reference files.
+
+            ### Script 1: inject-agent-context
+
+            Rewrite `implementations/claude-code/prompts/scripts/inject-agent-context` (currently
+            116 lines) to ~40-50 lines. Replace the awk-based YAML frontmatter parser (lines 56-83)
+            and generic entry-matching loop (lines 88-114) with direct case/if logic.
+
+            New logic:
+            ```bash
+            #!/usr/bin/env bash
+            # inject-agent-context -- conditional agent reference injection
+            #
+            # Injects conditional reference files based on agent type and prompt content.
+            # Always-needed references are inlined in agent definitions (agents/*.md).
+            # This script handles only the 3 conditional references.
+            #
+            # Usage: inject-agent-context --type <agent-type> --prompt <prompt-text>
+
+            set -euo pipefail
+
+            agent_type=""
+            prompt=""
+            while [[ $# -gt 0 ]]; do
+              case $1 in
+                --type)   agent_type="$2"; shift 2 ;;
+                --prompt) prompt="$2";     shift 2 ;;
+                *)        shift ;;
+              esac
+            done
+
+            [[ -z "$agent_type" ]] && { echo "error: --type is required" >&2; exit 1; }
+
+            SKILL_DIR="${CLAUDE_SKILL_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
+
+            inject_file() {
+              local file="$1"
+              local ref_path="${SKILL_DIR}/${file}"
+              local marker="<!-- injected: ${file} -->"
+              # Dedup: skip if marker already in prompt
+              echo "$prompt" | grep -qF "$marker" && return 0
+              [[ -f "$ref_path" ]] || { echo "warn: not found: ${ref_path}" >&2; return 0; }
+              printf '%s\n' "$marker"
+              command cat "$ref_path"
+              printf '\n\n'
+            }
+
+            case "$agent_type" in
+              scout)
+                if [[ "$prompt" =~ --program ]]; then
+                  inject_file "references/scout-program-contracts.md"
+                fi
+                ;;
+              wave-agent)
+                if [[ "$prompt" =~ baseline_verification_failed ]]; then
+                  inject_file "references/wave-agent-build-diagnosis.md"
+                fi
+                if [[ "$prompt" =~ frozen_contracts ]]; then
+                  inject_file "references/wave-agent-program-contracts.md"
+                fi
+                ;;
+              # critic-agent, planner, integration-agent: no conditional references
+              # All content inlined in agent definitions
+            esac
+            ```
+
+            ### Script 2: inject-context
+
+            Rewrite `implementations/claude-code/prompts/scripts/inject-context` (currently 85 lines)
+            to ~40 lines. Replace the awk-based YAML frontmatter parser (lines 38-59) and generic
+            trigger-matching loop (lines 62-79) with direct conditional logic.
+
+            New logic:
+            ```bash
+            #!/usr/bin/env bash
+            # inject-context -- orchestrator-level context injection for SAW skill
+            #
+            # Matches user prompt against orchestrator trigger patterns and outputs
+            # reference file contents. Called by inject_skill_context hook.
+            #
+            # Usage: scripts/inject-context "user prompt text"
+
+            set -euo pipefail
+
+            PROMPT="${1:-$(cat)}"
+            [[ -z "$PROMPT" ]] && exit 0
+
+            SKILL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+
+            inject_file() {
+              local file="$1"
+              local ref_path="${SKILL_DIR}/${file}"
+              [[ -f "$ref_path" ]] || { echo "warn: not found: ${ref_path}" >&2; return 0; }
+              printf '<!-- injected: %s -->\n' "$file"
+              command cat "$ref_path"
+              printf '\n\n'
+            }
+
+            injected=""
+
+            if echo "$PROMPT" | grep -qE "^/saw program"; then
+              injected+="$(inject_file "references/program-flow.md")"
+            fi
+
+            if echo "$PROMPT" | grep -qE "^/saw amend"; then
+              injected+="$(inject_file "references/amend-flow.md")"
+            fi
+
+            [[ -n "$injected" ]] && printf '%s' "$injected"
+            ```
+
+            ### Conditional Reference File Comment Updates
+
+            Update the first-line comment in 3 files:
+            - `references/scout-program-contracts.md`: Change any "Loaded by validate_agent_launch hook"
+              to "Loaded conditionally by inject-agent-context script when --program flag present"
+            - `references/wave-agent-build-diagnosis.md`: Change to "Loaded conditionally by
+              inject-agent-context script when baseline_verification_failed present in prompt"
+            - `references/wave-agent-program-contracts.md`: Change to "Loaded conditionally by
+              inject-agent-context script when frozen_contracts present in prompt"
+
+            ## Verification Gate
+            - `bash -n implementations/claude-code/prompts/scripts/inject-agent-context` must pass
+            - `bash -n implementations/claude-code/prompts/scripts/inject-context` must pass
+            - inject-agent-context must NOT contain any awk commands or SKILL.md references
+            - inject-context must NOT contain any awk commands or SKILL.md/SKILL_FILE references
+            - Both scripts must handle empty prompt gracefully (exit 0)
+
+            ## Constraints
+            - Do NOT modify agent definition files, hook files, or saw-skill.md
+            - Keep the --type and --prompt CLI interface for inject-agent-context
+            - Keep the positional/$1 interface for inject-context
+            - Preserve dedup marker logic in inject-agent-context
+          files:
+            - implementations/claude-code/prompts/scripts/inject-agent-context
+            - implementations/claude-code/prompts/scripts/inject-context
+            - implementations/claude-code/prompts/references/wave-agent-build-diagnosis.md
+            - implementations/claude-code/prompts/references/wave-agent-program-contracts.md
+            - implementations/claude-code/prompts/references/scout-program-contracts.md
+          dependencies:
+            - A
+            - B
+        - id: H
+          task: |
+            ## What to Implement
+
+            Simplify `implementations/claude-code/hooks/validate_agent_launch` by removing all
+            unconditional injection blocks. The hook delegates conditional injection to the
+            inject-agent-context script instead of implementing injection inline.
+
+            ## Detailed Steps
+
+            1. Read the current `validate_agent_launch` hook (471 lines).
+
+            2. DELETE the Scout unconditional injection block (lines 55-134). Replace with a call
+               to inject-agent-context for conditional injection only:
+               ```bash
+               if [[ "$is_scout" == "true" ]]; then
+                 # Auto-fix description tag (keep existing logic, lines 68-83)
+                 fixed_description="$description"
+                 if ! [[ "$description" =~ \[SAW:scout ]]; then
+                   slug=$(echo "$prompt" | grep -oE 'IMPL-[a-z0-9-]+\.yaml' | head -1 | sed 's/IMPL-//;s/\.yaml//' || true)
+                   if [[ -n "$slug" ]]; then
+                     fixed_description="[SAW:scout:${slug}] ${description}"
+                   else
+                     fixed_description="[SAW:scout:unknown] ${description}"
+                   fi
+                 fi
+
+                 # Conditional injection via script
+                 inject_content=""
+                 inject_script="${skill_dir}/scripts/inject-agent-context"
+                 if [[ -x "$inject_script" ]]; then
+                   inject_content=$("$inject_script" --type scout --prompt "$prompt" 2>/dev/null) || true
+                 fi
+
+                 # Emit updatedInput if content was injected or description was fixed
+                 if [[ -n "$inject_content" || "$fixed_description" != "$description" ]]; then
+                   jq -n --arg inject "$inject_content" --arg orig "$prompt" --arg desc "$fixed_description" --argjson orig_input "$tool_input" \
+                     '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow", "updatedInput": ($orig_input | .prompt = (if $inject != "" then ($inject + "\n\n" + $orig) else $orig end) | .description = $desc)}}'
+                   exit 0
+                 fi
+                 exit 0
+               fi
+               ```
+
+            3. DELETE the Critic injection block entirely (lines 136-173, "Check 11").
+               Critic content is now inlined in critic-agent.md. No injection needed.
+
+            4. DELETE the Planner injection block entirely (lines 175-218, "Check 12").
+               Planner content is now inlined in planner.md. No injection needed.
+
+            5. DELETE the Integration injection block entirely (lines 220-257, "Check 13").
+               Integration content is now inlined in integration-agent.md. No injection needed.
+
+            6. SIMPLIFY the Wave agent injection block (lines 407-467, "Check 10").
+               Remove always-inject logic for worktree-isolation, completion-report, build-diagnosis.
+               Replace with a call to inject-agent-context script:
+               ```bash
+               if [[ "$is_wave_agent" == "true" ]]; then
+                 inject_content=""
+                 inject_script="${skill_dir}/scripts/inject-agent-context"
+                 if [[ -x "$inject_script" ]]; then
+                   inject_content=$("$inject_script" --type wave-agent --prompt "$prompt" 2>/dev/null) || true
+                 fi
+
+                 if [[ -n "$inject_content" ]]; then
+                   jq -n --arg inject "$inject_content" --arg orig "$prompt" --argjson orig_input "$tool_input" \
+                     '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow", "updatedInput": ($orig_input | .prompt = ($inject + "\n\n" + $orig))}}'
+                   exit 0
+                 fi
+               fi
+               ```
+
+            7. KEEP all enforcement checks (Check 1 through Check 8) unchanged.
+            8. KEEP the scout description auto-fix logic.
+            9. Update comments throughout to reflect the new injection model.
+
+            ## Verification Gate
+            - `bash -n implementations/claude-code/hooks/validate_agent_launch` must pass
+            - Hook must NOT contain direct `command cat` of reference files (injection delegated to script)
+            - Hook must still contain Check 1 through Check 8 enforcement logic
+            - Hook must still contain scout description auto-fix
+            - File should be ~250 lines (down from 471)
+
+            ## Constraints
+            - Do NOT modify any agent definition files, scripts, or saw-skill.md
+            - Keep all enforcement checks intact
+            - The skill_dir variable resolution must remain unchanged
+          files:
+            - implementations/claude-code/hooks/validate_agent_launch
+          dependencies:
+            - A
+            - B
+            - C
+            - D
+            - E
+    - number: 3
+      agents:
+        - id: I
+          task: |
+            ## What to Implement
+
+            Delete 11 reference files whose content has been inlined into agent definitions.
+
+            ## Files to Delete
+
+            Use `git rm` for each file:
+            1. `implementations/claude-code/prompts/references/scout-suitability-gate.md`
+            2. `implementations/claude-code/prompts/references/scout-implementation-process.md`
+            3. `implementations/claude-code/prompts/references/planner-suitability-gate.md`
+            4. `implementations/claude-code/prompts/references/planner-implementation-process.md`
+            5. `implementations/claude-code/prompts/references/planner-example-manifest.md`
+            6. `implementations/claude-code/prompts/references/wave-agent-worktree-isolation.md`
+            7. `implementations/claude-code/prompts/references/wave-agent-completion-report.md`
+            8. `implementations/claude-code/prompts/references/critic-agent-verification-checks.md`
+            9. `implementations/claude-code/prompts/references/critic-agent-completion-format.md`
+            10. `implementations/claude-code/prompts/references/integration-connectors-reference.md`
+            11. `implementations/claude-code/prompts/references/integration-agent-completion-report.md`
+
+            ## Verification
+
+            After deletion, verify the references/ directory still contains:
+            - amend-flow.md (orchestrator reference)
+            - failure-routing.md (orchestrator reference)
+            - impl-targeting.md (orchestrator reference)
+            - integration-gap-detection.md (orchestrator reference)
+            - model-selection.md (orchestrator reference)
+            - pre-wave-validation.md (orchestrator reference)
+            - program-flow.md (orchestrator reference)
+            - wave-agent-contracts.md (orchestrator reference)
+            - scout-program-contracts.md (conditional agent reference)
+            - wave-agent-build-diagnosis.md (conditional agent reference)
+            - wave-agent-program-contracts.md (conditional agent reference)
+
+            That should be 11 files remaining (8 orchestrator + 3 conditional agent).
+
+            ## Verification Gate
+            - All 11 files must be deleted (git rm)
+            - The 11 remaining reference files must still exist
+            - `ls implementations/claude-code/prompts/references/ | wc -l` should output 11
+
+            ## Constraints
+            - Do NOT modify any existing files, only delete
+            - Use `git rm` not plain `rm`
+          files:
+            - implementations/claude-code/prompts/references/scout-suitability-gate.md
+            - implementations/claude-code/prompts/references/scout-implementation-process.md
+            - implementations/claude-code/prompts/references/planner-suitability-gate.md
+            - implementations/claude-code/prompts/references/planner-implementation-process.md
+            - implementations/claude-code/prompts/references/planner-example-manifest.md
+            - implementations/claude-code/prompts/references/wave-agent-worktree-isolation.md
+            - implementations/claude-code/prompts/references/wave-agent-completion-report.md
+            - implementations/claude-code/prompts/references/critic-agent-verification-checks.md
+            - implementations/claude-code/prompts/references/critic-agent-completion-format.md
+            - implementations/claude-code/prompts/references/integration-connectors-reference.md
+            - implementations/claude-code/prompts/references/integration-agent-completion-report.md
+          dependencies:
+            - F
+            - G
+            - H
+        - id: J
+          task: |
+            ## What to Implement
+
+            Update 3 documentation files under `implementations/claude-code/prompts/` to reflect
+            the migration from hook-injected references to inlined content.
+
+            ### File 1: implementations/claude-code/prompts/README.md (115 lines)
+
+            1. Read the current file.
+            2. In the directory structure listing: remove "(hook-injected)" annotations from
+               the 11 deleted reference files. Either remove the deleted files from the listing
+               entirely, or mark them as "(deleted - content inlined in agent definitions)".
+               Keep the 3 conditional references with "(conditionally injected)" annotation.
+            3. Update the "Agent Type Definitions" table. Current descriptions say "Slim identity
+               core (~N lines)". Update to accurate sizes:
+               - scout.md: ~780 lines (was 208)
+               - wave-agent.md: ~320 lines (was 151)
+               - critic-agent.md: ~210 lines (was 90)
+               - planner.md: ~555 lines (was 143)
+               - integration-agent.md: ~233 lines (was 133)
+               Remove "Slim identity core" language. Replace with "Self-contained agent definition".
+            4. Rename the "Agent References (hook-injected)" table section to
+               "Agent References (conditionally injected)". Remove the 11 deleted reference entries.
+               Keep only the 3 conditional entries.
+
+            ### File 2: implementations/claude-code/README.md (416 lines)
+
+            1. Read the current file.
+            2. Update agent file descriptions (around lines 54-59). Replace "Slim identity core"
+               descriptions with accurate sizes and "Self-contained agent definition" language.
+            3. Update the "Install on-demand reference files" section (around lines 140-154).
+               Update file counts: 11 reference files remain (8 orchestrator + 3 conditional agent),
+               down from 22. Remove the 11 deleted files from the "Agent references" bullet list.
+
+            ### File 3: implementations/claude-code/prompts/scripts/README.md (407 lines)
+
+            1. Read the current file.
+            2. Rewrite the "inject-agent-context" section (around lines 67-138). Remove all
+               references to `agent-references:` frontmatter parsing. Remove the YAML config
+               example. Replace with documentation of the case/if conditional logic.
+            3. Update "Architecture Overview" section (around lines 140-163). Describe the new
+               flow: hook calls script, script contains conditional logic directly, no YAML parsing.
+            4. Rewrite "inject-context" section to document the new direct conditional logic
+               instead of YAML trigger parsing.
+            5. Update "Maintenance > Adding new reference files" (around lines 310-320). Change
+               from "Add entry to saw-skill.md frontmatter" to "For always-needed: inline in agent
+               definition. For conditional: add case branch in inject-agent-context."
+            6. Remove the "Debugging frontmatter parsing" section for agent-references awk.
+               Keep the triggers awk debugging section ONLY IF inject-context still uses awk
+               (it won't after Wave 2 refactor -- remove it too).
+
+            ## Verification Gate
+            - No documentation file references "agent-references:" frontmatter
+            - No documentation file says "Slim identity core"
+            - scripts/README.md does not reference awk or YAML parsing for injection
+            - File counts in README.md are accurate (11 remaining references, not 22)
+
+            ## Constraints
+            - Do NOT modify source files (scripts, hooks, agent definitions)
+            - Only update documentation to match the new reality
+          files:
+            - implementations/claude-code/prompts/README.md
+            - implementations/claude-code/README.md
+            - implementations/claude-code/prompts/scripts/README.md
+          dependencies:
+            - F
+            - G
+            - H
+        - id: K
+          task: |
+            ## What to Implement
+
+            Update 3 architecture/design documentation files to reflect the migration.
+
+            ### File 1: implementations/claude-code/hooks/README.md (915 lines)
+
+            1. Read the current file.
+            2. Update the "Injection hooks" table (around lines 25-31). Change validate_agent_launch
+               description to: "Injects conditional agent references (3 files) into subagent prompt;
+               always-needed content inlined in agent definitions"
+            3. Update "Injection Patterns" section (around lines 38-72). Revise "Layer 2: Subagent
+               injection" to describe new flow: hook detects agent type, calls inject-agent-context
+               script for conditional injection.
+            4. Update "The two-layer picture" diagram (around lines 74-90). Remove unconditional
+               injection mentions. Show only conditional paths.
+            5. Rewrite "Hook 9" section (around lines 534-567). Update Checks 9-13:
+               - Check 9 (Scout): "Conditionally injects program-contracts when --program present.
+                 Suitability gate and implementation process now inlined in scout.md."
+               - Check 10 (Wave): "Conditionally injects build-diagnosis (baseline failed) and
+                 program-contracts (frozen contracts). Worktree isolation and completion report
+                 now inlined in wave-agent.md."
+               - Check 11 (Critic): "No injection -- all content inlined in critic-agent.md."
+               - Check 12 (Planner): "No injection -- all content inlined in planner.md."
+               - Check 13 (Integration): "No injection -- all content inlined in integration-agent.md."
+
+            ### File 2: docs/skills-progressive-disclosure.md (801 lines)
+
+            1. Read the current file.
+            2. Update the Executive Summary (lines 1-18). Change item 1 from describing
+               `agent-references:` frontmatter to describing the new approach: "Always-needed
+               agent references inlined in agent definitions. Conditional references (3) injected
+               by inject-agent-context script."
+            3. Update the example flow (around lines 20-51). Replace "validate_agent_launch reads
+               saw-skill.md frontmatter agent-references:" with new description.
+            4. In "The Four Tiers > Tier 1" (around lines 130-195): Remove the `agent-references:`
+               YAML example block. Update to describe Tier 1 as containing NO custom frontmatter
+               (both triggers: and agent-references: removed).
+            5. In "The Advanced Pattern" section (around lines 228-278): Rewrite "Agent References"
+               subsection. Remove YAML example. Describe new pattern.
+            6. In "Three-Layer Injection" section: Update Layer descriptions.
+            7. Add a prominent note: "As of v0.56.0, always-needed agent references are inlined
+               directly in agent definitions. The triggers: and agent-references: custom frontmatter
+               blocks have been removed. Conditional injection (3 references) and orchestrator
+               trigger injection (2 references) are handled by scripts with direct conditional
+               logic. Zero custom frontmatter fields remain."
+
+            ### File 3: POSITION.md (474 lines)
+
+            1. Read the current file.
+            2. Update line 84: Remove "and `agent-references:` declarations" and also remove
+               "`triggers:`" -- both are gone. Update to describe Tier 1 as standard Skills API
+               frontmatter only.
+            3. Remove the `triggers:` YAML example block (around lines 95-101) and the
+               `agent-references:` YAML example block (around lines 105-129).
+            4. Update line 103: Remove description of inject_skill_context reading triggers: block.
+               Replace with: "Orchestrator triggers injected by inject-context script with direct
+               conditional matching."
+            5. Update line 127: Remove "validate_agent_launch hook reads agent-references: block".
+               Replace with description of script-based conditional injection.
+            6. Update line 147: Remove "triggers: and agent-references: frontmatter source".
+            7. Update line 204: Remove "add an entry to triggers: or agent-references: frontmatter".
+
+            ## Verification Gate
+            - No file references "agent-references:" as a current feature (historical mentions OK)
+            - No file references "triggers:" as current frontmatter (historical mentions OK)
+            - POSITION.md Tier 1 description does not mention custom frontmatter
+            - skills-progressive-disclosure.md reflects the simplified architecture
+
+            ## Constraints
+            - Do NOT modify source files (scripts, hooks, agent definitions)
+            - Historical/audit references to the old pattern are fine -- only update
+              sections that describe the current architecture
+          files:
+            - implementations/claude-code/hooks/README.md
+            - docs/skills-progressive-disclosure.md
+            - POSITION.md
+          dependencies:
+            - F
+            - G
+            - H
+quality_gates:
+    level: standard
+    gates:
+        - type: custom
+          command: bash -n implementations/claude-code/prompts/scripts/inject-agent-context
+          required: true
+        - type: custom
+          command: bash -n implementations/claude-code/hooks/validate_agent_launch
+          required: true
+        - type: custom
+          command: bash -n implementations/claude-code/prompts/scripts/inject-context
+          required: true
+        - type: custom
+          command: bash -n implementations/claude-code/hooks/inject_skill_context
+          required: true
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: Inlined content has wrong section ordering, breaking agent behavior
+          likelihood: low
+          impact: medium
+          mitigation: |
+            Each agent's task specifies exact section placement. Reference file
+            content is copied verbatim, not summarized. Wave 2 agents (hook/script)
+            test that injection still works for conditional references.
+        - scenario: inject-agent-context script refactor breaks conditional injection
+          likelihood: medium
+          impact: medium
+          mitigation: |
+            Agent G task includes exact script content. Verification gate checks
+            bash syntax and absence of awk/YAML parsing. The 3 conditional paths
+            are simple regex matches that can be tested manually.
+        - scenario: validate_agent_launch hook refactor accidentally removes enforcement checks
+          likelihood: low
+          impact: high
+          mitigation: |
+            Agent H task explicitly lists Checks 1-8 as "KEEP unchanged". Verification
+            gate requires all enforcement checks remain present. The hook's enforcement
+            section (lines 259-405) is structurally separate from injection blocks.
+        - scenario: Documentation updates miss references to old patterns in prose
+          likelihood: medium
+          impact: low
+          mitigation: |
+            Agents J and K can grep for "agent-references:" and "triggers:" (in frontmatter
+            context) to find all mentions. Low impact because stale docs don't break functionality.
+        - scenario: Wave 3 file deletion before Wave 2 hook refactor causes runtime errors
+          likelihood: low
+          impact: high
+          mitigation: |
+            Wave ordering prevents this. Wave 3 depends on Wave 2 completion. The hook
+            and scripts must be refactored before reference files are deleted.
+state: REVIEWED
+injection_method: hook
