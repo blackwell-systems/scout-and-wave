@@ -198,6 +198,7 @@ The `inject-context` script matches prompt patterns with direct conditional logi
 
 - `^/saw program` in prompt → inject `references/program-flow.md`
 - `^/saw amend` in prompt → inject `references/amend-flow.md`
+- `^/saw auto` in prompt → no-op (no file to inject; auto flow is Tier 2 core, inlined in `saw-skill.md`)
 
 Multiple matches result in all matching references injected (concatenated). No match results in no injection, zero overhead.
 
@@ -468,10 +469,13 @@ The decision heuristic (for content already past the CLAUDE.md entry stage):
 - IMPL discovery and targeting — used by wave, status, and amend
 - The full wave loop (steps 1–11) — the core value of the skill; invoked by every `/saw wave` call
 - E37 Critic Gate logic — triggered during scout and wave flows, both common paths
+- `/saw auto` flow — invoked on a significant fraction of sessions; its logic directly chains the existing scout and wave flows (11 steps), making it short and tightly coupled to the core wave loop; it belongs inline in `saw-skill.md`, not in a separate reference file
 
 **Always in Tier 3 (on-demand references):**
 - Subcommand families that represent a distinct execution tier (program, amend)
 - Failure routing logic beyond the basic "read failure-routing.md" trigger point — agents succeed on the majority of runs, so detailed remediation logic is pay-per-use
+
+**Note on `/saw auto` and Tier 3:** `/saw auto` does NOT require a new on-demand reference file. The auto flow (11 steps) is short and tightly coupled to the existing scout and wave flows — it lives inline in `saw-skill.md` as Tier 2 core content. A separate reference file would be overhead without benefit.
 
 ---
 
