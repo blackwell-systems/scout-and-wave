@@ -103,3 +103,5 @@
   - IMPL doc: docs/IMPL/complete/IMPL-quality-gate-parallelization.yaml
 - **progressive-disclosure-migration**: completed 2026-03-29, 3 waves, 11 agents
   - IMPL doc: docs/IMPL/complete/IMPL-progressive-disclosure-migration.yaml
+- **saw-auto-command**: completed 2026-03-31, 1 waves, 3 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-saw-auto-command.yaml

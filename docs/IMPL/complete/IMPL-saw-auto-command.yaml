@@ -1,3 +1,4 @@
+completion_date: "2026-03-31"
 title: Add /saw auto command
 feature_slug: saw-auto-command
 verdict: SUITABLE
@@ -510,6 +511,7 @@ waves:
           files:
             - cmd/sawtools/auto_cmd.go
             - cmd/sawtools/main.go
+      base_commit: 07d5ca1d9f1a79416295c1e323acee3c5859e6e7
 quality_gates:
     level: standard
     gates:
@@ -533,6 +535,37 @@ post_merge_checklist:
                 Replace X.Y.Z with the next minor version after the current latest.
                 Commit the change directly (CHANGELOG.md exceeds the V048 LOC budget and
                 is updated as a post-merge orchestrator step, not via a wave agent).
+completion_reports:
+    A:
+        status: complete
+        branch: saw/saw-auto-command/wave1-agent-A
+        commit: 04f417a
+        files_changed:
+            - implementations/claude-code/prompts/saw-skill.md
+            - implementations/claude-code/prompts/scripts/inject-context
+        verification: PASS
+        notes: Added /saw auto row to Invocation Modes table and Auto flow section (steps 1-11) to saw-skill.md. Added /saw auto comment block to inject-context after ^/saw amend block. No Go files exist in this repo so go build/test gates do not apply.
+    A2:
+        status: complete
+        branch: saw/saw-auto-command/wave1-agent-A2
+        commit: 3e69ba6
+        files_changed:
+            - README.md
+            - POSITION.md
+            - docs/skills-progressive-disclosure.md
+        verification: PASS
+        notes: 'Documentation-only changes. README.md: added /saw auto quick start example and subcommand reference table. POSITION.md: added /saw auto to Agent Skill code block with 2-sentence description. docs/skills-progressive-disclosure.md: added /saw auto to Tier 2 Always-in-core list, Tier 3 no-reference note, and inject-context no-op placeholder entry. No go.mod in repo -- go build/test gates not applicable.'
+    B:
+        status: complete
+        branch: saw/saw-auto-command/wave1-agent-B
+        commit: "2313238"
+        files_changed:
+            - cmd/sawtools/auto_cmd.go
+            - cmd/sawtools/main.go
+        files_created:
+            - cmd/sawtools/auto_cmd.go
+        verification: PASS
+        notes: 'auto_cmd.go created with full scout->confirm->wave flow. newAutoCmd() registered in main.go after newRunScoutCmd(). All three verification gates pass: go build ./..., go vet ./..., sawtools auto --help.'
 pre_mortem:
     overall_risk: low
     rows:
@@ -582,5 +615,5 @@ critic_report:
     summary: Skipped by operator
     reviewed_at: "2026-03-31T22:25:38Z"
     issue_count: 0
-state: "REVIEWED"
+state: COMPLETE
 injection_method: hook
