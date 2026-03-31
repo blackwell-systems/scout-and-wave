@@ -65,8 +65,11 @@ The primary interactive experience. The `/saw` skill is a YAML-frontmatter + mar
 ```
 /saw scout "add caching layer"     # Scout analyzes codebase, produces IMPL plan
 /saw wave --auto                   # Execute all waves with human checkpoints
+/saw auto "add caching layer"      # Scout + confirm + all waves in one command
 /saw program execute "refactor"    # Multi-feature tier-gated execution
 ```
+
+`/saw auto` is the low-friction entry point for the common case — same human checkpoint as scout → wave, without the separate command invocations. It eliminates command overhead while preserving the review step where the plan is visible before any agent writes code.
 
 - Human-in-the-loop by default; `--auto` for autonomous wave progression
 - Access to Claude Code's full tool suite (file I/O, shell, subagents, MCP)

@@ -103,7 +103,27 @@ sawtools init
 # → If shared types are needed, Scaffold Agent creates them automatically
 # → Parallel agents implement their assigned files concurrently
 # → Orchestrator merges, runs tests, reports result
+
+# Or collapse both steps into one command:
+/saw auto "add a caching layer to the API client"
+# → Scout analyzes, writes IMPL doc, shows wave structure
+# → You confirm ("Proceed? [y/N]") -- this is the human checkpoint
+# → On Y: all waves execute automatically
 ```
+
+**Subcommands:**
+
+| Command | Purpose |
+|---------|---------|
+| `/saw scout "<feature>"` | Analyze codebase, produce IMPL doc |
+| `/saw wave` | Execute next pending wave |
+| `/saw wave --auto` | Execute all remaining waves unattended |
+| `/saw auto "<feature>"` | Scout + confirm + wave in one command |
+| `/saw status` | Show current wave and agent progress |
+| `/saw bootstrap "<project>"` | Design new project structure from scratch |
+| `/saw interview "<description>"` | Structured requirements gathering |
+| `/saw program plan/execute/status/replan` | Multi-IMPL program coordination |
+| `/saw amend --add-wave/--redirect-agent/--extend-scope` | Modify active IMPL |
 
 The scout produces an **Implementation Document (IMPL doc)** (`docs/IMPL/IMPL-<feature>.yaml`): a structured YAML coordination document that defines which files each agent will modify, what interfaces they'll implement, and how they'll work in parallel. You review it before any agent writes code. This is the human checkpoint that makes parallel execution safe.
 
