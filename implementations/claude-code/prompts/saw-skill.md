@@ -1,7 +1,7 @@
 ---
 name: saw
 description: "Parallel agent coordination: Scout analyzes the codebase and produces a plan; Wave agents implement in parallel. Use for multi-package features, parallel refactors, coordinated changes."
-argument-hint: "[bootstrap <project-name> | interview <description> | scout [--model <m>] <feature> | wave [--impl <id>] [--auto] [--model <m>] | status [--impl <id>]]"
+argument-hint: "[auto [--skip-confirm] <feature> | bootstrap <project-name> | interview <description> | scout [--model <m>] <feature> | wave [--impl <id>] [--auto] [--model <m>] | status [--impl <id>]]"
 user-invocable: true
 allowed-tools: |
   Read, Write, Glob, Grep, Bash(git *), Bash(cd *), Bash(mkdir *),
@@ -13,7 +13,7 @@ license: MIT OR Apache-2.0
 compatibility: Requires Claude Code (Skills API). Git 2.20+ required for worktree support.
 metadata:
   author: blackwell-systems
-  version: "0.76.0"
+  version: "0.77.0"
 ---
 
 # Scout-and-Wave: Parallel Agent Coordination
