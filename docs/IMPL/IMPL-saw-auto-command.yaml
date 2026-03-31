@@ -576,5 +576,11 @@ pre_mortem:
           mitigation: |-
             Post-merge checklist instructs the orchestrator to read CHANGELOG.md first and
             use the next available version number.
+critic_report:
+    verdict: PASS
+    agent_reviews: {}
+    summary: Skipped by operator
+    reviewed_at: "2026-03-31T22:25:38Z"
+    issue_count: 0
 state: SCOUT_PENDING
 injection_method: hook
