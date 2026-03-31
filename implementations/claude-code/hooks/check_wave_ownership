@@ -56,10 +56,11 @@ fi
 # The directory containing .saw-ownership.json is the worktree/repo root
 worktree_root=$(dirname "$ownership_file")
 
-# Read owned files list from manifest
+# Read owned files list and repo root from manifest
 owned_files_json=$(jq -r '.owned_files // []' "$ownership_file")
 agent_id=$(jq -r '.agent // "unknown"' "$ownership_file")
 wave=$(jq -r '.wave // "unknown"' "$ownership_file")
+repo_root=$(jq -r '.repo_root // empty' "$ownership_file")
 
 # Normalize file_path to be relative to worktree root for comparison
 # If absolute, strip the worktree root prefix.
@@ -72,7 +73,27 @@ if [[ "$file_path" == /* ]]; then
   if [[ "$abs_file" == "$abs_worktree/"* ]]; then
     normalized="${abs_file#"$abs_worktree/"}"
   else
-    # File is outside worktree entirely — allow (could be system file, temp, etc.)
+    # File is outside this worktree.
+    # If it's inside the parent repo root, that's a cross-worktree violation — block it.
+    if [[ -n "$repo_root" ]]; then
+      abs_repo=$(realpath -m "$repo_root" 2>/dev/null || echo "$repo_root")
+      if [[ "$abs_file" == "$abs_repo/"* ]]; then
+        echo "I1 VIOLATION (cross-worktree): Wave agent ${agent_id} (wave ${wave}) attempted to write a file inside the main repository but outside its assigned worktree.
+
+Attempted:  $file_path
+Worktree:   $abs_worktree
+Main repo:  $abs_repo
+
+This happens when an agent uses absolute paths pointing at the main repo instead of
+relative paths within its assigned worktree. Always use relative paths, or paths under:
+  $abs_worktree
+
+Owned files for this agent:
+$(echo "$owned_files_json" | jq -r '.[]' | sed 's/^/  - /')" >&2
+        exit 2  # Block
+      fi
+    fi
+    # File is completely outside the repo (system file, /tmp, etc.) — allow
     exit 0
   fi
 else

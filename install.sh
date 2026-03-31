@@ -35,6 +35,7 @@ HOOK_SCRIPTS=(
   "auto_format_saw_agent_names"
   "validate_agent_launch"
   "validate_agent_completion"
+  "validate_agent_isolation"
   "emit_agent_completion"
   "inject_skill_context"
   "inject_worktree_env"
@@ -276,6 +277,7 @@ install_claude_code() {
 
   # SubagentStart
   add_hook "SubagentStart" "" "${BIN_DIR}/inject_worktree_env" "E43 env var injection"
+  add_hook "SubagentStart" "" "${BIN_DIR}/validate_agent_isolation" "E12 isolation verification"
 
   # SubagentStop
   add_hook "SubagentStop" "" "${BIN_DIR}/verify_worktree_compliance" "E42/I5 compliance check"
@@ -349,9 +351,10 @@ install_claude_code() {
     exit 1
   }
 
-  echo "Installation complete (Claude Code). 15 hooks active:"
+  echo "Installation complete (Claude Code). 16 hooks active:"
   echo ""
   echo "  SubagentStart:     inject_worktree_env        (E43 env var injection)"
+  echo "  SubagentStart:     validate_agent_isolation   (E12 isolation verification)"
   echo "  PreToolUse:        inject_bash_cd             (E43 Bash cd injection)"
   echo "  PreToolUse:        validate_write_paths       (E43 Write path validation)"
   echo "  PreToolUse:        check_scout_boundaries     (I6 Scout write boundaries)"

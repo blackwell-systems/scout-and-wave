@@ -89,9 +89,9 @@ This creates an integration wave where agent B wires agent A's work into the app
 - Failure routing (partial/blocked agents)
 - Integration planning (E25/E26 gap detection)
 
-## SAW Tag Format
+## SAW Tag Format (E44)
 
-**Rule:** Agent descriptions must use the standardized tag format for observability.
+**Rule:** Agent names must use the standardized tag format for observability.
 
 **Format:**
 ```
@@ -104,6 +104,11 @@ This creates an integration wave where agent B wires agent A's work into the app
 - `[SAW:scaffold:user-auth] create interface files`
 - `[SAW:critic:user-auth] pre-wave brief review`
 
+**Implementation (automatic):**
+1. `sawtools prepare-wave/prepare-agent` writes `saw_name` field to brief frontmatter
+2. Orchestrator reads `saw_name` from `.saw-agent-brief.md` and uses as Agent tool name parameter
+3. `auto_format_saw_agent_names` PreToolUse hook validates format and provides fallback
+
 **Why:** Enables monitoring tools (claudewatch, SAW dashboard) to detect and track agent runs.
 
 **Components:**
@@ -111,6 +116,8 @@ This creates an integration wave where agent B wires agent A's work into the app
 - `wave{N}:` or `scaffold:` or `critic:` — Phase identifier
 - `agent-{ID}` or feature slug — Agent/task identifier
 - Short description — Human-readable summary
+
+**Orchestrators:** Read the `saw_name` field from brief frontmatter—do not manually construct names.
 
 ## Cross-Repository Orchestration
 
@@ -132,6 +139,6 @@ This creates an integration wave where agent B wires agent A's work into the app
 ## Protocol Reference Notation
 
 `I{N}` = Invariants (I1-I6) defined in `protocol/invariants.md`
-`E{N}` = Execution rules (E1-E43) defined in `protocol/execution-rules.md`
+`E{N}` = Execution rules (E1-E45) defined in `protocol/execution-rules.md`
 
 Each number is an anchor for cross-referencing and audit trail.

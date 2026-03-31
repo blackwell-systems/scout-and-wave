@@ -1,6 +1,6 @@
 # SAW Claude Code Hooks
 
-Enforcement and injection hooks for CLI-based SAW agents. 15 hooks across SubagentStart, PreToolUse, PostToolUse, SubagentStop, and UserPromptSubmit events.
+Enforcement and injection hooks for CLI-based SAW agents. 17 hooks across SubagentStart, PreToolUse, PostToolUse, SubagentStop, and UserPromptSubmit events.
 
 ## Hook Summary
 
@@ -9,6 +9,7 @@ Enforcement and injection hooks for CLI-based SAW agents. 15 hooks across Subage
 | Hook | Event | Matcher | Rule | Description |
 |------|-------|---------|------|-------------|
 | inject_worktree_env | SubagentStart | — | E43 | Sets 5 env vars (worktree path, agent ID, wave num, IMPL path, branch) |
+| validate_agent_isolation | SubagentStart | — | E12 | Verifies wave agent running in correct worktree (exit 2 blocks start) |
 | inject_bash_cd | PreToolUse | Bash | E43 | Auto-prepends `cd $SAW_AGENT_WORKTREE &&` to bash commands |
 | validate_write_paths | PreToolUse | Write\|Edit | E43 | Blocks relative paths and paths outside worktree |
 | verify_worktree_compliance | SubagentStop | — | E42/I5 | Verifies completion report and commits (warn-only) |
@@ -110,7 +111,7 @@ cd ~/code/scout-and-wave/implementations/claude-code/hooks
 ```
 
 The installer:
-- Creates symlinks in `~/.local/bin/` for all 15 hook scripts
+- Creates symlinks in `~/.local/bin/` for all 17 hook scripts
 - Merges hook configs into `~/.claude/settings.json` (preserves existing hooks)
 - Verifies installation and runs basic tests
 

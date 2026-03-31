@@ -179,23 +179,25 @@ Start the server with:
 ./saw serve
 ```
 
-## Hooks (15 total)
+## Hooks (17 total)
 
-The hook installer registers 15 hooks across four lifecycle events. All hook scripts live in `implementations/claude-code/hooks/` and are symlinked to `~/.local/bin/`.
+The hook installer registers 17 hooks across five lifecycle events. All hook scripts live in `implementations/claude-code/hooks/` and are symlinked to `~/.local/bin/`.
 
-### SubagentStart (1 hook — fire when an agent session starts)
+### SubagentStart (2 hooks — fire when an agent session starts)
 
 | Hook | Matcher | Purpose |
 |---|---|---|
 | `inject_worktree_env` | *(all)* | Sets 5 environment variables (worktree path, agent ID, wave number, IMPL path, branch name) |
+| `validate_agent_isolation` | *(all)* | Verifies wave agent is running in the correct worktree (exit 2 blocks start) |
 
-### PreToolUse (6 hooks — fire before tool execution)
+### PreToolUse (7 hooks — fire before tool execution)
 
 | Hook | Matcher | Purpose |
 |---|---|---|
 | `check_scout_boundaries` | `Write\|Edit` | Blocks Scout agents from writing outside `docs/IMPL/IMPL-*.yaml` |
 | `block_claire_paths` | `Write\|Edit\|Bash` | Blocks operations targeting `.claire` paths (common typo for `.claude`) |
 | `check_wave_ownership` | `Write\|Edit\|NotebookEdit` | Blocks Wave agents from writing files outside their ownership manifest |
+| `auto_format_saw_agent_names` | `Agent` | Validates/formats SAW agent names from brief metadata (fallback for E44) |
 | `validate_agent_launch` | `Agent` | Full pre-launch validation gate: checks IMPL doc, agent existence, scaffolds, branch |
 | `inject_bash_cd` | `Bash` | Auto-prepends `cd $SAW_AGENT_WORKTREE &&` to every bash command when agent is in worktree |
 | `validate_write_paths` | `Write\|Edit` | Blocks relative paths and paths outside worktree boundaries |
@@ -209,13 +211,19 @@ The hook installer registers 15 hooks across four lifecycle events. All hook scr
 | `warn_stubs` | `Write\|Edit` | Warns on stub patterns (TODO, FIXME, panic) in written files |
 | `check_branch_drift` | `Bash` | Blocks commits directly to `main` or `master` |
 
-### SubagentStop (4 hooks — fire when an agent session ends)
+### SubagentStop (3 hooks — fire when an agent session ends)
 
 | Hook | Matcher | Purpose |
 |---|---|---|
 | `validate_agent_completion` | *(all)* | Blocks completion if protocol obligations are unfulfilled (timeout: 10s) |
 | `emit_agent_completion` | *(all, async)* | Emits observability events for monitoring and the web dashboard |
 | `verify_worktree_compliance` | *(all)* | Verifies completion report and commits exist (warn-only, creates audit trail) |
+
+### UserPromptSubmit (1 hook — fires when user submits a prompt)
+
+| Hook | Matcher | Purpose |
+|---|---|---|
+| `inject_skill_context` | *(all)* | Injects skill subcommand references (program-flow, amend-flow) into orchestrator context |
 
 #### Hook-Based Enforcement (E43)
 
@@ -238,9 +246,11 @@ The installer creates these symlinks in `~/.local/bin/`:
 
 ```
 ~/.local/bin/inject_worktree_env
+~/.local/bin/validate_agent_isolation
 ~/.local/bin/check_scout_boundaries
 ~/.local/bin/block_claire_paths
 ~/.local/bin/check_wave_ownership
+~/.local/bin/auto_format_saw_agent_names
 ~/.local/bin/validate_agent_launch
 ~/.local/bin/inject_bash_cd
 ~/.local/bin/validate_write_paths
@@ -251,6 +261,7 @@ The installer creates these symlinks in `~/.local/bin/`:
 ~/.local/bin/validate_agent_completion
 ~/.local/bin/emit_agent_completion
 ~/.local/bin/verify_worktree_compliance
+~/.local/bin/inject_skill_context
 ```
 
 Note: The installer script also references `check_impl_path` in its uninstall instructions, but this hook has been superseded by `validate_agent_launch` and is no longer installed or registered.

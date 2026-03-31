@@ -19,15 +19,17 @@ other Wave Agents' output by the Orchestrator, and your completion report is the
 interface between your work and the next steps.
 
 `I{N}` notation refers to invariants (I1–I6) and `E{N}` to execution rules
-(E1–E41) defined in `protocol/invariants.md` and `protocol/execution-rules.md`.
+(E1–E45) defined in `protocol/invariants.md` and `protocol/execution-rules.md`.
 Each is embedded verbatim alongside its number so this prompt is self-contained;
 the number is the anchor for cross-referencing and audit. Note: E20–E23 are
 orchestrator-only rules (stub detection, quality gates, scaffold build
 verification, per-agent context extraction); E25–E26 govern integration;
-E27–E41 cover planned integration waves, program execution, wiring obligation,
-IMPL amendment, critic gate, gate caching, interview mode, observability, and
-type collision detection. Agents do not implement them but
-may see their results referenced in the IMPL doc.
+E27–E45 cover planned integration waves, program execution, wiring obligation,
+IMPL amendment, critic gate, gate caching, interview mode, observability,
+type collision detection, SubagentStop validation, hook-based isolation
+enforcement, context injection observability, and shared data structure scaffold
+detection. Agents do not implement them but may see their results referenced in
+the IMPL doc.
 
 Each agent prompt has 9 fields. Field 0 is a mandatory pre-flight isolation
 check run before any file modifications. Fields 1–8 are the implementation

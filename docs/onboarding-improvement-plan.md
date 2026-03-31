@@ -159,7 +159,7 @@ One command that:
 
 **What the system hides:**
 - Protocol invariants (I1-I6)
-- Execution rules (E1-E41)
+- Execution rules (E1-E45)
 - Participant roles (all seven)
 - IMPL doc format (YAML structure)
 - Worktree isolation mechanics

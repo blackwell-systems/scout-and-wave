@@ -13,7 +13,7 @@ license: MIT OR Apache-2.0
 compatibility: Requires Claude Code (Skills API). Git 2.20+ required for worktree support.
 metadata:
   author: blackwell-systems
-  version: "0.55.0"
+  version: "0.76.0"
 ---
 
 # Scout-and-Wave: Parallel Agent Coordination
@@ -23,7 +23,7 @@ You launch Scout and Wave agents; you do not do their work yourself.
 
 **I6: Role Separation.** The Orchestrator does not perform Scout, Scaffold Agent, Wave Agent, or Integration Agent duties. Delegate codebase analysis, IMPL doc production, scaffold creation, and implementation to async agents. If doing their work yourself, you've violated I6 — stop and launch the correct agent. Scout agents create IMPL docs only (`docs/IMPL/IMPL-*.yaml`), not source code or other docs.
 
-*`I{N}` = invariants (I1–I6), `E{N}` = execution rules (E1–E43) from `protocol/invariants.md` and `protocol/execution-rules.md`. Numbers are anchors for cross-referencing.*
+*`I{N}` = invariants (I1–I6), `E{N}` = execution rules (E1–E45) from `protocol/invariants.md` and `protocol/execution-rules.md`. Numbers are anchors for cross-referencing.*
 
 **Agent type preference:** Use custom `subagent_type` values (`scout`, `scaffold-agent`, `wave-agent`, `integration-agent`, `critic-agent`, `planner`). These provide tool-level enforcement and behavioral instructions.
 
@@ -83,7 +83,7 @@ See `references/impl-targeting.md` for discovery commands, resolution logic, aut
 **Scout flow** (no IMPL doc exists):
 1. Launch Scout agent (`subagent_type: scout`, `run_in_background: true`, prompt = feature description). Inform user.
 2. When Scout completes, read `docs/IMPL/IMPL-<feature-slug>.yaml`. Record injection method: `sawtools set-injection-method "<path>" --method hook`.
-3. **E16: Validate IMPL doc.** `sawtools validate --fix "<path>"`. Exit 0 = proceed. Exit 1 = send errors to Scout (resume), retry once. Failure = BLOCKED. See `references/pre-wave-validation.md` for details.
+3. **E16+E35: Validate IMPL doc.** `sawtools pre-wave-validate "<path>" --wave 1 --fix`. Exit 0 = proceed. Exit 1 = send errors to Scout (resume), retry once. Failure = BLOCKED. See `references/pre-wave-validation.md` for E16 (structure) and E35 (caller detection) details.
 4. **Critic Gate (E37).** Check trigger conditions (3+ agents OR 2+ repos). If triggered, launch critic, read verdict. PASS = proceed. ISSUES (error) = correct and re-run. See `references/pre-wave-validation.md` § E37.
 5. Report suitability verdict, wave structure, file ownership, interface contracts, Scaffolds. Ask user to review.
 6. **Scaffold Agent (conditional):** If Scaffolds has `Status: pending`, launch Scaffold Agent (`[SAW:scaffold:<slug>]`). If `FAILED`, stop. If `committed`, proceed.
@@ -96,15 +96,17 @@ If a `docs/IMPL/IMPL-*.yaml` file already exists:
 4. **Solo agent:** If exactly 1 agent (not integration type), skip worktrees. Run `sawtools prepare-agent --no-worktree`, launch `wave-agent` on main branch. After completes, proceed to step 7. Solo agents still operate in Wave Agent role (I6).
 5. **Wave preparation (multi-agent):** For waves with 2+ agents:
    ```bash
-   sawtools prepare-wave "<manifest-path>" --wave <N> --repo-dir "<repo-path>"
+   sawtools prepare-wave "<manifest-path>" --wave <N> --repo-dir "<repo-path>" [--commit-baseline]
    ```
    Combines worktree creation + agent preparation (brief extraction, journal init). Exit 1 = failure (E21A baseline gate, scaffolds, or worktree errors) — do not proceed.
+
+   **--commit-baseline flag:** Auto-commits baseline fixes when working directory is dirty. **Always use with `--auto` flag** for autonomous execution. Without it, dirty working dir causes failure.
 
    **E43:** Hook-based isolation enforces worktree boundaries automatically. Agents don't need manual `cd` commands. See `protocol/execution-rules.md` E43.
 
    **E21A baseline failure:** Codebase already broken. Fix and re-run. See `references/pre-wave-validation.md` § E21A.
 
-   Returns JSON with worktree paths and agent metadata.
+   Returns JSON with worktree paths and agent metadata. Result also written to `.saw-state/wave{N}/prepare-result.json` for automation-friendly access.
 
 6. **Agent launching.** For each agent, launch with `subagent_type: wave-agent` and `run_in_background: true`. Prepend journal context if exists. Use short IMPL-referencing prompts (~60 tokens). Agent reads full brief from `.saw-agent-brief.md`.
 
@@ -114,11 +116,6 @@ If a `docs/IMPL/IMPL-*.yaml` file already exists:
 ```
 <!-- IMPL doc: /abs/path/to/IMPL-feature.yaml | Wave N | Agent X -->
 <!-- Worktree: /abs/path/to/.claude/worktrees/saw/{slug}/wave{N}-agent-{X} -->
-
-MANDATORY FIRST STEP - Verify isolation:
-1. cd /abs/path/to/.claude/worktrees/saw/{slug}/wave{N}-agent-{X}
-2. sawtools verify-isolation --branch saw/{slug}/wave{N}-agent-{X}
-3. If fails, STOP and report status: blocked
 
 Read .saw-agent-brief.md and follow exactly.
 ```

@@ -1,7 +1,7 @@
 # Scout-and-Wave
 
 [![Blackwell Systems™](https://raw.githubusercontent.com/blackwell-systems/blackwell-docs-theme/main/badge-trademark.svg)](https://github.com/blackwell-systems)
-![Version](https://img.shields.io/badge/version-0.55.0-blue)
+![Version](https://img.shields.io/badge/version-0.76.0-blue)
 [![Agent Skills](assets/badge-agentskills.svg)](https://agentskills.io)
 
 SAW is published as an [Agent Skill](https://agentskills.io) — a portable, tool-agnostic package for adding capabilities to AI coding agents.
@@ -131,7 +131,7 @@ The protocol is defined independent of any implementation. Read these to underst
 - **[protocol/participants.md](protocol/participants.md)** - Seven participant roles and their responsibilities
 - **[protocol/preconditions.md](protocol/preconditions.md)** - Five preconditions for suitability gate
 - **[protocol/invariants.md](protocol/invariants.md)** - Six invariants (I1–I6) — formal correctness rules that every implementation must satisfy (e.g., I1: disjoint file ownership, I2: interface contracts precede parallel implementation)
-- **[protocol/execution-rules.md](protocol/execution-rules.md)** - Execution rules (E1–E41) governing state transitions, agent launches, completion handling, merge procedures, verification gates, IMPL doc lifecycle, Scout output validation (E16A/B/C), project memory lifecycle (E17/E18), failure taxonomy (E19), stub detection (E20), post-wave quality gates (E21), scaffold build verification (E22), per-agent context extraction (E23), integration validation (E25), integration agent (E26), planned integration waves (E27), program execution (E28–E34), wiring obligation (E35), IMPL amendment (E36), critic gate (E37), gate caching (E38), interview mode (E39), observability (E40), and type collision detection (E41)
+- **[protocol/execution-rules.md](protocol/execution-rules.md)** - Execution rules (E1–E45) governing state transitions, agent launches, completion handling, merge procedures, verification gates, IMPL doc lifecycle, Scout output validation (E16A/B/C), project memory lifecycle (E17/E18), failure taxonomy (E19), stub detection (E20), post-wave quality gates (E21), scaffold build verification (E22), per-agent context extraction (E23), integration validation (E25), integration agent (E26), planned integration waves (E27), program execution (E28–E34), wiring obligation (E35), IMPL amendment (E36), critic gate (E37), gate caching (E38), interview mode (E39), observability (E40), type collision detection (E41), SubagentStop validation (E42), hook-based isolation enforcement (E43), context injection observability (E44), and shared data structure scaffold detection (E45)
 - **[protocol/state-machine.md](protocol/state-machine.md)** - Protocol states and transitions
 - **[protocol/message-formats.md](protocol/message-formats.md)** - IMPL doc and completion report schemas
 - **[protocol/procedures.md](protocol/procedures.md)** - Step-by-step merge and verification procedures
@@ -194,7 +194,7 @@ See [protocol/README.md](protocol/README.md) for the full adoption guide.
 
 ## SAW-Teams (Experimental)
 
-[`saw-teams/`](saw-teams/) is an alternate execution layer using Claude Code Agent Teams. Same protocol, same IMPL doc, same Scout. Different wave plumbing: teammates replace background Agent tool calls, providing inter-agent messaging and real-time deviation alerts. Trade-off: better visibility during execution, worse crash recovery. See [`saw-teams/README.md`](saw-teams/README.md) for setup and usage.
+[`docs/proposals/saw-teams/`](docs/proposals/saw-teams/) is an alternate execution layer using Claude Code Agent Teams. Same protocol, same IMPL doc, same Scout. Different wave plumbing: teammates replace background Agent tool calls, providing inter-agent messaging and real-time deviation alerts. Trade-off: better visibility during execution, worse crash recovery. See [`docs/proposals/saw-teams/README.md`](docs/proposals/saw-teams/README.md) for setup and usage.
 
 ## Blog Post
 

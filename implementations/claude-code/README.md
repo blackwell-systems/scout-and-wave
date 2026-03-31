@@ -166,7 +166,7 @@ cd ~/code/scout-and-wave/implementations/claude-code/hooks
 ./install.sh
 ```
 
-The installer symlinks all 15 hook scripts to `~/.local/bin/`, registers them in `~/.claude/settings.json`, and verifies each hook is executable. It will print a summary of what was installed.
+The installer symlinks all 17 hook scripts to `~/.local/bin/`, registers them in `~/.claude/settings.json`, and verifies each hook is executable. It will print a summary of what was installed.
 
 **If `~/.local/bin` is not on your `$PATH`**, add it:
 ```bash

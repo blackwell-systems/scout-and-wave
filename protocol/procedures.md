@@ -2,7 +2,7 @@
 
 **Version:** 0.21.0
 
-> **See also:** `execution-rules.md` (v0.20.0) — numbered execution rules (E1–E42) referenced throughout these procedures.
+> **See also:** `execution-rules.md` (v0.20.0) — numbered execution rules (E1–E45) referenced throughout these procedures.
 
 This document defines the operational procedures executed by the Orchestrator and other participants: suitability assessment, scaffold materialization, wave execution, and merge operations.
 

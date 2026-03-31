@@ -153,7 +153,7 @@ Orchestrator trigger injection (`inject-context` script) and conditional agent i
 
 **Target:** ~20 lines. The frontmatter is now minimal standard Skills API metadata only.
 
-### Tier 2 — Core SKILL.md (loaded on invocation, ~323 lines)
+### Tier 2 — Core SKILL.md (loaded on invocation, ~140 lines)
 
 *Maps to Agent Skills spec: **Instructions** tier (<5000 tokens recommended).*
 
@@ -622,7 +622,7 @@ SAW's progressive disclosure architecture combines **four tiers**, **three layer
 
 1. **Tier 0** (CLAUDE.md): Discovery index. Always present. Zero invocation cost.
 2. **Tier 1** (Frontmatter): Standard Skills API metadata only. No custom frontmatter fields. Parsed at skill load time.
-3. **Tier 2** (Core SKILL.md): ~183 lines covering core flows (scout, wave, status, bootstrap, interview). Loaded on every `/saw` invocation.
+3. **Tier 2** (Core SKILL.md): ~140 lines covering core flows (scout, wave, status, bootstrap, interview). Loaded on every `/saw` invocation.
 4. **Tier 3** (References): Conditional reference files loaded only when scenario requires them. Always-needed content inlined in agent definitions.
 
 ### Three Layers

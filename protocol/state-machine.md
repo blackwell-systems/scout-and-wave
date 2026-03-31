@@ -362,7 +362,7 @@ Waves execute sequentially (I3: Wave sequencing). When Wave N completes, its imp
 
 ## State Machine Correctness Properties
 
-When all invariants (I1–I6, P5) and execution rules (E1–E42, E21A, E21B) are maintained:
+When all invariants (I1–I6, P5) and execution rules (E1–E45, including sub-rules E7a, E11a, E21A, E21B, E23A, E28A, E28B) are maintained:
 
 - **Progress:** The state machine always advances or terminates. No infinite loops.
 - **Human checkpoints enforced:** REVIEWED state requires explicit approval. Suitability gate requires human review of NOT SUITABLE verdicts.

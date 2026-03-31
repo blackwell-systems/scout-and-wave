@@ -1,0 +1,580 @@
+title: Add /saw auto command
+feature_slug: saw-auto-command
+verdict: SUITABLE
+suitability_assessment: |-
+    /saw auto is a new entry point that collapses scout -> review -> wave into one command.
+    All five suitability preconditions hold:
+
+    1. File decomposition: Work splits cleanly across two repos and three agents. Agent A
+       owns behavior-critical skill and inject-context files in scout-and-wave. Agent A2
+       owns three documentation files (README.md, POSITION.md,
+       docs/skills-progressive-disclosure.md) in scout-and-wave. Agent B owns the new Go
+       subcommand file and main.go registration in scout-and-wave-go. No shared files.
+       CHANGELOG.md is updated post-merge (it is 2396 lines; assigning it to any agent
+       would exceed the V048 LOC budget of 2000 lines).
+
+    2. No investigation-first blockers: The design is fully specified. The Go command pattern
+       is established (run_scout_cmd.go is the direct model). No root-cause analysis needed.
+
+    3. Interface discoverability: The skill changes are self-contained prose additions. The Go
+       command's signature follows the existing cobra pattern -- no cross-agent interface needed.
+
+    4. Pre-implementation status: /saw auto does not exist in any file. 100% TODO.
+
+    5. Parallelization value: Two repos, independent tech stacks (markdown vs Go). Full
+       independence -- single wave with three parallel agents.
+
+    Estimated times:
+    - Scout phase: ~8 min (dependency mapping, interface contracts, IMPL doc)
+    - Agent execution: ~15 min (3 agents x ~7-8 min avg, running in parallel)
+    - Merge and verification: ~3 min
+    Total SAW time: ~26 min
+
+    Sequential baseline: ~20 min (one agent at a time)
+    Time savings: ~6 min net. Modest but the cross-repo isolation and coordination artifact
+    also provide value as an audit trail.
+
+    Recommendation: SUITABLE. Proceed with 3 parallel agents.
+test_command: go test ./...
+lint_command: go vet ./...
+file_ownership:
+    - file: implementations/claude-code/prompts/saw-skill.md
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: implementations/claude-code/prompts/scripts/inject-context
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: README.md
+      agent: A2
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: POSITION.md
+      agent: A2
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: docs/skills-progressive-disclosure.md
+      agent: A2
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: cmd/sawtools/auto_cmd.go
+      agent: B
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: cmd/sawtools/main.go
+      agent: B
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+interface_contracts:
+    - name: newAutoCmd
+      description: |-
+        New cobra subcommand for sawtools auto. Wraps run-scout + confirm + run-wave.
+        Follows the same pattern as newRunScoutCmd in run_scout_cmd.go.
+        Uses protocol.Load (context, path) to read the IMPL manifest after Scout completes.
+      definition: |-
+        func newAutoCmd() *cobra.Command
+        // Flags:
+        //   --repo-dir string    Repository root (shared package-level var, default: current directory)
+        //   --saw-repo string    SAW protocol repo path
+        //   --scout-model string Scout model override
+        //   --wave-model string  Wave model override (reserved)
+        //   --timeout int        Scout timeout in minutes (default: 10)
+        //   --skip-confirm bool  Skip human confirmation prompt (expert/CI use only)
+        //
+        // Engine calls used:
+        //   engine.RunScoutFull(ctx, RunScoutFullOpts{...}, streamFn) -> (*RunScoutFullResult, error)
+        //   protocol.Load(ctx, implPath) -> (*IMPLManifest, error)  [pkg/protocol/manifest.go:62]
+        //   engine.RunWaveFull(ctx, RunWaveFullOpts{ManifestPath, RepoPath, WaveNum}) -> (*WaveResult, error)
+      location: cmd/sawtools/auto_cmd.go
+    - name: saw-auto invocation mode entry
+      description: |-
+        New row to add to the Invocation Modes table in saw-skill.md, plus
+        a new "Auto Flow" section describing the step-by-step logic.
+      definition: |-
+        Invocation Modes table row (add after /saw wave row):
+          | `/saw auto [--model <m>] [--skip-confirm] "<feature>"` | Scout + confirm + wave in one command |
+
+        New "Auto Flow" section content (add after Invocation Modes table, before Pre-flight Validation):
+
+        **Auto flow** (`auto <feature-description>`):
+        Collapses scout -> review -> wave into a single command. Human confirmation is
+        preserved -- /saw auto eliminates command overhead, not the review step.
+
+        1. Launch Scout agent (same as Scout flow step 1). Inform user.
+        2. When Scout completes, read IMPL doc.
+        3. If NOT_SUITABLE: report verdict, reason, and suggested alternative. Stop.
+        4. E16+E35: Validate IMPL doc (same as Scout flow step 3).
+        5. Critic Gate E37 (same as Scout flow step 4).
+        6. Report: verdict, wave structure summary, file ownership count, interface contract
+           count. If SUITABLE_WITH_CAVEATS, show caveats explicitly before confirmation.
+        7. Scaffold Agent (conditional, same as Scout flow step 6).
+        8. Ask: "Proceed with wave execution? [y/N]"
+           - N: "Auto flow cancelled. Review the IMPL doc and run /saw wave when ready." Stop.
+           - Y: continue.
+        9. Execute waves with --auto behavior (I3: each wave waits for prior wave to merge
+           and verify). Equivalent to /saw wave --auto starting at Wave 1.
+        10. On any wave failure: stop and report. Do not proceed.
+        11. On completion: report result (same as standard wave completion).
+
+        --skip-confirm flag (expert/CI only): omits step 8. Removes human checkpoint.
+        NOT recommended for regular use.
+      location: implementations/claude-code/prompts/saw-skill.md
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |-
+            ## Role
+            You are a Wave Agent. Update Scout-and-Wave protocol skill and inject-context
+            script to add /saw auto as a new invocation mode.
+
+            ## Repository
+            /Users/dayna.blackwell/code/scout-and-wave
+
+            ## Files You Own
+            - implementations/claude-code/prompts/saw-skill.md
+            - implementations/claude-code/prompts/scripts/inject-context
+
+            Read each file before editing. Do not guess at existing content.
+
+            ## What to Implement
+
+            ### 1. saw-skill.md -- add /saw auto to invocation table and add auto flow section
+
+            In the Invocation Modes table (the markdown table under `## Invocation Modes`),
+            add a new row after the `/saw wave` row:
+
+            ```
+            | `/saw auto [--model <m>] [--skip-confirm] "<feature>"` | Scout + confirm + wave in one command |
+            ```
+
+            After the Invocation Modes table (before `## Pre-flight Validation`), add:
+
+            **Auto flow** (`auto <feature-description>`):
+            Collapses scout -> review -> wave into a single command. Human confirmation is
+            preserved -- /saw auto eliminates command overhead, not the review step.
+
+            1. Launch Scout agent (same as Scout flow step 1). Inform user.
+            2. When Scout completes, read `docs/IMPL/IMPL-<feature-slug>.yaml`.
+            3. **If NOT_SUITABLE:** Report verdict, reason, and suggested alternative. Stop.
+            4. **E16+E35: Validate IMPL doc.** Same as Scout flow step 3.
+            5. **Critic Gate (E37).** Same as Scout flow step 4.
+            6. Report: verdict (SUITABLE or SUITABLE_WITH_CAVEATS), wave structure summary,
+               file ownership count, interface contract count. If SUITABLE_WITH_CAVEATS, show
+               caveats explicitly before asking for confirmation.
+            7. **Scaffold Agent (conditional).** Same as Scout flow step 6.
+            8. Ask: "Proceed with wave execution? [y/N]"
+               - N (or no input): "Auto flow cancelled. Review the IMPL doc and run `/saw wave` when ready." Stop.
+               - Y: continue.
+            9. Execute waves with `--auto` behavior (I3: each wave waits for the prior wave to
+               merge and verify before proceeding). Equivalent to `/saw wave --auto` starting
+               at Wave 1.
+            10. On any wave failure: stop and report. Do not proceed.
+            11. On completion: report result (same as standard wave completion).
+
+            **`--skip-confirm` flag (expert/CI only):** Omits step 8. Removes the human
+            checkpoint entirely. NOT recommended for regular use.
+
+            The auto flow is short and tightly coupled to the existing scout/wave flows in
+            Tier 2 -- do NOT add a routing/dispatch block that reads a reference file. The
+            auto flow belongs inline in core saw-skill.md.
+
+            ### 2. scripts/inject-context -- add /saw auto comment block
+
+            After the existing `^/saw amend` block, add:
+
+            ```bash
+            if echo "$PROMPT" | grep -qE "^/saw auto"; then
+              # /saw auto runs the full scout -> review -> wave flow inline.
+              # The auto flow is defined in saw-skill.md core (Tier 2), not a reference file.
+              # No injection needed; this block documents the pattern for maintainability.
+              :
+            fi
+            ```
+
+            ## Verification Gate
+            1. Read the modified saw-skill.md and confirm: Invocation Modes table has
+               the new row, auto flow section is present and numbered 1-11.
+            2. Read inject-context and confirm the ^/saw auto block is present.
+            3. No broken markdown syntax in any file.
+
+            Commit all changes in a single commit before writing the completion report.
+          files:
+            - implementations/claude-code/prompts/saw-skill.md
+            - implementations/claude-code/prompts/scripts/inject-context
+        - id: A2
+          task: |-
+            ## Role
+            You are a Wave Agent. Update Scout-and-Wave documentation files to mention
+            /saw auto. These are documentation-only changes -- no interface contracts
+            or upstream dependencies.
+
+            ## Repository
+            /Users/dayna.blackwell/code/scout-and-wave
+
+            ## Files You Own
+            - README.md
+            - POSITION.md
+            - docs/skills-progressive-disclosure.md
+
+            Read each file before editing. Do not guess at existing content.
+
+            ## What to Implement
+
+            ### 1. README.md -- add /saw auto to quick start
+
+            In the Quick Start section (the bash code block around line 97-106 with
+            `/saw scout` and `/saw wave`), add /saw auto as an alternative after the
+            existing two-command example:
+
+            ```bash
+            # Or collapse both steps into one command:
+            /saw auto "add a caching layer to the API client"
+            # -> Scout analyzes, writes IMPL doc, shows wave structure
+            # -> You confirm ("Proceed? [y/N]") -- this is the human checkpoint
+            # -> On Y: all waves execute automatically
+            ```
+
+            Also add `/saw auto "<feature>"` to the command table (the table listing
+            subcommands and their purposes) after the `/saw wave` row.
+
+            ### 2. POSITION.md -- add auto mode mention
+
+            In the "Agent Skill" execution mode section, in the code block showing
+            `/saw scout "add caching layer"` and `/saw wave --auto`, add a line:
+
+            ```
+            /saw auto "add caching layer"     # Scout + confirm + all waves in one command
+            ```
+
+            Add 1-2 sentences after the code block: /saw auto is the low-friction entry
+            point for the common case -- same human checkpoint as scout -> wave, without
+            the separate command invocations.
+
+            ### 3. docs/skills-progressive-disclosure.md -- tier placement note
+
+            In the section describing "What Stays in Core" (Tier 2), add /saw auto to
+            the examples of content that belongs in core SKILL.md. It belongs in Tier 2
+            because it is invoked on a significant fraction of sessions and its logic
+            directly chains the existing scout and wave flows.
+
+            Note explicitly in the Tier 3 section: /saw auto does NOT require a new
+            on-demand reference file. The flow (11 steps) is short and coupled to core
+            scout/wave logic -- it lives inline in saw-skill.md.
+
+            In the inject-context script description, note that a `^/saw auto` pattern
+            block exists in the script as a no-op placeholder (no file to inject; auto
+            flow is Tier 2 core).
+
+            ## Verification Gate
+            1. README.md Quick Start has the /saw auto example and command table row.
+            2. POSITION.md code block and follow-on sentences mention /saw auto.
+            3. docs/skills-progressive-disclosure.md mentions /saw auto in Tier 2 section.
+            4. No broken markdown syntax in any file.
+
+            Commit all changes in a single commit before writing the completion report.
+          files:
+            - README.md
+            - POSITION.md
+            - docs/skills-progressive-disclosure.md
+        - id: B
+          task: |-
+            ## Role
+            You are a Wave Agent. Add a `sawtools auto` subcommand to the Go CLI binary.
+
+            ## Repository
+            /Users/dayna.blackwell/code/scout-and-wave-go
+
+            ## Files You Own
+            - cmd/sawtools/auto_cmd.go  (NEW -- create this file)
+            - cmd/sawtools/main.go      (MODIFY -- add newAutoCmd() registration)
+
+            ## Key API facts (verified before writing this brief)
+            - Protocol load function: `protocol.Load(ctx context.Context, path string) (*protocol.IMPLManifest, error)`
+              defined in pkg/protocol/manifest.go:62
+            - IMPLManifest fields used: Verdict (string), SuitabilityAssessment (string),
+              Waves ([]Wave), FileOwnership ([]FileOwnership), InterfaceContracts ([]InterfaceContract)
+            - Engine scout: `engine.RunScoutFull(ctx, RunScoutFullOpts{...}, streamFn) (*RunScoutFullResult, error)`
+            - Engine wave: `engine.RunWaveFull(ctx, RunWaveFullOpts{ManifestPath, RepoPath, WaveNum}) (*WaveResult, error)`
+            - The `repoDir` package-level variable is defined in root.go and shared by all commands.
+              Use it directly -- do not redeclare it.
+
+            Read `cmd/sawtools/run_scout_cmd.go` and `cmd/sawtools/run_wave_cmd.go` first
+            to confirm struct field names and call conventions before writing auto_cmd.go.
+
+            ## What to Implement
+
+            ### 1. cmd/sawtools/auto_cmd.go -- new file
+
+            Create `cmd/sawtools/auto_cmd.go` in `package main`.
+
+            ```go
+            package main
+
+            import (
+                "bufio"
+                "context"
+                "fmt"
+                "os"
+                "strings"
+
+                "github.com/blackwell-systems/scout-and-wave-go/pkg/engine"
+                "github.com/blackwell-systems/scout-and-wave-go/pkg/protocol"
+                "github.com/spf13/cobra"
+            )
+
+            func newAutoCmd() *cobra.Command {
+                var (
+                    sawRepoPath string
+                    scoutModel  string
+                    waveModel   string
+                    timeout     int
+                    skipConfirm bool
+                )
+
+                cmd := &cobra.Command{
+                    Use:   "auto <feature-description>",
+                    Short: "Scout + confirm + wave: the full SAW flow in one command",
+                    Long: `Collapses the three-step scout -> review -> wave flow into one command.
+
+            The human confirmation checkpoint is preserved: after Scout completes, you will
+            be shown the IMPL summary and asked "Proceed with wave execution? [y/N]"
+            before any agent writes code.
+
+            Behavior by verdict:
+              NOT_SUITABLE          -- shows reason and suggested alternative, exits
+              SUITABLE              -- shows IMPL summary, asks to confirm, then waves
+              SUITABLE_WITH_CAVEATS -- shows IMPL summary + caveats, asks to confirm, then waves
+
+            Use --skip-confirm to omit the confirmation prompt (expert/CI use only).
+
+            Examples:
+              sawtools auto "Add audit logging to auth module"
+              sawtools auto "Add caching layer" --repo-dir /path/to/project
+              sawtools auto "Refactor storage layer" --skip-confirm`,
+                    Args: cobra.ExactArgs(1),
+                    RunE: func(cmd *cobra.Command, args []string) error {
+                        featureDesc := args[0]
+
+                        // Resolve repo path (repoDir is the package-level persistent flag).
+                        if repoDir == "" || repoDir == "." {
+                            cwd, err := os.Getwd()
+                            if err != nil {
+                                return fmt.Errorf("auto: failed to get current directory: %w", err)
+                            }
+                            repoDir = cwd
+                        }
+
+                        fmt.Printf("Running Scout...\n")
+                        fmt.Printf("  Feature: %s\n", featureDesc)
+                        fmt.Printf("  Repository: %s\n\n", repoDir)
+
+                        // Phase 1: Scout.
+                        scoutOpts := engine.RunScoutFullOpts{
+                            Feature:     featureDesc,
+                            RepoPath:    repoDir,
+                            SAWRepoPath: sawRepoPath,
+                            ScoutModel:  scoutModel,
+                            Timeout:     timeout,
+                            Logger:      newSawLogger(),
+                        }
+                        scoutRes, err := engine.RunScoutFull(cmd.Context(), scoutOpts, func(chunk string) {
+                            fmt.Print(chunk)
+                        })
+                        if err != nil {
+                            return fmt.Errorf("auto: scout failed: %w", err)
+                        }
+
+                        // Phase 2: Read IMPL doc and check verdict.
+                        implPath := scoutRes.IMPLPath
+                        manifest, err := protocol.Load(context.Background(), implPath)
+                        if err != nil {
+                            return fmt.Errorf("auto: failed to read IMPL doc %s: %w", implPath, err)
+                        }
+
+                        verdict := strings.TrimSpace(manifest.Verdict)
+                        fmt.Println()
+
+                        if strings.EqualFold(verdict, "NOT_SUITABLE") {
+                            fmt.Println("Verdict: NOT_SUITABLE")
+                            fmt.Println()
+                            fmt.Println("Reason:")
+                            fmt.Println(manifest.SuitabilityAssessment)
+                            fmt.Println()
+                            fmt.Println("Suggested alternative: implement sequentially or run /saw interview first.")
+                            return nil
+                        }
+
+                        // SUITABLE or SUITABLE_WITH_CAVEATS -- print summary.
+                        fmt.Printf("Verdict: %s\n", verdict)
+                        fmt.Println()
+                        waveCount := len(manifest.Waves)
+                        agentCount := 0
+                        for _, w := range manifest.Waves {
+                            agentCount += len(w.Agents)
+                        }
+                        fmt.Printf("IMPL doc: %s\n", implPath)
+                        fmt.Printf("Waves: %d | Agents: %d | Files: %d\n",
+                            waveCount, agentCount, len(manifest.FileOwnership))
+                        if len(manifest.InterfaceContracts) > 0 {
+                            fmt.Printf("Interface contracts: %d\n", len(manifest.InterfaceContracts))
+                        }
+                        if strings.EqualFold(verdict, "SUITABLE_WITH_CAVEATS") {
+                            fmt.Println()
+                            fmt.Println("Caveats:")
+                            fmt.Println(manifest.SuitabilityAssessment)
+                        }
+                        fmt.Println()
+
+                        // Phase 3: Human confirmation.
+                        if !skipConfirm {
+                            fmt.Print("Proceed with wave execution? [y/N] ")
+                            scanner := bufio.NewScanner(os.Stdin)
+                            scanner.Scan()
+                            response := strings.TrimSpace(scanner.Text())
+                            if !strings.EqualFold(response, "y") && !strings.EqualFold(response, "yes") {
+                                fmt.Println("Auto flow cancelled. Review the IMPL doc and run:")
+                                fmt.Printf("  sawtools run-wave %s --wave 1\n", implPath)
+                                return nil
+                            }
+                            fmt.Println()
+                        }
+
+                        // Phase 4: Wave execution (all waves in sequence).
+                        fmt.Println("Executing waves...")
+                        fmt.Println()
+                        for waveNum := 1; waveNum <= waveCount; waveNum++ {
+                            fmt.Printf("Wave %d of %d...\n", waveNum, waveCount)
+                            waveRes, err := engine.RunWaveFull(cmd.Context(), engine.RunWaveFullOpts{
+                                ManifestPath: implPath,
+                                RepoPath:     repoDir,
+                                WaveNum:      waveNum,
+                            })
+                            if err != nil || (waveRes != nil && !waveRes.Success) {
+                                msg := "wave execution failed"
+                                if err != nil {
+                                    msg = err.Error()
+                                }
+                                return fmt.Errorf("auto: wave %d failed: %s", waveNum, msg)
+                            }
+                            fmt.Printf("Wave %d complete.\n\n", waveNum)
+                        }
+
+                        fmt.Println("All waves complete.")
+                        fmt.Printf("IMPL doc: %s\n", implPath)
+                        return nil
+                    },
+                }
+
+                cmd.Flags().StringVar(&sawRepoPath, "saw-repo", "", "Scout-and-Wave protocol repo path")
+                cmd.Flags().StringVar(&scoutModel, "scout-model", "", "Scout model override (e.g., claude-opus-4-6)")
+                cmd.Flags().StringVar(&waveModel, "wave-model", "", "Wave model override (reserved for future use)")
+                cmd.Flags().IntVar(&timeout, "timeout", 10, "Scout timeout in minutes (default: 10)")
+                cmd.Flags().BoolVar(&skipConfirm, "skip-confirm", false, "Skip confirmation prompt (expert/CI use only)")
+
+                return cmd
+            }
+            ```
+
+            IMPORTANT: Before writing this file, read run_scout_cmd.go and run_wave_cmd.go
+            to confirm the exact struct field names for RunScoutFullOpts and RunWaveFullOpts.
+            Adjust the template above if any field names differ. The template is a starting
+            point, not a transcription -- field names must match the actual Go types.
+
+            ### 2. cmd/sawtools/main.go -- register newAutoCmd()
+
+            In main.go, inside `rootCmd.AddCommand(`, add `newAutoCmd()` immediately after
+            `newRunScoutCmd()`:
+
+            ```go
+            newRunScoutCmd(),       // I3: Phase 5 integration
+            newAutoCmd(),           // /saw auto: scout + confirm + wave in one command
+            ```
+
+            That is the only change to main.go.
+
+            ## Verification Gate
+            1. `cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./...` -- must pass
+            2. `go vet ./...` -- must pass
+            3. `./sawtools auto --help` -- must show the command description and flags
+
+            Commit all changes before writing the completion report.
+          files:
+            - cmd/sawtools/auto_cmd.go
+            - cmd/sawtools/main.go
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./...
+          required: true
+          repo: scout-and-wave-go
+        - type: test
+          command: go test ./...
+          required: true
+          repo: scout-and-wave-go
+post_merge_checklist:
+    groups:
+        - title: Changelog
+          items:
+            - description: |-
+                Update CHANGELOG.md with the new version entry for /saw auto.
+                Read CHANGELOG.md and use the next available version number (current latest is
+                at the top of the Version History table). Add an entry at the top of the table:
+                  | [X.Y.Z] | 2026-03-31 | /saw auto command -- collapses scout -> review -> wave into one command; human confirmation checkpoint preserved; SUITABLE_WITH_CAVEATS shows caveats before confirmation gate; --skip-confirm flag for CI/expert use; inject-context script updated with /saw auto pattern; README and POSITION.md updated |
+                Replace X.Y.Z with the next minor version after the current latest.
+                Commit the change directly (CHANGELOG.md exceeds the V048 LOC budget and
+                is updated as a post-merge orchestrator step, not via a wave agent).
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: |-
+            RunScoutFullOpts or RunWaveFullOpts field names differ from the template.
+            For example, WaveNum might be named Wave, or SAWRepoPath might be absent.
+          likelihood: low
+          impact: medium
+          mitigation: |-
+            Agent B is explicitly instructed to read run_scout_cmd.go and run_wave_cmd.go
+            before writing auto_cmd.go and to adapt field names to match actual types.
+        - scenario: protocol.Load signature differs from (ctx, path) or returns a different error type.
+          likelihood: low
+          impact: low
+          mitigation: |-
+            The function signature was verified during scouting: pkg/protocol/manifest.go:62
+            shows `func Load(ctx context.Context, path string) (*IMPLManifest, error)`.
+            Agent B brief uses this exact signature.
+        - scenario: |-
+            The Invocation Modes table in saw-skill.md has a different column count or
+            format than the brief assumes (e.g., a third column for "available since").
+          likelihood: low
+          impact: low
+          mitigation: |-
+            Agent A reads the actual file before editing and adapts to the real format.
+            The brief gives the content; the agent must fit it to the existing structure.
+        - scenario: |-
+            saw-skill.md symlink -- the file at ~/.claude/skills/saw/SKILL.md is a symlink
+            to the repo source. Agent A must edit the repo source only; the symlink propagates.
+            If the agent tries to edit the symlink target directly it may edit the wrong path.
+          likelihood: low
+          impact: low
+          mitigation: |-
+            Brief instructs Agent A to edit implementations/claude-code/prompts/saw-skill.md
+            (repo source). The symlink propagates changes automatically.
+        - scenario: |-
+            CHANGELOG.md version number is 0.77.0 or higher by execution time if another
+            change was committed after scouting.
+          likelihood: low
+          impact: low
+          mitigation: |-
+            Post-merge checklist instructs the orchestrator to read CHANGELOG.md first and
+            use the next available version number.
+state: SCOUT_PENDING
+injection_method: hook

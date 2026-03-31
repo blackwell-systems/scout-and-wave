@@ -64,7 +64,7 @@ See [execution-rules.md](execution-rules.md) for the formal correctness argument
 
 This protocol specification follows semantic versioning. Breaking changes to invariants, preconditions, or message formats increment the major version. New optional fields or clarifications increment the minor version.
 
-Current version: **0.57.0**
+Current version: **0.76.0**
 
 **Changelog:**
 - **0.58.0** — E43 hook-based isolation enforcement: lifecycle hooks (SubagentStart, PreToolUse:Bash, PreToolUse:Write/Edit, SubagentStop) mechanically prevent isolation violations at tool boundary; procedures.md updated with E43 enforcement note; README.md isolation defense updated to 6 layers with E43 as primary prevention mechanism; protocol guarantees updated with mechanical isolation enforcement

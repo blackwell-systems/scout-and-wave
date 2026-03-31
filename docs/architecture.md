@@ -526,6 +526,6 @@ The web application (`scout-and-wave-web`) provides an HTTP/SSE interface for th
 ## See Also
 
 - [Protocol Invariants](../protocol/invariants.md) — I1-I6 formal specification
-- [Protocol Execution Rules](../protocol/execution-rules.md) — E1-E41 orchestrator rules
+- [Protocol Execution Rules](../protocol/execution-rules.md) — E1-E45 orchestrator rules
 - [Tool Journaling](./tool-journaling.md) — Compaction safety system
 - [Orchestrator Skill](../implementations/claude-code/prompts/saw-skill.md) — /saw command implementation

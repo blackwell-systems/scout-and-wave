@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# validate_agent_isolation — E12 automatic isolation verification
+# Event: SubagentStart
+# Purpose: Verify wave agents are running in correct worktree before they execute any work
+# Exit 2 = block agent from starting (isolation check failed)
+# Exit 0 = proceed (isolation verified or not a wave agent)
+
+set -euo pipefail
+
+# Extract agent name from CLAUDE_CODE_AGENT_NAME environment variable
+agent_name="${CLAUDE_CODE_AGENT_NAME:-}"
+
+# Only validate wave agents (format: [SAW:wave{N}:agent-{ID}] ...)
+if [[ ! "$agent_name" =~ ^\[SAW:wave([0-9]+):agent-([A-Z][2-9]?)\] ]]; then
+  # Not a wave agent (could be scout, critic, integration, etc.) — skip check
+  exit 0
+fi
+
+wave_num="${BASH_REMATCH[1]}"
+agent_id="${BASH_REMATCH[2]}"
+
+# Check if running in worktree by looking for .saw-agent-brief.md
+if [[ ! -f .saw-agent-brief.md ]]; then
+  echo "E12 violation: Wave agent must run in worktree with .saw-agent-brief.md" >&2
+  echo "  Agent: $agent_name" >&2
+  echo "  Current directory: $(pwd)" >&2
+  exit 2
+fi
+
+# Extract IMPL doc path and feature slug from brief frontmatter
+impl_path=$(grep -m1 "^**IMPL Doc:**" .saw-agent-brief.md | sed 's/^**IMPL Doc:** //' || echo "")
+if [[ -z "$impl_path" ]]; then
+  # Try alternate format in frontmatter
+  impl_path=$(head -20 .saw-agent-brief.md | grep "impl_doc:" | sed 's/^impl_doc: *//' || echo "")
+fi
+
+if [[ -z "$impl_path" ]]; then
+  echo "E12 warning: Cannot extract IMPL doc path from brief, skipping isolation verification" >&2
+  exit 0
+fi
+
+# Extract feature slug from IMPL path (e.g., IMPL-feature-name.yaml -> feature-name)
+feature_slug=$(basename "$impl_path" .yaml | sed 's/^IMPL-//')
+
+# Construct expected branch name
+expected_branch="saw/${feature_slug}/wave${wave_num}-agent-${agent_id}"
+
+# Run isolation verification with explicit cwd
+if ! sawtools verify-isolation --cwd "$(pwd)" --branch "$expected_branch" >/dev/null 2>&1; then
+  echo "E12 violation: Agent isolation verification failed" >&2
+  echo "  Agent: $agent_name" >&2
+  echo "  Expected branch: $expected_branch" >&2
+  echo "  Current directory: $(pwd)" >&2
+  echo "  Current branch: $(git branch --show-current 2>/dev/null || echo 'unknown')" >&2
+  echo "" >&2
+  echo "Run manually to see details:" >&2
+  echo "  sawtools verify-isolation --cwd \"\$(pwd)\" --branch $expected_branch" >&2
+  exit 2
+fi
+
+# Isolation verified
+exit 0

@@ -50,6 +50,8 @@ Model selection is configurable at three levels: per-invocation (`--model`), per
 
 The `Backend` config accepts `BaseURL` for endpoint override, meaning any API-compatible service works without code changes: `http://localhost:11434/v1` for local Ollama, `https://api.groq.com/openai/v1` for Groq, or a corporate proxy endpoint.
 
+The Anthropic API and Bedrock backends support **structured output mode** (`UseStructuredOutput` in `RunWaveOpts`). When enabled, the engine passes a JSON schema to the model via the API's native structured output parameter; the response is schema-validated by the API before it reaches the engine. This eliminates SCOUT_VALIDATING self-loop retries in automated pipelines — the output is already schema-conformant and can skip validation. The CLI backend falls back to the standard completion-report polling path, which produces equivalent results for human-interactive sessions.
+
 For AWS environments, the web application includes a Bedrock SSO device auth flow -- users authenticate via browser-based device authorization and the engine obtains temporary credentials automatically. No API keys to manage or rotate.
 
 ## Execution Modes
@@ -82,7 +84,7 @@ The skill uses a four-tier progressive disclosure model to keep the Orchestrator
 
 - **Tier 0** (CLAUDE.md) -- discovery index, always present, zero invocation cost
 - **Tier 1** (frontmatter metadata, ~20 lines) -- parsed by the Skills API before context construction; standard Skills API fields only (name, description, allowed-tools, etc.)
-- **Tier 2** (core skill body, ~183 lines after v0.73.0 simplification) -- loads on invocation; covers scout, wave, status, bootstrap, and interview (the operations needed on >90% of sessions); 50% reduction from original via extraction to reference files
+- **Tier 2** (core skill body, ~140 lines) -- loads on invocation; covers scout, wave, status, bootstrap, and interview (the operations needed on >90% of sessions); reduced from original 365-line monolith via extraction to reference files
 - **Tier 3** (on-demand reference files) -- loads only when a subcommand match fires: program execution, IMPL amendment, and failure routing stay out of context until needed
 - **Tier 3 reference files:** `model-selection.md` (81 lines), `pre-wave-validation.md` (151 lines), `wave-agent-contracts.md` (137 lines), `impl-targeting.md` (195 lines)
 
@@ -185,17 +187,18 @@ The CLI is callable from CI/CD pipelines, shell scripts, cron jobs, or other orc
 
 Batching commands (`run-scout`, `prepare-wave`, `finalize-wave`, `finalize-impl`, `prepare-tier`, `finalize-tier`) package multi-step workflows as atomic operations. Each succeeds or fails as a unit with structured JSON output. Forgotten steps -- the most common source of silent protocol violations -- are eliminated by design.
 
-Additional CLI surface includes 60+ commands across all protocol phases:
-- **Validation:** `validate` (E16 with --fix auto-correction), `run-critic` (E37), `check-type-collisions` (E41), `detect-shared-types` (E45), `validate-program`, `validate-integration --wiring` (E35), `check-impl-conflicts` (P1+), `validate-scaffolds`, `freeze-check`
-- **Execution:** `run-wave`, `create-worktrees`, `prepare-agent`, `journal-init`, `journal-context` (E23A), `install-hooks`, `verify-hook-installed`
-- **Analysis:** `analyze-suitability`, `analyze-deps`, `extract-commands`, `detect-scaffolds`, `detect-cascades`, `diagnose-build-failure` (multi-language error classification), `solve` (wave solver)
-- **Verification:** `verify-commits`, `verify-build`, `scan-stubs` (E20), `run-gates` (E21/E21A with caching E38), `code-review` (LLM-powered diff review)
-- **Merge:** `merge-agents`, `check-conflicts` (E11), `cleanup`
-- **State:** `set-completion`, `check-completion`, `mark-complete`, `close-impl`, `set-impl-state`, `update-status`, `update-context`
+Additional CLI surface includes 75+ commands across all protocol phases:
+- **Validation:** `validate` (E16 with --fix auto-correction), `run-critic` (E37), `set-critic-review` (critic agent result writer), `check-type-collisions` (E41), `detect-shared-types` (E45), `validate-program`, `validate-integration --wiring` (E35), `check-impl-conflicts` (P1+), `check-program-conflicts` (tier-scoped P1+ conflict check), `validate-scaffolds`, `validate-scaffold`, `freeze-check`, `pre-wave-gate` (composite readiness check: E16 + E37 + scaffold status + IMPL state), `pre-wave-validate` (E16 + E35 same-package caller gap detection)
+- **Execution:** `run-wave`, `create-worktrees`, `create-program-worktrees`, `prepare-agent`, `journal-init`, `journal-context` (E23A), `install-hooks`, `verify-hook-installed`, `verify-isolation` (E12: confirms agent is on assigned worktree branch)
+- **Analysis:** `analyze-suitability`, `analyze-deps`, `extract-commands`, `detect-scaffolds`, `detect-cascades`, `detect-wiring` (cross-agent function call detection → wiring declarations), `diagnose-build-failure` (multi-language error classification), `solve` (wave solver), `assign-agent-ids` (sequential or category-grouped ID assignment, up to 234 agents)
+- **Verification:** `verify-commits`, `verify-build`, `scan-stubs` (E20), `run-gates` (E21/E21A with caching E38), `run-review` (LLM-powered diff review), `predict-conflicts` (E11 hunk-level conflict prediction), `pre-commit-check` (lint + build gates as git pre-commit entry point)
+- **Merge:** `merge-agents`, `check-conflicts` (E11), `cleanup`, `cleanup-stale` (stale worktree detection and removal, --dry-run/--force/--slug/--all)
+- **State:** `set-completion`, `check-completion`, `mark-complete`, `close-impl` (REVIEWED → COMPLETE without wave execution), `set-impl-state`, `update-status`, `update-context`, `list-impls`, `resolve-impl` (resolve IMPL path from slug/filename/path/auto-select)
 - **Amendment:** `amend-impl` (E36: --add-wave, --redirect-agent, --extend-scope)
 - **Recovery:** `resume-detect`, `build-retry-context`, `retry`
 - **Autonomy:** `daemon`, `queue` (add/list/next)
-- **Program:** `create-program` (top-down/bottom-up), `program-execute`, `program-status`, `program-replan`, `list-programs`, `import-impls`, `tier-gate`, `freeze-contracts`, `mark-program-complete`
+- **Program:** `create-program` (top-down/bottom-up), `program-execute`, `program-status`, `program-replan`, `list-programs`, `import-impls`, `tier-gate`, `freeze-contracts`, `mark-program-complete`, `update-program-impl`, `update-program-state`
+- **Integration:** `run-integration-agent` (E26), `run-integration-wave` (E27), `populate-integration-checklist` (M5: auto-generate post_merge_checklist from file_ownership patterns — detects API handlers, React components, CLI commands, background services)
 - **Interview:** `interview` (E39 structured requirements gathering with 6-phase state persistence)
 - **Observability:** `metrics`, `query`, `set-injection-method` (E44)
 - **Setup:** `init` (zero-config project initialization), `verify-install`, `version`
@@ -237,8 +240,13 @@ The web application (`scout-and-wave-web`) is built on this SDK. Every CLI comma
 - Resume detection (`pkg/resume`) -- interrupted session identification with progress percentage
 - Tool journaling (`pkg/journal`) -- E23A checkpoint system with archive policy
 - Collision detection (`pkg/collision`) -- E41 AST-based duplicate detection
-- Notification system (`pkg/notify`) -- extractable library with Slack/Discord/Telegram adapters, Block Kit/embed/Markdown formatters
+- Notification system (`pkg/notify`) -- extractable library with Slack/Discord/Telegram adapters, Block Kit/embed/Markdown formatters; custom adapter registration via factory interface
 - Webhook integration -- unified field names with backward compatibility for old configs
+- Pre-implementation scan (`pkg/suitability`) -- classifies each requirement in an audit/REQUIREMENTS.md as DONE/PARTIAL/TODO with per-item completeness scores; feeds P4 suitability precondition; computes time-saved estimates
+- Dependency conflict detection (`pkg/deps`) -- parses IMPL file ownership, extracts external imports from owned files, and cross-references lock files (go.mod, Cargo.lock, package-lock.json) to detect missing dependencies and version conflicts before wave launch
+- Format detection (`pkg/format`) -- auto-detects project formatter from toolchain markers (go.mod → gofmt, package.json → prettier, pyproject.toml/setup.py → ruff, Cargo.toml → cargo fmt); produces check and fix commands for gate integration
+- Agent ID generation (`pkg/idgen`) -- generates agent IDs matching `^[A-Z][2-9]?$`; sequential mode (A-Z then A2-Z2, max 234) or category-grouped mode (agents with shared category tags get same-letter multi-generation IDs, e.g., `["data","data","api"]` → `["A","A2","B"]`)
+- Unified error code catalog (`pkg/result`) -- 8 code domains (V/W/B/G/A/N/P/T), 60+ named constants; all engine errors carry a structured `SAWError` with Code, Message, and Cause for programmatic error handling
 
 ## What Makes SAW Different
 
@@ -276,6 +284,8 @@ If the Scout determines a feature is not suitable for parallel execution, it say
 
 This extends to multi-feature coordination: the PROGRAM layer's P1+ conflict check validates that no two IMPLs in the same tier share file ownership before any agent in the tier launches.
 
+**E11: Pre-Merge Conflict Prediction.** Before merging agent branches, SAW performs hunk-level diff analysis: `git diff --unified=0 mergeBase..branch -- file` for each agent, parsing `@@ -a,b @@` ranges and checking whether any two agents' modified line ranges overlap. Cascade patch patterns — where multiple agents modify callers in the same file at different functions — produce non-overlapping hunks and are identified as safe to merge. Only true overlapping edits (two agents modifying the same lines) or same-position insertions are flagged. This eliminates a class of false positives that would otherwise force manual merge steps on every multi-wave cascade refactor.
+
 ### Interface Contracts Before Implementation
 
 **I2: Interface Contracts Precede Parallel Implementation.** The Scout identifies all cross-agent boundaries. A Scaffold Agent materializes shared types as real source files committed to HEAD before any Wave Agent launches. Agents compile against committed types, not hallucinated APIs. Interface contracts freeze when worktrees are created (E2) -- no mid-wave drift.
@@ -312,7 +322,7 @@ Protocol compliance is not advisory. Lifecycle hooks enforce invariants mechanic
 
 Agents cannot violate the protocol even if prompted to. Enforcement lives below the agent's decision layer. The three enforcement layers are:
 
-1. **Claude Code hooks** (Layer 1) -- 18 hooks across PreToolUse/PostToolUse/SubagentStop/UserPromptSubmit: enforcement hooks block protocol violations (ownership I1, role separation I6, worktree isolation E43, branch drift, IMPL validation E16, pre-launch gate H5, git ownership, agent completion E42); injection hooks prepend conditional reference content at two layers (`inject_skill_context` targets the Orchestrator via `UserPromptSubmit` + `additionalContext`, `validate_agent_launch` targets subagents via `PreToolUse` + `updatedInput` for 3 conditional references); observability hooks emit structured events for monitoring and cost tracking.
+1. **Claude Code hooks** (Layer 1) -- 17 hooks across PreToolUse/PostToolUse/SubagentStop/UserPromptSubmit: enforcement hooks block protocol violations (ownership I1, role separation I6, worktree isolation E43, branch drift, IMPL validation E16, pre-launch gate H5, git ownership, agent completion E42); injection hooks prepend conditional reference content at two layers (`inject_skill_context` targets the Orchestrator via `UserPromptSubmit` + `additionalContext`, `validate_agent_launch` targets subagents via `PreToolUse` + `updatedInput` for 3 conditional references); observability hooks emit structured events for monitoring and cost tracking.
 2. **Git pre-commit hooks** (Layer 2) -- ownership verification at commit time, catching violations that bypass Layer 1.
 3. **SDK constraint middleware** (Layer 3) -- `tools.Constraints` on every backend, enforcing the same rules programmatically for CLI and daemon execution where Claude Code hooks are not present.
 
@@ -350,7 +360,7 @@ Build failure diagnosis (`pkg/builddiag`) classifies errors across languages (Go
 
 ### Autonomy Levels
 
-The autonomy system (`pkg/autonomy`) supports graduated levels: supervised (human confirms each wave), semi-autonomous (`--auto` with human checkpoints at wave boundaries), and fully autonomous (daemon mode with queue-based continuous operation). Autonomy level is configurable per-project in `saw.config.json` and can be overridden per-invocation.
+The autonomy system (`pkg/autonomy`) supports graduated levels: supervised (human confirms each wave), semi-autonomous (`--auto` with human checkpoints at wave boundaries), and fully autonomous (daemon mode with queue-based continuous operation). Autonomy level is configurable per-project in `saw.config.json` and can be overridden per-invocation. Queue items (`docs/IMPL/queue/`) support per-item overrides: `autonomy_override` (overrides project-level autonomy for a specific item) and `require_review` (forces human IMPL review even in autonomous mode). Queue items carry `depends_on` for ordered execution and `priority` for scheduling within the daemon's pick-next logic.
 
 ### PROGRAM Layer for Multi-Feature Coordination
 
@@ -404,8 +414,10 @@ The web application includes:
 - **Planner and Scout Launchers** -- one-click program/feature initiation with model selection
 - **Pipeline View** -- step-by-step execution visualization with metrics
 - **Recovery Controls** -- resume, retry, and amend operations from the UI
+- **Conflict Resolution Panel** -- in-browser AI-assisted merge conflict resolution with per-file progress tracking
+- **Disjoint Analysis Screen** -- visual tier assignment preview from `check-impl-conflicts` results: shows which IMPLs conflict, suggested tier groupings, and a confirm flow to create the PROGRAM manifest
 - **Command Palette** -- keyboard-driven navigation across all operations
-- **File Browser** -- tree view with diff viewer and file content inspection
+- **File Browser** -- tree view with diff viewer (per-agent per-file unified diff via `/api/impl/{slug}/diff/{agent}`) and file content inspection
 - **Chat Panel** -- conversational agent interaction via `engine.Chat()`
 - **Notification System** -- browser push notifications and in-app toasts for 9 event types (wave complete, agent failed, merge complete/failed, scaffold complete, build verify pass/fail, plan complete, run failed), with per-event muting and preferences persisted in `saw.config.json`
 - **Base16 Theming** -- 200+ color themes with dark/light mode and live preview
@@ -415,7 +427,7 @@ The observability event schema (E40) defines three event types -- `cost` (token 
 
 ## Capabilities by Phase
 
-**Planning:** Scout codebase analysis, quantitative suitability scoring, dependency graph construction, automatic wave assignment (topological solver), file ownership assignment, interface contract specification, shared data structure detection (E45), PROGRAM manifests with automatic tiering, structured requirements interviews (E39), IMPL amendment for mid-execution adaptation (E36), `sawtools init` zero-config project initialization with auto-detection (Go/Rust/Node/Python/Ruby/Makefile).
+**Planning:** Scout codebase analysis, quantitative suitability scoring, dependency graph construction, automatic wave assignment (topological solver), file ownership assignment, interface contract specification, shared data structure detection (E45), PROGRAM manifests with automatic tiering, structured requirements interviews (E39), IMPL amendment for mid-execution adaptation (E36), `sawtools init` zero-config project initialization with auto-detection (Go/Rust/Node/Python/Ruby/Makefile). Five suitability preconditions gate Scout execution: P1 (file decomposability), P2 (no investigation-first blockers), P3 (interface discoverability), P4 (pre-implementation scan — DONE/PARTIAL/TODO classification of existing work), P5 (positive parallelization value — quantitative overhead vs. gain check). NOT_SUITABLE verdicts name the failed precondition with codebase evidence and a suggested alternative (serial execution, investigate-first, etc.). The IMPL state machine has 11 states (INTERVIEWING, SCOUT_PENDING, SCOUT_VALIDATING, REVIEWED, SCAFFOLD_PENDING, WAVE_PENDING, WAVE_EXECUTING, WAVE_MERGING, WAVE_VERIFIED, BLOCKED, COMPLETE/NOT_SUITABLE terminal) with documented transition guards; the Program state machine wraps this with 9 program-level states (PROGRAM_PLANNING through PROGRAM_COMPLETE/PROGRAM_NOT_SUITABLE).
 
 **Validation:** E16 IMPL structural validation with auto-fix (`validate --fix` auto-corrects invalid gate types and strips unknown keys), E37 critic brief review with pass/issues/fail verdict, E41 type collision detection (AST-based duplicate detection in same package), E45 shared data structure detection (prevents duplicate type definitions), P1+ cross-IMPL file ownership conflict detection, E21A/E21B baseline gate verification (pre-wave build/test verification with parallel execution and gate result caching E38, including cross-repo), H5 pre-launch agent validation (8 checks), scaffold correctness verification, E35 wiring obligation enforcement.
 
@@ -435,6 +447,8 @@ Dogfooding surfaces real issues. A Scout analyzing the Go engine's agent prompt 
 
 The critic gate also catches planning errors before compute is wasted. During the progressive disclosure extraction project, a pre-wave critic review caught that the planned hook output format used `additionalContext` (which targets the orchestrator's context) rather than `updatedInput` (which modifies the subagent's prompt). Three critic cycles -- not execution failures -- corrected the mechanism before any agent ran. The correctness of the final implementation is traceable to the review process, not to getting it right on the first try.
 
-The Go SDK contains 34 packages across engine, protocol, hooks, resume, retry, journal, collision detection, autonomy, suitability analysis, wave solver, pipeline framework, build diagnostics, error parsing, code review, scaffold validation, notification system, gate caching, worktree management, four LLM backends (Anthropic API, Bedrock, OpenAI-compatible, CLI), constraint enforcement, and configuration. The CLI exposes 60+ commands. The web app ships 70+ React components with real-time SSE streaming, Base16 theming, and Bedrock SSO -- all embedded in a single Go binary.
+The Go SDK contains 32 packages across engine, protocol, hooks, resume, retry, journal, collision detection, autonomy, suitability analysis, wave solver, pipeline framework, build diagnostics, error parsing, code review, scaffold validation, notification system, gate caching, worktree management, four LLM backends (Anthropic API, Bedrock, OpenAI-compatible, CLI), constraint enforcement, configuration, dependency conflict detection, format detection, agent ID generation, and a unified error code catalog (60+ named codes across 8 domains). The CLI exposes 75+ commands. The web app ships 75+ React components with real-time SSE streaming, Base16 theming, and Bedrock SSO -- all embedded in a single Go binary.
+
+A 6-wave, 31-agent cascade refactor threading `context.Context` through the entire codebase surfaced two protocol tooling gaps during dogfooding: the E11 conflict predictor was blocking on every wave because it checked file names rather than hunk ranges (cascade patches legitimately touch the same file at different positions), and the E37 gate was blocking `prepare-wave` on warnings-only critic reports (violating its own documented semantics of "blocks on unresolved errors"). Both were fixed against the live IMPL doc rather than in a separate branch — the IMPL for the fixes and the IMPL being fixed coexisted in the same repo. This is the expected property of a self-hosting system.
 
 This is production infrastructure, not a proof of concept.

@@ -1,12 +1,29 @@
-# Pre-Wave Validation (E16, E37, E21A)
+# Pre-Wave Validation (E16, E35, E37, E21A)
 
 **Purpose:** This reference documents the validation gates that run after Scout produces an IMPL doc and before Wave agents launch.
 
-## E16: IMPL Doc Validation
+## Batch Command (Recommended)
 
 **When:** Immediately after Scout writes the IMPL doc, before human review.
 
 **Command:**
+```bash
+sawtools pre-wave-validate "<absolute-path-to-impl-doc>" --wave <N> --fix
+```
+
+**What it does:**
+- Runs E16 (IMPL doc structure validation)
+- Runs E35 (same-package caller detection)
+- Returns combined JSON output
+- Exit 0 = all passed, Exit 1 = any failed
+
+**Use this instead of separate `validate` calls** — batches synchronous checks for efficiency.
+
+## E16: IMPL Doc Validation
+
+**When:** Part of `pre-wave-validate` batch (or standalone via `sawtools validate --fix`).
+
+**Standalone command:**
 ```bash
 sawtools validate --fix "<absolute-path-to-impl-doc>"
 ```
@@ -48,6 +65,80 @@ The validator enforces presence of typed blocks. An IMPL doc missing any of thes
 Warnings about content that should be in typed blocks (e.g., dependency graph info in prose comments) appear in stdout but do **not** cause exit 1.
 
 **Handling:** Include E16C warnings in the correction prompt anyway, so Scout moves the content into proper typed blocks.
+
+## E35: Same-Package Caller Detection
+
+**When:** Part of `pre-wave-validate` batch, runs after E16 passes.
+
+**Purpose:** Detect E35 violations where an agent owns a function definition but not the call sites in the same package. Prevents post-merge build failures from signature mismatches.
+
+### How It Works
+
+1. Parse IMPL doc to get file ownership for target wave
+2. For each agent's owned files:
+   - Extract function/method declarations via Go AST
+   - Determine package via `go/build`
+3. For each function:
+   - Find all files in same package
+   - Search for call sites in files NOT owned by defining agent
+   - Report gaps with file:line references
+
+### Detection Scope
+
+**Detected:**
+- Exported functions (e.g., `CreateProgramWorktrees`)
+- Unexported functions (e.g., `helperFunc`)
+- Methods on types (e.g., `(r *Receiver) Method()`)
+- Same-package calls only
+
+**Not detected:**
+- Cross-package calls (different concern — E2 dependency analysis)
+- Test files (`*_test.go`) excluded from call site search
+
+### Exit Codes & Gap Handling
+
+**Exit 0:** No E35 gaps found → proceed to E37 (if triggered) or human review.
+
+**Exit 1:** E35 gaps detected → Scout must resolve before wave execution.
+
+**Resolution strategies:**
+1. **Reassign ownership:** Extend agent's `files` list to include caller files
+2. **Create wiring entry:** Add `wiring` block for cross-agent integration (if caller must stay with different agent)
+3. **Defer to integration wave:** Document in pre_mortem, handle post-merge
+
+### Output Format
+
+```json
+{
+  "validation": {"valid": true, "errors": []},
+  "e35_gaps": {
+    "passed": false,
+    "gaps": [
+      {
+        "agent": "C",
+        "function_name": "CreateProgramWorktrees",
+        "defined_in": "pkg/protocol/worktree.go",
+        "called_from": [
+          "pkg/protocol/program_tier_prepare.go:45",
+          "pkg/protocol/program_tier_prepare.go:82"
+        ],
+        "package": "github.com/.../pkg/protocol"
+      }
+    ]
+  }
+}
+```
+
+### Real-World Example
+
+**Problem:** Wave 1 of logging-injection-remaining IMPL:
+- Agent C owned `pkg/protocol/worktree.go` (defines `CreateProgramWorktrees`)
+- Agent B owned `pkg/protocol/program_tier_prepare.go` (calls `CreateProgramWorktrees`)
+- Agent C added `logger` parameter → build failed post-merge (unowned call sites had old signature)
+
+**E35 would catch:** `Agent C owns CreateProgramWorktrees but not its 2 callers in program_tier_prepare.go`
+
+**Resolution:** Extend Agent C's ownership to include `program_tier_prepare.go`, or create integration wave.
 
 ## E37: Critic Gate (Pre-Wave Brief Review)
 
@@ -140,12 +231,21 @@ If baseline passes, proceed with worktree creation and agent launches.
 
 **Scout flow (new IMPL):**
 1. Scout completes → Read IMPL doc
-2. Run E16 (this file § E16)
-3. If E37 triggered → Run E37 (this file § E37)
-4. Present for human review
+2. Run `sawtools pre-wave-validate` (combines E16 + E35)
+3. If validation failed → send errors to Scout for correction, retry once
+4. If E37 triggered → Run E37 (this file § E37)
+5. Present for human review
 
 **Existing IMPL flow (wave execution):**
 1. Check if critic already ran (non-empty `critic_report` field)
 2. If not and E37 triggered → Run E37
 3. Run `sawtools prepare-wave` → E21A executes automatically
 4. Launch wave agents
+
+**Retry procedure for E35 gaps:**
+1. Parse JSON output from `pre-wave-validate`
+2. If `e35_gaps.passed == false`, extract gaps list
+3. Send to Scout via resume: "E35 gaps detected. Resolve ownership:\n{gaps}"
+4. Scout updates IMPL doc (extends file_ownership or adds wiring entries)
+5. Re-run `pre-wave-validate` (retry once)
+6. On second failure: Enter BLOCKED, surface to human
