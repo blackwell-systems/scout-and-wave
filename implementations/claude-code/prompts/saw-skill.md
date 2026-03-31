@@ -42,11 +42,37 @@ Files in `${CLAUDE_SKILL_DIR}/` (defaults to `~/.claude/skills/saw/`). Read `age
 | `/saw bootstrap <name>` | Design new project from scratch |
 | `/saw scout [--model <m>] <feature>` | Analyze codebase and plan feature |
 | `/saw wave [--impl <id>] [--auto] [--model <m>]` | Execute next wave (auto-selects if 1 pending) |
+| `/saw auto [--model <m>] [--skip-confirm] "<feature>"` | Scout + confirm + wave in one command |
 | `/saw status [--impl <id>]` | Show progress (auto-selects if 1 pending) |
 | `/saw amend --add-wave / --redirect-agent <ID> / --extend-scope` | Modify active IMPL |
 | `/saw program plan/execute/status/replan` | Multi-IMPL coordination |
 | `/saw interview [--resume <path>] "<description>"` | Requirements gathering |
 
+
+**Auto flow** (`auto <feature-description>`):
+Collapses scout -> review -> wave into a single command. Human confirmation is
+preserved -- /saw auto eliminates command overhead, not the review step.
+
+1. Launch Scout agent (same as Scout flow step 1). Inform user.
+2. When Scout completes, read `docs/IMPL/IMPL-<feature-slug>.yaml`.
+3. **If NOT_SUITABLE:** Report verdict, reason, and suggested alternative. Stop.
+4. **E16+E35: Validate IMPL doc.** Same as Scout flow step 3.
+5. **Critic Gate (E37).** Same as Scout flow step 4.
+6. Report: verdict (SUITABLE or SUITABLE_WITH_CAVEATS), wave structure summary,
+   file ownership count, interface contract count. If SUITABLE_WITH_CAVEATS, show
+   caveats explicitly before asking for confirmation.
+7. **Scaffold Agent (conditional).** Same as Scout flow step 6.
+8. Ask: "Proceed with wave execution? [y/N]"
+   - N (or no input): "Auto flow cancelled. Review the IMPL doc and run `/saw wave` when ready." Stop.
+   - Y: continue.
+9. Execute waves with `--auto` behavior (I3: each wave waits for the prior wave to
+   merge and verify before proceeding). Equivalent to `/saw wave --auto` starting
+   at Wave 1.
+10. On any wave failure: stop and report. Do not proceed.
+11. On completion: report result (same as standard wave completion).
+
+**`--skip-confirm` flag (expert/CI only):** Omits step 8. Removes the human
+checkpoint entirely. NOT recommended for regular use.
 
 ## Pre-flight Validation
 
