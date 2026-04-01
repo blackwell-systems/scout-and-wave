@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## Version History
 
+## [Unreleased]
+
+### Added
+- **Multi-level I1 enforcement:** 6 defense-in-depth layers to prevent disjoint file ownership violations
+  - E3 validation (Layer 1) with test coverage
+  - Critic agent Check 9: i1_disjoint_ownership (Layer 2)
+  - PrepareWave fast-fail check (Layer 3)
+  - Scout agent I1 self-check reminder (step 7b)
+  - Protocol documentation update (invariants.md updated to 6 layers)
+- Critic agent Check 9 (i1_disjoint_ownership) validates file_ownership table before wave execution
+- PrepareWave early I1 check (line ~184) catches violations before worktree creation
+
+### Changed
+- `pkg/protocol/validation.go`: Added `ValidateI1DisjointOwnership` public wrapper for runtime enforcement
+- `pkg/engine/prepare.go`: Added i1_fast_fail step after load_manifest (defense-in-depth, existing I1 check at line 537 remains)
+- `critic-agent.md`: Added Check 9 (i1_disjoint_ownership) to verification suite (now 9 checks)
+- `scout.md`: Added step 7b I1 self-check reminder between steps 7 and 8
+- `protocol/invariants.md`: Updated I1 enforcement layers from 4 to 6 (inserted Layers 2-3, renumbered 2-3 to 4-5)
+
 | Version | Date | Headline |
 |---------|------|----------|
 | [0.77.0] | 2026-03-31 | `/saw auto` command — single-command entry point that collapses scout → review → wave into one invocation; suitability gate runs first (NOT_SUITABLE surfaces reason and stops), SUITABLE_WITH_CAVEATS pauses for human review, SUITABLE shows IMPL summary then confirms before waving with `--auto`; human checkpoint preserved in all paths; `--skip-confirm` flag for CI/expert use; `sawtools auto` Go subcommand added; README quick start, POSITION.md, and progressive disclosure doc updated |
