@@ -9,6 +9,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **Test cascade detection (E46):** Prevents orphaned test files when interfaces change
+  - Scout-time detection: grep for `*_test.go` files referencing changed interfaces
+  - E35 extension: `detectTestCascades()` function in e35_detection.go
+  - Documentation: execution rule E46 documents detection layers
+- `pkg/protocol/e35_detection.go`: New `detectTestCascades()` function for AST-based test file analysis
+- Scout agent now includes test cascade detection heuristic (step 4)
 - **Multi-level I1 enforcement:** 6 defense-in-depth layers to prevent disjoint file ownership violations
   - E3 validation (Layer 1) with test coverage
   - Critic agent Check 9: i1_disjoint_ownership (Layer 2)
@@ -19,6 +25,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - PrepareWave early I1 check (line ~184) catches violations before worktree creation
 
 ### Changed
+- `pkg/protocol/e35_detection.go`: Extended E35 to include test file orphan detection
+- `scout.md`: Added test file scanning to dependency analysis (step 4)
+- `protocol/execution-rules.md`: Added E46 (Test File Cascade Detection) rule
 - `pkg/protocol/validation.go`: Added `ValidateI1DisjointOwnership` public wrapper for runtime enforcement
 - `pkg/engine/prepare.go`: Added i1_fast_fail step after load_manifest (defense-in-depth, existing I1 check at line 537 remains)
 - `critic-agent.md`: Added Check 9 (i1_disjoint_ownership) to verification suite (now 9 checks)

@@ -10,7 +10,7 @@ This document defines the execution rules that govern orchestrator behavior duri
 
 ## Overview
 
-Rules are numbered E1–E45 for cross-referencing and audit; the same convention as invariants (I1–I6). When referenced in implementation files, the E-number serves as an anchor; implementations should embed the canonical definition verbatim alongside the reference.
+Rules are numbered E1–E46 for cross-referencing and audit; the same convention as invariants (I1–I6). When referenced in implementation files, the E-number serves as an anchor; implementations should embed the canonical definition verbatim alongside the reference.
 
 To audit consistency, search implementation files for `E{N}` and verify the embedded definitions match this document.
 
@@ -1962,6 +1962,34 @@ time. However, this is a late failure — E45 exists to prevent it proactively.
 
 ---
 
+## E46: Test File Cascade Detection
+
+**Trigger:** Scout planning phase (step 4: dependency analysis) OR pre-wave validation (E35 detection)
+
+**Required Action:** When an interface contract involves signature changes (parameter modifications, return type migration, method removal), detect test files that reference the interface and ensure they are assigned to an agent in the same wave.
+
+**Detection layers:**
+
+1. **Scout-time (primary):** During dependency analysis, Scout scans for `*_test.go` files that reference changed interfaces:
+   - For each interface contract with signature change keywords ("migrate", "update signature", "change return type")
+   - Run: `find <package-dir> -name "*_test.go" -exec grep -l "InterfaceName" {} \;`
+   - Assign orphaned test files to interface-changing agent OR create dedicated test-update agent
+
+2. **Pre-wave validation (E35 extension):** `sawtools pre-wave-validate` runs E35 detection, which includes test cascade detection via `detectTestCascades()`. Reports orphaned test files as E35Gap entries with CalledFrom pointing to test file locations.
+
+3. **Post-merge verification (future work):** Documented as third detection layer, but not implemented in this IMPL. Future enhancement: add `VerifyTestCompilation()` to finalize-wave workflow to run `go test -compile-only` and catch missed test cascades before quality gates.
+
+**Rationale:** Interface signature changes break test files that call the interface, but test files are often not included in file_ownership because Scout focuses on implementation files. Example from deps-review-fixes IMPL: Agent B changed LockFileParser.Parse signature, but 4 test files (cargolock_test.go, gosum_test.go, packagelock_test.go, poetrylock_test.go) were orphaned, causing 30 min of manual post-merge fixes.
+
+**Failure Handling:**
+- Scout-time detection prevents the issue (test files assigned to agent)
+- E35 pre-wave validation catches missed cases (blocks wave launch)
+- Post-merge verification is final safety net (blocks merge if tests don't compile)
+
+**Related Rules:** E35 (same-package caller detection), E3 (pre-launch ownership verification)
+
+---
+
 ## Cross-References
 
 - See `preconditions.md` for conditions that must hold before execution begins
@@ -1995,3 +2023,4 @@ time. However, this is a late failure — E45 exists to prevent it proactively.
 - E41: Type Collision Detection — pre-flight check during prepare-wave; AST-based detection of duplicate type/function/const names across agents in same package; blocks wave launch on collision — see also E3, E22, I1
 - E42: SubagentStop Validation — SubagentStop lifecycle hook validates protocol obligations before agent session closes; checks I1 ownership, I5 commit, and completion reports for wave agents; agent-type-specific validation matrix; exit 2 blocks completion — see also I1, I4, I5, E3, E21, E40
 - E45: Shared Data Structure Scaffold Detection — Scout scans agent tasks and file ownership to detect types referenced by 2+ agents; emits scaffold entries before Wave 1; prevents duplicate definitions and merge-time I1 violations — see also I2, E11, E22, `procedures.md` (Scout Agent step 10), `message-formats.md` (Scaffolds Section Format)
+- E46: Test File Cascade Detection — Scout and pre-wave validation detect test files referencing changed interfaces; test files assigned to same wave as interface changes to prevent orphaned tests; three detection layers (Scout-time, E35 extension, post-merge verification) — see also E35, E3, `procedures.md` (Scout Agent step 4)
