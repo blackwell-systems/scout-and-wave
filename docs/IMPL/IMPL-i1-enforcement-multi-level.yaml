@@ -2,461 +2,482 @@ title: Multi-Level I1 (Disjoint File Ownership) Enforcement
 feature_slug: i1-enforcement-multi-level
 verdict: SUITABLE
 suitability_assessment: |
-    **Problem:** Critic gate passed with 3 agents owning the same file (checker_test.go owned by agents A, G, H), violating I1 but not caught.
+  **Problem:** Critic gate passed with 3 agents owning the same file (checker_test.go owned by agents A, G, H), violating I1 but not caught.
 
-    **Suitability assessment:**
+  **Suitability assessment:**
 
-    1. **File decomposition:** 5 distinct files across 3 repos will be modified. Each enforcement layer touches different files:
-       - E16 validation: pkg/protocol/validation.go (Go SDK)
-       - Runtime enforcement: pkg/engine/prepare.go (Go SDK)
-       - Critic agent: implementations/claude-code/prompts/agents/critic-agent.md (protocol)
-       - Scout agent: implementations/claude-code/prompts/agents/scout.md (protocol)
-       - Invariants doc: protocol/invariants.md (protocol)
-       All changes are independent and can be parallelized.
+  1. **File decomposition:** 5 distinct files across 3 repos will be modified. Each enforcement layer touches different files:
+     - E16 validation: pkg/protocol/validation.go (Go SDK)
+     - Runtime enforcement: pkg/engine/prepare.go (Go SDK)
+     - Critic agent: implementations/claude-code/prompts/agents/critic-agent.md (protocol)
+     - Scout agent: implementations/claude-code/prompts/agents/scout.md (protocol)
+     - Invariants doc: protocol/invariants.md (protocol)
+     All changes are independent and can be parallelized.
 
-    2. **Investigation-first items:** None. The I1 check already exists in validation.go (validateI1DisjointOwnership function). We're adding defensive checks in additional layers, not debugging a failure.
+  2. **Investigation-first items:** None. The I1 check already exists in validation.go (validateI1DisjointOwnership function). We're adding defensive checks in additional layers, not debugging a failure.
 
-    3. **Interface discoverability:** No new cross-agent interfaces. Each agent adds a check to an existing pipeline stage.
+  3. **Interface discoverability:** No new cross-agent interfaces. Each agent adds a check to an existing pipeline stage.
 
-    4. **Pre-implementation status check:** I1 validation already implemented in pkg/protocol/validation.go:78-111 (validateI1DisjointOwnership). Critic agent has 8 existing checks. Runtime enforcement in prepare.go has no I1 fast-fail check yet (gap).
+  4. **Pre-implementation status check:** I1 validation already implemented in pkg/protocol/validation.go:78-111 (validateI1DisjointOwnership). Critic agent has 8 existing checks. Runtime enforcement in prepare.go has no I1 fast-fail check yet (gap).
 
-    5. **Parallelization value check:**
-       - Build/test cycle: 120s (go test ./...) — high parallelization benefit
-       - Files per agent: 1-2 files per agent
-       - Agent independence: Wave 1 fully parallel (2 agents), Wave 2 fully parallel (3 agents)
-       - Task complexity: Adds validation logic to existing pipelines (non-trivial)
+  5. **Parallelization value check:**
+     - Build/test cycle: 120s (go test ./...) — high parallelization benefit
+     - Files per agent: 1-2 files per agent
+     - Agent independence: Wave 1 fully parallel (2 agents), Wave 2 fully parallel (3 agents)
+     - Task complexity: Adds validation logic to existing pipelines (non-trivial)
 
-    **Estimated times:**
-    - Scout phase: ~8 min (multi-repo analysis, cross-repo coordination)
-    - Agent execution: ~12 min (5 agents × 3 min avg, 2 waves accounting for parallelism)
-    - Merge & verification: ~4 min
-    Total SAW time: ~24 min
+  **Estimated times:**
+  - Scout phase: ~8 min (multi-repo analysis, cross-repo coordination)
+  - Agent execution: ~12 min (5 agents × 3 min avg, 2 waves accounting for parallelism)
+  - Merge & verification: ~4 min
+  Total SAW time: ~24 min
 
-    Sequential baseline: ~25 min (5 agents × 5 min avg sequential time)
-    Time savings: ~1 min (4% faster)
+  Sequential baseline: ~25 min (5 agents × 5 min avg sequential time)
+  Time savings: ~1 min (4% faster)
 
-    **Recommendation:** Marginal speed gains, but high coordination value. The IMPL doc serves as an audit trail of defense-in-depth enforcement layers and ensures all 5 layers are implemented consistently. Proceed.
+  **Recommendation:** Marginal speed gains, but high coordination value. The IMPL doc serves as an audit trail of defense-in-depth enforcement layers and ensures all 5 layers are implemented consistently. Proceed.
 test_command: go test ./... -timeout 120s
 lint_command: go vet ./...
 file_ownership:
-    - file: pkg/protocol/validation.go
-      agent: A
-      wave: 1
-      action: modify
-      repo: scout-and-wave-go
-    - file: pkg/engine/prepare.go
-      agent: B
-      wave: 1
-      action: modify
-      repo: scout-and-wave-go
-    - file: implementations/claude-code/prompts/agents/critic-agent.md
-      agent: C
-      wave: 2
-      action: modify
-      repo: scout-and-wave
-    - file: implementations/claude-code/prompts/agents/scout.md
-      agent: D
-      wave: 2
-      action: modify
-      repo: scout-and-wave
-    - file: protocol/invariants.md
-      agent: E
-      wave: 2
-      action: modify
-      repo: scout-and-wave
-    - file: CHANGELOG.md
-      agent: F
-      wave: 2
-      action: modify
-      repo: scout-and-wave
+  - file: pkg/protocol/validation.go
+    agent: A
+    wave: 1
+    action: modify
+    repo: scout-and-wave-go
+  - file: pkg/engine/prepare.go
+    agent: B
+    wave: 1
+    action: modify
+    repo: scout-and-wave-go
+  - file: implementations/claude-code/prompts/agents/critic-agent.md
+    agent: C
+    wave: 2
+    action: modify
+    repo: scout-and-wave
+  - file: implementations/claude-code/prompts/agents/scout.md
+    agent: D
+    wave: 2
+    action: modify
+    repo: scout-and-wave
+  - file: protocol/invariants.md
+    agent: E
+    wave: 2
+    action: modify
+    repo: scout-and-wave
+  - file: CHANGELOG.md
+    agent: F
+    wave: 2
+    action: modify
+    repo: scout-and-wave
 interface_contracts:
-    - name: validateI1DisjointOwnership
-      description: E16 validation function that checks file_ownership table for duplicate entries within same wave
-      definition: |
-        func validateI1DisjointOwnership(m *IMPLManifest, slug string) []result.SAWError
-      location: pkg/protocol/validation.go
-    - name: PrepareWave
-      description: Wave preparation pipeline that creates worktrees and initializes agents
-      definition: |
-        func PrepareWave(ctx context.Context, opts PrepareWaveOpts) (*PrepareWaveResult, error)
-      location: pkg/engine/prepare.go
+  - name: validateI1DisjointOwnership
+    description: E16 validation function that checks file_ownership table for duplicate entries within same wave
+    definition: |
+      func validateI1DisjointOwnership(m *IMPLManifest, slug string) []result.SAWError
+    location: pkg/protocol/validation.go
+  - name: PrepareWave
+    description: Wave preparation pipeline that creates worktrees and initializes agents
+    definition: |
+      func PrepareWave(ctx context.Context, opts PrepareWaveOpts) (*PrepareWaveResult, error)
+    location: pkg/engine/prepare.go
 waves:
-    - number: 1
-      agents:
-        - id: A
-          task: |
-            **Role:** Add duplicate file ownership check to E16 validation (already exists; verify it's working correctly).
+  - number: 1
+    agents:
+      - id: A
+        task: |
+          **Role:** Add duplicate file ownership check to E16 validation (already exists; verify it's working correctly).
 
-            **What to implement:**
+          **What to implement:**
 
-            Read pkg/protocol/validation.go and verify that the existing validateI1DisjointOwnership function (lines 78-111) correctly detects duplicate file ownership within the same wave. The function already exists and works as follows:
+          Read pkg/protocol/validation.go and verify that the existing validateI1DisjointOwnership function (lines 78-111) correctly detects duplicate file ownership within the same wave. The function already exists and works as follows:
 
-            1. Builds a map of (wave, file) → agents
-            2. Checks for multiple owners in same wave
-            3. Returns CodeDisjointOwnership error if duplicates found
+          1. Builds a map of (wave, file) → agents
+          2. Checks for multiple owners in same wave
+          3. Returns CodeDisjointOwnership error if duplicates found
 
-            Your task: Add a test case to pkg/protocol/validation_test.go (or full_validate_test.go if that's where I1 tests live) that verifies the I1 check catches duplicate ownership:
+          Your task: Add a test case to pkg/protocol/validation_test.go (or full_validate_test.go if that's where I1 tests live) that verifies the I1 check catches duplicate ownership:
 
-            ```go
-            func TestValidateI1DisjointOwnership_CatchesDuplicates(t *testing.T) {
-                m := &IMPLManifest{
-                    FeatureSlug: "test-i1",
-                    FileOwnership: []FileOwnership{
-                        {File: "checker_test.go", Agent: "A", Wave: 1},
-                        {File: "checker_test.go", Agent: "G", Wave: 1},
-                        {File: "checker_test.go", Agent: "H", Wave: 1},
-                    },
-                    Waves: []Wave{
-                        {Number: 1, Agents: []Agent{
-                            {ID: "A", Files: []string{"checker_test.go"}},
-                            {ID: "G", Files: []string{"checker_test.go"}},
-                            {ID: "H", Files: []string{"checker_test.go"}},
-                        }},
-                    },
-                }
-                errs := validateI1DisjointOwnership(m, "test-i1")
-                if len(errs) == 0 {
-                    t.Fatal("expected I1 violation error, got none")
-                }
-                foundDisjoint := false
-                for _, e := range errs {
-                    if e.Code == result.CodeDisjointOwnership {
-                        foundDisjoint = true
-                        break
-                    }
-                }
-                if !foundDisjoint {
-                    t.Errorf("expected CodeDisjointOwnership error, got: %v", errs)
-                }
-            }
-            ```
+          ```go
+          func TestValidateI1DisjointOwnership_CatchesDuplicates(t *testing.T) {
+              m := &IMPLManifest{
+                  FeatureSlug: "test-i1",
+                  FileOwnership: []FileOwnership{
+                      {File: "checker_test.go", Agent: "A", Wave: 1},
+                      {File: "checker_test.go", Agent: "G", Wave: 1},
+                      {File: "checker_test.go", Agent: "H", Wave: 1},
+                  },
+                  Waves: []Wave{
+                      {Number: 1, Agents: []Agent{
+                          {ID: "A", Files: []string{"checker_test.go"}},
+                          {ID: "G", Files: []string{"checker_test.go"}},
+                          {ID: "H", Files: []string{"checker_test.go"}},
+                      }},
+                  },
+              }
+              errs := validateI1DisjointOwnership(m, "test-i1")
+              if len(errs) == 0 {
+                  t.Fatal("expected I1 violation error, got none")
+              }
+              foundDisjoint := false
+              for _, e := range errs {
+                  if e.Code == result.CodeDisjointOwnership {
+                      foundDisjoint = true
+                      break
+                  }
+              }
+              if !foundDisjoint {
+                  t.Errorf("expected CodeDisjointOwnership error, got: %v", errs)
+              }
+          }
+          ```
 
-            Run `go test ./pkg/protocol/... -run TestValidateI1` to verify the test passes.
+          Run `go test ./pkg/protocol/... -run TestValidateI1` to verify the test passes.
 
-            **Verification gate:**
-            ```bash
-            cd /Users/dayna.blackwell/code/scout-and-wave-go
-            go build ./pkg/protocol/...
-            go vet ./pkg/protocol/...
-            go test ./pkg/protocol/... -run TestValidateI1 -timeout 30s
-            ```
+          **Verification gate:**
+          ```bash
+          cd /Users/dayna.blackwell/code/scout-and-wave-go
+          go build ./pkg/protocol/...
+          go vet ./pkg/protocol/...
+          go test ./pkg/protocol/... -run TestValidateI1 -timeout 30s
+          ```
 
-            **Constraints:**
-            - The existing validateI1DisjointOwnership function is correct; do not modify it
-            - Only add test coverage to verify it works
-            - If validation_test.go doesn't exist, create it in pkg/protocol/
-          files:
-            - pkg/protocol/validation.go
-        - id: B
-          task: |
-            **Role:** Add fast-fail I1 check early in PrepareWave runtime enforcement.
+          **Constraints:**
+          - The existing validateI1DisjointOwnership function is correct; do not modify it
+          - Only add test coverage to verify it works
+          - If validation_test.go doesn't exist, create it in pkg/protocol/
+        files:
+          - pkg/protocol/validation.go
+      - id: B
+        task: |
+          **Role:** Add fast-fail I1 check early in PrepareWave runtime enforcement.
 
-            **What to implement:**
+          **What to implement:**
 
-            Read pkg/engine/prepare.go and note that there's already an I1 check at line 537 (labeled "I1 disjoint ownership verification (E3)"). That check runs late in the pipeline, after many steps have already completed. Your task is to add an EARLIER fast-fail check that runs immediately after the manifest is loaded (around line 184, after "load_manifest" step completes).
+          Read pkg/engine/prepare.go and note that there's already an I1 check at line 537 (labeled "I1 disjoint ownership verification (E3)"). That check runs late in the pipeline, after many steps have already completed. Your task is to add an EARLIER fast-fail check that runs immediately after the manifest is loaded (around line 184, after "load_manifest" step completes).
 
-            **Part 1: Add public wrapper function to pkg/protocol/validation.go**
+          **Part 1: Add public wrapper function to pkg/protocol/validation.go**
 
-            The existing validateI1DisjointOwnership function (line 80) is private. Add a public wrapper after it:
+          The existing validateI1DisjointOwnership function (line 80) is private. Add a public wrapper after it:
 
-            ```go
-            // ValidateI1DisjointOwnership is a public wrapper around validateI1DisjointOwnership
-            // for use by prepare-wave runtime enforcement. It validates I1 compliance for a
-            // specific wave number by filtering the file_ownership table.
-            func ValidateI1DisjointOwnership(m *IMPLManifest, waveNum int) []result.SAWError {
-                // Build a filtered manifest with only this wave's ownership entries
-                filtered := &IMPLManifest{
-                    FeatureSlug: m.FeatureSlug,
-                    FileOwnership: []FileOwnership{},
-                }
-                for _, fo := range m.FileOwnership {
-                    if fo.Wave == waveNum {
-                        filtered.FileOwnership = append(filtered.FileOwnership, fo)
-                    }
-                }
-                return validateI1DisjointOwnership(filtered, m.FeatureSlug)
-            }
-            ```
+          ```go
+          // ValidateI1DisjointOwnership is a public wrapper around validateI1DisjointOwnership
+          // for use by prepare-wave runtime enforcement. It validates I1 compliance for a
+          // specific wave number by filtering the file_ownership table.
+          func ValidateI1DisjointOwnership(m *IMPLManifest, waveNum int) []result.SAWError {
+              // Build a filtered manifest with only this wave's ownership entries
+              filtered := &IMPLManifest{
+                  FeatureSlug: m.FeatureSlug,
+                  FileOwnership: []FileOwnership{},
+              }
+              for _, fo := range m.FileOwnership {
+                  if fo.Wave == waveNum {
+                      filtered.FileOwnership = append(filtered.FileOwnership, fo)
+                  }
+              }
+              return validateI1DisjointOwnership(filtered, m.FeatureSlug)
+          }
+          ```
 
-            **Part 2: Add early I1 check to pkg/engine/prepare.go**
+          **Part 2: Add early I1 check to pkg/engine/prepare.go**
 
-            Insert after line 184 (after "load_manifest" recordStep call), before the wave_sequencing check:
+          Insert after line 184 (after "load_manifest" recordStep call), before the wave_sequencing check:
 
-            ```go
-            // Step: I1 fast-fail check (early detection)
-            // This runs before wave_sequencing and other expensive operations to catch
-            // Scout planning errors immediately. The existing I1 check at line 537 remains
-            // as defense-in-depth but runs later in the pipeline.
-            i1Errs := protocol.ValidateI1DisjointOwnership(doc, opts.WaveNum)
-            if len(i1Errs) > 0 {
-                var errMsgs []string
-                for _, e := range i1Errs {
-                    errMsgs = append(errMsgs, e.Message)
-                }
-                detail := fmt.Sprintf("I1 violation detected: %s", strings.Join(errMsgs, "; "))
-                recordStep(res, opts.OnEvent, "i1_fast_fail", "failed", detail)
-                return res, fmt.Errorf("I1 violation: %s", detail)
-            }
-            recordStep(res, opts.OnEvent, "i1_fast_fail", "success", "No duplicate file ownership (early check)")
-            ```
+          ```go
+          // Step: I1 fast-fail check (early detection)
+          // This runs before wave_sequencing and other expensive operations to catch
+          // Scout planning errors immediately. The existing I1 check at line 537 remains
+          // as defense-in-depth but runs later in the pipeline.
+          i1Errs := protocol.ValidateI1DisjointOwnership(doc, opts.WaveNum)
+          if len(i1Errs) > 0 {
+              var errMsgs []string
+              for _, e := range i1Errs {
+                  errMsgs = append(errMsgs, e.Message)
+              }
+              detail := fmt.Sprintf("I1 violation detected: %s", strings.Join(errMsgs, "; "))
+              recordStep(res, opts.OnEvent, "i1_fast_fail", "failed", detail)
+              return res, fmt.Errorf("I1 violation: %s", detail)
+          }
+          recordStep(res, opts.OnEvent, "i1_fast_fail", "success", "No duplicate file ownership (early check)")
+          ```
 
-            **Verification gate:**
-            ```bash
-            cd /Users/dayna.blackwell/code/scout-and-wave-go
-            go build ./pkg/protocol/...
-            go build ./pkg/engine/...
-            go vet ./pkg/protocol/...
-            go vet ./pkg/engine/...
-            go test ./pkg/engine/... -run TestPrepareWave -timeout 30s
-            ```
+          **Verification gate:**
+          ```bash
+          cd /Users/dayna.blackwell/code/scout-and-wave-go
+          go build ./pkg/protocol/...
+          go build ./pkg/engine/...
+          go vet ./pkg/protocol/...
+          go vet ./pkg/engine/...
+          go test ./pkg/engine/... -run TestPrepareWave -timeout 30s
+          ```
 
-            **Constraints:**
-            - Add the public wrapper function ValidateI1DisjointOwnership to pkg/protocol/validation.go
-            - Insert the early I1 check after line 184 (after load_manifest completes)
-            - Use recordStep with step name "i1_fast_fail" to distinguish from existing I1 check at line 537
-            - Do NOT remove the existing I1 check at line 537 (both checks provide defense-in-depth)
-          files:
-            - pkg/engine/prepare.go
-    - number: 2
-      agents:
-        - id: C
-          task: |
-            **Role:** Add I1 validation as Check 9 to critic agent verification suite.
+          **Constraints:**
+          - Add the public wrapper function ValidateI1DisjointOwnership to pkg/protocol/validation.go
+          - Insert the early I1 check after line 184 (after load_manifest completes)
+          - Use recordStep with step name "i1_fast_fail" to distinguish from existing I1 check at line 537
+          - Do NOT remove the existing I1 check at line 537 (both checks provide defense-in-depth)
+        files:
+          - pkg/engine/prepare.go
+    base_commit: 44fa099323eaed4d2f3ca8aa3525f3def26f6190
+  - number: 2
+    agents:
+      - id: C
+        task: |
+          **Role:** Add I1 validation as Check 9 to critic agent verification suite.
 
-            **What to implement:**
+          **What to implement:**
 
-            Read implementations/claude-code/prompts/agents/critic-agent.md. The verification checks section currently has 8 checks (Check 1 through Check 8: caller_exhaustiveness at line 125). Add a NEW Check 9 after caller_exhaustiveness:
+          Read implementations/claude-code/prompts/agents/critic-agent.md. The verification checks section currently has 8 checks (Check 1 through Check 8: caller_exhaustiveness at line 125). Add a NEW Check 9 after caller_exhaustiveness:
 
-            Find the line that says `### Check 8: caller_exhaustiveness` (around line 125). After that check's description ends (before the "<!-- Inlined from references/critic-agent-completion-format.md -->" comment at line 137), insert:
+          Find the line that says `### Check 8: caller_exhaustiveness` (around line 125). After that check's description ends (before the "<!-- Inlined from references/critic-agent-completion-format.md -->" comment at line 137), insert:
 
-            ```markdown
-            ### Check 9: i1_disjoint_ownership
-            For each wave in the IMPL doc, verify that no file appears in file_ownership with multiple agent IDs for the same wave number:
-            - Build a map of (wave, file) → list of agent IDs
-            - For each (wave, file) key with more than 1 agent ID: severity: error, check: i1_disjoint_ownership, description: "File X is owned by agents [A, G, H] in wave N — violates I1 disjoint ownership"
-            - If a file is owned by different agents in different waves, this is allowed (sequential modification)
-            This check catches Scout planning errors that violate the I1 invariant before wave execution.
-            ```
+          ```markdown
+          ### Check 9: i1_disjoint_ownership
+          For each wave in the IMPL doc, verify that no file appears in file_ownership with multiple agent IDs for the same wave number:
+          - Build a map of (wave, file) → list of agent IDs
+          - For each (wave, file) key with more than 1 agent ID: severity: error, check: i1_disjoint_ownership, description: "File X is owned by agents [A, G, H] in wave N — violates I1 disjoint ownership"
+          - If a file is owned by different agents in different waves, this is allowed (sequential modification)
+          This check catches Scout planning errors that violate the I1 invariant before wave execution.
+          ```
 
-            No other changes needed. The critic agent will automatically include Check 9 in its per-agent review loop since it processes all checks in the verification section sequentially.
+          No other changes needed. The critic agent will automatically include Check 9 in its per-agent review loop since it processes all checks in the verification section sequentially.
 
-            **Verification gate:**
-            ```bash
-            cd /Users/dayna.blackwell/code/scout-and-wave
-            grep -A 5 "### Check 9: i1_disjoint_ownership" implementations/claude-code/prompts/agents/critic-agent.md
-            grep -c "### Check" implementations/claude-code/prompts/agents/critic-agent.md | grep 9
-            echo "Verification: Check 9 exists in critic agent prompt"
-            ```
+          **Verification gate:**
+          ```bash
+          cd /Users/dayna.blackwell/code/scout-and-wave
+          grep -A 5 "### Check 9: i1_disjoint_ownership" implementations/claude-code/prompts/agents/critic-agent.md
+          grep -c "### Check" implementations/claude-code/prompts/agents/critic-agent.md | grep 9
+          echo "Verification: Check 9 exists in critic agent prompt"
+          ```
 
-            **Constraints:**
-            - Insert after Check 8 (caller_exhaustiveness), before the completion format comment
-            - Use severity: error (blocking)
-            - Error message must list all agents that own the same file in the same wave
-            - This will be the 9th check (currently only 8 exist)
-          files:
-            - implementations/claude-code/prompts/agents/critic-agent.md
-        - id: D
-          task: |
-            **Role:** Add I1 self-check reminder as a new sub-step in scout agent prompt.
+          **Constraints:**
+          - Insert after Check 8 (caller_exhaustiveness), before the completion format comment
+          - Use severity: error (blocking)
+          - Error message must list all agents that own the same file in the same wave
+          - This will be the 9th check (currently only 8 exist)
+        files:
+          - implementations/claude-code/prompts/agents/critic-agent.md
+      - id: D
+        task: |
+          **Role:** Add I1 self-check reminder as a new sub-step in scout agent prompt.
 
-            **What to implement:**
+          **What to implement:**
 
-            Read implementations/claude-code/prompts/agents/scout.md. The "Implementation Process" section currently has steps 1-18. Step 7 ("Assign file ownership and agent IDs") is at line 464, followed directly by step 8 ("Structure waves from the DAG") at line 484.
+          Read implementations/claude-code/prompts/agents/scout.md. The "Implementation Process" section currently has steps 1-18. Step 7 ("Assign file ownership and agent IDs") is at line 464, followed directly by step 8 ("Structure waves from the DAG") at line 484.
 
-            **Part 1: Insert new step 7b between steps 7 and 8**
+          **Part 1: Insert new step 7b between steps 7 and 8**
 
-            After step 7 ends (around line 483, just before the line "8. **Structure waves from the DAG.**"), insert:
+          After step 7 ends (around line 483, just before the line "8. **Structure waves from the DAG.**"), insert:
 
-            ```markdown
-            7b. **I1 self-check (mandatory).** After assigning file ownership, verify disjoint ownership within each wave:
-                - For each wave, list all files in file_ownership for that wave
-                - Check: does any file appear more than once in the same wave?
-                - If yes: restructure ownership (extract interface, split file, or move to sequential waves)
-                - This check prevents I1 violations at planning time — do not skip it
-            ```
+          ```markdown
+          7b. **I1 self-check (mandatory).** After assigning file ownership, verify disjoint ownership within each wave:
+              - For each wave, list all files in file_ownership for that wave
+              - Check: does any file appear more than once in the same wave?
+              - If yes: restructure ownership (extract interface, split file, or move to sequential waves)
+              - This check prevents I1 violations at planning time — do not skip it
+          ```
 
-            **Part 2: Update CRITICAL INVARIANTS section**
+          **Part 2: Update CRITICAL INVARIANTS section**
 
-            The CRITICAL INVARIANTS section starts at line 114. The I1 section ends around line 121 ("If two tasks need the same file: extract interfaces, split files, or sequence into different waves"). Insert a new paragraph after line 121, before the I2 section starts (line 123):
+          The CRITICAL INVARIANTS section starts at line 114. The I1 section ends around line 121 ("If two tasks need the same file: extract interfaces, split files, or sequence into different waves"). Insert a new paragraph after line 121, before the I2 section starts (line 123):
 
-            ```markdown
+          ```markdown
 
-            **I1 validation checkpoint:** After assigning file ownership (step 7), run a manual I1 check before proceeding to step 8: for each wave, verify no file appears multiple times in file_ownership with different agent IDs. If duplicates exist, restructure using the options in step 7b.
-            ```
+          **I1 validation checkpoint:** After assigning file ownership (step 7), run a manual I1 check before proceeding to step 8: for each wave, verify no file appears multiple times in file_ownership with different agent IDs. If duplicates exist, restructure using the options in step 7b.
+          ```
 
-            **Verification gate:**
-            ```bash
-            cd /Users/dayna.blackwell/code/scout-and-wave
-            grep -A 4 "7b\. \*\*I1 self-check" implementations/claude-code/prompts/agents/scout.md
-            grep "Validation checkpoint.*step 7" implementations/claude-code/prompts/agents/scout.md
-            echo "Verification: I1 self-check reminder exists in scout prompt"
-            ```
+          **Verification gate:**
+          ```bash
+          cd /Users/dayna.blackwell/code/scout-and-wave
+          grep -A 4 "7b\. \*\*I1 self-check" implementations/claude-code/prompts/agents/scout.md
+          grep "Validation checkpoint.*step 7" implementations/claude-code/prompts/agents/scout.md
+          echo "Verification: I1 self-check reminder exists in scout prompt"
+          ```
 
-            **Constraints:**
-            - Insert step 7b between step 7 (line 464) and step 8 (line 484)
-            - Mark as mandatory (do not skip)
-            - Emphasize restructuring options (extract interface, split file, sequential waves)
-            - Add validation checkpoint to CRITICAL INVARIANTS (I1 section)
-          files:
-            - implementations/claude-code/prompts/agents/scout.md
-        - id: E
-          task: |
-            **Role:** Update protocol/invariants.md to document 6-layer defense-in-depth enforcement (insert 2 new layers).
+          **Constraints:**
+          - Insert step 7b between step 7 (line 464) and step 8 (line 484)
+          - Mark as mandatory (do not skip)
+          - Emphasize restructuring options (extract interface, split file, sequential waves)
+          - Add validation checkpoint to CRITICAL INVARIANTS (I1 section)
+        files:
+          - implementations/claude-code/prompts/agents/scout.md
+      - id: E
+        task: |
+          **Role:** Update protocol/invariants.md to document 6-layer defense-in-depth enforcement (insert 2 new layers).
 
-            **What to implement:**
+          **What to implement:**
 
-            Read protocol/invariants.md. The "I1 Enforcement Layers (Defense-in-Depth)" section (starting line 29) currently has 4 layers numbered 0-3:
-            - Layer 0: E43 hooks
-            - Layer 1: E3 validation (pre-launch)
-            - Layer 2: E11 conflict prediction (pre-merge)
-            - Layer 3: E42 SubagentStop (post-completion)
+          Read protocol/invariants.md. The "I1 Enforcement Layers (Defense-in-Depth)" section (starting line 29) currently has 4 layers numbered 0-3:
+          - Layer 0: E43 hooks
+          - Layer 1: E3 validation (pre-launch)
+          - Layer 2: E11 conflict prediction (pre-merge)
+          - Layer 3: E42 SubagentStop (post-completion)
 
-            Your task: INSERT two new layers (Critic gate and PrepareWave runtime) and RENUMBER the existing layers 2-3 to become 4-5. The new structure will be:
+          Your task: INSERT two new layers (Critic gate and PrepareWave runtime) and RENUMBER the existing layers 2-3 to become 4-5. The new structure will be:
 
-            **Replace the entire bullet list (lines 33-38) with:**
+          **Replace the entire bullet list (lines 33-38) with:**
 
-            ```markdown
-            - **Layer 0 (E43 hooks):** PreToolUse validation blocks writes outside worktree boundaries at the tool invocation boundary. This is the **primary enforcement mechanism** in Claude Code orchestration. The `validate_write_paths` hook (E43) prevents violations before they occur by blocking relative paths and out-of-bounds writes with exit code 2. Other platforms must implement equivalent tool-boundary enforcement or rely on Layer 5 (Field 0 self-verification).
-            - **Layer 1 (E3 validation):** Pre-launch ownership table validation. The orchestrator validates the `file_ownership` table for disjoint ownership before creating worktrees, catching Scout planning errors early.
-            - **Layer 2 (Critic gate E37):** Pre-wave brief review. The Critic Agent runs Check 9 (i1_disjoint_ownership) on the file_ownership table before the IMPL doc enters REVIEWED state. Any duplicate file ownership within a wave is flagged as an error and blocks wave execution.
-            - **Layer 3 (PrepareWave runtime):** Fast-fail check at start of prepare-wave. The engine runs `ValidateI1DisjointOwnership()` immediately after loading the manifest, catching validation gaps before creating worktrees.
-            - **Layer 4 (E11 conflict prediction):** Pre-merge `files_changed` intersection check. Before any merge proceeds, the orchestrator cross-references all agents' `files_changed` and `files_created` lists to detect runtime deviations where an agent touched files outside its declared scope.
-            - **Layer 5 (E42 SubagentStop):** Post-completion ownership audit. The SubagentStop hook runs `git diff --name-only` in the worktree and compares changed files against the agent's ownership list from `.saw-ownership.json`. Any unowned modified file triggers exit 2 with an I1 violation message.
-            ```
+          ```markdown
+          - **Layer 0 (E43 hooks):** PreToolUse validation blocks writes outside worktree boundaries at the tool invocation boundary. This is the **primary enforcement mechanism** in Claude Code orchestration. The `validate_write_paths` hook (E43) prevents violations before they occur by blocking relative paths and out-of-bounds writes with exit code 2. Other platforms must implement equivalent tool-boundary enforcement or rely on Layer 5 (Field 0 self-verification).
+          - **Layer 1 (E3 validation):** Pre-launch ownership table validation. The orchestrator validates the `file_ownership` table for disjoint ownership before creating worktrees, catching Scout planning errors early.
+          - **Layer 2 (Critic gate E37):** Pre-wave brief review. The Critic Agent runs Check 9 (i1_disjoint_ownership) on the file_ownership table before the IMPL doc enters REVIEWED state. Any duplicate file ownership within a wave is flagged as an error and blocks wave execution.
+          - **Layer 3 (PrepareWave runtime):** Fast-fail check at start of prepare-wave. The engine runs `ValidateI1DisjointOwnership()` immediately after loading the manifest, catching validation gaps before creating worktrees.
+          - **Layer 4 (E11 conflict prediction):** Pre-merge `files_changed` intersection check. Before any merge proceeds, the orchestrator cross-references all agents' `files_changed` and `files_created` lists to detect runtime deviations where an agent touched files outside its declared scope.
+          - **Layer 5 (E42 SubagentStop):** Post-completion ownership audit. The SubagentStop hook runs `git diff --name-only` in the worktree and compares changed files against the agent's ownership list from `.saw-ownership.json`. Any unowned modified file triggers exit 2 with an I1 violation message.
+          ```
 
-            **Update the "Result:" paragraph (around line 38) to:**
+          **Update the "Result:" paragraph (around line 38) to:**
 
-            ```markdown
-            **Result:** I1 violations are structurally prevented (Layer 0), validated at planning time (Layers 1-2), detected at runtime (Layer 3), caught at merge time (Layer 4), and audited at completion time (Layer 5). All layers remain active; E43 does not replace the others.
-            ```
+          ```markdown
+          **Result:** I1 violations are structurally prevented (Layer 0), validated at planning time (Layers 1-2), detected at runtime (Layer 3), caught at merge time (Layer 4), and audited at completion time (Layer 5). All layers remain active; E43 does not replace the others.
+          ```
 
-            **Verification gate:**
-            ```bash
-            cd /Users/dayna.blackwell/code/scout-and-wave
-            grep -c "Layer [0-5]" protocol/invariants.md | grep 6
-            grep "Layer 2 (Critic gate E37)" protocol/invariants.md
-            grep "Layer 3 (PrepareWave runtime)" protocol/invariants.md
-            echo "Verification: 6-layer enforcement documented (0-5)"
-            ```
+          **Verification gate:**
+          ```bash
+          cd /Users/dayna.blackwell/code/scout-and-wave
+          grep -c "Layer [0-5]" protocol/invariants.md | grep 6
+          grep "Layer 2 (Critic gate E37)" protocol/invariants.md
+          grep "Layer 3 (PrepareWave runtime)" protocol/invariants.md
+          echo "Verification: 6-layer enforcement documented (0-5)"
+          ```
 
-            **Constraints:**
-            - Replace the existing 4-layer bullet list (lines 33-38) with the new 6-layer list
-            - Keep Layer 0 and Layer 1 unchanged (just update E3→E16 reference in Layer 1 is optional)
-            - INSERT new Layers 2-3, RENUMBER old Layers 2-3 to become 4-5
-            - Update the Result paragraph to mention 6 layers (0-5)
-          files:
-            - protocol/invariants.md
-        - id: F
-          task: |
-            **Role:** Create [Unreleased] section in CHANGELOG.md and document I1 enforcement changes.
+          **Constraints:**
+          - Replace the existing 4-layer bullet list (lines 33-38) with the new 6-layer list
+          - Keep Layer 0 and Layer 1 unchanged (just update E3→E16 reference in Layer 1 is optional)
+          - INSERT new Layers 2-3, RENUMBER old Layers 2-3 to become 4-5
+          - Update the Result paragraph to mention 6 layers (0-5)
+        files:
+          - protocol/invariants.md
+      - id: F
+        task: |
+          **Role:** Create [Unreleased] section in CHANGELOG.md and document I1 enforcement changes.
 
-            **What to implement:**
+          **What to implement:**
 
-            Read CHANGELOG.md. The file currently has no [Unreleased] section — the latest entry is version 0.77.0 at line 11. Your task is to CREATE a new [Unreleased] section at the top of the version history.
+          Read CHANGELOG.md. The file currently has no [Unreleased] section — the latest entry is version 0.77.0 at line 11. Your task is to CREATE a new [Unreleased] section at the top of the version history.
 
-            **Part 1: Add [Unreleased] section**
+          **Part 1: Add [Unreleased] section**
 
-            After the "## Version History" line (line 7) and before the version table starts (line 9), insert:
+          After the "## Version History" line (line 7) and before the version table starts (line 9), insert:
 
-            ```markdown
-            ## [Unreleased]
+          ```markdown
+          ## [Unreleased]
 
-            ### Added
-            - **Multi-level I1 enforcement:** 6 defense-in-depth layers to prevent disjoint file ownership violations
-              - E3 validation (Layer 1) with test coverage
-              - Critic agent Check 9: i1_disjoint_ownership (Layer 2)
-              - PrepareWave fast-fail check (Layer 3)
-              - Scout agent I1 self-check reminder (step 7b)
-              - Protocol documentation update (invariants.md updated to 6 layers)
-            - Critic agent Check 9 (i1_disjoint_ownership) validates file_ownership table before wave execution
-            - PrepareWave early I1 check (line ~184) catches violations before worktree creation
+          ### Added
+          - **Multi-level I1 enforcement:** 6 defense-in-depth layers to prevent disjoint file ownership violations
+            - E3 validation (Layer 1) with test coverage
+            - Critic agent Check 9: i1_disjoint_ownership (Layer 2)
+            - PrepareWave fast-fail check (Layer 3)
+            - Scout agent I1 self-check reminder (step 7b)
+            - Protocol documentation update (invariants.md updated to 6 layers)
+          - Critic agent Check 9 (i1_disjoint_ownership) validates file_ownership table before wave execution
+          - PrepareWave early I1 check (line ~184) catches violations before worktree creation
 
-            ### Changed
-            - `pkg/protocol/validation.go`: Added `ValidateI1DisjointOwnership` public wrapper for runtime enforcement
-            - `pkg/engine/prepare.go`: Added i1_fast_fail step after load_manifest (defense-in-depth, existing I1 check at line 537 remains)
-            - `critic-agent.md`: Added Check 9 (i1_disjoint_ownership) to verification suite (now 9 checks)
-            - `scout.md`: Added step 7b I1 self-check reminder between steps 7 and 8
-            - `protocol/invariants.md`: Updated I1 enforcement layers from 4 to 6 (inserted Layers 2-3, renumbered 2-3 to 4-5)
+          ### Changed
+          - `pkg/protocol/validation.go`: Added `ValidateI1DisjointOwnership` public wrapper for runtime enforcement
+          - `pkg/engine/prepare.go`: Added i1_fast_fail step after load_manifest (defense-in-depth, existing I1 check at line 537 remains)
+          - `critic-agent.md`: Added Check 9 (i1_disjoint_ownership) to verification suite (now 9 checks)
+          - `scout.md`: Added step 7b I1 self-check reminder between steps 7 and 8
+          - `protocol/invariants.md`: Updated I1 enforcement layers from 4 to 6 (inserted Layers 2-3, renumbered 2-3 to 4-5)
 
-            ```
+          ```
 
-            **Part 2: No critic-agent.md edits needed**
+          **Part 2: No critic-agent.md edits needed**
 
-            Agent C will handle the critic-agent.md changes. You do not need to modify that file.
+          Agent C will handle the critic-agent.md changes. You do not need to modify that file.
 
-            **Verification gate:**
-            ```bash
-            cd /Users/dayna.blackwell/code/scout-and-wave
-            grep "## \[Unreleased\]" CHANGELOG.md
-            grep -A 8 "## \[Unreleased\]" CHANGELOG.md | grep "Multi-level I1 enforcement"
-            echo "Verification: [Unreleased] section exists with I1 enforcement entry"
-            ```
+          **Verification gate:**
+          ```bash
+          cd /Users/dayna.blackwell/code/scout-and-wave
+          grep "## \[Unreleased\]" CHANGELOG.md
+          grep -A 8 "## \[Unreleased\]" CHANGELOG.md | grep "Multi-level I1 enforcement"
+          echo "Verification: [Unreleased] section exists with I1 enforcement entry"
+          ```
 
-            **Constraints:**
-            - INSERT new [Unreleased] section after line 7, before the version table
-            - Follow existing CHANGELOG format (### Added, ### Changed headers)
-            - Mention 6 layers (not 5) to match Agent E's updated invariants.md
-            - Keep entries concise but specific (mention file names and layer numbers)
-            - Do not version the release (leave as [Unreleased])
-          files:
-            - CHANGELOG.md
+          **Constraints:**
+          - INSERT new [Unreleased] section after line 7, before the version table
+          - Follow existing CHANGELOG format (### Added, ### Changed headers)
+          - Mention 6 layers (not 5) to match Agent E's updated invariants.md
+          - Keep entries concise but specific (mention file names and layer numbers)
+          - Do not version the release (leave as [Unreleased])
+        files:
+          - CHANGELOG.md
 quality_gates:
-    level: standard
-    gates:
-        - type: build
-          command: go build ./...
-          required: true
-          repo: scout-and-wave-go
-        - type: lint
-          command: go vet ./...
-          required: true
-          repo: scout-and-wave-go
-        - type: test
-          command: go test ./pkg/protocol/... -timeout 120s
-          required: true
-          repo: scout-and-wave-go
+  level: standard
+  gates:
+    - type: build
+      command: go build ./...
+      required: true
+      repo: scout-and-wave-go
+    - type: lint
+      command: go vet ./...
+      required: true
+      repo: scout-and-wave-go
+    - type: test
+      command: go test ./pkg/protocol/... -timeout 120s
+      required: true
+      repo: scout-and-wave-go
+completion_reports:
+  A:
+    status: complete
+    branch: saw/i1-enforcement-multi-level/wave1-agent-A
+    commit: fb3a752
+    files_changed:
+      - pkg/protocol/validation_test.go
+    tests_added:
+      - TestValidateI1DisjointOwnership_CatchesDuplicates
+    verification: PASS
+    notes: Added test case verifying I1 validation catches 3+ agents owning same file in same wave. Existing validateI1DisjointOwnership function works correctly. All tests passing.
+  B:
+    status: complete
+    branch: saw/i1-enforcement-multi-level/wave1-agent-B
+    commit: f8d47b9
+    files_changed:
+      - pkg/protocol/validation.go
+      - pkg/engine/prepare.go
+    verification: PASS
+    notes: Added public ValidateI1DisjointOwnership wrapper to pkg/protocol/validation.go. Early I1 check now runs immediately after manifest load (line 184 in prepare.go) before expensive operations. Existing defense-in-depth check at line 537 preserved. All verification gates pass.
 pre_mortem:
-    overall_risk: low
-    rows:
-        - scenario: E16 validation already catches I1 violations; new checks may be redundant
-          likelihood: medium
-          impact: low
-          mitigation: Verified that validateI1DisjointOwnership exists in validation.go:78-111. New layers add defense-in-depth but don't duplicate logic. Each layer checks at a different lifecycle stage (planning, pre-wave, runtime, merge, post-completion).
-        - scenario: Cross-repo file ownership complicates I1 validation (repo field may be missing)
-          likelihood: low
-          impact: medium
-          mitigation: I1 check already handles cross-repo via file path comparison only. Repo field is metadata for UI display, not part of uniqueness check. validateI1DisjointOwnership uses (wave, file) as key, not (wave, repo, file).
-        - scenario: Critic agent Check 9 duplicates E16 validation work
-          likelihood: high
-          impact: low
-          mitigation: 'Acceptable duplication. Critic runs after Scout, before wave execution. E16 runs at prepare-wave time. Both are needed: critic catches planning errors at review time; E16 catches gaps that passed review.'
-        - scenario: PrepareWave runtime check may slow down wave launches
-          likelihood: low
-          impact: low
-          mitigation: I1 check is O(n) where n = number of file_ownership entries in wave. Typical wave has 10-30 entries. Check runs once at prepare-wave start, adds <1ms overhead.
+  overall_risk: low
+  rows:
+    - scenario: E16 validation already catches I1 violations; new checks may be redundant
+      likelihood: medium
+      impact: low
+      mitigation: Verified that validateI1DisjointOwnership exists in validation.go:78-111. New layers add defense-in-depth but don't duplicate logic. Each layer checks at a different lifecycle stage (planning, pre-wave, runtime, merge, post-completion).
+    - scenario: Cross-repo file ownership complicates I1 validation (repo field may be missing)
+      likelihood: low
+      impact: medium
+      mitigation: I1 check already handles cross-repo via file path comparison only. Repo field is metadata for UI display, not part of uniqueness check. validateI1DisjointOwnership uses (wave, file) as key, not (wave, repo, file).
+    - scenario: Critic agent Check 9 duplicates E16 validation work
+      likelihood: high
+      impact: low
+      mitigation: 'Acceptable duplication. Critic runs after Scout, before wave execution. E16 runs at prepare-wave time. Both are needed: critic catches planning errors at review time; E16 catches gaps that passed review.'
+    - scenario: PrepareWave runtime check may slow down wave launches
+      likelihood: low
+      impact: low
+      mitigation: I1 check is O(n) where n = number of file_ownership entries in wave. Typical wave has 10-30 entries. Check runs once at prepare-wave start, adds <1ms overhead.
 critic_report:
-    verdict: PASS
-    agent_reviews:
-        A:
-            agent_id: A
-            verdict: PASS
-        B:
-            agent_id: B
-            verdict: PASS
-        C:
-            agent_id: C
-            verdict: PASS
-        D:
-            agent_id: D
-            verdict: PASS
-        E:
-            agent_id: E
-            verdict: PASS
-        F:
-            agent_id: F
-            verdict: PASS
-    summary: All agent briefs verified against codebase after previous corrections. All 6 agents (A-F) have accurate type names (FileOwnership, Agent, Wave), correct line numbers (validation.go:78-111, prepare.go:184/537, scout.md:464/484/121, critic-agent.md:125/137, invariants.md:29/33-38, CHANGELOG.md:7/11), valid function signatures (validateI1DisjointOwnership, PrepareWave, Validate), and correct pattern references (recordStep, CodeDisjointOwnership). Interface contracts match actual codebase. Import chains are valid (protocol, result, fmt, strings all exist). Side effects are properly wired (test files, CHANGELOG entry, invariants doc update). Zero errors found across all 9 verification checks.
-    reviewed_at: "2026-04-01T20:23:36Z"
-    issue_count: 0
-state: "REVIEWED"
+  verdict: PASS
+  agent_reviews:
+    A:
+      agent_id: A
+      verdict: PASS
+    B:
+      agent_id: B
+      verdict: PASS
+    C:
+      agent_id: C
+      verdict: PASS
+    D:
+      agent_id: D
+      verdict: PASS
+    E:
+      agent_id: E
+      verdict: PASS
+    F:
+      agent_id: F
+      verdict: PASS
+  summary: All agent briefs verified against codebase after previous corrections. All 6 agents (A-F) have accurate type names (FileOwnership, Agent, Wave), correct line numbers (validation.go:78-111, prepare.go:184/537, scout.md:464/484/121, critic-agent.md:125/137, invariants.md:29/33-38, CHANGELOG.md:7/11), valid function signatures (validateI1DisjointOwnership, PrepareWave, Validate), and correct pattern references (recordStep, CodeDisjointOwnership). Interface contracts match actual codebase. Import chains are valid (protocol, result, fmt, strings all exist). Side effects are properly wired (test files, CHANGELOG entry, invariants doc update). Zero errors found across all 9 verification checks.
+  reviewed_at: "2026-04-01T20:23:36Z"
+  issue_count: 0
+state: WAVE_VERIFIED
 injection_method: hook
