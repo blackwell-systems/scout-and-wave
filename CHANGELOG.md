@@ -9,6 +9,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **E11 smart merge strategies:** Automatic conflict resolution for append-only patterns
+  - Pattern analysis: `AnalyzeDiffPattern()` classifies changes as append-only, line edits, deletions, or mixed
+  - Auto-merge: `StepAutoMergeAppendConflicts()` merges agents with append-only conflicts in file-sorted order
+  - CLI flag: `sawtools finalize-wave --auto-merge-append` enables automatic merge for compatible patterns
+  - Merge strategy suggestions: E11 error messages now recommend specific merge commands based on pattern analysis
+  - Prevention guidance: Scout documentation updated with E11 conflict patterns
+- `pkg/protocol/conflict_predict.go`: New `DiffPattern` classification and `AnalyzeDiffPattern()` function
+- `internal/git/commands.go`: New `GetDiffStats()` primitive for diff statistics
+- `pkg/engine/finalize_steps.go`: New `StepAutoMergeAppendConflicts()` orchestration function
 - **Test cascade detection (E46):** Prevents orphaned test files when interfaces change
   - Scout-time detection: grep for `*_test.go` files referencing changed interfaces
   - E35 extension: `detectTestCascades()` function in e35_detection.go
@@ -25,6 +34,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - PrepareWave early I1 check (line ~184) catches violations before worktree creation
 
 ### Changed
+- `pkg/protocol/conflict_predict.go`: E11 now includes pattern analysis before blocking
+- `pkg/engine/finalize.go`: FinalizeWave can optionally auto-merge append-only conflicts
+- `sawtools finalize-wave`: New `--auto-merge-append` flag for automatic merge
+- `scout.md`: Added E11 prevention guidance (test file patterns, append-only vs line edits)
+- E11 error messages now include intelligent merge strategy suggestions
 - `pkg/protocol/e35_detection.go`: Extended E35 to include test file orphan detection
 - `scout.md`: Added test file scanning to dependency analysis (step 4)
 - `protocol/execution-rules.md`: Added E46 (Test File Cascade Detection) rule
@@ -33,6 +47,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - `critic-agent.md`: Added Check 9 (i1_disjoint_ownership) to verification suite (now 9 checks)
 - `scout.md`: Added step 7b I1 self-check reminder between steps 7 and 8
 - `protocol/invariants.md`: Updated I1 enforcement layers from 4 to 6 (inserted Layers 2-3, renumbered 2-3 to 4-5)
+
+### Fixed
+- Test file conflicts (append-only pattern) now auto-mergeable instead of requiring manual merge
 
 | Version | Date | Headline |
 |---------|------|----------|
