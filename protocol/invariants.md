@@ -30,12 +30,14 @@ To audit consistency, search implementation files for `I{N}` and verify the embe
 
 I1 is protected by multiple enforcement layers that work together to prevent, detect, and audit ownership violations:
 
-- **Layer 0 (E43 hooks):** PreToolUse validation blocks writes outside worktree boundaries at the tool invocation boundary. This is the **primary enforcement mechanism** in Claude Code orchestration. The `validate_write_paths` hook (E43) prevents violations before they occur by blocking relative paths and out-of-bounds writes with exit code 2. Other platforms must implement equivalent tool-boundary enforcement or rely on Layer 3 (Field 0 self-verification).
+- **Layer 0 (E43 hooks):** PreToolUse validation blocks writes outside worktree boundaries at the tool invocation boundary. This is the **primary enforcement mechanism** in Claude Code orchestration. The `validate_write_paths` hook (E43) prevents violations before they occur by blocking relative paths and out-of-bounds writes with exit code 2. Other platforms must implement equivalent tool-boundary enforcement or rely on Layer 5 (Field 0 self-verification).
 - **Layer 1 (E3 validation):** Pre-launch ownership table validation. The orchestrator validates the `file_ownership` table for disjoint ownership before creating worktrees, catching Scout planning errors early.
-- **Layer 2 (E11 conflict prediction):** Pre-merge `files_changed` intersection check. Before any merge proceeds, the orchestrator cross-references all agents' `files_changed` and `files_created` lists to detect runtime deviations where an agent touched files outside its declared scope.
-- **Layer 3 (E42 SubagentStop):** Post-completion ownership audit. The SubagentStop hook runs `git diff --name-only` in the worktree and compares changed files against the agent's ownership list from `.saw-ownership.json`. Any unowned modified file triggers exit 2 with an I1 violation message.
+- **Layer 2 (Critic gate E37):** Pre-wave brief review. The Critic Agent runs Check 9 (i1_disjoint_ownership) on the file_ownership table before the IMPL doc enters REVIEWED state. Any duplicate file ownership within a wave is flagged as an error and blocks wave execution.
+- **Layer 3 (PrepareWave runtime):** Fast-fail check at start of prepare-wave. The engine runs `ValidateI1DisjointOwnership()` immediately after loading the manifest, catching validation gaps before creating worktrees.
+- **Layer 4 (E11 conflict prediction):** Pre-merge `files_changed` intersection check. Before any merge proceeds, the orchestrator cross-references all agents' `files_changed` and `files_created` lists to detect runtime deviations where an agent touched files outside its declared scope.
+- **Layer 5 (E42 SubagentStop):** Post-completion ownership audit. The SubagentStop hook runs `git diff --name-only` in the worktree and compares changed files against the agent's ownership list from `.saw-ownership.json`. Any unowned modified file triggers exit 2 with an I1 violation message.
 
-**Result:** I1 violations are structurally prevented (Layer 0), validated at planning time (Layer 1), detected at merge time (Layer 2), and audited at completion time (Layer 3). All layers remain active; E43 does not replace the others.
+**Result:** I1 violations are structurally prevented (Layer 0), validated at planning time (Layers 1-2), detected at runtime (Layer 3), caught at merge time (Layer 4), and audited at completion time (Layer 5). All layers remain active; E43 does not replace the others.
 
 ### I1 Amendment: Integration Agent Exemption
 
