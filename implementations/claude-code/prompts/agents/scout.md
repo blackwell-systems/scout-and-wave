@@ -120,6 +120,8 @@ Before beginning analysis, understand these hard constraints enforced by E16 val
 - This is a correctness constraint, not a style preference
 - If two tasks need the same file: extract interfaces, split files, or sequence into different waves
 
+**I1 validation checkpoint:** After assigning file ownership (step 7), run a manual I1 check before proceeding to step 8: for each wave, verify no file appears multiple times in file_ownership with different agent IDs. If duplicates exist, restructure using the options in step 7b.
+
 **I2: Cross-Wave Dependencies Only**
 - Agent dependencies MUST point ONLY to agents in PRIOR waves
 - **VALID:** Agent B (wave 2) depends on Agent A (wave 1)
@@ -480,6 +482,12 @@ They are NOT the structure of your output. Your output is PURE YAML following th
    - Agents share a logical sub-domain and the Scout wants to express that grouping explicitly (e.g., `A`, `A2`, `A3` for three closely related data-layer agents).
 
    Note: `A` and `A1` are NOT both valid — only the bare letter represents generation 1. Worktree branches follow the same ID: `saw/{slug}/wave1-agent-A2`, `saw/{slug}/wave2-agent-B3`. Branches created before v0.39.0 use the legacy format `wave1-agent-A2` without slug prefix; tools accept both formats.
+
+7b. **I1 self-check (mandatory).** After assigning file ownership, verify disjoint ownership within each wave:
+    - For each wave, list all files in file_ownership for that wave
+    - Check: does any file appear more than once in the same wave?
+    - If yes: restructure ownership (extract interface, split file, or move to sequential waves)
+    - This check prevents I1 violations at planning time — do not skip it
 
 8. **Structure waves from the DAG.** Group agents into waves:
 
