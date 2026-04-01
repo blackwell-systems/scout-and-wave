@@ -120,7 +120,13 @@ Before beginning analysis, understand these hard constraints enforced by E16 val
 - This is a correctness constraint, not a style preference
 - If two tasks need the same file: extract interfaces, split files, or sequence into different waves
 
-**I1 validation checkpoint:** After assigning file ownership (step 7), run a manual I1 check before proceeding to step 8: for each wave, verify no file appears multiple times in file_ownership with different agent IDs. If duplicates exist, restructure using the options in step 7b.
+**I1 relaxation for append-only patterns (E11):** As of v0.X.X, E11 enhanced conflict
+prediction analyzes diff patterns and can auto-merge append-only conflicts. This allows
+controlled violations of strict I1 when both agents add independent content to the same
+file without modifying existing lines (e.g., test files, registries). See step 7's E11
+guidance for when to use append-only shared ownership vs. strict disjoint ownership.
+
+**I1 validation checkpoint:** After assigning file ownership (step 7), run a manual I1 check before proceeding to step 8: for each wave, verify no file appears multiple times in file_ownership with different agent IDs. If duplicates exist, restructure using the options in step 7b or document as append-only shared ownership per E11 guidance.
 
 **I2: Cross-Wave Dependencies Only**
 - Agent dependencies MUST point ONLY to agents in PRIOR waves
@@ -505,6 +511,35 @@ They are NOT the structure of your output. Your output is PURE YAML following th
    interface, split the file, or create a new file so ownership is disjoint.
    This is a hard constraint, not a preference.
 
+   **E11 conflict prevention — pattern-aware ownership:** When analyzing potential
+   file conflicts, distinguish between true conflicts (both agents modifying the
+   same lines or exported symbols) and append-only patterns (both agents adding
+   new functions/tests without touching existing code). E11 enhanced conflict
+   prediction (v0.X.X+) analyzes diff patterns and can auto-merge append-only
+   conflicts. This allows you to assign the same file to multiple agents in the
+   same wave IF AND ONLY IF:
+
+   - The file follows an append-only pattern (test files, registry files, collection modules)
+   - Each agent adds new content without modifying existing lines
+   - No shared symbols are being renamed or removed
+   - The file structure supports independent additions (e.g., `_test.go` files where each agent adds distinct test functions)
+
+   **When to use append-only ownership (relaxed I1):**
+   - Test files where agents add independent test functions (e.g., `pkg/engine/finalize_test.go` — Agent A adds `TestAutoMerge`, Agent B adds `TestDiffPattern`)
+   - Integration registries where agents append independent entries (e.g., route tables, CLI command lists)
+   - Collection modules where agents add independent items (e.g., a validators file where each agent adds a new validator function)
+
+   **When to enforce strict I1 (disjoint ownership):**
+   - Agents modify existing function signatures or struct fields
+   - Agents edit the same lines (e.g., both updating the same config value)
+   - Agents rename or remove exported symbols
+   - Mixed patterns (one agent adds, another edits existing code)
+
+   If you assign append-only shared ownership, document the pattern in the agent
+   prompts: "Add new test functions only — do not modify existing tests." The
+   E11 gate will verify the pattern at finalize time and auto-merge if safe,
+   falling back to manual merge if conflicts are detected.
+
    **Cross-repository file ownership:** If the work spans multiple repositories, add a `repo:` field to each file ownership entry specifying which repository the file belongs to. Use the repository name (not the full path). For files outside any repository (e.g., `~/.local/bin/sawtools`), use `repo: system`.
 
    **IMPORTANT — mismatched repos:** When the IMPL doc lives in repository X but the owned files live in repository Y (common when the protocol repo contains IMPL docs for work that lands in the Go SDK or web app repos), you MUST set `repo:` on every file ownership entry. Even if you believe all files are in one repo, check: does the IMPL doc's location (e.g. `scout-and-wave/docs/IMPL/`) match the repo where the files will be created or modified? If not, tag every entry with its correct repo name. Omitting `repo:` in this scenario causes the file browser to 404 when users try to view owned files.
@@ -617,6 +652,42 @@ They are NOT the structure of your output. Your output is PURE YAML following th
    - TypeScript/JavaScript: `export { NewName as OldName } from './new-module'`
    - Python: `from new_module import NewName as OldName` in `__init__.py`
    - Rust: `pub use new_crate::NewType as OldType;`
+
+   **E11 known conflict patterns:** Enhanced conflict prediction (v0.X.X+) recognizes
+   common diff patterns and suggests merge strategies. Use these patterns when structuring
+   waves with shared file ownership:
+
+   **Pattern 1: Test file append-only**
+   - **Scenario:** Multiple agents add new test functions to the same `_test.go`, `_test.rs`, or `.test.ts` file
+   - **Safe when:** Each agent adds distinct test functions without modifying existing tests
+   - **E11 behavior:** Auto-merges by applying commits in file-sorted order; verifies no git conflicts after merge
+   - **Example:** Agent A adds `TestAutoMergeAppend`, Agent B adds `TestDiffPatternAnalysis` to `finalize_test.go`
+   - **Constraints:** Agents must not rename or remove existing test functions; must not modify shared setup/teardown
+
+   **Pattern 2: Integration file append-only**
+   - **Scenario:** Multiple agents register independent entries (routes, commands, validators) in a central registry
+   - **Safe when:** Entries are independent key-value pairs or function calls; order doesn't matter
+   - **E11 behavior:** Auto-merges as append-only; falls back to manual if line edits detected
+   - **Example:** Agent A adds `router.Handle("/api/v1/conflicts", ...)`, Agent B adds `router.Handle("/api/v1/patterns", ...)` to `routes.go`
+   - **Constraints:** Agents must not reorder existing entries; must not modify shared initialization logic
+
+   **Pattern 3: Line edits (manual merge required)**
+   - **Scenario:** Agents modify existing lines, function signatures, or struct fields
+   - **Not safe:** Two agents editing overlapping line ranges will cause semantic conflicts
+   - **E11 behavior:** Flags as `MergeStrategyManual`; requires human review before merge
+   - **Example:** Agent A changes `func Parse(data []byte) (Result, error)` to return `result.Result[Data]`; Agent B changes same signature to add parameter
+   - **Resolution:** Restructure into sequential waves (Agent A in Wave 1, Agent B in Wave 2)
+
+   **Pattern 4: Mixed patterns (sequential merge recommended)**
+   - **Scenario:** One agent appends new content while another edits existing lines in same file
+   - **Not safe:** Append may depend on the edit's semantic changes (e.g., new test depends on refactored function)
+   - **E11 behavior:** Flags as `MergeStrategySequential`; suggests merge order
+   - **Example:** Agent A refactors `validateInput()` function; Agent B adds `TestValidateInputEdgeCases()` that calls it
+   - **Resolution:** Agent A in Wave 1, Agent B in Wave 2 (ensures new tests call refactored signature)
+
+   When E11 detects auto-mergeable patterns at finalize time, agents merge automatically
+   with full verification (build/test/lint gates run post-merge). When manual merge is
+   required, the Orchestrator surfaces the conflict type and suggested resolution strategy.
 
 9. **Integration completeness audit.** Before writing agent prompts, verify
    every new artifact has its full wiring chain assigned. For each file in
