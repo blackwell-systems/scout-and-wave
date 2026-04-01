@@ -2,608 +2,613 @@ title: E11 Smart Merge Strategies with Automatic Conflict Resolution
 feature_slug: e11-smart-merge-strategies
 verdict: SUITABLE
 suitability_assessment: |
-  Defense-in-depth enhancement to E11 conflict prediction with 5 layers:
-  1. Pattern analysis (append vs edit) in conflict_predict.go
-  2. Auto-merge for append-only patterns in finalize_steps.go
-  3. Merge strategy suggestions in conflict_predict.go output
-  4. Scout prevention guidance in scout.md reference docs
-  5. Hook customization examples (non-blocking, documentation only)
+    Defense-in-depth enhancement to E11 conflict prediction with 5 layers:
+    1. Pattern analysis (append vs edit) in conflict_predict.go
+    2. Auto-merge for append-only patterns in finalize_steps.go
+    3. Merge strategy suggestions in conflict_predict.go output
+    4. Scout prevention guidance in scout.md reference docs
+    5. Hook customization examples (non-blocking, documentation only)
 
-  File decomposition: 4 agents, 7 distinct files, no shared ownership:
-  - Agent A: pkg/protocol/conflict_predict.go + test file (pattern detection logic)
-  - Agent B: pkg/engine/finalize_steps.go + finalize.go + test file (auto-merge orchestration)
-  - Agent C: internal/git/commands.go + test file (git diff analysis primitives)
-  - Agent D: implementations/claude-code/prompts/agents/scout.md (prevention docs)
+    File decomposition: 4 agents, 7 distinct files, no shared ownership:
+    - Agent A: pkg/protocol/conflict_predict.go + test file (pattern detection logic)
+    - Agent B: pkg/engine/finalize_steps.go + finalize.go + test file (auto-merge orchestration)
+    - Agent C: internal/git/commands.go + test file (git diff analysis primitives)
+    - Agent D: implementations/claude-code/prompts/agents/scout.md (prevention docs)
 
-  All interface contracts discoverable from existing codebase:
-  - git.DiffUnifiedZero already exists for hunk analysis (lines 646+)
-  - ConflictPrediction struct already exists (lines 21-24)
-  - PredictConflictsFromReports returns result.Result[ConflictData] (line 35)
+    All interface contracts discoverable from existing codebase:
+    - git.DiffUnifiedZero already exists for hunk analysis (lines 646+)
+    - ConflictPrediction struct already exists (lines 21-24)
+    - PredictConflictsFromReports returns result.Result[ConflictData] (line 35)
 
-  Pre-implementation status (sawtools analyze-suitability):
-  - Pattern detection: NOT IMPLEMENTED (E11 only detects file overlap, no pattern analysis)
-  - Auto-merge: NOT IMPLEMENTED (E11 blocks on any conflict)
-  - Merge suggestions: PARTIAL (E11a documents manual escape hatch, but no automated suggestions)
-  - Scout prevention: DONE (Scout already avoids overlapping file ownership via I1)
+    Pre-implementation status (sawtools analyze-suitability):
+    - Pattern detection: NOT IMPLEMENTED (E11 only detects file overlap, no pattern analysis)
+    - Auto-merge: NOT IMPLEMENTED (E11 blocks on any conflict)
+    - Merge suggestions: PARTIAL (E11a documents manual escape hatch, but no automated suggestions)
+    - Scout prevention: DONE (Scout already avoids overlapping file ownership via I1)
 
-  Parallelization value: 4 agents, Go build+test ~20s, independent files.
-  High coordination value: E11 is a common friction point (checker_test.go pattern).
+    Parallelization value: 4 agents, Go build+test ~20s, independent files.
+    High coordination value: E11 is a common friction point (checker_test.go pattern).
 
-  Estimated times:
-  - Scout phase: ~15 min (complex dependency analysis, git primitives)
-  - Agent execution: ~4 agents × ~20 min avg = ~25 min (parallel)
-  - Merge & verification: ~5 min
-  Total SAW time: ~45 min
-  Sequential baseline: ~4 × 25 min = ~100 min
-  Time savings: ~55 min (55% faster)
-  Recommendation: Clear speedup. Proceed.
-
+    Estimated times:
+    - Scout phase: ~15 min (complex dependency analysis, git primitives)
+    - Agent execution: ~4 agents × ~20 min avg = ~25 min (parallel)
+    - Merge & verification: ~5 min
+    Total SAW time: ~45 min
+    Sequential baseline: ~4 × 25 min = ~100 min
+    Time savings: ~55 min (55% faster)
+    Recommendation: Clear speedup. Proceed.
 test_command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go test ./pkg/protocol ./pkg/engine ./internal/git -v
 lint_command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go vet ./pkg/protocol ./pkg/engine ./internal/git
-state: SCOUT_PENDING
-
-quality_gates:
-  level: standard
-  gates:
-    - type: build
-      command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./pkg/protocol ./pkg/engine ./internal/git ./cmd/sawtools
-      required: true
-      repo: scout-and-wave-go
-    - type: test
-      command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go test ./pkg/protocol ./pkg/engine ./internal/git
-      required: true
-      repo: scout-and-wave-go
-    - type: lint
-      command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go vet ./pkg/protocol ./pkg/engine ./internal/git
-      required: true
-      repo: scout-and-wave-go
-
-scaffolds: []
-
 file_ownership:
-  - file: pkg/protocol/conflict_predict.go
-    agent: A
-    wave: 1
-    action: modify
-    repo: scout-and-wave-go
-  - file: pkg/protocol/conflict_predict_test.go
-    agent: A
-    wave: 1
-    action: modify
-    repo: scout-and-wave-go
-  - file: internal/git/commands.go
-    agent: C
-    wave: 1
-    action: modify
-    repo: scout-and-wave-go
-  - file: internal/git/commands_test.go
-    agent: C
-    wave: 1
-    action: modify
-    repo: scout-and-wave-go
-  - file: pkg/engine/finalize_steps.go
-    agent: B
-    wave: 2
-    action: modify
-    repo: scout-and-wave-go
-  - file: pkg/engine/finalize.go
-    agent: B
-    wave: 2
-    action: modify
-    repo: scout-and-wave-go
-  - file: pkg/engine/finalize_steps_test.go
-    agent: B
-    wave: 2
-    action: modify
-    repo: scout-and-wave-go
-  - file: implementations/claude-code/prompts/agents/scout.md
-    agent: D
-    wave: 2
-    action: modify
-    repo: scout-and-wave
-  - file: CHANGELOG.md
-    agent: E
-    wave: 2
-    action: modify
-    repo: scout-and-wave
-
+    - file: pkg/protocol/conflict_predict.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/protocol/conflict_predict_test.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: internal/git/commands.go
+      agent: C
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: internal/git/commands_test.go
+      agent: C
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/engine/finalize_steps.go
+      agent: B
+      wave: 2
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/engine/finalize.go
+      agent: B
+      wave: 2
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/engine/finalize_steps_test.go
+      agent: B
+      wave: 2
+      action: modify
+      repo: scout-and-wave-go
+    - file: implementations/claude-code/prompts/agents/scout.md
+      agent: D
+      wave: 2
+      action: modify
+      repo: scout-and-wave
+    - file: CHANGELOG.md
+      agent: E
+      wave: 2
+      action: modify
+      repo: scout-and-wave
 interface_contracts:
-  - name: AnalyzeDiffPattern
-    description: |
-      Analyzes git diff for a single file to classify the change pattern: append-only
-      (new functions/tests), line edits (modifying existing lines), or deletions.
-      Returns pattern enum and hunk metadata for merge decision.
-    definition: |
-      // DiffPattern classifies the type of changes in a git diff
-      type DiffPattern string
+    - name: AnalyzeDiffPattern
+      description: |
+        Analyzes git diff for a single file to classify the change pattern: append-only
+        (new functions/tests), line edits (modifying existing lines), or deletions.
+        Returns pattern enum and hunk metadata for merge decision.
+      definition: |
+        // DiffPattern classifies the type of changes in a git diff
+        type DiffPattern string
 
-      const (
-          DiffPatternAppendOnly DiffPattern = "append_only"  // New lines only, no edits
-          DiffPatternLineEdits  DiffPattern = "line_edits"   // Modifies existing lines
-          DiffPatternDeletions  DiffPattern = "deletions"    // Removes lines
-          DiffPatternMixed      DiffPattern = "mixed"        // Combination of above
-      )
+        const (
+            DiffPatternAppendOnly DiffPattern = "append_only"  // New lines only, no edits
+            DiffPatternLineEdits  DiffPattern = "line_edits"   // Modifies existing lines
+            DiffPatternDeletions  DiffPattern = "deletions"    // Removes lines
+            DiffPatternMixed      DiffPattern = "mixed"        // Combination of above
+        )
 
-      // DiffAnalysis holds the result of analyzing a single agent's diff for one file
-      type DiffAnalysis struct {
-          AgentID string
-          File    string
-          Pattern DiffPattern
-          Hunks   []HunkRange
-          Hash    string  // SHA256 of final file content
-      }
+        // DiffAnalysis holds the result of analyzing a single agent's diff for one file
+        type DiffAnalysis struct {
+            AgentID string
+            File    string
+            Pattern DiffPattern
+            Hunks   []HunkRange
+            Hash    string  // SHA256 of final file content
+        }
 
-      // AnalyzeDiffPattern inspects the diff between baseRef and agentBranch for file
-      // and returns the pattern classification. Uses git diff --unified=0 to get hunks.
-      func AnalyzeDiffPattern(repoPath, baseRef, agentBranch, file string) (*DiffAnalysis, error)
-    location: pkg/protocol/conflict_predict.go
+        // AnalyzeDiffPattern inspects the diff between baseRef and agentBranch for file
+        // and returns the pattern classification. Uses git diff --unified=0 to get hunks.
+        func AnalyzeDiffPattern(repoPath, baseRef, agentBranch, file string) (*DiffAnalysis, error)
+      location: pkg/protocol/conflict_predict.go
+    - name: ConflictPredictionWithStrategy
+      description: |
+        Enhanced E11 conflict prediction that not only detects overlapping files but
+        analyzes diff patterns and suggests merge strategies. Returns recommendations
+        for auto-merge (append-only), manual merge (line edits), or hybrid approaches.
+      definition: |
+        // MergeStrategy suggests how to resolve a detected conflict
+        type MergeStrategy string
 
-  - name: ConflictPredictionWithStrategy
-    description: |
-      Enhanced E11 conflict prediction that not only detects overlapping files but
-      analyzes diff patterns and suggests merge strategies. Returns recommendations
-      for auto-merge (append-only), manual merge (line edits), or hybrid approaches.
-    definition: |
-      // MergeStrategy suggests how to resolve a detected conflict
-      type MergeStrategy string
+        const (
+            MergeStrategyAutomatic MergeStrategy = "automatic"  // Safe to auto-merge
+            MergeStrategyManual    MergeStrategy = "manual"     // Requires human review
+            MergeStrategySequential MergeStrategy = "sequential" // Merge agents in order
+        )
 
-      const (
-          MergeStrategyAutomatic MergeStrategy = "automatic"  // Safe to auto-merge
-          MergeStrategyManual    MergeStrategy = "manual"     // Requires human review
-          MergeStrategySequential MergeStrategy = "sequential" // Merge agents in order
-      )
+        // ConflictPredictionEnhanced extends ConflictPrediction with strategy metadata
+        type ConflictPredictionEnhanced struct {
+            File              string
+            Agents            []string
+            Strategy          MergeStrategy
+            Reason            string  // Human-readable explanation
+            MergeOrder        []string // Suggested agent merge order (for sequential)
+            DiffAnalyses      []*DiffAnalysis
+        }
 
-      // ConflictPredictionEnhanced extends ConflictPrediction with strategy metadata
-      type ConflictPredictionEnhanced struct {
-          File              string
-          Agents            []string
-          Strategy          MergeStrategy
-          Reason            string  // Human-readable explanation
-          MergeOrder        []string // Suggested agent merge order (for sequential)
-          DiffAnalyses      []*DiffAnalysis
-      }
+        // ConflictDataEnhanced extends ConflictData with strategy recommendations
+        type ConflictDataEnhanced struct {
+            ConflictsDetected int
+            Conflicts         []ConflictPredictionEnhanced
+            AutoMergeable     int  // Count of conflicts safe to auto-merge
+        }
 
-      // ConflictDataEnhanced extends ConflictData with strategy recommendations
-      type ConflictDataEnhanced struct {
-          ConflictsDetected int
-          Conflicts         []ConflictPredictionEnhanced
-          AutoMergeable     int  // Count of conflicts safe to auto-merge
-      }
+        // PredictConflictsWithStrategy is the enhanced E11 function that analyzes patterns
+        func PredictConflictsWithStrategy(ctx context.Context, manifest *IMPLManifest, waveNum int) result.Result[ConflictDataEnhanced]
+      location: pkg/protocol/conflict_predict.go
+    - name: DiffStatistics
+      description: |
+        Git primitive to extract diff statistics: lines added, removed, files changed.
+        Used to determine if a diff is append-only (additions > 0, removals == 0).
+      definition: |
+        // DiffStats holds statistics for a git diff
+        type DiffStats struct {
+            FilesChanged  int
+            LinesAdded    int
+            LinesRemoved  int
+        }
 
-      // PredictConflictsWithStrategy is the enhanced E11 function that analyzes patterns
-      func PredictConflictsWithStrategy(ctx context.Context, manifest *IMPLManifest, waveNum int) result.Result[ConflictDataEnhanced]
-    location: pkg/protocol/conflict_predict.go
+        // GetDiffStats runs git diff --numstat between fromRef and toRef for file
+        // and returns parsed statistics. Returns zero stats on error (safe default).
+        func GetDiffStats(repoPath, fromRef, toRef, file string) (*DiffStats, error)
+      location: internal/git/commands.go
+    - name: StepPredictConflictsEnhanced
+      description: |
+        Replacement for StepPredictConflicts that calls PredictConflictsWithStrategy
+        and logs the recommendations. If all conflicts are auto-mergeable, proceeds
+        to auto-merge instead of blocking. Otherwise, surfaces strategy suggestions
+        in the error message.
+      definition: |
+        // StepPredictConflictsEnhanced replaces StepPredictConflicts with pattern analysis.
+        // Returns fatal error only when conflicts require manual intervention.
+        // Auto-mergeable conflicts proceed to StepAutoMergeAppendConflicts.
+        func StepPredictConflictsEnhanced(ctx context.Context, opts FinalizeWaveOpts, manifest *protocol.IMPLManifest, onEvent EventCallback) (*StepResult, *protocol.ConflictDataEnhanced, error)
+      location: pkg/engine/finalize_steps.go
+    - name: StepAutoMergeAppendConflicts
+      description: |
+        New finalize step that auto-merges agents with append-only conflicts.
+        Runs after StepPredictConflictsEnhanced detects append patterns.
+        Merges agents in file-sorted order, verifies no git conflicts after merge,
+        falls back to manual on unexpected merge failure.
+      definition: |
+        // AutoMergeData holds the result of automatic merge for append-only conflicts
+        type AutoMergeData struct {
+            File           string
+            Agents         []string
+            MergeOrder     []string
+            MergesApplied  int
+            FallbackNeeded bool
+            Reason         string
+        }
 
-  - name: DiffStatistics
-    description: |
-      Git primitive to extract diff statistics: lines added, removed, files changed.
-      Used to determine if a diff is append-only (additions > 0, removals == 0).
-    definition: |
-      // DiffStats holds statistics for a git diff
-      type DiffStats struct {
-          FilesChanged  int
-          LinesAdded    int
-          LinesRemoved  int
-      }
-
-      // GetDiffStats runs git diff --numstat between fromRef and toRef for file
-      // and returns parsed statistics. Returns zero stats on error (safe default).
-      func GetDiffStats(repoPath, fromRef, toRef, file string) (*DiffStats, error)
-    location: internal/git/commands.go
-
-  - name: StepPredictConflictsEnhanced
-    description: |
-      Replacement for StepPredictConflicts that calls PredictConflictsWithStrategy
-      and logs the recommendations. If all conflicts are auto-mergeable, proceeds
-      to auto-merge instead of blocking. Otherwise, surfaces strategy suggestions
-      in the error message.
-    definition: |
-      // StepPredictConflictsEnhanced replaces StepPredictConflicts with pattern analysis.
-      // Returns fatal error only when conflicts require manual intervention.
-      // Auto-mergeable conflicts proceed to StepAutoMergeAppendConflicts.
-      func StepPredictConflictsEnhanced(ctx context.Context, opts FinalizeWaveOpts, manifest *protocol.IMPLManifest, onEvent EventCallback) (*StepResult, *protocol.ConflictDataEnhanced, error)
-    location: pkg/engine/finalize_steps.go
-
-  - name: StepAutoMergeAppendConflicts
-    description: |
-      New finalize step that auto-merges agents with append-only conflicts.
-      Runs after StepPredictConflictsEnhanced detects append patterns.
-      Merges agents in file-sorted order, verifies no git conflicts after merge,
-      falls back to manual on unexpected merge failure.
-    definition: |
-      // AutoMergeData holds the result of automatic merge for append-only conflicts
-      type AutoMergeData struct {
-          File           string
-          Agents         []string
-          MergeOrder     []string
-          MergesApplied  int
-          FallbackNeeded bool
-          Reason         string
-      }
-
-      // StepAutoMergeAppendConflicts attempts automatic merge for append-only conflicts.
-      // Returns fatal error if merge produces conflicts (fallback to manual).
-      func StepAutoMergeAppendConflicts(ctx context.Context, opts FinalizeWaveOpts, conflicts []protocol.ConflictPredictionEnhanced, onEvent EventCallback) (*StepResult, []AutoMergeData, error)
-    location: pkg/engine/finalize_steps.go
-
+        // StepAutoMergeAppendConflicts attempts automatic merge for append-only conflicts.
+        // Returns fatal error if merge produces conflicts (fallback to manual).
+        func StepAutoMergeAppendConflicts(ctx context.Context, opts FinalizeWaveOpts, conflicts []protocol.ConflictPredictionEnhanced, onEvent EventCallback) (*StepResult, []AutoMergeData, error)
+      location: pkg/engine/finalize_steps.go
 waves:
-  - number: 1
-    agents:
-      - id: A
-        task: |
-          ## Agent A — conflict_predict.go: Pattern Analysis
-
-          Enhance `pkg/protocol/conflict_predict.go` with diff pattern classification.
-
-          ### 1. Add DiffPattern types and DiffAnalysis struct
-
-          After line 24 (ConflictPrediction struct), add the new types from the
-          interface contracts:
-
-          ```go
-          // DiffPattern classifies the type of changes in a git diff
-          type DiffPattern string
-
-          const (
-              DiffPatternAppendOnly DiffPattern = "append_only"
-              DiffPatternLineEdits  DiffPattern = "line_edits"
-              DiffPatternDeletions  DiffPattern = "deletions"
-              DiffPatternMixed      DiffPattern = "mixed"
-          )
-
-          // DiffAnalysis holds the result of analyzing a single agent's diff for one file
-          type DiffAnalysis struct {
-              AgentID string
-              File    string
-              Pattern DiffPattern
-              Hunks   []HunkRange
-              Hash    string
-          }
-
-          // MergeStrategy suggests how to resolve a detected conflict
-          type MergeStrategy string
-
-          const (
-              MergeStrategyAutomatic  MergeStrategy = "automatic"
-              MergeStrategyManual     MergeStrategy = "manual"
-              MergeStrategySequential MergeStrategy = "sequential"
-          )
-
-          // ConflictPredictionEnhanced extends ConflictPrediction with strategy metadata
-          type ConflictPredictionEnhanced struct {
-              File         string
-              Agents       []string
-              Strategy     MergeStrategy
-              Reason       string
-              MergeOrder   []string
-              DiffAnalyses []*DiffAnalysis
-          }
-
-          // ConflictDataEnhanced extends ConflictData with strategy recommendations
-          type ConflictDataEnhanced struct {
-              ConflictsDetected int
-              Conflicts         []ConflictPredictionEnhanced
-              AutoMergeable     int
-          }
-          ```
-
-          ### 2. Implement AnalyzeDiffPattern function
-
-          Before `PredictConflictsFromReports` (around line 35), add:
-
-          ```go
-          // AnalyzeDiffPattern inspects the diff between baseRef and agentBranch for file
-          // and returns the pattern classification.
-          func AnalyzeDiffPattern(repoPath, baseRef, agentBranch, file string) (*DiffAnalysis, error) {
-              if repoPath == "" {
-                  return nil, fmt.Errorf("repoPath required")
-              }
-
-              // Get diff with zero context to extract hunks
-              diff, err := git.DiffUnifiedZero(repoPath, baseRef, agentBranch, file)
-              if err != nil {
-                  return nil, fmt.Errorf("git diff failed: %w", err)
-              }
-
-              hunks := parseDiffHunks(diff)
-
-              // Get diff stats to determine pattern
-              stats, err := git.GetDiffStats(repoPath, baseRef, agentBranch, file)
-              if err != nil {
-                  // Fallback to conservative pattern on stats error
-                  return &DiffAnalysis{
-                      File:    file,
-                      Pattern: DiffPatternMixed,
-                      Hunks:   hunks,
-                  }, nil
-              }
-
-              // Classify pattern based on stats
-              pattern := DiffPatternMixed
-              if stats.LinesRemoved == 0 && stats.LinesAdded > 0 {
-                  // Pure additions → append-only
-                  pattern = DiffPatternAppendOnly
-              } else if stats.LinesRemoved > 0 && stats.LinesAdded == 0 {
-                  pattern = DiffPatternDeletions
-              } else if stats.LinesRemoved > 0 && stats.LinesAdded > 0 {
-                  pattern = DiffPatternLineEdits
-              }
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## Agent A — conflict_predict.go: Pattern Analysis
+
+            Enhance `pkg/protocol/conflict_predict.go` with diff pattern classification.
+
+            ### 1. Add DiffPattern types and DiffAnalysis struct
+
+            After line 24 (ConflictPrediction struct), add the new types from the
+            interface contracts:
+
+            ```go
+            // DiffPattern classifies the type of changes in a git diff
+            type DiffPattern string
+
+            const (
+                DiffPatternAppendOnly DiffPattern = "append_only"
+                DiffPatternLineEdits  DiffPattern = "line_edits"
+                DiffPatternDeletions  DiffPattern = "deletions"
+                DiffPatternMixed      DiffPattern = "mixed"
+            )
+
+            // DiffAnalysis holds the result of analyzing a single agent's diff for one file
+            type DiffAnalysis struct {
+                AgentID string
+                File    string
+                Pattern DiffPattern
+                Hunks   []HunkRange
+                Hash    string
+            }
+
+            // MergeStrategy suggests how to resolve a detected conflict
+            type MergeStrategy string
+
+            const (
+                MergeStrategyAutomatic  MergeStrategy = "automatic"
+                MergeStrategyManual     MergeStrategy = "manual"
+                MergeStrategySequential MergeStrategy = "sequential"
+            )
+
+            // ConflictPredictionEnhanced extends ConflictPrediction with strategy metadata
+            type ConflictPredictionEnhanced struct {
+                File         string
+                Agents       []string
+                Strategy     MergeStrategy
+                Reason       string
+                MergeOrder   []string
+                DiffAnalyses []*DiffAnalysis
+            }
+
+            // ConflictDataEnhanced extends ConflictData with strategy recommendations
+            type ConflictDataEnhanced struct {
+                ConflictsDetected int
+                Conflicts         []ConflictPredictionEnhanced
+                AutoMergeable     int
+            }
+            ```
+
+            ### 2. Implement AnalyzeDiffPattern function
+
+            Before `PredictConflictsFromReports` (around line 35), add:
+
+            ```go
+            // AnalyzeDiffPattern inspects the diff between baseRef and agentBranch for file
+            // and returns the pattern classification.
+            func AnalyzeDiffPattern(repoPath, baseRef, agentBranch, file string) (*DiffAnalysis, error) {
+                if repoPath == "" {
+                    return nil, fmt.Errorf("repoPath required")
+                }
+
+                // Get diff with zero context to extract hunks
+                diff, err := git.DiffUnifiedZero(repoPath, baseRef, agentBranch, file)
+                if err != nil {
+                    return nil, fmt.Errorf("git diff failed: %w", err)
+                }
+
+                hunks := parseDiffHunks(diff)
+
+                // Get diff stats to determine pattern
+                stats, err := git.GetDiffStats(repoPath, baseRef, agentBranch, file)
+                if err != nil {
+                    // Fallback to conservative pattern on stats error
+                    return &DiffAnalysis{
+                        File:    file,
+                        Pattern: DiffPatternMixed,
+                        Hunks:   hunks,
+                    }, nil
+                }
+
+                // Classify pattern based on stats
+                pattern := DiffPatternMixed
+                if stats.LinesRemoved == 0 && stats.LinesAdded > 0 {
+                    // Pure additions → append-only
+                    pattern = DiffPatternAppendOnly
+                } else if stats.LinesRemoved > 0 && stats.LinesAdded == 0 {
+                    pattern = DiffPatternDeletions
+                } else if stats.LinesRemoved > 0 && stats.LinesAdded > 0 {
+                    pattern = DiffPatternLineEdits
+                }
+
+                // Get file hash from agent branch
+                hash, err := computeFileHashInBranch(repoPath, agentBranch, file)
+                if err != nil {
+                    hash = "" // Non-fatal, leave empty
+                }
+
+                return &DiffAnalysis{
+                    File:    file,
+                    Pattern: pattern,
+                    Hunks:   hunks,
+                    Hash:    hash,
+                }, nil
+            }
+            ```
+
+            ### 3. Implement PredictConflictsWithStrategy
+
+            After `PredictConflictsFromReports` (around line 125), add the enhanced function.
+            Full implementation in agent prompt preserves existing E11 logic while adding
+            pattern analysis layer. See interface contracts for signature.
+
+            ### 4. Tests
 
-              // Get file hash from agent branch
-              hash, err := computeFileHashInBranch(repoPath, agentBranch, file)
-              if err != nil {
-                  hash = "" // Non-fatal, leave empty
-              }
+            Add tests in `conflict_predict_test.go`:
+            - `TestAnalyzeDiffPattern_AppendOnly` — verify append-only detection
+            - `TestAnalyzeDiffPattern_LineEdits` — verify edit detection
+            - `TestPredictConflictsWithStrategy_AutoMergeable` — verify auto-merge recommendation
+            - `TestPredictConflictsWithStrategy_ManualRequired` — verify manual merge detection
+
+            ### Verification Gate
 
-              return &DiffAnalysis{
-                  File:    file,
-                  Pattern: pattern,
-                  Hunks:   hunks,
-                  Hash:    hash,
-              }, nil
-          }
-          ```
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && \
+              go test ./pkg/protocol -run TestAnalyzeDiffPattern -v && \
+              go test ./pkg/protocol -run TestPredictConflictsWithStrategy -v
+            ```
+
+            ### Constraints
 
-          ### 3. Implement PredictConflictsWithStrategy
+            - Do not modify existing `PredictConflictsFromReports` — it must remain unchanged for backward compatibility
+            - New function `PredictConflictsWithStrategy` is the enhanced alternative
+            - All new types are exported (capitalized) for use by finalize_steps.go
+            - Use existing `git.DiffUnifiedZero` and `git.MergeBase` functions (no modifications)
+            - Pattern detection must be conservative: when in doubt, classify as Manual
+          files:
+            - pkg/protocol/conflict_predict.go
+            - pkg/protocol/conflict_predict_test.go
+        - id: C
+          task: |
+            ## Agent C — commands.go: Git Diff Statistics Primitive
+
+            Add `GetDiffStats` function to `internal/git/commands.go` for diff statistics.
+
+            ### 1. Add DiffStats struct
+
+            After the imports section (around line 14), add:
+
+            ```go
+            // DiffStats holds statistics for a git diff
+            type DiffStats struct {
+                FilesChanged  int
+                LinesAdded    int
+                LinesRemoved  int
+            }
+            ```
+
+            ### 2. Implement GetDiffStats function
+
+            At the end of the file (after existing functions), add the full implementation
+            per the interface contract. Use `git diff --numstat` to get line counts.
 
-          After `PredictConflictsFromReports` (around line 125), add the enhanced function.
-          Full implementation in agent prompt preserves existing E11 logic while adding
-          pattern analysis layer. See interface contracts for signature.
+            ### 3. Tests
 
-          ### 4. Tests
+            Add to `commands_test.go`:
+            - `TestGetDiffStats_AppendOnly` — verify append-only pattern (LinesAdded > 0, LinesRemoved == 0)
+            - `TestGetDiffStats_LineEdits` — verify edit pattern (both > 0)
+            - `TestGetDiffStats_NoChanges` — verify FilesChanged == 0
 
-          Add tests in `conflict_predict_test.go`:
-          - `TestAnalyzeDiffPattern_AppendOnly` — verify append-only detection
-          - `TestAnalyzeDiffPattern_LineEdits` — verify edit detection
-          - `TestPredictConflictsWithStrategy_AutoMergeable` — verify auto-merge recommendation
-          - `TestPredictConflictsWithStrategy_ManualRequired` — verify manual merge detection
+            ### Verification Gate
 
-          ### Verification Gate
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && \
+              go test ./internal/git -run TestGetDiffStats -v
+            ```
 
-          ```bash
-          cd /Users/dayna.blackwell/code/scout-and-wave-go && \
-            go test ./pkg/protocol -run TestAnalyzeDiffPattern -v && \
-            go test ./pkg/protocol -run TestPredictConflictsWithStrategy -v
-          ```
+            ### Constraints
 
-          ### Constraints
+            - Use existing `RunOutput` helper (line 33) for git command execution
+            - Handle empty diff output gracefully (returns zero stats, not error)
+            - Parse `--numstat` format exactly: `<added>\t<removed>\t<file>`
+            - Binary files show `-` for stats — treat as error (not supported)
+          files:
+            - internal/git/commands.go
+            - internal/git/commands_test.go
+    - number: 2
+      agents:
+        - id: B
+          task: |
+            ## Agent B — finalize_steps.go: Auto-Merge Orchestration
 
-          - Do not modify existing `PredictConflictsFromReports` — it must remain unchanged for backward compatibility
-          - New function `PredictConflictsWithStrategy` is the enhanced alternative
-          - All new types are exported (capitalized) for use by finalize_steps.go
-          - Use existing `git.DiffUnifiedZero` and `git.MergeBase` functions (no modifications)
-          - Pattern detection must be conservative: when in doubt, classify as Manual
+            Enhance `pkg/engine/finalize_steps.go` and wire into `finalize.go` with
+            auto-merge capability for append-only conflicts.
 
-        files:
-          - pkg/protocol/conflict_predict.go
-          - pkg/protocol/conflict_predict_test.go
+            ### 1. Add StepPredictConflictsEnhanced function
 
-      - id: C
-        task: |
-          ## Agent C — commands.go: Git Diff Statistics Primitive
-
-          Add `GetDiffStats` function to `internal/git/commands.go` for diff statistics.
-
-          ### 1. Add DiffStats struct
-
-          After the imports section (around line 14), add:
-
-          ```go
-          // DiffStats holds statistics for a git diff
-          type DiffStats struct {
-              FilesChanged  int
-              LinesAdded    int
-              LinesRemoved  int
-          }
-          ```
-
-          ### 2. Implement GetDiffStats function
-
-          At the end of the file (after existing functions), add the full implementation
-          per the interface contract. Use `git diff --numstat` to get line counts.
-
-          ### 3. Tests
-
-          Add to `commands_test.go`:
-          - `TestGetDiffStats_AppendOnly` — verify append-only pattern (LinesAdded > 0, LinesRemoved == 0)
-          - `TestGetDiffStats_LineEdits` — verify edit pattern (both > 0)
-          - `TestGetDiffStats_NoChanges` — verify FilesChanged == 0
-
-          ### Verification Gate
-
-          ```bash
-          cd /Users/dayna.blackwell/code/scout-and-wave-go && \
-            go test ./internal/git -run TestGetDiffStats -v
-          ```
-
-          ### Constraints
-
-          - Use existing `RunOutput` helper (line 33) for git command execution
-          - Handle empty diff output gracefully (returns zero stats, not error)
-          - Parse `--numstat` format exactly: `<added>\t<removed>\t<file>`
-          - Binary files show `-` for stats — treat as error (not supported)
-
-        files:
-          - internal/git/commands.go
-          - internal/git/commands_test.go
-
-  - number: 2
-    agents:
-      - id: B
-        task: |
-          ## Agent B — finalize_steps.go: Auto-Merge Orchestration
-
-          Enhance `pkg/engine/finalize_steps.go` and wire into `finalize.go` with
-          auto-merge capability for append-only conflicts.
-
-          ### 1. Add StepPredictConflictsEnhanced function
-
-          Add to `finalize_steps.go` the enhanced conflict prediction step that calls
-          `protocol.PredictConflictsWithStrategy` and handles auto-mergeable patterns.
-
-          ### 2. Add StepAutoMergeAppendConflicts function
-
-          Add auto-merge step that merges agent branches in order, verifies no git
-          conflicts after each merge, and falls back to manual on unexpected conflict.
-
-          ### 3. Wire into finalize.go
-
-          In `pkg/engine/finalize.go` at line 344 (Step 1.3: PredictConflicts), replace
-          the existing `StepPredictConflicts` call with `StepPredictConflictsEnhanced`
-          and add conditional auto-merge logic.
-
-          Add helper function `countMergedAgents` at end of `finalize.go`.
-
-          ### 4. Tests
-
-          Add to `finalize_steps_test.go`:
-          - `TestStepPredictConflictsEnhanced_NoConflicts`
-          - `TestStepPredictConflictsEnhanced_AllAutoMergeable`
-          - `TestStepPredictConflictsEnhanced_MixedStrategies`
-          - `TestStepAutoMergeAppendConflicts_Success`
-          - `TestStepAutoMergeAppendConflicts_UnexpectedConflict`
-
-          ### Verification Gate
-
-          ```bash
-          cd /Users/dayna.blackwell/code/scout-and-wave-go && \
-            go test ./pkg/engine -run TestStepPredictConflictsEnhanced -v && \
-            go test ./pkg/engine -run TestStepAutoMergeAppendConflicts -v
-          ```
-
-          ### Constraints
-
-          - Import `internal/git` package for `git.ConflictedFiles` call
-          - Use existing `emitStepEvent` helper for progress reporting
-          - Auto-merge MUST check for git conflicts after each merge (safety)
-          - Fallback to manual merge (abort + error) on any unexpected conflict
-          - Do not modify existing `StepPredictConflicts` — keep for backward compatibility
-
-        files:
-          - pkg/engine/finalize_steps.go
-          - pkg/engine/finalize.go
-          - pkg/engine/finalize_steps_test.go
-
-      - id: D
-        task: |
-          ## Agent D — scout.md: Prevention Guidance
-
-          Update Scout agent documentation to include E11 conflict prevention guidance.
-
-          ### 1. Add E11 Prevention Section
-
-          In `implementations/claude-code/prompts/agents/scout.md`, find the section
-          "7. Assign file ownership and agent IDs" (around line 230) and add a new
-          subsection documenting E11 conflict prevention strategies.
-
-          ### 2. Update File Ownership Section Documentation
-
-          Add a note after the I1 reference explaining that E11 now includes pattern
-          analysis for append-only patterns.
-
-          ### 3. Add Known Patterns Section
-
-          At the end of section 8 "Structure waves from the DAG" (around line 300),
-          add a subsection documenting known E11 conflict patterns: test file append-only,
-          integration file append-only, line edits, and mixed patterns.
-
-          ### Verification Gate
-
-          ```bash
-          # No compilation needed — documentation only
-          echo "scout.md updated with E11 prevention guidance"
-          ```
-
-          ### Constraints
-
-          - Do not modify the schema section or interface contracts section
-          - Keep the tone consistent with existing Scout documentation (instructive, protocol-focused)
-          - Reference specific line numbers as "around line X" since exact lines may shift
-          - Mention version "v0.X.X" as placeholder (will be updated at release time)
-
-        files:
-          - implementations/claude-code/prompts/agents/scout.md
-
-      - id: E
-        task: |
-          ## Agent E — Documentation: CHANGELOG + CLI Help
-
-          Document E11 smart merge feature in CHANGELOG.md.
-
-          ### 1. CHANGELOG.md Entry
-
-          Add a new version entry to CHANGELOG.md:
-
-          ```markdown
-          ## [Unreleased]
-
-          ### Added
-          - **E11 smart merge strategies:** Automatic conflict resolution for append-only patterns
-            - Pattern analysis: `AnalyzeDiffPattern()` classifies changes as append-only, line edits, deletions, or mixed
-            - Auto-merge: `StepAutoMergeAppendConflicts()` merges agents with append-only conflicts in file-sorted order
-            - CLI flag: `sawtools finalize-wave --auto-merge-append` enables automatic merge for compatible patterns
-            - Merge strategy suggestions: E11 error messages now recommend specific merge commands based on pattern analysis
-            - Prevention guidance: Scout documentation updated with E11 conflict patterns
-          - `pkg/protocol/conflict_predict.go`: New `DiffPattern` classification and `AnalyzeDiffPattern()` function
-          - `internal/git/commands.go`: New `GetDiffStats()` primitive for diff statistics
-          - `pkg/engine/finalize_steps.go`: New `StepAutoMergeAppendConflicts()` orchestration function
-
-          ### Changed
-          - `pkg/protocol/conflict_predict.go`: E11 now includes pattern analysis before blocking
-          - `pkg/engine/finalize.go`: FinalizeWave can optionally auto-merge append-only conflicts
-          - `sawtools finalize-wave`: New `--auto-merge-append` flag for automatic merge
-          - `scout.md`: Added E11 prevention guidance (test file patterns, append-only vs line edits)
-          - E11 error messages now include intelligent merge strategy suggestions
-
-          ### Fixed
-          - Test file conflicts (append-only pattern) now auto-mergeable instead of requiring manual merge
-          ```
-
-          ### 2. Verification Gate
-
-          ```bash
-          cd /Users/dayna.blackwell/code/scout-and-wave
-          grep -A 5 "## \[Unreleased\]" CHANGELOG.md | grep "E11 smart merge"
-          echo "✓ CHANGELOG updated"
-          ```
-
-          ### Constraints
-
-          - Place entry in [Unreleased] section (not a versioned release yet)
-          - Follow existing CHANGELOG.md format (### Added, ### Changed headers)
-          - Mention all 4 agents' contributions (A: pattern analysis, C: git primitives, B: orchestration, D: docs)
-          - Include CLI flag documentation (`--auto-merge-append`)
-          - Keep entries concise but specific (mention function names and file names)
-
-        files:
-          - CHANGELOG.md
-
+            Add to `finalize_steps.go` the enhanced conflict prediction step that calls
+            `protocol.PredictConflictsWithStrategy` and handles auto-mergeable patterns.
+
+            ### 2. Add StepAutoMergeAppendConflicts function
+
+            Add auto-merge step that merges agent branches in order, verifies no git
+            conflicts after each merge, and falls back to manual on unexpected conflict.
+
+            ### 3. Wire into finalize.go
+
+            In `pkg/engine/finalize.go` at line 344 (Step 1.3: PredictConflicts), replace
+            the existing `StepPredictConflicts` call with `StepPredictConflictsEnhanced`
+            and add conditional auto-merge logic.
+
+            Add helper function `countMergedAgents` at end of `finalize.go`.
+
+            ### 4. Tests
+
+            Add to `finalize_steps_test.go`:
+            - `TestStepPredictConflictsEnhanced_NoConflicts`
+            - `TestStepPredictConflictsEnhanced_AllAutoMergeable`
+            - `TestStepPredictConflictsEnhanced_MixedStrategies`
+            - `TestStepAutoMergeAppendConflicts_Success`
+            - `TestStepAutoMergeAppendConflicts_UnexpectedConflict`
+
+            ### Verification Gate
+
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && \
+              go test ./pkg/engine -run TestStepPredictConflictsEnhanced -v && \
+              go test ./pkg/engine -run TestStepAutoMergeAppendConflicts -v
+            ```
+
+            ### Constraints
+
+            - Import `internal/git` package for `git.ConflictedFiles` call
+            - Use existing `emitStepEvent` helper for progress reporting
+            - Auto-merge MUST check for git conflicts after each merge (safety)
+            - Fallback to manual merge (abort + error) on any unexpected conflict
+            - Do not modify existing `StepPredictConflicts` — keep for backward compatibility
+          files:
+            - pkg/engine/finalize_steps.go
+            - pkg/engine/finalize.go
+            - pkg/engine/finalize_steps_test.go
+        - id: D
+          task: |
+            ## Agent D — scout.md: Prevention Guidance
+
+            Update Scout agent documentation to include E11 conflict prevention guidance.
+
+            ### 1. Add E11 Prevention Section
+
+            In `implementations/claude-code/prompts/agents/scout.md`, find the section
+            "7. Assign file ownership and agent IDs" (around line 230) and add a new
+            subsection documenting E11 conflict prevention strategies.
+
+            ### 2. Update File Ownership Section Documentation
+
+            Add a note after the I1 reference explaining that E11 now includes pattern
+            analysis for append-only patterns.
+
+            ### 3. Add Known Patterns Section
+
+            At the end of section 8 "Structure waves from the DAG" (around line 300),
+            add a subsection documenting known E11 conflict patterns: test file append-only,
+            integration file append-only, line edits, and mixed patterns.
+
+            ### Verification Gate
+
+            ```bash
+            # No compilation needed — documentation only
+            echo "scout.md updated with E11 prevention guidance"
+            ```
+
+            ### Constraints
+
+            - Do not modify the schema section or interface contracts section
+            - Keep the tone consistent with existing Scout documentation (instructive, protocol-focused)
+            - Reference specific line numbers as "around line X" since exact lines may shift
+            - Mention version "v0.X.X" as placeholder (will be updated at release time)
+          files:
+            - implementations/claude-code/prompts/agents/scout.md
+        - id: E
+          task: |
+            ## Agent E — Documentation: CHANGELOG + CLI Help
+
+            Document E11 smart merge feature in CHANGELOG.md.
+
+            ### 1. CHANGELOG.md Entry
+
+            Add a new version entry to CHANGELOG.md:
+
+            ```markdown
+            ## [Unreleased]
+
+            ### Added
+            - **E11 smart merge strategies:** Automatic conflict resolution for append-only patterns
+              - Pattern analysis: `AnalyzeDiffPattern()` classifies changes as append-only, line edits, deletions, or mixed
+              - Auto-merge: `StepAutoMergeAppendConflicts()` merges agents with append-only conflicts in file-sorted order
+              - CLI flag: `sawtools finalize-wave --auto-merge-append` enables automatic merge for compatible patterns
+              - Merge strategy suggestions: E11 error messages now recommend specific merge commands based on pattern analysis
+              - Prevention guidance: Scout documentation updated with E11 conflict patterns
+            - `pkg/protocol/conflict_predict.go`: New `DiffPattern` classification and `AnalyzeDiffPattern()` function
+            - `internal/git/commands.go`: New `GetDiffStats()` primitive for diff statistics
+            - `pkg/engine/finalize_steps.go`: New `StepAutoMergeAppendConflicts()` orchestration function
+
+            ### Changed
+            - `pkg/protocol/conflict_predict.go`: E11 now includes pattern analysis before blocking
+            - `pkg/engine/finalize.go`: FinalizeWave can optionally auto-merge append-only conflicts
+            - `sawtools finalize-wave`: New `--auto-merge-append` flag for automatic merge
+            - `scout.md`: Added E11 prevention guidance (test file patterns, append-only vs line edits)
+            - E11 error messages now include intelligent merge strategy suggestions
+
+            ### Fixed
+            - Test file conflicts (append-only pattern) now auto-mergeable instead of requiring manual merge
+            ```
+
+            ### 2. Verification Gate
+
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave
+            grep -A 5 "## \[Unreleased\]" CHANGELOG.md | grep "E11 smart merge"
+            echo "✓ CHANGELOG updated"
+            ```
+
+            ### Constraints
+
+            - Place entry in [Unreleased] section (not a versioned release yet)
+            - Follow existing CHANGELOG.md format (### Added, ### Changed headers)
+            - Mention all 4 agents' contributions (A: pattern analysis, C: git primitives, B: orchestration, D: docs)
+            - Include CLI flag documentation (`--auto-merge-append`)
+            - Keep entries concise but specific (mention function names and file names)
+          files:
+            - CHANGELOG.md
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go build ./pkg/protocol ./pkg/engine ./internal/git ./cmd/sawtools
+          required: true
+          repo: scout-and-wave-go
+        - type: test
+          command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go test ./pkg/protocol ./pkg/engine ./internal/git
+          required: true
+          repo: scout-and-wave-go
+        - type: lint
+          command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go vet ./pkg/protocol ./pkg/engine ./internal/git
+          required: true
+          repo: scout-and-wave-go
 pre_mortem:
-  overall_risk: medium
-  rows:
-    - scenario: Auto-merge produces git conflicts despite append-only detection
-      likelihood: low
-      impact: high
-      mitigation: |
-        StepAutoMergeAppendConflicts checks for conflicts after each merge and
-        falls back to manual merge (with abort) on any unexpected conflict. Tests
-        verify fallback behavior.
-    - scenario: Pattern detection false positives (classifies line edits as append-only)
-      likelihood: low
-      impact: high
-      mitigation: |
-        GetDiffStats uses git diff --numstat which is accurate for line counts.
-        Conservative classification: when in doubt, classify as Manual. Tests verify
-        edge cases (binary files, empty diffs).
-    - scenario: Cross-repo IMPLs where manifest.Repository is empty
-      likelihood: medium
-      impact: medium
-      mitigation: |
-        AnalyzeDiffPattern returns error when repoPath is empty. Caller falls back
-        to conservative Manual strategy. Document limitation in E11 protocol section.
-    - scenario: Agent C and Agent A have circular dependency (both need git.DiffStats)
-      likelihood: low
-      impact: low
-      mitigation: |
-        Agent C creates git.DiffStats first (Wave 1). Agent A consumes it (also Wave 1,
-        but independent file). No circular dependency — both are leaf nodes in same wave.
+    overall_risk: medium
+    rows:
+        - scenario: Auto-merge produces git conflicts despite append-only detection
+          likelihood: low
+          impact: high
+          mitigation: |
+            StepAutoMergeAppendConflicts checks for conflicts after each merge and
+            falls back to manual merge (with abort) on any unexpected conflict. Tests
+            verify fallback behavior.
+        - scenario: Pattern detection false positives (classifies line edits as append-only)
+          likelihood: low
+          impact: high
+          mitigation: |
+            GetDiffStats uses git diff --numstat which is accurate for line counts.
+            Conservative classification: when in doubt, classify as Manual. Tests verify
+            edge cases (binary files, empty diffs).
+        - scenario: Cross-repo IMPLs where manifest.Repository is empty
+          likelihood: medium
+          impact: medium
+          mitigation: |
+            AnalyzeDiffPattern returns error when repoPath is empty. Caller falls back
+            to conservative Manual strategy. Document limitation in E11 protocol section.
+        - scenario: Agent C and Agent A have circular dependency (both need git.DiffStats)
+          likelihood: low
+          impact: low
+          mitigation: |
+            Agent C creates git.DiffStats first (Wave 1). Agent A consumes it (also Wave 1,
+            but independent file). No circular dependency — both are leaf nodes in same wave.
+critic_report:
+    verdict: PASS
+    agent_reviews:
+        A:
+            agent_id: A
+            verdict: PASS
+        B:
+            agent_id: B
+            verdict: PASS
+        C:
+            agent_id: C
+            verdict: PASS
+        D:
+            agent_id: D
+            verdict: ISSUES
+            issues:
+                - check: pattern_accuracy
+                  severity: warning
+                  description: Brief references 'section 7... around line 230' but actual section 7 is at line 502. Brief references 'section 8... around line 300' but actual section 8 is at line 528.
+                  file: implementations/claude-code/prompts/agents/scout.md
+        E:
+            agent_id: E
+            verdict: PASS
+    summary: 'All agent briefs verified against codebase. Agent A references correct line numbers (24, 35, 125) in conflict_predict.go. Agent C references correct RunOutput helper at line 33 in commands.go. Agent B correctly identifies finalize.go line 344 for StepPredictConflicts call site and references existing imports. Agent D has minor line number drift in scout.md (section 7 at line 502 not 230, section 8 at line 528 not 300) but uses ''around line X'' qualifier which is acceptable given file evolution. Agent E references CHANGELOG.md correctly. All interface contracts match existing symbols: git.DiffUnifiedZero (line 646), git.MergeBase (line 634), git.Run, parseDiffHunks (line 170), computeFileHashInBranch (line 294), HunkRange (line 162). All test files exist. No errors detected.'
+    reviewed_at: "2026-04-01T21:57:16Z"
+    issue_count: 1
+state: "REVIEWED"
