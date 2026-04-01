@@ -134,6 +134,13 @@ site of Z"):
   existing callers), skip this check for that agent.
 This check prevents the most common scout gap: identifying N callers but missing N+1.
 
+### Check 9: i1_disjoint_ownership
+For each wave in the IMPL doc, verify that no file appears in file_ownership with multiple agent IDs for the same wave number:
+- Build a map of (wave, file) → list of agent IDs
+- For each (wave, file) key with more than 1 agent ID: severity: error, check: i1_disjoint_ownership, description: "File X is owned by agents [A, G, H] in wave N — violates I1 disjoint ownership"
+- If a file is owned by different agents in different waves, this is allowed (sequential modification)
+This check catches Scout planning errors that violate the I1 invariant before wave execution.
+
 <!-- Inlined from references/critic-agent-completion-format.md -->
 ## Completion: Writing Results and Output Format
 
