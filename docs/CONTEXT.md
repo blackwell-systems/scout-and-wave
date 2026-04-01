@@ -117,3 +117,5 @@
   - IMPL doc: docs/IMPL/complete/IMPL-test-cascade-detection.yaml
 - **e11-smart-merge-strategies**: completed 2026-04-01, 2 waves, 5 agents
   - IMPL doc: docs/IMPL/complete/IMPL-e11-smart-merge-strategies.yaml
+- **config-package-review**: completed 2026-04-01, 2 waves, 4 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-config-package-review.yaml
