@@ -101,13 +101,13 @@ waves:
             func TestValidateI1DisjointOwnership_CatchesDuplicates(t *testing.T) {
                 m := &IMPLManifest{
                     FeatureSlug: "test-i1",
-                    FileOwnership: []FileOwnershipEntry{
+                    FileOwnership: []FileOwnership{
                         {File: "checker_test.go", Agent: "A", Wave: 1},
                         {File: "checker_test.go", Agent: "G", Wave: 1},
                         {File: "checker_test.go", Agent: "H", Wave: 1},
                     },
                     Waves: []Wave{
-                        {Number: 1, Agents: []AgentSpec{
+                        {Number: 1, Agents: []Agent{
                             {ID: "A", Files: []string{"checker_test.go"}},
                             {ID: "G", Files: []string{"checker_test.go"}},
                             {ID: "H", Files: []string{"checker_test.go"}},
@@ -167,7 +167,7 @@ waves:
                 // Build a filtered manifest with only this wave's ownership entries
                 filtered := &IMPLManifest{
                     FeatureSlug: m.FeatureSlug,
-                    FileOwnership: []FileOwnershipEntry{},
+                    FileOwnership: []FileOwnership{},
                 }
                 for _, fo := range m.FileOwnership {
                     if fo.Wave == waveNum {
@@ -277,10 +277,11 @@ waves:
 
             **Part 2: Update CRITICAL INVARIANTS section**
 
-            The CRITICAL INVARIANTS section starts at line 114. At the end of the I1 section (after the I1 description but before the I2 section starts, around line 135), add:
+            The CRITICAL INVARIANTS section starts at line 114. The I1 section ends around line 121 ("If two tasks need the same file: extract interfaces, split files, or sequence into different waves"). Insert a new paragraph after line 121, before the I2 section starts (line 123):
 
             ```markdown
-            **Validation checkpoint:** After assigning file ownership (step 7), run a manual I1 check before proceeding to step 8: for each wave, verify no file appears multiple times in file_ownership with different agent IDs. If duplicates exist, restructure using the options in step 7b.
+
+            **I1 validation checkpoint:** After assigning file ownership (step 7), run a manual I1 check before proceeding to step 8: for each wave, verify no file appears multiple times in file_ownership with different agent IDs. If duplicates exist, restructure using the options in step 7b.
             ```
 
             **Verification gate:**
