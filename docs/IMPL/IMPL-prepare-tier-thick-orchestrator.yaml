@@ -1,0 +1,611 @@
+title: 'prepare-tier: absorb prepare-wave calls as thick orchestrator'
+feature_slug: prepare-tier-thick-orchestrator
+verdict: SUITABLE
+suitability_assessment: |-
+    The feature touches 3 files across 2 layers (protocol + cmd). File ownership
+    is cleanly disjoint: Agent A owns the protocol layer (program_tier_prepare.go),
+    and Agent B owns the CLI adapter (prepare_tier_cmd.go). The engine layer
+    (step_types.go + prepare.go) is owned by the sibling IMPL
+    prepare-wave-program-context, which must be waved FIRST. This IMPL depends on
+    CommitState bool in PrepareWaveOpts being present before it can call engine.PrepareWave
+    with commit-state semantics.
+
+    SEQUENCING DEPENDENCY: IMPL-prepare-wave-program-context (SCOUT_PENDING in
+    /Users/dayna.blackwell/code/scout-and-wave/docs/IMPL/IMPL-prepare-wave-program-context.yaml)
+    must be waved before this IMPL. That IMPL adds CommitState bool to PrepareWaveOpts
+    and the isSAWOwnedPath/commit-state logic in prepare.go. This IMPL calls
+    engine.PrepareWave with CommitState: true to absorb the per-IMPL prepare-wave
+    calls inside prepare-tier.
+
+    Wave structure: 2 waves, 2 agents. Agent A (wave 1) is the protocol-layer work —
+    add PrepareWave calls + new result fields to PrepareTier. Agent B (wave 2) wires
+    the new result fields to the CLI output.
+
+    Parallelization value: marginal (2 agents, sequential dependency), but the IMPL
+    doc provides interface contracts preventing field-name drift between layers.
+
+    Estimated times:
+    - Scout phase: ~15 min
+    - Agent execution: ~20 min (agent A ~12 min, agent B ~8 min, sequential)
+    - Merge and verification: ~5 min
+    Total SAW time: ~40 min
+
+    Sequential baseline: ~30 min
+    Time savings: marginal. Coordination value (interface contract) is primary benefit.
+
+    Precondition: wave IMPL-prepare-wave-program-context before launching this IMPL.
+test_command: go test ./... -timeout 120s
+lint_command: go vet ./...
+file_ownership:
+    - file: pkg/protocol/program_tier_prepare.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/protocol/program_tier_prepare_test.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: cmd/sawtools/prepare_tier_cmd.go
+      agent: B
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+      repo: scout-and-wave-go
+interface_contracts:
+    - name: PrepareTierOpts.RunPrepareWave
+      description: |-
+        New boolean field on PrepareTierOpts. When true, PrepareTier calls
+        engine.PrepareWave (with CommitState: true) for each IMPL in the tier after
+        the existing conflict-check + validate + worktree-create steps. Requires
+        prepare-wave-program-context IMPL to be merged first (adds CommitState to
+        PrepareWaveOpts).
+      definition: |
+        // RunPrepareWave controls whether PrepareTier absorbs prepare-wave calls
+        // for each IMPL in the tier after worktree creation. When true, it calls
+        // engine.PrepareWave with CommitState: true so SAW-owned state changes are
+        // auto-committed between IMPL preparations. User code changes still fail fast.
+        RunPrepareWave bool
+      location: pkg/protocol/program_tier_prepare.go
+    - name: IMPLPrepareWaveResult
+      description: |-
+        New struct capturing the result of prepare-wave for a single IMPL in the
+        tier. Embedded in PrepareTierResult.PrepareWaveResults slice. Contains the
+        IMPL slug, success flag, worktrees, agent briefs, and any error message.
+        Mirrors relevant fields from engine.PrepareWaveResult to avoid a circular
+        import (protocol imports engine is not allowed; engine imports protocol).
+        The CLI adapter maps engine.PrepareWaveResult → IMPLPrepareWaveResult.
+      definition: |
+        // IMPLPrepareWaveResult is the per-IMPL result of a prepare-wave call
+        // made by PrepareTier when RunPrepareWave is true.
+        type IMPLPrepareWaveResult struct {
+            ImplSlug    string                  `json:"impl_slug"`
+            Success     bool                    `json:"success"`
+            Worktrees   []protocol.WorktreeInfo `json:"worktrees"`
+            AgentBriefs []engine.AgentBriefInfo `json:"agent_briefs"`
+            Error       string                  `json:"error,omitempty"`
+        }
+      location: pkg/protocol/program_tier_prepare.go
+    - name: PrepareTierResult.PrepareWaveResults
+      description: |-
+        New slice field on PrepareTierResult. Present and non-nil only when
+        RunPrepareWave was true. Each entry corresponds to one IMPL in the tier
+        (ordered by tier.Impls order). If prepare-wave failed for an IMPL, the
+        entry has Success=false and Error set; subsequent IMPLs still attempted
+        (fail-all-collect pattern already used in the validation step).
+      definition: |
+        // PrepareWaveResults holds per-IMPL prepare-wave results when
+        // PrepareTierOpts.RunPrepareWave is true. Nil when RunPrepareWave is false.
+        PrepareWaveResults []IMPLPrepareWaveResult `json:"prepare_wave_results,omitempty"`
+      location: pkg/protocol/program_tier_prepare.go
+    - name: PrepareTierOpts.WaveNum
+      description: |-
+        New int field on PrepareTierOpts. Passed to engine.PrepareWave as WaveNum
+        when RunPrepareWave is true. Defaults to 1 (the standard first-wave case
+        for program tier execution). Must be >= 1 when RunPrepareWave is true.
+      definition: |
+        // WaveNum is the wave number passed to engine.PrepareWave when
+        // RunPrepareWave is true. Defaults to 1.
+        WaveNum int
+      location: pkg/protocol/program_tier_prepare.go
+    - name: PrepareTierOpts.MergeTarget
+      description: |-
+        New string field on PrepareTierOpts. Passed to engine.PrepareWave as
+        MergeTarget when RunPrepareWave is true. Allows the caller to specify the
+        baseline branch. Empty string means current HEAD (same default as prepare-wave).
+      definition: |
+        // MergeTarget is the baseline branch for prepare-wave calls.
+        // Empty string uses current HEAD (prepare-wave default).
+        MergeTarget string
+      location: pkg/protocol/program_tier_prepare.go
+    - name: prepare-tier --run-prepare-wave flag
+      description: |-
+        New CLI flag added to prepare-tier command. Maps to PrepareTierOpts.RunPrepareWave.
+        When passed, prepare-tier also runs prepare-wave for each IMPL in the tier,
+        outputting the full set of agent worktrees and briefs in the JSON result.
+      definition: |
+        --run-prepare-wave   Also run prepare-wave for each IMPL in the tier after
+                             worktree creation. Auto-commits SAW state between IMPLs
+                             so subsequent IMPLs do not fail with "working directory
+                             is dirty". Does not commit user code changes.
+      location: cmd/sawtools/prepare_tier_cmd.go
+    - name: prepare-tier --wave flag
+      description: |-
+        New CLI flag for wave number, forwarded to engine.PrepareWave when
+        --run-prepare-wave is set. Defaults to 1.
+      definition: |
+        --wave int   Wave number to pass to prepare-wave (default 1). Only used
+                     when --run-prepare-wave is set.
+      location: cmd/sawtools/prepare_tier_cmd.go
+    - name: prepare-tier --merge-target flag
+      description: |-
+        New CLI flag for merge target branch, forwarded to engine.PrepareWave when
+        --run-prepare-wave is set. Empty string uses current HEAD.
+      definition: |
+        --merge-target string   Baseline branch for prepare-wave calls (default: current HEAD).
+                                Only used when --run-prepare-wave is set.
+      location: cmd/sawtools/prepare_tier_cmd.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## Role
+            You are a Wave Agent. Implement the protocol-layer changes for the
+            `prepare-tier-thick-orchestrator` feature in the scout-and-wave-go repo.
+
+            ## Precondition — check before writing any code
+            This IMPL depends on IMPL-prepare-wave-program-context being merged first.
+            That IMPL adds `CommitState bool` to `PrepareWaveOpts` in
+            `pkg/engine/step_types.go`. Before writing your changes, verify that field
+            exists:
+
+            ```bash
+            grep -n "CommitState" /Users/dayna.blackwell/workspace/code/scout-and-wave-go/pkg/engine/step_types.go
+            ```
+
+            If `CommitState` is absent, STOP and report this as a blocker. Do not proceed.
+
+            ## Context
+            `prepare-tier` currently stops after validating IMPLs and creating IMPL-branch
+            worktrees. The orchestrator then calls `prepare-wave` for each IMPL manually.
+            This causes the second `prepare-wave` call to fail with "working directory is
+            dirty" because the first call advanced IMPL state and wrote the gate cache.
+
+            The fix: add `RunPrepareWave bool` to `PrepareTierOpts`. When true, PrepareTier
+            calls `engine.PrepareWave` for each IMPL in the tier (with `CommitState: true`)
+            after the existing steps, collecting results. SAW-owned state changes are
+            auto-committed between IMPL preparations so the next call starts clean.
+
+            ## Package import note
+            `pkg/protocol` MUST NOT import `pkg/engine` (engine imports protocol, not
+            the reverse — circular import). PrepareTier already receives the engine
+            call results from a different layer. To avoid the circular import, define
+            `IMPLPrepareWaveResult` in `pkg/protocol/program_tier_prepare.go` using
+            only protocol-level types (`protocol.WorktreeInfo`). The engine-level
+            `AgentBriefInfo` struct must be mapped at the call site (CLI adapter). Read
+            the import graph carefully before writing.
+
+            CORRECTION: Since PrepareTier lives in `pkg/protocol` and engine.PrepareWave
+            lives in `pkg/engine`, and `pkg/protocol` is imported BY `pkg/engine`, calling
+            `engine.PrepareWave` from `pkg/protocol` creates a circular import. Therefore,
+            the `RunPrepareWave` logic CANNOT live in `pkg/protocol/program_tier_prepare.go`.
+
+            Instead: the `RunPrepareWave` logic must be lifted to the CLI adapter
+            (`cmd/sawtools/prepare_tier_cmd.go`). The CLI adapter can import both
+            `pkg/protocol` (for PrepareTier) and `pkg/engine` (for PrepareWave). The
+            `PrepareTierResult` struct gets a new `PrepareWaveResults` field of type
+            `[]IMPLPrepareWaveResult`, where `IMPLPrepareWaveResult` holds only protocol-
+            level types (no engine imports needed in protocol package).
+
+            ## Files to Modify
+
+            ### `pkg/protocol/program_tier_prepare.go`
+
+            **1. Add new fields to `PrepareTierOpts`:**
+
+            After `SkipCritic bool` (line ~14), add:
+
+            ```go
+            // RunPrepareWave controls whether the caller should run prepare-wave for
+            // each IMPL. When true, the CLI adapter iterates IMPLs and calls
+            // engine.PrepareWave with CommitState: true between calls.
+            // This field is informational for the protocol layer; actual prepare-wave
+            // calls happen in the CLI adapter to avoid circular imports.
+            RunPrepareWave bool
+            WaveNum        int    // Wave number to pass to prepare-wave (defaults to 1)
+            MergeTarget    string // Baseline branch for prepare-wave calls (empty = HEAD)
+            ```
+
+            **2. Add `IMPLPrepareWaveResult` struct** (new type, add near `IMPLValidationResult`):
+
+            ```go
+            // IMPLPrepareWaveResult captures the result of a prepare-wave call for a
+            // single IMPL within a tier. Used when PrepareTierOpts.RunPrepareWave is true.
+            // AgentBriefs and Worktrees use protocol-level types to avoid a circular import
+            // with pkg/engine.
+            type IMPLPrepareWaveResult struct {
+                ImplSlug  string               `json:"impl_slug"`
+                Success   bool                 `json:"success"`
+                Worktrees []WorktreeInfo       `json:"worktrees"`
+                Error     string               `json:"error,omitempty"`
+            }
+            ```
+
+            Note: `AgentBriefInfo` is an engine type; omit it from `IMPLPrepareWaveResult`
+            here. The CLI adapter (Agent B) will add agent_briefs to a separate struct or
+            embed them at the CLI layer.
+
+            **3. Add `PrepareWaveResults` field to `PrepareTierResult`:**
+
+            After `Success bool` (line ~26), add:
+
+            ```go
+            // PrepareWaveResults holds per-IMPL prepare-wave results.
+            // Non-nil only when PrepareTierOpts.RunPrepareWave is true.
+            PrepareWaveResults []IMPLPrepareWaveResult `json:"prepare_wave_results,omitempty"`
+            ```
+
+            **4. No changes to the `PrepareTier` function body** — the prepare-wave loop
+            lives in the CLI adapter to avoid circular imports. PrepareTier continues to
+            perform steps 1–5 (conflict-check, validate, worktree create) as today.
+
+            ## Tests
+
+            Add tests to `pkg/protocol/program_tier_prepare_test.go`:
+
+            1. `TestPrepareTierResult_PrepareWaveResults_JSONFields` — verify that
+               `PrepareTierResult` serializes `prepare_wave_results` field correctly when
+               set, and omits it when nil (omitempty). Use the existing
+               `TestPrepareTierResult_JSONFields` test pattern.
+
+            2. `TestIMPLPrepareWaveResult_JSONFields` — verify that `IMPLPrepareWaveResult`
+               serializes with expected field names: `impl_slug`, `success`, `worktrees`,
+               and that `error` is omitted when empty (omitempty).
+
+            3. `TestPrepareTierOpts_NewFields` — compile-time test verifying the new
+               fields exist on `PrepareTierOpts` by constructing the struct:
+
+               ```go
+               func TestPrepareTierOpts_NewFields(t *testing.T) {
+                   opts := PrepareTierOpts{
+                       ProgramManifestPath: "test.yaml",
+                       TierNumber:          1,
+                       RepoDir:             ".",
+                       SkipCritic:          false,
+                       RunPrepareWave:      true,
+                       WaveNum:             1,
+                       MergeTarget:         "main",
+                   }
+                   if !opts.RunPrepareWave {
+                       t.Error("expected RunPrepareWave=true")
+                   }
+                   if opts.WaveNum != 1 {
+                       t.Error("expected WaveNum=1")
+                   }
+               }
+               ```
+
+            ## Verification Gate
+            ```
+            go build ./...
+            go vet ./...
+            go test ./pkg/protocol/... -run "TestPrepareTier|TestIMPLPrepareWaveResult|TestPrepareTierOpts" -timeout 60s
+            ```
+
+            ## Constraints
+            - Do NOT import `pkg/engine` from `pkg/protocol` — this creates a circular
+              import (engine imports protocol). Verify with `go build ./...` before finishing.
+            - `IMPLPrepareWaveResult` must use only types from `pkg/protocol` or stdlib.
+            - Do NOT change the existing `PrepareTier` function body logic — only add
+              struct fields and types. The prepare-wave loop lives in Agent B's work.
+            - Follow existing Go conventions in this package: no public unexported fields,
+              use `omitempty` on optional JSON fields, keep error messages lowercase.
+          files:
+            - pkg/protocol/program_tier_prepare.go
+            - pkg/protocol/program_tier_prepare_test.go
+    - number: 2
+      agents:
+        - id: B
+          task: |
+            ## Role
+            You are a Wave Agent. Implement the CLI adapter changes for the
+            `prepare-tier-thick-orchestrator` feature in the scout-and-wave-go repo.
+
+            ## Precondition — check before writing any code
+            Agent A (Wave 1) has already added:
+            - `PrepareTierOpts.RunPrepareWave bool` to `pkg/protocol/program_tier_prepare.go`
+            - `PrepareTierOpts.WaveNum int` to `pkg/protocol/program_tier_prepare.go`
+            - `PrepareTierOpts.MergeTarget string` to `pkg/protocol/program_tier_prepare.go`
+            - `PrepareTierResult.PrepareWaveResults []IMPLPrepareWaveResult` to the result struct
+            - `IMPLPrepareWaveResult` struct in `pkg/protocol/program_tier_prepare.go`
+
+            Also verify that IMPL-prepare-wave-program-context is merged (CommitState field exists):
+            ```bash
+            grep -n "CommitState" /Users/dayna.blackwell/workspace/code/scout-and-wave-go/pkg/engine/step_types.go
+            ```
+
+            If either precondition is absent, STOP and report as a blocker.
+
+            ## Context
+            The CLI adapter `cmd/sawtools/prepare_tier_cmd.go` currently calls
+            `protocol.PrepareTier(...)` and outputs JSON. This wave adds:
+
+            1. Three new flags: `--run-prepare-wave`, `--wave`, `--merge-target`
+            2. After `protocol.PrepareTier` succeeds, when `--run-prepare-wave` is set,
+               call `engine.PrepareWave` for each IMPL in the tier (ordered by tier.Impls
+               slug list from the program manifest) with `CommitState: true` to auto-commit
+               SAW state between calls.
+            3. Collect per-IMPL results into `result.PrepareWaveResults` and output the
+               enriched JSON.
+
+            ## Design: where the loop lives
+            Because `pkg/protocol` cannot import `pkg/engine` (circular import), the
+            prepare-wave loop runs in the CLI adapter which can freely import both packages.
+            The loop:
+
+            ```go
+            if runPrepareWave {
+                // Determine projectRoot the same way prepare-wave does
+                waveNum := waveNumFlag
+                if waveNum == 0 {
+                    waveNum = 1
+                }
+                for _, slug := range tier.Impls {
+                    implPath, resolveErr := protocol.ResolveIMPLPath(repoDir, slug)
+                    if resolveErr != nil {
+                        result.PrepareWaveResults = append(result.PrepareWaveResults,
+                            protocol.IMPLPrepareWaveResult{
+                                ImplSlug: slug,
+                                Success:  false,
+                                Error:    resolveErr.Error(),
+                            })
+                        continue
+                    }
+                    pwResult, pwErr := engine.PrepareWave(context.Background(), engine.PrepareWaveOpts{
+                        IMPLPath:    implPath,
+                        RepoPath:    projectRoot,
+                        WaveNum:     waveNum,
+                        MergeTarget: mergeTargetFlag,
+                        CommitState: true,
+                        Logger:      newSawLogger(),
+                        OnEvent: func(step, status, detail string) {
+                            fmt.Fprintf(os.Stderr, "prepare-tier[%s]: [%s] %s — %s\n", slug, step, status, detail)
+                        },
+                    })
+                    entry := protocol.IMPLPrepareWaveResult{
+                        ImplSlug: slug,
+                    }
+                    if pwErr != nil {
+                        entry.Success = false
+                        entry.Error = pwErr.Error()
+                    } else {
+                        entry.Success = pwResult.Success
+                        entry.Worktrees = pwResult.Worktrees
+                    }
+                    result.PrepareWaveResults = append(result.PrepareWaveResults, entry)
+                }
+                // Mark overall success false if any prepare-wave failed
+                for _, pw := range result.PrepareWaveResults {
+                    if !pw.Success {
+                        result.Success = false
+                        break
+                    }
+                }
+            }
+            ```
+
+            ## Files to Modify
+
+            ### `cmd/sawtools/prepare_tier_cmd.go`
+
+            **1. Add three new variable declarations** alongside `tierNum` and `skipCritic`:
+
+            ```go
+            var runPrepareWave bool
+            var waveNumFlag   int
+            var mergeTargetFlag string
+            ```
+
+            **2. Import `pkg/engine`** (add to imports block):
+
+            ```go
+            "github.com/blackwell-systems/scout-and-wave-go/pkg/engine"
+            ```
+
+            **3. Add the prepare-wave loop** after the `result, err := protocol.PrepareTier(...)`
+            call succeeds and before the final JSON output. Insert the loop (shown in the
+            Design section above) between the err-check and the JSON marshal block:
+
+            ```go
+            result, err := protocol.PrepareTier(protocol.PrepareTierOpts{
+                ProgramManifestPath: manifestPath,
+                TierNumber:          tierNum,
+                RepoDir:             repoDir,
+                SkipCritic:          skipCritic,
+                RunPrepareWave:      runPrepareWave,
+                WaveNum:             waveNumFlag,
+                MergeTarget:         mergeTargetFlag,
+            })
+            if err != nil {
+                ... (existing error handling)
+            }
+
+            // Run prepare-wave for each IMPL if requested
+            if runPrepareWave && result.Success {
+                ... (the loop from Design section)
+            }
+
+            out, _ := json.MarshalIndent(result, "", "  ")
+            fmt.Fprintln(cmd.OutOrStdout(), string(out))
+            ```
+
+            Note: only run the prepare-wave loop when `result.Success` is true (all
+            prior steps passed). If conflicts or validation failed, skip the loop.
+
+            **4. Determine `tier` for slug iteration.** The loop needs the list of IMPL
+            slugs in the tier. Parse the program manifest after PrepareTier succeeds:
+
+            ```go
+            manifest, parseErr := protocol.ParseProgramManifest(manifestPath)
+            if parseErr == nil {
+                for i := range manifest.Tiers {
+                    if manifest.Tiers[i].Number == tierNum {
+                        tier = &manifest.Tiers[i]
+                        break
+                    }
+                }
+            }
+            ```
+
+            Store the tier pointer in `var tier *protocol.ProgramTier` declared before
+            RunE. Use it in the prepare-wave loop.
+
+            **5. Determine `projectRoot`** — use the same logic as `prepare-wave`:
+
+            ```go
+            projectRoot := repoDir
+            if projectRoot == "" {
+                projectRoot = "."
+            }
+            ```
+
+            The `repoDir` global flag is already available in `cmd/sawtools` package scope.
+
+            **6. Register three new flags** at the bottom of `newPrepareTierCmd`, after
+            the `--skip-critic` line:
+
+            ```go
+            cmd.Flags().BoolVar(&runPrepareWave, "run-prepare-wave", false,
+                "Also run prepare-wave for each IMPL in the tier. Auto-commits SAW state between IMPLs.")
+            cmd.Flags().IntVar(&waveNumFlag, "wave", 1,
+                "Wave number to pass to prepare-wave (default 1). Only used with --run-prepare-wave.")
+            cmd.Flags().StringVar(&mergeTargetFlag, "merge-target", "",
+                "Baseline branch for prepare-wave calls (default: current HEAD). Only used with --run-prepare-wave.")
+            ```
+
+            **7. Update Long description** to document the new behavior. After the
+            existing example lines, add:
+
+            ```
+            When --run-prepare-wave is set, prepare-tier also runs prepare-wave for
+            each IMPL in the tier after worktree creation, using --commit-state
+            internally to auto-commit SAW state between IMPL preparations. The JSON
+            output gains a prepare_wave_results array with per-IMPL worktrees and
+            success status.
+            ```
+
+            ## Tests
+            No new tests required in the CLI layer. The protocol-layer tests from Agent A
+            cover struct correctness. Verify the CLI compiles and the flag registration
+            is correct:
+
+            ```bash
+            go build ./cmd/sawtools/...
+            ./sawtools prepare-tier --help 2>&1 | grep run-prepare-wave
+            ```
+
+            (The grep should print the flag description line.)
+
+            ## Verification Gate
+            ```
+            go build ./...
+            go vet ./...
+            go test ./cmd/sawtools/... -timeout 60s
+            go test ./pkg/protocol/... -timeout 60s
+            ```
+
+            ## Constraints
+            - Only run the prepare-wave loop when `result.Success == true`. If PrepareTier
+              itself failed (conflicts, validation errors), skip the loop entirely.
+            - Pass `CommitState: true` to every `engine.PrepareWave` call. This is the
+              key fix: it auto-commits SAW state between IMPL preparaions.
+            - Do NOT pass `--commit-state` as a user-facing flag on `prepare-tier`. It is
+              always true when `--run-prepare-wave` is set (implementation detail, not
+              user-controlled).
+            - Collect all prepare-wave results even if one fails (fail-all-collect pattern,
+              consistent with existing validation step).
+            - Set `result.Success = false` if any prepare-wave entry has `Success=false`.
+            - The prepare-wave loop uses `protocol.ResolveIMPLPath` to find each IMPL's
+              path. Check that function exists: grep for it in
+              `/Users/dayna.blackwell/workspace/code/scout-and-wave-go/pkg/protocol/`.
+            - Do NOT use `os.Exit` — return errors through cobra's RunE error return.
+          files:
+            - cmd/sawtools/prepare_tier_cmd.go
+          dependencies:
+            - A
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./...
+          required: true
+          repo: scout-and-wave-go
+        - type: lint
+          command: go vet ./...
+          required: true
+          repo: scout-and-wave-go
+        - type: test
+          command: go test ./pkg/protocol/... -timeout 120s
+          required: true
+          repo: scout-and-wave-go
+pre_mortem:
+    overall_risk: medium
+    rows:
+        - scenario: |-
+            IMPL-prepare-wave-program-context is not yet merged when this IMPL is waved.
+            Agent A (and then Agent B) will find CommitState absent in PrepareWaveOpts
+            and fail to compile.
+          likelihood: high
+          impact: high
+          mitigation: |-
+            Wave IMPL-prepare-wave-program-context first. Both agents have a precondition
+            check (grep for CommitState) that surfaces this clearly before they write any
+            code. If CommitState is absent, the agent STOPs and reports a blocker rather
+            than producing broken code.
+        - scenario: |-
+            Circular import: pkg/protocol imports pkg/engine. This would cause a compile
+            failure since engine imports protocol.
+          likelihood: medium
+          impact: high
+          mitigation: |-
+            Agent A's prompt explicitly prohibits importing pkg/engine from pkg/protocol
+            and instructs the agent to verify with go build ./... before finishing.
+            The prepare-wave loop is explicitly placed in the CLI adapter (Agent B),
+            not in the protocol layer. Both agents have this constraint documented.
+        - scenario: |-
+            The tier slug list needed for the prepare-wave loop is not easily accessible
+            after PrepareTier returns — Agent B must re-parse the program manifest to get
+            the ordered slug list.
+          likelihood: low
+          impact: low
+          mitigation: |-
+            Agent B's prompt explicitly instructs parsing the program manifest a second
+            time (ParseProgramManifest) after PrepareTier returns to get the tier.Impls
+            slice. This is a read-only parse, not a write, so it is safe and cheap.
+        - scenario: |-
+            protocol.ResolveIMPLPath does not exist or has a different signature than
+            expected. Agent B references it in the loop.
+          likelihood: low
+          impact: medium
+          mitigation: |-
+            Agent B's constraints section instructs the agent to grep for ResolveIMPLPath
+            in pkg/protocol before using it. If absent, the agent must find the correct
+            path-resolution function (e.g., manual path construction matching the existing
+            pattern in program_tier_prepare.go).
+        - scenario: |-
+            The second prepare-wave call still fails with "working directory is dirty"
+            if CommitState logic in prepare.go does not correctly identify the IMPL yaml
+            as SAW-owned (e.g., absolute vs relative path mismatch).
+          likelihood: low
+          impact: medium
+          mitigation: |-
+            This is a risk in the prepare-wave-program-context IMPL (already documented
+            in its pre_mortem). The TestIsSAWOwnedPath unit test there covers the absolute
+            vs relative path normalization. If that test passes, this scenario is mitigated.
+            Integration-level test: after waving both IMPLs, run prepare-tier --run-prepare-wave
+            on a real program manifest and verify the second IMPL does not fail dirty-check.
+state: "REVIEWED"
+injection_method: hook
