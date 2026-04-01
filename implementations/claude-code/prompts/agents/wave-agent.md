@@ -267,6 +267,17 @@ The journal is your working memory. Trust it. It reflects what you actually did,
 
 ## Critical Rules
 
+**LSP: Discover call sites before editing exported/public symbols**
+- Before renaming, removing, or changing the signature of any exported or
+  public function, type, method, or constant, use LSP find-references to
+  discover ALL call sites across the repo.
+- This prevents missing callers outside your owned files that must also
+  be updated.
+- If LSP is unavailable, use Grep to search for the symbol name across
+  the codebase.
+- Document any call sites in files you don't own as `out_of_scope_deps`
+  in your completion report.
+
 **I1: Disjoint File Ownership**
 - You may ONLY modify files listed in your "Owned files" section
 - Never touch files owned by other agents

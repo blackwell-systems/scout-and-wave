@@ -1,3 +1,4 @@
+completion_date: "2026-03-31"
 title: 'prepare-wave: auto-commit SAW state in program context'
 feature_slug: prepare-wave-program-context
 verdict: SUITABLE
@@ -241,6 +242,7 @@ waves:
           files:
             - pkg/engine/step_types.go
             - pkg/engine/prepare.go
+      base_commit: 9bf4ae99fa8c29b413b54342637edb67b269ec72
     - number: 2
       agents:
         - id: B
@@ -325,6 +327,7 @@ waves:
             - cmd/sawtools/prepare_wave.go
           dependencies:
             - A
+      base_commit: 4fe0c0d221210253845f0f2d9c08f6c0162cb7b6
 quality_gates:
     level: standard
     gates:
@@ -340,6 +343,31 @@ quality_gates:
           command: go test ./pkg/engine/... -timeout 120s
           required: true
           repo: scout-and-wave-go
+completion_reports:
+    A:
+        status: complete
+        branch: saw/prepare-wave-program-context/wave1-agent-A
+        commit: 8f2b91c
+        files_changed:
+            - pkg/engine/step_types.go
+            - pkg/engine/prepare.go
+            - pkg/engine/prepare_test.go
+        files_created:
+            - pkg/engine/prepare_test.go
+        tests_added:
+            - TestIsSAWOwnedPath
+            - TestPrepareWave_CommitState_CleanDir
+            - TestPrepareWave_CommitState_UserCodeDirty
+        verification: PASS
+        notes: 'Added CommitState bool to PrepareWaveOpts (step_types.go). Added isSAWOwnedPath helper and CommitState branch in prepare.go dirty-check block. 9 tests passing. Out-of-scope: --commit-state CLI flag wiring (Agent B''s scope).'
+    B:
+        status: complete
+        branch: saw/prepare-wave-program-context/wave2-agent-B
+        commit: 976d7c4
+        files_changed:
+            - cmd/sawtools/prepare_wave.go
+        verification: PASS
+        notes: 'Wired --commit-state flag: added commitState var, CommitState field in PrepareWaveOpts struct literal, flag registration after --commit-baseline, and Long description update. All gates pass: build, vet, cmd/sawtools tests, pkg/engine tests.'
 pre_mortem:
     overall_risk: low
     rows:
@@ -380,5 +408,5 @@ pre_mortem:
             the split. Agent A should ensure the error message says something like
             "1 SAW state file(s) and 2 user-code file(s) modified" rather than just
             the user-code count.
-state: "REVIEWED"
+state: COMPLETE
 injection_method: hook

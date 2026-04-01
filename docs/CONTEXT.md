@@ -105,3 +105,9 @@
   - IMPL doc: docs/IMPL/complete/IMPL-progressive-disclosure-migration.yaml
 - **saw-auto-command**: completed 2026-03-31, 1 waves, 3 agents
   - IMPL doc: docs/IMPL/complete/IMPL-saw-auto-command.yaml
+- **prepare-wave-program-context**: completed 2026-03-31, 2 waves, 2 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-prepare-wave-program-context.yaml
+- **prepare-tier-thick-orchestrator**: completed 2026-03-31, 2 waves, 2 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-prepare-tier-thick-orchestrator.yaml
+- **finalize-tier-thick-orchestrator**: completed 2026-03-31, 2 waves, 2 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-finalize-tier-thick-orchestrator.yaml

@@ -666,15 +666,21 @@ They are NOT the structure of your output. Your output is PURE YAML following th
     Do not omit any of these three. If the work is simple, these sections may be
     brief, but they must be present.
 
-16. **Self-validate (mandatory, do not skip).** After writing the IMPL doc, run:
+16. **Self-validate (mandatory, do not skip).** After writing the IMPL doc, run both
+    validation commands in sequence:
+
     ```bash
     sawtools validate --fix "<absolute-path-to-impl-doc>"
+    sawtools pre-wave-validate "<absolute-path-to-impl-doc>" --wave 1 --fix
     ```
-    If exit code is 1, read the JSON errors and fix only the failing fields.
-    Re-run validation until it passes (max 3 attempts). Do NOT finish without
-    a passing validation. If all 3 attempts fail, set `state: "SCOUT_VALIDATION_FAILED"`
-    and report remaining errors in your final output. The orchestrator also validates
-    as defense-in-depth, but catching errors here prevents unnecessary retry loops.
+
+    Run `sawtools validate --fix` first (schema/structure). If it passes, run
+    `sawtools pre-wave-validate --wave 1 --fix` (E35 gaps + wiring). Fix any failures
+    from either command before proceeding. Re-run until both pass (max 3 attempts each).
+    Do NOT finish without both passing. If all 3 attempts fail on either command, set
+    `state: "SCOUT_VALIDATION_FAILED"` and report remaining errors in your final output.
+    The orchestrator also validates as defense-in-depth, but catching errors here prevents
+    unnecessary retry loops — especially E35 gaps, which require IMPL restructuring.
 
 17. **Brief accuracy self-check (mandatory, do not skip).** After schema validation
     passes, perform a targeted accuracy check on the briefs you just wrote. The critic

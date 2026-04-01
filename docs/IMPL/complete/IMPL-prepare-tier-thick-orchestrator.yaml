@@ -1,3 +1,4 @@
+completion_date: "2026-03-31"
 title: 'prepare-tier: absorb prepare-wave calls as thick orchestrator'
 feature_slug: prepare-tier-thick-orchestrator
 verdict: SUITABLE
@@ -306,6 +307,7 @@ waves:
           files:
             - pkg/protocol/program_tier_prepare.go
             - pkg/protocol/program_tier_prepare_test.go
+      base_commit: cbc7c796b90dca2c7d52ede5d6a413637f979fe5
     - number: 2
       agents:
         - id: B
@@ -536,6 +538,7 @@ waves:
             - cmd/sawtools/prepare_tier_cmd.go
           dependencies:
             - A
+          context_source: prepared-brief
 quality_gates:
     level: standard
     gates:
@@ -551,6 +554,28 @@ quality_gates:
           command: go test ./pkg/protocol/... -timeout 120s
           required: true
           repo: scout-and-wave-go
+completion_reports:
+    A:
+        status: complete
+        branch: saw/prepare-tier-thick-orchestrator/wave1-agent-A
+        commit: 5672f1e
+        files_changed:
+            - pkg/protocol/program_tier_prepare.go
+            - pkg/protocol/program_tier_prepare_test.go
+        tests_added:
+            - TestPrepareTierResult_PrepareWaveResults_JSONFields
+            - TestIMPLPrepareWaveResult_JSONFields
+            - TestPrepareTierOpts_NewFields
+        verification: PASS
+        notes: Protocol layer complete. Added RunPrepareWave/WaveNum/MergeTarget to PrepareTierOpts, IMPLPrepareWaveResult struct (protocol-only types, no engine import), and PrepareWaveResults field to PrepareTierResult. All 3 new tests pass plus full protocol suite (22s). No circular imports. Actual prepare-wave loop is Agent B scope (CLI adapter).
+    B:
+        status: complete
+        branch: main
+        commit: 3041d65
+        files_changed:
+            - cmd/sawtools/prepare_tier_cmd.go
+        verification: PASS
+        notes: 'Added --run-prepare-wave, --wave, --merge-target flags. Loop runs in CLI adapter (avoids circular import). CommitState: true always set. Fail-all-collect pattern for prepare-wave results. All gates pass: build, vet, protocol tests, sawtools tests.'
 pre_mortem:
     overall_risk: medium
     rows:
@@ -607,5 +632,5 @@ pre_mortem:
             vs relative path normalization. If that test passes, this scenario is mitigated.
             Integration-level test: after waving both IMPLs, run prepare-tier --run-prepare-wave
             on a real program manifest and verify the second IMPL does not fail dirty-check.
-state: "REVIEWED"
+state: COMPLETE
 injection_method: hook

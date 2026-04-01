@@ -1,3 +1,4 @@
+completion_date: "2026-03-31"
 title: finalize-tier thick orchestrator
 feature_slug: finalize-tier-thick-orchestrator
 verdict: SUITABLE
@@ -338,6 +339,7 @@ waves:
           files:
             - pkg/engine/finalize_tier.go
             - pkg/engine/finalize_tier_test.go
+      base_commit: 98ae1c36276bc4c490bf62b9aa05496e901c359f
     - number: 2
       agents:
         - id: B
@@ -449,6 +451,7 @@ waves:
             - cmd/sawtools/finalize_tier_cmd_test.go
           dependencies:
             - A
+          context_source: prepared-brief
 quality_gates:
     level: standard
     gates:
@@ -461,6 +464,36 @@ quality_gates:
         - type: test
           command: go test ./...
           required: true
+completion_reports:
+    A:
+        status: complete
+        branch: saw/finalize-tier-thick-orchestrator/wave1-agent-A
+        commit: 2b258e1
+        files_changed:
+            - pkg/engine/finalize_tier.go
+            - pkg/engine/finalize_tier_test.go
+        files_created:
+            - pkg/engine/finalize_tier.go
+            - pkg/engine/finalize_tier_test.go
+        tests_added:
+            - TestFinalizeTierEngine_MissingManifest
+            - TestFinalizeTierEngine_TierNotFound
+            - TestMergeIMPLBranchWorktreeAware_NoWorktrees
+            - TestFinalizeTierEngine_AllImplsAlreadyArchived
+        verification: PASS
+        notes: FinalizeTierEngine and mergeIMPLBranchWorktreeAware implemented. All 4 tests pass. Build and vet clean. Agent B owns cmd/sawtools/finalize_tier_cmd.go wiring.
+    B:
+        status: complete
+        branch: saw/finalize-tier-thick-orchestrator/wave2-agent-B
+        commit: 8d11229
+        files_changed:
+            - cmd/sawtools/finalize_tier_cmd.go
+        tests_added:
+            - TestFinalizeTierCmd_NoArgs
+            - TestFinalizeTierCmd_NoTierFlag
+            - TestFinalizeTierCmd_MissingManifest
+        verification: PASS
+        notes: Updated finalize_tier_cmd.go to call engine.FinalizeTierEngine instead of protocol.FinalizeTier. Updated Long description. Removed result.IsSuccess() check, uses engineResult.Errors slice. protocol import retained for --auto path (ParseProgramManifest). All 3 existing tests pass.
 pre_mortem:
     overall_risk: medium
     rows:
@@ -514,5 +547,5 @@ pre_mortem:
             human-authored comments that need preserving. The round-trip via gopkg.in/yaml.v3
             is the same pattern used in mark_program_complete.go (via strings manipulation)
             and is acceptable. Document in the completion report if it occurs.
-state: "REVIEWED"
+state: COMPLETE
 injection_method: hook

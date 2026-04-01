@@ -1,0 +1,631 @@
+title: Test Cascade Detection for Interface Changes
+feature_slug: test-cascade-detection
+verdict: SUITABLE
+suitability_assessment: |
+    Suitability Gate Assessment:
+
+    1. **File decomposition:** Yes — 5 defense layers span 7+ files cleanly:
+       - Scout prompt enhancement (scout.md)
+       - E35 detection extension (e35_detection.go, e35_detection_test.go)
+       - Pre-wave validation (pre_wave_validate_cmd.go, full_validate.go)
+       - Post-merge integration check (finalize.go or integration-agent.md)
+       - Documentation (execution-rules.md)
+       All changes have disjoint file ownership across agents.
+
+    2. **Investigation-first items:** No — problem is well-understood from recent
+       post-mortem (deps-review-fixes IMPL). LockFileParser interface change left 4
+       test files unowned: cargolock_test.go, gosum_test.go, packagelock_test.go,
+       poetrylock_test.go. Each test calls parser.Parse() which returned
+       result.Result[[]PackageInfo] after Agent B's change, but tests weren't
+       updated because no agent owned them. Root cause: Scout didn't detect test
+       files as cascade candidates when interface changed.
+
+    3. **Interface discoverability:** Yes — all extension points are well-defined:
+       - E35Gap struct exists (pkg/protocol/e35_detection.go:14-22)
+       - DetectE35Gaps function signature is stable
+       - Pre-wave validation pipeline is established (full_validate.go)
+       - Post-merge hook points exist in finalize-wave workflow
+
+    4. **Pre-implementation status check:** Confirmed TODO — no test cascade
+       detection exists today. E35 detects same-package function calls but skips
+       test files (line 68 in e35_detection.go: `strings.HasSuffix(file, "_test.go")`).
+       Scout prompt has no test file detection heuristic. Post-merge integration
+       checks don't verify test compilation.
+
+    5. **Parallelization value check:** Moderate value — 5 independent agents with
+       2-3 files each. Build/test cycle ~2-3s (Go). Parallelization benefit comes
+       from logical independence (5 detection layers can be implemented simultaneously)
+       rather than cycle length. Coordination value is high: explicit defense-in-depth
+       layers prevent future test cascade failures (high-impact dogfooding error class).
+
+    Estimated times:
+    - Scout phase: ~10 min (5 agent briefs, interface contract analysis)
+    - Agent execution: ~6-8 min (5 agents × 4-6 min avg, single wave — fully parallel)
+    - Merge & verification: ~4 min (go test ./... + validate test case additions)
+    Total SAW time: ~20-22 min
+
+    Sequential baseline: ~25-30 min (5 tasks × 5-6 min each)
+    Time savings: ~5-8 min (20-27% faster)
+
+    Recommendation: Clear speedup. Single-wave execution maximizes parallelism.
+    Coordination value is significant: explicit layers prevent recurring issue class.
+test_command: go test ./... -timeout 120s
+lint_command: go vet ./...
+file_ownership:
+    - file: implementations/claude-code/prompts/agents/scout.md
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: pkg/protocol/e35_detection.go
+      agent: B
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/protocol/e35_detection_test.go
+      agent: B
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: protocol/execution-rules.md
+      agent: E
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: CHANGELOG.md
+      agent: E
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+interface_contracts:
+    - name: DetectE35Gaps
+      description: |
+        Extend to detect test file cascade candidates when interface changes.
+        Add optional parameter to include test files in caller detection.
+      definition: |
+        func DetectE35Gaps(m *IMPLManifest, waveNum int, repoRoot string) ([]E35Gap, error)
+
+        // New internal function:
+        func detectTestCascades(m *IMPLManifest, waveNum int, repoRoot string) ([]E35Gap, error)
+      location: pkg/protocol/e35_detection.go
+    - name: E35Gap
+      description: |
+        Struct already exists — no changes needed. Test cascade candidates use
+        existing E35Gap structure with FunctionName = interface name (e.g.,
+        "LockFileParser.Parse") and CalledFrom = test file paths.
+      definition: |
+        type E35Gap struct {
+          Agent        string
+          FunctionName string
+          DefinedIn    string
+          CalledFrom   []string
+          Package      string
+        }
+      location: pkg/protocol/e35_detection.go:14-22
+    - name: PreWaveValidateResult
+      description: |
+        CLI output struct — add TestCascades field to surface test file gaps
+        separately from E35 same-package gaps.
+      definition: |
+        type PreWaveValidateResult struct {
+          Validation    protocol.FullValidateData
+          E35Gaps       E35GapsResult
+          TestCascades  E35GapsResult  // new field
+        }
+      location: cmd/sawtools/pre_wave_validate_cmd.go:14-17
+    - name: Scout Test Detection Heuristic
+      description: |
+        New section in Scout prompt (step 4 enhancement) — after dependency
+        analysis, scan for test files that reference changed interfaces.
+      definition: |
+        Algorithm (pseudo-code):
+        1. For each interface contract with "migrate" or "update signature" in description:
+           - Extract interface/type name (e.g., "LockFileParser")
+           - Run: grep -r "InterfaceName\." --include="*_test.go" <repo-root>
+           - For each test file found:
+             * Check if file is in file_ownership for same wave as interface change
+             * If NOT owned: flag as cascade candidate (assign to interface-changing agent OR create test-update agent)
+        2. Document in "Test Cascade Check" subsection of IMPL doc
+      location: implementations/claude-code/prompts/agents/scout.md (step 4 enhancement)
+    - name: Post-Merge Test Compilation Check
+      description: |
+        New step in finalize-wave workflow — after merge, before quality gates,
+        run test compilation-only check to catch orphaned test files.
+      definition: |
+        func VerifyTestCompilation(repoRoot string) error {
+          cmd := exec.Command("go", "test", "./...", "-compile-only")
+          cmd.Dir = repoRoot
+          out, err := cmd.CombinedOutput()
+          if err != nil {
+            return fmt.Errorf("test compilation failed: %w\nOutput: %s", err, out)
+          }
+          return nil
+        }
+      location: pkg/engine/finalize.go (new function + call in merge workflow)
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## What to Implement
+
+            Enhance Scout prompt (step 4 in Implementation Process) with test cascade
+            detection when interface contracts involve signature changes:
+
+            **Location:** implementations/claude-code/prompts/agents/scout.md, after
+            line 361 ("Language support: `sawtools detect-cascades` currently supports
+            Go only..."). Insert new subsection before step 5 (Define interface contracts).
+
+            **New content to add:**
+
+            ```markdown
+            **Test file cascade detection (after dependency analysis):**
+            When an interface contract involves a signature change (not just new methods,
+            but parameter changes, return type migration, or method removal), scan for
+            test files that reference the interface and ensure they're assigned to an
+            agent in the same wave.
+
+            Algorithm:
+            1. For each interface contract with keywords "migrate", "update signature",
+               "change return type", or "modify interface":
+               - Extract interface/type name from contract definition (e.g., "LockFileParser")
+               - Determine file where interface is defined (from `location` field)
+               - Find package directory of that file
+            2. Search for test files in same package:
+               ```bash
+               find <package-dir> -name "*_test.go" -exec grep -l "InterfaceName" {} \;
+               ```
+            3. For each test file found:
+               - Check if file is in `file_ownership` for same wave as interface change
+               - If NOT in ownership: either assign to interface-changing agent OR
+                 create dedicated test-update agent
+               - Test files must be owned by an agent in same wave to prevent
+                 post-merge compilation failures
+            4. Document findings in interface contract notes or Pre-Mortem risk section
+
+            **Example from deps-review-fixes post-mortem:**
+            Agent B changed LockFileParser.Parse signature from `([]PackageInfo, error)`
+            to `result.Result[[]PackageInfo]`. Four test files called parser.Parse():
+            cargolock_test.go, gosum_test.go, packagelock_test.go, poetrylock_test.go.
+            None were in file_ownership. Post-merge: 30 min manual fixes. Scout should
+            have detected these via grep and assigned them to Agent B or created Agent I
+            to update all test files.
+
+            **When to skip:** If interface change is additive-only (new method added,
+            existing signatures unchanged), test cascade check is not needed — existing
+            tests continue to compile.
+            ```
+
+            **Placement:** Insert between current step 4 (cascade detection) and step 5
+            (interface contracts). Renumber subsequent steps accordingly.
+
+            ## Interfaces & Dependencies
+
+            **No code dependencies** — this is pure documentation/prompt enhancement.
+
+            **Validation:** After editing, verify:
+            1. New section appears between cascade detection and interface contracts
+            2. Example references deps-review-fixes post-mortem
+            3. Algorithm is concrete (uses grep/find commands)
+            4. "When to skip" guidance prevents false positives
+
+            ## Tests & Verification
+
+            **No automated tests** — validation is manual review of prompt content.
+
+            **Verification gate (run in worktree):**
+            ```bash
+            grep -A20 "Test file cascade detection" implementations/claude-code/prompts/agents/scout.md && \
+            echo "✓ Scout enhancement present" || echo "✗ Section not found"
+            ```
+
+            ## Constraints
+
+            - DO NOT modify existing cascade detection logic (sawtools detect-cascades)
+            - DO NOT change step numbering in other parts of scout.md (steps 1-3 stay same)
+            - Ensure new section is Markdown-formatted (no YAML in this section)
+            - Keep example concrete (reference actual IMPL: deps-review-fixes)
+          files:
+            - implementations/claude-code/prompts/agents/scout.md
+        - id: B
+          task: |
+            ## What to Implement
+
+            Extend E35 detection to identify test file cascade candidates when interface
+            signatures change:
+
+            **1. New function: detectTestCascades**
+
+            Add after existing `DetectE35Gaps` function (after line 148):
+
+            ```go
+            // detectTestCascades finds test files that reference changed interfaces but
+            // are not owned by any agent in the wave. This prevents post-merge test
+            // compilation failures when interface signatures change.
+            //
+            // Detection algorithm:
+            // 1. For each agent's owned files, identify interface/type definitions
+            // 2. For each interface found, locate test files in same package
+            // 3. Check if test file calls interface methods (Parse, Detect, etc.)
+            // 4. If test file NOT owned by any agent, report as cascade candidate
+            func detectTestCascades(m *IMPLManifest, waveNum int, repoRoot string) ([]E35Gap, error) {
+              if m == nil {
+                return nil, fmt.Errorf("manifest is nil")
+              }
+              if repoRoot == "" {
+                return nil, fmt.Errorf("repoRoot is empty")
+              }
+
+              // Build agent file ownership map
+              agentFiles := make(map[string]map[string]bool)
+              allOwnedFiles := make(map[string]bool)
+              for _, fo := range m.FileOwnership {
+                if fo.Wave != waveNum {
+                  continue
+                }
+                if agentFiles[fo.Agent] == nil {
+                  agentFiles[fo.Agent] = make(map[string]bool)
+                }
+                agentFiles[fo.Agent][fo.File] = true
+                allOwnedFiles[fo.File] = true
+              }
+
+              // Build interface/type definitions from owned files
+              type interfaceDef struct {
+                name   string
+                file   string
+                pkg    string
+                pkgDir string
+                agent  string
+              }
+              var interfaces []interfaceDef
+
+              for agentID, files := range agentFiles {
+                for file := range files {
+                  if !strings.HasSuffix(file, ".go") || strings.HasSuffix(file, "_test.go") {
+                    continue
+                  }
+
+                  absPath := filepath.Join(repoRoot, file)
+                  ifaces, pkgName, pkgDir, err := extractInterfaces(absPath)
+                  if err != nil {
+                    continue
+                  }
+
+                  for _, iface := range ifaces {
+                    interfaces = append(interfaces, interfaceDef{
+                      name:   iface,
+                      file:   file,
+                      pkg:    pkgName,
+                      pkgDir: pkgDir,
+                      agent:  agentID,
+                    })
+                  }
+                }
+              }
+
+              // For each interface, find test files in same package that reference it
+              var gaps []E35Gap
+              for _, iface := range interfaces {
+                testFiles, err := filepath.Glob(filepath.Join(iface.pkgDir, "*_test.go"))
+                if err != nil {
+                  continue
+                }
+
+                var orphanedTests []string
+                for _, testFile := range testFiles {
+                  relPath, err := filepath.Rel(repoRoot, testFile)
+                  if err != nil {
+                    continue
+                  }
+
+                  // Skip if test file is owned by an agent
+                  if allOwnedFiles[relPath] {
+                    continue
+                  }
+
+                  // Check if test file references the interface
+                  refs, err := findInterfaceReferences(testFile, iface.name)
+                  if err != nil || len(refs) == 0 {
+                    continue
+                  }
+
+                  for _, line := range refs {
+                    orphanedTests = append(orphanedTests, fmt.Sprintf("%s:%d", relPath, line))
+                  }
+                }
+
+                if len(orphanedTests) > 0 {
+                  gaps = append(gaps, E35Gap{
+                    Agent:        iface.agent,
+                    FunctionName: iface.name,
+                    DefinedIn:    iface.file,
+                    CalledFrom:   orphanedTests,
+                    Package:      iface.pkg,
+                  })
+                }
+              }
+
+              return gaps, nil
+            }
+
+            // extractInterfaces parses a Go file and returns interface/type names
+            func extractInterfaces(absPath string) ([]string, string, string, error) {
+              fset := token.NewFileSet()
+              f, err := parser.ParseFile(fset, absPath, nil, 0)
+              if err != nil {
+                return nil, "", "", err
+              }
+
+              pkgName := f.Name.Name
+              pkgDir := filepath.Dir(absPath)
+
+              var interfaces []string
+              for _, decl := range f.Decls {
+                if genDecl, ok := decl.(*ast.GenDecl); ok && genDecl.Tok == token.TYPE {
+                  for _, spec := range genDecl.Specs {
+                    if typeSpec, ok := spec.(*ast.TypeSpec); ok {
+                      if _, isInterface := typeSpec.Type.(*ast.InterfaceType); isInterface {
+                        interfaces = append(interfaces, typeSpec.Name.Name)
+                      }
+                      // Also detect struct types (for signature changes like Parse method)
+                      if _, isStruct := typeSpec.Type.(*ast.StructType); isStruct {
+                        interfaces = append(interfaces, typeSpec.Name.Name)
+                      }
+                    }
+                  }
+                }
+              }
+
+              return interfaces, pkgName, pkgDir, nil
+            }
+
+            // findInterfaceReferences searches a test file for references to an interface
+            // (e.g., "parser := &CargoLockParser{}" or "var p LockFileParser")
+            func findInterfaceReferences(absPath, interfaceName string) ([]int, error) {
+              data, err := os.ReadFile(absPath)
+              if err != nil {
+                return nil, err
+              }
+
+              fset := token.NewFileSet()
+              f, err := parser.ParseFile(fset, absPath, data, 0)
+              if err != nil {
+                return nil, err
+              }
+
+              var lines []int
+              ast.Inspect(f, func(n ast.Node) bool {
+                // Detect type references in variable declarations, assignments, composites
+                switch node := n.(type) {
+                case *ast.CompositeLit:
+                  if ident, ok := node.Type.(*ast.Ident); ok && ident.Name == interfaceName {
+                    pos := fset.Position(node.Pos())
+                    lines = append(lines, pos.Line)
+                  }
+                case *ast.ValueSpec:
+                  if node.Type != nil {
+                    if ident, ok := node.Type.(*ast.Ident); ok && ident.Name == interfaceName {
+                      pos := fset.Position(node.Pos())
+                      lines = append(lines, pos.Line)
+                    }
+                  }
+                }
+                return true
+              })
+
+              return lines, nil
+            }
+            ```
+
+            **2. Update DetectE35Gaps to call detectTestCascades**
+
+            At end of `DetectE35Gaps` function (before return, around line 146), add:
+
+            ```go
+            	// Also detect test file cascades
+            	testGaps, err := detectTestCascades(m, waveNum, repoRoot)
+            	if err == nil {
+            		gaps = append(gaps, testGaps...)
+            	}
+            	// Note: we don't fail on test cascade detection errors — they're advisory
+
+            	return gaps, nil
+            ```
+
+            **3. Add test cases**
+
+            In `pkg/protocol/e35_detection_test.go`, add:
+
+            ```go
+            func TestDetectTestCascades_OrphanedTestFile(t *testing.T) {
+              // Test case: interface changes, test file not owned by any agent
+              // Expected: E35Gap reported with test file in CalledFrom
+              // Implementation: create temp repo with interface + test file, run detectTestCascades
+            }
+
+            func TestDetectTestCascades_TestFileOwned(t *testing.T) {
+              // Test case: interface changes, test file IS owned by an agent
+              // Expected: No gap reported
+            }
+            ```
+
+            ## Interfaces & Dependencies
+
+            **Imports:**
+            - No new imports needed — all required (go/ast, go/parser, go/token) already present
+
+            **Called by:**
+            - Agent C will invoke DetectE35Gaps from pre-wave-validate command
+            - Output format (E35Gap slice) remains unchanged
+
+            ## Tests & Verification
+
+            **Verification gate (run in worktree):**
+            ```bash
+            go build ./pkg/protocol && \
+            go vet ./pkg/protocol && \
+            go test ./pkg/protocol -run TestDetectTestCascades -v
+            ```
+
+            ## Constraints
+
+            - DO NOT modify existing E35Gap struct definition
+            - DO NOT change DetectE35Gaps function signature (backward compat)
+            - Keep test cascade detection as additive feature (doesn't break existing E35 logic)
+            - Test file detection is best-effort — if extraction fails, log and continue
+          files:
+            - pkg/protocol/e35_detection.go
+            - pkg/protocol/e35_detection_test.go
+        - id: E
+          task: |
+            ## What to Implement
+
+            Document test cascade detection as execution rule E46 in protocol:
+
+            **Location:** protocol/execution-rules.md, insert after E45 (or next
+            available E-number if E46 is taken).
+
+            **New section to add:**
+
+            ```markdown
+            ## E46: Test File Cascade Detection
+
+            **Trigger:** Scout planning phase (step 4: dependency analysis) OR
+            pre-wave validation (E35 detection)
+
+            **Required Action:** When an interface contract involves signature changes
+            (parameter modifications, return type migration, method removal), detect test
+            files that reference the interface and ensure they are assigned to an agent
+            in the same wave.
+
+            **Detection layers:**
+
+            1. **Scout-time (primary):** During dependency analysis, Scout scans for
+               `*_test.go` files that reference changed interfaces:
+               - For each interface contract with signature change keywords ("migrate",
+                 "update signature", "change return type")
+               - Run: `find <package-dir> -name "*_test.go" -exec grep -l "InterfaceName" {} \;`
+               - Assign orphaned test files to interface-changing agent OR create
+                 dedicated test-update agent
+
+            2. **Pre-wave validation (E35 extension):** `sawtools pre-wave-validate`
+               runs E35 detection, which includes test cascade detection via
+               `detectTestCascades()`. Reports orphaned test files as E35Gap entries
+               with CalledFrom pointing to test file locations.
+
+            3. **Post-merge verification:** After finalize-wave merges all agents,
+               `VerifyTestCompilation()` runs `go test -compile-only` to catch any
+               missed test cascades before quality gates execute.
+
+            **Rationale:** Interface signature changes break test files that call the
+            interface, but test files are often not included in file_ownership because
+            Scout focuses on implementation files. Example from deps-review-fixes IMPL:
+            Agent B changed LockFileParser.Parse signature, but 4 test files
+            (cargolock_test.go, gosum_test.go, packagelock_test.go, poetrylock_test.go)
+            were orphaned, causing 30 min of manual post-merge fixes.
+
+            **Failure Handling:**
+            - Scout-time detection prevents the issue (test files assigned to agent)
+            - E35 pre-wave validation catches missed cases (blocks wave launch)
+            - Post-merge verification is final safety net (blocks merge if tests don't compile)
+
+            **Related Rules:** E35 (same-package caller detection), E3 (pre-launch
+            ownership verification)
+
+            ---
+            ```
+
+            **Placement:** After E45 (or renumber if E46 already exists). Update "Overview"
+            section at top of document to reference E46 in the rule count.
+
+            ## Interfaces & Dependencies
+
+            **No code dependencies** — this is pure documentation.
+
+            **Cross-references:**
+            - Scout prompt (Agent A's changes) implements detection algorithm
+            - E35 detection (Agent B's changes) provides pre-wave validation
+            - Finalize workflow (Agent D's changes) provides post-merge check
+
+            ## Tests & Verification
+
+            **Verification gate (run in worktree):**
+            ```bash
+            grep -A30 "E46: Test File Cascade Detection" protocol/execution-rules.md && \
+            echo "✓ Rule documented" || echo "✗ Rule not found"
+            ```
+
+            ## Constraints
+
+            - Maintain existing E-number sequence (use next available)
+            - Follow existing rule format (Trigger, Required Action, Rationale, Failure Handling)
+            - Cross-reference related rules (E3, E35)
+            - Keep language concrete (avoid vague "should" statements)
+
+            ### 2. CHANGELOG.md Entry
+
+            Add a new version entry to CHANGELOG.md for the test cascade detection feature:
+
+            ```markdown
+            ## [Unreleased]
+
+            ### Added
+            - **Test cascade detection (E46):** Prevents orphaned test files when interfaces change
+              - Scout-time detection: grep for `*_test.go` files referencing changed interfaces
+              - E35 extension: `detectTestCascades()` function in e35_detection.go
+              - Documentation: execution rule E46 documents detection layers
+            - `pkg/protocol/e35_detection.go`: New `detectTestCascades()` function for AST-based test file analysis
+            - Scout agent now includes test cascade detection heuristic (step 4)
+
+            ### Changed
+            - `pkg/protocol/e35_detection.go`: Extended E35 to include test file orphan detection
+            - `scout.md`: Added test file scanning to dependency analysis (step 4)
+            - `protocol/execution-rules.md`: Added E46 (Test File Cascade Detection) rule
+            ```
+
+            **Verification gate (run in worktree):**
+            ```bash
+            grep -A 5 "## \[Unreleased\]" CHANGELOG.md | grep "Test cascade detection"
+            grep -A30 "E46: Test File Cascade Detection" protocol/execution-rules.md
+            echo "✓ Documentation complete"
+            ```
+          files:
+            - protocol/execution-rules.md
+            - CHANGELOG.md
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./...
+          required: true
+          repo: scout-and-wave-go
+        - type: test
+          command: go test ./... -timeout 120s
+          required: true
+          repo: scout-and-wave-go
+        - type: lint
+          command: go vet ./...
+          required: true
+          repo: scout-and-wave-go
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: E35 detection performance degrades on large repos (scanning all test files)
+          likelihood: low
+          impact: medium
+          mitigation: detectTestCascades skips test files in same-package folders already scanned by E35. If performance issue observed, add caching or limit scan to modified packages only.
+        - scenario: Scout test cascade heuristic produces false positives (non-interface grep matches)
+          likelihood: medium
+          impact: low
+          mitigation: Scout instructions include "When to skip" guidance (additive-only changes don't need cascade check). False positives caught by human review of IMPL doc before wave launch.
+        - scenario: Post-merge test compilation check fails on non-Go repos
+          likelihood: low
+          impact: low
+          mitigation: VerifyTestCompilation checks for go.mod before running test compilation. Returns nil for non-Go projects.
+        - scenario: Test cascade detection misses test files in subdirectories
+          likelihood: low
+          impact: medium
+          mitigation: detectTestCascades uses filepath.Glob with "*_test.go" pattern in package directory. If subdirectory tests exist, Scout instructions note to check pkg/ and internal/ subdirs.
+state: SCOUT_PENDING
+injection_method: hook
