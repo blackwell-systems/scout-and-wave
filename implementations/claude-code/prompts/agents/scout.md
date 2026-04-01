@@ -362,6 +362,42 @@ They are NOT the structure of your output. Your output is PURE YAML following th
    references it, manually classify as syntax vs semantic based on context (import line = syntax,
    comment = semantic).
 
+   **Test file cascade detection (after dependency analysis):**
+   When an interface contract involves a signature change (not just new methods,
+   but parameter changes, return type migration, or method removal), scan for
+   test files that reference the interface and ensure they're assigned to an
+   agent in the same wave.
+
+   Algorithm:
+   1. For each interface contract with keywords "migrate", "update signature",
+      "change return type", or "modify interface":
+      - Extract interface/type name from contract definition (e.g., "LockFileParser")
+      - Determine file where interface is defined (from `location` field)
+      - Find package directory of that file
+   2. Search for test files in same package:
+      ```bash
+      find <package-dir> -name "*_test.go" -exec grep -l "InterfaceName" {} \;
+      ```
+   3. For each test file found:
+      - Check if file is in `file_ownership` for same wave as interface change
+      - If NOT in ownership: either assign to interface-changing agent OR
+        create dedicated test-update agent
+      - Test files must be owned by an agent in same wave to prevent
+        post-merge compilation failures
+   4. Document findings in interface contract notes or Pre-Mortem risk section
+
+   **Example from deps-review-fixes post-mortem:**
+   Agent B changed LockFileParser.Parse signature from `([]PackageInfo, error)`
+   to `result.Result[[]PackageInfo]`. Four test files called parser.Parse():
+   cargolock_test.go, gosum_test.go, packagelock_test.go, poetrylock_test.go.
+   None were in file_ownership. Post-merge: 30 min manual fixes. Scout should
+   have detected these via grep and assigned them to Agent B or created Agent I
+   to update all test files.
+
+   **When to skip:** If interface change is additive-only (new method added,
+   existing signatures unchanged), test cascade check is not needed — existing
+   tests continue to compile.
+
 5. **Define interface contracts.** For every function, method, or type that
    will be called across agent boundaries, write the exact signature.
    Language-specific, fully typed, no pseudocode. These signatures are binding
