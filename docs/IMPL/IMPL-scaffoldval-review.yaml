@@ -67,12 +67,6 @@ file_ownership:
       action: modify
       depends_on:
         - A
-    - file: pkg/protocol/scaffold_validation.go
-      agent: C
-      wave: 2
-      action: modify
-      depends_on:
-        - A
 interface_contracts:
     - name: ValidateScaffold
       description: |
@@ -82,9 +76,13 @@ interface_contracts:
         func ValidateScaffold(ctx context.Context, scaffoldPath string, implPath string, repoRoot string) result.Result[*ValidationResult]
 
         Returns:
-        - SUCCESS with ValidationResult when all checks pass or are skipped
-        - FATAL with error codes SV01_SYNTAX_FAIL, SV02_IMPORT_FAIL, SV03_BUILD_FAIL,
-          SV04_PARSE_FAIL, SV05_PROTOCOL_LOAD_FAIL when validation pipeline fails
+        - SUCCESS with *ValidationResult in all cases
+        - Validation failures are captured in the ValidationResult payload
+          (Syntax.Status = "FAIL", Imports.Status = "FAIL", Build.Status = "FAIL/SKIP")
+        - NEVER returns FATAL — the pipeline always completes and returns a ValidationResult
+
+        Note: Error codes SV01-SV05 are reserved for future use if the function needs to
+        signal pipeline-level failures (e.g., scaffold file doesn't exist). Currently unused.
       location: pkg/scaffoldval/validator.go
     - name: Error codes for scaffoldval
       description: |
@@ -120,10 +118,12 @@ waves:
 
             2. Replace all `return result, nil` with `result.NewSuccess(result)`
 
-            3. Replace all `return result, nil` (early exits) with structured error returns:
-               - Line 32: Syntax fail → `result.NewFailure[*ValidationResult]([]result.SAWError{result.NewError(result.CodeScaffoldSyntaxFail, err.Error())})`
-               - Line 68: Protocol load fail → `result.NewFailure[*ValidationResult]([]result.SAWError{result.NewError(result.CodeScaffoldProtocolLoad, fmt.Sprintf("Failed to parse IMPL manifest: %v", err))})`
-               - Line 97: Final success → `result.NewSuccess(result)`
+               The function currently returns `(result, nil)` in all cases — validation failures
+               are captured in ValidationResult fields (Syntax.Status = "FAIL", etc.), not as
+               function-level errors. This pattern must be preserved. All returns become:
+               - Line 32: `return result.NewSuccess(result)` (syntax fail captured in result.Syntax.Status)
+               - Line 68: `return result.NewSuccess(result)` (protocol load captured in result.Build.Status = "SKIP")
+               - Line 97: `return result.NewSuccess(result)` (final success or validation failures in payload)
 
             4. Update ValidationResult to include structured build/import errors if needed
                (currently stores raw error strings in Errors []string fields)
@@ -242,7 +242,7 @@ waves:
 
             ## What to implement
 
-            Three callers must be updated:
+            One caller must be updated:
 
             1. cmd/sawtools/validate_scaffold_cmd.go (line 34):
                Before:
@@ -269,15 +269,6 @@ waves:
                ```
                No change needed (test decodes YAML output, not Go return value).
 
-            3. pkg/protocol/scaffold_validation.go (no direct call, but documents the pattern):
-               Add a comment at the top explaining the Result[T] pattern for future readers:
-               ```go
-               // ScaffoldStatus represents the validation result for a single scaffold file.
-               // This type is used by protocol.ValidateScaffolds to check scaffold readiness.
-               // For detailed validation (syntax, imports, build), use scaffoldval.ValidateScaffold
-               // which returns result.Result[*scaffoldval.ValidationResult].
-               ```
-
             ## Interface contracts
 
             No new interfaces. Uses ValidateScaffold from Agent A (Wave 1).
@@ -289,9 +280,6 @@ waves:
                - TestValidateScaffoldCmd_InvalidScaffold: check command still exits 1
                - No changes to YAML decoding logic (output format unchanged)
 
-            2. pkg/protocol/scaffold_validation_test.go:
-               - No changes needed (does not call scaffoldval.ValidateScaffold directly)
-
             ## Verification gate
 
             ```bash
@@ -299,19 +287,15 @@ waves:
             go build ./cmd/sawtools/...
             go vet ./cmd/sawtools/...
             go test ./cmd/sawtools/... -run TestValidateScaffold -v
-            go test ./pkg/protocol/... -run ValidateScaffolds -v
             ```
 
             ## Constraints
 
             - Do NOT change the YAML output format (validate_scaffold_cmd.go line 42-46)
-            - Do NOT change scaffold_validation.go logic (it checks status strings, not
-              validation pipeline results)
             - Preserve error exit behavior (exit 1 when result.OverallStatus() == "FAIL")
           files:
             - cmd/sawtools/validate_scaffold_cmd.go
             - cmd/sawtools/validate_scaffold_cmd_test.go
-            - pkg/protocol/scaffold_validation.go
           dependencies:
             - A
 quality_gates:
@@ -353,5 +337,26 @@ pre_mortem:
           mitigation: |
             Agent C explicitly preserves YAML output format and error exit codes. Test
             coverage in validate_scaffold_cmd_test.go verifies CLI behavior unchanged.
+critic_report:
+    verdict: PASS
+    agent_reviews:
+        A:
+            agent_id: A
+            verdict: PASS
+            issues:
+                - check: pattern_accuracy
+                  severity: warning
+                  description: 'Interface contract contains contradictory statements: line 82 says NEVER returns FATAL, but lines 147-149 say Returns FATAL only when the pipeline cannot run (syntax error prevents import check...). Implementation steps (119-126) consistently specify result.NewSuccess for all returns, and test expectations (154-155) match this. Contradiction is in contract description only; implementation instructions are clear.'
+                  file: pkg/scaffoldval/validator.go
+                  symbol: ValidateScaffold
+        B:
+            agent_id: B
+            verdict: PASS
+        C:
+            agent_id: C
+            verdict: PASS
+    summary: All briefs verified against codebase. Agent A's interface contract contains contradictory language about FATAL returns (line 82 vs lines 147-149), but implementation steps and test expectations are clear and consistent. Agents B and C are fully accurate. One warning noted for documentation clarity.
+    reviewed_at: "2026-04-01T22:49:32Z"
+    issue_count: 1
 state: SCOUT_PENDING
 injection_method: hook

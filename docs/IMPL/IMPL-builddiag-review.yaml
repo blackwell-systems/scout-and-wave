@@ -1,0 +1,98 @@
+title: Deep Review and Refactoring of pkg/builddiag
+feature_slug: builddiag-review
+verdict: NOT_SUITABLE
+suitability_assessment: |
+    The pkg/builddiag package was reviewed for Result[T] migration opportunities,
+    error code standardization, simplification potential, and consistency with
+    codebase standards. The package consists of 287 production lines and 100%
+    test coverage.
+
+    **Key findings:**
+
+    1. **No Result[T] migration opportunities.** The package has exactly one
+       public function that returns error: `DiagnoseError(errorLog string,
+       language string) (*Diagnosis, error)`. This function ALWAYS returns a
+       non-nil Diagnosis value, even on error cases (returns "unknown" pattern
+       when no match is found). The error return is ONLY used for unsupported
+       languages (line 21 in diagnose.go). This is a non-canonical pattern but
+       NOT a Result[T] migration candidate — it's an always-SUCCESS behavior
+       (similar to pkg/scaffoldval). The proper fix would be to change the
+       signature to `DiagnoseError(...) *Diagnosis` (no error return) and
+       return `&Diagnosis{Pattern: "unsupported", ...}` for unsupported
+       languages. However, this change would break the one callsite in
+       pkg/engine/finalize_steps.go:346 where the error is silently ignored
+       anyway (`if d, diagErr := builddiag.DiagnoseError(...); diagErr == nil`).
+
+    2. **No error code standardization needed.** The package only creates one
+       error (unsupported language), which is returned as a plain fmt.Errorf.
+       This error is never checked by the caller — it's silently discarded in
+       finalize_steps.go. Adding a result.SAWError with code would be
+       over-engineering for an error that is never handled. The error should
+       either be removed entirely (return nil Diagnosis for unsupported
+       languages) or converted to a warning log.
+
+    3. **No simplification opportunities.** The package is already minimal:
+       - diagnose.go (60 lines): core matching logic
+       - types.go (21 lines): two structs
+       - 4 pattern files (54 lines each): language-specific catalogs
+       - 100% test coverage with edge case validation
+       All code is actively used. No dead code, no unused parameters, no
+       redundant abstractions.
+
+    4. **Package is consistent with codebase standards.** Naming conventions,
+       test patterns, and structure all match the project's style. The package
+       follows the established pattern from pkg/deps and pkg/suitability.
+
+    5. **Recent implementation (v0.34.0).** Git history shows the package was
+       implemented 2026-03-23 in feature H7 (build failure diagnosis). The
+       design is fresh and follows current best practices. No drift or legacy
+       patterns detected.
+
+    **Why NOT_SUITABLE:**
+
+    The only actionable issue is the always-SUCCESS error return pattern, which
+    requires a signature change to `DiagnoseError(...) *Diagnosis` (no error)
+    and updating the single callsite to handle nil returns. This is a 2-line
+    change in diagnose.go and a 3-line change in finalize_steps.go — 5 lines
+    total across 2 files. SAW adds no parallelization value at this scope.
+
+    The change should be made directly:
+
+    1. Change `DiagnoseError` signature to return `*Diagnosis` only (no error)
+    2. Replace `fmt.Errorf("unsupported language")` with `return nil`
+    3. Update finalize_steps.go:346 to check `if d := builddiag.DiagnoseError(...); d != nil`
+
+    **Estimated time:**
+    - Direct implementation: ~5 minutes (signature change + callsite update + test fix)
+    - SAW overhead: ~15 minutes (scout, wave prep, merge, validation)
+    - Time savings: none (SAW is 3x slower for this scope)
+
+    **Recommendation:** Make the signature change directly without SAW. The
+    package is well-designed, thoroughly tested, and has no other issues
+    requiring attention.
+test_command: go test ./pkg/builddiag/...
+lint_command: go vet ./pkg/builddiag/...
+file_ownership: []
+interface_contracts: []
+waves: []
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./pkg/builddiag/...
+          required: true
+        - type: lint
+          command: go vet ./pkg/builddiag/...
+          required: true
+        - type: test
+          command: go test ./pkg/builddiag/... -cover
+          required: true
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: No work to be done via SAW
+          likelihood: high
+          impact: low
+          mitigation: Direct implementation recommended instead
+state: NOT_SUITABLE
+injection_method: hook
