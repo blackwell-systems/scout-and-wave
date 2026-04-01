@@ -396,6 +396,7 @@ waves:
           files:
             - internal/git/commands.go
             - internal/git/commands_test.go
+      base_commit: bd08bf970de65714f2076bdae0301078f655dbd9
     - number: 2
       agents:
         - id: B
@@ -556,6 +557,35 @@ quality_gates:
           command: cd /Users/dayna.blackwell/code/scout-and-wave-go && go vet ./pkg/protocol ./pkg/engine ./internal/git
           required: true
           repo: scout-and-wave-go
+completion_reports:
+    A:
+        status: complete
+        branch: saw/e11-smart-merge-strategies/wave1-agent-A
+        commit: 12cfead
+        files_changed:
+            - pkg/protocol/conflict_predict.go
+            - pkg/protocol/conflict_predict_test.go
+            - internal/git/commands.go
+        tests_added:
+            - TestAnalyzeDiffPattern_AppendOnly
+            - TestAnalyzeDiffPattern_LineEdits
+            - TestPredictConflictsWithStrategy_AutoMergeable
+            - TestPredictConflictsWithStrategy_ManualRequired
+        verification: PASS
+        notes: 'Pattern analysis complete. Out-of-scope: Added GetDiffStats to internal/git/commands.go (required dependency not in owned files list). All 4 new tests passing. Conservative merge strategy logic prioritizes safety (defaults to manual review for ambiguous cases). Append-only detection working correctly for new function/test additions. All verification gates clean.'
+    C:
+        status: complete
+        branch: saw/e11-smart-merge-strategies/wave1-agent-C
+        commit: 3fb2b00
+        files_changed:
+            - internal/git/commands.go
+            - internal/git/commands_test.go
+        tests_added:
+            - TestGetDiffStats_AppendOnly
+            - TestGetDiffStats_LineEdits
+            - TestGetDiffStats_NoChanges
+        verification: PASS
+        notes: Implemented GetDiffStats function and DiffStats struct per interface contract. All three tests pass (append-only, line edits, no changes). Quality gates pass (build, test, lint). Function uses RunOutput helper and handles empty diffs gracefully. Binary files return error as specified in constraints.
 pre_mortem:
     overall_risk: medium
     rows:
@@ -611,4 +641,4 @@ critic_report:
     summary: 'All agent briefs verified against codebase. Agent A references correct line numbers (24, 35, 125) in conflict_predict.go. Agent C references correct RunOutput helper at line 33 in commands.go. Agent B correctly identifies finalize.go line 344 for StepPredictConflicts call site and references existing imports. Agent D has minor line number drift in scout.md (section 7 at line 502 not 230, section 8 at line 528 not 300) but uses ''around line X'' qualifier which is acceptable given file evolution. Agent E references CHANGELOG.md correctly. All interface contracts match existing symbols: git.DiffUnifiedZero (line 646), git.MergeBase (line 634), git.Run, parseDiffHunks (line 170), computeFileHashInBranch (line 294), HunkRange (line 162). All test files exist. No errors detected.'
     reviewed_at: "2026-04-01T21:57:16Z"
     issue_count: 1
-state: "REVIEWED"
+state: REVIEWED
