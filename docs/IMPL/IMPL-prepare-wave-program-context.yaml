@@ -1,0 +1,384 @@
+title: 'prepare-wave: auto-commit SAW state in program context'
+feature_slug: prepare-wave-program-context
+verdict: SUITABLE
+suitability_assessment: |-
+    The fix touches 3 files across 2 Go packages (pkg/engine and cmd/sawtools).
+    File ownership is naturally disjoint: Agent A owns both engine files
+    (step_types.go adds the new field; prepare.go implements the logic), and
+    Agent B owns the CLI adapter (prepare_wave.go adds the flag and passes it).
+    Agent B must depend on Agent A completing first because prepare_wave.go
+    references the new PrepareWaveOpts.CommitState field defined in step_types.go.
+
+    Parallelization value: marginal (only 2 agents, 1 sequential dependency), but
+    the IMPL doc provides interface contracts that prevent the agents from choosing
+    conflicting field names or flag spellings. The scout produces a binding
+    contract that both agents can reference independently, which is the primary
+    value here.
+
+    Option B (--commit-state flag) is the cleaner approach: it matches the
+    existing --commit-baseline pattern, gives the program orchestrator explicit
+    opt-in control, and avoids implicit behavior tied to --merge-target presence
+    (which could have unintended side effects). The flag is narrowly scoped to
+    SAW-owned state files only; user code dirty-check behavior is unchanged.
+
+    Estimated times:
+    - Scout phase: ~10 min
+    - Agent execution: ~15 min (2 agents x ~8 min avg; wave 2 blocked on wave 1)
+    - Merge and verification: ~5 min
+    Total SAW time: ~30 min
+
+    Sequential baseline: ~25 min (2 tasks x ~12 min each)
+    Time savings: marginal. Coordination value (interface contract) is the
+    primary benefit.
+test_command: go test ./... -timeout 120s
+lint_command: go vet ./...
+file_ownership:
+    - file: pkg/engine/step_types.go
+      agent: A
+      wave: 1
+      action: modify
+    - file: pkg/engine/prepare.go
+      agent: A
+      wave: 1
+      action: modify
+    - file: pkg/engine/prepare_agent.go
+      agent: A
+      wave: 1
+      action: modify
+    - file: cmd/sawtools/prepare_wave.go
+      agent: B
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+interface_contracts:
+    - name: PrepareWaveOpts.CommitState
+      description: |-
+        New boolean field on PrepareWaveOpts. When true, the engine will detect
+        SAW-owned dirty files (.saw-state/** and the IMPL yaml) and commit them
+        before the working_dir_check fails. User code changes still produce the
+        existing fatal error. This field is set by --commit-state CLI flag.
+      definition: |
+        // CommitState auto-commits SAW-owned state changes (IMPL yaml + gate-cache)
+        // before the working-directory check. Does NOT commit user code changes.
+        // Intended for program-context prepare-wave calls.
+        CommitState bool
+      location: pkg/engine/step_types.go
+    - name: isSAWOwnedPath
+      description: |-
+        Helper function in prepare.go that classifies a git-status path as
+        SAW-owned (safe to auto-commit) vs user-code (must still fail). A path
+        is SAW-owned if it matches the IMPL yaml file or is under .saw-state/.
+      definition: |
+        // isSAWOwnedPath reports whether the given git-porcelain path (relative
+        // to repo root) is a SAW-managed state file safe to auto-commit.
+        func isSAWOwnedPath(path, implPath, projectRoot string) bool
+      location: pkg/engine/prepare.go
+    - name: commitStateFlag
+      description: CLI flag name added to prepare-wave command. Maps to PrepareWaveOpts.CommitState.
+      definition: |
+        --commit-state   Auto-commit SAW-owned state changes (IMPL yaml + gate-cache)
+                         before the working-directory check. Does not commit user code.
+      location: cmd/sawtools/prepare_wave.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## Role
+            You are a Wave Agent. Implement the engine-side changes for the
+            `prepare-wave-program-context` feature in the scout-and-wave-go repo.
+
+            ## Context
+            In a PROGRAM execution flow, `sawtools prepare-wave` is called once per
+            IMPL in a tier. The first call advances the IMPL state (SCOUT_PENDING →
+            REVIEWED) and writes to the gate cache, dirtying the working directory.
+            The second call then fails with "working directory is dirty". The fix adds
+            a `--commit-state` flag that auto-commits only SAW-owned state files
+            (IMPL yaml + `.saw-state/` directory) before the dirty-check, so user
+            code changes still fail as expected.
+
+            ## Files to Modify
+
+            ### `pkg/engine/step_types.go`
+            Add one new field to `PrepareWaveOpts`:
+
+            ```go
+            // CommitState auto-commits SAW-owned state changes (IMPL yaml + gate-cache)
+            // before the working-directory check. Does NOT commit user code changes.
+            // Intended for program-context prepare-wave calls.
+            CommitState bool
+            ```
+
+            Add it after the existing `CommitBaseline bool` field (line ~29).
+
+            ### `pkg/engine/prepare.go`
+
+            **1. Add helper function `isSAWOwnedPath`** (add near the top of the file,
+            after the `loadSAWConfigRepos` helper, before `PrepareWave`):
+
+            ```go
+            // isSAWOwnedPath reports whether the given git-porcelain relative path
+            // is a SAW-managed state file that is safe to auto-commit in program context.
+            // A path is SAW-owned if it is the IMPL yaml file or falls under .saw-state/.
+            func isSAWOwnedPath(path, implPath, projectRoot string) bool {
+                // Normalize implPath to repo-relative
+                rel, err := filepath.Rel(projectRoot, implPath)
+                if err != nil {
+                    rel = implPath
+                }
+                // git porcelain output has a 3-char prefix (e.g. " M "), trim it
+                trimmed := strings.TrimSpace(path)
+                if len(trimmed) > 3 {
+                    trimmed = strings.TrimSpace(trimmed[2:])
+                }
+                return trimmed == rel ||
+                    strings.HasPrefix(trimmed, ".saw-state/") ||
+                    strings.HasPrefix(trimmed, ".saw-state\\")
+            }
+            ```
+
+            **2. Extend the working-directory-check block** (lines ~305–346 in
+            `prepare.go`). The current block reads:
+
+            ```go
+            } else if len(out) > 0 {
+                // Working directory is dirty
+                modifiedFiles := strings.Split(strings.TrimSpace(string(out)), "\n")
+                fileCount := len(modifiedFiles)
+
+                if opts.CommitBaseline {
+                    ...
+                } else {
+                    // Working directory is dirty but auto-commit not requested
+                    detail := fmt.Sprintf(...)
+                    recordStep(...)
+                    return res, fmt.Errorf("working directory is dirty: ...")
+                }
+            ```
+
+            Add an `else if opts.CommitState` branch between the `CommitBaseline`
+            block and the final `else` block:
+
+            ```go
+            } else if opts.CommitState {
+                // Classify dirty files: SAW-owned vs user code
+                var sawFiles []string
+                var userFiles []string
+                for _, f := range modifiedFiles {
+                    if isSAWOwnedPath(f, opts.IMPLPath, projectRoot) {
+                        sawFiles = append(sawFiles, f)
+                    } else {
+                        userFiles = append(userFiles, f)
+                    }
+                }
+                if len(userFiles) > 0 {
+                    detail := fmt.Sprintf("%d user-code file(s) modified — --commit-state only commits SAW state files; commit user code manually", len(userFiles))
+                    recordStep(res, opts.OnEvent, "working_dir_check", "failed", detail)
+                    return res, fmt.Errorf("working directory has user-code changes: %d file(s) (--commit-state does not commit user code)", len(userFiles))
+                }
+                if len(sawFiles) == 0 {
+                    recordStep(res, opts.OnEvent, "working_dir_check", "success", "working directory is clean")
+                } else {
+                    os.Setenv("SAW_ALLOW_MAIN_COMMIT", "1")
+                    defer os.Unsetenv("SAW_ALLOW_MAIN_COMMIT")
+                    for _, f := range sawFiles {
+                        // Stage each SAW-owned file individually (not -A)
+                        trimmed := strings.TrimSpace(f)
+                        if len(trimmed) > 3 {
+                            trimmed = strings.TrimSpace(trimmed[2:])
+                        }
+                        if _, addErr := git.Run(projectRoot, "add", trimmed); addErr != nil {
+                            recordStep(res, opts.OnEvent, "commit_state", "failed",
+                                fmt.Sprintf("failed to stage %s: %v", trimmed, addErr))
+                            return res, fmt.Errorf("failed to stage SAW state file %s: %w", trimmed, addErr)
+                        }
+                    }
+                    commitMsg := fmt.Sprintf("chore: update SAW state for wave %d preparation\n\nAuto-committed %d SAW state file(s): %s",
+                        opts.WaveNum, len(sawFiles), strings.Join(sawFiles, ", "))
+                    if _, commitErr := git.Run(projectRoot, "commit", "-m", commitMsg); commitErr != nil {
+                        recordStep(res, opts.OnEvent, "commit_state", "failed",
+                            fmt.Sprintf("failed to commit: %v", commitErr))
+                        return res, fmt.Errorf("failed to commit SAW state files: %w", commitErr)
+                    }
+                    recordStep(res, opts.OnEvent, "commit_state", "success",
+                        fmt.Sprintf("committed %d SAW state file(s)", len(sawFiles)))
+                }
+            ```
+
+            ## Tests
+            Add or extend tests in `pkg/engine/prepare_test.go` to cover:
+
+            1. `TestPrepareWave_CommitState_CleanDir` — when CommitState=true and
+               working dir is clean, working_dir_check step status is "success" (no commit).
+            2. `TestPrepareWave_CommitState_UserCodeDirty` — when CommitState=true but
+               dirty files are user code, the step fails with a descriptive error
+               containing "user-code changes".
+            3. `TestIsSAWOwnedPath` — unit test the helper directly:
+               - IMPL yaml path → true
+               - `.saw-state/gate-cache.json` → true
+               - `cmd/sawtools/main.go` → false
+               - `docs/IMPL/something.yaml` that does NOT match implPath → false
+
+            If the existing prepare_test.go uses table-driven patterns, follow that
+            style. Keep the helper tests simple (no git subprocess needed).
+
+            ## Verification Gate
+            ```
+            go build ./...
+            go vet ./...
+            go test ./pkg/engine/... -run "TestPrepareWave|TestIsSAWOwnedPath" -timeout 60s
+            ```
+
+            ## Constraints
+            - Do NOT set `SAW_ALLOW_MAIN_COMMIT` globally at the start of the
+              function; only set it immediately before the targeted git commit.
+            - Do NOT use `git add -A`; stage SAW-owned files individually.
+            - The `isSAWOwnedPath` function must handle both Unix and Windows
+              path separators in the `.saw-state` prefix check.
+            - The helper must be unexported (lowercase).
+            - Do not modify the CommitBaseline branch behavior.
+          files:
+            - pkg/engine/step_types.go
+            - pkg/engine/prepare.go
+    - number: 2
+      agents:
+        - id: B
+          task: |
+            ## Role
+            You are a Wave Agent. Wire the `--commit-state` CLI flag into
+            `cmd/sawtools/prepare_wave.go` for the `prepare-wave-program-context`
+            feature in the scout-and-wave-go repo.
+
+            ## Context
+            Agent A (Wave 1) added `CommitState bool` to `PrepareWaveOpts` in
+            `pkg/engine/step_types.go` and implemented the auto-commit logic in
+            `pkg/engine/prepare.go`. Your task is to expose this as a CLI flag
+            and pass it through to the engine.
+
+            ## File to Modify
+
+            ### `cmd/sawtools/prepare_wave.go`
+
+            **1. Add a new variable declaration** alongside the existing flag vars
+            (lines ~17–21):
+
+            ```go
+            var commitState bool
+            ```
+
+            **2. Pass the new field in the `PrepareWaveOpts` struct literal**
+            (around line ~69–82, where `opts` is constructed):
+
+            ```go
+            opts := engine.PrepareWaveOpts{
+                ...
+                CommitBaseline: commitBaseline,
+                CommitState:    commitState,  // add this line
+                ...
+            }
+            ```
+
+            **3. Register the CLI flag** in the `cmd.Flags()` block at the bottom
+            of the function (after the `--commit-baseline` flag line):
+
+            ```go
+            cmd.Flags().BoolVar(&commitState, "commit-state", false, "Auto-commit SAW-owned state changes (IMPL yaml + gate-cache) before working-dir check. Does not commit user code.")
+            ```
+
+            The flag must appear after the `--commit-baseline` flag registration
+            for consistency with the existing ordering.
+
+            **4. Update the Long description** to document the new flag. Find the
+            `Long:` string in the `cobra.Command{}` literal and add a paragraph
+            after the NOTE about solo agents:
+
+            ```
+            Use --commit-state in PROGRAM context when calling prepare-wave for
+            multiple IMPLs in a tier. SAW-owned state changes (IMPL yaml state
+            advances, gate-cache updates) are auto-committed so the second
+            prepare-wave call does not fail with "working directory is dirty".
+            User code changes are NOT auto-committed; they still cause the command
+            to fail with a descriptive error.
+            ```
+
+            ## Tests
+            No new tests are required in the CLI layer (the engine has unit test
+            coverage from Agent A). Verify the flag is wired correctly by checking
+            that the cobra flag registration compiles and the struct field assignment
+            is present.
+
+            ## Verification Gate
+            ```
+            go build ./...
+            go vet ./...
+            go test ./cmd/sawtools/... -timeout 60s
+            ```
+
+            ## Constraints
+            - Do NOT change any existing flag names or behaviors.
+            - Do NOT pass `--commit-state` as mutually exclusive with
+              `--commit-baseline`; both can coexist (they handle different
+              dirty-file scenarios). No MarkFlagsMutuallyExclusive call.
+            - The flag description must clearly state it does not commit user code.
+          files:
+            - cmd/sawtools/prepare_wave.go
+          dependencies:
+            - A
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./...
+          required: true
+          repo: scout-and-wave-go
+        - type: lint
+          command: go vet ./...
+          required: true
+          repo: scout-and-wave-go
+        - type: test
+          command: go test ./pkg/engine/... -timeout 120s
+          required: true
+          repo: scout-and-wave-go
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: |-
+            git porcelain output format differs between Git versions (e.g. XY prefix
+            handling). The isSAWOwnedPath helper trims the first 3 chars assuming
+            standard porcelain format (" M path" or "M  path"). If format varies,
+            the helper could mis-classify a file.
+          likelihood: low
+          impact: medium
+          mitigation: |-
+            Agent A should test the helper against both tracked-modified (" M path")
+            and untracked ("?? path") git porcelain entries. If the format is wrong
+            the classification fails safe (user-code branch) and returns a descriptive
+            error rather than committing the wrong files.
+        - scenario: |-
+            The IMPL yaml path might be absolute while git porcelain reports relative
+            paths, causing isSAWOwnedPath to never match the IMPL file. This would
+            mean the IMPL yaml stays unstaged and the commit_state step succeeds
+            without committing it — the root cause of the original bug would persist.
+          likelihood: low
+          impact: high
+          mitigation: |-
+            The helper calls filepath.Rel(projectRoot, implPath) to normalize the
+            IMPL path to repo-relative before comparing. Agent A must verify this
+            normalization in the TestIsSAWOwnedPath unit test with both absolute
+            and relative implPath inputs.
+        - scenario: |-
+            A user who has both user-code changes AND SAW state changes (e.g. they
+            edited a Go file while the state advance was also pending) would get an
+            error message that blames all dirty files as "user-code changes" even
+            though some are SAW-owned. This could be confusing.
+          likelihood: medium
+          impact: low
+          mitigation: |-
+            The error message in the user-code branch should include the count of
+            SAW-owned files alongside the user-code count so the user understands
+            the split. Agent A should ensure the error message says something like
+            "1 SAW state file(s) and 2 user-code file(s) modified" rather than just
+            the user-code count.
+state: "REVIEWED"
+injection_method: hook
