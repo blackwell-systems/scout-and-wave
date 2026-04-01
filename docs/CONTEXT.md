@@ -113,3 +113,5 @@
   - IMPL doc: docs/IMPL/complete/IMPL-finalize-tier-thick-orchestrator.yaml
 - **i1-enforcement-multi-level**: completed 2026-04-01, 2 waves, 6 agents
   - IMPL doc: docs/IMPL/complete/IMPL-i1-enforcement-multi-level.yaml
+- **test-cascade-detection**: completed 2026-04-01, 1 waves, 3 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-test-cascade-detection.yaml
