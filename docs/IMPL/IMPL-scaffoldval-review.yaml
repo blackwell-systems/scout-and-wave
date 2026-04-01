@@ -234,6 +234,7 @@ waves:
             - Do NOT renumber existing codes
           files:
             - pkg/result/codes.go
+      base_commit: 6ac0aa6d2698d057f33d966c87bb86adc2f13dcf
     - number: 2
       agents:
         - id: C
@@ -310,6 +311,7 @@ quality_gates:
         - type: test
           command: go test ./pkg/scaffoldval/... -cover
           required: true
+completion_reports: {}
 pre_mortem:
     overall_risk: low
     rows:
@@ -358,5 +360,5 @@ critic_report:
     summary: All briefs verified against codebase. Agent A's interface contract contains contradictory language about FATAL returns (line 82 vs lines 147-149), but implementation steps and test expectations are clear and consistent. Agents B and C are fully accurate. One warning noted for documentation clarity.
     reviewed_at: "2026-04-01T22:49:32Z"
     issue_count: 1
-state: "REVIEWED"
+state: REVIEWED
 injection_method: hook
