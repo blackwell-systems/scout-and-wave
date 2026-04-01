@@ -129,8 +129,9 @@ interface_contracts:
       location: implementations/claude-code/prompts/agents/scout.md (step 4 enhancement)
     - name: Post-Merge Test Compilation Check
       description: |
-        New step in finalize-wave workflow — after merge, before quality gates,
-        run test compilation-only check to catch orphaned test files.
+        Documented in E46 as third detection layer but NOT implemented in this IMPL.
+        Future enhancement: add test compilation-only check to finalize-wave workflow
+        after merge, before quality gates, to catch orphaned test files.
       definition: |
         func VerifyTestCompilation(repoRoot string) error {
           cmd := exec.Command("go", "test", "./...", "-compile-only")
@@ -141,7 +142,7 @@ interface_contracts:
           }
           return nil
         }
-      location: pkg/engine/finalize.go (new function + call in merge workflow)
+      location: pkg/engine/finalize.go (future work — not in this IMPL's scope)
 waves:
     - number: 1
       agents:
@@ -153,7 +154,7 @@ waves:
             detection when interface contracts involve signature changes:
 
             **Location:** implementations/claude-code/prompts/agents/scout.md, after
-            line 361 ("Language support: `sawtools detect-cascades` currently supports
+            line 359 ("Language support: `sawtools detect-cascades` currently supports
             Go only..."). Insert new subsection before step 5 (Define interface contracts).
 
             **New content to add:**
@@ -420,7 +421,7 @@ waves:
 
             **2. Update DetectE35Gaps to call detectTestCascades**
 
-            At end of `DetectE35Gaps` function (before return, around line 146), add:
+            At end of `DetectE35Gaps` function (before return, around line 147), add:
 
             ```go
             	// Also detect test file cascades
@@ -514,9 +515,10 @@ waves:
                `detectTestCascades()`. Reports orphaned test files as E35Gap entries
                with CalledFrom pointing to test file locations.
 
-            3. **Post-merge verification:** After finalize-wave merges all agents,
-               `VerifyTestCompilation()` runs `go test -compile-only` to catch any
-               missed test cascades before quality gates execute.
+            3. **Post-merge verification (future work):** Documented as third detection
+               layer, but not implemented in this IMPL. Future enhancement: add
+               `VerifyTestCompilation()` to finalize-wave workflow to run
+               `go test -compile-only` and catch missed test cascades before quality gates.
 
             **Rationale:** Interface signature changes break test files that call the
             interface, but test files are often not included in file_ownership because
@@ -546,7 +548,7 @@ waves:
             **Cross-references:**
             - Scout prompt (Agent A's changes) implements detection algorithm
             - E35 detection (Agent B's changes) provides pre-wave validation
-            - Finalize workflow (Agent D's changes) provides post-merge check
+            - Post-merge test compilation check (mentioned in E46) is documented but not implemented in this IMPL — future enhancement
 
             ## Tests & Verification
 
@@ -627,5 +629,23 @@ pre_mortem:
           likelihood: low
           impact: medium
           mitigation: detectTestCascades uses filepath.Glob with "*_test.go" pattern in package directory. If subdirectory tests exist, Scout instructions note to check pkg/ and internal/ subdirs.
-state: SCOUT_PENDING
+critic_report:
+    verdict: ISSUES
+    agent_reviews:
+        A:
+            agent_id: A
+            verdict: PASS
+            issues: []
+        B:
+            agent_id: B
+            verdict: PASS
+            issues: []
+        E:
+            agent_id: E
+            verdict: PASS
+            issues: []
+    summary: 'Critic review completed. All 3 agents (A, B, E) passed review after corrections. Line number references corrected (Agent A: 361→359, Agent B: 146→147), and non-existent Agent D reference removed from Agent E. Post-merge test compilation check clarified as future work. All files exist, symbols accurate, imports present, patterns match codebase.'
+    reviewed_at: "2026-04-01T20:51:55Z"
+    issue_count: 0
+state: REVIEWED
 injection_method: hook
