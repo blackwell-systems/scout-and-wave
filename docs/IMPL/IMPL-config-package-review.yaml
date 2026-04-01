@@ -43,30 +43,37 @@ file_ownership:
       agent: A
       wave: 1
       action: modify
+      repo: scout-and-wave-go
     - file: pkg/config/config_test.go
       agent: A
       wave: 1
       action: modify
+      repo: scout-and-wave-go
     - file: pkg/config/state.go
       agent: B
       wave: 1
       action: modify
+      repo: scout-and-wave-go
     - file: pkg/config/state_test.go
       agent: B
       wave: 1
       action: modify
+      repo: scout-and-wave-go
     - file: pkg/agent/backend/configfile.go
       agent: C
       wave: 1
       action: modify
+      repo: scout-and-wave-go
     - file: pkg/agent/backend/configfile_test.go
       agent: C
       wave: 1
       action: modify
+      repo: scout-and-wave-go
     - file: docs/reviews/config-package-review.md
       agent: D
       wave: 2
       action: new
+      repo: scout-and-wave
 interface_contracts: []
 waves:
     - number: 1
@@ -122,7 +129,7 @@ waves:
 
             ## Deliverables
 
-            Write findings to `docs/reviews/config-package-review.md` (Wave 2 agent will
+            Write findings to `docs/reviews/config-go-findings.md` (Wave 2 agent will
             consolidate). Use this format:
 
             ```markdown
@@ -361,7 +368,7 @@ waves:
             ## Inputs
 
             Read the three partial reports:
-            - `docs/reviews/config-package-review.md` (Agent A: config.go)
+            - `docs/reviews/config-go-findings.md` (Agent A: config.go)
             - `docs/reviews/state-review-findings.md` (Agent B: state.go)
             - `docs/reviews/configfile-review-findings.md` (Agent C: configfile.go)
 
@@ -471,12 +478,15 @@ quality_gates:
         - type: build
           command: go build ./pkg/config/...
           required: true
+          repo: scout-and-wave-go
         - type: lint
           command: go vet ./pkg/config/...
           required: true
+          repo: scout-and-wave-go
         - type: test
           command: go test ./pkg/config/... -timeout 30s
           required: true
+          repo: scout-and-wave-go
 pre_mortem:
     overall_risk: low
     rows:
@@ -512,5 +522,23 @@ pre_mortem:
             Findings document severity (critical/important/nice-to-have). After
             review completes, user can create a follow-up IMPL for high-priority
             fixes. This review creates the audit trail; fixes are separate work.
+critic_report:
+    verdict: PASS
+    agent_reviews:
+        A:
+            agent_id: A
+            verdict: PASS
+        B:
+            agent_id: B
+            verdict: PASS
+        C:
+            agent_id: C
+            verdict: PASS
+        D:
+            agent_id: D
+            verdict: PASS
+    summary: 'All agent briefs verified against codebase. Repository fields present in all file_ownership entries. Line references accurate: config.go ProvidersConfig at line 31, configfile.go SAWProviders at line 11, state.go nil-slice initialization at lines 75-83. All referenced symbols exist: Load/Save/LoadOrDefault in config.go, GetWaveState/GetAllWaveStates in state.go, LoadProvidersFromConfig in configfile.go. Error codes verified: CodeConfigNotFound (N013), CodeConfigInvalid (N014), CodeConfigIOFailed (N085). Status constants verified: StatusComplete, StatusPartial, StatusBlocked in protocol.types. File naming conflict resolved: Agent A writes config-go-findings.md, Agent D writes config-package-review.md. Directory docs/reviews/ does not exist but is action:new, agents will create it. All callers exist: LoadProvidersFromConfig called from bedrock/client.go and api/client.go. Wave execution may proceed.'
+    reviewed_at: "2026-04-01T22:53:40Z"
+    issue_count: 0
 state: REVIEWED
 injection_method: hook
