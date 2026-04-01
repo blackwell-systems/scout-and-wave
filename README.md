@@ -109,6 +109,13 @@ sawtools init
 # → Scout analyzes, writes IMPL doc, shows wave structure
 # → You confirm ("Proceed? [y/N]") -- this is the human checkpoint
 # → On Y: all waves execute automatically
+
+# When you have multiple IMPLs queued — run them all in parallel:
+/saw program --impl feature-a feature-b feature-c
+# → Checks for file ownership conflicts across all three
+# → If disjoint (no overlapping files), assigns all to Tier 1
+# → All three IMPLs execute simultaneously; sequential tiers only when files overlap
+/saw program execute
 ```
 
 **Subcommands:**
@@ -122,7 +129,8 @@ sawtools init
 | `/saw status` | Show current wave and agent progress |
 | `/saw bootstrap "<project>"` | Design new project structure from scratch |
 | `/saw interview "<description>"` | Structured requirements gathering |
-| `/saw program plan/execute/status/replan` | Multi-IMPL program coordination |
+| `/saw program --impl <slug> ...` | Bundle queued IMPLs into a parallel program (auto tier-assigns by file ownership) |
+| `/saw program plan/execute/status/replan` | Top-down multi-feature planning and tier-gated execution |
 | `/saw amend --add-wave/--redirect-agent/--extend-scope` | Modify active IMPL |
 
 The scout produces an **Implementation Document (IMPL doc)** (`docs/IMPL/IMPL-<feature>.yaml`): a structured YAML coordination document that defines which files each agent will modify, what interfaces they'll implement, and how they'll work in parallel. You review it before any agent writes code. This is the human checkpoint that makes parallel execution safe.

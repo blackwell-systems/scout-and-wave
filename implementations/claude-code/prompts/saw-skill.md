@@ -45,7 +45,8 @@ Files in `${CLAUDE_SKILL_DIR}/` (defaults to `~/.claude/skills/saw/`). Read `age
 | `/saw auto [--model <m>] [--skip-confirm] "<feature>"` | Scout + confirm + wave in one command |
 | `/saw status [--impl <id>]` | Show progress (auto-selects if 1 pending) |
 | `/saw amend --add-wave / --redirect-agent <ID> / --extend-scope` | Modify active IMPL |
-| `/saw program plan/execute/status/replan` | Multi-IMPL coordination |
+| `/saw program --impl <slug> ...` | Bundle existing IMPLs into a parallel program (tier-assigned by file ownership) |
+| `/saw program plan/execute/status/replan` | Top-down multi-feature planning and tier-gated execution |
 | `/saw interview [--resume <path>] "<description>"` | Requirements gathering |
 
 

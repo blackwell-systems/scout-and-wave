@@ -63,13 +63,16 @@ SAW has three distinct execution modes, each serving different use cases. All th
 The primary interactive experience. The `/saw` skill is a YAML-frontmatter + markdown file that conforms to the **agent skills open standard** -- the same format adopted by most frontier model agent frameworks. The skill turns a Claude Code session into a SAW Orchestrator.
 
 ```
-/saw scout "add caching layer"     # Scout analyzes codebase, produces IMPL plan
-/saw wave --auto                   # Execute all waves with human checkpoints
-/saw auto "add caching layer"      # Scout + confirm + all waves in one command
-/saw program execute "refactor"    # Multi-feature tier-gated execution
+/saw scout "add caching layer"                 # Scout analyzes codebase, produces IMPL plan
+/saw wave --auto                               # Execute all waves with human checkpoints
+/saw auto "add caching layer"                  # Scout + confirm + all waves in one command
+/saw program --impl feat-a feat-b feat-c       # Bundle queued IMPLs → auto tier-assign by file ownership
+/saw program execute                           # Run all tiers; parallel within tier, sequential across
 ```
 
 `/saw auto` is the low-friction entry point for the common case — same human checkpoint as scout → wave, without the separate command invocations. It eliminates command overhead while preserving the review step where the plan is visible before any agent writes code.
+
+`/saw program --impl` is the natural next step once you have multiple IMPLs queued. It runs `check-impl-conflicts` on all provided slugs, assigns them to tiers automatically (IMPLs with disjoint file ownership land in the same tier and execute in parallel), and produces a PROGRAM manifest ready for `/saw program execute`. No planning agent is needed — the tier structure is derived mechanically from file ownership.
 
 - Human-in-the-loop by default; `--auto` for autonomous wave progression
 - Access to Claude Code's full tool suite (file I/O, shell, subagents, MCP)
@@ -380,7 +383,7 @@ For projects spanning multiple features, the PROGRAM layer provides tier-gated e
 
 **Top-down:** `/saw program plan "description"` launches a Planner agent that decomposes the project into features, identifies cross-feature dependencies, and produces a PROGRAM manifest with tier assignments before any Scout runs. Scouts then execute with awareness of their tier context. The Planner uses BFS unblocking score to prioritize IMPLs by critical path and assigns concurrency caps per tier.
 
-**Bottom-up:** `/saw program --from-impls slug1 slug2 ...` assembles a PROGRAM manifest from pre-existing IMPL docs via `create-program`. The `check-impl-conflicts` command runs greedy graph coloring to compute disjoint tier assignments. Both paths produce the same PROGRAM manifest format and execute identically from that point forward.
+**Bottom-up:** `/saw program --impl slug1 slug2 ...` assembles a PROGRAM manifest from pre-existing IMPL docs. The `check-impl-conflicts` command runs greedy graph coloring to compute disjoint tier assignments. Both paths produce the same PROGRAM manifest format and execute identically from that point forward.
 
 **Program execution:** `program-execute` runs the tier loop (E28): launches Scouts in parallel (E31), tracks cross-IMPL progress (E32), runs tier gate verification (E29), and auto-advances in `--auto` mode (E33). On tier gate failure, `program-replan` re-engages the Planner to revise the PROGRAM manifest (E34). DAG prioritization scores IMPLs by unblocking value within each tier for optimal parallelism.
 
