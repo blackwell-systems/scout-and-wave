@@ -1,0 +1,518 @@
+title: finalize-tier thick orchestrator
+feature_slug: finalize-tier-thick-orchestrator
+verdict: SUITABLE
+suitability_assessment: |
+    File decomposition: The work splits cleanly across two files with disjoint ownership.
+    Agent A owns pkg/engine/finalize_tier.go (new file — the thick orchestrator logic),
+    Agent B owns cmd/sawtools/finalize_tier_cmd.go (thin adapter update to call engine
+    instead of protocol directly). Both files are independent — A provides the engine
+    function, B wires it into the CLI. No shared files.
+
+    Interface discoverability: The cross-agent interface is a single exported function
+    FinalizeTierEngine(ctx, opts) that A defines and B calls. The signature can be
+    specified fully before implementation.
+
+    Parallelization: Two agents with clear interface contract, disjoint files, non-trivial
+    logic. Agent A implements 4 sequential steps (close IMPLs, worktree-aware merge,
+    tier gate, advance state) plus tests. Agent B updates the thin adapter.
+    Go build+test cycle is moderate (~10-30s). Clear speedup over sequential given A's
+    complexity.
+
+    Pre-implementation status check: The current finalize_tier_cmd.go calls
+    protocol.FinalizeTier directly, skipping IMPL closure and worktree-aware merging.
+    pkg/engine/finalize_tier.go does not exist yet. All four desired behaviors are TODO.
+
+    Scouting note: ProgramTier struct (pkg/protocol/program_types.go) has no Status field.
+    Step 4 "advance PROGRAM state" must update ProgramIMPL.Status entries in manifest.Impls
+    (where the real status lives) and write the manifest using yaml.Marshal + os.WriteFile.
+    Agent A's task reflects this accurately.
+
+    Estimated times:
+    - Scout phase: ~15 min (dependency mapping, interface contracts, IMPL doc)
+    - Agent execution: ~2 agents x ~15 min avg, parallel = ~15 min
+    - Merge and verification: ~5 min
+    Total SAW time: ~35 min
+
+    Sequential baseline: ~2 agents x 15 min = ~30 min + overhead
+    Time savings: Marginal on clock time, but coordination value is high.
+    Recommendation: Proceed — the interface contract between A and B is the main value,
+    preventing a monolithic edit to two interdependent files.
+test_command: go test ./...
+lint_command: go vet ./...
+file_ownership:
+    - file: pkg/engine/finalize_tier.go
+      agent: A
+      wave: 1
+      action: new
+    - file: pkg/engine/finalize_tier_test.go
+      agent: A
+      wave: 1
+      action: new
+    - file: cmd/sawtools/finalize_tier_cmd.go
+      agent: B
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+    - file: cmd/sawtools/finalize_tier_cmd_test.go
+      agent: B
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+interface_contracts:
+    - name: FinalizeTierEngine
+      description: |-
+        Thick orchestrator for finalize-tier. Implements the full tier completion
+        sequence: close complete IMPLs, worktree-aware IMPL branch merge, tier gate,
+        advance PROGRAM state. Idempotent at every step.
+      definition: |
+        // FinalizeTierOpts configures the thick finalize-tier orchestrator.
+        type FinalizeTierOpts struct {
+            ManifestPath string       // absolute path to PROGRAM manifest (required)
+            TierNumber   int          // tier to finalize (required)
+            RepoDir      string       // absolute path to repo root (required)
+            Logger       *slog.Logger // optional; nil falls back to slog.Default()
+        }
+
+        // FinalizeTierResult is the structured result of FinalizeTierEngine.
+        type FinalizeTierResult struct {
+            TierNumber     int                                  `json:"tier_number"`
+            ImplsClosed    []string                             `json:"impls_closed"`
+            ImplsSkipped   []string                             `json:"impls_skipped"`
+            MergeResults   map[string]*protocol.MergeAgentsData `json:"merge_results"`
+            TierGateResult *protocol.TierGateData               `json:"tier_gate_result,omitempty"`
+            StateAdvanced  bool                                 `json:"state_advanced"`
+            Errors         []string                             `json:"errors,omitempty"`
+        }
+
+        // FinalizeTierEngine is the thick orchestrator for finalize-tier.
+        // Replaces the thin protocol.FinalizeTier call in the CLI adapter.
+        // Steps (each idempotent):
+        //   1. For each IMPL in the tier: call MarkIMPLComplete if not already closed.
+        //   2. Merge each IMPL branch into HEAD, handling the "branch in worktree" case.
+        //   3. Run RunTierGate with enriched statuses.
+        //   4. Update IMPL statuses in the PROGRAM manifest and commit.
+        func FinalizeTierEngine(ctx context.Context, opts FinalizeTierOpts) (FinalizeTierResult, error)
+      location: pkg/engine/finalize_tier.go
+    - name: mergeIMPLBranchWorktreeAware
+      description: |-
+        Internal helper that merges an IMPL branch into the main repo HEAD,
+        handling the case where the branch is already checked out as a worktree.
+        When the branch is in a worktree, resolves the SHA and merges by commit hash
+        to avoid the "already checked out" error. When not in a worktree, falls back
+        to git.MergeNoFF in the main repo.
+      definition: |
+        // mergeIMPLBranchWorktreeAware merges branch into HEAD of repoDir.
+        // If the branch is currently checked out in a worktree, it:
+        //   1. Finds the worktree path via git.WorktreeList.
+        //   2. Resolves the commit SHA of the worktree HEAD using git.RevParse.
+        //   3. Merges by SHA from the main repo (git merge --no-ff <sha> -m <msg>),
+        //      which avoids the "already checked out" error.
+        // If the branch is not in any worktree, uses git.MergeNoFF directly.
+        func mergeIMPLBranchWorktreeAware(repoDir, branch, message string) error
+      location: pkg/engine/finalize_tier.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## What to implement
+
+            Create `pkg/engine/finalize_tier.go` — the thick orchestrator for `finalize-tier`.
+            This file does not exist yet; create it from scratch.
+
+            The package is `engine`. Module: `github.com/blackwell-systems/scout-and-wave-go`.
+
+            ## Read these files first (do not skip)
+
+            Before writing any code, read these files to understand the patterns to follow:
+            - `/Users/dayna.blackwell/workspace/code/scout-and-wave-go/pkg/engine/mark_program_complete.go`
+            - `/Users/dayna.blackwell/workspace/code/scout-and-wave-go/pkg/engine/finalize.go` (lines 601-657 for MarkIMPLComplete signature)
+            - `/Users/dayna.blackwell/workspace/code/scout-and-wave-go/pkg/protocol/program_types.go` (understand ProgramTier and ProgramIMPL structs)
+            - `/Users/dayna.blackwell/workspace/code/scout-and-wave-go/pkg/protocol/program_worktree.go` (ProgramBranchName function)
+            - `/Users/dayna.blackwell/workspace/code/scout-and-wave-go/internal/git/commands.go` (lines 76-128 for WorktreeList, lines 130-138 for MergeNoFF, lines 245-258 for BranchExists/RevParse)
+
+            ## Types and functions to define
+
+            ### FinalizeTierOpts
+            ```go
+            type FinalizeTierOpts struct {
+                ManifestPath string
+                TierNumber   int
+                RepoDir      string
+                Logger       *slog.Logger
+            }
+            ```
+
+            ### FinalizeTierResult
+            ```go
+            type FinalizeTierResult struct {
+                TierNumber     int                                  `json:"tier_number"`
+                ImplsClosed    []string                             `json:"impls_closed"`
+                ImplsSkipped   []string                             `json:"impls_skipped"`
+                MergeResults   map[string]*protocol.MergeAgentsData `json:"merge_results"`
+                TierGateResult *protocol.TierGateData               `json:"tier_gate_result,omitempty"`
+                StateAdvanced  bool                                 `json:"state_advanced"`
+                Errors         []string                             `json:"errors,omitempty"`
+            }
+            ```
+
+            ### FinalizeTierEngine
+
+            This is the main exported function. Follow the `MarkProgramComplete` pattern in
+            `pkg/engine/mark_program_complete.go` for structure (logger nil-safe, context passed
+            through, steps logged, non-fatal steps warned but continued).
+
+            Steps:
+
+            **Step 1 — Close all complete IMPLs:**
+            Parse the PROGRAM manifest via `protocol.ParseProgramManifest(opts.ManifestPath)`.
+            Find the target tier (loop over `manifest.Tiers`, match `t.Number == opts.TierNumber`).
+            If not found, return an error.
+
+            For each IMPL slug in `targetTier.Impls`:
+            - Resolve via `protocol.ResolveIMPLPath(opts.RepoDir, implSlug)`.
+              Note: ResolveIMPLPath returns (path, error). If the file does not exist on disk
+              (already archived), `os.Stat(implPath)` will return os.IsNotExist. In that case
+              append slug to result.ImplsSkipped and continue.
+            - Call `MarkIMPLComplete(ctx, MarkIMPLCompleteOpts{IMPLPath: implPath, RepoPath: opts.RepoDir, Logger: opts.Logger})`.
+            - If it returns a fatal result, log a warning and append to result.Errors (non-fatal,
+              continue to next IMPL). MarkIMPLComplete is idempotent for already-complete IMPLs.
+            - On success, append slug to result.ImplsClosed.
+
+            **Step 2 — Merge IMPL branches (worktree-aware):**
+            For each IMPL slug in `targetTier.Impls`:
+            - Compute `branch = protocol.ProgramBranchName(manifest.ProgramSlug, opts.TierNumber, implSlug)`.
+            - If `!git.BranchExists(opts.RepoDir, branch)`: branch already merged or never created.
+              Store a "skipped" MergeAgentsData entry and continue.
+            - If `git.IsAncestor(opts.RepoDir, branch, "HEAD")`: already merged into HEAD.
+              Store a "skipped" MergeAgentsData entry and continue.
+            - Otherwise call `mergeIMPLBranchWorktreeAware(opts.RepoDir, branch, message)` where
+              `message = fmt.Sprintf("Merge program tier %d impl %s: %s", opts.TierNumber, implSlug, branch)`.
+            - If merge fails: append error to result.Errors and return immediately (same stop-on-first
+              behavior as the existing protocol.FinalizeTier).
+            - On success: record `result.MergeResults[implSlug] = &protocol.MergeAgentsData{...}`.
+
+            MergeAgentsData struct is in `pkg/protocol/merge_agents.go`. Fields to populate:
+            ```go
+            &protocol.MergeAgentsData{
+                Wave:   opts.TierNumber,
+                Merges: []protocol.MergeStatus{{Agent: implSlug, Branch: branch, Success: true}},
+            }
+            ```
+
+            **Step 3 — Run tier gate:**
+            Re-parse the manifest: `manifest, err = protocol.ParseProgramManifest(opts.ManifestPath)`.
+            Call `gateRes := protocol.RunTierGate(manifest, opts.TierNumber, opts.RepoDir)`.
+            Store `result.TierGateResult = gateRes.GetData()`.
+
+            If gate fails or did not pass:
+            - Append an error string to result.Errors.
+            - Return the partial result (no error from the function itself; return nil error and
+              populated result — the caller checks result.Errors).
+
+            **Step 4 — Update IMPL statuses in PROGRAM manifest and commit:**
+            This step marks all IMPLs in the tier as "complete" in the PROGRAM manifest YAML.
+
+            IMPORTANT: `ProgramTier` has NO `Status` field. Status is tracked in the
+            `ProgramIMPL.Status` field in `manifest.Impls`. Update as follows:
+
+            ```go
+            for i := range manifest.Impls {
+                for _, slug := range targetTier.Impls {
+                    if manifest.Impls[i].Slug == slug {
+                        manifest.Impls[i].Status = "complete"
+                    }
+                }
+            }
+            ```
+
+            There is no SaveProgramManifest helper. Write using yaml.Marshal + os.WriteFile:
+            ```go
+            import "gopkg.in/yaml.v3"
+
+            data, err := yaml.Marshal(manifest)
+            if err != nil { /* log warn, skip commit, set StateAdvanced=false, return */ }
+            if err := os.WriteFile(opts.ManifestPath, data, 0644); err != nil { /* same */ }
+            ```
+
+            Then commit: `git.CommitWithMessage(opts.RepoDir, fmt.Sprintf("chore: finalize tier %d", opts.TierNumber))`.
+            If git.Add is needed first, call `git.Add(opts.RepoDir, opts.ManifestPath)` before committing.
+            On commit error: log warning, do not return error (non-fatal).
+            On success: set `result.StateAdvanced = true`.
+
+            Return `result, nil`.
+
+            ### mergeIMPLBranchWorktreeAware (unexported helper)
+
+            ```go
+            func mergeIMPLBranchWorktreeAware(repoDir, branch, message string) error
+            ```
+
+            Implementation:
+            1. Call `git.WorktreeList(repoDir)` to get `[][2]string` where each entry is `{path, branchName}`.
+            2. Loop over entries, find one where `entry[1] == branch`.
+            3. If found in a worktree:
+               a. Get the commit SHA: `sha, err := git.RevParse(entry[0], "HEAD")`.
+                  If RevParse fails, fall back to `sha, err = git.RevParse(repoDir, branch)`.
+                  If both fail, return the error.
+               b. Merge by SHA: `return git.MergeNoFF(repoDir, sha, message)`.
+                  Since sha is a commit hash (not a branch name), git accepts it without the
+                  "branch is already checked out" error.
+            4. If not found in any worktree: `return git.MergeNoFF(repoDir, branch, message)`.
+
+            ## Imports needed
+            ```go
+            import (
+                "context"
+                "fmt"
+                "log/slog"
+                "os"
+
+                "gopkg.in/yaml.v3"
+                "github.com/blackwell-systems/scout-and-wave-go/internal/git"
+                "github.com/blackwell-systems/scout-and-wave-go/pkg/protocol"
+            )
+            ```
+
+            Note: `loggerFrom` and `MarkIMPLComplete`/`MarkIMPLCompleteOpts` are in the same
+            `engine` package (finalize.go). No import needed for them.
+
+            ## Tests to write (pkg/engine/finalize_tier_test.go)
+
+            All tests in `package engine`.
+
+            1. **TestFinalizeTierEngine_MissingManifest**: Pass a nonexistent manifest path.
+               Expect non-nil error from FinalizeTierEngine.
+
+            2. **TestFinalizeTierEngine_TierNotFound**: Write a minimal valid PROGRAM manifest
+               YAML to a temp file with one tier (number: 1), call with TierNumber=99. Expect
+               non-nil error returned.
+
+            3. **TestMergeIMPLBranchWorktreeAware_NoWorktrees**: Initialize a temp git repo
+               (git init, initial commit), call mergeIMPLBranchWorktreeAware with a branch name
+               that does not exist. Expect non-nil error (MergeNoFF will fail because the branch
+               does not exist — that is the correct behavior; the skip-if-absent logic lives in
+               FinalizeTierEngine, not in this helper).
+
+            4. **TestFinalizeTierEngine_AllImplsAlreadyArchived**: Create a temp git repo,
+               write a minimal PROGRAM manifest with one tier containing one IMPL slug, but do
+               NOT create the IMPL doc file on disk (simulates already-archived). Call
+               FinalizeTierEngine. Verify the IMPL slug appears in result.ImplsSkipped (not
+               ImplsClosed). This test will likely fail at the merge step too (branch doesn't
+               exist), which is fine — just check ImplsSkipped is non-empty before the merge
+               step would abort.
+
+            Use `t.TempDir()` for temp dirs. For test manifests, write minimal YAML like:
+            ```yaml
+            title: test-program
+            program_slug: test-prog
+            state: TIER_EXECUTING
+            impls:
+              - slug: test-impl
+                title: Test Impl
+                tier: 1
+                status: reviewed
+            tiers:
+              - number: 1
+                impls:
+                  - test-impl
+            completion: {}
+            ```
+
+            ## Verification gate
+            ```
+            go build ./pkg/engine/...
+            go vet ./pkg/engine/...
+            go test ./pkg/engine/... -run TestFinalizeTier -v
+            ```
+
+            ## Constraints
+            - Do NOT modify cmd/sawtools/finalize_tier_cmd.go — Agent B owns that file.
+            - Do NOT modify pkg/protocol/program_tier_finalize.go — it stays as-is.
+            - loggerFrom() is defined in pkg/engine/finalize.go (same package, no import needed).
+            - Follow the existing nil-safe logger pattern: use loggerFrom(opts.Logger).
+            - All git operations use the git package (internal/git), never exec.Command directly.
+            - ProgramTier has no Status field — do not attempt to set one. Use ProgramIMPL.Status.
+          files:
+            - pkg/engine/finalize_tier.go
+            - pkg/engine/finalize_tier_test.go
+    - number: 2
+      agents:
+        - id: B
+          task: |
+            ## What to implement
+
+            Update `cmd/sawtools/finalize_tier_cmd.go` to call the new engine function
+            `engine.FinalizeTierEngine` instead of `protocol.FinalizeTier`.
+
+            Read the file first: `/Users/dayna.blackwell/workspace/code/scout-and-wave-go/cmd/sawtools/finalize_tier_cmd.go`
+
+            ## Current behavior (to replace)
+
+            The current RunE calls:
+            ```go
+            result, err := protocol.FinalizeTier(manifestPath, tierNum, repoDir)
+            ```
+
+            ## New behavior
+
+            Replace the `protocol.FinalizeTier` call with:
+            ```go
+            engineResult, err := engine.FinalizeTierEngine(cmd.Context(), engine.FinalizeTierOpts{
+                ManifestPath: manifestPath,
+                TierNumber:   tierNum,
+                RepoDir:      repoDir,
+                Logger:       newSawLogger(),
+            })
+            if err != nil {
+                return err
+            }
+
+            out, _ := json.MarshalIndent(engineResult, "", "  ")
+            fmt.Fprintln(cmd.OutOrStdout(), string(out))
+
+            if len(engineResult.Errors) > 0 {
+                return fmt.Errorf("finalize-tier: %s", engineResult.Errors[0])
+            }
+            ```
+
+            Remove the `result.IsSuccess()` check that was used with the old protocol.Result type.
+            The FinalizeTierResult struct uses an Errors slice instead.
+
+            Remove the `protocol` import if it is no longer used after this change. Add the
+            `engine` import if not already present.
+            Import path: `github.com/blackwell-systems/scout-and-wave-go/pkg/engine`
+
+            Keep the `--auto` flag and its `AdvanceTierAutomatically` call intact — that
+            logic is separate from the main FinalizeTier call and does not change.
+
+            ## Update Long description
+
+            Update the `Long:` field of the cobra.Command to reflect the new thick-orchestrator
+            behavior. Replace the existing Long string with:
+
+            ```
+            Finalizes a program tier using the full thick-orchestrator sequence:
+              1. Close all complete IMPLs (mark-complete + archive + update context)
+              2. Merge IMPL branches to main, handling worktree-checked-out branches
+              3. Run tier-level quality gates
+              4. Update IMPL statuses in the PROGRAM manifest and commit
+
+            Analogous to finalize-wave and prepare-wave: no manual preconditions required.
+            Idempotent: already-closed IMPLs and already-merged branches are skipped.
+
+            When --auto is set, automatically advances to the next tier after the gate passes.
+
+            Examples:
+              sawtools finalize-tier docs/PROGRAM/PROGRAM.yaml --tier 1
+              sawtools finalize-tier program.yaml --tier 2 --repo-dir /path/to/repo
+              sawtools finalize-tier program.yaml --tier 1 --auto
+
+            Exit codes:
+              0 - All steps succeeded
+              1 - One or more steps failed
+              2 - Parse error or tier not found
+            ```
+
+            ## Tests to verify (cmd/sawtools/finalize_tier_cmd_test.go)
+
+            The existing tests test cobra flag validation (no args, no tier flag, missing
+            manifest) — these remain valid and should still pass after the import change.
+
+            Read the test file first. If it imports `protocol` directly, update those imports.
+            No new tests are required for the cmd layer; engine logic is tested in
+            pkg/engine/finalize_tier_test.go.
+
+            Run the tests to verify: `go test ./cmd/sawtools/... -run TestFinalizeTierCmd -v`
+
+            ## Verification gate
+            ```
+            go build ./cmd/sawtools/...
+            go vet ./cmd/sawtools/...
+            go test ./cmd/sawtools/... -run TestFinalizeTierCmd -v
+            ```
+
+            ## Constraints
+            - Do NOT modify pkg/engine/finalize_tier.go — Agent A owns that file.
+            - The thin-adapter pattern: all orchestration stays in pkg/engine, cmd/ only
+              parses flags and calls engine. No logic in the RunE beyond flag parsing and
+              the engine call.
+            - newSawLogger() is defined in cmd/sawtools/root.go (same package, accessible).
+            - repoDir is a package-level variable in cmd/sawtools (defined in root.go).
+            - After changes, grep for `protocol.` in the file and confirm only the protocol
+              import for the --auto path (which uses protocol.ParseProgramManifest) remains,
+              or is gone entirely if the protocol package is no longer referenced.
+          files:
+            - cmd/sawtools/finalize_tier_cmd.go
+            - cmd/sawtools/finalize_tier_cmd_test.go
+          dependencies:
+            - A
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./...
+          required: true
+        - type: lint
+          command: go vet ./...
+          required: true
+        - type: test
+          command: go test ./...
+          required: true
+pre_mortem:
+    overall_risk: medium
+    rows:
+        - scenario: |-
+            ProgramTier struct has no Status field (confirmed by reading program_types.go).
+            Agent A's task explicitly addresses this, but if the agent ignores the constraint
+            and tries to set Tier.Status, it will fail to compile.
+          likelihood: low
+          impact: high
+          mitigation: |-
+            The constraint is explicitly stated twice in Agent A's task. The agent is instructed
+            to read program_types.go first. If compilation fails on Tier.Status, the fix is
+            immediate: remove that line and update ProgramIMPL.Status entries instead.
+        - scenario: |-
+            MarkIMPLComplete may return a fatal result even for already-COMPLETE IMPLs if
+            WriteCompletionMarker fails due to an already-archived file (file not found).
+            The file-existence check before calling MarkIMPLComplete prevents this case,
+            but if ResolveIMPLPath returns a path that exists at a stale location, the
+            check could pass while MarkIMPLComplete then fails.
+          likelihood: low
+          impact: low
+          mitigation: |-
+            Non-fatal: Agent A logs a warning and continues. The IMPL being already closed
+            is the normal idempotent case. Stale paths are handled by checking os.Stat before
+            calling MarkIMPLComplete.
+        - scenario: |-
+            Agent B removes the `protocol` import but the --auto path still calls
+            `protocol.ParseProgramManifest`, causing a compile error.
+          likelihood: medium
+          impact: high
+          mitigation: |-
+            Agent B's task explicitly notes to check whether protocol is still referenced
+            by the --auto path before removing the import. The --auto path uses
+            protocol.ParseProgramManifest; if still present, the import must stay.
+        - scenario: |-
+            git.MergeNoFF with a commit SHA (worktree case) may produce a different merge
+            commit message than expected if git treats the SHA as an anonymous commit.
+            The merge will succeed but the commit message may appear differently in git log.
+          likelihood: low
+          impact: low
+          mitigation: |-
+            Non-functional — the merge message is for human readability only. The -m flag
+            on git merge --no-ff sets the message explicitly regardless of what is being merged.
+        - scenario: |-
+            The yaml.Marshal round-trip for the PROGRAM manifest may lose YAML comments or
+            reorder keys compared to the original file, making diffs noisy.
+          likelihood: high
+          impact: low
+          mitigation: |-
+            This is cosmetic. The PROGRAM manifest is machine-written and does not contain
+            human-authored comments that need preserving. The round-trip via gopkg.in/yaml.v3
+            is the same pattern used in mark_program_complete.go (via strings manipulation)
+            and is acceptable. Document in the completion report if it occurs.
+state: "REVIEWED"
+injection_method: hook
