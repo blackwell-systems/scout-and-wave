@@ -115,3 +115,5 @@
   - IMPL doc: docs/IMPL/complete/IMPL-i1-enforcement-multi-level.yaml
 - **test-cascade-detection**: completed 2026-04-01, 1 waves, 3 agents
   - IMPL doc: docs/IMPL/complete/IMPL-test-cascade-detection.yaml
+- **e11-smart-merge-strategies**: completed 2026-04-01, 2 waves, 5 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-e11-smart-merge-strategies.yaml

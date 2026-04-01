@@ -1,0 +1,357 @@
+title: pkg/scaffoldval Review and Result[T] Migration
+feature_slug: scaffoldval-review
+verdict: SUITABLE
+suitability_assessment: |
+    The pkg/scaffoldval package is a 272-line validation pipeline for scaffold files
+    (syntax, imports, type references, build checks). The work is suitable for SAW
+    because:
+
+    1. File decomposition: The package has 2 production files (validator.go, types.go)
+       that can be cleanly decomposed across agents. One agent modernizes the return
+       type and error handling, another adds error codes to pkg/result/codes.go.
+
+    2. No investigation required: All changes are mechanical migrations following
+       established patterns from pkg/idgen, pkg/queue, pkg/notify.
+
+    3. Clear interfaces: ValidateScaffold signature change from (*ValidationResult, error)
+       to Result[*ValidationResult] is well-defined and testable.
+
+    4. Pre-implementation status: Package exists and is tested (89.8% coverage). No
+       partial implementation detected.
+
+    5. Parallelization value: Medium. Two agents can run independently (one on
+       validator.go, one on codes.go). Build cycle ~5s. Value is consistency across
+       codebase rather than raw speed gains.
+
+    Estimated times:
+    - Scout phase: ~8 min (analysis, interface contracts, IMPL doc)
+    - Agent execution: ~12 min (2 agents × 6 min avg, parallel)
+    - Merge & verification: ~3 min
+    Total SAW time: ~23 min
+
+    Sequential baseline: ~18 min (2 agents × 9 min avg sequential)
+    Time savings: -5 min (27% slower)
+
+    Recommendation: Proceed. The value is consistency and code review efficiency, not
+    speed. Having a canonical pattern for Result[T] migration across the codebase is
+    worth the overhead. The IMPL doc also serves as a reference for future migrations
+    (68 *Result types remain).
+test_command: go test ./pkg/scaffoldval/...
+lint_command: go vet ./pkg/scaffoldval/...
+file_ownership:
+    - file: pkg/scaffoldval/validator.go
+      agent: A
+      wave: 1
+      action: modify
+    - file: pkg/scaffoldval/types.go
+      agent: A
+      wave: 1
+      action: modify
+    - file: pkg/scaffoldval/validator_test.go
+      agent: A
+      wave: 1
+      action: modify
+    - file: pkg/result/codes.go
+      agent: B
+      wave: 1
+      action: modify
+    - file: cmd/sawtools/validate_scaffold_cmd.go
+      agent: C
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+    - file: cmd/sawtools/validate_scaffold_cmd_test.go
+      agent: C
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+    - file: pkg/protocol/scaffold_validation.go
+      agent: C
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+interface_contracts:
+    - name: ValidateScaffold
+      description: |
+        Primary validation function. Migrated from (*ValidationResult, error) to
+        Result[*ValidationResult] following pkg/idgen.AssignAgentIDs pattern.
+      definition: |
+        func ValidateScaffold(ctx context.Context, scaffoldPath string, implPath string, repoRoot string) result.Result[*ValidationResult]
+
+        Returns:
+        - SUCCESS with ValidationResult when all checks pass or are skipped
+        - FATAL with error codes SV01_SYNTAX_FAIL, SV02_IMPORT_FAIL, SV03_BUILD_FAIL,
+          SV04_PARSE_FAIL, SV05_PROTOCOL_LOAD_FAIL when validation pipeline fails
+      location: pkg/scaffoldval/validator.go
+    - name: Error codes for scaffoldval
+      description: |
+        New error codes added to pkg/result/codes.go in the S001-S099 range (Suitability
+        error codes — scaffoldval is a validation tool, S prefix is appropriate).
+      definition: |
+        // Scaffold validation error codes (SV01-SV10)
+        const (
+          CodeScaffoldSyntaxFail     = "SV01_SYNTAX_FAIL"      // go/parser failed
+          CodeScaffoldImportFail     = "SV02_IMPORT_FAIL"      // missing imports detected
+          CodeScaffoldBuildFail      = "SV03_BUILD_FAIL"       // build command failed
+          CodeScaffoldParseFail      = "SV04_PARSE_FAIL"       // AST parse error
+          CodeScaffoldProtocolLoad   = "SV05_PROTOCOL_LOAD_FAIL" // IMPL doc load failed
+        )
+      location: pkg/result/codes.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            Migrate pkg/scaffoldval to Result[T] pattern and structured error codes.
+
+            ## What to implement
+
+            1. Change ValidateScaffold signature from:
+               ```go
+               func ValidateScaffold(...) (*ValidationResult, error)
+               ```
+               to:
+               ```go
+               func ValidateScaffold(...) result.Result[*ValidationResult]
+               ```
+
+            2. Replace all `return result, nil` with `result.NewSuccess(result)`
+
+            3. Replace all `return result, nil` (early exits) with structured error returns:
+               - Line 32: Syntax fail → `result.NewFailure[*ValidationResult]([]result.SAWError{result.NewError(result.CodeScaffoldSyntaxFail, err.Error())})`
+               - Line 68: Protocol load fail → `result.NewFailure[*ValidationResult]([]result.SAWError{result.NewError(result.CodeScaffoldProtocolLoad, fmt.Sprintf("Failed to parse IMPL manifest: %v", err))})`
+               - Line 97: Final success → `result.NewSuccess(result)`
+
+            4. Update ValidationResult to include structured build/import errors if needed
+               (currently stores raw error strings in Errors []string fields)
+
+            5. Update all tests in validator_test.go to handle Result[T] return type:
+               - Replace `result, err := ValidateScaffold(...)` with `res := ValidateScaffold(...)`
+               - Replace `if err != nil` checks with `if res.IsFatal()`
+               - Access data via `res.GetData()` instead of `result`
+
+            6. Add import: `"github.com/blackwell-systems/scout-and-wave-go/pkg/result"`
+
+            ## Interface contracts
+
+            ValidateScaffold signature:
+            ```go
+            func ValidateScaffold(ctx context.Context, scaffoldPath string, implPath string, repoRoot string) result.Result[*ValidationResult]
+            ```
+
+            Returns SUCCESS with *ValidationResult when validation completes (even if
+            individual steps fail — the ValidationResult captures those failures).
+            Returns FATAL only when the pipeline cannot run (syntax error prevents
+            import check, protocol load fails so build command unavailable).
+
+            ## Tests to add/modify
+
+            Update all tests in validator_test.go:
+            - TestValidateScaffold_ValidScaffold: check `res.IsSuccess()` instead of `err == nil`
+            - TestValidateScaffold_SyntaxError: check `res.IsSuccess()` (syntax fail returns
+              SUCCESS with result.Syntax.Status = "FAIL", not a FATAL Result)
+            - TestValidateScaffold_MissingImport: same pattern
+            - TestValidateScaffold_BuildFail: same pattern
+            - TestExtractImports: no changes (internal helper, not affected)
+            - TestCheckImports_*: no changes (internal helpers)
+
+            ## Verification gate
+
+            ```bash
+            cd /Users/dayna.blackwell/workspace/code/scout-and-wave-go
+            go build ./pkg/scaffoldval/...
+            go vet ./pkg/scaffoldval/...
+            go test ./pkg/scaffoldval/... -v
+            ```
+
+            All tests must pass. Coverage should remain ≥89%.
+
+            ## Constraints
+
+            - Do NOT change the ValidationResult struct fields (Syntax, Imports, TypeReferences, Build)
+            - Do NOT change OverallStatus() method logic
+            - Do NOT change internal helpers (extractImports, parseGoMod, checkImports, findRepoRoot, importsFromAST)
+            - The Result[T] wrapper is for ValidateScaffold return only; ValidationResult
+              itself stays as-is (it's the payload inside Result[T])
+          files:
+            - pkg/scaffoldval/validator.go
+            - pkg/scaffoldval/types.go
+            - pkg/scaffoldval/validator_test.go
+        - id: B
+          task: |
+            Add scaffold validation error codes to pkg/result/codes.go.
+
+            ## What to implement
+
+            Add 5 new error code constants in the S001-S099 range (Suitability error codes)
+            to pkg/result/codes.go. Insert them after the existing suitability codes
+            (currently S001-S006) and before the I001-I099 range.
+
+            New constants (lines ~268-274 in codes.go):
+
+            ```go
+            // Scaffold validation error codes (SV01-SV10)
+            const (
+              CodeScaffoldSyntaxFail     = "SV01_SYNTAX_FAIL"      // go/parser failed
+              CodeScaffoldImportFail     = "SV02_IMPORT_FAIL"      // missing imports detected
+              CodeScaffoldBuildFail      = "SV03_BUILD_FAIL"       // build command failed
+              CodeScaffoldParseFail      = "SV04_PARSE_FAIL"       // AST parse error (distinct from syntax fail)
+              CodeScaffoldProtocolLoad   = "SV05_PROTOCOL_LOAD_FAIL" // IMPL doc load failed
+            )
+            ```
+
+            Context: These codes will be used by Agent A in ValidateScaffold to replace
+            unstructured error returns with result.SAWError instances. The codes follow
+            the SV01-SV10 sub-range pattern for consistency with other validation domains.
+
+            ## Interface contracts
+
+            Constants exported from pkg/result/codes.go. No function signatures.
+
+            ## Tests to add/modify
+
+            No test changes needed. Error code constants do not have dedicated tests; they
+            are verified by integration tests in packages that use them (scaffoldval tests
+            in Agent A's work will verify these codes work correctly).
+
+            ## Verification gate
+
+            ```bash
+            cd /Users/dayna.blackwell/workspace/code/scout-and-wave-go
+            go build ./pkg/result/...
+            go vet ./pkg/result/...
+            go test ./pkg/result/... -v
+            ```
+
+            ## Constraints
+
+            - Insert codes in the correct range (after S006, before I001)
+            - Use SV01-SV10 prefix for consistency with validation domain naming
+            - Add inline comments explaining when each code is emitted
+            - Do NOT renumber existing codes
+          files:
+            - pkg/result/codes.go
+    - number: 2
+      agents:
+        - id: C
+          task: |
+            Update callers of ValidateScaffold to handle Result[T] return type.
+
+            ## What to implement
+
+            Three callers must be updated:
+
+            1. cmd/sawtools/validate_scaffold_cmd.go (line 34):
+               Before:
+               ```go
+               result, err := scaffoldval.ValidateScaffold(cmd.Context(), scaffoldPath, implDoc, "")
+               if err != nil {
+                 return fmt.Errorf("validation failed: %w", err)
+               }
+               ```
+               After:
+               ```go
+               res := scaffoldval.ValidateScaffold(cmd.Context(), scaffoldPath, implDoc, "")
+               if res.IsFatal() {
+                 return fmt.Errorf("validation failed: %s", res.Errors[0].Message)
+               }
+               result := res.GetData()
+               ```
+
+            2. cmd/sawtools/validate_scaffold_cmd_test.go (lines 64, 255):
+               Before:
+               ```go
+               var result scaffoldval.ValidationResult
+               err = yaml.Unmarshal(output.Bytes(), &result)
+               ```
+               No change needed (test decodes YAML output, not Go return value).
+
+            3. pkg/protocol/scaffold_validation.go (no direct call, but documents the pattern):
+               Add a comment at the top explaining the Result[T] pattern for future readers:
+               ```go
+               // ScaffoldStatus represents the validation result for a single scaffold file.
+               // This type is used by protocol.ValidateScaffolds to check scaffold readiness.
+               // For detailed validation (syntax, imports, build), use scaffoldval.ValidateScaffold
+               // which returns result.Result[*scaffoldval.ValidationResult].
+               ```
+
+            ## Interface contracts
+
+            No new interfaces. Uses ValidateScaffold from Agent A (Wave 1).
+
+            ## Tests to add/modify
+
+            1. cmd/sawtools/validate_scaffold_cmd_test.go:
+               - TestValidateScaffoldCmd_ValidScaffold: check command still exits 0
+               - TestValidateScaffoldCmd_InvalidScaffold: check command still exits 1
+               - No changes to YAML decoding logic (output format unchanged)
+
+            2. pkg/protocol/scaffold_validation_test.go:
+               - No changes needed (does not call scaffoldval.ValidateScaffold directly)
+
+            ## Verification gate
+
+            ```bash
+            cd /Users/dayna.blackwell/workspace/code/scout-and-wave-go
+            go build ./cmd/sawtools/...
+            go vet ./cmd/sawtools/...
+            go test ./cmd/sawtools/... -run TestValidateScaffold -v
+            go test ./pkg/protocol/... -run ValidateScaffolds -v
+            ```
+
+            ## Constraints
+
+            - Do NOT change the YAML output format (validate_scaffold_cmd.go line 42-46)
+            - Do NOT change scaffold_validation.go logic (it checks status strings, not
+              validation pipeline results)
+            - Preserve error exit behavior (exit 1 when result.OverallStatus() == "FAIL")
+          files:
+            - cmd/sawtools/validate_scaffold_cmd.go
+            - cmd/sawtools/validate_scaffold_cmd_test.go
+            - pkg/protocol/scaffold_validation.go
+          dependencies:
+            - A
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./pkg/scaffoldval/...
+          required: true
+        - type: lint
+          command: go vet ./pkg/scaffoldval/...
+          required: true
+        - type: test
+          command: go test ./pkg/scaffoldval/... -cover
+          required: true
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: Agent A breaks validator_test.go by incorrectly handling Result[T] in assertions
+          likelihood: medium
+          impact: low
+          mitigation: |
+            Verification gate includes full test suite. Agent must run tests and fix
+            failures before completing. Pattern is well-established in pkg/idgen tests.
+        - scenario: Agent B inserts error codes in wrong range, breaking code range invariants
+          likelihood: low
+          impact: medium
+          mitigation: |
+            Brief explicitly states "after S006, before I001". Verification gate includes
+            go vet which catches redeclaration errors.
+        - scenario: Agent C misses a caller of ValidateScaffold (e.g., in pkg/engine/)
+          likelihood: low
+          impact: high
+          mitigation: |
+            Pre-scout grep found only 1 production caller (validate_scaffold_cmd.go).
+            Post-merge gate includes full build which catches signature mismatches.
+        - scenario: Result[T] migration changes observable behavior (exit codes, YAML output)
+          likelihood: low
+          impact: medium
+          mitigation: |
+            Agent C explicitly preserves YAML output format and error exit codes. Test
+            coverage in validate_scaffold_cmd_test.go verifies CLI behavior unchanged.
+state: SCOUT_PENDING
+injection_method: hook

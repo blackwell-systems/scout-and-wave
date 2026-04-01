@@ -1,0 +1,516 @@
+title: Deep Review of pkg/config Package
+feature_slug: config-package-review
+verdict: SUITABLE
+suitability_assessment: |
+    The pkg/config package is parallelizable across 3 independent review dimensions:
+
+    1. **File decomposition**: 2 production files (config.go, state.go) with distinct
+       responsibilities; test files can be reviewed independently. Each agent gets
+       disjoint ownership (1-2 files).
+
+    2. **Investigation-first**: None. All code exists and is testable. Review findings
+       are based on static analysis against established patterns (Result[T], error codes).
+
+    3. **Interface discoverability**: Review findings don't require cross-agent coordination.
+       Each agent evaluates its assigned files against the review checklist independently.
+
+    4. **Pre-implementation status**: Package exists and is in active use. Tests pass.
+       Review identifies inconsistencies against codebase conventions (Result[T] pattern,
+       structured error codes, dead code). No existing audit report—findings discovered
+       during review.
+
+    5. **Parallelization value**: Build/test cycle ~2s (Go project). Low per-agent time
+       (<10 min each), but coordination value is high: structured review findings document
+       technical debt and inform future refactoring. SAW overhead (~5 min total) is
+       marginal but acceptable for the audit trail value.
+
+    Estimated times:
+    - Scout phase: ~8 min (pattern analysis, interface review, IMPL doc)
+    - Agent execution: ~15 min (3 agents × 5 min avg, fully parallel)
+    - Merge & verification: ~2 min
+    Total SAW time: ~25 min
+
+    Sequential baseline: ~20 min (3 agents × 6-7 min avg sequential time)
+    Time savings: ~-5 min (20% slower due to overhead)
+
+    Recommendation: Marginal time loss, but structured findings justify SAW use.
+    The IMPL doc serves as an audit trail and coordination artifact for future
+    refactoring work.
+test_command: go test ./pkg/config/... -timeout 30s
+lint_command: go vet ./pkg/config/...
+file_ownership:
+    - file: pkg/config/config.go
+      agent: A
+      wave: 1
+      action: modify
+    - file: pkg/config/config_test.go
+      agent: A
+      wave: 1
+      action: modify
+    - file: pkg/config/state.go
+      agent: B
+      wave: 1
+      action: modify
+    - file: pkg/config/state_test.go
+      agent: B
+      wave: 1
+      action: modify
+    - file: pkg/agent/backend/configfile.go
+      agent: C
+      wave: 1
+      action: modify
+    - file: pkg/agent/backend/configfile_test.go
+      agent: C
+      wave: 1
+      action: modify
+    - file: docs/reviews/config-package-review.md
+      agent: D
+      wave: 2
+      action: new
+interface_contracts: []
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## Objective
+            Review `pkg/config/config.go` and `config_test.go` for consistency with
+            codebase conventions, identify technical debt, and document findings.
+
+            ## Review Checklist
+
+            **1. Result[T] pattern conformance**
+            - All public functions that can fail return `result.Result[T]`? ✓
+            - `Load()` returns `Result[*SAWConfig]` ✓
+            - `Save()` returns `Result[bool]` ✓
+            - `LoadOrDefault()` is a convenience wrapper (returns *SAWConfig, not Result)—acceptable ✓
+
+            **2. Error handling**
+            - All errors use structured error codes from `pkg/result/codes.go`? Check:
+              - `N013_CONFIG_NOT_FOUND` (used in Load)
+              - `N014_CONFIG_INVALID` (used for parse/read errors)
+              - `N085_CONFIG_IO_FAILED` (used for temp file/write/chmod errors)
+            - Are codes consistent with usage in other packages?
+            - Any raw `error` types that should be SAWError?
+
+            **3. Dead code detection**
+            - Is `LoadOrDefault` used anywhere? (Check: `grep -r LoadOrDefault`)
+            - Are all exported functions referenced?
+            - Are all config fields (ProvidersConfig, AutonomyConfig, AgentConfig, etc.) used?
+            - Check for unreferenced struct fields using `go vet`
+
+            **4. Consistency with pkg/* patterns**
+            - Compare error handling to `pkg/protocol`, `pkg/engine`, `pkg/journal`
+            - Does `Save()` follow atomic write patterns elsewhere?
+            - Is `FindConfigPath()` pattern used consistently with similar walk-up functions?
+
+            **5. Simplification opportunities**
+            - Can `Save()` preserve-unknown-keys logic be extracted to a helper?
+            - Can legacy migration in `Load()` be removed (check: when was it added, is it still needed)?
+            - Is the 10-parent-directory limit (`maxWalkDepth`) appropriate?
+
+            **6. Test coverage gaps**
+            - Run: `go test -cover ./pkg/config`
+            - Are all error paths tested? (missing config, invalid JSON, IO failures)
+            - Are edge cases covered? (empty config, missing fields, permissions)
+            - Check coverage report line-by-line against `config.go`
+
+            **7. Documentation completeness**
+            - Are all exported functions documented?
+            - Do comments explain non-obvious behavior (atomic write, legacy migration)?
+            - Are error codes documented in function comments?
+
+            ## Deliverables
+
+            Write findings to `docs/reviews/config-package-review.md` (Wave 2 agent will
+            consolidate). Use this format:
+
+            ```markdown
+            ### config.go and config_test.go Review Findings
+
+            #### Result[T] Pattern Conformance
+            - [PASS/FAIL] All public fallible functions return Result[T]
+            - Notes: [specific findings]
+
+            #### Error Handling
+            - [PASS/FAIL] Structured error codes used consistently
+            - Issues found: [list any raw errors or missing codes]
+
+            #### Dead Code
+            - [PASS/FAIL] No unused exports
+            - Findings: [list any dead code]
+
+            #### Consistency
+            - [PASS/FAIL] Matches pkg/* patterns
+            - Deviations: [list inconsistencies]
+
+            #### Simplification Opportunities
+            - [list refactoring suggestions]
+
+            #### Test Coverage
+            - Coverage: [X%]
+            - Gaps: [list missing test cases]
+
+            #### Documentation
+            - [PASS/FAIL] Complete and accurate
+            - Issues: [missing or incorrect docs]
+            ```
+
+            ## Constraints
+
+            - Do NOT modify production code (only tests if adding coverage)
+            - Do NOT refactor—document findings only
+            - Focus on inconsistencies, not style preferences
+            - Check against established patterns from CONTEXT.md
+          files:
+            - pkg/config/config.go
+            - pkg/config/config_test.go
+        - id: B
+          task: |
+            ## Objective
+            Review `pkg/config/state.go` and `state_test.go` for consistency with
+            codebase conventions, identify technical debt, and document findings.
+
+            ## Review Checklist
+
+            **1. Result[T] pattern conformance**
+            - All public functions that can fail return `result.Result[T]`? Check:
+              - `GetWaveState()` returns `Result[*WaveState]` ✓
+              - `GetAllWaveStates()` returns `Result[[]WaveState]` ✓
+
+            **2. Error handling**
+            - All errors use structured error codes? Check:
+              - `CodeConfigInvalid` (used for nil manifest)
+              - `CodeWaveNotReady` (used when wave not found)
+            - Are these the right codes? Should `CodeWaveNotReady` be used or should
+              there be a more specific "wave not found in manifest" code?
+            - Any error wrapping issues? (Check the fmt.Sprintf pattern in GetAllWaveStates)
+
+            **3. Dead code detection**
+            - Is `WaveState` struct used outside pkg/config? (Run: `grep -r WaveState`)
+            - Are `GetWaveState` and `GetAllWaveStates` called anywhere?
+            - If unused: is this planned future functionality or actual dead code?
+
+            **4. Consistency with pkg/* patterns**
+            - Does status classification logic (complete/blocked/partial/pending) match
+              definitions in `pkg/protocol`?
+            - Is the `IsComplete` calculation correct? (All agents complete AND no failures)
+            - Should `MergeState` be included in WaveState? Check if it's used.
+
+            **5. Simplification opportunities**
+            - Can agent classification loop be extracted to a helper?
+            - Is the nil-slice initialization (lines 75-83) necessary for JSON output?
+              Can it be handled by json.Marshal?
+            - Could WaveState calculation be moved to pkg/protocol (closer to IMPLManifest)?
+
+            **6. Test coverage gaps**
+            - Run: `go test -cover ./pkg/config`
+            - Are all status transitions tested? (complete, blocked, partial, pending, unknown)
+            - Edge cases: empty waves? waves with zero agents? all agents pending?
+            - Error paths: nil manifest, missing wave, invalid completion reports?
+
+            **7. Naming consistency**
+            - Is `WaveState` the right name? (Compare: protocol.Wave, protocol.CompletionReport)
+            - Should this be `WaveStatus` or `WaveProgress` instead?
+            - Is `GetWaveState` vs `GetAllWaveStates` naming consistent with Go conventions?
+
+            ## Deliverables
+
+            Write findings to `docs/reviews/state-review-findings.md` (Wave 2 agent will
+            consolidate into main report). Use same format as Agent A.
+
+            ```markdown
+            ### state.go and state_test.go Review Findings
+
+            #### Result[T] Pattern Conformance
+            [findings]
+
+            #### Error Handling
+            [findings]
+
+            #### Dead Code
+            [findings]
+
+            #### Consistency
+            [findings]
+
+            #### Simplification Opportunities
+            [list refactoring suggestions]
+
+            #### Test Coverage
+            [coverage report]
+
+            #### Naming Consistency
+            [findings]
+            ```
+
+            ## Constraints
+
+            - Do NOT modify production code
+            - Document findings only—no refactoring
+            - Check usage patterns: is this code actually called, or is it future work?
+          files:
+            - pkg/config/state.go
+            - pkg/config/state_test.go
+        - id: C
+          task: |
+            ## Objective
+            Review `pkg/agent/backend/configfile.go` and its tests for dead code,
+            duplication with `pkg/config`, and migration opportunities.
+
+            ## Review Checklist
+
+            **1. Duplication with pkg/config**
+            - `SAWProviders` struct (configfile.go:11) duplicates fields from
+              `config.ProvidersConfig` (config.go:31). Can one be eliminated?
+            - `LoadProvidersFromConfig()` re-implements `config.FindConfigPath()` +
+              manual parsing. Should it use `config.Load()` instead?
+            - Compare field definitions: are they identical? Any drift?
+
+            **2. Usage analysis**
+            - Run: `grep -r LoadProvidersFromConfig`
+            - Where is it called? (Check: pkg/agent/backend/bedrock/client.go,
+              pkg/agent/backend/api/client.go)
+            - Why does it exist separately from `pkg/config.Load()`?
+            - Is the zero-value-on-error pattern intentional or legacy?
+
+            **3. Result[T] migration**
+            - Should `LoadProvidersFromConfig()` return `Result[SAWProviders]` instead
+              of a zero value on error?
+            - Compare error handling to `config.Load()`: which approach is better?
+            - Would migrating to Result[T] break existing callers?
+
+            **4. Simplification opportunities**
+            - Can `LoadProvidersFromConfig()` be replaced with a call to `config.Load()`
+              and a field accessor: `cfg.Providers`?
+            - If not, why not? Document the reason (performance? error handling semantics?)
+            - Can the test helper `writeConfig()` be reused from `pkg/config` tests?
+
+            **5. Error handling**
+            - Silent failure (returns zero value on error) vs explicit error return:
+              which is correct for this use case?
+            - Check callers: do they check if APIKey is empty, or do they assume success?
+            - Any risk of silent misconfigurations?
+
+            **6. Test coverage**
+            - Run: `go test -cover ./pkg/agent/backend`
+            - Are all error paths tested? (missing file, invalid JSON, parent walk-up)
+            - Compare test coverage to `pkg/config` tests—any gaps?
+
+            **7. Migration path**
+            - If consolidation is recommended, what's the migration plan?
+            - Breaking change or backward-compatible wrapper?
+            - Deprecation timeline?
+
+            ## Deliverables
+
+            Write findings to `docs/reviews/configfile-review-findings.md` (Wave 2 agent
+            will consolidate). Use this format:
+
+            ```markdown
+            ### pkg/agent/backend/configfile.go Review Findings
+
+            #### Duplication Analysis
+            - [DUPLICATE/UNIQUE] SAWProviders vs config.ProvidersConfig
+            - Differences: [list any field drift]
+            - Recommendation: [consolidate / keep separate / other]
+
+            #### Usage Analysis
+            - Called from: [list call sites]
+            - Purpose: [why separate from config.Load()?]
+
+            #### Result[T] Migration
+            - Current: returns zero value on error
+            - Recommended: [migrate to Result[T] / keep as-is]
+            - Breaking change: [yes/no, impact]
+
+            #### Simplification Opportunities
+            - [can LoadProvidersFromConfig be eliminated?]
+            - [can it delegate to config.Load()?]
+
+            #### Error Handling
+            - Silent failure risk: [analysis]
+            - Caller assumptions: [do they check for empty values?]
+
+            #### Test Coverage
+            - Coverage: [X%]
+            - Gaps: [compared to pkg/config tests]
+
+            #### Migration Path
+            - [if consolidation recommended: detailed plan]
+            - [if keeping separate: justification]
+            ```
+
+            ## Constraints
+
+            - Do NOT modify code—document findings only
+            - Evaluate duplication objectively: sometimes duplication is intentional
+            - Check git history: when was configfile.go added? Before or after pkg/config
+              unification?
+          files:
+            - pkg/agent/backend/configfile.go
+            - pkg/agent/backend/configfile_test.go
+    - number: 2
+      agents:
+        - id: D
+          task: |
+            ## Objective
+            Consolidate review findings from Wave 1 agents into a single comprehensive
+            report with recommendations.
+
+            ## Inputs
+
+            Read the three partial reports:
+            - `docs/reviews/config-package-review.md` (Agent A: config.go)
+            - `docs/reviews/state-review-findings.md` (Agent B: state.go)
+            - `docs/reviews/configfile-review-findings.md` (Agent C: configfile.go)
+
+            ## Deliverables
+
+            Create `docs/reviews/config-package-review.md` with consolidated findings:
+
+            ```markdown
+            # pkg/config Package Review
+
+            Date: [auto-generate from completion_date]
+            Reviewer: SAW Deep Review (3 agents)
+
+            ## Executive Summary
+
+            [1-2 paragraph overview: overall health, critical issues, recommended actions]
+
+            ## Findings by Category
+
+            ### 1. Result[T] Pattern Conformance
+
+            **Status**: [PASS / FAIL / PARTIAL]
+
+            [consolidate findings from all 3 agents]
+
+            ### 2. Error Handling
+
+            **Status**: [PASS / FAIL / PARTIAL]
+
+            [consolidate error handling findings]
+
+            ### 3. Dead Code Analysis
+
+            **Status**: [PASS / FAIL]
+
+            [list all dead code found, if any]
+
+            ### 4. Code Duplication
+
+            **Status**: [PASS / FAIL]
+
+            [detail SAWProviders vs ProvidersConfig duplication]
+
+            ### 5. Consistency with Codebase Patterns
+
+            **Status**: [PASS / PARTIAL]
+
+            [compare to pkg/protocol, pkg/engine patterns]
+
+            ### 6. Simplification Opportunities
+
+            [ranked list of refactoring suggestions]
+
+            ### 7. Test Coverage
+
+            - config.go: [X%]
+            - state.go: [Y%]
+            - configfile.go: [Z%]
+            - Overall: [avg%]
+
+            Gaps: [consolidated list]
+
+            ## Recommendations
+
+            ### High Priority
+
+            1. [critical issues requiring immediate action]
+
+            ### Medium Priority
+
+            2. [improvements that should be scheduled]
+
+            ### Low Priority / Future Work
+
+            3. [nice-to-have refactorings]
+
+            ## Appendix: Per-File Details
+
+            [include full findings from each agent's report]
+            ```
+
+            ## Merge Strategy
+
+            - Include all findings from Wave 1 agents
+            - Resolve contradictions (if Agent A says PASS and Agent C says FAIL for
+              the same pattern, investigate and make a determination)
+            - Prioritize findings: critical (breaks conventions) > important (inconsistency)
+              > nice-to-have (simplification)
+            - Add cross-cutting observations (patterns across all 3 files)
+
+            ## Verification
+
+            Before completing:
+            - All 3 input reports referenced
+            - No findings lost in consolidation
+            - Recommendations are actionable (specific file, specific change)
+            - Executive summary matches detailed findings
+          files:
+            - docs/reviews/config-package-review.md
+          dependencies:
+            - A
+            - B
+            - C
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./pkg/config/...
+          required: true
+        - type: lint
+          command: go vet ./pkg/config/...
+          required: true
+        - type: test
+          command: go test ./pkg/config/... -timeout 30s
+          required: true
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: Agent A, B, or C misses dead code because grep search is too narrow
+          likelihood: medium
+          impact: low
+          mitigation: |
+            Each agent should use multiple search patterns:
+            - grep -r "FunctionName" (exact match)
+            - git log --all -S "FunctionName" (historical usage)
+            - go vet -all (static analysis)
+            Consolidation agent (D) cross-checks findings.
+        - scenario: Duplication findings (Agent C) contradict earlier unification work
+          likelihood: low
+          impact: medium
+          mitigation: |
+            Agent C should check git history:
+            `git log --oneline --all -- pkg/agent/backend/configfile.go`
+            `git log --oneline --all -- pkg/config/`
+            If configfile.go was added AFTER config-state-unification (2026-03-24),
+            the duplication is intentional—document why in the report.
+        - scenario: Wave 2 consolidation agent (D) loses findings during merge
+          likelihood: low
+          impact: high
+          mitigation: |
+            Agent D should include an "Appendix: Per-File Details" section that
+            preserves all raw findings from Wave 1. This ensures nothing is lost
+            even if the executive summary is brief.
+        - scenario: Review finds critical issues requiring immediate fix, but IMPL doc says "document only"
+          likelihood: medium
+          impact: low
+          mitigation: |
+            Findings document severity (critical/important/nice-to-have). After
+            review completes, user can create a follow-up IMPL for high-priority
+            fixes. This review creates the audit trail; fixes are separate work.
+state: REVIEWED
+injection_method: hook

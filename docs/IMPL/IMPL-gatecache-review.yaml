@@ -1,0 +1,371 @@
+title: Deep Review of pkg/gatecache Package
+feature_slug: gatecache-review
+verdict: SUITABLE
+suitability_assessment: |
+    The gatecache package review is well-suited for SAW parallelization:
+
+    1. **File decomposition**: 2 files (cache.go, cache_test.go) can be split into
+       multiple agents with disjoint ownership. Review work naturally decomposes into:
+       - Result[T] migration for Get method
+       - Error code standardization
+       - Dead code analysis
+       - Test coverage improvements
+
+    2. **No investigation required**: Package behavior is well-documented through
+       comprehensive tests. All interfaces are discoverable from existing usage in
+       pkg/protocol/gates.go and pkg/engine/finalize.go.
+
+    3. **Interface contracts**: All public methods have clear signatures. Changes
+       are backward-compatible (Get → Result[GetData] is the only breaking change).
+
+    4. **Pre-implementation status**: gatecache is fully implemented and working.
+       This is a refactoring/improvement task, not new development.
+
+    5. **Parallelization value**: Moderate. Build/test cycle is ~1-2s (Go), but
+       agents are independent and review tasks are substantial enough to benefit
+       from concurrent execution. Coordination value is high — IMPL doc serves as
+       review audit trail.
+
+    **Estimated times:**
+    - Scout phase: ~8 min (review + dependency mapping)
+    - Agent execution: 4 agents × 8 min = ~12 min parallel (vs ~32 min sequential)
+    - Merge & verification: ~3 min
+    - Total SAW time: ~23 min vs ~43 min sequential baseline
+    - Time savings: ~20 min (46% faster)
+
+    **Review findings summary:**
+    - Get method returns (bool, *CachedResult) instead of Result[GetData]
+    - Internal methods (load, save) use fmt.Errorf instead of structured codes
+    - No dead code detected — all methods actively used
+    - Error messages use "gatecache:" prefix consistently (good)
+    - Test coverage is excellent (592 lines vs 287 implementation)
+    - TTL handling is correct but could be simplified
+test_command: go test ./pkg/gatecache/...
+lint_command: go vet ./pkg/gatecache/...
+file_ownership:
+    - file: pkg/gatecache/cache.go
+      agent: A
+      wave: 1
+      action: modify
+    - file: pkg/gatecache/cache_test.go
+      agent: B
+      wave: 1
+      action: modify
+    - file: pkg/result/codes.go
+      agent: C
+      wave: 1
+      action: modify
+    - file: pkg/protocol/gates.go
+      agent: D
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+    - file: pkg/protocol/baseline_gates.go
+      agent: D
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+interface_contracts:
+    - name: Cache.Get
+      description: Migrate from (bool, *CachedResult) to Result[GetData]
+      definition: |
+        // GetData wraps successful cache hits
+        type GetData struct {
+            Result    CachedResult `json:"result"`
+            Key       string       `json:"key"`        // hex hash of CacheKey
+            FromCache bool         `json:"from_cache"` // always true for Get
+        }
+
+        // Get returns the cached result for (key, gateType) if it exists and has not expired.
+        // Returns Result[GetData] with code="CACHE_MISS" (non-fatal) on miss or expiry.
+        func (c *Cache) Get(ctx context.Context, key CacheKey, gateType string) result.Result[GetData]
+      location: pkg/gatecache/cache.go:163
+    - name: Error codes for cache operations
+      description: Structured error codes for cache failures
+      definition: |
+        // Add to pkg/result/codes.go in the appropriate range (likely C001-C099 for Cache):
+        const (
+            CodeCacheMiss            = "C001_CACHE_MISS"            // non-fatal
+            CodeCacheBuildKeyFailed  = "C002_CACHE_BUILD_KEY_FAILED" // fatal
+            CodeCachePutFailed       = "C003_CACHE_PUT_FAILED"       // fatal
+            CodeCacheInvalidateFailed = "C004_CACHE_INVALIDATE_FAILED" // fatal
+            CodeCacheLoadFailed      = "C005_CACHE_LOAD_FAILED"      // internal, non-fatal
+            CodeCacheSaveFailed      = "C006_CACHE_SAVE_FAILED"      // internal, fatal
+        )
+      location: pkg/result/codes.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            **Goal**: Migrate Cache.Get to Result[GetData] pattern and update internal error handling.
+
+            **Files to modify**:
+            - pkg/gatecache/cache.go
+
+            **Changes required**:
+
+            1. Define GetData struct in cache.go (after CachedResult):
+               ```go
+               type GetData struct {
+                   Result    CachedResult `json:"result"`
+                   Key       string       `json:"key"`
+                   FromCache bool         `json:"from_cache"` // always true
+               }
+               ```
+
+            2. Migrate Get method signature:
+               - FROM: `func (c *Cache) Get(ctx context.Context, key CacheKey, gateType string) (*CachedResult, bool)`
+               - TO: `func (c *Cache) Get(ctx context.Context, key CacheKey, gateType string) result.Result[GetData]`
+
+            3. Update Get implementation:
+               - Cache miss (no entry or expired) → `result.NewNonFatal[GetData]("CACHE_MISS", "...")`
+               - Cache hit → `result.NewSuccess(GetData{Result: r, Key: h, FromCache: true})`
+
+            4. Update internal error handling in load() and save():
+               - These remain `error` return type (private methods)
+               - Change error messages to use structured format:
+                 - `"CACHE_LOAD_FAILED: read cache file: %w"`
+                 - `"CACHE_SAVE_FAILED: write cache file: %w"`
+
+            5. Remove redundant TTL population logic:
+               - In Get, the line `r.TTL = c.ttl` exists solely to pass TTL to IsExpired
+               - Move this logic into IsExpired itself: accept cache TTL as parameter
+               - Signature: `func (r *CachedResult) IsExpired(cacheTTL time.Duration) bool`
+
+            **Tests**: No test changes needed in this agent. Agent B will update tests.
+
+            **Verification gate**:
+            ```bash
+            go build ./pkg/gatecache/... && \
+            go test ./pkg/gatecache/... -run TestCache_PutGet
+            ```
+
+            **Constraints**:
+            - Do NOT change callers (pkg/protocol/gates.go) — Agent D handles that
+            - Do NOT add new error codes to pkg/result/codes.go — Agent C handles that
+            - Preserve all existing behavior (cache hits, misses, expiry, persistence)
+          files:
+            - pkg/gatecache/cache.go
+        - id: B
+          task: |
+            **Goal**: Update tests to match new Get signature and verify Result[GetData] behavior.
+
+            **Files to modify**:
+            - pkg/gatecache/cache_test.go
+
+            **Changes required**:
+
+            1. Update all Get calls from:
+               ```go
+               got, ok := c.Get(ctx, key, "build")
+               if !ok { ... }
+               ```
+               TO:
+               ```go
+               getResult := c.Get(ctx, key, "build")
+               if getResult.Code == "CACHE_MISS" {
+                   // expected miss
+               }
+               if !getResult.IsSuccess() {
+                   t.Fatalf("Get failed: %v", getResult.Errors)
+               }
+               got := getResult.GetData().Result
+               ```
+
+            2. Add new test for GetData struct fields:
+               ```go
+               func TestCache_Get_ReturnsGetDataStruct(t *testing.T) {
+                   // ... put an entry ...
+                   getResult := c.Get(ctx, key, "test")
+                   if !getResult.IsSuccess() {
+                       t.Fatal("expected success")
+                   }
+                   data := getResult.GetData()
+                   if data.Key == "" {
+                       t.Error("Key should not be empty")
+                   }
+                   if !data.FromCache {
+                       t.Error("FromCache should be true for Get")
+                   }
+                   if data.Result.GateType != "test" {
+                       t.Errorf("Result.GateType: got %q", data.Result.GateType)
+                   }
+               }
+               ```
+
+            3. Add test for CACHE_MISS code on expiry:
+               ```go
+               func TestCache_Get_ReturnsMissCodeOnExpiry(t *testing.T) {
+                   // ... put an expired entry ...
+                   getResult := c.Get(ctx, key, "test")
+                   if getResult.Code != "CACHE_MISS" {
+                       t.Errorf("expected CACHE_MISS code on expiry, got %q", getResult.Code)
+                   }
+                   if getResult.IsFatal() {
+                       t.Error("CACHE_MISS should be non-fatal")
+                   }
+               }
+               ```
+
+            4. Update TTL tests to match IsExpired signature change (if Agent A modified it).
+
+            **Verification gate**:
+            ```bash
+            go test ./pkg/gatecache/... -v
+            ```
+
+            **Constraints**:
+            - Do NOT modify cache.go — Agent A handles implementation
+            - Run tests against Agent A's changes
+          files:
+            - pkg/gatecache/cache_test.go
+        - id: C
+          task: |
+            **Goal**: Add cache-related error codes to pkg/result/codes.go.
+
+            **Files to modify**:
+            - pkg/result/codes.go
+
+            **Changes required**:
+
+            1. Add new error code range comment after existing ranges:
+               ```go
+               //  C001-C099: Cache errors (gatecache operations)
+               ```
+
+            2. Add cache error code constants before or after the B001-B099 section:
+               ```go
+               // Cache error codes (C001-C099)
+               const (
+                   // CodeCacheMiss is emitted when Get finds no entry or entry is expired
+                   CodeCacheMiss = "CACHE_MISS"
+                   // CodeCacheBuildKeyFailed is emitted when BuildKey/BuildKeyForGate fails
+                   CodeCacheBuildKeyFailed = "CACHE_BUILD_KEY_FAILED"
+                   // CodeCachePutFailed is emitted when Put fails to save cache to disk
+                   CodeCachePutFailed = "CACHE_PUT_FAILED"
+                   // CodeCacheInvalidateFailed is emitted when Invalidate fails to remove cache file
+                   CodeCacheInvalidateFailed = "CACHE_INVALIDATE_FAILED"
+                   // CodeCachePutCancelled is emitted when Put is cancelled via context
+                   CodeCachePutCancelled = "CACHE_PUT_CANCELLED"
+                   // CodeCacheInvalidateCancelled is emitted when Invalidate is cancelled
+                   CodeCacheInvalidateCancelled = "CACHE_INVALIDATE_CANCELLED"
+               )
+               ```
+
+            3. Update pkg/result/codes.go documentation comment at top to list C001-C099 range.
+
+            **Tests**: No test changes needed (error codes are constants).
+
+            **Verification gate**:
+            ```bash
+            go build ./pkg/result/... && \
+            go vet ./pkg/result/...
+            ```
+
+            **Constraints**:
+            - Follow existing naming convention: CodeXxxYyy format
+            - Use SCREAMING_SNAKE_CASE for string values
+            - Add doc comments for each code
+          files:
+            - pkg/result/codes.go
+    - number: 2
+      agents:
+        - id: D
+          task: |
+            **Goal**: Update all gatecache callers to use new Result[GetData] signature.
+
+            **Files to modify**:
+            - pkg/protocol/gates.go
+            - pkg/protocol/baseline_gates.go
+
+            **Changes required**:
+
+            1. In pkg/protocol/gates.go, update executeSingleGate (lines 118-150):
+               - FROM:
+                 ```go
+                 if cached, ok := cache.Get(ctx, cacheKey, gate.Type); ok {
+                     return GateResult{..., Passed: cached.Passed, ...}
+                 }
+                 ```
+               - TO:
+                 ```go
+                 getResult := cache.Get(ctx, cacheKey, gate.Type)
+                 if getResult.IsSuccess() {
+                     cached := getResult.GetData().Result
+                     return GateResult{..., Passed: cached.Passed, ...}
+                 }
+                 // CACHE_MISS is non-fatal, fall through to run gate
+                 ```
+
+            2. No changes needed in baseline_gates.go — it doesn't call Get directly.
+
+            3. Verify no other Get calls exist:
+               ```bash
+               grep -n "\.Get(" pkg/protocol/*.go | grep cache
+               ```
+
+            **Tests**: Run existing protocol tests to verify no regressions:
+            ```bash
+            go test ./pkg/protocol/... -run TestRunGatesWithCache
+            ```
+
+            **Verification gate**:
+            ```bash
+            go build ./pkg/protocol/... && \
+            go test ./pkg/protocol/... -run Gate
+            ```
+
+            **Constraints**:
+            - Preserve exact existing behavior (cache hits skip gate execution)
+            - Do NOT change cache.go — Agent A handled implementation
+            - Depends on Agent A completing Get migration
+          files:
+            - pkg/protocol/gates.go
+            - pkg/protocol/baseline_gates.go
+          dependencies:
+            - A
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./pkg/gatecache/...
+          required: true
+        - type: test
+          command: go test ./pkg/gatecache/...
+          required: true
+        - type: lint
+          command: go vet ./pkg/gatecache/...
+          required: true
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: Agent A changes Get signature before Agent D updates callers
+          likelihood: low
+          impact: high
+          mitigation: |
+            Wave structure enforces sequencing. Agent A is in wave 1, Agent D in wave 2.
+            Merge only happens after wave 1 verification passes, so callers are updated
+            before the breaking change lands on main.
+        - scenario: Agent B test changes conflict with Agent A implementation changes
+          likelihood: low
+          impact: low
+          mitigation: |
+            Both in wave 1 but touch different files (cache.go vs cache_test.go).
+            Disjoint ownership eliminates merge conflicts.
+        - scenario: Forgotten caller of cache.Get outside pkg/protocol
+          likelihood: low
+          impact: medium
+          mitigation: |
+            Pre-scout grep found only 1 call site (pkg/protocol/gates.go line 136).
+            Wave 2 verification will catch any missed callers (build failure).
+        - scenario: Error code "CACHE_MISS" already exists with different meaning
+          likelihood: low
+          impact: low
+          mitigation: |
+            Pre-scout grep of pkg/result/codes.go found no existing CACHE_* codes.
+            Agent C will fail if duplicate constant names are added.
+state: REVIEWED
+injection_method: hook
