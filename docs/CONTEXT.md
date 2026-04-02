@@ -119,3 +119,13 @@
   - IMPL doc: docs/IMPL/complete/IMPL-e11-smart-merge-strategies.yaml
 - **config-package-review**: completed 2026-04-01, 2 waves, 4 agents
   - IMPL doc: docs/IMPL/complete/IMPL-config-package-review.yaml
+- **scaffoldval-review**: completed 2026-04-01, 2 waves, 3 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-scaffoldval-review.yaml
+- **autonomy-review**: completed 2026-04-01, 1 waves, 3 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-autonomy-review.yaml
+- **commands-review-fixes**: completed 2026-04-01, 2 waves, 5 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-commands-review-fixes.yaml
+- **retry-review-fixes**: completed 2026-04-01, 2 waves, 3 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-retry-review-fixes.yaml
+- **tools-review-fixes**: completed 2026-04-01, 2 waves, 6 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-tools-review-fixes.yaml
