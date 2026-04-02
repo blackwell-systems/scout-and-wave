@@ -40,6 +40,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - PrepareWave early I1 check (line ~184) catches violations before worktree creation
 
 ### Changed
+- **`protocol/execution-rules.md` (critic-improvements):** E37 enforcement block updated to two-case model — removed dead "ISSUES for warnings-only" branch; Check 8 (`caller_exhaustiveness`) description updated with test-file carve-out (`*_test.go` missed callers are warnings, not errors)
 - **`POSITION.md` updates (2026-04-02):** Rule count updated to 46 (E1-E46); Critic agent updated to 10-check (was 8-check); `pkg/result` domain count corrected to 17 domains (was 8); added 5 new sawtools commands (`check-callers`, `list-error-ranges`, `validate-briefs`, `check-test-cascade`, `suggest-wave-structure`); added `block_git_stash` hook to enforcement list; added E46 (Test File Cascade Detection) section; added E11 auto-merge-append capability note; added `branch-refs.json` finalize-wave resilience note; updated I1 enforcement to 5 layers.
 - **Docs sweep (2026-04-02):** Updated 9 documentation files: `protocol/execution-rules.md`, `pre-wave-validation.md`, `saw-skill.md`, `wave-agent-contracts.md`, `GETTING_STARTED.md`, `INSTALLATION.md`, `hooks/README.md`, `implementations/claude-code/README.md`, `README.md`.
 - **`critic-agent.md` Check 8 (`caller_exhaustiveness`) tool-assisted note:** Check 8 now documents that `sawtools check-callers "<symbol>" --repo-dir <repo>` should be used to enumerate all call sites including test files, replacing manual `grep -rn` invocations. Any file in the output not in `file_ownership` is severity: error.
@@ -59,6 +60,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - `protocol/invariants.md`: Updated I1 enforcement layers from 4 to 6 (inserted Layers 2-3, renumbered 2-3 to 4-5)
 
 ### Fixed
+- **Critic verdict bug (critic-improvements):** Critic now sets `verdict: PASS` when all issues are warning-severity; previously set `verdict: ISSUES` for any non-empty issues list, blocking `prepare-wave` unnecessarily
+- **Critic Check 2 (`symbol_accuracy`, critic-improvements):** Agents with all `action: new` files skip symbol checks entirely; dot-qualified references (e.g., `result.NewFatal`) filtered from symbol scan; symbols appearing in deletion-context sentences filtered out
+- **Critic Check 5 (`import_chains`, critic-improvements):** Now only runs for agents with at least one `action: new` file; skipped for modify/delete-only agents
+- **Critic Check 8 (`caller_exhaustiveness`, critic-improvements):** `*_test.go` missed callers downgraded from error to warning — test cascade detection delegated to E46/`check-test-cascade`
+- **`critic-agent.md` (critic-improvements):** Added parallelism advisory (agents evaluated concurrently after reading all owned files); added `# Note: use PASS when all issues are warnings` comment to `sawtools set-critic-review` example
+- **`pkg/interview` canonicalization (Go engine, interview-review-fixes):** `Manager` interface, `CompileToRequirements`, and all error codes use registered constants; dead scaffolding (`RegisterCompiler`, `compileFunc`, `init()`, `PreviewRequirements`) removed
 - Test file conflicts (append-only pattern) now auto-mergeable instead of requiring manual merge
 
 | Version | Date | Headline |
