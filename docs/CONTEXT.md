@@ -174,3 +174,5 @@ round-trip time by catching errors at source (~5 min saved per critic cycle).
   - IMPL doc: docs/IMPL/complete/IMPL-gatecache-review-fixes.yaml
 - **result-review-fixes**: completed 2026-04-02, 1 waves, 2 agents
   - IMPL doc: docs/IMPL/complete/IMPL-result-review-fixes.yaml
+- **resume-review-fixes**: completed 2026-04-02, 4 waves, 6 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-resume-review-fixes.yaml
