@@ -131,3 +131,5 @@
   - IMPL doc: docs/IMPL/complete/IMPL-tools-review-fixes.yaml
 - **gatecache-review**: completed 2026-04-02, 2 waves, 4 agents
   - IMPL doc: docs/IMPL/complete/IMPL-gatecache-review.yaml
+- **sawtools-scout-automation**: completed 2026-04-02, 4 waves, 9 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-sawtools-scout-automation.yaml
