@@ -184,3 +184,5 @@ round-trip time by catching errors at source (~5 min saved per critic cycle).
   - IMPL doc: docs/IMPL/complete/IMPL-enhanced-resume-detection.yaml
 - **enhanced-resume-detection**: completed 2026-04-02, 2 waves, 2 agents
   - IMPL doc: docs/IMPL/complete/IMPL-enhanced-resume-detection.yaml
+- **interview-review-fixes**: completed 2026-04-02, 3 waves, 5 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-interview-review-fixes.yaml
