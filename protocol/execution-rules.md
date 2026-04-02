@@ -1511,26 +1511,19 @@ all source files listed in file_ownership. The critic:
 ### Enforcement Point (Added in P5)
 
 After critic writes verdict to IMPL doc, `prepare-wave` checks the verdict before creating worktrees.
-The enforcement is **severity-aware**: `CriticIssue.Severity` is either `"error"` (blocking) or
-`"warning"` (advisory). The overall `verdict` field is `"PASS"` or `"ISSUES"`; `"ISSUES"` may
-contain errors, warnings, or a mix.
+The overall `verdict` field is `"PASS"` or `"ISSUES"`. The critic sets `verdict: PASS` when
+all issues are warnings (no errors present). Only error-severity issues produce `verdict: ISSUES`.
 
-- **Verdict: PASS** → proceed with worktree creation
-- **Verdict: ISSUES, all warnings** → emit advisory notice, proceed with worktree creation
-- **Verdict: ISSUES, any errors** → exit code 1, block worktree creation
+- **Verdict: PASS** → proceed with worktree creation (even if warnings are noted)
+- **Verdict: ISSUES** → exit code 1, block worktree creation (at least one error present)
 
-Error message format (errors present):
+Error message format:
 ```
 Error: E37: critic found N error(s) in agent briefs — fix before launching wave
 ```
 
-Advisory message format (warnings only):
-```
-prepare-wave: [critic_verdict] success — critic found N warning(s) only — proceeding (advisory)
-```
-
-This ensures agents cannot launch with inaccurate briefs, while warnings surface for awareness
-without blocking execution.
+This ensures agents cannot launch with inaccurate briefs, while warning-only results
+do not block execution.
 
 **Verification checks per agent brief (10 checks):**
 - Check 1 (file_existence): Every file marked action=modify must exist in the repo; every file
@@ -1552,7 +1545,8 @@ without blocking execution.
 - Check 7 (complexity_balance): Warning if any agent owns >8 files or >40% of total IMPL files
 - Check 8 (caller_exhaustiveness): Verify all callers of symbols being changed are in
   file_ownership. Use `sawtools check-callers "<symbol>" --repo-dir <repo>` to enumerate all
-  call sites including test files. Missing callers = severity: error
+  call sites. Non-test callers not in file_ownership = severity: error. Test files
+  (`*_test.go`) not in file_ownership = severity: warning (handled by E46/check-test-cascade).
 - Check 9 (i1_disjoint_ownership): For each (wave, file) with more than 1 agent ID, flag as
   error — violates I1 disjoint ownership. Catches Scout planning errors before wave launch
 - Check 10 (result_code_semantics): Verify result package usage is semantically correct —
