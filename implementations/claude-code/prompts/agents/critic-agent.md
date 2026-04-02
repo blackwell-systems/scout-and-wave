@@ -52,7 +52,10 @@ Read the full IMPL manifest. Extract:
 <!-- Inlined from references/critic-agent-verification-checks.md -->
 ## Verification Checks (Step 2)
 
-Process agents one at a time. For each agent:
+For each agent, apply the checks below. **Advisory:** All agent checks are
+independent and can be evaluated in parallel. When reviewing multiple agents,
+read all owned files first, then evaluate all agents concurrently rather than
+sequentially.
 
 ### Check 1: file_existence
 For every file in the agent's ownership:
@@ -65,6 +68,22 @@ For every file in the agent's ownership:
 Parse the agent's task description for specific function names, type names, method
 names, struct fields, and interface method sets that the agent is told to call or
 implement against. For each named symbol:
+
+**action:new exclusion:** If ALL files owned by an agent have `action: new`,
+skip symbol_accuracy for that agent entirely -- the symbols do not exist yet
+by definition, and grepping for them produces false positives.
+
+**Package-qualified reference filter:** When scanning brief text for symbol
+names to verify, skip any token that contains a `.` (dot). These are
+package-qualified references (e.g., `result.NewFatal`, `pkg.SymbolName`)
+pointing to other packages, not symbols the agent is expected to own or
+implement.
+
+**Deletion-context filter:** If a symbol name appears in a sentence that
+contains deletion verbs (delete, remove, removing, deleted, removed), skip
+the existence check for that symbol. It is mentioned as a deletion target,
+not a dependency that must already exist.
+
 - If the symbol is from a file the agent owns (action: new), verify it does not
   conflict with existing exported names in the same package.
 - If the symbol is from a file the agent does NOT own (a dependency), grep for it
@@ -93,6 +112,11 @@ For each interface contract in the IMPL:
   interface contract in the same IMPL
 
 ### Check 5: import_chains
+**Scope filter:** Run Check 5 only for agents that have at least one
+`action: new` file. For agents with only `action: modify` or `action: delete`
+files, skip Check 5 entirely -- the import chain is already validated by the
+existing build.
+
 For each new file an agent will create:
 - Identify all packages that file would need to import (based on the interface
   contracts and brief description)
@@ -128,8 +152,11 @@ symbol (e.g. "replace all uses of X", "migrate all callers of Y", "update every 
 site of Z"):
 - Grep for the symbol across the entire repo: `grep -rn "symbolName" . --include="*.go"`
 - Compare every file returned against the IMPL's `file_ownership` table
-- Any file containing a call to the symbol that is NOT in `file_ownership` = severity: error
-  (missed caller — agent will not migrate it, leaving the codebase in a broken/mixed state)
+- Any non-test file containing a call to the symbol that is NOT in
+  `file_ownership` = severity: error (missed caller -- agent will not migrate it)
+- Any test file (`*_test.go`) containing a call to the symbol that is NOT in
+  `file_ownership` = severity: warning (not error) -- test cascade detection is
+  handled by E46 and `sawtools check-test-cascade` as a dedicated gate
 - If no migration language is present in the brief (agent is adding new code, not replacing
   existing callers), skip this check for that agent.
 This check prevents the most common scout gap: identifying N callers but missing N+1.
@@ -163,6 +190,7 @@ After reviewing all agents, write the result using `sawtools set-critic-review`:
 # Build the JSON result and write it
 sawtools set-critic-review "<impl-path>" \
   --verdict "<PASS|ISSUES>" \
+  # Note: use PASS when all issues are warnings; ISSUES requires at least one error
   --summary "<one paragraph summary>" \
   --issue-count <N> \
   --agent-reviews '<JSON array of AgentCriticReview>'
@@ -212,7 +240,11 @@ Issues found: N errors, N warnings
 ## Verdict Thresholds
 
 - **PASS:** Zero errors across all agents. Warnings are noted but do not block.
+  **Set the top-level `verdict` field to `PASS` if no agent has any
+  error-severity issue, regardless of how many warnings are present.**
 - **ISSUES:** One or more errors found in any agent's review.
+  `verdict: ISSUES` requires at least one error-severity issue somewhere.
+  Do NOT set `verdict: ISSUES` when the only issues present are warnings.
 
 A "warning" severity issue is advisory — it should be fixed but does not prevent
 wave execution. An "error" severity issue must be resolved before the orchestrator
