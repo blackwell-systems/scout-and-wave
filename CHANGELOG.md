@@ -9,6 +9,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **`block_git_stash` hook:** New `PreToolUse:Bash` hook blocks `git stash` in wave agent worktrees. Wave agents working in parallel cannot stash — stashing hides uncommitted work from `finalize-wave` merge verification, risks losing work on worktree cleanup, and defeats the I5 invariant (commit before reporting). The hook fires only when `agent_type == "wave-agent"` and the bash command matches `git stash`. Block message instructs agents to commit with `--no-verify` instead. Registered in `install.sh` alongside the other 16 enforcement hooks.
+- **Critic agent Check 10 (`result_code_semantics`):** New verification check for any agent brief referencing `result.Result[T]` or the `.Code` field. Verifies that comparisons against `.Code` only use the top-level status values (`"SUCCESS"`, `"PARTIAL"`, `"FATAL"`); flags patterns like `getResult.Code == "SOME_ERROR_CODE"` as errors (the error code lives in `getResult.Errors[0].Code`, not `.Code`). Also flags misuse of `IsFatal()` to assert non-fatal conditions when the result was created with `NewFailure`. Skipped for agents that don't interact with the result package.
+- **Scout step 17 `validate-briefs` integration:** Step 17 (brief accuracy self-check) now instructs Scout to run `sawtools validate-briefs <impl-path>` for automated symbol and line-reference validation across all agent briefs. Manual per-symbol grep spot-checks are no longer required — the automated check covers all symbols comprehensively. Scout must fix all reported errors (exit non-zero) and re-run until `"valid": true` before proceeding.
+- **Scout step 4 `check-callers` integration:** Test cascade detection now instructs Scout to run `sawtools check-callers "<SymbolName>" --repo-dir <repo-path>` to enumerate all call sites including test files in other packages. Documents that callers in packages outside the symbol's own package are the most commonly missed category. Post-IMPL cascade check with `sawtools check-test-cascade` added as a mandatory step after writing the IMPL doc.
+- **Scout step 5 `list-error-ranges` guidance:** Before defining new error code constants, Scout is instructed to run `sawtools list-error-ranges --repo-dir <repo-path>` to see all allocated ranges in `pkg/result/codes.go` and choose an unoccupied prefix letter, preventing the collision pattern seen in the `gatecache-review` IMPL.
 - **E11 smart merge strategies:** Automatic conflict resolution for append-only patterns
   - Pattern analysis: `AnalyzeDiffPattern()` classifies changes as append-only, line edits, deletions, or mixed
   - Auto-merge: `StepAutoMergeAppendConflicts()` merges agents with append-only conflicts in file-sorted order
@@ -34,6 +39,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - PrepareWave early I1 check (line ~184) catches violations before worktree creation
 
 ### Changed
+- **`critic-agent.md` Check 8 (`caller_exhaustiveness`) tool-assisted note:** Check 8 now documents that `sawtools check-callers "<symbol>" --repo-dir <repo>` should be used to enumerate all call sites including test files, replacing manual `grep -rn` invocations. Any file in the output not in `file_ownership` is severity: error.
+- **`wave-agent.md` parallel wave commit rule:** Added explicit `--no-verify` guidance: if code cannot compile because it depends on another parallel agent's uncommitted changes, agents are explicitly permitted to `git -C $SAW_AGENT_WORKTREE commit --no-verify`. Pre-commit hooks run `go vet ./...` across the entire repo; failing because a different agent's files have signature changes is expected and is not a reason to report partial status.
 - `pkg/protocol/conflict_predict.go`: E11 now includes pattern analysis before blocking
 - `pkg/engine/finalize.go`: FinalizeWave can optionally auto-merge append-only conflicts
 - `sawtools finalize-wave`: New `--auto-merge-append` flag for automatic merge
