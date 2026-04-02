@@ -652,5 +652,5 @@ critic_report:
     summary: 'Line 23→22 correction applied to Agent B brief. One warning remains: wrapper.go has pre-existing bug (registers no parsers despite comment) but fixing it is out of scope. Error codes E001-E006 are available. All function signatures, interface definitions, and verification gates are correct. Ready for wave execution.'
     reviewed_at: "2026-04-02T03:02:15Z"
     issue_count: 0
-state: SCOUT_PENDING
+state: "REVIEWED"
 injection_method: hook
