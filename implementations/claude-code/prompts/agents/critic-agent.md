@@ -134,6 +134,10 @@ site of Z"):
   existing callers), skip this check for that agent.
 This check prevents the most common scout gap: identifying N callers but missing N+1.
 
+**Tool-assisted check:** Run `sawtools check-callers "<symbol>" --repo-dir <repo>`
+to enumerate all call sites including test files. Compare against file_ownership.
+Any file in the output not in file_ownership = severity: error (missed caller).
+
 ### Check 10: result_code_semantics
 For any agent brief that references `result.Result[T]` or uses the `.Code` field:
 - Verify that comparisons to `.Code` only use the top-level result codes: `"SUCCESS"`, `"PARTIAL"`, `"FATAL"`.
