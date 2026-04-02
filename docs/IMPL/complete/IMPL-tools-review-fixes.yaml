@@ -1,3 +1,4 @@
+completion_date: "2026-04-01"
 title: Deep Review and Fixes for pkg/tools Package
 feature_slug: tools-review-fixes
 verdict: SUITABLE
@@ -489,6 +490,7 @@ waves:
             - Use executorFunc helper for mock executors (already defined in middleware_test.go:9)
           files:
             - pkg/tools/middleware_test.go
+      base_commit: 7adb771c4fe63525292c2db39a8085c64adf96a3
     - number: 2
       agents:
         - id: B
@@ -921,6 +923,7 @@ waves:
             - Add tests regardless of usage findings (method is part of public API)
           files:
             - pkg/tools/workshop_test.go
+      base_commit: c9615b326f0c69608068a24741cf299310d07c9a
 quality_gates:
     level: standard
     gates:
@@ -936,6 +939,80 @@ quality_gates:
           command: go vet ./pkg/tools/...
           required: true
           repo: scout-and-wave-go
+completion_reports:
+    A:
+        status: complete
+        branch: saw/tools-review-fixes/wave1-agent-A
+        commit: a86a067
+        files_changed:
+            - pkg/result/codes.go
+        verification: PASS
+        notes: Added CodeToolAlreadyRegistered (T005) to Tool/parse error codes section. Build and pre-commit hooks passed.
+    B:
+        status: complete
+        branch: saw/tools-review-fixes/wave2-agent-B
+        commit: "2187438"
+        files_changed:
+            - pkg/tools/workshop.go
+            - pkg/tools/workshop_test.go
+        verification: PASS
+        notes: Updated Workshop.Register and mockWorkshop.Register to use result.CodeToolAlreadyRegistered constant. Updated test error message formatting. All tests pass (73/73).
+    C:
+        status: complete
+        branch: saw/tools-review-fixes/wave1-agent-C
+        commit: bdbc708
+        files_changed:
+            - pkg/tools/adapters_test.go
+        tests_added:
+            - TestAdapterSerializeEmpty
+            - TestAnthropicAdapterSerializeComplexSchema
+            - TestOpenAIAdapterSerializeMultipleTools
+        verification: PASS
+        notes: Replaced mock adapters with real constructors (NewAnthropicAdapter, NewOpenAIAdapter, NewBedrockAdapter) in all tests. Coverage increased from 0% to 100% for all three Serialize methods. Removed 110 lines of mock code, simplified test structure. All 7 adapter tests pass. Build, test, and lint gates pass.
+    D:
+        status: complete
+        branch: saw/tools-review-fixes/wave1-agent-D
+        commit: b80668b
+        files_changed:
+            - pkg/tools/middleware_test.go
+        tests_added:
+            - TestTimingMiddleware_RealImplementation
+            - TestPermissionMiddleware_Blocks
+            - TestPermissionMiddleware_Allows
+            - TestWithTiming_AppliedToAllTools
+            - TestWithPermissions_BlocksWriteTools
+            - TestReadOnlyTools_Registered
+        verification: PASS
+        notes: Added 6 tests for previously uncovered middleware functions. Coverage increased from 0% to 100% for TimingMiddleware, PermissionMiddleware, WithTiming, WithPermissions, and ReadOnlyTools. All 74 tests in pkg/tools pass.
+    E:
+        status: complete
+        branch: saw/tools-review-fixes/wave2-agent-E
+        commit: df51325
+        files_changed:
+            - pkg/tools/executors_test.go
+        tests_added:
+            - TestEditExecutor_Success
+            - TestEditExecutor_OldStringNotFound
+            - TestEditExecutor_MissingFilePath
+            - TestGlobExecutor_FindsMatches
+            - TestGrepExecutor_FindsPattern
+            - TestFileListExecutor_ListsDirectory
+            - TestBashExecutor_GitOwnershipWarning
+            - TestFileWriteExecutor_EmptyContent
+            - TestFileWriteExecutor_CreatesParentDirs
+        verification: PASS
+        notes: 'All executor tests added and passing. Coverage improved: EditExecutor 0%→87.5%, GlobExecutor 0%→85.7%, GrepExecutor 0%→85.7%, FileListExecutor 0%→81.8%, FileWriteExecutor 41.7%→80.0%. Overall pkg/tools coverage: 81.2%'
+    F:
+        status: complete
+        branch: saw/tools-review-fixes/wave2-agent-F
+        commit: 5e1afe1
+        files_changed:
+            - pkg/tools/workshop.go
+            - pkg/tools/workshop_test.go
+        tests_added:
+            - TestDefaultWorkshopNamespace
+        verification: PASS
+        notes: 'Investigation complete: Namespace() is not used outside pkg/tools package. Added TestDefaultWorkshopNamespace using NewWorkshop() (real DefaultWorkshop implementation) to achieve 100% coverage (up from 0%). Documented method as dead code candidate preserved for future use.'
 pre_mortem:
     overall_risk: low
     rows:
@@ -979,5 +1056,5 @@ critic_report:
     summary: Reviewed 6 agents (A, C, D in Wave 1; B, E, F in Wave 2) against scout-and-wave-go codebase. All file paths exist and are action:modify. All symbols referenced in briefs exist or are properly created by dependencies. Agent A adds CodeToolAlreadyRegistered constant; Agent B uses it (correct dependency). Agent C tests adapters (NewAnthropicAdapter, NewOpenAIAdapter, NewBedrockAdapter all exist). Agent D tests middleware (TimingMiddleware, PermissionMiddleware, WithTiming, WithPermissions, ReadOnlyTools all exist, executorFunc helper available). Agent E adds executor tests with required imports explicitly listed (context, encoding/json, os, os/exec, path/filepath, strings, testing) - brief correctly instructs agent to add these imports. Agent F tests Namespace method (exists at workshop.go:89). Interface contracts are syntactically valid. All error patterns match actual code. Wave execution may proceed.
     reviewed_at: "2026-04-02T04:36:58Z"
     issue_count: 0
-state: "REVIEWED"
+state: COMPLETE
 injection_method: hook

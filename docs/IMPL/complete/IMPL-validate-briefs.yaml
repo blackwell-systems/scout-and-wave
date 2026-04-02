@@ -1,3 +1,4 @@
+completion_date: "2026-04-02"
 title: Language-Agnostic Brief Validation Automation
 feature_slug: validate-briefs
 verdict: SUITABLE
@@ -349,6 +350,7 @@ waves:
           files:
             - pkg/protocol/brief_validator.go
             - pkg/protocol/brief_validator_test.go
+      base_commit: 052fd78af89243f696c3c36dfdc5491b2d8c74dd
     - number: 2
       agents:
         - id: B
@@ -521,6 +523,7 @@ waves:
             - Use the exact function signature from the interface contract
           files:
             - docs/CONTEXT.md
+      base_commit: 34f87dc035e79056e706ea11692de763c90b21b1
     - number: 3
       agents:
         - id: C
@@ -608,6 +611,7 @@ waves:
           dependencies:
             - A
             - B
+      base_commit: a01a9f5d79ee50cd721185b2adab997499b11ede
 quality_gates:
     level: standard
     gates:
@@ -623,6 +627,63 @@ quality_gates:
           command: go test ./... -timeout 120s
           required: true
           repo: scout-and-wave-go
+completion_reports:
+    A:
+        status: complete
+        branch: saw/validate-briefs/wave1-agent-A
+        commit: 0a54fd5
+        files_changed:
+            - pkg/protocol/brief_validator.go
+            - pkg/protocol/brief_validator_test.go
+        files_created:
+            - pkg/protocol/brief_validator.go
+            - pkg/protocol/brief_validator_test.go
+        tests_added:
+            - TestExtractSymbols
+            - TestExtractSymbols_Deduplication
+            - TestExtractSymbols_MethodCallStrip
+            - TestExtractLineReferences
+            - TestCheckSymbolExists_Found
+            - TestCheckSymbolExists_NotFound
+            - TestCheckLineValid_Valid
+            - TestCheckLineValid_NonExistentFile
+            - TestValidateBriefs
+            - TestValidateBriefs_NewFileSkipped
+            - TestValidateBriefs_MissingSymbol
+        verification: PASS
+        notes: Renamed resolveFilePath->briefResolveFilePath and appendUnique->briefAppendUniqueInt to avoid conflicts with existing package-level functions. All 42 packages pass.
+    B:
+        status: complete
+        branch: saw/validate-briefs/wave2-agent-B
+        commit: 9b218f2
+        files_changed:
+            - cmd/sawtools/validate_briefs_cmd.go
+            - cmd/sawtools/validate_briefs_cmd_test.go
+            - cmd/sawtools/main.go
+        files_created:
+            - cmd/sawtools/validate_briefs_cmd.go
+            - cmd/sawtools/validate_briefs_cmd_test.go
+        tests_added:
+            - TestValidateBriefsCmd_HappyPath
+            - TestValidateBriefsCmd_InvalidBriefs
+            - TestValidateBriefsCmd_NoManifest
+        verification: PASS
+        notes: 'CLI adapter complete. All 3 tests pass. Full test suite clean. Command registered in main.go. Used fmt.Fprintln(cmd.OutOrStdout()) for testable output (not fmt.Println). Note: symbol_missing issues have severity=warning so data.Valid remains true even with missing symbols; tests verify issues are reported rather than exit code.'
+    C:
+        status: complete
+        branch: saw/validate-briefs/wave3-agent-C
+        commit: "5665393"
+        files_changed:
+            - implementations/claude-code/prompts/agents/scout.md
+        verification: PASS
+        notes: Replaced manual symbol spot-check (check b) in step 17 with automated sawtools validate-briefs invocation. Updated time estimate from 5-10 min to 3-5 min. Checks a, c, d unchanged. Go engine tests all pass (42 packages).
+    D:
+        status: complete
+        branch: saw/validate-briefs/wave2-agent-D
+        commit: 3c8c5ff
+        files_changed:
+            - docs/CONTEXT.md
+        verification: PASS
 pre_mortem:
     overall_risk: low
     rows:
@@ -679,5 +740,5 @@ critic_report:
     summary: 'All four agents pass verification. Agent A: both new files (brief_validator.go, brief_validator_test.go) do not yet exist (no conflict); all referenced read targets exist at claimed locations — critic.go (183 lines), types.go, full_validate.go, manifest.go containing protocol.Load at line 62; manifest.Repositories and FileOwnership.Repo fields exist as described; stdlib packages os/exec and regexp are sufficient with no external deps needed. Agent B: both new files do not exist; main.go exists with newCheckTestCascadeCmd() confirmed as last entry at line 124 — registration instruction is accurate; validate_cmd.go and pre_wave_validate_cmd.go both exist and match the described patterns; validate_cmd_test.go and pre_wave_validate_cmd_test.go do not exist (prior warning retained) but validate_scaffold_cmd_test.go is present as a substitute; protocol.ValidateBriefs dependency on Agent A is correctly modeled. Agent C: scout.md exists; step 17 confirmed at line 830, check b at line 844 — both line references are accurate. Agent D: docs/CONTEXT.md exists; no Established Interfaces section currently present; Features Completed section exists as the placement anchor. One advisory warning carried forward from previous review: Agent B is directed to follow patterns in two test files that do not exist; this does not block implementation as validate_scaffold_cmd_test.go is available as a substitute.'
     reviewed_at: "2026-04-02T19:01:03Z"
     issue_count: 1
-state: "REVIEWED"
+state: COMPLETE
 injection_method: hook

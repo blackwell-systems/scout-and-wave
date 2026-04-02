@@ -1,3 +1,4 @@
+completion_date: "2026-04-01"
 title: pkg/scaffoldval Review and Result[T] Migration
 feature_slug: scaffoldval-review
 verdict: SUITABLE
@@ -234,7 +235,7 @@ waves:
             - Do NOT renumber existing codes
           files:
             - pkg/result/codes.go
-      base_commit: 6ac0aa6d2698d057f33d966c87bb86adc2f13dcf
+      base_commit: a083607ae03fbc03325a26f4fefad5998f52fcb7
     - number: 2
       agents:
         - id: C
@@ -299,6 +300,7 @@ waves:
             - cmd/sawtools/validate_scaffold_cmd_test.go
           dependencies:
             - A
+      base_commit: 11ff61e8aa3cbd85f61cbb152e041ec8026c7f02
 quality_gates:
     level: standard
     gates:
@@ -311,7 +313,32 @@ quality_gates:
         - type: test
           command: go test ./pkg/scaffoldval/... -cover
           required: true
-completion_reports: {}
+completion_reports:
+    A:
+        status: complete
+        branch: saw/scaffoldval-review/wave1-agent-A
+        commit: e3b47c5
+        files_changed:
+            - pkg/scaffoldval/validator.go
+            - pkg/scaffoldval/validator_test.go
+        verification: PASS
+        notes: Migration complete. ValidateScaffold now returns result.Result[*ValidationResult]. All 16 tests passing with 89.8% coverage (exceeds 89% requirement).
+    B:
+        status: complete
+        branch: saw/scaffoldval-review/wave1-agent-B
+        commit: b21f96c
+        files_changed:
+            - pkg/result/codes.go
+        verification: PASS
+        notes: 'Added 5 scaffold validation error codes (SV01-SV05) in the S001-S099 range. Constants inserted correctly after existing suitability codes and before agent ID generation codes. All verification gates passed: build, vet, and tests.'
+    C:
+        status: complete
+        branch: saw/scaffoldval-review/wave2-agent-C
+        commit: 7110b41
+        files_changed:
+            - cmd/sawtools/validate_scaffold_cmd.go
+        verification: PASS - Implementation complete. Files compile in isolation. Package-level build blocked by out-of-scope file (diagnose_build_failure_cmd.go line 39 - separate IMPL).
+        notes: 'Updated validate_scaffold_cmd.go to handle Result[*ValidationResult] return type from ValidateScaffold (Wave 1 Agent A). Changed from (result, err) pattern to res.IsFatal()/res.GetData() pattern. Preserved YAML output format and error exit behavior as required by constraints. Individual files compile successfully (go test -c verified). Full package build blocked by pre-existing issue in diagnose_build_failure_cmd.go (line 39: DiagnoseError signature mismatch), which is out of scope per file ownership table. This blocker affects cmd/sawtools package tests but not scaffold validation functionality.'
 pre_mortem:
     overall_risk: low
     rows:
@@ -360,5 +387,5 @@ critic_report:
     summary: All briefs verified against codebase. Agent A's interface contract contains contradictory language about FATAL returns (line 82 vs lines 147-149), but implementation steps and test expectations are clear and consistent. Agents B and C are fully accurate. One warning noted for documentation clarity.
     reviewed_at: "2026-04-01T22:49:32Z"
     issue_count: 1
-state: REVIEWED
+state: COMPLETE
 injection_method: hook

@@ -1,3 +1,4 @@
+completion_date: "2026-04-02"
 title: sawtools Pre-Wave Scout Automation
 feature_slug: sawtools-scout-automation
 verdict: SUITABLE
@@ -565,6 +566,7 @@ waves:
             - pkg/protocol/check_test_cascade.go
             - pkg/protocol/check_test_cascade_test.go
             - pkg/result/codes.go
+      base_commit: 22a900aa61961960a034a08cc4d393b1d3ba09f7
     - number: 2
       agents:
         - id: D
@@ -890,6 +892,7 @@ waves:
             - cmd/sawtools/pre_wave_validate_cmd.go
           dependencies:
             - C
+      base_commit: 9f96b9e8aaecb82aa420b1c11a0a248b99af117b
     - number: 3
       agents:
         - id: F
@@ -933,6 +936,7 @@ waves:
           dependencies:
             - D
             - E
+          context_source: prepared-brief
     - number: 4
       agents:
         - id: G
@@ -1142,6 +1146,7 @@ waves:
           dependencies:
             - D
             - E
+      base_commit: 1748426071ba6ed79385de41daba699410a7d1c4
 quality_gates:
     level: standard
     gates:
@@ -1157,6 +1162,121 @@ quality_gates:
           command: go vet ./...
           required: false
           repo: scout-and-wave-go
+completion_reports:
+    A:
+        status: complete
+        branch: saw/sawtools-scout-automation/wave1-agent-A
+        commit: f40cc6b
+        files_changed:
+            - pkg/protocol/check_callers.go
+            - pkg/protocol/check_callers_test.go
+        files_created:
+            - pkg/protocol/check_callers.go
+            - pkg/protocol/check_callers_test.go
+        tests_added:
+            - TestCheckCallers_FindsCallSites
+            - TestCheckCallers_IncludesTestFiles
+            - TestCheckCallers_EmptySymbolNameReturnsFatal
+            - TestCheckCallers_NoCallersReturnsEmptySlice
+            - TestCheckCallers_UnreadableRepoDirReturnsFatal
+            - TestListErrorRanges_ReturnsRanges
+            - TestListErrorRanges_MissingFileReturnsFatal
+        verification: PASS
+        notes: All 7 tests pass. CallerSite, CheckCallers, ErrorCodeRange, ListErrorRanges implemented with result.Result[T] pattern. Test file scanning and empty-slice (not nil) on no-match both verified.
+    B:
+        status: complete
+        branch: saw/sawtools-scout-automation/wave1-agent-B
+        commit: 4d89119
+        files_changed:
+            - pkg/protocol/suggest_wave_structure.go
+            - pkg/protocol/suggest_wave_structure_test.go
+        files_created:
+            - pkg/protocol/suggest_wave_structure.go
+            - pkg/protocol/suggest_wave_structure_test.go
+        tests_added:
+            - TestSuggestWaveStructure_CleanManifest
+            - TestSuggestWaveStructure_EarlierWaveCaller
+            - TestSuggestWaveStructure_NilManifest
+            - TestSuggestWaveStructure_LaterWaveMissingDependsOn
+        verification: PASS
+        notes: Renamed containsString helper to sliceContains to avoid collision with pre-existing types_test.go declaration. All 4 tests pass. Full protocol suite passes (23s).
+    C:
+        status: complete
+        branch: saw/sawtools-scout-automation/wave1-agent-C
+        commit: 615558d
+        files_changed:
+            - pkg/protocol/check_test_cascade.go
+            - pkg/protocol/check_test_cascade_test.go
+            - pkg/result/codes.go
+        files_created:
+            - pkg/protocol/check_test_cascade.go
+            - pkg/protocol/check_test_cascade_test.go
+        tests_added:
+            - TestCheckTestCascade_OrphanTestFile
+            - TestCheckTestCascade_OwnedTestFile
+            - TestCheckTestCascade_NilManifest
+            - TestCheckTestCascade_NoKeywords
+        verification: PASS
+        notes: CheckTestCascade implemented and all 4 tests passing. Renamed appendUnique->appendUniqueAgent and makeMinimalManifest->makeTestCascadeManifest to avoid redeclaration conflicts with existing protocol package helpers.
+    D:
+        status: complete
+        branch: saw/sawtools-scout-automation/wave2-agent-D
+        commit: 367dd5e
+        files_changed:
+            - cmd/sawtools/check_callers_cmd.go
+            - cmd/sawtools/list_error_ranges_cmd.go
+            - cmd/sawtools/suggest_wave_structure_cmd.go
+        files_created:
+            - cmd/sawtools/check_callers_cmd.go
+            - cmd/sawtools/list_error_ranges_cmd.go
+            - cmd/sawtools/suggest_wave_structure_cmd.go
+        verification: PASS
+        notes: Three CLI command files created. main.go registration is Agent E's scope. go build and go vet both pass cleanly.
+    E:
+        status: complete
+        branch: saw/sawtools-scout-automation/wave2-agent-E
+        commit: 02a0340
+        files_changed:
+            - cmd/sawtools/check_test_cascade_cmd.go
+            - cmd/sawtools/pre_wave_validate_cmd.go
+        files_created:
+            - cmd/sawtools/check_test_cascade_cmd.go
+        verification: PASS
+        notes: 'check-test-cascade command created; pre-wave-validate Step 3 added. Build and vet pass. Out-of-scope: newCheckTestCascadeCmd() registration in cmd/sawtools/main.go (Agent F, Wave 3).'
+    F:
+        status: complete
+        branch: main
+        commit: "6921808"
+        files_changed:
+            - cmd/sawtools/main.go
+        verification: PASS
+        notes: 'Registered 4 new commands: check-callers, list-error-ranges, suggest-wave-structure, check-test-cascade. Build and vet clean.'
+    G:
+        status: complete
+        branch: saw/sawtools-scout-automation/wave4-agent-G
+        commit: 45769d5
+        files_changed:
+            - implementations/claude-code/prompts/agents/scout.md
+        verification: PASS
+        notes: 'Two surgical additions to scout.md: (1) Step 4 test cascade algorithm now instructs Scout to use sawtools check-callers instead of manual grep, plus a post-IMPL check-test-cascade step; (2) Step 5 has a new error code range lookup note pointing to sawtools list-error-ranges. Version string unchanged. No existing text modified.'
+    H:
+        status: complete
+        branch: saw/sawtools-scout-automation/wave4-agent-H
+        commit: ab5a537
+        files_changed:
+            - implementations/claude-code/prompts/agents/critic-agent.md
+            - implementations/claude-code/prompts/saw-skill.md
+            - protocol/execution-rules.md
+        verification: PASS
+    I:
+        status: complete
+        branch: saw/sawtools-scout-automation/wave4-agent-I
+        commit: 73e8ced
+        files_changed:
+            - docs/GETTING_STARTED.md
+            - docs/INSTALLATION.md
+        verification: PASS
+        notes: Added Scout Automation Commands subsection to GETTING_STARTED.md (under CLI section, before Quick Decision). Added capabilities bullet list to INSTALLATION.md Platform Support section. Both grep gates pass.
 pre_mortem:
     overall_risk: medium
     rows:
@@ -1251,5 +1371,5 @@ critic_report:
     summary: 'Agent I''s two reported issues from the previous run were addressed. Fix 1 (verification gate): the INSTALLATION.md gate now greps for ''check-callers'' (lines 1136-1137) instead of ''validate-contracts'' — the error is resolved. Fix 2 (context paragraph): line 1091 still reads ''five new sawtools commands'' rather than ''four'', so the warning-level inaccuracy remains. Because only a warning survives and no errors exist across any agent, the overall verdict is PASS. Agents A through H: all previously verified PASS verdicts hold — modify-action files (pre_wave_validate_cmd.go, main.go, codes.go) confirmed present; new protocol files (check_callers.go, suggest_wave_structure.go, check_test_cascade.go) confirmed absent. Wave execution may proceed.'
     reviewed_at: "2026-04-02T17:29:33Z"
     issue_count: 1
-state: "REVIEWED"
+state: COMPLETE
 injection_method: hook
