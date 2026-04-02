@@ -1,0 +1,977 @@
+title: Canonicalize pkg/resume based on deep review findings
+feature_slug: resume-review-fixes
+verdict: SUITABLE
+suitability_assessment: |
+    All five suitability questions resolve cleanly.
+
+    File decomposition: 9 files change across 4 independent concerns — error
+    code constants, sessions.go, worktree_status.go, and detect.go. Ownership
+    is disjoint in every wave. Two caller files (resume_detect_cmd.go,
+    prepare.go) update independently in a final wave.
+
+    No investigation-first items: findings are pre-digested with grep evidence.
+    All root causes confirmed.
+
+    Interface discoverability: all cross-agent interfaces can be defined before
+    implementation starts. LoadAgentSessions changes from (T,error) to Result[T];
+    ClassifyWorktrees drops its dead error return; Detect/DetectWithConfig change
+    from (T,error) to Result[T]. These are the only cross-boundary surfaces.
+
+    Pre-implementation status: reviewer agent confirmed all findings are TODO.
+    No findings are already fixed.
+
+    Parallelization value: Wave 2 runs B and C concurrently (independent
+    packages). Wave 4 runs E and F concurrently. Build/test cycle ~10-20s.
+    Moderate parallel value.
+
+    Wave structure:
+      Wave 1: [A] — add CodeSessionSaveFailed to codes.go (prerequisite constant)
+      Wave 2: [B] [C] — sessions.go + worktree_status.go fixes (independent, use new constant)
+      Wave 3: [D] — detect.go fixes (consumes B's LoadAgentSessions Result + C's ClassifyWorktrees)
+      Wave 4: [E] [F] — caller updates (unpack Detect Result return)
+
+    Estimated times:
+    - Scout phase: ~15 min (reading 9 files, digesting review findings, writing manifest)
+    - Agent execution: ~35 min (6 agents × ~6 min avg, accounting for wave sequencing)
+    - Merge & verification: ~5 min
+    Total SAW time: ~55 min
+
+    Sequential baseline: ~60 min (6 × ~10 min sequential)
+    Time savings: moderate; primary value is coordination clarity and audit trail.
+
+    Recommendation: Proceed. Parallel waves B+C and E+F provide clear speedup;
+    the multi-wave DAG enforces correct ordering of signature dependencies.
+
+    Note on N-code reservation: N086 and N087 are reserved by the concurrent
+    result-review-fixes IMPL. Resume error codes start at N088.
+test_command: go test ./pkg/resume/... ./cmd/sawtools/... ./pkg/engine/...
+lint_command: go vet ./...
+file_ownership:
+    - file: pkg/result/codes.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/resume/sessions.go
+      agent: B
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+      repo: scout-and-wave-go
+    - file: pkg/resume/sessions_test.go
+      agent: B
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+      repo: scout-and-wave-go
+    - file: pkg/resume/worktree_status.go
+      agent: C
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+      repo: scout-and-wave-go
+    - file: pkg/resume/worktree_status_test.go
+      agent: C
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+      repo: scout-and-wave-go
+    - file: pkg/resume/detect.go
+      agent: D
+      wave: 3
+      action: modify
+      depends_on:
+        - B
+        - C
+      repo: scout-and-wave-go
+    - file: pkg/resume/detect_test.go
+      agent: D
+      wave: 3
+      action: modify
+      depends_on:
+        - B
+        - C
+      repo: scout-and-wave-go
+    - file: cmd/sawtools/resume_detect_cmd.go
+      agent: E
+      wave: 4
+      action: modify
+      depends_on:
+        - D
+      repo: scout-and-wave-go
+    - file: pkg/engine/prepare.go
+      agent: F
+      wave: 4
+      action: modify
+      depends_on:
+        - D
+      repo: scout-and-wave-go
+interface_contracts:
+    - name: CodeSessionSaveFailed
+      description: |
+        New error code constant for all SaveAgentSession, LoadAgentSessions,
+        and DetectWithConfig failure paths. Assigned N088 (N086 and N087 reserved
+        by concurrent result-review-fixes IMPL).
+      definition: |
+        // CodeSessionSaveFailed is emitted for session persistence and load failures
+        // in pkg/resume (SaveAgentSession, LoadAgentSessions, DetectWithConfig).
+        CodeSessionSaveFailed = "N088_SESSION_SAVE_FAILED"
+      location: pkg/result/codes.go
+    - name: LoadAgentSessions
+      description: |
+        Changed from (map[string]AgentSession, error) to result.Result[map[string]AgentSession].
+        Returns a successful Result with an empty map when the file does not exist.
+        Returns a fatal Result with CodeSessionSaveFailed on I/O or JSON parse failure.
+      definition: |
+        func LoadAgentSessions(stateDir string, slug string) result.Result[map[string]AgentSession]
+      location: pkg/resume/sessions.go
+    - name: ClassifyWorktrees
+      description: |
+        Removes the dead error return — every failure was already silently swallowed.
+        New signature drops the ([]DirtyWorktree, error) in favour of []DirtyWorktree.
+        The local variable named 'result' (lines 53, 94, 103) is renamed to 'classified'
+        to avoid shadowing the result package identifier.
+      definition: |
+        func ClassifyWorktrees(worktreePaths []string, manifest *protocol.IMPLManifest, logger *slog.Logger) []DirtyWorktree
+      location: pkg/resume/worktree_status.go
+    - name: Detect
+      description: |
+        Changed from ([]SessionState, error) to result.Result[[]SessionState].
+        Delegates to DetectWithConfig. Callers must unpack with .IsSuccess()/.GetData().
+      definition: |
+        func Detect(ctx context.Context, repoPath string) result.Result[[]SessionState]
+      location: pkg/resume/detect.go
+    - name: DetectWithConfig
+      description: |
+        Changed from ([]SessionState, error) to result.Result[[]SessionState].
+        The inline fmt.Errorf at line 83 is replaced with
+        result.NewFailure[[]SessionState]([]result.SAWError{
+            result.NewFatal(result.CodeSessionSaveFailed, msg).WithContext("implDir", implDir).WithCause(err),
+        }).
+      definition: |
+        func DetectWithConfig(ctx context.Context, repoPaths []string) result.Result[[]SessionState]
+      location: pkg/resume/detect.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## Agent A — Add CodeSessionSaveFailed error code constant
+
+            **Repo:** `scout-and-wave-go`
+            **File to modify:** `pkg/result/codes.go`
+
+            ### What to implement
+
+            Add a single new error code constant for the resume domain to the
+            Engine error codes (N001-N099) block in `pkg/result/codes.go`.
+
+            The highest currently assigned N-code is N085 (`CodeConfigIOFailed`).
+            N086 and N087 are reserved by a concurrent `result-review-fixes` IMPL.
+            Assign the new resume constant to **N088**.
+
+            Add this constant at the end of the `// Engine error codes (N001-N099)`
+            const block, immediately after `CodeConfigIOFailed = "N085_CONFIG_IO_FAILED"`:
+
+            ```go
+            // N088: session save/load failed in pkg/resume (SaveAgentSession, LoadAgentSessions, DetectWithConfig)
+            CodeSessionSaveFailed = "N088_SESSION_SAVE_FAILED"
+            ```
+
+            Do not add any new const blocks. Do not modify any existing constants.
+            Do not change the package comment or the range documentation at the top
+            of the file.
+
+            ### Interface contract
+
+            ```go
+            CodeSessionSaveFailed = "N088_SESSION_SAVE_FAILED"
+            ```
+
+            Location: `pkg/result/codes.go`, end of N001-N099 const block.
+
+            ### Tests
+
+            No test file exists for codes.go and none is required — constants are
+            verified transitively by the consumer tests in pkg/resume.
+
+            ### Verification gate
+
+            ```
+            go build ./pkg/result/...
+            go vet ./pkg/result/...
+            ```
+
+            ### Constraints
+
+            - Do NOT modify any existing constants.
+            - Do NOT change N086 or N087 (reserved for concurrent IMPL).
+            - Do NOT skip the comment line explaining what N088 covers.
+          files:
+            - pkg/result/codes.go
+          context_source: prepared-brief
+    - number: 2
+      agents:
+        - id: B
+          task: |
+            ## Agent B — Fix sessions.go: LoadAgentSessions return type + SaveAgentSession error construction
+
+            **Repo:** `scout-and-wave-go`
+            **Files to modify:** `pkg/resume/sessions.go`, `pkg/resume/sessions_test.go`
+
+            ### Prerequisites
+
+            Agent A has added `result.CodeSessionSaveFailed = "N088_SESSION_SAVE_FAILED"` to
+            `pkg/result/codes.go`. Use this constant for all error codes in this file.
+
+            ### What to implement
+
+            #### 1. Change LoadAgentSessions return type (P0-3)
+
+            Current signature (sessions.go:113):
+            ```go
+            func LoadAgentSessions(stateDir string, slug string) (map[string]AgentSession, error)
+            ```
+
+            New signature:
+            ```go
+            func LoadAgentSessions(stateDir string, slug string) result.Result[map[string]AgentSession]
+            ```
+
+            Replace the function body:
+            - `os.IsNotExist(err)` path → `result.NewSuccess(map[string]AgentSession{})`
+            - I/O error path → `result.NewFailure[map[string]AgentSession]([]result.SAWError{ result.NewFatal(result.CodeSessionSaveFailed, fmt.Sprintf("resume.LoadAgentSessions: reading %s: %v", path, err)).WithContext("slug", slug).WithCause(err) })`
+            - JSON unmarshal error path → `result.NewFailure[map[string]AgentSession]([]result.SAWError{ result.NewFatal(result.CodeSessionSaveFailed, fmt.Sprintf("resume.LoadAgentSessions: parsing %s: %v", path, err)).WithContext("slug", slug).WithCause(err) })`
+            - Success path (nil sessions guard + return) → `result.NewSuccess(sessions)` (keep the nil guard for sessions before wrapping)
+
+            #### 2. Fix SaveAgentSession error construction (P1-1)
+
+            Five error sites in SaveAgentSession (lines 33-41, 49-57, 65-73, 79-87, 93-101)
+            all use inline `result.SAWError{Code: "SESSION_SAVE_FAILED", ...}` literals.
+            Replace all five with the canonical builder pattern:
+
+            ```go
+            result.NewFatal(result.CodeSessionSaveFailed, "<existing message>").WithContext("slug", slug).WithCause(err)
+            ```
+
+            The error messages themselves stay unchanged. Only the construction pattern changes.
+
+            The call to `LoadAgentSessions` inside `SaveAgentSession` at line 47 must be
+            updated to unpack the new Result return:
+            ```go
+            loadRes := LoadAgentSessions(stateDir, slug)
+            if !loadRes.IsSuccess() {
+                return result.NewFailure[SaveSessionData](loadRes.Errors)
+            }
+            existing := loadRes.GetData()
+            ```
+
+            #### 3. Imports
+
+            Remove `"fmt"` from imports if it is no longer used after the changes.
+            Ensure `"github.com/blackwell-systems/scout-and-wave-go/pkg/result"` is imported.
+
+            ### Tests — sessions_test.go
+
+            Update the existing test `TestLoadAgentSessions_FileNotExist` (sessions_test.go:101):
+            - Change `sessions, err := LoadAgentSessions(...)` to `res := LoadAgentSessions(...)`
+            - Assert `res.IsSuccess()` instead of `err == nil`
+            - Extract sessions via `sessions := res.GetData()`
+
+            Update `TestSaveAndLoadAgentSession` and `TestSaveAgentSession_UpdateExisting`:
+            - Same pattern: unpack LoadAgentSessions result with `.IsSuccess()` / `.GetData()`
+
+            Update `TestSaveAgentSession_FailureReturnsFatal` (sessions_test.go:177):
+            - The test already checks `sawErr.Code != "SESSION_SAVE_FAILED"` — update the
+              expected code string to `result.CodeSessionSaveFailed` (import pkg/result)
+              so the test is not a raw string literal check.
+
+            Add one new test `TestLoadAgentSessions_CorruptedJSON`:
+            ```go
+            func TestLoadAgentSessions_CorruptedJSON(t *testing.T) {
+                stateDir := t.TempDir()
+                slug := "corrupt"
+                // Write malformed JSON to the sessions file.
+                sessionsDir := filepath.Join(stateDir, "sessions")
+                if err := os.MkdirAll(sessionsDir, 0o755); err != nil {
+                    t.Fatal(err)
+                }
+                bad := filepath.Join(sessionsDir, slug+".json")
+                if err := os.WriteFile(bad, []byte("{not valid json"), 0o644); err != nil {
+                    t.Fatal(err)
+                }
+                res := LoadAgentSessions(stateDir, slug)
+                if res.IsSuccess() {
+                    t.Fatal("expected failure for corrupted JSON, got success")
+                }
+                if len(res.Errors) == 0 {
+                    t.Fatal("expected at least one error")
+                }
+                if res.Errors[0].Code != result.CodeSessionSaveFailed {
+                    t.Errorf("code = %q, want %q", res.Errors[0].Code, result.CodeSessionSaveFailed)
+                }
+            }
+            ```
+
+            ### Verification gate
+
+            ```
+            go build ./pkg/resume/...
+            go vet ./pkg/resume/...
+            go test ./pkg/resume/... -run TestSave -v
+            go test ./pkg/resume/... -run TestLoad -v
+            ```
+
+            ### Constraints
+
+            - Keep ALL existing test assertions; only adapt the call sites that changed.
+            - Do NOT change `SaveAgentSession`'s return type (already correct: `result.Result[SaveSessionData]`).
+            - Do NOT touch detect.go or worktree_status.go — those are other agents' files.
+            - The `sessions_test.go` tests call `LoadAgentSessions` directly and must compile.
+          files:
+            - pkg/resume/sessions.go
+            - pkg/resume/sessions_test.go
+        - id: C
+          task: |
+            ## Agent C — Fix worktree_status.go: remove dead error return, inline helpers, rename local var
+
+            **Repo:** `scout-and-wave-go`
+            **Files to modify:** `pkg/resume/worktree_status.go`, `pkg/resume/worktree_status_test.go`
+
+            ### What to implement
+
+            #### 1. Remove dead error return from ClassifyWorktrees (P1-2)
+
+            Current signature (worktree_status.go:39):
+            ```go
+            func ClassifyWorktrees(worktreePaths []string, manifest *protocol.IMPLManifest, logger *slog.Logger) ([]DirtyWorktree, error)
+            ```
+
+            New signature:
+            ```go
+            func ClassifyWorktrees(worktreePaths []string, manifest *protocol.IMPLManifest, logger *slog.Logger) []DirtyWorktree
+            ```
+
+            All `return result, nil` statements become `return result`.
+            The single `return []DirtyWorktree{}, nil` (if present) becomes `return []DirtyWorktree{}`.
+            The nil-guard at the end (`if result == nil { result = []DirtyWorktree{} }`) stays.
+
+            #### 2. Rename local variable 'result' to 'classified' (P1-3)
+
+            The local variable named `result` at lines 53, 94, 103 shadows the `result`
+            package name. Rename all occurrences within ClassifyWorktrees:
+            - `var result []DirtyWorktree` → `var classified []DirtyWorktree`
+            - `result = append(result, DirtyWorktree{...})` → `classified = append(classified, DirtyWorktree{...})`
+            - `if result == nil { result = []DirtyWorktree{} }` → `if classified == nil { classified = []DirtyWorktree{} }`
+            - `return result, nil` → `return classified`
+
+            Note: the `result` package is NOT imported in worktree_status.go — but the rename
+            is still important for clarity as the package is used in the same package (resume).
+
+            #### 3. Inline loggerFrom helper (P2-1)
+
+            The `loggerFrom` helper (worktree_status.go:16-21) is a 3-line private function
+            called in exactly 2 places in this file:
+            - line 40: `log := loggerFrom(logger)` in ClassifyWorktrees
+            - line 113: `log := loggerFrom(logger)` in isWorktreeDirty
+
+            Inline at both call sites. Replace each `log := loggerFrom(logger)` with:
+            ```go
+            log := logger
+            if log == nil {
+                log = slog.Default()
+            }
+            ```
+
+            Then delete the `loggerFrom` function entirely.
+
+            #### 4. Inline branchViaSymbolicRef wrapper (P2-2)
+
+            The `branchViaSymbolicRef` wrapper (worktree_status.go:160-166) is a single-line
+            wrapper around `git.SymbolicRef`. It is called in two places inside
+            `resolveWorktreeBranch`:
+            - line 139: `return branchViaSymbolicRef(path)` (no .git at all — fallback)
+            - line 156: `return branchViaSymbolicRef(path)` (linked worktree)
+
+            Replace each call site with the inlined body:
+            ```go
+            branch, err := git.SymbolicRef(path)
+            if err != nil {
+                return ""
+            }
+            return branch
+            ```
+
+            Then delete the `branchViaSymbolicRef` function entirely.
+
+            Note: both call sites are `return branchViaSymbolicRef(path)` at the end of
+            control flow branches, so inline correctly as full blocks, not single expressions.
+
+            ### Tests — worktree_status_test.go
+
+            Update all test calls to ClassifyWorktrees to drop the second return value.
+            There are 5 call sites in the test file (TestClassifyWorktrees_DirtyWorktree,
+            TestClassifyWorktrees_CleanWorktree, TestClassifyWorktrees_NonexistentPath,
+            TestClassifyWorktrees_MixedDirtyClean, TestClassifyWorktrees_SlugFiltering).
+
+            Change each from:
+            ```go
+            result, err := ClassifyWorktrees(...)
+            if err != nil {
+                t.Fatalf("unexpected error: %v", err)
+            }
+            ```
+            to:
+            ```go
+            result := ClassifyWorktrees(...)
+            ```
+
+            Add one new test `TestClassifyWorktrees_LockedWorktree`:
+            ```go
+            // TestClassifyWorktrees_LockedWorktree verifies that a locked worktree is
+            // conservatively treated as dirty (HasChanges=true) even with no uncommitted files.
+            func TestClassifyWorktrees_LockedWorktree(t *testing.T) {
+                repo := makeTestRepo(t)
+                wtDir := t.TempDir()
+                wtPath := filepath.Join(wtDir, "wt-locked")
+                branch := "saw/my-slug/wave1-agent-A"
+                addWorktree(t, repo, wtPath, branch)
+
+                // Lock the worktree.
+                lockCmd := exec.Command("git", "-C", repo, "worktree", "lock", wtPath)
+                if out, err := lockCmd.CombinedOutput(); err != nil {
+                    t.Skipf("git worktree lock not supported: %v\n%s", err, out)
+                }
+                t.Cleanup(func() {
+                    exec.Command("git", "-C", repo, "worktree", "unlock", wtPath).Run()
+                })
+
+                manifest := makeManifest("my-slug")
+                result := ClassifyWorktrees([]string{wtPath}, manifest, nil)
+
+                if len(result) != 1 {
+                    t.Fatalf("expected 1 result, got %d", len(result))
+                }
+                if !result[0].HasChanges {
+                    t.Error("locked worktree should be treated as dirty (HasChanges=true)")
+                }
+            }
+            ```
+            Add `"os/exec"` to imports if not already present (it is present — makeTestRepo uses it).
+
+            ### Verification gate
+
+            ```
+            go build ./pkg/resume/...
+            go vet ./pkg/resume/...
+            go test ./pkg/resume/... -run TestClassify -v
+            ```
+
+            ### Constraints
+
+            - Do NOT change ClassifyWorktrees' exported behaviour — only remove the dead error return.
+            - Do NOT touch detect.go, sessions.go, or their test files.
+            - The detect.go call site at line 168 (`dirty, _ := ClassifyWorktrees(...)`) will be
+              updated by Agent D — do not modify detect.go.
+          files:
+            - pkg/resume/worktree_status.go
+            - pkg/resume/worktree_status_test.go
+    - number: 3
+      agents:
+        - id: D
+          task: |
+            ## Agent D — Fix detect.go: signature changes for Detect/DetectWithConfig, unpack Results, remove dead guard, pass pre-computed failed slice
+
+            **Repo:** `scout-and-wave-go`
+            **Files to modify:** `pkg/resume/detect.go`, `pkg/resume/detect_test.go`
+
+            ### Prerequisites
+
+            - Agent B has changed `LoadAgentSessions` to return `result.Result[map[string]AgentSession]`.
+            - Agent C has changed `ClassifyWorktrees` to return `[]DirtyWorktree` (no error).
+
+            ### What to implement
+
+            #### 1. Change Detect return type (P0-1)
+
+            Current (detect.go:59):
+            ```go
+            func Detect(ctx context.Context, repoPath string) ([]SessionState, error) {
+                return DetectWithConfig(ctx, []string{repoPath})
+            }
+            ```
+
+            New:
+            ```go
+            func Detect(ctx context.Context, repoPath string) result.Result[[]SessionState] {
+                return DetectWithConfig(ctx, []string{repoPath})
+            }
+            ```
+
+            #### 2. Change DetectWithConfig return type (P0-2)
+
+            Current (detect.go:68):
+            ```go
+            func DetectWithConfig(ctx context.Context, repoPaths []string) ([]SessionState, error)
+            ```
+
+            New:
+            ```go
+            func DetectWithConfig(ctx context.Context, repoPaths []string) result.Result[[]SessionState]
+            ```
+
+            Update the function body:
+            - Early return at line 70 (`return []SessionState{}, nil`) →
+              `return result.NewSuccess([]SessionState{})`
+            - Error return at line 83 (inline `fmt.Errorf`) →
+              ```go
+              return result.NewFailure[[]SessionState]([]result.SAWError{
+                  result.NewFatal(result.CodeSessionSaveFailed,
+                      fmt.Sprintf("resume.DetectWithConfig: reading %s: %v", implDir, err)).
+                      WithContext("implDir", implDir).WithCause(err),
+              })
+              ```
+            - Final return at line 130 (`return sessions, nil`) →
+              `return result.NewSuccess(sessions)`
+
+            #### 3. Unpack LoadAgentSessions result in buildSessionState (P0-3 caller)
+
+            In `buildSessionState` at lines 185-189:
+
+            Current:
+            ```go
+            if len(repoPaths) > 0 {
+                stateDir := protocol.SAWStateDir(repoPaths[0])
+                if loaded, err := LoadAgentSessions(stateDir, manifest.FeatureSlug); err == nil {
+                    agentSessions = loaded
+                }
+            }
+            ```
+
+            New (the `if len(repoPaths) > 0` guard stays — this is in buildSessionState,
+            not the dead guard in detectOrphanedWorktrees):
+            ```go
+            if len(repoPaths) > 0 {
+                stateDir := protocol.SAWStateDir(repoPaths[0])
+                if loadRes := LoadAgentSessions(stateDir, manifest.FeatureSlug); loadRes.IsSuccess() {
+                    agentSessions = loadRes.GetData()
+                }
+            }
+            ```
+
+            #### 4. Update ClassifyWorktrees call site (P1-2 caller)
+
+            In `buildSessionState` at line 168:
+
+            Current:
+            ```go
+            dirty, _ := ClassifyWorktrees(orphaned, manifest, nil)
+            ```
+
+            New:
+            ```go
+            dirty := ClassifyWorktrees(orphaned, manifest, nil)
+            ```
+
+            #### 5. Remove dead guard in detectOrphanedWorktrees (P2-4)
+
+            In `detectOrphanedWorktrees`, the guard at line 185:
+            ```go
+            if len(repoPaths) > 0 {
+            ```
+            is unreachable — the caller (`buildSessionState`) checks `len(repoPaths) > 0`
+            before calling `detectOrphanedWorktrees` (via the `orphaned, _ := detectOrphanedWorktrees(repoPaths, manifest)` call at line 161). However, looking at the actual code, `detectOrphanedWorktrees` itself iterates over `repoPaths` with `for _, repoPath := range repoPaths` and the `if len(repoPaths) > 0` guard at line 185 is inside `buildSessionState` for the LoadAgentSessions call — NOT inside detectOrphanedWorktrees.
+
+            Re-check: P2-4 says the dead guard is `if len(repoPaths) > 0` at detect.go:185
+            which is inside `buildSessionState`. The reviewer says the caller already guards
+            this (referring to the outer function `buildSessionState` receiving repoPaths
+            that was already checked). Actually, looking at the code: `buildSessionState`
+            receives repoPaths parameter and uses it directly. The guard at line 185 is in
+            `buildSessionState` around the LoadAgentSessions call. This IS necessary because
+            buildSessionState could be called with an empty repoPaths slice.
+
+            RESOLUTION: Read detect.go carefully. If the guard at the stated line is truly
+            unreachable (e.g., the function already returned early if repoPaths is empty),
+            remove it. If it is reachable and meaningful, leave it and document why the
+            finding was incorrect. Do NOT blindly remove a guard that is actually needed.
+
+            #### 6. Pass pre-computed failed slice to buildActionAndCommandInternal (P2-3)
+
+            `buildActionAndCommandInternal` at detect.go:285-297 re-walks `manifest.Waves`
+            to recompute the `failed []string` slice that was already computed in
+            `buildSessionState` at detect.go:140-158.
+
+            Change `buildActionAndCommandInternal` signature to accept the pre-computed
+            failed slice:
+
+            Current:
+            ```go
+            func buildActionAndCommandInternal(
+                implPath string,
+                manifest *protocol.IMPLManifest,
+                orphaned []string,
+                dirtyWorktrees []DirtyWorktree,
+                completed []string,
+                currentWave int,
+            ) (string, string)
+            ```
+
+            New:
+            ```go
+            func buildActionAndCommandInternal(
+                implPath string,
+                manifest *protocol.IMPLManifest,
+                orphaned []string,
+                dirtyWorktrees []DirtyWorktree,
+                completed []string,
+                failed []string,
+                currentWave int,
+            ) (string, string)
+            ```
+
+            Delete the re-walk block inside buildActionAndCommandInternal (lines 285-297):
+            ```go
+            // Delete this block:
+            var failed []string
+            for _, wave := range manifest.Waves {
+                for _, agent := range wave.Agents {
+                    report, exists := manifest.CompletionReports[agent.ID]
+                    if !exists {
+                        continue
+                    }
+                    if report.Status == protocol.StatusPartial || report.Status == protocol.StatusBlocked {
+                        failed = append(failed, agent.ID)
+                    }
+                }
+            }
+            ```
+
+            The `failed` variable in the function body now refers to the parameter.
+
+            Update the call site in `buildSessionState` at line 171:
+
+            Current:
+            ```go
+            suggestedAction, resumeCommand := buildActionAndCommandInternal(implPath, manifest, orphaned, dirty, completed, currentWave)
+            ```
+
+            New:
+            ```go
+            suggestedAction, resumeCommand := buildActionAndCommandInternal(implPath, manifest, orphaned, dirty, completed, failed, currentWave)
+            ```
+
+            #### 7. Add result package import
+
+            Add `"github.com/blackwell-systems/scout-and-wave-go/pkg/result"` to the import
+            block in detect.go.
+
+            ### Tests — detect_test.go
+
+            Update all test calls to `Detect` and `DetectWithConfig` that use `sessions, err := ...`:
+
+            Change pattern:
+            ```go
+            sessions, err := Detect(context.Background(), root)
+            if err != nil {
+                t.Fatalf("unexpected error: %v", err)
+            }
+            ```
+            to:
+            ```go
+            res := Detect(context.Background(), root)
+            if !res.IsSuccess() {
+                t.Fatalf("unexpected failure: %v", res.Errors)
+            }
+            sessions := res.GetData()
+            ```
+
+            Similarly for `DetectWithConfig` calls (TestDetectWithConfig_EmptyRepoList,
+            TestDetectWithConfig_MultipleRepos).
+
+            Count of call sites to update in detect_test.go: there are 17 tests that call
+            `Detect(...)` and 2 tests that call `DetectWithConfig(...)`. Each uses the
+            `sessions, err :=` pattern. Update ALL of them.
+
+            Update `buildActionAndCommandInternal` call sites in test code (TestBuildAction_DirtyWorktrees):
+            The test calls `buildActionAndCommandInternal(implPath, manifest, orphaned, dirtyWorktrees, nil, 1)` 3 times.
+            Add the `failed` parameter (nil or empty slice) at position 6 of each call:
+            ```go
+            // Old (3 occurrences):
+            action, _ := buildActionAndCommandInternal(implPath, manifest, orphaned, dirtyWorktrees, nil, 1)
+            // New:
+            action, _ := buildActionAndCommandInternal(implPath, manifest, orphaned, dirtyWorktrees, nil, nil, 1)
+            ```
+
+            Add new test `TestDetectOrphanedWorktrees_LiveGitPath`:
+            ```go
+            // TestDetectOrphanedWorktrees_LiveGitPath verifies that detectOrphanedWorktrees
+            // correctly identifies an unmerged worktree against a live git repo.
+            func TestDetectOrphanedWorktrees_LiveGitPath(t *testing.T) {
+                repo := makeRepoWithIMPLDir(t)
+
+                // Initialise as a git repo.
+                run := func(args ...string) {
+                    t.Helper()
+                    cmd := exec.Command("git", args...)
+                    cmd.Dir = repo
+                    if out, err := cmd.CombinedOutput(); err != nil {
+                        t.Fatalf("git %v: %v\n%s", args, err, out)
+                    }
+                }
+                run("init", "-b", "main")
+                run("config", "user.email", "test@example.com")
+                run("config", "user.name", "Test")
+                f := filepath.Join(repo, "README")
+                if err := os.WriteFile(f, []byte("init\n"), 0o644); err != nil {
+                    t.Fatal(err)
+                }
+                run("add", ".")
+                run("commit", "-m", "init")
+
+                // Create a SAW-patterned worktree.
+                wtPath := filepath.Join(repo, ".claude", "worktrees", "saw", "test-feature", "wave1-agent-A")
+                if err := os.MkdirAll(filepath.Dir(wtPath), 0o755); err != nil {
+                    t.Fatal(err)
+                }
+                addWorktreeFn := func(repo, path, branch string) {
+                    cmd := exec.Command("git", "-C", repo, "worktree", "add", "-b", branch, path)
+                    if out, err := cmd.CombinedOutput(); err != nil {
+                        t.Fatalf("git worktree add: %v\n%s", err, out)
+                    }
+                }
+                addWorktreeFn(repo, wtPath, "saw/test-feature/wave1-agent-A")
+
+                manifest := simpleManifest() // wave 1 agents A and B, neither complete
+                orphaned, err := detectOrphanedWorktrees([]string{repo}, manifest)
+                if err != nil {
+                    t.Fatalf("unexpected error: %v", err)
+                }
+                if len(orphaned) == 0 {
+                    t.Fatal("expected at least one orphaned worktree, got none")
+                }
+                found := false
+                for _, o := range orphaned {
+                    if o == wtPath {
+                        found = true
+                    }
+                }
+                if !found {
+                    t.Errorf("expected wtPath=%q in orphaned list, got %v", wtPath, orphaned)
+                }
+            }
+            ```
+            Add `"os/exec"` to imports if not already present (it is not — add it).
+
+            ### Verification gate
+
+            ```
+            go build ./pkg/resume/...
+            go vet ./pkg/resume/...
+            go test ./pkg/resume/... -v
+            ```
+
+            ### Constraints
+
+            - The package-level `worktreePattern` and `slugPattern` regexps are unchanged.
+            - Do NOT change SessionState, AgentSession, or any other exported types.
+            - Keep the sessions nil-guard at detect.go:126 (`if sessions == nil { sessions = []SessionState{} }`).
+            - Import `"os/exec"` in detect_test.go for the new live-git test.
+            - buildActionAndCommandInternal remains unexported (lowercase).
+          files:
+            - pkg/resume/detect.go
+            - pkg/resume/detect_test.go
+          dependencies:
+            - B
+            - C
+    - number: 4
+      agents:
+        - id: E
+          task: |
+            ## Agent E — Update resume_detect_cmd.go caller of Detect
+
+            **Repo:** `scout-and-wave-go`
+            **File to modify:** `cmd/sawtools/resume_detect_cmd.go`
+
+            ### Prerequisites
+
+            Agent D has changed `resume.Detect` from returning `([]SessionState, error)`
+            to `result.Result[[]SessionState]`.
+
+            ### What to implement
+
+            In `newResumeDetectCmd` at resume_detect_cmd.go:26-29, update the call site:
+
+            Current:
+            ```go
+            sessions, err := resume.Detect(cmd.Context(), repoDir)
+            if err != nil {
+                return fmt.Errorf("resume-detect: %w", err)
+            }
+            ```
+
+            New:
+            ```go
+            res := resume.Detect(cmd.Context(), repoDir)
+            if !res.IsSuccess() {
+                if len(res.Errors) > 0 {
+                    return fmt.Errorf("resume-detect: %s", res.Errors[0].Message)
+                }
+                return fmt.Errorf("resume-detect: detection failed")
+            }
+            sessions := res.GetData()
+            ```
+
+            Add import `"github.com/blackwell-systems/scout-and-wave-go/pkg/result"` if needed.
+            Actually, the result type is opaque at the call site — `res` is the Result value
+            returned directly. The import of `pkg/result` is NOT needed here because we only
+            call methods on `res` (`.IsSuccess()`, `.GetData()`, `.Errors`). No explicit
+            `result.` type references are needed.
+
+            Verify: after the change, `"fmt"` import is still used (it is, for `fmt.Errorf`
+            and `fmt.Fprintln`). Do NOT remove it.
+
+            ### Verification gate
+
+            ```
+            go build ./cmd/sawtools/...
+            go vet ./cmd/sawtools/...
+            ```
+
+            ### Constraints
+
+            - Do NOT change the command's output format or exit codes.
+            - The JSON marshalling of `sessions` and `fmt.Fprintln(os.Stdout, ...)` remain unchanged.
+            - This is a minimal adapter change: unpack the Result, preserve all other logic.
+          files:
+            - cmd/sawtools/resume_detect_cmd.go
+          dependencies:
+            - D
+        - id: F
+          task: |
+            ## Agent F — Update prepare.go caller of resume.Detect
+
+            **Repo:** `scout-and-wave-go`
+            **File to modify:** `pkg/engine/prepare.go`
+
+            ### Prerequisites
+
+            Agent D has changed `resume.Detect` from returning `([]SessionState, error)`
+            to `result.Result[[]SessionState]`.
+
+            ### What to implement
+
+            In `prepare.go` around line 150, update the call site in the "Resume detection"
+            step. The current code is:
+
+            ```go
+            if sessions, err := resume.Detect(ctx, projectRoot); err == nil {
+                for _, s := range sessions {
+                    if len(s.OrphanedWorktrees) > 0 {
+                        detail := fmt.Sprintf("%d orphaned worktree(s) for %s (wave %d)",
+                            len(s.OrphanedWorktrees), s.IMPLSlug, s.CurrentWave)
+                        recordStep(res, opts.OnEvent, "resume_detection", "warning", detail)
+                    }
+                }
+            }
+            ```
+
+            Change to:
+            ```go
+            if detectRes := resume.Detect(ctx, projectRoot); detectRes.IsSuccess() {
+                for _, s := range detectRes.GetData() {
+                    if len(s.OrphanedWorktrees) > 0 {
+                        detail := fmt.Sprintf("%d orphaned worktree(s) for %s (wave %d)",
+                            len(s.OrphanedWorktrees), s.IMPLSlug, s.CurrentWave)
+                        recordStep(res, opts.OnEvent, "resume_detection", "warning", detail)
+                    }
+                }
+            }
+            ```
+
+            This is a one-to-one semantic substitution: `err == nil` → `.IsSuccess()`,
+            `sessions` → `detectRes.GetData()`. The surrounding logic (recordStep calls,
+            the no-orphaned-worktrees success step) is unchanged.
+
+            Verify: the `resume` package import is already present in prepare.go.
+            No new imports are needed — the result type is accessed via methods on
+            the returned value (no explicit `result.` package reference needed).
+
+            ### Verification gate
+
+            ```
+            go build ./pkg/engine/...
+            go vet ./pkg/engine/...
+            go test ./pkg/engine/... -run TestPrepare -v
+            ```
+
+            ### Constraints
+
+            - Do NOT change any other part of prepare.go — this is a targeted single-site fix.
+            - The logic and error handling behaviour of the prepare step are semantically
+              identical: detection errors are silently ignored (same as before), only the
+              success path iterates sessions.
+            - Do NOT add new imports beyond what is strictly required.
+          files:
+            - pkg/engine/prepare.go
+          dependencies:
+            - D
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./...
+          required: true
+          repo: scout-and-wave-go
+        - type: lint
+          command: go vet ./...
+          required: true
+          repo: scout-and-wave-go
+        - type: test
+          command: go test ./pkg/resume/... ./cmd/sawtools/... ./pkg/engine/...
+          required: true
+          repo: scout-and-wave-go
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: |
+            N086/N087 collision: the concurrent result-review-fixes IMPL assigns those codes
+            before this IMPL merges, but this IMPL mistakenly assigns N088 to something else.
+          likelihood: low
+          impact: high
+          mitigation: |
+            Agent A reads codes.go before writing. The constant is assigned N088 explicitly.
+            If codes.go has grown past N087 by merge time, Agent A must re-check and assign
+            the next available slot. The constant value is self-documenting.
+        - scenario: |
+            detect.go P2-4 dead guard: the review finding says the guard at detect.go:185
+            is unreachable, but it is actually the LoadAgentSessions call guard inside
+            buildSessionState (not detectOrphanedWorktrees). Agent D may misidentify the
+            wrong guard and remove live code.
+          likelihood: medium
+          impact: medium
+          mitigation: |
+            Agent D's brief contains an explicit resolution note: read the code carefully,
+            confirm the guard is truly unreachable, and document the decision. If uncertain,
+            leave the guard and add a comment. The test suite will catch a nil-pointer panic.
+        - scenario: |
+            buildActionAndCommandInternal signature change in Wave 3 leaves test file
+            call sites out of sync — 3 occurrences in TestBuildAction_DirtyWorktrees.
+          likelihood: low
+          impact: medium
+          mitigation: |
+            Agent D's brief enumerates all 3 test call sites and the exact parameter
+            position change. The compiler will catch any missed site.
+        - scenario: |
+            sessions_test.go raw string "SESSION_SAVE_FAILED" still present after Agent B
+            completes — test passes but doesn't validate the constant is used correctly.
+          likelihood: low
+          impact: low
+          mitigation: |
+            Agent B's brief explicitly updates the test to use result.CodeSessionSaveFailed
+            constant instead of the raw string literal.
+state: "REVIEWED"
+injection_method: hook
