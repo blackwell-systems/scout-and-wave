@@ -1,0 +1,239 @@
+title: Wire SuggestWaveStructure into pre-wave-validate as Step 4
+feature_slug: suggest-wave-structure-gate
+verdict: SUITABLE_WITH_CAVEATS
+suitability_assessment: |
+    This is a single-file change that adds Step 4 to pre_wave_validate_cmd.go
+    and creates a new test file pre_wave_validate_cmd_test.go. Two distinct files
+    with disjoint ownership satisfy the file decomposition requirement, but at
+    minimal scope (1 agent, 2 files).
+
+    Parallelization value: Low — both files are owned by the same agent, so there
+    is no parallelism to exploit. The value here is coordination: the IMPL doc
+    serves as an audit trail and change specification for this pre-flight gate
+    addition. SAW overhead is marginal vs sequential implementation.
+
+    Caveats:
+    - 1 agent (A) owns both files; no parallelism within the wave.
+    - The validator will emit V047_TRIVIAL_SCOPE. This is acknowledged.
+    - SuggestWaveStructure already exists and is tested; no new protocol changes needed.
+
+    All five suitability questions pass:
+    1. File decomposition: 2 files (cmd file + new test file), single agent
+    2. No investigation-first items
+    3. Interface contracts fully discoverable from existing source
+    4. No prior implementation — Step 4 is genuinely missing from pre-wave-validate
+    5. Low parallelization value, but coordination value justifies the IMPL doc
+
+    Estimated times:
+    - Scout phase: ~5 min
+    - Agent execution: ~10 min (1 agent, 2 files, moderate logic)
+    - Merge and verification: ~2 min
+    Total SAW time: ~17 min
+
+    Sequential baseline: ~12 min
+    Time savings: marginal (~5 min overhead). Coordination value justifies proceeding.
+test_command: go test ./cmd/sawtools/... -run TestPreWaveValidate
+lint_command: go vet ./cmd/sawtools/...
+file_ownership:
+    - file: cmd/sawtools/pre_wave_validate_cmd.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: cmd/sawtools/pre_wave_validate_cmd_test.go
+      agent: A
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+interface_contracts:
+    - name: WaveStructureCheckResult
+      description: |
+        New struct added to PreWaveValidateResult to hold the Step 4 wave structure
+        check output. Mirrors the shape of TestCascadeCheckResult.
+      definition: |
+        // WaveStructureCheckResult holds the result of the suggest-wave-structure pre-flight gate.
+        type WaveStructureCheckResult struct {
+            Passed   bool                              `json:"passed"`
+            Problems []protocol.WaveStructureProblem  `json:"problems"`
+        }
+      location: cmd/sawtools/pre_wave_validate_cmd.go
+    - name: PreWaveValidateResult
+      description: |
+        Updated struct — adds WaveStructure field after TestCascade. Exit-1 logic
+        extended to include !output.WaveStructure.Passed.
+      definition: |
+        type PreWaveValidateResult struct {
+            Validation    protocol.FullValidateData  `json:"validation"`
+            E35Gaps       E35GapsResult              `json:"e35_gaps"`
+            TestCascade   TestCascadeCheckResult     `json:"test_cascade"`
+            WaveStructure WaveStructureCheckResult   `json:"wave_structure"` // NEW Step 4
+        }
+      location: cmd/sawtools/pre_wave_validate_cmd.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## Step 4: Wire SuggestWaveStructure into pre-wave-validate
+
+            ### What to implement
+
+            In `cmd/sawtools/pre_wave_validate_cmd.go`:
+
+            **1. Add `WaveStructureCheckResult` struct** (after `TestCascadeCheckResult`):
+            ```go
+            // WaveStructureCheckResult holds the result of the suggest-wave-structure pre-flight gate.
+            type WaveStructureCheckResult struct {
+                Passed   bool                             `json:"passed"`
+                Problems []protocol.WaveStructureProblem `json:"problems"`
+            }
+            ```
+
+            **2. Add `WaveStructure` field to `PreWaveValidateResult`**:
+            ```go
+            type PreWaveValidateResult struct {
+                Validation    protocol.FullValidateData `json:"validation"`
+                E35Gaps       E35GapsResult             `json:"e35_gaps"`
+                TestCascade   TestCascadeCheckResult    `json:"test_cascade"`
+                WaveStructure WaveStructureCheckResult  `json:"wave_structure"` // Step 4
+            }
+            ```
+
+            **3. Add Step 4 logic in `RunE`**, after the existing Step 3 block and before
+            the "Combine results" comment. Insert:
+            ```go
+            // Step 4: Run wave structure check
+            waveStructureRes := protocol.SuggestWaveStructure(context.TODO(), manifest, repoRoot)
+            var waveStructureResult WaveStructureCheckResult
+            if waveStructureRes.IsFatal() {
+                // Log but don't fail — fatal means the check itself errored (e.g. nil manifest),
+                // not that problems were found.
+                fmt.Fprintf(os.Stderr, "pre-wave-validate: wave structure check failed: %v\n", waveStructureRes.Errors)
+                waveStructureResult = WaveStructureCheckResult{Passed: true, Problems: nil}
+            } else {
+                problems := waveStructureRes.GetData()
+                waveStructureResult = WaveStructureCheckResult{
+                    Passed:   len(problems) == 0,
+                    Problems: problems,
+                }
+            }
+            ```
+
+            **4. Update the "Combine results" block** to include the new field:
+            ```go
+            output := PreWaveValidateResult{
+                Validation: validateRes.GetData(),
+                E35Gaps: E35GapsResult{
+                    Passed: len(e35Gaps) == 0,
+                    Gaps:   e35Gaps,
+                },
+                TestCascade:   testCascadeResult,
+                WaveStructure: waveStructureResult, // Step 4
+            }
+            ```
+
+            **5. Update the exit-1 condition** to include wave structure failures:
+            ```go
+            if !output.Validation.Valid || !output.E35Gaps.Passed || !output.TestCascade.Passed || !output.WaveStructure.Passed {
+                return fmt.Errorf("pre-wave validation failed")
+            }
+            ```
+
+            **6. Update the Long description** of the command to document Step 4:
+            Add `  3. E46 test cascade detection` and `  4. Wave structure check (X004/X005)`
+            to the list in the `Long:` field so users see all four steps in --help output.
+
+            ### Test file: `cmd/sawtools/pre_wave_validate_cmd_test.go`
+
+            Create this file. Pattern the test style after `pre_wave_gate_cmd_test.go`
+            (temp dir fixtures, `cmd.Execute()`, JSON unmarshal into result struct).
+
+            Write these test cases:
+
+            **TestPreWaveValidateCmd_StepFour_NoProblemsMani** — a valid IMPL with no
+            interface contracts and a single wave. Call the command with `--wave 1`.
+            Assert `wave_structure.passed == true` and `wave_structure.problems` is
+            empty (or nil/[]).
+
+            **TestPreWaveValidateCmd_StepFour_PassedField** — same minimal IMPL as above.
+            Assert that the JSON output contains a `"wave_structure"` key (unmarshal to
+            `map[string]interface{}` and check key presence).
+
+            **TestPreWaveValidateCmd_MissingWaveFlag** — call the command without
+            `--wave` flag; assert that `cmd.Execute()` returns an error (the flag is
+            required).
+
+            For the IMPL fixtures, use the same minimal-valid IMPL format shown in
+            `pre_wave_gate_cmd_test.go`: two agents, two files, wave 1, verdict SUITABLE,
+            no repository field (so repoRoot falls through to os.Getwd()).
+
+            ### Verification gate
+            ```
+            go build ./cmd/sawtools/...
+            go vet ./cmd/sawtools/...
+            go test ./cmd/sawtools/... -run TestPreWaveValidate
+            ```
+
+            ### Constraints
+            - Do NOT modify `pkg/protocol/suggest_wave_structure.go` — it is correct as-is.
+            - Do NOT modify `cmd/sawtools/suggest_wave_structure_cmd.go` — standalone command is unchanged.
+            - The `repoRoot` variable is already determined in Steps 1-2 of the existing
+              command logic; reuse it for the `SuggestWaveStructure` call.
+            - Error handling for Step 4 must mirror Step 3: IsFatal() → log to stderr,
+              treat as passed; non-fatal with problems → Passed: false.
+            - Import `protocol` is already in the file; no new imports needed beyond
+              what already exists.
+          files:
+            - cmd/sawtools/pre_wave_validate_cmd.go
+            - cmd/sawtools/pre_wave_validate_cmd_test.go
+          context_source: prepared-brief
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./cmd/sawtools/...
+          required: true
+          repo: scout-and-wave-go
+        - type: lint
+          command: go vet ./cmd/sawtools/...
+          required: true
+          repo: scout-and-wave-go
+        - type: test
+          command: go test ./cmd/sawtools/... -run TestPreWaveValidate
+          required: true
+          repo: scout-and-wave-go
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: |
+            repoRoot resolution differs between the test environment and real execution.
+            Tests use `os.Getwd()` fallback (no `repository` field in fixture), which
+            points at the Go repo root — SuggestWaveStructure will scan real owned files
+            listed in the fixture. If the owned files don't exist on disk, fileContainsSymbol
+            returns false for all, producing zero problems (safe — tests pass).
+          likelihood: low
+          impact: low
+          mitigation: |
+            Use `action: new` in test fixtures so files don't need to exist.
+            SuggestWaveStructure's fileContainsSymbol silently returns false on open errors,
+            so missing files produce zero problems, not panics.
+        - scenario: |
+            V047_TRIVIAL_SCOPE warning fires because this IMPL has 1 agent and 2 files.
+            sawtools validate will warn but not block.
+          likelihood: high
+          impact: low
+          mitigation: |
+            Acknowledged. V047 is a warning code (advisory), not an error. It does not
+            block wave execution.
+        - scenario: |
+            The `manifest` variable is declared in Step 2 (E35 detection path) but
+            agent may accidentally re-declare it in Step 4 with `:=`, causing a
+            compile error.
+          likelihood: low
+          impact: medium
+          mitigation: |
+            Agent brief explicitly says "reuse repoRoot" and shows the call site without
+            redeclaring manifest. The agent should use the `manifest` and `repoRoot`
+            variables already in scope from Steps 2-3.
+state: "REVIEWED"
+injection_method: hook
