@@ -1,0 +1,512 @@
+title: validate-briefs false positive fix
+feature_slug: validate-briefs-false-positive-fix
+verdict: SUITABLE_WITH_CAVEATS
+suitability_assessment: |
+    Two files change (brief_validator.go + brief_validator_test.go), both owned by one agent.
+    Single-agent scope means no parallelization speedup. SUITABLE WITH CAVEATS: the IMPL
+    doc provides value as a clear spec and audit trail for a targeted precision fix.
+
+    Root cause is confirmed by code inspection (no investigation needed):
+    - action:new short-circuit fires per-file rather than per-agent: the loop sets
+      found=true when ANY owned file is action:new, but only skips that one file — not
+      the agent. Symbols not in the new file still get checked in the remaining owned
+      files. Fix: if ALL owned files for an agent are action:new, skip the agent entirely.
+    - extractSymbols is context-blind: it treats all backtick identifiers identically
+      regardless of whether they appear after deletion verbs, as package-qualified
+      references, or as language keywords.
+
+    Parallelization value: low (2 files, 1 logical task). The IMPL doc is the deliverable
+    for clarity, not speed.
+
+    Estimated times:
+    - Scout phase: ~10 min
+    - Agent execution: ~20 min (1 agent, non-trivial logic + test cases)
+    - Merge & verification: ~3 min
+    Total SAW time: ~33 min
+
+    Sequential baseline: ~20 min
+    Time savings: marginally slower with SAW overhead. Coordination value is the spec.
+
+    Recommendation: Proceed as single-agent wave. Value is spec clarity, not speed.
+test_command: go test ./pkg/protocol/... -run TestValidateBriefs
+lint_command: go vet ./pkg/protocol/...
+file_ownership:
+    - file: pkg/protocol/brief_validator.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/protocol/brief_validator_test.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+interface_contracts:
+    - name: extractSymbols
+      description: |-
+        Updated to filter three categories of false-positive symbols.
+        Signature is unchanged; filtering happens inside the function.
+      definition: |
+        func extractSymbols(taskText string) []string
+
+        // Internal filtering applied before returning:
+        // 1. Package-qualified symbols (e.g. "result.NewFatal") — drop the whole token.
+        //    Pattern: backtick containing a dot (pkg.Symbol). Only the unqualified part
+        //    after the last dot would match grep anyway, but the package prefix signals
+        //    the symbol lives in another package. Skip entirely.
+        // 2. Go keywords and common builtins — drop short lowercase identifiers that
+        //    are language constructs, not user-defined symbols:
+        //    {"error", "ctx", "err", "ok", "func", "type", "const", "var", "struct",
+        //     "interface", "map", "chan", "string", "int", "bool", "byte", "rune",
+        //     "nil", "true", "false", "len", "cap", "make", "new", "append", "copy",
+        //     "close", "delete", "panic", "recover", "print", "println", "return",
+        //     "range", "for", "if", "else", "switch", "case", "default", "break",
+        //     "continue", "go", "defer", "select", "import", "package"}
+        // 3. Deletion-context symbols — if the symbol appears within the same sentence
+        //    (split on '. ') as a deletion verb ("delete ", "remove ", "deleted ",
+        //    "removing ", "deleting ", "drop "), skip the symbol.
+      location: pkg/protocol/brief_validator.go
+    - name: ValidateBriefs (action:new agent skip)
+      description: |-
+        If ALL of an agent's owned files have action:new, skip symbol checks for
+        that agent entirely. The current code sets found=true per file (skipping
+        one file at a time), which still checks symbols against non-new files.
+        The corrected logic: before the symbol-check loop, test whether
+        len(newFiles) == len(ownedFiles); if so, skip to line-reference checks
+        (which are also skipped for fully-new agents since those files don't exist).
+      definition: |
+        // Before symbol check loop in ValidateBriefs:
+        allNew := len(newFiles) > 0 && len(newFiles) == len(ownedFiles)
+        if allNew {
+            // Skip both symbol checks and line-reference checks.
+            // Agent is creating everything from scratch; nothing exists yet.
+            agentResults[agent.ID] = AgentBriefResult{
+                AgentID: agent.ID,
+                Passed:  true,
+                Issues:  nil,
+            }
+            continue
+        }
+      location: pkg/protocol/brief_validator.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## Context
+
+            You are fixing false positives in `ValidateBriefs` (file:
+            `pkg/protocol/brief_validator.go`). The validator currently produces
+            `symbol_missing` errors for three legitimate patterns: symbols being
+            deleted, symbols to be created (new files), and symbols from other
+            packages referenced for context. A 2-agent IMPL produced 32 false-positive
+            errors, making the output useless.
+
+            Repo root: `/Users/dayna.blackwell/workspace/code/scout-and-wave-go`
+
+            ## Files to modify
+
+            1. `pkg/protocol/brief_validator.go` — two targeted changes
+            2. `pkg/protocol/brief_validator_test.go` — four new test functions
+
+            ## Change 1: Skip fully-new agents in ValidateBriefs
+
+            In `ValidateBriefs`, inside the `for _, agent := range wave.Agents` loop,
+            AFTER building `newFiles` and `ownedFiles` (around line 90), add an
+            early-continue for agents where all owned files are action:new:
+
+            ```go
+            // If every owned file is action:new, skip symbol+line checks entirely.
+            // The agent is creating files from scratch; no symbols exist yet.
+            allNew := len(newFiles) > 0 && len(newFiles) == len(ownedFiles)
+            if allNew {
+                agentResults[agent.ID] = AgentBriefResult{
+                    AgentID: agent.ID,
+                    Passed:  true,
+                    Issues:  nil,
+                }
+                continue
+            }
+            ```
+
+            This replaces the current per-file short-circuit (`if newFiles[filePath] { found = true; break }`).
+            Remove that per-file short-circuit ONLY if the allNew check makes it redundant.
+            Actually, keep the per-file short-circuit as well — it handles mixed agents
+            (some new, some modify files). The allNew check is an additional optimization
+            for fully-new agents.
+
+            ## Change 2: Filter false-positive symbols in extractSymbols
+
+            In `extractSymbols`, apply three filters AFTER collecting all symbols from
+            regexes, BEFORE returning:
+
+            **Filter A — Package-qualified symbols:**
+            If a backtick-wrapped token contains a dot (e.g. `` `result.NewFatal` ``,
+            `` `fo.Action` ``), it refers to a symbol in another package. Skip it entirely.
+            Implementation: in `addSymbol`, before adding to the set, check if `s`
+            contains `.` — if so, return early without adding.
+
+            ```go
+            addSymbol := func(s string) {
+                s = strings.TrimSuffix(s, "()")
+                s = strings.TrimSuffix(s, "(")
+                // Skip package-qualified references (e.g. result.NewFatal, fo.Action).
+                if strings.Contains(s, ".") {
+                    return
+                }
+                if s != "" && !seen[s] {
+                    seen[s] = true
+                    symbols = append(symbols, s)
+                }
+            }
+            ```
+
+            **Filter B — Go keywords and common builtins:**
+            After all symbols are collected (before `sort.Strings`), filter out
+            identifiers that are Go language constructs. Define a package-level var:
+
+            ```go
+            var goKeywordsAndBuiltins = map[string]bool{
+                "error": true, "ctx": true, "err": true, "ok": true,
+                "func": true, "type": true, "const": true, "var": true,
+                "struct": true, "interface": true, "map": true, "chan": true,
+                "string": true, "int": true, "bool": true, "byte": true,
+                "rune": true, "nil": true, "true": true, "false": true,
+                "len": true, "cap": true, "make": true, "new": true,
+                "append": true, "copy": true, "close": true, "delete": true,
+                "panic": true, "recover": true, "print": true, "println": true,
+                "return": true, "range": true, "for": true, "if": true,
+                "else": true, "switch": true, "case": true, "default": true,
+                "break": true, "continue": true, "go": true, "defer": true,
+                "select": true, "import": true, "package": true,
+                "result": true, "context": true, "fmt": true,
+            }
+            ```
+
+            Then in `extractSymbols` before `sort.Strings(symbols)`:
+            ```go
+            var filtered []string
+            for _, s := range symbols {
+                if !goKeywordsAndBuiltins[s] {
+                    filtered = append(filtered, s)
+                }
+            }
+            symbols = filtered
+            ```
+
+            **Filter C — Deletion-context symbols:**
+            After all regexes run and before filter B, scan for symbols that appear
+            in a sentence that also contains a deletion verb. Split `taskText` into
+            sentences by `. ` and `\n`. For each sentence containing a deletion verb
+            (`"delete "`, `"remove "`, `"deleted "`, `"removing "`, `"deleting "`,
+            `"drop "`, `"Delete "`, `"Remove "`), extract all backtick symbols from
+            that sentence and add them to a `deletionSymbols` set. After collecting
+            all symbols, filter out any in `deletionSymbols`.
+
+            ```go
+            // Build deletion-context exclusion set.
+            deletionVerbs := []string{"delete ", "remove ", "deleted ", "removing ",
+                "deleting ", "drop ", "Delete ", "Remove "}
+            deletionSymbols := make(map[string]bool)
+            sentences := splitSentences(taskText)
+            for _, sentence := range sentences {
+                hasDeletion := false
+                for _, verb := range deletionVerbs {
+                    if strings.Contains(sentence, verb) {
+                        hasDeletion = true
+                        break
+                    }
+                }
+                if hasDeletion {
+                    for _, m := range reBacktickType.FindAllStringSubmatch(sentence, -1) {
+                        deletionSymbols[m[1]] = true
+                    }
+                    for _, m := range reBacktickFunc.FindAllStringSubmatch(sentence, -1) {
+                        sym := strings.TrimSuffix(m[1], "()")
+                        sym = strings.TrimSuffix(sym, "(")
+                        deletionSymbols[sym] = true
+                    }
+                }
+            }
+
+            // Apply deletion filter.
+            var afterDeletion []string
+            for _, s := range symbols {
+                if !deletionSymbols[s] {
+                    afterDeletion = append(afterDeletion, s)
+                }
+            }
+            symbols = afterDeletion
+            ```
+
+            Add a helper function `splitSentences` in `brief_validator.go`:
+
+            ```go
+            // splitSentences splits text into sentences for deletion-context detection.
+            // Splits on ". ", ".\n", and bare newlines.
+            func splitSentences(text string) []string {
+                // Normalize line endings, then split on sentence boundaries.
+                text = strings.ReplaceAll(text, ".\n", ". ")
+                parts := strings.Split(text, ". ")
+                var sentences []string
+                for _, p := range parts {
+                    for _, line := range strings.Split(p, "\n") {
+                        line = strings.TrimSpace(line)
+                        if line != "" {
+                            sentences = append(sentences, line)
+                        }
+                    }
+                }
+                return sentences
+            }
+            ```
+
+            Apply filters in this order inside `extractSymbols`:
+            1. Collect symbols via regexes (existing code, plus Filter A in `addSymbol`)
+            2. Build `deletionSymbols` set (Filter C) — uses the same regex vars
+            3. Apply deletion filter to `symbols`
+            4. Apply keyword filter to `symbols` (Filter B)
+            5. `sort.Strings(symbols)` and return
+
+            Note: `reBacktickType` and `reBacktickFunc` are used both in the symbol
+            collection loop and in the deletion-context loop. Compile them once at the
+            top of `extractSymbols` (they already are) and reuse.
+
+            ## Change 3: Update the per-file new-file handling (minor cleanup)
+
+            The existing per-file short-circuit at line ~103:
+            ```go
+            if newFiles[filePath] {
+                found = true
+                break
+            }
+            ```
+            Keep this as-is. It correctly handles mixed agents (agent owns both a new
+            file and an existing file). The allNew check added in Change 1 handles
+            fully-new agents before reaching this loop.
+
+            ## Tests to add in brief_validator_test.go
+
+            Add four new test functions. Do NOT modify existing tests.
+
+            **TestExtractSymbols_PackageQualifiedSkipped:**
+            ```go
+            func TestExtractSymbols_PackageQualifiedSkipped(t *testing.T) {
+                taskText := "Call `result.NewFatal` and `fo.Action` from the handler. Also use `ValidSymbol`."
+                symbols := extractSymbols(taskText)
+                for _, s := range symbols {
+                    if strings.Contains(s, ".") {
+                        t.Errorf("package-qualified symbol %q should be filtered out", s)
+                    }
+                }
+                found := false
+                for _, s := range symbols {
+                    if s == "ValidSymbol" {
+                        found = true
+                    }
+                }
+                if !found {
+                    t.Error("expected ValidSymbol (unqualified) to be retained")
+                }
+            }
+            ```
+
+            **TestExtractSymbols_GoKeywordsFiltered:**
+            ```go
+            func TestExtractSymbols_GoKeywordsFiltered(t *testing.T) {
+                taskText := "Use `error`, `ctx`, `err`, `string`, `bool` and `MyActualType`."
+                symbols := extractSymbols(taskText)
+                keywords := []string{"error", "ctx", "err", "string", "bool"}
+                for _, kw := range keywords {
+                    for _, s := range symbols {
+                        if s == kw {
+                            t.Errorf("keyword %q should be filtered out of symbols", kw)
+                        }
+                    }
+                }
+                found := false
+                for _, s := range symbols {
+                    if s == "MyActualType" {
+                        found = true
+                    }
+                }
+                if !found {
+                    t.Error("expected MyActualType to be retained after keyword filter")
+                }
+            }
+            ```
+
+            **TestExtractSymbols_DeletionContextSkipped:**
+            ```go
+            func TestExtractSymbols_DeletionContextSkipped(t *testing.T) {
+                taskText := "Delete `Errorf` and remove `WrapCode` from errors.go. Keep `ValidKeeper`."
+                symbols := extractSymbols(taskText)
+                for _, s := range symbols {
+                    if s == "Errorf" {
+                        t.Error("Errorf is in deletion context and should be skipped")
+                    }
+                    if s == "WrapCode" {
+                        t.Error("WrapCode is in deletion context and should be skipped")
+                    }
+                }
+                found := false
+                for _, s := range symbols {
+                    if s == "ValidKeeper" {
+                        found = true
+                    }
+                }
+                if !found {
+                    t.Error("expected ValidKeeper (not in deletion context) to be retained")
+                }
+            }
+            ```
+
+            **TestValidateBriefs_AllNewFilesSkipped:**
+            This tests the allNew agent skip in `ValidateBriefs`. Use a YAML with
+            two action:new files for one agent. The files do NOT exist on disk.
+            The agent's brief mentions symbols that don't exist anywhere.
+            Expect: no symbol_missing issues.
+
+            ```go
+            func TestValidateBriefs_AllNewFilesSkipped(t *testing.T) {
+                tmp := t.TempDir()
+
+                implContent := `title: All New Files Test
+            feature_slug: all-new-test
+            verdict: SUITABLE
+            test_command: go test ./...
+            lint_command: go vet ./...
+            repository: ` + tmp + `
+            file_ownership:
+              - file: pkg/newpkg/types.go
+                agent: D
+                wave: 1
+                action: new
+              - file: pkg/newpkg/handler.go
+                agent: D
+                wave: 1
+                action: new
+            waves:
+              - number: 1
+                agents:
+                  - id: D
+                    task: |
+                      Create ` + "`" + `NewService` + "`" + ` and ` + "`" + `BrandNewType` + "`" + ` in pkg/newpkg/types.go.
+                      Also add ` + "`" + `HandleRequest` + "`" + ` in pkg/newpkg/handler.go.
+                    files:
+                      - pkg/newpkg/types.go
+                      - pkg/newpkg/handler.go
+            `
+                implPath := filepath.Join(tmp, "IMPL-all-new.yaml")
+                if err := os.WriteFile(implPath, []byte(implContent), 0644); err != nil {
+                    t.Fatal(err)
+                }
+
+                ctx := t.Context()
+                result, err := ValidateBriefs(ctx, implPath)
+                if err != nil {
+                    t.Fatalf("ValidateBriefs returned error: %v", err)
+                }
+
+                agentD, ok := result.AgentResults["D"]
+                if !ok {
+                    t.Fatal("expected result for agent D")
+                }
+
+                for _, issue := range agentD.Issues {
+                    if issue.Check == "symbol_missing" {
+                        t.Errorf("unexpected symbol_missing for all-new-file agent: %+v", issue)
+                    }
+                }
+                if !agentD.Passed {
+                    t.Errorf("expected all-new-file agent to pass, issues: %+v", agentD.Issues)
+                }
+            }
+            ```
+
+            ## Verification gate
+
+            ```
+            go build ./pkg/protocol/...
+            go vet ./pkg/protocol/...
+            go test ./pkg/protocol/... -run TestValidateBriefs
+            go test ./pkg/protocol/... -run TestExtractSymbols
+            ```
+
+            All existing tests must continue to pass. The four new tests must pass.
+            Do not change severity levels or JSON output format.
+
+            ## Constraints
+
+            - Do not change `BriefValidationData`, `AgentBriefResult`, or `BriefIssue` struct fields
+            - Do not change the CLI output format of `sawtools validate-briefs`
+            - `goKeywordsAndBuiltins` must be a package-level `var` (not inside the function)
+              so it is compiled once
+            - `splitSentences` is a new unexported helper in `brief_validator.go`; do not
+              add it to `brief_validator_test.go`
+            - Import `strings` is already present; no new imports needed
+          files:
+            - pkg/protocol/brief_validator.go
+            - pkg/protocol/brief_validator_test.go
+          context_source: prepared-brief
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./pkg/protocol/...
+          required: true
+          repo: scout-and-wave-go
+        - type: lint
+          command: go vet ./pkg/protocol/...
+          required: true
+          repo: scout-and-wave-go
+        - type: test
+          command: go test ./pkg/protocol/... -run TestValidateBriefs
+          required: true
+          repo: scout-and-wave-go
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: |-
+            Filter C (deletion-context) splits on ". " and misses sentences ending with
+            punctuation other than period (e.g., "!" or "?"), leaving some deletion symbols
+            unflagged.
+          likelihood: low
+          impact: low
+          mitigation: |-
+            The common case is period or newline delimiters in brief text. The fix covers
+            the overwhelming majority. Edge cases can be addressed in a follow-up.
+        - scenario: |-
+            `goKeywordsAndBuiltins` contains "delete" — `delete` is a Go builtin but is
+            also a deletion verb used in Filter C logic. If an agent brief says
+            `delete(myMap, key)`, the symbol "delete" would be filtered by Filter B
+            before Filter C runs, but Filter C wouldn't see it either. No false positive;
+            no regression.
+          likelihood: low
+          impact: low
+          mitigation: |-
+            Filter order (C before B) means deletion-context detection runs on the raw
+            collected symbols before keyword filter. "delete" as a keyword is in Filter B,
+            which runs after C. The interaction is benign.
+        - scenario: |-
+            Mixed agent (some action:new, some action:modify) with symbols only in the
+            modify file. The allNew guard doesn't fire; per-file short-circuit correctly
+            skips new files. Existing symbols in modify files are still checked.
+          likelihood: medium
+          impact: low
+          mitigation: |-
+            The allNew guard is additive. The existing per-file short-circuit handles
+            mixed agents correctly. No regression expected; covered by existing
+            TestValidateBriefs_NewFileSkipped test.
+        - scenario: |-
+            A legitimate missing symbol coincidentally appears in a deletion sentence
+            (e.g., "Delete the old usage and add `MyNewSymbol`"). Filter C incorrectly
+            exempts MyNewSymbol.
+          likelihood: low
+          impact: medium
+          mitigation: |-
+            Filter C is conservative: deletion sentences are identified by verb presence.
+            Complex sentences mixing deletion and addition are uncommon in practice.
+            If needed, a follow-up can refine sentence segmentation to noun-phrase scope.
+state: "REVIEWED"
+injection_method: hook
