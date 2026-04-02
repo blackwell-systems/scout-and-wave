@@ -168,3 +168,5 @@ round-trip time by catching errors at source (~5 min saved per critic cycle).
 **Cross-repo support:** Handles multi-repo IMPLs via FileOwnership.Repo field.
 
 **Performance:** <2s for typical IMPL with 4-6 agents.
+- **validate-briefs**: completed 2026-04-02, 3 waves, 4 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-validate-briefs.yaml
