@@ -375,5 +375,5 @@ pre_mortem:
           mitigation: |-
             Replacement text in Change 1 explicitly includes the error message format block.
             Verification gate item 2 checks that PASS and ISSUES cases are present.
-state: SCOUT_PENDING
+state: "REVIEWED"
 injection_method: hook
