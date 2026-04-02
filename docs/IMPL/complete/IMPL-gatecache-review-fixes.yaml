@@ -1,0 +1,481 @@
+completion_date: "2026-04-02"
+title: 'pkg/gatecache Code Review: Result[T] Conformance and Code Quality Improvements'
+feature_slug: gatecache-review-fixes
+verdict: SUITABLE
+suitability_assessment: |
+  SUITABLE. The review identified 3 specific issues in pkg/gatecache (287 total lines,
+  80.6% test coverage). All issues are cleanly separable with disjoint file ownership:
+
+  1. Get returns (*CachedResult, bool) instead of Result[GetData] — non-conforming
+     return type that violates protocol standard for fallible operations
+  2. load/save use hardcoded error strings instead of error code constants
+  3. IsExpired has 75% coverage (uncovered edge case: TTL==0 path)
+
+  The package is small (2 files, 287 lines), well-tested (80.6% coverage), and has
+  clean dependencies. No dead code detected. All exported functions follow Result[T]
+  pattern except Get, which predates the Result[T] unification.
+
+  **Parallelization value check:**
+  - Build/test cycle: ~1.2s (fast)
+  - Files per agent: 1 file/agent (minimal implementation time)
+  - Agent independence: All agents in Wave 1 (fully parallel)
+  - Task complexity: Simple signature changes + test updates
+
+  Assessment: Low parallelization value due to fast cycle time and simple tasks.
+  Sequential implementation would take ~15 minutes; SAW overhead is ~10-12 minutes
+  (scout 3-4 min + agent execution 4-5 min + merge 2-3 min). Time savings: ~3-5 min
+  (20-30% faster).
+
+  Coordination value: The IMPL doc provides an audit trail for protocol conformance
+  fixes and enforces test coverage targets. This work is worth doing through SAW to
+  validate the review-to-IMPL workflow pattern established in autonomy-review,
+  config-package-review, and scaffoldval-review.
+
+  Time estimate:
+  - Scout: ~4 min
+  - Wave 1 execution: ~5 min (3 agents × 2 min avg, accounting for parallelism)
+  - Merge & verification: ~3 min
+  Total SAW time: ~12 min
+
+  Sequential baseline: ~15 min
+  Time savings: ~3 min (20% faster)
+
+  Recommendation: Proceed. Coordination value (protocol conformance enforcement,
+  test coverage audit) outweighs modest time savings.
+test_command: go test ./pkg/gatecache/...
+lint_command: go vet ./pkg/gatecache/...
+state: COMPLETE
+injection_method: hook
+
+quality_gates:
+  level: standard
+  gates:
+    - type: build
+      command: go build ./pkg/gatecache/...
+      required: true
+    - type: lint
+      command: go vet ./pkg/gatecache/...
+      required: true
+    - type: test
+      command: go test ./pkg/gatecache/...
+      required: true
+
+scaffolds: []
+
+file_ownership:
+  - file: pkg/gatecache/cache.go
+    agent: A
+    wave: 1
+    action: modify
+  - file: pkg/gatecache/cache_test.go
+    agent: B
+    wave: 1
+    action: modify
+  - file: pkg/result/codes.go
+    agent: C
+    wave: 1
+    action: modify
+
+interface_contracts:
+  - name: Get
+    description: |
+      Retrieves cached gate result. Currently returns (*CachedResult, bool) but
+      should return Result[GetData] for protocol conformance. This is a fallible
+      operation (cache miss, expiry) that must use Result[T] pattern.
+    definition: |
+      // Before:
+      func (c *Cache) Get(ctx context.Context, key CacheKey, gateType string) (*CachedResult, bool)
+
+      // After:
+      type GetData struct {
+          Result    CachedResult
+          FromCache bool
+      }
+      func (c *Cache) Get(ctx context.Context, key CacheKey, gateType string) result.Result[GetData]
+
+      // On cache miss or expiry:
+      return result.NewFailure[GetData]([]result.SAWError{
+          {Code: "CACHE_MISS", Message: "cache miss", Severity: "info"},
+      })
+
+      // On success:
+      return result.NewSuccess(GetData{Result: r, FromCache: true})
+    location: pkg/gatecache/cache.go:163
+
+  - name: load
+    description: |
+      Private function that uses hardcoded error strings. Must use error code
+      constants from pkg/result/codes.go for consistency with the codebase.
+    definition: |
+      // Current implementation uses:
+      return fmt.Errorf("gatecache: read cache file: %w", err)
+      return fmt.Errorf("gatecache: parse cache file: %w", err)
+
+      // Should use error codes (add to pkg/result/codes.go if needed):
+      // If reading cache file fails and file exists:
+      return fmt.Errorf("gatecache: %s: %w", result.CodeCacheLoadFailed, err)
+
+      // If parsing JSON fails:
+      return fmt.Errorf("gatecache: %s: %w", result.CodeCacheParseFailed, err)
+    location: pkg/gatecache/cache.go:245
+
+  - name: save
+    description: |
+      Private function that uses hardcoded error strings. Must use error code
+      constants from pkg/result/codes.go for consistency with the codebase.
+    definition: |
+      // Current implementation uses:
+      return fmt.Errorf("gatecache: create state dir: %w", err)
+      return fmt.Errorf("gatecache: marshal cache: %w", err)
+      return fmt.Errorf("gatecache: write cache file: %w", err)
+
+      // Should use error codes (add to pkg/result/codes.go if needed):
+      return fmt.Errorf("gatecache: %s: %w", result.CodeCacheSaveFailed, err)
+    location: pkg/gatecache/cache.go:269
+
+  - name: CodeCacheLoadFailed
+    description: Error code constant for cache file read/parse failures
+    definition: |
+      // Add to Cache error codes section (C001-C099 range, next available: C012)
+      const (
+          CodeCacheLoadFailed  = "C012_CACHE_LOAD_FAILED"
+          CodeCacheParseFailed = "C013_CACHE_PARSE_FAILED"
+          CodeCacheSaveFailed  = "C014_CACHE_SAVE_FAILED"
+          CodeCacheMiss        = "C015_CACHE_MISS"
+      )
+    location: pkg/result/codes.go
+
+waves:
+  - number: 1
+    agents:
+      - id: A
+        task: |
+          **Objective**: Update Cache.Get to return Result[GetData] and refactor load/save
+          to use error code constants.
+
+          **Files to modify**:
+          - pkg/gatecache/cache.go (lines 163-182 for Get, 245-286 for load/save)
+
+          **Changes**:
+
+          1. Add GetData struct before Get function (around line 62):
+             ```go
+             // GetData is returned on successful Get operations.
+             type GetData struct {
+                 Result    CachedResult
+                 FromCache bool
+             }
+             ```
+
+          2. Update Get signature and implementation:
+             ```go
+             // Change function signature from:
+             func (c *Cache) Get(ctx context.Context, key CacheKey, gateType string) (*CachedResult, bool)
+
+             // To:
+             func (c *Cache) Get(ctx context.Context, key CacheKey, gateType string) result.Result[GetData]
+
+             // Update implementation:
+             func (c *Cache) Get(ctx context.Context, key CacheKey, gateType string) result.Result[GetData] {
+                 c.mu.RLock()
+                 defer c.mu.RUnlock()
+
+                 h := hashKey(key)
+                 inner, ok := c.entries[h]
+                 if !ok {
+                     return result.NewFailure[GetData]([]result.SAWError{
+                         {Code: result.CodeCacheMiss, Message: "cache miss: key not found", Severity: "info"},
+                     })
+                 }
+                 r, ok := inner[gateType]
+                 if !ok {
+                     return result.NewFailure[GetData]([]result.SAWError{
+                         {Code: result.CodeCacheMiss, Message: fmt.Sprintf("cache miss: gate type %q not found", gateType), Severity: "info"},
+                     })
+                 }
+                 // Populate TTL for expiry check
+                 r.TTL = c.ttl
+                 if r.IsExpired() {
+                     return result.NewFailure[GetData]([]result.SAWError{
+                         {Code: result.CodeCacheMiss, Message: "cache miss: entry expired", Severity: "info"},
+                     })
+                 }
+                 return result.NewSuccess(GetData{Result: r, FromCache: true})
+             }
+             ```
+
+          3. Update load function to use error codes (lines 245-265):
+             ```go
+             func (c *Cache) load(ctx context.Context) error {
+                 if err := ctx.Err(); err != nil {
+                     return fmt.Errorf("%s: %w", result.CodeCacheLoadFailed, err)
+                 }
+                 path := filepath.Join(c.stateDir, cacheFileName)
+                 data, err := os.ReadFile(path)
+                 if err != nil {
+                     if os.IsNotExist(err) {
+                         return nil // No cache file yet; that's fine
+                     }
+                     return fmt.Errorf("%s: read cache file: %w", result.CodeCacheLoadFailed, err)
+                 }
+                 var cf cacheFile
+                 if err := json.Unmarshal(data, &cf); err != nil {
+                     return fmt.Errorf("%s: parse cache file: %w", result.CodeCacheParseFailed, err)
+                 }
+                 if cf.Entries != nil {
+                     c.entries = cf.Entries
+                 }
+                 return nil
+             }
+             ```
+
+          4. Update save function to use error codes (lines 269-286):
+             ```go
+             func (c *Cache) save(ctx context.Context) error {
+                 if err := ctx.Err(); err != nil {
+                     return fmt.Errorf("%s: %w", result.CodeCacheSaveFailed, err)
+                 }
+                 if err := os.MkdirAll(c.stateDir, 0755); err != nil {
+                     return fmt.Errorf("%s: create state dir: %w", result.CodeCacheSaveFailed, err)
+                 }
+                 cf := cacheFile{Entries: c.entries}
+                 data, err := json.MarshalIndent(cf, "", "  ")
+                 if err != nil {
+                     return fmt.Errorf("%s: marshal cache: %w", result.CodeCacheSaveFailed, err)
+                 }
+                 path := filepath.Join(c.stateDir, cacheFileName)
+                 if err := os.WriteFile(path, data, 0644); err != nil {
+                     return fmt.Errorf("%s: write cache file: %w", result.CodeCacheSaveFailed, err)
+                 }
+                 return nil
+             }
+             ```
+
+          **Interfaces**: GetData struct, updated Get signature.
+
+          **Tests**: Agent B will update all Get call sites in tests.
+
+          **Verification gate**:
+          ```bash
+          cd /Users/dayna.blackwell/workspace/code/scout-and-wave-go
+          go build ./pkg/gatecache/... && \
+          go vet ./pkg/gatecache/... && \
+          go test ./pkg/gatecache/... -run TestCache_PutGet
+          ```
+
+          **Constraints**:
+          - Do NOT modify any other functions (BuildKey, BuildKeyForGate, Put, Invalidate)
+          - Do NOT change CachedResult struct
+          - Do NOT modify test files (Agent B owns all test changes)
+
+      - id: B
+        task: |
+            **Objective**: Update all test call sites for Cache.Get to use Result[GetData]
+            pattern and add coverage for IsExpired TTL==0 edge case.
+
+            **Files to modify**:
+            - pkg/gatecache/cache_test.go (all tests calling Get)
+
+            **Changes**:
+
+            1. Update all Get call sites (appears in 11 test functions):
+
+               Change from:
+               ```go
+               got, ok := c.Get(ctx, key, "build")
+               if !ok {
+                   t.Fatal("expected cache hit, got miss")
+               }
+               if got.GateType != "build" { ... }
+               ```
+
+               To:
+               ```go
+               getResult := c.Get(ctx, key, "build")
+               if !getResult.IsSuccess() {
+                   t.Fatalf("expected cache hit, got miss: %v", getResult.Errors)
+               }
+               got := getResult.GetData()
+               if got.Result.GateType != "build" { ... }
+               if !got.FromCache {
+                   t.Error("expected FromCache=true")
+               }
+               ```
+
+               Tests to update:
+               - TestCache_PutGet (lines 39-54)
+               - TestCache_TTLExpiry (lines 103-106)
+               - TestCache_TTLNotExpired (lines 125-131)
+               - TestCache_Invalidate (lines 159-161)
+               - TestCache_Persistence (lines 233-248)
+               - TestCache_MultipleGateTypes (lines 274-283)
+               - TestCache_CommandDifferentiation (lines 413-418)
+               - TestCacheThreadSafety (lines 505-509)
+               - TestConcurrentPut (lines 578-590)
+
+            2. Add test for IsExpired TTL==0 edge case (insert after TestCache_TTLNotExpired):
+               ```go
+               func TestCache_IsExpiredWithZeroTTL(t *testing.T) {
+                   // When CachedResult.TTL is 0, IsExpired should fall back to DefaultTTL
+                   r := &CachedResult{
+                       TTL:      0,
+                       CachedAt: time.Now().Add(-10 * time.Minute), // Older than DefaultTTL (5 min)
+                   }
+                   if !r.IsExpired() {
+                       t.Error("expected IsExpired=true when TTL=0 and age > DefaultTTL")
+                   }
+
+                   // Not expired if age < DefaultTTL
+                   r2 := &CachedResult{
+                       TTL:      0,
+                       CachedAt: time.Now().Add(-2 * time.Minute), // Younger than DefaultTTL
+                   }
+                   if r2.IsExpired() {
+                       t.Error("expected IsExpired=false when TTL=0 and age < DefaultTTL")
+                   }
+               }
+               ```
+
+            3. Add test for GetData.FromCache field:
+               ```go
+               func TestCache_GetData_FromCacheField(t *testing.T) {
+                   ctx := context.Background()
+                   dir := t.TempDir()
+                   c := New(ctx, dir, DefaultTTL)
+
+                   key := CacheKey{HeadCommit: "abc123"}
+                   r := CachedResult{GateType: "build", Passed: true}
+
+                   putResult := c.Put(ctx, key, "build", r)
+                   if putResult.IsFatal() {
+                       t.Fatalf("Put failed: %v", putResult.Errors)
+                   }
+
+                   getResult := c.Get(ctx, key, "build")
+                   if !getResult.IsSuccess() {
+                       t.Fatalf("Get failed: %v", getResult.Errors)
+                   }
+                   data := getResult.GetData()
+                   if !data.FromCache {
+                       t.Error("expected FromCache=true after successful Get")
+                   }
+               }
+               ```
+
+            **Interfaces**: Consumes GetData struct from Agent A.
+
+            **Tests**: Run full test suite to verify all call sites updated correctly.
+
+            **Verification gate**:
+            ```bash
+            cd /Users/dayna.blackwell/workspace/code/scout-and-wave-go
+            go build ./pkg/gatecache/... && \
+            go vet ./pkg/gatecache/... && \
+            go test ./pkg/gatecache/... -cover
+            ```
+
+            **Constraints**:
+            - Do NOT modify cache.go (Agent A owns implementation changes)
+            - Update ONLY test call sites for Get — do not change other test functions
+            - Target coverage: ≥82% (from current 80.6%)
+
+      - id: C
+        task: |
+            **Objective**: Add cache error code constants to pkg/result/codes.go.
+
+            **Files to modify**:
+            - pkg/result/codes.go (Collision error codes section, lines 273-285)
+
+            **Changes**:
+
+            1. Add cache error codes after existing collision codes (after line 285):
+               ```go
+               // Collision error codes (C001-C099)
+               const (
+                   CodeCollisionLoadManifestFailed = "C001_LOAD_MANIFEST_FAILED"
+                   CodeCollisionInvalidWave        = "C002_INVALID_WAVE"
+                   CodeCollisionGetFilesFailed     = "C003_GET_FILES_FAILED"
+                   CodeCollisionExtractTypesFailed = "C004_EXTRACT_TYPES_FAILED"
+                   CodeCollisionGitDiffFailed      = "C005_GIT_DIFF_FAILED"
+                   CodeCollisionParseFailed        = "C006_PARSE_FAILED"
+                   CodeCollisionKeyParseFailed     = "C007_KEY_PARSE_FAILED"
+                   CodeCollisionGitShowFailed      = "C008_GIT_SHOW_FAILED"
+                   CodeCollisionContextCancelled   = "C009_CONTEXT_CANCELLED"
+                   CodeCollisionBranchNotFound     = "C010_BRANCH_NOT_FOUND"
+                   CodeCollisionInvalidInput       = "C011_INVALID_INPUT"
+                   // Cache error codes
+                   CodeCacheLoadFailed  = "C012_CACHE_LOAD_FAILED"
+                   CodeCacheParseFailed = "C013_CACHE_PARSE_FAILED"
+                   CodeCacheSaveFailed  = "C014_CACHE_SAVE_FAILED"
+                   CodeCacheMiss        = "C015_CACHE_MISS"
+               )
+               ```
+
+            2. Update package comment to document cache codes (lines 1-16):
+               Add after existing C001-C099 line:
+               ```
+               C001-C011: Collision detection errors
+               C012-C015: Cache errors (load, parse, save, miss)
+               ```
+
+            **Interfaces**: Provides error code constants for Agent A.
+
+            **Tests**: No test changes needed (constants only).
+
+            **Verification gate**:
+            ```bash
+            cd /Users/dayna.blackwell/workspace/code/scout-and-wave-go
+            go build ./pkg/result/... && \
+            go vet ./pkg/result/... && \
+            grep -q "CodeCacheMiss" pkg/result/codes.go
+            ```
+
+            **Constraints**:
+            - Add constants ONLY to Collision section (C001-C099 range)
+            - Use next available codes: C012, C013, C014, C015
+            - Do NOT modify any other sections of codes.go
+            - Follow existing naming convention: Code<Domain><Action> pattern
+
+pre_mortem:
+  overall_risk: low
+  rows:
+    - scenario: Get callers in pkg/protocol/baseline_gates.go not updated
+      likelihood: medium
+      impact: high
+      mitigation: |
+        pkg/protocol is outside wave agent scope. Integration will fail at post-merge
+        verification. Run grep before merge: `grep -n "\.Get(ctx" pkg/protocol/*.go`
+        to identify cascade candidates. If found, add integration connector or wave 2.
+
+    - scenario: Error code constants conflict with existing codes
+      likelihood: low
+      impact: medium
+      mitigation: |
+        Agent C uses next available codes in C001-C099 range (C012-C015). Pre-wave
+        validation will catch duplicate constant names if they exist.
+
+    - scenario: Test coverage target not met (stays at 80.6% instead of ≥82%)
+      likelihood: low
+      impact: low
+      mitigation: |
+        Agent B adds 2 new tests (IsExpired TTL==0 edge case, GetData.FromCache field).
+        Coverage should increase to ~82-85%. Post-merge gate enforces minimum.
+
+known_issues:
+  - title: "validate_cmd.go calls GetData() without checking Result success"
+    description: |
+      cmd/sawtools/validate_cmd.go:59 calls res.GetData() without first checking
+      if res.IsSuccess(). When FullValidate returns a failure Result (e.g., YAML
+      parse error), calling GetData() on nil Data causes a panic:
+      
+      panic: GetData called on Result with nil Data
+      
+      This is a dogfooding error found during gatecache-review-fixes scout phase.
+      The validate command is unusable when the IMPL doc has any parse errors.
+    severity: high
+    workaround: |
+      Use Python YAML validation or manual review for syntax errors. The bug does
+      not affect valid IMPL docs that pass FullValidate.
+    discovered_during: gatecache-review-fixes scout phase (2026-04-01)
+    affected_files:
+      - cmd/sawtools/validate_cmd.go
