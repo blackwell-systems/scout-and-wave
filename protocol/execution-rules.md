@@ -1972,10 +1972,12 @@ time. However, this is a late failure — E45 exists to prevent it proactively.
 
 1. **Scout-time (primary):** During dependency analysis, Scout scans for `*_test.go` files that reference changed interfaces:
    - For each interface contract with signature change keywords ("migrate", "update signature", "change return type")
-   - Run: `find <package-dir> -name "*_test.go" -exec grep -l "InterfaceName" {} \;`
-   - Assign orphaned test files to interface-changing agent OR create dedicated test-update agent
+   - Run: `sawtools check-callers "<InterfaceName>" --repo-dir <repo-path>` (returns JSON including test files)
+   - Filter the output for `_test.go` files; assign unowned test files to the interface-changing agent
 
 2. **Pre-wave validation (E35 extension):** `sawtools pre-wave-validate` runs E35 detection, which includes test cascade detection via `detectTestCascades()`. Reports orphaned test files as E35Gap entries with CalledFrom pointing to test file locations.
+   As of E46, pre-wave-validate also runs Step 3: `check-test-cascade`, which performs a whole-repo
+   scan for test files calling changed symbols. Exit 1 if any orphaned test callers are found.
 
 3. **Post-merge verification (future work):** Documented as third detection layer, but not implemented in this IMPL. Future enhancement: add `VerifyTestCompilation()` to finalize-wave workflow to run `go test -compile-only` and catch missed test cascades before quality gates.
 
@@ -2024,3 +2026,9 @@ time. However, this is a late failure — E45 exists to prevent it proactively.
 - E42: SubagentStop Validation — SubagentStop lifecycle hook validates protocol obligations before agent session closes; checks I1 ownership, I5 commit, and completion reports for wave agents; agent-type-specific validation matrix; exit 2 blocks completion — see also I1, I4, I5, E3, E21, E40
 - E45: Shared Data Structure Scaffold Detection — Scout scans agent tasks and file ownership to detect types referenced by 2+ agents; emits scaffold entries before Wave 1; prevents duplicate definitions and merge-time I1 violations — see also I2, E11, E22, `procedures.md` (Scout Agent step 10), `message-formats.md` (Scaffolds Section Format)
 - E46: Test File Cascade Detection — Scout and pre-wave validation detect test files referencing changed interfaces; test files assigned to same wave as interface changes to prevent orphaned tests; three detection layers (Scout-time, E35 extension, post-merge verification) — see also E35, E3, `procedures.md` (Scout Agent step 4)
+- E47: Scout Automation Gates — four new sawtools commands replace Scout manual grep and
+  guessing: `check-callers` (whole-repo caller lookup including test files),
+  `list-error-ranges` (occupied code ranges in pkg/result/codes.go),
+  `suggest-wave-structure` (wave ordering safety for interface migrations),
+  `check-test-cascade` (pre-flight orphaned test caller detection, runs as Step 3
+  of `sawtools pre-wave-validate`). — see also E35, E37, E16

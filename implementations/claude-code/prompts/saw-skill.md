@@ -110,7 +110,10 @@ See `references/impl-targeting.md` for discovery commands, resolution logic, aut
 **Scout flow** (no IMPL doc exists):
 1. Launch Scout agent (`subagent_type: scout`, `run_in_background: true`, prompt = feature description). Inform user.
 2. When Scout completes, read `docs/IMPL/IMPL-<feature-slug>.yaml`. Record injection method: `sawtools set-injection-method "<path>" --method hook`.
-3. **E16+E35: Validate IMPL doc.** `sawtools pre-wave-validate "<path>" --wave 1 --fix`. Exit 0 = proceed. Exit 1 = send errors to Scout (resume), retry once. Failure = BLOCKED. See `references/pre-wave-validation.md` for E16 (structure) and E35 (caller detection) details.
+3. **E16+E35+TestCascade: Validate IMPL doc.** `sawtools pre-wave-validate "<path>" --wave 1 --fix`.
+   Exit 0 = proceed. Exit 1 = send errors to Scout (resume), retry once. Failure = BLOCKED.
+   Now includes Step 3: test cascade check — verifies that *_test.go files calling changed
+   symbols are assigned to agents. See `references/pre-wave-validation.md`.
 4. **Critic Gate (E37).** Check trigger conditions (3+ agents OR 2+ repos). If triggered, launch critic, read verdict. PASS = proceed. ISSUES (error) = correct and re-run. See `references/pre-wave-validation.md` § E37.
 5. Report suitability verdict, wave structure, file ownership, interface contracts, Scaffolds. Ask user to review.
 6. **Scaffold Agent (conditional):** If Scaffolds has `Status: pending`, launch Scaffold Agent (`[SAW:scaffold:<slug>]`). If `FAILED`, stop. If `committed`, proceed.
