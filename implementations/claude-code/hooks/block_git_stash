@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# PreToolUse:Bash hook: block git stash in wave agent worktrees
+#
+# Wave agents working in parallel cannot stash. Stashing hides uncommitted work
+# from the finalize-wave merge verification, risks losing work on worktree cleanup,
+# and defeats the I5 invariant (commit before reporting).
+#
+# If you need to pause: commit with --no-verify (parallel wave agents are explicitly
+# permitted to skip pre-commit hooks when their work depends on another agent's
+# uncommitted changes that land on merge).
+
+set -euo pipefail
+
+input=$(cat)
+tool_name=$(echo "$input" | jq -r '.tool_name // empty')
+agent_type=$(echo "$input" | jq -r '.agent_type // empty')
+command=$(echo "$input" | jq -r '.tool_input.command // empty')
+
+# Only enforce on wave-agent (this hook is not relevant for other agent types)
+if [[ "$agent_type" != "wave-agent" ]]; then
+    echo '{"decision":"approve"}'
+    exit 0
+fi
+
+# Only enforce on Bash calls
+if [ "$tool_name" != "Bash" ]; then
+    echo '{"decision":"approve"}'
+    exit 0
+fi
+
+# Block any git stash invocation (stash push, stash pop, stash list, etc.)
+if echo "$command" | grep -qE '(^|&&|\|)\s*git\s+(-C\s+\S+\s+)?stash(\s|$)'; then
+    echo '{"decision":"block","reason":"BLOCKED: git stash is not permitted in wave agent worktrees. Wave agents must commit (use --no-verify if parallel-wave pre-commit fails) or report blocked status. Stashing hides work from merge verification and risks loss on worktree cleanup."}'
+    exit 0
+fi
+
+echo '{"decision":"approve"}'

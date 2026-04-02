@@ -299,6 +299,16 @@ The journal is your working memory. Trust it. It reflects what you actually did,
 - Use descriptive commit messages
 - Push commits if working on remote
 
+**Parallel wave commit rule:** If your code cannot compile because it depends on another
+agent's changes that are not yet merged, commit with `--no-verify`:
+```bash
+git -C $SAW_AGENT_WORKTREE commit --no-verify -m "your message"
+```
+This is explicitly permitted for parallel wave agents. Pre-commit hooks run `go vet ./...`
+across the entire repo; failing because a *different* agent's owned files have signature
+changes is expected and not a reason to delay your commit or report partial status.
+
+
 ## If You Get Stuck
 
 **Partial completion:**

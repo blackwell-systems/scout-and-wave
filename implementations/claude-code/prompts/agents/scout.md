@@ -377,14 +377,17 @@ They are NOT the structure of your output. Your output is PURE YAML following th
    Algorithm:
    1. For each interface contract with keywords "migrate", "update signature",
       "change return type", or "modify interface":
-      - Extract interface/type name from contract definition (e.g., "LockFileParser")
-      - Determine file where interface is defined (from `location` field)
-      - Find package directory of that file
-   2. Search for test files in same package:
+      - Extract the function/method name being changed (e.g., `Cache.Get`, `Parse`)
+      - Determine file where the symbol is defined (from `location` field)
+   2. Search the **entire repo** for ALL callers — production code AND test files:
       ```bash
-      find <package-dir> -name "*_test.go" -exec grep -l "InterfaceName" {} \;
+      grep -rn "SymbolName\|\.MethodName(" . --include="*.go"
       ```
-   3. For each test file found:
+      **CRITICAL: Do NOT limit search to `<package-dir>`.** Callers in other packages
+      (e.g., `pkg/protocol/gates_test.go` calling `pkg/gatecache/Cache.Get`) are the
+      most commonly missed category. Test files in unrelated packages are invisible
+      to a package-scoped search.
+   3. For each file found (production OR test, any package):
       - Check if file is in `file_ownership` for same wave as interface change
       - If NOT in ownership: either assign to interface-changing agent OR
         create dedicated test-update agent
@@ -392,13 +395,20 @@ They are NOT the structure of your output. Your output is PURE YAML following th
         post-merge compilation failures
    4. Document findings in interface contract notes or Pre-Mortem risk section
 
-   **Example from deps-review-fixes post-mortem:**
+   **Example 1 (deps-review-fixes):**
    Agent B changed LockFileParser.Parse signature from `([]PackageInfo, error)`
    to `result.Result[[]PackageInfo]`. Four test files called parser.Parse():
    cargolock_test.go, gosum_test.go, packagelock_test.go, poetrylock_test.go.
    None were in file_ownership. Post-merge: 30 min manual fixes. Scout should
-   have detected these via grep and assigned them to Agent B or created Agent I
-   to update all test files.
+   have detected these via grep and assigned them to Agent B or created Agent I.
+
+   **Example 2 (gatecache-review):**
+   Agent A changed `Cache.Get` return type from `(*CachedResult, bool)` to
+   `result.Result[GetData]`. Scout searched `pkg/gatecache/` and found
+   `pkg/protocol/gates.go:136` — but missed `pkg/protocol/gates_test.go:296`
+   which also called `cache.Get()`. The test was in a different package. A
+   whole-repo grep (`grep -rn "cache.Get\|\.Get(" . --include="*.go"`) would
+   have found it. Required manual E21A baseline fix during wave execution.
 
    **When to skip:** If interface change is additive-only (new method added,
    existing signatures unchanged), test cascade check is not needed — existing

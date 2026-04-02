@@ -134,6 +134,13 @@ site of Z"):
   existing callers), skip this check for that agent.
 This check prevents the most common scout gap: identifying N callers but missing N+1.
 
+### Check 10: result_code_semantics
+For any agent brief that references `result.Result[T]` or uses the `.Code` field:
+- Verify that comparisons to `.Code` only use the top-level result codes: `"SUCCESS"`, `"PARTIAL"`, `"FATAL"`.
+- If the brief shows a pattern like `getResult.Code == "SOME_ERROR_CODE"` where the value is anything other than those three, severity: error — the agent will compare the wrong field. The error code lives in `getResult.Errors[0].Code`, not `getResult.Code`.
+- Similarly flag `IsFatal()` being used to assert a condition is "non-fatal" when the result was created with `NewFailure` (which always sets Code = "FATAL"). `NewFailure` with `NewWarning` errors is still IsFatal() = true.
+Skip this check for agents that don't interact with the result package.
+
 ### Check 9: i1_disjoint_ownership
 For each wave in the IMPL doc, verify that no file appears in file_ownership with multiple agent IDs for the same wave number:
 - Build a map of (wave, file) → list of agent IDs

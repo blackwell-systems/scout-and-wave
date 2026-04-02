@@ -42,6 +42,7 @@ HOOK_SCRIPTS=(
   "inject_bash_cd"
   "validate_write_paths"
   "verify_worktree_compliance"
+  "block_git_stash"
 )
 
 # Core skill files: source (relative to PROMPTS_DIR) -> target name
@@ -268,6 +269,7 @@ install_claude_code() {
   add_hook "PreToolUse" "Agent" "${BIN_DIR}/validate_agent_launch" "H5 pre-launch validation"
   add_hook "PreToolUse" "Bash" "${BIN_DIR}/inject_bash_cd" "E43 Bash cd injection"
   add_hook "PreToolUse" "Write|Edit" "${BIN_DIR}/validate_write_paths" "E43 Write path validation"
+  add_hook "PreToolUse" "Bash" "${BIN_DIR}/block_git_stash" "I5 no-stash enforcement"
 
   # PostToolUse
   add_hook "PostToolUse" "Write" "${BIN_DIR}/validate_impl_on_write" "E16 IMPL validation"
@@ -351,12 +353,13 @@ install_claude_code() {
     exit 1
   }
 
-  echo "Installation complete (Claude Code). 16 hooks active:"
+  echo "Installation complete (Claude Code). 17 hooks active:"
   echo ""
   echo "  SubagentStart:     inject_worktree_env        (E43 env var injection)"
   echo "  SubagentStart:     validate_agent_isolation   (E12 isolation verification)"
   echo "  PreToolUse:        inject_bash_cd             (E43 Bash cd injection)"
   echo "  PreToolUse:        validate_write_paths       (E43 Write path validation)"
+  echo "  PreToolUse:        block_git_stash            (I5 no-stash enforcement)"
   echo "  PreToolUse:        check_scout_boundaries     (I6 Scout write boundaries)"
   echo "  PreToolUse:        block_claire_paths         (.claire path blocker)"
   echo "  PreToolUse:        check_wave_ownership       (I1 file ownership enforcement)"
