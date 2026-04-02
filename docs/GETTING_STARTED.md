@@ -28,6 +28,19 @@ Direct command-line access to every SAW operation. Build automation pipelines, s
 
 **Best for:** CI/CD pipelines, scripting, power users who want fine-grained control.
 
+### Scout Automation Commands
+
+These four commands replace manual grep and guessing during Scout planning:
+
+| Command | Purpose |
+|---------|---------|
+| `sawtools check-callers <symbol>` | Find all call sites of a function/method across the repo (including test files) |
+| `sawtools list-error-ranges` | List all allocated error code ranges from `pkg/result/codes.go` |
+| `sawtools suggest-wave-structure <impl-path>` | Validate that callers of changed interfaces are in correct downstream waves |
+| `sawtools check-test-cascade <impl-path>` | Pre-flight gate: verify test files calling changed symbols are assigned to agents |
+
+`check-test-cascade` runs automatically as Step 3 of `sawtools pre-wave-validate`.
+
 ## Quick Decision
 
 ```
