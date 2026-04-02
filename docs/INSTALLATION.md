@@ -468,7 +468,13 @@ The installer supports multiple platforms via flags:
 | `./install.sh --claude-code` | `~/.claude/skills/saw/` | `~/.local/bin/` | Registers in `settings.json` + Agent permission |
 | `./install.sh --generic` | `~/.agents/skills/saw/` | `~/.local/bin/` | None (manual registration) |
 
-**`sawtools` works on any platform** -- it's a standalone Go binary that manages git worktrees, validates IMPL docs, merges branches, and runs quality gates. No LLM API calls.
+**`sawtools` works on any platform** -- it's a standalone Go binary that manages git worktrees, validates IMPL docs, merges branches, and runs quality gates. No LLM API calls. Key capabilities include:
+
+- Worktree management: `prepare-wave`, `finalize-wave`, `create-worktree`
+- Validation: `pre-wave-validate`, `verify-install`, `validate-impl`
+- Configuration: `init`, `set-completion`, `advance-state`
+- Scout automation: `check-callers`, `list-error-ranges`, `suggest-wave-structure`,
+  and `check-test-cascade` replace manual grep during planning
 
 **The orchestrator prompt and hooks are platform-specific.** The `/saw` skill prompt is written for Claude Code's skill system. The hook scripts use a JSON stdin/stdout protocol that can be adapted to other platforms' hook systems (Gemini CLI's `BeforeAgent`, Cursor's `beforeSubmitPrompt`, etc.). Use `--generic` to install the scripts, then register them in your platform's configuration.
 
