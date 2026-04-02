@@ -230,6 +230,7 @@ waves:
             No build or test command is needed. This is a documentation-only change.
           files:
             - implementations/claude-code/prompts/agents/critic-agent.md
+      base_commit: 0e56ee535439777ef56384584ce956fc9494f10f
     - number: 2
       agents:
         - id: B
@@ -337,6 +338,15 @@ quality_gates:
         - type: custom
           command: 'echo ''docs-only: no build/test/lint required'''
           required: false
+completion_reports:
+    A:
+        status: complete
+        branch: saw/critic-improvements/wave1-agent-A
+        commit: 79058b0
+        files_changed:
+            - implementations/claude-code/prompts/agents/critic-agent.md
+        verification: PASS
+        notes: 'All 8 changes applied and verified. No build/test required (docs-only change). Verification checklist: (1) PASS verdict clarification present, (2) set-critic-review comment present, (3) Check 2 has all 3 filter paragraphs in correct order, (4) Check 5 scope filter present, (5) Check 8 test vs non-test severity split present, (6) Step 2 parallelism advisory present.'
 pre_mortem:
     overall_risk: low
     rows:
@@ -375,5 +385,5 @@ pre_mortem:
           mitigation: |-
             Replacement text in Change 1 explicitly includes the error message format block.
             Verification gate item 2 checks that PASS and ISSUES cases are present.
-state: "REVIEWED"
+state: REVIEWED
 injection_method: hook
