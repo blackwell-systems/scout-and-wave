@@ -180,3 +180,5 @@ round-trip time by catching errors at source (~5 min saved per critic cycle).
   - IMPL doc: docs/IMPL/complete/IMPL-suggest-wave-structure-gate.yaml
 - **validate-briefs-false-positive-fix**: completed 2026-04-02, 1 waves, 1 agents
   - IMPL doc: docs/IMPL/complete/IMPL-validate-briefs-false-positive-fix.yaml
+- **enhanced-resume-detection**: completed 2026-04-02, 3 waves, 7 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-enhanced-resume-detection.yaml

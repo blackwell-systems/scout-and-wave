@@ -1,0 +1,821 @@
+completion_date: "2026-04-02"
+title: Enhanced Resume Detection with Failure Classification and Recovery Guidance
+feature_slug: enhanced-resume-detection
+verdict: SUITABLE
+suitability_assessment: |
+    ## Suitability Assessment
+
+    **1. File decomposition:** ✅ PASS
+    Work spans 8 distinct files across 3 packages (resume, retry, protocol types).
+    Each file has clear ownership boundaries:
+    - pkg/resume/detect.go — Session detection (extend SessionState)
+    - pkg/resume/recovery.go — NEW: Recovery step generation logic
+    - pkg/retry/classify.go — Error classification (extend beyond 5 types to 10+)
+    - pkg/retry/context.go — NEW: Structured retry context builder
+    - pkg/protocol/types.go — Add RecoveryStep, FailureCategory types
+    - cmd/sawtools/resume_detect_cmd.go — Wire new fields into JSON output
+    - cmd/sawtools/build_retry_context_cmd.go — Extend with recovery steps
+    - pkg/builddiag/diagnose.go — Enhance with actionable command generation
+
+    No two agents require conflicting modifications to the same file.
+
+    **2. Investigation-first items:** ✅ PASS
+    No root cause analysis needed. Feature extends existing detection/classification
+    infrastructure with well-defined enhancements. All interfaces are discoverable
+    from existing code (SessionState, RetryAttempt, ErrorClass).
+
+    **3. Interface discoverability:** ✅ PASS
+    All cross-agent interfaces are defined before implementation:
+    - RecoveryStep struct (protocol types) — consumed by resume and retry packages
+    - FailureCategory enum — extends ErrorClass, consumed by classify.go
+    - BuildRecoverySteps(SessionState) []RecoveryStep — called by resume-detect
+    - ClassifyFailureDetailed(CompletionReport) FailureCategory — called by context builder
+
+    **4. Pre-implementation status check:**
+    Existing functionality (baseline):
+    - SessionState.SuggestedAction exists (string, free-form)
+    - ErrorClass has 5 categories (import, type, test, build, lint, unknown)
+    - RetryAttempt.SuggestedFixes exists ([]string, generic advice)
+    - builddiag package has language-specific pattern matching
+
+    Enhancement scope (net new):
+    - RecoverySteps field ([]RecoveryStep with command + reason + priority)
+    - FailureCategory with 10+ granular types (network_error, rate_limit, worktree_isolation, git_conflict, contract_violation, etc.)
+    - Actionable sawtools commands in recovery steps ("sawtools diagnose-build-failure <path>", "sawtools check-deps <impl>", etc.)
+    - Structured retry context (what_worked, what_changed, suggested_fix_approach)
+
+    All baseline functionality remains unchanged; new fields are additive.
+
+    **5. Parallelization value check:** ✅ HIGH VALUE
+    - Build/test cycle: ~20s (go test ./... -timeout 120s across 34 packages)
+    - 3 waves with 2-3 agents each (8 agents total)
+    - Agents are largely independent (Wave 1: protocol types; Wave 2: resume+retry consumers; Wave 3: CLI wiring)
+    - Multi-wave chain reduces parallelization benefit slightly (waves run sequentially), but Wave 2's 3 agents benefit from parallel execution
+
+    **Estimated times:**
+    - Scout phase: ~8 min (dependency mapping, interface contracts, IMPL doc)
+    - Agent execution: ~25 min (8 agents × ~5 min avg, 2 sequential waves = 15 min + 10 min)
+    - Merge & verification: ~4 min
+    - Total SAW time: ~37 min
+
+    Sequential baseline: ~50 min (8 agents × ~6 min avg sequential time with context switching)
+    Time savings: ~13 min (26% faster)
+
+    Recommendation: Clear speedup. Coordination value also high — 8 files across 3 packages
+    benefit from explicit interface contracts to prevent integration gaps.
+test_command: go test ./... -timeout 120s
+lint_command: go vet ./...
+file_ownership:
+    - file: pkg/protocol/types.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/resume/recovery.go
+      agent: B
+      wave: 2
+      action: new
+      depends_on:
+        - A
+      repo: scout-and-wave-go
+    - file: pkg/resume/detect.go
+      agent: B
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+      repo: scout-and-wave-go
+    - file: pkg/retry/classify.go
+      agent: C
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+      repo: scout-and-wave-go
+    - file: pkg/retry/context.go
+      agent: C
+      wave: 2
+      action: new
+      depends_on:
+        - A
+      repo: scout-and-wave-go
+    - file: pkg/retry/attempt.go
+      agent: C
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+      repo: scout-and-wave-go
+    - file: pkg/builddiag/diagnose.go
+      agent: D
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+      repo: scout-and-wave-go
+    - file: cmd/sawtools/resume_detect_cmd.go
+      agent: E
+      wave: 3
+      action: modify
+      depends_on:
+        - B
+      repo: scout-and-wave-go
+    - file: cmd/sawtools/build_retry_context_cmd.go
+      agent: F
+      wave: 3
+      action: modify
+      depends_on:
+        - C
+      repo: scout-and-wave-go
+    - file: protocol/execution-rules.md
+      agent: G
+      wave: 3
+      action: modify
+      depends_on:
+        - A
+        - B
+        - C
+      repo: scout-and-wave
+interface_contracts:
+    - name: RecoveryStep
+      description: Structured recovery action with command, reason, and priority
+      definition: |
+        // RecoveryStep is a single actionable recovery step with priority ordering.
+        type RecoveryStep struct {
+            Command     string `json:"command"`      // Exact sawtools command to run
+            Reason      string `json:"reason"`       // Why this step helps
+            Priority    int    `json:"priority"`     // 1=critical, 2=recommended, 3=optional
+            Category    string `json:"category"`     // "diagnostic" | "fix" | "verification"
+            AutoRunnable bool  `json:"auto_runnable"` // Can orchestrator run this automatically?
+        }
+      location: pkg/protocol/types.go
+    - name: FailureCategory
+      description: Granular failure classification extending ErrorClass
+      definition: |
+        // FailureCategory is a detailed failure type for enhanced resume detection.
+        type FailureCategory string
+
+        const (
+            FailureCategoryImportError         FailureCategory = "import_error"
+            FailureCategoryTypeError           FailureCategory = "type_error"
+            FailureCategoryTestFailure         FailureCategory = "test_failure"
+            FailureCategoryBuildError          FailureCategory = "build_error"
+            FailureCategoryLintError           FailureCategory = "lint_error"
+            FailureCategoryNetworkError        FailureCategory = "network_error"
+            FailureCategoryRateLimitError      FailureCategory = "rate_limit_error"
+            FailureCategoryWorktreeIsolation   FailureCategory = "worktree_isolation_failure"
+            FailureCategoryGitConflict         FailureCategory = "git_conflict"
+            FailureCategoryContractViolation   FailureCategory = "contract_violation"
+            FailureCategoryTimeout             FailureCategory = "timeout"
+            FailureCategoryUnknown             FailureCategory = "unknown"
+        )
+      location: pkg/protocol/types.go
+    - name: BuildRecoverySteps
+      description: Generate recovery steps from SessionState
+      definition: |
+        // BuildRecoverySteps analyzes a SessionState and returns ordered recovery steps.
+        func BuildRecoverySteps(state SessionState, manifest *protocol.IMPLManifest) []protocol.RecoveryStep
+      location: pkg/resume/recovery.go
+    - name: ClassifyFailureDetailed
+      description: Enhanced failure classification with granular categories
+      definition: |
+        // ClassifyFailureDetailed extends ClassifyError with more granular categories.
+        // It parses error output for network errors, rate limits, worktree isolation
+        // failures, git conflicts, and contract violations.
+        func ClassifyFailureDetailed(report protocol.CompletionReport) protocol.FailureCategory
+      location: pkg/retry/classify.go
+    - name: BuildRetryContextWithRecovery
+      description: Extend RetryAttempt with recovery steps
+      definition: |
+        // BuildRetryContextWithRecovery builds a RetryAttempt with recovery steps attached.
+        // It analyzes the completion report, classifies the failure, and generates
+        // actionable recovery steps using BuildRecoverySteps.
+        func BuildRetryContextWithRecovery(manifestPath string, agentID string, attemptNum int) (*RetryAttempt, error)
+      location: pkg/retry/context.go
+    - name: SessionState (extended)
+      description: Add RecoverySteps field to SessionState
+      definition: |
+        // SessionState (existing struct, add new field):
+        type SessionState struct {
+            // ... existing fields ...
+            RecoverySteps []protocol.RecoveryStep `json:"recovery_steps,omitempty"`
+        }
+      location: pkg/resume/detect.go
+    - name: RetryAttempt (extended)
+      description: Add RecoverySteps and FailureCategory fields
+      definition: |
+        // RetryAttempt (existing struct, add new fields):
+        type RetryAttempt struct {
+            // ... existing fields ...
+            FailureCategory   protocol.FailureCategory   `json:"failure_category"`
+            RecoverySteps     []protocol.RecoveryStep    `json:"recovery_steps,omitempty"`
+            WhatWorked        string                     `json:"what_worked,omitempty"`
+            WhatChanged       string                     `json:"what_changed,omitempty"`
+            SuggestedApproach string                     `json:"suggested_fix_approach,omitempty"`
+        }
+      location: pkg/retry/attempt.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## Agent A: Protocol Types Extension
+
+            **Objective:** Add RecoveryStep, FailureCategory types to pkg/protocol/types.go
+
+            **What to implement:**
+
+            1. **Add RecoveryStep struct** after the PreMortemRow type definition (around line 217):
+               - Command string (exact sawtools command to run)
+               - Reason string (why this step helps)
+               - Priority int (1=critical, 2=recommended, 3=optional)
+               - Category string ("diagnostic" | "fix" | "verification")
+               - AutoRunnable bool (can orchestrator run this automatically?)
+
+               All fields JSON-tagged for sawtools output.
+
+            2. **Add FailureCategory type** after ErrorClass (create new const block):
+               - Extend beyond retry.ErrorClass's 5 categories
+               - Add 7 new categories: network_error, rate_limit_error, worktree_isolation_failure, git_conflict, contract_violation, timeout, unknown
+               - Keep existing 5: import_error, type_error, test_failure, build_error, lint_error
+               - Type: FailureCategory string
+               - Constants follow naming pattern: FailureCategoryImportError, FailureCategoryNetworkError, etc.
+
+            3. **Update SessionState struct** in pkg/resume/detect.go import path comment:
+               - No code changes to detect.go in this agent
+               - Document that RecoverySteps field will be added by Agent B
+               - Add comment: "// RecoverySteps will be added by enhanced resume detection (Agent B)"
+
+            4. **Update RetryAttempt struct** in pkg/retry/attempt.go import path comment:
+               - No code changes to attempt.go in this agent
+               - Document that new fields will be added by Agent C
+               - Add comment: "// FailureCategory, RecoverySteps, WhatWorked, WhatChanged, SuggestedApproach will be added by Agent C"
+
+            **Interface contracts to follow:**
+            See RecoveryStep and FailureCategory definitions in interface_contracts section.
+
+            **Tests:**
+            No new tests required — these are data structure additions only.
+            Agent B and C will add integration tests that use these types.
+
+            **Verification gate:**
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go
+            go build ./pkg/protocol/...
+            go vet ./pkg/protocol/...
+            ```
+
+            **Constraints:**
+            - Do not modify any existing fields in SessionState or RetryAttempt
+            - JSON tags must match existing naming convention (snake_case)
+            - FailureCategory constants must be exported (start with uppercase)
+          files:
+            - pkg/protocol/types.go
+    - number: 2
+      agents:
+        - id: B
+          task: |
+            ## Agent B: Resume Detection Enhancement
+
+            **Objective:** Add recovery step generation to pkg/resume/ package
+
+            **What to implement:**
+
+            1. **Create pkg/resume/recovery.go** (new file):
+               - Import protocol types (RecoveryStep, FailureCategory, CompletionReport)
+               - Implement BuildRecoverySteps(state SessionState, manifest *protocol.IMPLManifest) []protocol.RecoveryStep
+               - Analysis logic:
+                 a. If failed agents exist → check their failure_type from completion reports
+                 b. Generate diagnostic command: sawtools build-retry-context <impl-path> --agent <id>
+                 c. If failure_type=fixable → add "Apply fix and relaunch" step (priority 1)
+                 d. If orphaned worktrees exist → add cleanup command (priority 2)
+                 e. If dirty worktrees exist → add "Review uncommitted work" step (priority 1)
+                 f. Always add "Resume wave" command as final step (priority 3)
+               - Return slice ordered by priority (1, then 2, then 3)
+
+            2. **Extend pkg/resume/detect.go**:
+               - Add RecoverySteps []protocol.RecoveryStep field to SessionState struct (after AgentSessions field)
+               - In buildSessionState function (around line 132):
+                 a. After loading agent sessions (line 185), call BuildRecoverySteps
+                 b. Pass state and manifest to BuildRecoverySteps
+                 c. Populate ss.RecoverySteps with the result
+               - JSON tag: `json:"recovery_steps,omitempty"`
+
+            3. **Recovery step generation logic** (in recovery.go):
+               ```go
+               func BuildRecoverySteps(state SessionState, manifest *protocol.IMPLManifest) []protocol.RecoveryStep {
+                   var steps []protocol.RecoveryStep
+
+                   // Priority 1: Failed agents
+                   for _, agentID := range state.FailedAgents {
+                       report := manifest.CompletionReports[agentID]
+                       category := "diagnostic"
+                       if report.FailureType == "fixable" {
+                           category = "fix"
+                       }
+                       steps = append(steps, protocol.RecoveryStep{
+                           Command: fmt.Sprintf("sawtools build-retry-context %s --agent %s", state.IMPLPath, agentID),
+                           Reason: fmt.Sprintf("Analyze failure details for agent %s", agentID),
+                           Priority: 1,
+                           Category: category,
+                           AutoRunnable: true,
+                       })
+                   }
+
+                   // Priority 2: Dirty worktrees (uncommitted work)
+                   for _, dw := range state.DirtyWorktrees {
+                       if dw.HasChanges {
+                           steps = append(steps, protocol.RecoveryStep{
+                               Command: fmt.Sprintf("cd %s && git status", dw.Path),
+                               Reason: "Review uncommitted changes before resuming",
+                               Priority: 1,
+                               Category: "verification",
+                               AutoRunnable: false,
+                           })
+                       }
+                   }
+
+                   // Priority 3: Resume command
+                   steps = append(steps, protocol.RecoveryStep{
+                       Command: state.ResumeCommand,
+                       Reason: state.SuggestedAction,
+                       Priority: 3,
+                       Category: "fix",
+                       AutoRunnable: false, // requires human review
+                   })
+
+                   return steps
+               }
+               ```
+
+            **Interface contracts to follow:**
+            - RecoveryStep struct (defined by Agent A)
+            - SessionState.RecoverySteps field (extend existing struct)
+            - BuildRecoverySteps function signature (return []protocol.RecoveryStep)
+
+            **Tests:**
+            Add to pkg/resume/recovery_test.go:
+            - TestBuildRecoverySteps_FailedAgent
+            - TestBuildRecoverySteps_DirtyWorktree
+            - TestBuildRecoverySteps_NoFailures
+
+            **Verification gate:**
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go
+            go build ./pkg/resume/...
+            go test ./pkg/resume/... -run TestBuildRecoverySteps
+            go vet ./pkg/resume/...
+            ```
+
+            **Constraints:**
+            - Do not modify SessionState fields other than adding RecoverySteps
+            - Preserve backward compatibility (RecoverySteps is optional, omitempty)
+            - Priority values: 1=critical, 2=recommended, 3=optional
+          files:
+            - pkg/resume/recovery.go
+            - pkg/resume/detect.go
+          dependencies:
+            - A
+        - id: C
+          task: |
+            ## Agent C: Retry Classification and Context Enhancement
+
+            **Objective:** Extend failure classification and add structured retry context
+
+            **What to implement:**
+
+            1. **Extend pkg/retry/classify.go**:
+               - Add ClassifyFailureDetailed(report protocol.CompletionReport) protocol.FailureCategory
+               - Reuse existing ClassifyError logic as baseline
+               - Add new detection patterns:
+                 a. Network errors: "dial tcp", "connection refused", "EOF", "timeout"
+                 b. Rate limit: "rate limit exceeded", "429", "quota exceeded"
+                 c. Worktree isolation: "worktree", "failed to change directory", "not in worktree"
+                 d. Git conflicts: "CONFLICT", "Merge conflict", "You have unstaged changes"
+                 e. Contract violations: "does not implement", "missing method", "type .* does not satisfy"
+                 f. Timeout: "turn limit exceeded", "timeout", "deadline exceeded"
+               - Priority order (check in this order): network → rate_limit → worktree → git → contract → timeout → existing 5 types → unknown
+               - Return protocol.FailureCategory (not retry.ErrorClass)
+
+            2. **Create pkg/retry/context.go** (new file):
+               - Import protocol types, resume package
+               - Implement BuildRetryContextWithRecovery(manifestPath, agentID, attemptNum) (*RetryAttempt, error)
+               - Logic flow:
+                 a. Load manifest using protocol.Load
+                 b. Get completion report for agentID
+                 c. Call ClassifyFailureDetailed(report) → FailureCategory
+                 d. Build RecoverySteps using resume.BuildRecoverySteps (construct minimal SessionState)
+                 e. Populate WhatWorked, WhatChanged, SuggestedApproach fields:
+                    - WhatWorked: extract from prior completion report's Verification field (lines before error)
+                    - WhatChanged: compare FilesChanged between current and prior attempts (if attemptNum > 1)
+                    - SuggestedApproach: based on FailureCategory (network → "retry after delay", contract → "check interface contracts", etc.)
+                 f. Return populated RetryAttempt with new fields
+
+            3. **Extend pkg/retry/attempt.go**:
+               - Add 5 new fields to RetryAttempt struct (after PriorNotes field):
+                 - FailureCategory protocol.FailureCategory `json:"failure_category"`
+                 - RecoverySteps []protocol.RecoveryStep `json:"recovery_steps,omitempty"`
+                 - WhatWorked string `json:"what_worked,omitempty"`
+                 - WhatChanged string `json:"what_changed,omitempty"`
+                 - SuggestedApproach string `json:"suggested_fix_approach,omitempty"`
+               - Do not modify existing BuildRetryAttempt function (keep for backward compat)
+               - BuildRetryContextWithRecovery is the new enhanced version
+
+            4. **Classification pattern examples** (in classify.go):
+               ```go
+               var networkPatterns = []string{
+                   "dial tcp", "connection refused", "EOF", "net/http: request canceled",
+               }
+               var rateLimitPatterns = []string{
+                   "rate limit exceeded", "429", "quota exceeded", "throttled",
+               }
+               var worktreePatterns = []string{
+                   "fatal: this operation must be run in a work tree",
+                   "failed to change directory to worktree",
+               }
+               // ... etc for git, contract, timeout
+               ```
+
+            **Interface contracts to follow:**
+            - FailureCategory type (defined by Agent A)
+            - RecoveryStep type (defined by Agent A)
+            - RetryAttempt struct extension (add new fields)
+            - ClassifyFailureDetailed function signature
+            - BuildRetryContextWithRecovery function signature
+
+            **Tests:**
+            Add to pkg/retry/classify_test.go:
+            - TestClassifyFailureDetailed_NetworkError
+            - TestClassifyFailureDetailed_RateLimitError
+            - TestClassifyFailureDetailed_WorktreeIsolation
+            - TestClassifyFailureDetailed_GitConflict
+            - TestClassifyFailureDetailed_ContractViolation
+
+            Add to pkg/retry/context_test.go:
+            - TestBuildRetryContextWithRecovery_FailedAgent
+            - TestBuildRetryContextWithRecovery_NetworkError
+            - TestBuildRetryContextWithRecovery_MultipleAttempts
+
+            **Verification gate:**
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go
+            go build ./pkg/retry/...
+            go test ./pkg/retry/... -run TestClassifyFailureDetailed -run TestBuildRetryContextWithRecovery
+            go vet ./pkg/retry/...
+            ```
+
+            **Constraints:**
+            - Preserve backward compatibility: existing BuildRetryAttempt unchanged
+            - New fields in RetryAttempt are optional (omitempty tags)
+            - ClassifyFailureDetailed must handle empty/nil CompletionReport gracefully
+          files:
+            - pkg/retry/classify.go
+            - pkg/retry/context.go
+            - pkg/retry/attempt.go
+          dependencies:
+            - A
+        - id: D
+          task: |
+            ## Agent D: Build Diagnosis Enhancement
+
+            **Objective:** Extend pkg/builddiag to generate actionable sawtools commands
+
+            **What to implement:**
+
+            1. **Extend pkg/builddiag/diagnose.go**:
+               - Add GenerateActionableCommand(diagnosis *Diagnosis, implPath string) string
+               - Logic:
+                 a. For "missing_import" pattern → return "sawtools check-deps <implPath>"
+                 b. For "type_mismatch" pattern → return "sawtools check-type-collisions <implPath>"
+                 c. For "test_failure" pattern → return "go test -v <package> -run <test-name>"
+                 d. For "lint_error" pattern → return "go vet <file>"
+                 e. For "unknown" pattern → return "sawtools diagnose-build-failure <error-log>"
+               - Extract file/package names from diagnosis.Pattern or error log context
+               - Return fully-qualified command string
+
+            2. **Add command generation helper**:
+               ```go
+               // GenerateActionableCommand produces a concrete sawtools command for a diagnosis.
+               func GenerateActionableCommand(diag *Diagnosis, implPath string) string {
+                   switch diag.Pattern {
+                   case "missing_import":
+                       return fmt.Sprintf("sawtools check-deps %s", implPath)
+                   case "type_mismatch":
+                       return fmt.Sprintf("sawtools check-type-collisions %s", implPath)
+                   case "undefined_symbol":
+                       return fmt.Sprintf("grep -rn '%s' %s", extractSymbol(diag), implPath)
+                   default:
+                       return "sawtools diagnose-build-failure <error-log-path>"
+                   }
+               }
+               ```
+
+            3. **Extend Diagnosis struct**:
+               - Add ActionableCommand string field
+               - Populate in DiagnoseError after pattern match
+               - Call GenerateActionableCommand before returning
+
+            4. **Integration with existing patterns**:
+               - No changes to go_patterns.go, rust_patterns.go, etc.
+               - Command generation is done in diagnose.go at diagnosis time
+               - Pattern catalogs remain unchanged (only add command generation logic)
+
+            **Interface contracts to follow:**
+            - Diagnosis struct (existing, add ActionableCommand field)
+            - GenerateActionableCommand function signature
+
+            **Tests:**
+            Add to pkg/builddiag/diagnose_test.go:
+            - TestGenerateActionableCommand_MissingImport
+            - TestGenerateActionableCommand_TypeMismatch
+            - TestGenerateActionableCommand_Unknown
+
+            **Verification gate:**
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go
+            go build ./pkg/builddiag/...
+            go test ./pkg/builddiag/... -run TestGenerateActionableCommand
+            go vet ./pkg/builddiag/...
+            ```
+
+            **Constraints:**
+            - Do not modify existing pattern catalogs (go_patterns.go, rust_patterns.go, etc.)
+            - Preserve backward compatibility: ActionableCommand field is optional
+            - Command strings must be copy-pasteable (no placeholders like "<path>" in final output)
+          files:
+            - pkg/builddiag/diagnose.go
+          dependencies:
+            - A
+    - number: 3
+      agents:
+        - id: E
+          task: |
+            ## Agent E: Resume Detect CLI Integration
+
+            **Objective:** Wire RecoverySteps into sawtools resume-detect JSON output
+
+            **What to implement:**
+
+            1. **Extend cmd/sawtools/resume_detect_cmd.go**:
+               - No code changes needed in newResumeDetectCmd function
+               - SessionState already includes RecoverySteps field (added by Agent B)
+               - json.MarshalIndent will automatically include recovery_steps in output
+               - Verify JSON output includes new field by running command locally
+
+            2. **Add usage documentation**:
+               - Update cmd.Long description to mention recovery_steps field:
+                 ```
+                 Output JSON includes:
+                 - impl_slug, impl_path, current_wave, total_waves
+                 - completed_agents, failed_agents, pending_agents
+                 - suggested_action, resume_command
+                 - recovery_steps (actionable commands with priority and reason)
+                 ```
+
+            3. **Integration test**:
+               - Add test case in cmd/sawtools/resume_detect_cmd_test.go (if it exists)
+               - Or create simple integration test that:
+                 a. Creates a mock IMPL with failed agent
+                 b. Runs resume.Detect()
+                 c. Asserts RecoverySteps field is populated
+                 d. Verifies JSON marshaling includes recovery_steps
+
+            **Interface contracts to follow:**
+            - SessionState.RecoverySteps field (added by Agent B)
+            - RecoveryStep struct (defined by Agent A)
+
+            **Tests:**
+            If cmd/sawtools/*_test.go files exist for other commands, follow same pattern.
+            Otherwise, manual verification:
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go
+            go build ./cmd/sawtools
+            ./sawtools resume-detect | jq '.[] | .recovery_steps'
+            ```
+
+            **Verification gate:**
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go
+            go build ./cmd/sawtools/...
+            go vet ./cmd/sawtools/...
+            # Manual test: verify JSON output includes recovery_steps
+            ```
+
+            **Constraints:**
+            - Preserve existing JSON output format (only add recovery_steps field)
+            - Do not modify exit codes or error handling
+          files:
+            - cmd/sawtools/resume_detect_cmd.go
+          dependencies:
+            - B
+        - id: F
+          task: |
+            ## Agent F: Build Retry Context CLI Integration
+
+            **Objective:** Wire enhanced retry context into sawtools build-retry-context output
+
+            **What to implement:**
+
+            1. **Extend cmd/sawtools/build_retry_context_cmd.go**:
+               - Replace retry.BuildRetryAttempt call with retry.BuildRetryContextWithRecovery
+               - Update imports to include protocol package (for RecoveryStep)
+               - JSON output will automatically include new fields:
+                 - failure_category
+                 - recovery_steps
+                 - what_worked
+                 - what_changed
+                 - suggested_fix_approach
+
+            2. **Update cmd.Long description**:
+               ```
+               The retry context includes:
+                 - attempt_number, agent_id, error_class (legacy)
+                 - failure_category (granular classification)
+                 - error_excerpt, gate_results
+                 - suggested_fixes (generic advice)
+                 - recovery_steps (actionable commands with priority)
+                 - what_worked, what_changed, suggested_fix_approach
+                 - prior_notes, prompt_text
+               ```
+
+            3. **Code change** (around line 38):
+               ```go
+               // Before:
+               rc, err := retry.BuildRetryAttempt(manifestPath, agentID, attemptNum)
+
+               // After:
+               rc, err := retry.BuildRetryContextWithRecovery(manifestPath, agentID, attemptNum)
+               ```
+
+            **Interface contracts to follow:**
+            - BuildRetryContextWithRecovery function (implemented by Agent C)
+            - RetryAttempt extended struct (fields added by Agent C)
+
+            **Tests:**
+            Manual verification:
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go
+            go build ./cmd/sawtools
+            # Create a test IMPL with failed agent, then:
+            ./sawtools build-retry-context <impl-path> --agent A --attempt 2 | jq '.failure_category, .recovery_steps'
+            ```
+
+            **Verification gate:**
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go
+            go build ./cmd/sawtools/...
+            go vet ./cmd/sawtools/...
+            ```
+
+            **Constraints:**
+            - Preserve backward compatibility: existing BuildRetryAttempt still exists
+            - JSON output is additive (new fields, no removals)
+            - Do not change exit codes or error handling
+          files:
+            - cmd/sawtools/build_retry_context_cmd.go
+          dependencies:
+            - C
+        - id: G
+          task: |
+            ## Agent G: Protocol Documentation Update
+
+            **Objective:** Document enhanced resume detection in execution-rules.md
+
+            **What to implement:**
+
+            1. **Add new section E19.2** after E19.1 (around line 770 in execution-rules.md):
+               ```
+               ### E19.2 — Enhanced Resume Detection and Recovery Guidance
+
+               **Trigger:** sawtools resume-detect or orchestrator resumption after interruption
+
+               **Required Action:** The orchestrator SHOULD use sawtools resume-detect to surface
+               structured recovery guidance when a wave is interrupted (user Ctrl-C, system crash,
+               network failure, etc.).
+
+               **Recovery Steps Format:**
+               Each SessionState returned by resume-detect includes a `recovery_steps` array
+               with prioritized actionable commands:
+
+               ```json
+               {
+                 "impl_slug": "my-feature",
+                 "current_wave": 2,
+                 "failed_agents": ["B"],
+                 "recovery_steps": [
+                   {
+                     "command": "sawtools build-retry-context docs/IMPL/IMPL-my-feature.yaml --agent B",
+                     "reason": "Analyze failure details for agent B",
+                     "priority": 1,
+                     "category": "diagnostic",
+                     "auto_runnable": true
+                   },
+                   {
+                     "command": "sawtools run-wave docs/IMPL/IMPL-my-feature.yaml --wave 2",
+                     "reason": "Resume wave 2 after fixing agent B",
+                     "priority": 3,
+                     "category": "fix",
+                     "auto_runnable": false
+                   }
+                 ]
+               }
+               ```
+
+               **Failure Categories:** Enhanced beyond E19's 5 failure_type values to include:
+               - network_error — transient network failures (dial tcp, EOF)
+               - rate_limit_error — API quota exhaustion (429, throttled)
+               - worktree_isolation_failure — agent committed to wrong branch/worktree
+               - git_conflict — merge conflicts, unstaged changes
+               - contract_violation — type errors, missing method implementations
+               - timeout — turn limit exceeded, deadline exceeded
+
+               These categories are surfaced in build-retry-context JSON output as
+               `failure_category` field alongside legacy `error_class`.
+
+               **Orchestrator Integration:** When resuming after interruption:
+               1. Run `sawtools resume-detect` to get SessionState with recovery_steps
+               2. For priority 1 steps marked `auto_runnable: true`, run them automatically
+               3. For priority 1 steps with `auto_runnable: false`, surface to user before proceeding
+               4. For priority 2-3 steps, include in UI but do not block resumption
+
+               **Relationship to E19:** E19.2 extends E19's failure handling with structured
+               recovery guidance. E19 defines orchestrator actions during active wave execution;
+               E19.2 defines orchestrator actions when resuming after interruption.
+
+               **Related Commands:**
+               - sawtools resume-detect — outputs SessionState with recovery_steps
+               - sawtools build-retry-context <impl> --agent <id> — outputs RetryAttempt with
+                 failure_category, recovery_steps, what_worked, what_changed fields
+               ```
+
+            2. **Update E19 section** (add cross-reference to E19.2 at end of E19):
+               After "Related Rules:" line (around line 728), add:
+               ```
+               See also E19.2 (enhanced resume detection) for structured recovery guidance.
+               ```
+
+            3. **Update execution rules index** (near top of file, around line 14):
+               Add E19.2 to the list of rules.
+
+            **Interface contracts to follow:**
+            - No code interfaces (documentation only)
+            - Follow existing E-rule numbering and format conventions
+
+            **Tests:**
+            No tests required (documentation only).
+            Visual review: ensure markdown renders correctly.
+
+            **Verification gate:**
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave
+            # Verify file parses as valid markdown
+            grep -q "E19.2" protocol/execution-rules.md
+            echo "E19.2 section added successfully"
+            ```
+
+            **Constraints:**
+            - Follow existing E-rule documentation format
+            - Add cross-references to E19, E19.1
+            - Do not renumber existing rules
+          files:
+            - protocol/execution-rules.md
+          dependencies:
+            - A
+            - B
+            - C
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./...
+          required: true
+          repo: scout-and-wave-go
+        - type: lint
+          command: go vet ./...
+          required: true
+          repo: scout-and-wave-go
+        - type: test
+          command: go test ./pkg/resume/... ./pkg/retry/... ./pkg/protocol/... -timeout 60s
+          required: true
+          repo: scout-and-wave-go
+pre_mortem:
+    overall_risk: medium
+    rows:
+        - scenario: RetryAttempt struct size exceeds JSON marshaling limits
+          likelihood: low
+          impact: medium
+          mitigation: WhatWorked/WhatChanged fields use truncation (max 500 chars); RecoverySteps slice limited to 10 entries
+        - scenario: ClassifyFailureDetailed false positives (wrong category)
+          likelihood: medium
+          impact: low
+          mitigation: Pattern matching uses priority order (most specific first); unknown fallback always available
+        - scenario: BuildRecoverySteps generates non-existent sawtools commands
+          likelihood: low
+          impact: medium
+          mitigation: Agent E verifies all commands exist via go build ./cmd/sawtools/... before wiring
+        - scenario: Cross-package import cycles (protocol → resume → retry → protocol)
+          likelihood: low
+          impact: high
+          mitigation: Wave 1 defines all types in protocol package; Wave 2 imports only from protocol (no cross-imports between resume/retry)
+state: COMPLETE
+injection_method: hook
