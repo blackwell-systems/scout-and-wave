@@ -1,0 +1,399 @@
+completion_date: "2026-04-02"
+title: 'Critic Agent: Verdict Bug Fix and 7 Hardening Improvements'
+feature_slug: critic-improvements
+verdict: SUITABLE_WITH_CAVEATS
+suitability_assessment: |-
+    The 8 changes (1 bug fix + 7 improvements) primarily target:
+    implementations/claude-code/prompts/agents/critic-agent.md
+
+    A secondary update is needed in protocol/execution-rules.md to align the
+    prepare-wave enforcement description (lines 1515-1529) with the new critic
+    behavior: if the critic now emits PASS for warnings-only, the "ISSUES, all
+    warnings" case in prepare-wave documentation describes dead code and should
+    be updated. Line 1555 also references "Missing callers = severity: error"
+    without the test-file carve-out that Improvement 3 adds.
+
+    Two agents, two disjoint files, two waves. Agent A (critic-agent.md) runs
+    first; Agent B (execution-rules.md) runs second to document the spec change
+    that A implements. Parallelization value is low but the IMPL doc provides
+    an audit trail and ensures both the prompt fix and the protocol spec stay
+    in sync. Proceeding as SUITABLE_WITH_CAVEATS.
+
+    Pre-implementation scan:
+    - Fix 1 (verdict bug): Verdict Thresholds section (lines 212-215 of
+      critic-agent.md) allows ISSUES for "one or more errors" but does not
+      restrict top-level verdict to error-only cases. Status: TODO.
+    - Improvement 2 (skip symbol_accuracy for action:new): Check 2 has no
+      action:new exclusion. Status: TODO.
+    - Improvement 3 (test files = warnings in Check 8): Check 8 makes all
+      non-ownership callers errors with no test-file carve-out. Status: TODO.
+    - Improvement 4 (Check 5 only for action:new): Check 5 has no scope
+      filter. Status: TODO.
+    - Improvement 5 (dot-qualified symbol filter): Check 2 has no dot-filter.
+      Status: TODO.
+    - Improvement 6 (deletion-context symbol filter): Check 2 has no deletion
+      verb filter. Status: TODO.
+    - Improvement 7 (parallelism note): Step 2 says "Process agents one at a
+      time". Status: TODO.
+    - Secondary (execution-rules.md): Lines 1515-1529 describe prepare-wave
+      handling of "ISSUES, all warnings" which will become dead code after the
+      critic fix. Line 1555 missing test-file carve-out. Status: TODO.
+
+    Estimated times:
+    - Scout phase: approx 5 min
+    - Agent execution: approx 20 min (2 sequential waves, 1 agent each)
+    - Merge and verification: approx 2 min
+    - Total SAW time: approx 27 min
+    - Sequential baseline: approx 20 min (same work without coordination)
+    - Time savings: marginal; value is audit trail and synchronized spec update.
+
+    Recommendation: Proceed. The IMPL doc codifies the bug fix and 7
+    improvements with a synchronized update to the protocol spec.
+test_command: 'echo ''no tests: documentation-only change'''
+lint_command: none
+file_ownership:
+    - file: implementations/claude-code/prompts/agents/critic-agent.md
+      agent: A
+      wave: 1
+      action: modify
+    - file: protocol/execution-rules.md
+      agent: B
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+interface_contracts:
+    - name: Verdict Thresholds Rule
+      description: |-
+        Top-level verdict must be PASS when no agent has any error-severity issue,
+        regardless of how many warnings are present. This is the binding definition
+        used by prepare-wave and must be reflected in both the critic agent prompt
+        and the protocol spec.
+      definition: |-
+        PASS: Zero errors across all agents. Warnings are noted but do not block.
+          Set verdict to PASS if no agent has any error-severity issue, regardless
+          of warnings present.
+        ISSUES: One or more errors found in any agent's review. verdict ISSUES
+          requires at least one error-severity issue somewhere in the review.
+      location: implementations/claude-code/prompts/agents/critic-agent.md
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            # Critic Agent Hardening: 8 Changes to critic-agent.md
+
+            You are making 8 targeted text changes to a single file:
+            `implementations/claude-code/prompts/agents/critic-agent.md`
+
+            Do NOT modify any other file. All 8 changes are in this one file.
+
+            Read the file in full before making any edits.
+
+            ## Owned file
+            - `implementations/claude-code/prompts/agents/critic-agent.md`
+
+            ---
+
+            ## Change 1 (blocking bug fix): Correct ISSUES verdict for warning-only results
+
+            **Location:** The `## Verdict Thresholds` section near the end of the file
+            (around lines 212-219).
+
+            Find the block that reads:
+
+                - **PASS:** Zero errors across all agents. Warnings are noted but do not block.
+                - **ISSUES:** One or more errors found in any agent's review.
+
+            Replace those two bullet lines with:
+
+                - **PASS:** Zero errors across all agents. Warnings are noted but do not block.
+                  **Set the top-level `verdict` field to `PASS` if no agent has any
+                  error-severity issue, regardless of how many warnings are present.**
+                - **ISSUES:** One or more errors found in any agent's review.
+                  `verdict: ISSUES` requires at least one error-severity issue somewhere.
+                  Do NOT set `verdict: ISSUES` when the only issues present are warnings.
+
+            Also update the `sawtools set-critic-review` usage example in the Completion
+            section (the bash code block with `--verdict "<PASS|ISSUES>"`). Add a comment
+            line immediately after the --verdict line:
+
+                # Note: use PASS when all issues are warnings; ISSUES requires at least one error
+
+            ---
+
+            ## Change 2: Skip symbol_accuracy for action:new agents
+
+            **Location:** `### Check 2: symbol_accuracy` section.
+
+            Find the opening paragraph of Check 2 that begins:
+            "Parse the agent's task description for specific function names, type names..."
+
+            After that paragraph (before the bullet points starting with "If the symbol
+            is from a file the agent owns..."), insert this new paragraph:
+
+                **action:new exclusion:** If ALL files owned by an agent have `action: new`,
+                skip symbol_accuracy for that agent entirely -- the symbols do not exist yet
+                by definition, and grepping for them produces false positives.
+
+            ---
+
+            ## Change 3: Test-file callers are warnings not errors in Check 8
+
+            **Location:** `### Check 8: caller_exhaustiveness` section.
+
+            Find the bullet that reads (approximately):
+
+                - Any file containing a call to the symbol that is NOT in `file_ownership` = severity: error
+
+            Replace it with two bullets:
+
+                - Any non-test file containing a call to the symbol that is NOT in
+                  `file_ownership` = severity: error (missed caller -- agent will not migrate it)
+                - Any test file (`*_test.go`) containing a call to the symbol that is NOT in
+                  `file_ownership` = severity: warning (not error) -- test cascade detection is
+                  handled by E46 and `sawtools check-test-cascade` as a dedicated gate
+
+            ---
+
+            ## Change 4: Check 5 (import_chains) only for action:new
+
+            **Location:** `### Check 5: import_chains` section.
+
+            Before the opening line of Check 5's body ("For each new file an agent will
+            create:"), insert this paragraph:
+
+                **Scope filter:** Run Check 5 only for agents that have at least one
+                `action: new` file. For agents with only `action: modify` or `action: delete`
+                files, skip Check 5 entirely -- the import chain is already validated by the
+                existing build.
+
+            ---
+
+            ## Change 5: Dot-qualified symbol filter in Check 2
+
+            **Location:** `### Check 2: symbol_accuracy` section.
+
+            After the action:new exclusion paragraph inserted in Change 2, add this second
+            rule paragraph:
+
+                **Package-qualified reference filter:** When scanning brief text for symbol
+                names to verify, skip any token that contains a `.` (dot). These are
+                package-qualified references (e.g., `result.NewFatal`, `pkg.SymbolName`)
+                pointing to other packages, not symbols the agent is expected to own or
+                implement.
+
+            ---
+
+            ## Change 6: Deletion-context symbol filter in Check 2
+
+            **Location:** `### Check 2: symbol_accuracy` section.
+
+            After the package-qualified reference filter paragraph inserted in Change 5,
+            add this third rule paragraph:
+
+                **Deletion-context filter:** If a symbol name appears in a sentence that
+                contains deletion verbs (delete, remove, removing, deleted, removed), skip
+                the existence check for that symbol. It is mentioned as a deletion target,
+                not a dependency that must already exist.
+
+            ---
+
+            ## Change 7: Parallelism advisory note
+
+            **Location:** `## Verification Checks (Step 2)` section.
+
+            Find the first line after the section header `## Verification Checks (Step 2)`:
+
+                Process agents one at a time. For each agent:
+
+            Replace it with:
+
+                For each agent, apply the checks below. **Advisory:** All agent checks are
+                independent and can be evaluated in parallel. When reviewing multiple agents,
+                read all owned files first, then evaluate all agents concurrently rather than
+                sequentially.
+
+            ---
+
+            ## Verification gate
+
+            After making all 8 changes, read the complete file and confirm:
+            1. Verdict Thresholds section has the PASS clarification (warnings-only = PASS).
+            2. The set-critic-review bash example has the PASS/ISSUES comment.
+            3. Check 2 has three filter rule paragraphs in order: action:new exclusion,
+               package-qualified reference filter, deletion-context filter.
+            4. Check 5 begins with the scope filter paragraph.
+            5. Check 8 distinguishes test (`*_test.go`) vs non-test callers with different
+               severities.
+            6. The Step 2 opening line has the parallelism advisory note.
+
+            No build or test command is needed. This is a documentation-only change.
+          files:
+            - implementations/claude-code/prompts/agents/critic-agent.md
+      base_commit: 0e56ee535439777ef56384584ce956fc9494f10f
+    - number: 2
+      agents:
+        - id: B
+          task: |
+            # Protocol Spec Update: Sync execution-rules.md with critic verdict fix
+
+            You are making two targeted updates to `protocol/execution-rules.md` to
+            align the E37 documentation with the critic verdict fix completed in Wave 1.
+
+            The fix: the critic agent now emits `verdict: PASS` when all issues are
+            warnings (no errors). The spec section on prepare-wave enforcement currently
+            describes a three-case model that includes "ISSUES, all warnings" -- this
+            case is now dead code and the section should be updated to a two-case model.
+
+            Do NOT modify any other file. All changes are in this one file.
+
+            Read the file in full before making any edits. Focus on the E37 section
+            which starts around line 1489.
+
+            ## Owned file
+            - `protocol/execution-rules.md`
+
+            ---
+
+            ## Change 1: Update prepare-wave enforcement block to two-case model
+
+            **Location:** The "Enforcement Point (Added in P5)" subsection under E37,
+            around lines 1513-1533.
+
+            Find this text block (the exact wording may vary slightly):
+
+                After critic writes verdict to IMPL doc, `prepare-wave` checks the verdict before creating worktrees.
+                The enforcement is **severity-aware**: `CriticIssue.Severity` is either `"error"` (blocking) or
+                `"warning"` (advisory). The overall `verdict` field is `"PASS"` or `"ISSUES"`; `"ISSUES"` may
+                contain errors, warnings, or a mix.
+
+                - **Verdict: PASS** -> proceed with worktree creation
+                - **Verdict: ISSUES, all warnings** -> emit advisory notice, proceed with worktree creation
+                - **Verdict: ISSUES, any errors** -> exit code 1, block worktree creation
+
+                Error message format (errors present):
+
+                Advisory message format (warnings only):
+                ...
+
+                This ensures agents cannot launch with inaccurate briefs, while warnings surface for awareness
+                without blocking execution.
+
+            Replace that entire block with:
+
+                After critic writes verdict to IMPL doc, `prepare-wave` checks the verdict before creating worktrees.
+                The overall `verdict` field is `"PASS"` or `"ISSUES"`. The critic sets `verdict: PASS` when
+                all issues are warnings (no errors present). Only error-severity issues produce `verdict: ISSUES`.
+
+                - **Verdict: PASS** -> proceed with worktree creation (even if warnings are noted)
+                - **Verdict: ISSUES** -> exit code 1, block worktree creation (at least one error present)
+
+                Error message format:
+                ```
+                Error: E37: critic found N error(s) in agent briefs -- fix before launching wave
+                ```
+
+                This ensures agents cannot launch with inaccurate briefs, while warning-only results
+                do not block execution.
+
+            ---
+
+            ## Change 2: Update Check 8 summary to include test-file carve-out
+
+            **Location:** The verification checks summary list under E37, around line 1553.
+
+            Find this line (may span 2-3 lines):
+
+                - Check 8 (caller_exhaustiveness): Verify all callers of symbols being changed are in
+                  file_ownership. Use `sawtools check-callers "<symbol>" --repo-dir <repo>` to enumerate all
+                  call sites including test files. Missing callers = severity: error
+
+            Replace it with:
+
+                - Check 8 (caller_exhaustiveness): Verify all callers of symbols being changed are in
+                  file_ownership. Use `sawtools check-callers "<symbol>" --repo-dir <repo>` to enumerate all
+                  call sites. Non-test callers not in file_ownership = severity: error. Test files
+                  (`*_test.go`) not in file_ownership = severity: warning (handled by E46/check-test-cascade).
+
+            ---
+
+            ## Verification gate
+
+            After making both changes, read the E37 section (approximately lines 1489-1584)
+            and confirm:
+            1. The "ISSUES, all warnings" bullet case is gone from the enforcement block.
+            2. Only two verdict cases remain in the enforcement block: PASS and ISSUES.
+            3. The advisory message format block (warnings-only) is removed.
+            4. Check 8 description now mentions test files get severity: warning.
+            5. No other lines in the E37 section were accidentally modified.
+
+            No build or test command is needed. This is a documentation-only change.
+          files:
+            - protocol/execution-rules.md
+          dependencies:
+            - A
+      base_commit: d2baadbc4eadb02fdf5ccb808b70ec40149b4705
+quality_gates:
+    level: standard
+    gates:
+        - type: custom
+          command: 'echo ''docs-only: no build/test/lint required'''
+          required: false
+completion_reports:
+    A:
+        status: complete
+        branch: saw/critic-improvements/wave1-agent-A
+        commit: 79058b0
+        files_changed:
+            - implementations/claude-code/prompts/agents/critic-agent.md
+        verification: PASS
+        notes: 'All 8 changes applied and verified. No build/test required (docs-only change). Verification checklist: (1) PASS verdict clarification present, (2) set-critic-review comment present, (3) Check 2 has all 3 filter paragraphs in correct order, (4) Check 5 scope filter present, (5) Check 8 test vs non-test severity split present, (6) Step 2 parallelism advisory present.'
+    B:
+        status: complete
+        branch: saw/critic-improvements/wave2-agent-B
+        commit: 4df4953
+        files_changed:
+            - protocol/execution-rules.md
+        verification: PASS
+        notes: 'Two targeted doc-only changes to E37: (1) enforcement block updated from three-case to two-case verdict model, removing dead ''ISSUES, all warnings'' path; (2) Check 8 updated to give test file callers severity: warning instead of error.'
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: |-
+            Agent A makes Change 1 to Verdict Thresholds but forgets the set-critic-review
+            bash example comment, leaving an inconsistency between the rule and the usage
+            example.
+          likelihood: medium
+          impact: low
+          mitigation: |-
+            Verification gate item 2 explicitly checks for the comment in the
+            set-critic-review example. Agent must confirm both locations are updated.
+        - scenario: |-
+            Change 2 (action:new exclusion) is placed after the per-symbol bullet list
+            rather than before it, so the LLM critic reads the bullets first and applies
+            them before reaching the exclusion rule.
+          likelihood: medium
+          impact: medium
+          mitigation: |-
+            Task brief explicitly says to add the rule paragraph "before the bullet points"
+            in Check 2. Verification gate item 3 checks that the action:new exclusion
+            appears first among the three filter rules.
+        - scenario: |-
+            Agent B removes too much from the enforcement description and loses important
+            context about how prepare-wave processes the verdict.
+          likelihood: low
+          impact: medium
+          mitigation: |-
+            Task brief provides the exact replacement text. Verification gate item 5
+            explicitly asks the agent to confirm no other lines were accidentally modified.
+        - scenario: |-
+            Agent B accidentally removes the error message format block along with the
+            advisory message format block.
+          likelihood: low
+          impact: low
+          mitigation: |-
+            Replacement text in Change 1 explicitly includes the error message format block.
+            Verification gate item 2 checks that PASS and ISSUES cases are present.
+state: COMPLETE
+injection_method: hook
