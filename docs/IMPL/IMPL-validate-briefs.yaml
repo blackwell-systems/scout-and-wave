@@ -83,6 +83,13 @@ file_ownership:
       wave: 2
       action: modify
       repo: scout-and-wave
+    - file: cmd/sawtools/main.go
+      agent: B
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+      repo: scout-and-wave-go
 interface_contracts:
     - name: ValidateBriefs
       description: |-
@@ -405,14 +412,13 @@ waves:
 
             ## Command registration
 
-            Find the main() function in cmd/sawtools/main.go. Locate the rootCmd.AddCommand(...)
-            calls (around lines 50-100). Add:
-
+            Read `cmd/sawtools/main.go`. Find the `rootCmd.AddCommand(...)` call.
+            After the existing commands (`newCheckTestCascadeCmd()` is the last one),
+            add:
             ```go
-            rootCmd.AddCommand(newValidateBriefsCmd())
+            newValidateBriefsCmd(),
             ```
-
-            Insert alphabetically after validate and before any other commands starting with 'v'.
+            Run `go build ./cmd/sawtools/...` to verify it compiles before committing.
 
             ## Tests
 
@@ -441,6 +447,7 @@ waves:
           files:
             - cmd/sawtools/validate_briefs_cmd.go
             - cmd/sawtools/validate_briefs_cmd_test.go
+            - cmd/sawtools/main.go
           dependencies:
             - A
         - id: D
@@ -526,12 +533,12 @@ waves:
 
             ## Read these files first
 
-            - `/Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/prompts/agents/scout.md` (lines 685-726 for current step 17)
+            - `/Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/prompts/agents/scout.md` (lines 830-880 for current step 17)
 
             ## Changes to make
 
             Locate step 17 "Brief accuracy self-check (mandatory, do not skip)."
-            This is around line 685.
+            This is around line 830.
 
             ### Current step 17 structure
 
@@ -545,7 +552,7 @@ waves:
 
             ### New check (b) — Automated symbol validation
 
-            Replace lines 699-706 (the "Symbol existence spot-check" section) with:
+            Replace the "Symbol existence spot-check" section (check b, around line 844) with:
 
             ```markdown
             **b. Symbol existence validation (automated).** Run `sawtools validate-briefs` to
@@ -648,5 +655,29 @@ pre_mortem:
             The step 17 update makes the command invocation explicit and mandatory. If Scout
             skips it, the critic gate will still catch errors (defense-in-depth). Future
             improvement: add validate-briefs to pre-wave-validate as a hard gate.
-state: SCOUT_PENDING
+critic_report:
+    verdict: PASS
+    agent_reviews:
+        A:
+            agent_id: A
+            verdict: PASS
+        B:
+            agent_id: B
+            verdict: ISSUES
+            issues:
+                - check: pattern_accuracy
+                  severity: warning
+                  description: Brief instructs agent to follow test patterns in validate_cmd_test.go and pre_wave_validate_cmd_test.go, but neither file exists in cmd/sawtools/. Agent will have no direct test pattern to read for these two files. validate_scaffold_cmd_test.go exists and can substitute.
+                  file: cmd/sawtools/validate_briefs_cmd_test.go
+                  symbol: validate_cmd_test.go
+        C:
+            agent_id: C
+            verdict: PASS
+        D:
+            agent_id: D
+            verdict: PASS
+    summary: 'All four agents pass verification. Agent A: both new files (brief_validator.go, brief_validator_test.go) do not yet exist (no conflict); all referenced read targets exist at claimed locations — critic.go (183 lines), types.go, full_validate.go, manifest.go containing protocol.Load at line 62; manifest.Repositories and FileOwnership.Repo fields exist as described; stdlib packages os/exec and regexp are sufficient with no external deps needed. Agent B: both new files do not exist; main.go exists with newCheckTestCascadeCmd() confirmed as last entry at line 124 — registration instruction is accurate; validate_cmd.go and pre_wave_validate_cmd.go both exist and match the described patterns; validate_cmd_test.go and pre_wave_validate_cmd_test.go do not exist (prior warning retained) but validate_scaffold_cmd_test.go is present as a substitute; protocol.ValidateBriefs dependency on Agent A is correctly modeled. Agent C: scout.md exists; step 17 confirmed at line 830, check b at line 844 — both line references are accurate. Agent D: docs/CONTEXT.md exists; no Established Interfaces section currently present; Features Completed section exists as the placement anchor. One advisory warning carried forward from previous review: Agent B is directed to follow patterns in two test files that do not exist; this does not block implementation as validate_scaffold_cmd_test.go is available as a substitute.'
+    reviewed_at: "2026-04-02T19:01:03Z"
+    issue_count: 1
+state: "REVIEWED"
 injection_method: hook
