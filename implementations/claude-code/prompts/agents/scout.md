@@ -841,14 +841,28 @@ C001 was occupied, causing a string mismatch with Agent A's hardcoded "CACHE_MIS
     file like `logger.go` or `types.go` described in the interface contracts but not
     listed as an ownership entry).
 
-    **b. Symbol existence spot-check.** For each agent, pick 3-5 key symbols referenced
-    in the brief (struct names, function names, method signatures) and verify they exist
-    in the actual source files at approximately the stated locations:
+    **b. Symbol existence validation (automated).** Run `sawtools validate-briefs` to
+    check all symbol references in agent briefs automatically:
+
+    ```bash
+    sawtools validate-briefs <absolute-path-to-impl-doc>
+    ```
+
+    This command checks:
+    - All symbols referenced in briefs exist in owned files (grep-based, language-agnostic)
+    - Line number references are valid (file has enough lines)
+    - Provides suggestions for missing symbols
+
+    If validation fails, the command outputs JSON with per-agent issues and suggestions.
+    Fix all reported errors before proceeding. Re-run until output shows `"valid": true`.
+
+    Manual spot-checks are no longer needed — the automated check covers all symbols across
+    all agents comprehensively. However, if you want to verify a specific symbol manually
+    after fixing validation errors, you can still use grep:
+
     ```bash
     grep -n "SymbolName" path/to/owned/file.go
     ```
-    If a symbol is absent or at a significantly different location, the brief is stale —
-    update it before finishing.
 
     **c. Package scope check for new function definitions.** If a brief instructs an
     agent to define a new unexported function (e.g., `func loggerFrom(...)`,
@@ -866,8 +880,9 @@ C001 was occupied, causing a string mismatch with Agent A's hardcoded "CACHE_MIS
     grep -c "StructName{" path/to/file.go  # count struct literal occurrences
     ```
 
-    Fix any issues found before completing. Typically takes 5-10 minutes. Do not skip
-    this step — it directly reduces critic gate errors and prevents wave execution delays.
+    Fix any issues found before completing. Typically takes 3-5 minutes with automated
+    validation (down from 5-10 minutes with manual spot-checks). Do not skip this step —
+    it directly reduces critic gate errors and prevents wave execution delays.
 
 18. **Write injection_method to IMPL doc.** Before completing, record how you received
     your reference file content by running:
