@@ -381,9 +381,15 @@ They are NOT the structure of your output. Your output is PURE YAML following th
       - Determine file where the symbol is defined (from `location` field)
    2. Search the **entire repo** for ALL callers — production code AND test files:
       ```bash
-      grep -rn "SymbolName\|\.MethodName(" . --include="*.go"
+      sawtools check-callers "<SymbolName>" --repo-dir <repo-path>
       ```
-      **CRITICAL: Do NOT limit search to `<package-dir>`.** Callers in other packages
+      The output includes both production and test call sites. Filter for `_test.go`
+      paths to identify test callers specifically. Any test file returned that is NOT
+      in `file_ownership` is a test cascade miss — assign it to the interface-changing
+      agent or create a dedicated test-update agent.
+
+      **CRITICAL: Do NOT limit search to `<package-dir>`.** `sawtools check-callers`
+      scans the entire repo; callers in other packages
       (e.g., `pkg/protocol/gates_test.go` calling `pkg/gatecache/Cache.Get`) are the
       most commonly missed category. Test files in unrelated packages are invisible
       to a package-scoped search.
@@ -394,6 +400,14 @@ They are NOT the structure of your output. Your output is PURE YAML following th
       - Test files must be owned by an agent in same wave to prevent
         post-merge compilation failures
    4. Document findings in interface contract notes or Pre-Mortem risk section
+
+   **Post-IMPL cascade check:** After writing the IMPL doc, run:
+   ```bash
+   sawtools check-test-cascade <impl-path> --repo-dir <repo-path>
+   ```
+   This catches any remaining test cascade misses before E37. Fix any reported
+   `TestCascadeError` entries by assigning the orphaned test files to an agent
+   in the same wave as the interface change.
 
    **Example 1 (deps-review-fixes):**
    Agent B changed LockFileParser.Parse signature from `([]PackageInfo, error)`
@@ -443,6 +457,12 @@ They are NOT the structure of your output. Your output is PURE YAML following th
    and emits YAML entries in wiring: schema format. Review and adjust before committing —
    pattern matching is ~80% reliable (false positives fail validation; false negatives
    are caught by finalize-wave post-merge checks).
+
+**Error code range lookup:** Before defining new error code constants, run
+`sawtools list-error-ranges --repo-dir <repo-path>` to see all allocated
+ranges in pkg/result/codes.go. Choose an unoccupied prefix letter to avoid
+the collision that occurred in gatecache-review (Agent C chose K001-K099 because
+C001 was occupied, causing a string mismatch with Agent A's hardcoded "CACHE_MISS").
 
 > **Note:** When `--program` flag is provided, additional contract handling
 > rules apply. See `references/scout-program-contracts.md`.
