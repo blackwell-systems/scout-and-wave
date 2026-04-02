@@ -1532,26 +1532,31 @@ prepare-wave: [critic_verdict] success — critic found N warning(s) only — pr
 This ensures agents cannot launch with inaccurate briefs, while warnings surface for awareness
 without blocking execution.
 
-**Verification checks per agent brief:**
-- file_existence: Every file marked action=modify must exist in the repo; every file
-  marked action=new must NOT exist (would cause conflict)
-- symbol_accuracy: Function names, type names, method signatures referenced in the
+**Verification checks per agent brief (10 checks):**
+- Check 1 (file_existence): Every file marked action=modify must exist in the repo; every file
+  marked action=new must NOT exist (would cause conflict). Files with no action: skip.
+- Check 2 (symbol_accuracy): Function names, type names, method signatures referenced in the
   brief must exist in the codebase as stated (for modify files) or must not conflict
   with existing symbols (for new files)
-- pattern_accuracy: Implementation patterns described in the brief (e.g. "call X to
+- Check 3 (pattern_accuracy): Implementation patterns described in the brief (e.g. "call X to
   register handler", "add field to struct Y") must match the actual patterns in the
   source files
-- interface_consistency: Interface contracts specified in the IMPL must be
+- Check 4 (interface_consistency): Interface contracts specified in the IMPL must be
   syntactically valid for the target language and consistent with types referenced
   in source files
-- import_chains: For new files, all packages referenced in interface contracts must
+- Check 5 (import_chains): For new files, all packages referenced in interface contracts must
   be importable from the target module (exist in go.mod or local packages)
-- side_effect_completeness: If a brief creates a new exported symbol that must be
+- Check 6 (side_effect_completeness): If a brief creates a new exported symbol that must be
   registered (CLI command in root.go, HTTP route in server.go, React component in
   a page), verify the registration file is also in the file_ownership table
-- action_new_awareness: For files marked `action: new` in file_ownership, skip
-  existence checks. The file WILL be created by the agent - flagging "file does
-  not exist" is a false positive.
+- Check 7 (complexity_balance): Warning if any agent owns >8 files or >40% of total IMPL files
+- Check 8 (caller_exhaustiveness): Verify all callers of symbols being changed are in
+  file_ownership. Use `sawtools check-callers "<symbol>" --repo-dir <repo>` to enumerate all
+  call sites including test files. Missing callers = severity: error
+- Check 9 (i1_disjoint_ownership): For each (wave, file) with more than 1 agent ID, flag as
+  error — violates I1 disjoint ownership. Catches Scout planning errors before wave launch
+- Check 10 (result_code_semantics): Verify result package usage is semantically correct —
+  `.Code` comparisons must use top-level codes (SUCCESS/PARTIAL/FATAL), not error domain codes
 
 **Output format:** CriticResult written to IMPL doc critic_report field (see
 interface contracts in IMPL-critic-agent.yaml). Per-agent verdict: PASS or ISSUES.

@@ -119,6 +119,21 @@ This creates an integration wave where agent B wires agent A's work into the app
 
 **Orchestrators:** Read the `saw_name` field from brief frontmatter—do not manually construct names.
 
+## Commit with --no-verify (Parallel Type Dependency Exception)
+
+**Rule:** Wave agents may commit with `git commit --no-verify` when parallel agents have unmerged type dependencies.
+
+**When this applies:** If an agent's worktree fails a pre-commit hook because it imports a type defined in another agent's (not yet merged) worktree, the hook fires on a dependency that doesn't exist in HEAD yet — a false positive caused by parallel execution. In this scenario, the agent may commit with `--no-verify` to bypass the hook.
+
+**Conditions for use:**
+1. The failing hook check is about a type or import that will be satisfied post-merge (another agent creates it)
+2. The agent's own code is correct and complete
+3. The worktree branch remains intact for merge
+
+**Note:** `--no-verify` does NOT bypass the E42 SubagentStop validation hook — that runs at agent session close, not at commit time.
+
+---
+
 ## Cross-Repository Orchestration
 
 **Same repo:** Use `isolation: "worktree"` in Agent tool invocations.

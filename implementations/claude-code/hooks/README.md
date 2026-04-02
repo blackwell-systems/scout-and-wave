@@ -1,6 +1,6 @@
 # SAW Claude Code Hooks
 
-Enforcement and injection hooks for CLI-based SAW agents. 17 hooks across SubagentStart, PreToolUse, PostToolUse, SubagentStop, and UserPromptSubmit events.
+Enforcement and injection hooks for CLI-based SAW agents. 18 hooks across SubagentStart, PreToolUse, PostToolUse, SubagentStop, and UserPromptSubmit events.
 
 ## Hook Summary
 
@@ -12,6 +12,7 @@ Enforcement and injection hooks for CLI-based SAW agents. 17 hooks across Subage
 | validate_agent_isolation | SubagentStart | — | E12 | Verifies wave agent running in correct worktree (exit 2 blocks start) |
 | inject_bash_cd | PreToolUse | Bash | E43 | Auto-prepends `cd $SAW_AGENT_WORKTREE &&` to bash commands |
 | validate_write_paths | PreToolUse | Write\|Edit | E43 | Blocks relative paths and paths outside worktree |
+| block_git_stash | PreToolUse | Bash | — | Blocks `git stash` in wave-agent worktrees (hides work from merge verification) |
 | verify_worktree_compliance | SubagentStop | — | E42/I5 | Verifies completion report and commits (warn-only) |
 | check_scout_boundaries | PreToolUse | Write\|Edit | I6 | Scouts can only write IMPL docs |
 | block_claire_paths | PreToolUse | Write\|Edit\|Bash | — | Blocks `.claire` typo paths |

@@ -159,14 +159,14 @@ These files are loaded on-demand only when the matching subcommand is invoked or
 
 ### Step 6: Install Hooks (Required)
 
-Hooks enforce the protocol's correctness guarantees at the Claude Code level — preventing Scout from writing source files (I6), blocking wave agents from touching files they don't own (I1), validating IMPL docs on write (E16), checking agent launch/completion protocol (E42/H5), enforcing worktree isolation (E43), detecting stub patterns (E20/H3), preventing branch drift (H4), and emitting observability events (E40). **Without hooks, many invariants are advisory only.**
+Hooks enforce the protocol's correctness guarantees at the Claude Code level — preventing Scout from writing source files (I6), blocking wave agents from touching files they don't own (I1), validating IMPL docs on write (E16), checking agent launch/completion protocol (E42/H5), enforcing worktree isolation (E43), detecting stub patterns (E20/H3), preventing branch drift (H4), blocking git stash in wave-agent worktrees, and emitting observability events (E40). **Without hooks, many invariants are advisory only.**
 
 ```bash
 cd ~/code/scout-and-wave/implementations/claude-code/hooks
 ./install.sh
 ```
 
-The installer symlinks all 17 hook scripts to `~/.local/bin/`, registers them in `~/.claude/settings.json`, and verifies each hook is executable. It will print a summary of what was installed.
+The installer symlinks all 18 hook scripts to `~/.local/bin/`, registers them in `~/.claude/settings.json`, and verifies each hook is executable. It will print a summary of what was installed.
 
 **If `~/.local/bin` is not on your `$PATH`**, add it:
 ```bash

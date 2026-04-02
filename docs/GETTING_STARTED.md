@@ -34,10 +34,11 @@ These four commands replace manual grep and guessing during Scout planning:
 
 | Command | Purpose |
 |---------|---------|
-| `sawtools check-callers <symbol>` | Find all call sites of a function/method across the repo (including test files) |
-| `sawtools list-error-ranges` | List all allocated error code ranges from `pkg/result/codes.go` |
-| `sawtools suggest-wave-structure <impl-path>` | Validate that callers of changed interfaces are in correct downstream waves |
-| `sawtools check-test-cascade <impl-path>` | Pre-flight gate: verify test files calling changed symbols are assigned to agents |
+| `sawtools check-callers "<symbol>" --repo-dir <path>` | Find all call sites of a function/method across the repo (including test files) |
+| `sawtools list-error-ranges --repo-dir <path>` | List all allocated error code ranges from `pkg/result/codes.go` |
+| `sawtools suggest-wave-structure <manifest> --repo-dir <path>` | Validate that callers of changed interfaces are in correct downstream waves |
+| `sawtools check-test-cascade <manifest> --repo-dir <path>` | Pre-flight gate: verify test files calling changed symbols are assigned to agents |
+| `sawtools validate-briefs <manifest>` | Symbol existence and line reference validation of agent briefs (Scout step 17) |
 
 `check-test-cascade` runs automatically as Step 3 of `sawtools pre-wave-validate`.
 

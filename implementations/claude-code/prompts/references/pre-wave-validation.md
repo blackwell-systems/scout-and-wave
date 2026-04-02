@@ -12,8 +12,9 @@ sawtools pre-wave-validate "<absolute-path-to-impl-doc>" --wave <N> --fix
 ```
 
 **What it does:**
-- Runs E16 (IMPL doc structure validation)
-- Runs E35 (same-package caller detection)
+- Step 1: Runs E16 (IMPL doc structure validation)
+- Step 2: Runs E35 (same-package caller detection)
+- Step 3: Runs E46 check-test-cascade (orphaned test file caller detection)
 - Returns combined JSON output
 - Exit 0 = all passed, Exit 1 = any failed
 
@@ -93,7 +94,7 @@ Warnings about content that should be in typed blocks (e.g., dependency graph in
 
 **Not detected:**
 - Cross-package calls (different concern — E2 dependency analysis)
-- Test files (`*_test.go`) excluded from call site search
+- Test files (`*_test.go`) excluded from E35 call site search (covered by E46 Step 3)
 
 ### Exit Codes & Gap Handling
 
@@ -227,11 +228,42 @@ If `baseline_verification_failed` is returned:
 
 If baseline passes, proceed with worktree creation and agent launches.
 
+## E46: Test File Cascade Detection (Step 3 of pre-wave-validate)
+
+**When:** Runs automatically as Step 3 of `sawtools pre-wave-validate`, after E35 passes.
+
+**Purpose:** Detect orphaned test file callers — `*_test.go` files that call symbols being changed by wave agents but are not assigned to any agent. Prevents post-merge test compilation failures from missed test cascades.
+
+**Command (standalone):**
+```bash
+sawtools check-test-cascade "<absolute-path-to-impl-doc>" --repo-dir "<repo-path>"
+```
+
+**How it works:** Scans the entire repo for test files calling symbols listed in the IMPL doc's changed interfaces. Reports any test file that calls a changed symbol but is not in any agent's `files` list.
+
+**Exit codes:** Exit 0 = no orphaned test callers. Exit 1 = orphaned test callers detected (blocks wave launch, same as E35).
+
+**Resolution:** Add the orphaned test file to the interface-changing agent's `files` list, then re-run `pre-wave-validate`.
+
+---
+
+## Additional Scout Automation Commands
+
+These commands support Scout planning beyond E35/E46 detection:
+
+| Command | Purpose |
+|---------|---------|
+| `sawtools check-callers "<symbol>" --repo-dir <path>` | Whole-repo call site scanner including test files (used by E46 and Critic Check 8) |
+| `sawtools list-error-ranges --repo-dir <path>` | Lists all allocated error code range prefixes from `pkg/result/codes.go` |
+| `sawtools suggest-wave-structure <manifest> --repo-dir <path>` | Validates wave ordering for changed symbols — ensures callers of changed interfaces are in correct downstream waves |
+
+---
+
 ## Integration with Orchestrator Flow
 
 **Scout flow (new IMPL):**
 1. Scout completes → Read IMPL doc
-2. Run `sawtools pre-wave-validate` (combines E16 + E35)
+2. Run `sawtools pre-wave-validate` (combines E16 + E35 + E46 check-test-cascade)
 3. If validation failed → send errors to Scout for correction, retry once
 4. If E37 triggered → Run E37 (this file § E37)
 5. Present for human review
@@ -242,10 +274,10 @@ If baseline passes, proceed with worktree creation and agent launches.
 3. Run `sawtools prepare-wave` → E21A executes automatically
 4. Launch wave agents
 
-**Retry procedure for E35 gaps:**
+**Retry procedure for E35/E46 gaps:**
 1. Parse JSON output from `pre-wave-validate`
-2. If `e35_gaps.passed == false`, extract gaps list
-3. Send to Scout via resume: "E35 gaps detected. Resolve ownership:\n{gaps}"
-4. Scout updates IMPL doc (extends file_ownership or adds wiring entries)
+2. If `e35_gaps.passed == false` or test cascade failures reported, extract gaps list
+3. Send to Scout via resume: "E35/E46 gaps detected. Resolve ownership:\n{gaps}"
+4. Scout updates IMPL doc (extends file_ownership to include test files or callers)
 5. Re-run `pre-wave-validate` (retry once)
 6. On second failure: Enter BLOCKED, surface to human

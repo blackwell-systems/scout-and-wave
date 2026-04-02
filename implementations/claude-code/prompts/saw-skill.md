@@ -23,7 +23,7 @@ You launch Scout and Wave agents; you do not do their work yourself.
 
 **I6: Role Separation.** The Orchestrator does not perform Scout, Scaffold Agent, Wave Agent, or Integration Agent duties. Delegate codebase analysis, IMPL doc production, scaffold creation, and implementation to async agents. If doing their work yourself, you've violated I6 — stop and launch the correct agent. Scout agents create IMPL docs only (`docs/IMPL/IMPL-*.yaml`), not source code or other docs.
 
-*`I{N}` = invariants (I1–I6), `E{N}` = execution rules (E1–E45) from `protocol/invariants.md` and `protocol/execution-rules.md`. Numbers are anchors for cross-referencing.*
+*`I{N}` = invariants (I1–I6), `E{N}` = execution rules (E1–E46) from `protocol/invariants.md` and `protocol/execution-rules.md`. Numbers are anchors for cross-referencing.*
 
 **Agent type preference:** Use custom `subagent_type` values (`scout`, `scaffold-agent`, `wave-agent`, `integration-agent`, `critic-agent`, `planner`). These provide tool-level enforcement and behavioral instructions.
 

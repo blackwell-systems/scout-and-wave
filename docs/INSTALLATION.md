@@ -71,7 +71,7 @@ cd scout-and-wave
 The installer auto-detects Claude Code (checks for `~/.claude`) and does four things:
 
 1. **Symlinks skill files** to `~/.claude/skills/saw/` (SKILL.md, agent definitions, references, scripts).
-2. **Symlinks hook scripts** to `~/.local/bin/` (15 enforcement hooks, see [Hooks](#hooks-15-total) below).
+2. **Symlinks hook scripts** to `~/.local/bin/` (17 enforcement hooks, see [Hooks](#hooks-17-total) below).
 3. **Registers hooks** in `~/.claude/settings.json` under `PreToolUse`, `PostToolUse`, `SubagentStart`, `SubagentStop`, and `UserPromptSubmit` lifecycle events.
 4. **Adds `Agent` permission** to `~/.claude/settings.json` so SAW can launch agents without manual approval.
 
@@ -179,9 +179,9 @@ Start the server with:
 ./saw serve
 ```
 
-## Hooks (17 total)
+## Hooks (18 total)
 
-The hook installer registers 17 hooks across five lifecycle events. All hook scripts live in `implementations/claude-code/hooks/` and are symlinked to `~/.local/bin/`.
+The hook installer registers 18 hooks across five lifecycle events. All hook scripts live in `implementations/claude-code/hooks/` and are symlinked to `~/.local/bin/`.
 
 ### SubagentStart (2 hooks — fire when an agent session starts)
 
@@ -190,7 +190,7 @@ The hook installer registers 17 hooks across five lifecycle events. All hook scr
 | `inject_worktree_env` | *(all)* | Sets 5 environment variables (worktree path, agent ID, wave number, IMPL path, branch name) |
 | `validate_agent_isolation` | *(all)* | Verifies wave agent is running in the correct worktree (exit 2 blocks start) |
 
-### PreToolUse (7 hooks — fire before tool execution)
+### PreToolUse (8 hooks — fire before tool execution)
 
 | Hook | Matcher | Purpose |
 |---|---|---|
@@ -201,6 +201,7 @@ The hook installer registers 17 hooks across five lifecycle events. All hook scr
 | `validate_agent_launch` | `Agent` | Full pre-launch validation gate: checks IMPL doc, agent existence, scaffolds, branch |
 | `inject_bash_cd` | `Bash` | Auto-prepends `cd $SAW_AGENT_WORKTREE &&` to every bash command when agent is in worktree |
 | `validate_write_paths` | `Write\|Edit` | Blocks relative paths and paths outside worktree boundaries |
+| `block_git_stash` | `Bash` | Blocks `git stash` in wave-agent worktrees (stash hides uncommitted work from merge verification) |
 
 ### PostToolUse (4 hooks — fire after tool execution)
 
@@ -254,6 +255,7 @@ The installer creates these symlinks in `~/.local/bin/`:
 ~/.local/bin/validate_agent_launch
 ~/.local/bin/inject_bash_cd
 ~/.local/bin/validate_write_paths
+~/.local/bin/block_git_stash
 ~/.local/bin/validate_impl_on_write
 ~/.local/bin/check_git_ownership
 ~/.local/bin/warn_stubs
@@ -471,7 +473,7 @@ The installer supports multiple platforms via flags:
 **`sawtools` works on any platform** -- it's a standalone Go binary that manages git worktrees, validates IMPL docs, merges branches, and runs quality gates. No LLM API calls. Key capabilities include:
 
 - Worktree management: `prepare-wave`, `finalize-wave`, `create-worktree`
-- Validation: `pre-wave-validate`, `verify-install`, `validate-impl`
+- Validation: `pre-wave-validate`, `verify-install`, `validate-impl`, `validate-briefs`
 - Configuration: `init`, `set-completion`, `advance-state`
 - Scout automation: `check-callers`, `list-error-ranges`, `suggest-wave-structure`,
   and `check-test-cascade` replace manual grep during planning
