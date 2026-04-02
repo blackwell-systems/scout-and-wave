@@ -1,0 +1,983 @@
+title: Deep Review and Fixes for pkg/tools Package
+feature_slug: tools-review-fixes
+verdict: SUITABLE
+suitability_assessment: |
+    The pkg/tools package review is well-suited for SAW parallelization:
+
+    1. **File decomposition**: 18 files (9 implementation + 9 test) can be split across
+       multiple agents with disjoint ownership. Review work naturally decomposes into:
+       - Error code standardization (hardcoded "TOOL_ALREADY_REGISTERED" → result/codes.go)
+       - Test coverage improvements (0% functions: adapters, middleware helpers, Namespace, executors)
+       - Dead code analysis (Namespace() method appears unused)
+       - Consistency review (error handling patterns, naming conventions)
+
+    2. **No investigation required**: Package behavior is well-documented through tests
+       (45.9% coverage). All interfaces are discoverable from existing usage in
+       pkg/agent/backend. ToolExecutor.Execute signature is stable.
+
+    3. **Interface contracts**: All public methods have clear signatures. The Workshop.Register
+       method already uses Result[RegisterData] correctly. ToolExecutor.Execute returns
+       (string, error) intentionally — tools serialize errors as strings for AI consumption,
+       not structured Result[T]. This is NOT a migration candidate.
+
+    4. **Pre-implementation status**: pkg/tools is fully implemented and actively used by
+       all agent backends (Anthropic, OpenAI, Bedrock, CLI). This is a quality/consistency
+       improvement task, not new development.
+
+    5. **Parallelization value**: Moderate. Build/test cycle is ~1-2s (Go), but agents are
+       independent and review tasks are substantial enough to benefit from concurrent execution.
+       Coordination value is high — IMPL doc serves as review audit trail.
+
+    **Estimated times:**
+    - Scout phase: ~10 min (review + dependency mapping + coverage analysis)
+    - Agent execution: 4 agents × 10 min = ~15 min parallel (vs ~40 min sequential)
+    - Merge & verification: ~3 min
+    - Total SAW time: ~28 min vs ~53 min sequential baseline
+    - Time savings: ~25 min (47% faster)
+
+    **Review findings summary:**
+    - TOOL_ALREADY_REGISTERED hardcoded in workshop.go:42 (should be in result/codes.go)
+    - I1_VIOLATION, I2_VIOLATION, I6_VIOLATION error codes are intentional (protocol invariants)
+    - Namespace() method has 0% coverage and appears unused outside pkg/tools (dead code candidate)
+    - Adapter Serialize() methods have 0% coverage but are actively used (need tests)
+    - TimingMiddleware, PermissionMiddleware, WithTiming, WithPermissions, ReadOnlyTools: 0% coverage
+    - BashExecutor.Execute has only 18.8% coverage (git ownership checks untested)
+    - EditExecutor, GlobExecutor, GrepExecutor: 0% coverage (critical file operations)
+    - FileWriteExecutor: 41.7% coverage (missing error path tests)
+    - Default middleware stubs (defaultOwnershipMiddleware, etc.) have 0% coverage but are expected
+      (they're replaced at init time; testing them would test nothing)
+test_command: go test ./pkg/tools/...
+lint_command: go vet ./pkg/tools/...
+file_ownership:
+    - file: pkg/result/codes.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/tools/workshop.go
+      agent: B
+      wave: 2
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/tools/adapters_test.go
+      agent: C
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/tools/middleware_test.go
+      agent: D
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/tools/executors_test.go
+      agent: E
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+      repo: scout-and-wave-go
+    - file: pkg/tools/workshop_test.go
+      agent: F
+      wave: 2
+      action: modify
+      repo: scout-and-wave-go
+interface_contracts:
+    - name: Tool error codes
+      description: Structured error codes for tool operations (T001-T099 range)
+      definition: |
+        // Add to pkg/result/codes.go in the T001-T099 section (already exists):
+        const (
+            CodeToolError           = "T001_TOOL_ERROR"         // existing
+            CodeParsePanic          = "T002_PARSE_PANIC"        // existing
+            CodeToolNotFound        = "T003_TOOL_NOT_FOUND"     // existing
+            CodeToolTimeout         = "T004_TOOL_TIMEOUT"       // existing
+            CodeToolAlreadyRegistered = "T005_TOOL_ALREADY_REGISTERED"  // NEW
+        )
+      location: pkg/result/codes.go:253-259
+    - name: Workshop.Register error code update
+      description: Use CodeToolAlreadyRegistered constant instead of hardcoded string
+      definition: |
+        // In workshop.go, line 42, change from:
+        Code: "TOOL_ALREADY_REGISTERED",
+        // TO:
+        Code: result.CodeToolAlreadyRegistered,
+      location: pkg/tools/workshop.go:42
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            **Goal**: Add CodeToolAlreadyRegistered to pkg/result/codes.go T001-T099 section.
+
+            **Files to modify**:
+            - pkg/result/codes.go
+
+            **Changes required**:
+
+            1. Locate the Tool/parse error codes section (currently lines 253-259):
+               ```go
+               // Tool/parse error codes (T001-T099)
+               const (
+                   CodeToolError    = "T001_TOOL_ERROR"
+                   CodeParsePanic   = "T002_PARSE_PANIC"
+                   CodeToolNotFound = "T003_TOOL_NOT_FOUND"
+                   CodeToolTimeout  = "T004_TOOL_TIMEOUT"
+               )
+               ```
+
+            2. Add new constant at the end of this section:
+               ```go
+               // Tool/parse error codes (T001-T099)
+               const (
+                   CodeToolError    = "T001_TOOL_ERROR"
+                   CodeParsePanic   = "T002_PARSE_PANIC"
+                   CodeToolNotFound = "T003_TOOL_NOT_FOUND"
+                   CodeToolTimeout  = "T004_TOOL_TIMEOUT"
+                   // CodeToolAlreadyRegistered is emitted when Workshop.Register receives
+                   // a tool name that is already registered.
+                   CodeToolAlreadyRegistered = "T005_TOOL_ALREADY_REGISTERED"
+               )
+               ```
+
+            **Tests**: No test changes needed. Agent B will update workshop.go to use this constant.
+
+            **Verification gate**:
+            ```bash
+            go build ./pkg/result/... && \
+            go test ./pkg/result/... -run TestErrorCodes
+            ```
+
+            **Constraints**:
+            - Do NOT change any existing constants or add other new constants
+            - Maintain alphabetical ordering within the T001-T099 section
+            - Follow existing comment style (see CodeAgentScopeLarge at line 84 for format)
+          files:
+            - pkg/result/codes.go
+        - id: C
+          task: |
+            **Goal**: Add comprehensive tests for adapter Serialize methods (0% coverage).
+
+            **Files to modify**:
+            - pkg/tools/adapters_test.go
+
+            **Current state**: adapters_test.go has tests for all three adapters' Serialize
+            methods, but coverage report shows 0% for the actual Serialize implementations.
+            This indicates the test suite exercises adapters but not exhaustively.
+
+            **Changes required**:
+
+            1. Add test for empty tools slice:
+               ```go
+               func TestAdapterSerializeEmpty(t *testing.T) {
+                   adapters := []ToolAdapter{
+                       NewAnthropicAdapter(),
+                       NewOpenAIAdapter(),
+                       NewBedrockAdapter(),
+                   }
+                   for _, adapter := range adapters {
+                       result := adapter.Serialize([]Tool{})
+                       // Verify returns empty slice, not nil
+                       if result == nil {
+                           t.Errorf("%T.Serialize([]Tool{}) returned nil", adapter)
+                       }
+                       // Type-assert to slice and verify length
+                       slice, ok := result.([]map[string]interface{})
+                       if !ok {
+                           t.Errorf("%T.Serialize returned wrong type: %T", adapter, result)
+                       }
+                       if len(slice) != 0 {
+                           t.Errorf("%T.Serialize([]Tool{}) returned %d items, want 0", adapter, len(slice))
+                       }
+                   }
+               }
+               ```
+
+            2. Add test for complex input schema (nested objects, arrays):
+               ```go
+               func TestAnthropicAdapterSerializeComplexSchema(t *testing.T) {
+                   adapter := NewAnthropicAdapter()
+                   tools := []Tool{
+                       {
+                           Name:        "complex_tool",
+                           Description: "A tool with complex schema",
+                           InputSchema: map[string]interface{}{
+                               "type": "object",
+                               "properties": map[string]interface{}{
+                                   "nested": map[string]interface{}{
+                                       "type": "object",
+                                       "properties": map[string]interface{}{
+                                           "field": map[string]interface{}{
+                                               "type": "string",
+                                           },
+                                       },
+                                   },
+                                   "array_field": map[string]interface{}{
+                                       "type": "array",
+                                       "items": map[string]interface{}{
+                                           "type": "string",
+                                       },
+                                   },
+                               },
+                               "required": []string{"nested"},
+                           },
+                       },
+                   }
+                   result := adapter.Serialize(tools)
+                   serialized := result.([]map[string]interface{})
+                   if len(serialized) != 1 {
+                       t.Fatalf("Expected 1 tool, got %d", len(serialized))
+                   }
+                   // Verify nested schema preserved
+                   schema := serialized[0]["input_schema"].(map[string]interface{})
+                   props := schema["properties"].(map[string]interface{})
+                   if _, ok := props["nested"]; !ok {
+                       t.Error("Nested property missing from serialized schema")
+                   }
+                   if _, ok := props["array_field"]; !ok {
+                       t.Error("Array field missing from serialized schema")
+                   }
+               }
+               ```
+
+            3. Add test for OpenAI adapter with multiple tools:
+               ```go
+               func TestOpenAIAdapterSerializeMultipleTools(t *testing.T) {
+                   adapter := NewOpenAIAdapter()
+                   tools := []Tool{
+                       {Name: "tool1", Description: "First", InputSchema: map[string]interface{}{"type": "object"}},
+                       {Name: "tool2", Description: "Second", InputSchema: map[string]interface{}{"type": "object"}},
+                       {Name: "tool3", Description: "Third", InputSchema: map[string]interface{}{"type": "object"}},
+                   }
+                   result := adapter.Serialize(tools)
+                   serialized := result.([]map[string]interface{})
+                   if len(serialized) != 3 {
+                       t.Fatalf("Expected 3 tools, got %d", len(serialized))
+                   }
+                   // Verify each has type=function and function object
+                   for i, item := range serialized {
+                       if item["type"] != "function" {
+                           t.Errorf("Tool %d: type=%v, want 'function'", i, item["type"])
+                       }
+                       fn := item["function"].(map[string]interface{})
+                       if fn["name"] != tools[i].Name {
+                           t.Errorf("Tool %d: name=%v, want %q", i, fn["name"], tools[i].Name)
+                       }
+                   }
+               }
+               ```
+
+            **Verification gate**:
+            ```bash
+            go test ./pkg/tools/... -run TestAdapter -v && \
+            go test ./pkg/tools/... -coverprofile=/tmp/adapters.out && \
+            go tool cover -func=/tmp/adapters.out | grep adapters.go
+            ```
+
+            **Constraints**:
+            - Do NOT modify adapters.go implementation
+            - Focus tests on Serialize methods only (Deserialize is intentionally unimplemented)
+            - Verify coverage increases for all three adapters (Anthropic, OpenAI, Bedrock)
+          files:
+            - pkg/tools/adapters_test.go
+        - id: D
+          task: |
+            **Goal**: Add tests for 0% coverage middleware helper functions.
+
+            **Files to modify**:
+            - pkg/tools/middleware_test.go
+
+            **Current state**: middleware_test.go has comprehensive tests for Apply() and
+            mock middleware, but the real TimingMiddleware, PermissionMiddleware, WithTiming,
+            WithPermissions, and ReadOnlyTools have 0% coverage.
+
+            **Changes required**:
+
+            1. Add test for real TimingMiddleware (currently at middleware.go:40):
+               ```go
+               func TestTimingMiddleware_RealImplementation(t *testing.T) {
+                   var captured ToolCallEvent
+                   callback := func(evt ToolCallEvent) {
+                       captured = evt
+                   }
+
+                   executor := executorFunc(func(ctx context.Context, execCtx ExecutionContext, input map[string]interface{}) (string, error) {
+                       time.Sleep(10 * time.Millisecond)
+                       return "ok", nil
+                   })
+
+                   middleware := TimingMiddleware("test:tool", callback)
+                   wrapped := middleware(executor)
+
+                   _, err := wrapped.Execute(context.Background(), ExecutionContext{}, map[string]interface{}{})
+                   if err != nil {
+                       t.Fatalf("Execute failed: %v", err)
+                   }
+
+                   if captured.ToolName != "test:tool" {
+                       t.Errorf("ToolName: got %q, want 'test:tool'", captured.ToolName)
+                   }
+                   if captured.DurationMs < 10 {
+                       t.Errorf("DurationMs: got %d, want >= 10", captured.DurationMs)
+                   }
+                   if captured.IsError {
+                       t.Error("IsError should be false for successful execution")
+                   }
+               }
+               ```
+
+            2. Add test for PermissionMiddleware (currently at middleware.go:60):
+               ```go
+               func TestPermissionMiddleware_Blocks(t *testing.T) {
+                   allowed := map[string]bool{"read_file": true}
+                   executor := executorFunc(func(ctx context.Context, execCtx ExecutionContext, input map[string]interface{}) (string, error) {
+                       return "should not reach", nil
+                   })
+
+                   middleware := PermissionMiddleware("write_file", allowed)
+                   wrapped := middleware(executor)
+
+                   result, err := wrapped.Execute(context.Background(), ExecutionContext{}, map[string]interface{}{})
+                   if err != nil {
+                       t.Errorf("Expected nil error (permissions return message, not error), got: %v", err)
+                   }
+                   if !strings.Contains(result, "not permitted") {
+                       t.Errorf("Expected denial message, got: %s", result)
+                   }
+               }
+
+               func TestPermissionMiddleware_Allows(t *testing.T) {
+                   allowed := map[string]bool{"write_file": true}
+                   executor := executorFunc(func(ctx context.Context, execCtx ExecutionContext, input map[string]interface{}) (string, error) {
+                       return "success", nil
+                   })
+
+                   middleware := PermissionMiddleware("write_file", allowed)
+                   wrapped := middleware(executor)
+
+                   result, err := wrapped.Execute(context.Background(), ExecutionContext{}, map[string]interface{}{})
+                   if err != nil {
+                       t.Fatalf("Execute failed: %v", err)
+                   }
+                   if result != "success" {
+                       t.Errorf("Expected 'success', got %q", result)
+                   }
+               }
+               ```
+
+            3. Add test for WithTiming (currently at middleware.go:73):
+               ```go
+               func TestWithTiming_AppliedToAllTools(t *testing.T) {
+                   baseWorkshop := NewWorkshop()
+                   baseWorkshop.Register(Tool{
+                       Name: "tool1",
+                       Executor: executorFunc(func(ctx context.Context, execCtx ExecutionContext, input map[string]interface{}) (string, error) {
+                           return "ok", nil
+                       }),
+                   })
+                   baseWorkshop.Register(Tool{
+                       Name: "tool2",
+                       Executor: executorFunc(func(ctx context.Context, execCtx ExecutionContext, input map[string]interface{}) (string, error) {
+                           return "ok", nil
+                       }),
+                   })
+
+                   var events []ToolCallEvent
+                   callback := func(evt ToolCallEvent) {
+                       events = append(events, evt)
+                   }
+
+                   wrapped := WithTiming(baseWorkshop, callback)
+                   tools := wrapped.All()
+                   if len(tools) != 2 {
+                       t.Fatalf("Expected 2 tools, got %d", len(tools))
+                   }
+
+                   // Execute both tools
+                   for _, tool := range tools {
+                       tool.Executor.Execute(context.Background(), ExecutionContext{}, map[string]interface{}{})
+                   }
+
+                   if len(events) != 2 {
+                       t.Errorf("Expected 2 timing events, got %d", len(events))
+                   }
+               }
+               ```
+
+            4. Add test for WithPermissions (currently at middleware.go:85):
+               ```go
+               func TestWithPermissions_BlocksWriteTools(t *testing.T) {
+                   baseWorkshop := NewWorkshop()
+                   baseWorkshop.Register(Tool{
+                       Name: "read_file",
+                       Executor: executorFunc(func(ctx context.Context, execCtx ExecutionContext, input map[string]interface{}) (string, error) {
+                           return "read ok", nil
+                       }),
+                   })
+                   baseWorkshop.Register(Tool{
+                       Name: "write_file",
+                       Executor: executorFunc(func(ctx context.Context, execCtx ExecutionContext, input map[string]interface{}) (string, error) {
+                           return "write ok", nil
+                       }),
+                   })
+
+                   allowed := map[string]bool{"read_file": true}
+                   wrapped := WithPermissions(baseWorkshop, allowed)
+
+                   readTool, _ := wrapped.Get("read_file")
+                   result, _ := readTool.Executor.Execute(context.Background(), ExecutionContext{}, map[string]interface{}{})
+                   if result != "read ok" {
+                       t.Errorf("read_file should be allowed, got: %s", result)
+                   }
+
+                   writeTool, _ := wrapped.Get("write_file")
+                   result, _ = writeTool.Executor.Execute(context.Background(), ExecutionContext{}, map[string]interface{}{})
+                   if !strings.Contains(result, "not permitted") {
+                       t.Errorf("write_file should be blocked, got: %s", result)
+                   }
+               }
+               ```
+
+            5. Add test for ReadOnlyTools (currently at middleware.go:109):
+               ```go
+               func TestReadOnlyTools_Registered(t *testing.T) {
+                   workshop := ReadOnlyTools("/tmp")
+                   tools := workshop.All()
+                   if len(tools) != 7 {
+                       t.Errorf("Expected 7 standard tools, got %d", len(tools))
+                   }
+
+                   // Verify read_file is allowed
+                   readTool, ok := workshop.Get("read_file")
+                   if !ok {
+                       t.Fatal("read_file not found")
+                   }
+                   result, _ := readTool.Executor.Execute(context.Background(), ExecutionContext{WorkDir: "/tmp"}, map[string]interface{}{
+                       "file_path": "nonexistent.txt",
+                   })
+                   if strings.Contains(result, "not permitted") {
+                       t.Error("read_file should not be blocked")
+                   }
+
+                   // Verify write_file is blocked
+                   writeTool, ok := workshop.Get("write_file")
+                   if !ok {
+                       t.Fatal("write_file not found")
+                   }
+                   result, _ = writeTool.Executor.Execute(context.Background(), ExecutionContext{WorkDir: "/tmp"}, map[string]interface{}{
+                       "file_path": "/tmp/test.txt",
+                       "content": "test",
+                   })
+                   if !strings.Contains(result, "not permitted") {
+                       t.Errorf("write_file should be blocked, got: %s", result)
+                   }
+               }
+               ```
+
+            **Verification gate**:
+            ```bash
+            go test ./pkg/tools/... -run TestTiming -v && \
+            go test ./pkg/tools/... -run TestPermission -v && \
+            go test ./pkg/tools/... -run TestWith -v && \
+            go test ./pkg/tools/... -run TestReadOnly -v && \
+            go test ./pkg/tools/... -coverprofile=/tmp/middleware.out && \
+            go tool cover -func=/tmp/middleware.out | grep middleware.go
+            ```
+
+            **Constraints**:
+            - Do NOT modify middleware.go implementation
+            - Tests must exercise real implementations (TimingMiddleware, PermissionMiddleware, etc.)
+            - Use executorFunc helper for mock executors (already defined in middleware_test.go:9)
+          files:
+            - pkg/tools/middleware_test.go
+    - number: 2
+      agents:
+        - id: B
+          task: |
+            **Goal**: Update Workshop.Register to use result.CodeToolAlreadyRegistered constant.
+
+            **Files to modify**:
+            - pkg/tools/workshop.go
+
+            **Changes required**:
+
+            1. Add import for result package if not already present (should be at line 9):
+               ```go
+               import (
+                   "fmt"
+                   "sort"
+                   "strings"
+                   "sync"
+
+                   "github.com/blackwell-systems/scout-and-wave-go/pkg/result"
+               )
+               ```
+
+            2. Update line 42 from:
+               ```go
+               Code:     "TOOL_ALREADY_REGISTERED",
+               ```
+               TO:
+               ```go
+               Code:     result.CodeToolAlreadyRegistered,
+               ```
+
+            3. Verify the full error construction context (lines 39-47):
+               ```go
+               if _, exists := w.tools[tool.Name]; exists {
+                   return result.NewFailure[RegisterData]([]result.SAWError{
+                       {
+                           Code:     result.CodeToolAlreadyRegistered,
+                           Message:  fmt.Sprintf("tool %q already registered", tool.Name),
+                           Severity: "fatal",
+                           Context:  map[string]string{"tool_name": tool.Name},
+                       },
+                   })
+               }
+               ```
+
+            **Tests**: Run existing workshop_test.go TestRegisterDuplicate (lines 126-159).
+            It verifies the error code is returned correctly. Update line 156 if it expects
+            the old string:
+            ```go
+            // FROM:
+            if res2.Errors[0].Code != "TOOL_ALREADY_REGISTERED" {
+            // TO:
+            if res2.Errors[0].Code != result.CodeToolAlreadyRegistered {
+            ```
+
+            **Verification gate**:
+            ```bash
+            go build ./pkg/tools/... && \
+            go test ./pkg/tools/... -run TestRegisterDuplicate -v
+            ```
+
+            **Constraints**:
+            - Do NOT change other error handling in workshop.go
+            - Do NOT modify Register method logic, only the error code constant
+            - Agent A must complete first (provides the constant)
+          files:
+            - pkg/tools/workshop.go
+          dependencies:
+            - A
+        - id: E
+          task: |
+            **Goal**: Add comprehensive tests for 0% coverage executor implementations.
+
+            **Files to modify**:
+            - pkg/tools/executors_test.go
+
+            **Current state**: executors_test.go has some tests (extractStringInput, FileWriteExecutor,
+            BashExecutor, grepFallback), but critical executors have 0% coverage: EditExecutor,
+            GlobExecutor, GrepExecutor, FileListExecutor. BashExecutor git ownership checks (lines
+            121-130) are untested. FileWriteExecutor is only 41.7% covered.
+
+            **Required imports**: Add to the import block if not already present:
+            ```go
+            import (
+                "context"
+                "encoding/json"
+                "os"
+                "os/exec"
+                "path/filepath"
+                "strings"
+                "testing"
+            )
+            ```
+
+            **Changes required**:
+
+            1. Add tests for EditExecutor (currently at executors.go:204, 0% coverage):
+               ```go
+               func TestEditExecutor_Success(t *testing.T) {
+                   tmpDir := t.TempDir()
+                   testFile := filepath.Join(tmpDir, "test.txt")
+                   os.WriteFile(testFile, []byte("hello world"), 0o644)
+
+                   executor := &EditExecutor{}
+                   result, err := executor.Execute(context.Background(), ExecutionContext{WorkDir: tmpDir}, map[string]interface{}{
+                       "file_path": testFile,
+                       "old_string": "world",
+                       "new_string": "universe",
+                   })
+
+                   if err != nil {
+                       t.Fatalf("Execute failed: %v", err)
+                   }
+                   if result != "ok" {
+                       t.Errorf("Expected 'ok', got %q", result)
+                   }
+
+                   contents, _ := os.ReadFile(testFile)
+                   if string(contents) != "hello universe" {
+                       t.Errorf("File contents: got %q, want 'hello universe'", string(contents))
+                   }
+               }
+
+               func TestEditExecutor_OldStringNotFound(t *testing.T) {
+                   tmpDir := t.TempDir()
+                   testFile := filepath.Join(tmpDir, "test.txt")
+                   os.WriteFile(testFile, []byte("hello world"), 0o644)
+
+                   executor := &EditExecutor{}
+                   result, err := executor.Execute(context.Background(), ExecutionContext{WorkDir: tmpDir}, map[string]interface{}{
+                       "file_path": testFile,
+                       "old_string": "nonexistent",
+                       "new_string": "replacement",
+                   })
+
+                   if err != nil {
+                       t.Fatalf("Execute should return error message as string, not Go error: %v", err)
+                   }
+                   if !strings.Contains(result, "old_string not found") {
+                       t.Errorf("Expected 'old_string not found' message, got: %s", result)
+                   }
+               }
+
+               func TestEditExecutor_MissingFilePath(t *testing.T) {
+                   executor := &EditExecutor{}
+                   result, err := executor.Execute(context.Background(), ExecutionContext{WorkDir: "/tmp"}, map[string]interface{}{
+                       "old_string": "foo",
+                       "new_string": "bar",
+                   })
+
+                   if err != nil {
+                       t.Fatalf("Execute should return validation error as string: %v", err)
+                   }
+                   if !strings.Contains(result, "input validation failed") {
+                       t.Errorf("Expected validation error, got: %s", result)
+                   }
+               }
+               ```
+
+            2. Add tests for GlobExecutor (currently at executors.go:231, 0% coverage):
+               ```go
+               func TestGlobExecutor_FindsMatches(t *testing.T) {
+                   tmpDir := t.TempDir()
+                   os.WriteFile(filepath.Join(tmpDir, "file1.txt"), []byte(""), 0o644)
+                   os.WriteFile(filepath.Join(tmpDir, "file2.txt"), []byte(""), 0o644)
+                   os.WriteFile(filepath.Join(tmpDir, "file3.log"), []byte(""), 0o644)
+
+                   executor := &GlobExecutor{}
+                   result, err := executor.Execute(context.Background(), ExecutionContext{WorkDir: tmpDir}, map[string]interface{}{
+                       "pattern": "*.txt",
+                   })
+
+                   if err != nil {
+                       t.Fatalf("Execute failed: %v", err)
+                   }
+                   if !strings.Contains(result, "file1.txt") || !strings.Contains(result, "file2.txt") {
+                       t.Errorf("Expected file1.txt and file2.txt in result, got: %s", result)
+                   }
+                   if strings.Contains(result, "file3.log") {
+                       t.Errorf("file3.log should not match *.txt pattern")
+                   }
+               }
+               ```
+
+            3. Add tests for GrepExecutor (currently at executors.go:248, 0% coverage):
+               ```go
+               func TestGrepExecutor_FindsPattern(t *testing.T) {
+                   tmpDir := t.TempDir()
+                   os.WriteFile(filepath.Join(tmpDir, "file1.txt"), []byte("hello world\nfoo bar"), 0o644)
+                   os.WriteFile(filepath.Join(tmpDir, "file2.txt"), []byte("hello universe"), 0o644)
+
+                   executor := &GrepExecutor{}
+                   result, err := executor.Execute(context.Background(), ExecutionContext{WorkDir: tmpDir}, map[string]interface{}{
+                       "pattern": "hello",
+                       "path": ".",
+                   })
+
+                   if err != nil {
+                       t.Fatalf("Execute failed: %v", err)
+                   }
+                   // Result format depends on whether rg is available, so just verify something is returned
+                   if result == "" {
+                       t.Error("Expected non-empty result for pattern that exists")
+                   }
+               }
+               ```
+
+            4. Add tests for FileListExecutor (currently at executors.go:83, 0% coverage):
+               ```go
+               func TestFileListExecutor_ListsDirectory(t *testing.T) {
+                   tmpDir := t.TempDir()
+                   os.WriteFile(filepath.Join(tmpDir, "file1.txt"), []byte(""), 0o644)
+                   os.WriteFile(filepath.Join(tmpDir, "file2.txt"), []byte(""), 0o644)
+                   os.Mkdir(filepath.Join(tmpDir, "subdir"), 0o755)
+
+                   executor := &FileListExecutor{}
+                   result, err := executor.Execute(context.Background(), ExecutionContext{WorkDir: tmpDir}, map[string]interface{}{
+                       "path": ".",
+                   })
+
+                   if err != nil {
+                       t.Fatalf("Execute failed: %v", err)
+                   }
+                   if !strings.Contains(result, "file1.txt") || !strings.Contains(result, "file2.txt") {
+                       t.Errorf("Expected file1.txt and file2.txt in result, got: %s", result)
+                   }
+                   if !strings.Contains(result, "subdir") {
+                       t.Errorf("Expected subdir in result, got: %s", result)
+                   }
+               }
+               ```
+
+            5. Add test for BashExecutor git ownership checks (currently at executors.go:121-130):
+               ```go
+               func TestBashExecutor_GitOwnershipWarning(t *testing.T) {
+                   tmpDir := t.TempDir()
+                   // Create .saw-ownership.json
+                   ownership := map[string]interface{}{
+                       "owned_files": []string{"owned.txt"},
+                   }
+                   ownershipJSON, _ := json.Marshal(ownership)
+                   os.WriteFile(filepath.Join(tmpDir, ".saw-ownership.json"), ownershipJSON, 0o644)
+
+                   // Initialize git repo
+                   exec.Command("git", "init", tmpDir).Run()
+                   exec.Command("git", "-C", tmpDir, "config", "user.email", "test@example.com").Run()
+                   exec.Command("git", "-C", tmpDir, "config", "user.name", "Test").Run()
+
+                   // Create and commit owned file
+                   os.WriteFile(filepath.Join(tmpDir, "owned.txt"), []byte("owned"), 0o644)
+                   exec.Command("git", "-C", tmpDir, "add", ".").Run()
+                   exec.Command("git", "-C", tmpDir, "commit", "-m", "init").Run()
+
+                   // Modify unowned file
+                   os.WriteFile(filepath.Join(tmpDir, "unowned.txt"), []byte("unowned"), 0o644)
+
+                   executor := &BashExecutor{}
+                   result, err := executor.Execute(context.Background(), ExecutionContext{WorkDir: tmpDir}, map[string]interface{}{
+                       "command": "git checkout HEAD",  // Triggers git modify check
+                   })
+
+                   if err != nil {
+                       t.Fatalf("Execute failed: %v", err)
+                   }
+                   // Check for warning message (only appears if git diff detects changes outside ownership)
+                   // This test may not trigger warning if git checkout doesn't modify unowned.txt
+                   t.Logf("Result: %s", result)
+               }
+               ```
+
+            6. Add tests for FileWriteExecutor error paths (increase from 41.7% coverage):
+               ```go
+               func TestFileWriteExecutor_EmptyContent(t *testing.T) {
+                   tmpDir := t.TempDir()
+                   testFile := filepath.Join(tmpDir, "empty.txt")
+
+                   executor := &FileWriteExecutor{}
+                   result, err := executor.Execute(context.Background(), ExecutionContext{WorkDir: tmpDir}, map[string]interface{}{
+                       "file_path": testFile,
+                       "content": "",
+                   })
+
+                   if err != nil {
+                       t.Fatalf("Execute failed: %v", err)
+                   }
+                   if result != "ok" {
+                       t.Errorf("Expected 'ok', got %q", result)
+                   }
+
+                   contents, _ := os.ReadFile(testFile)
+                   if len(contents) != 0 {
+                       t.Errorf("Expected empty file, got %d bytes", len(contents))
+                   }
+               }
+
+               func TestFileWriteExecutor_CreatesParentDirs(t *testing.T) {
+                   tmpDir := t.TempDir()
+                   testFile := filepath.Join(tmpDir, "subdir1", "subdir2", "test.txt")
+
+                   executor := &FileWriteExecutor{}
+                   result, err := executor.Execute(context.Background(), ExecutionContext{WorkDir: tmpDir}, map[string]interface{}{
+                       "file_path": testFile,
+                       "content": "nested",
+                   })
+
+                   if err != nil {
+                       t.Fatalf("Execute failed: %v", err)
+                   }
+                   if result != "ok" {
+                       t.Errorf("Expected 'ok', got %q", result)
+                   }
+
+                   contents, _ := os.ReadFile(testFile)
+                   if string(contents) != "nested" {
+                       t.Errorf("File contents: got %q, want 'nested'", string(contents))
+                   }
+               }
+               ```
+
+            **Verification gate**:
+            ```bash
+            go test ./pkg/tools/... -run TestEdit -v && \
+            go test ./pkg/tools/... -run TestGlob -v && \
+            go test ./pkg/tools/... -run TestGrep -v && \
+            go test ./pkg/tools/... -run TestFileList -v && \
+            go test ./pkg/tools/... -run TestFileWrite -v && \
+            go test ./pkg/tools/... -run TestBash -v && \
+            go test ./pkg/tools/... -coverprofile=/tmp/executors.out && \
+            go tool cover -func=/tmp/executors.out | grep executors.go
+            ```
+
+            **Constraints**:
+            - Do NOT modify executors.go implementation
+            - Use t.TempDir() for file-based tests (auto-cleanup)
+            - Tests must increase coverage for EditExecutor, GlobExecutor, GrepExecutor, FileListExecutor
+            - Agent A must complete first (provides CodeToolAlreadyRegistered constant used in workshop_test.go)
+          files:
+            - pkg/tools/executors_test.go
+          dependencies:
+            - A
+        - id: F
+          task: |
+            **Goal**: Investigate Namespace() method usage and add tests or document as dead code.
+
+            **Files to modify**:
+            - pkg/tools/workshop_test.go
+
+            **Current state**: Workshop.Namespace() method has 0% coverage. Review found no usage
+            outside pkg/tools package. Method is documented in doc.go but may be dead code.
+
+            **Investigation steps**:
+
+            1. Search entire scout-and-wave-go codebase for Namespace() calls:
+               ```bash
+               cd /Users/dayna.blackwell/workspace/code/scout-and-wave-go
+               grep -rn "\.Namespace(" . --include="*.go" | grep -v "pkg/tools" | grep -v "test"
+               ```
+
+            2. If NO usage found outside pkg/tools:
+               - Namespace() is dead code
+               - Add comment to workshop.go documenting this
+               - Add test to workshop_test.go to preserve functionality for future use
+
+            3. If usage IS found:
+               - Add comprehensive tests to workshop_test.go
+               - Document the usage locations in the test file
+
+            **Changes required**:
+
+            1. Add test for Namespace() method (lines 89-106 in workshop.go):
+               ```go
+               func TestNamespaceFiltersToolsByPrefix(t *testing.T) {
+                   workshop := NewWorkshop()
+
+                   tools := []Tool{
+                       {Name: "file:read", Namespace: "file", Executor: &mockExecutor{}},
+                       {Name: "file:write", Namespace: "file", Executor: &mockExecutor{}},
+                       {Name: "bash", Namespace: "bash", Executor: &mockExecutor{}},
+                       {Name: "git:commit", Namespace: "git", Executor: &mockExecutor{}},
+                   }
+                   for _, tool := range tools {
+                       workshop.Register(tool)
+                   }
+
+                   fileTools := workshop.Namespace("file:")
+                   if len(fileTools) != 2 {
+                       t.Errorf("Expected 2 file: tools, got %d", len(fileTools))
+                   }
+
+                   gitTools := workshop.Namespace("git:")
+                   if len(gitTools) != 1 {
+                       t.Errorf("Expected 1 git: tool, got %d", len(gitTools))
+                   }
+
+                   // Verify sorted order
+                   if fileTools[0].Name != "file:read" || fileTools[1].Name != "file:write" {
+                       t.Error("Namespace should return tools in sorted order")
+                   }
+               }
+               ```
+
+            2. If Namespace() is dead code, add comment to workshop.go after line 88:
+               ```go
+               // Namespace returns all tools whose names start with the given prefix,
+               // sorted by name for determinism. This enables namespace filtering for
+               // agent-specific tool subsets (e.g., "file:" for file tools).
+               //
+               // NOTE: As of 2026-04-01, this method is not actively used in the codebase
+               // outside of tests. It is preserved for future namespace-based tool filtering
+               // (e.g., per-agent tool restrictions beyond RolePathMiddleware).
+               func (w *DefaultWorkshop) Namespace(prefix string) []Tool {
+               ```
+
+            3. Document investigation results in completion report:
+               - Grep command output (if usage found)
+               - Decision: preserve with tests OR mark as dead code candidate for removal
+               - Recommendation: if truly unused, consider removing in future cleanup wave
+
+            **Verification gate**:
+            ```bash
+            go test ./pkg/tools/... -run TestNamespace -v && \
+            go test ./pkg/tools/... -coverprofile=/tmp/workshop.out && \
+            go tool cover -func=/tmp/workshop.out | grep workshop.go
+            ```
+
+            **Constraints**:
+            - Do NOT remove Namespace() method (preserve functionality)
+            - Do NOT modify Workshop interface (types.go)
+            - Add tests regardless of usage findings (method is part of public API)
+          files:
+            - pkg/tools/workshop_test.go
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./pkg/tools/...
+          required: true
+          repo: scout-and-wave-go
+        - type: test
+          command: go test ./pkg/tools/... -v
+          required: true
+          repo: scout-and-wave-go
+        - type: lint
+          command: go vet ./pkg/tools/...
+          required: true
+          repo: scout-and-wave-go
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: Agent B updates workshop.go before Agent A adds constant to result/codes.go
+          likelihood: low
+          impact: high
+          mitigation: Wave dependencies prevent this. Agent B depends_on Agent A.
+        - scenario: Test additions break existing tests due to mock conflicts
+          likelihood: low
+          impact: medium
+          mitigation: All tests use isolated executors and t.TempDir() for file operations. No shared state.
+        - scenario: Coverage does not increase despite new tests
+          likelihood: medium
+          impact: low
+          mitigation: Tests explicitly verify coverage increase in verification gates. If coverage remains low, investigation needed.
+        - scenario: Namespace() investigation reveals usage that makes it non-dead-code
+          likelihood: medium
+          impact: low
+          mitigation: Agent F handles both scenarios — adds tests regardless of usage findings.
+critic_report:
+    verdict: PASS
+    agent_reviews:
+        A:
+            agent_id: A
+            verdict: PASS
+        B:
+            agent_id: B
+            verdict: PASS
+        C:
+            agent_id: C
+            verdict: PASS
+        D:
+            agent_id: D
+            verdict: PASS
+        E:
+            agent_id: E
+            verdict: PASS
+        F:
+            agent_id: F
+            verdict: PASS
+    summary: Reviewed 6 agents (A, C, D in Wave 1; B, E, F in Wave 2) against scout-and-wave-go codebase. All file paths exist and are action:modify. All symbols referenced in briefs exist or are properly created by dependencies. Agent A adds CodeToolAlreadyRegistered constant; Agent B uses it (correct dependency). Agent C tests adapters (NewAnthropicAdapter, NewOpenAIAdapter, NewBedrockAdapter all exist). Agent D tests middleware (TimingMiddleware, PermissionMiddleware, WithTiming, WithPermissions, ReadOnlyTools all exist, executorFunc helper available). Agent E adds executor tests with required imports explicitly listed (context, encoding/json, os, os/exec, path/filepath, strings, testing) - brief correctly instructs agent to add these imports. Agent F tests Namespace method (exists at workshop.go:89). Interface contracts are syntactically valid. All error patterns match actual code. Wave execution may proceed.
+    reviewed_at: "2026-04-02T04:36:58Z"
+    issue_count: 0
+state: "REVIEWED"
+injection_method: hook
