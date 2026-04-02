@@ -1,0 +1,1255 @@
+title: sawtools Pre-Wave Scout Automation
+feature_slug: sawtools-scout-automation
+verdict: SUITABLE
+suitability_assessment: |
+    Four new sawtools commands decompose Scout judgment calls into deterministic
+    static analysis. The work is cleanly parallelizable across two repos:
+    Go library functions (pkg/protocol) and CLI command wires (cmd/sawtools) are
+    independent, as are the documentation updates (scout-and-wave protocol repo).
+
+    NOTE: A fifth command (validate-contracts) was originally in scope but conflicts
+    with the existing IMPL-validate-briefs.yaml (SCOUT_PENDING). validate-briefs covers
+    symbol lookup from brief text; validate-contracts is essentially the same capability
+    scoped to interface_contracts. Resolution: execute validate-briefs first (extend it
+    with result_code_semantics check type), then this IMPL provides the remaining four
+    commands. validate-contracts functionality will land via validate-briefs.
+
+    File decomposition: 2 library files (Wave 1), 4 CLI command files + 2 integration
+    edits (Wave 2), 5 documentation files (Wave 3). Disjoint ownership is achievable
+    with one exception resolved: main.go registers all new commands and is owned by
+    one agent in Wave 2.
+
+    No investigation-first items. No root cause analysis required — the feature
+    requirements are fully specified.
+
+    Interface discoverability: All cross-agent interfaces can be defined upfront. Wave
+    1 library functions return Result[T] types that Wave 2 CLI commands call. Types
+    are fully specifiable.
+
+    Pre-implementation status: None of the five new commands exist. pkg/result/codes.go
+    needs new error code ranges (X-series for contract validation). All doc files exist
+    and need targeted additions.
+
+    Parallelization value: HIGH. Go build/test cycle is >30s across the full suite. Wave
+    1 has 3 independent agents; Wave 2 has 3 independent agents; Wave 3 has 3 independent
+    documentation agents. Maximum parallelism at each wave.
+
+    Estimated times:
+    - Scout phase: ~15 min (cross-repo, 5 new commands with interface contracts)
+    - Agent execution: ~10 min (3 waves x ~12 min avg, parallel within each wave)
+    - Merge and verification: ~5 min
+    Total SAW time: ~30 min
+    Sequential baseline: ~9 agents x 15 min = ~135 min
+    Time savings: ~105 min (78% faster)
+    Recommendation: Clear speedup. Proceed.
+test_command: go test ./...
+lint_command: go vet ./...
+file_ownership:
+    - file: pkg/protocol/check_callers.go
+      agent: A
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: pkg/protocol/check_callers_test.go
+      agent: A
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: pkg/protocol/suggest_wave_structure.go
+      agent: B
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: pkg/protocol/suggest_wave_structure_test.go
+      agent: B
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: pkg/protocol/check_test_cascade.go
+      agent: C
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: pkg/protocol/check_test_cascade_test.go
+      agent: C
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: pkg/result/codes.go
+      agent: C
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: cmd/sawtools/check_callers_cmd.go
+      agent: D
+      wave: 2
+      action: new
+      depends_on:
+        - A
+      repo: scout-and-wave-go
+    - file: cmd/sawtools/list_error_ranges_cmd.go
+      agent: D
+      wave: 2
+      action: new
+      depends_on:
+        - A
+      repo: scout-and-wave-go
+    - file: cmd/sawtools/suggest_wave_structure_cmd.go
+      agent: D
+      wave: 2
+      action: new
+      depends_on:
+        - A
+        - B
+        - C
+      repo: scout-and-wave-go
+    - file: cmd/sawtools/check_test_cascade_cmd.go
+      agent: E
+      wave: 2
+      action: new
+      depends_on:
+        - C
+      repo: scout-and-wave-go
+    - file: cmd/sawtools/pre_wave_validate_cmd.go
+      agent: E
+      wave: 2
+      action: modify
+      depends_on:
+        - C
+      repo: scout-and-wave-go
+    - file: cmd/sawtools/main.go
+      agent: F
+      wave: 3
+      action: modify
+      depends_on:
+        - D
+        - E
+      repo: scout-and-wave-go
+    - file: implementations/claude-code/prompts/agents/scout.md
+      agent: G
+      wave: 4
+      action: modify
+      depends_on:
+        - D
+        - E
+      repo: scout-and-wave
+    - file: implementations/claude-code/prompts/agents/critic-agent.md
+      agent: H
+      wave: 4
+      action: modify
+      depends_on:
+        - D
+        - E
+      repo: scout-and-wave
+    - file: implementations/claude-code/prompts/saw-skill.md
+      agent: H
+      wave: 4
+      action: modify
+      depends_on:
+        - E
+      repo: scout-and-wave
+    - file: protocol/execution-rules.md
+      agent: H
+      wave: 4
+      action: modify
+      depends_on:
+        - D
+        - E
+      repo: scout-and-wave
+    - file: docs/GETTING_STARTED.md
+      agent: I
+      wave: 4
+      action: modify
+      depends_on:
+        - D
+        - E
+      repo: scout-and-wave
+    - file: docs/INSTALLATION.md
+      agent: I
+      wave: 4
+      action: modify
+      depends_on:
+        - D
+        - E
+      repo: scout-and-wave
+interface_contracts:
+    - name: CallerSite
+      description: A single call site of a function/method found during whole-repo scan.
+      definition: |
+        // CallerSite represents one location where a function/method is called.
+        type CallerSite struct {
+            File    string `json:"file"`    // repo-relative path
+            Line    int    `json:"line"`    // 1-indexed line number
+            Context string `json:"context"` // surrounding line content (trimmed)
+        }
+      location: pkg/protocol/check_callers.go
+    - name: CheckCallers
+      description: |-
+        Find all call sites of a named function or method across the entire repo,
+        including test files. Returns Result[[]CallerSite].
+      definition: |
+        // CheckCallers scans repoDir for all call sites of symbolName.
+        // symbolName may be a plain function name ("GetData") or a method call
+        // expression ("cache.Get") — both styles are matched via regex grep.
+        // Test files are included in the scan. Returns every (file, line, context)
+        // tuple where symbolName appears as a call expression.
+        func CheckCallers(ctx context.Context, repoDir, symbolName string) result.Result[[]CallerSite]
+      location: pkg/protocol/check_callers.go
+    - name: ErrorCodeRange
+      description: One allocated error code range from pkg/result/codes.go.
+      definition: |
+        // ErrorCodeRange describes a single allocated error code prefix range.
+        type ErrorCodeRange struct {
+            Prefix      string `json:"prefix"`      // e.g. "V", "K", "C"
+            Start       int    `json:"start"`       // first code number in range (1-indexed)
+            End         int    `json:"end"`         // last code number in range (inclusive)
+            Description string `json:"description"` // e.g. "Validation errors"
+        }
+      location: pkg/protocol/check_callers.go
+    - name: ListErrorRanges
+      description: |-
+        Scan pkg/result/codes.go and return all allocated error code ranges.
+        Lets Scout and agents choose unoccupied ranges without guessing.
+      definition: |
+        // ListErrorRanges parses the package-doc comment block in pkg/result/codes.go
+        // and returns all declared error code ranges.
+        // Returns Result[[]ErrorCodeRange].
+        func ListErrorRanges(ctx context.Context, repoDir string) result.Result[[]ErrorCodeRange]
+      location: pkg/protocol/check_callers.go
+    - name: TestCascadeError
+      description: A test file that calls a changed symbol but is not in any agent's ownership.
+      definition: |
+        // TestCascadeError represents an orphaned test file found during cascade check.
+        type TestCascadeError struct {
+            Symbol     string   `json:"symbol"`      // function/method name that changed
+            TestFile   string   `json:"test_file"`   // repo-relative path to *_test.go
+            Line       int      `json:"line"`        // line in test file
+            Context    string   `json:"context"`     // surrounding line content
+            Agents     []string `json:"agents"`      // agents that own the symbol definition
+        }
+      location: pkg/protocol/check_test_cascade.go
+    - name: CheckTestCascade
+      description: |-
+        Pre-flight gate: verify that every _test.go file calling a symbol whose
+        signature changes is assigned to an agent in file_ownership.
+        Run after IMPL doc is written, before E37.
+      definition: |
+        // CheckTestCascade detects orphaned test call sites for changed symbols.
+        // For each file in m.FileOwnership, it identifies function/method names
+        // that the owning agent is changing (based on agent task keywords:
+        // "change signature", "migrate", "update signature", "change return type",
+        // "rename"). For each such symbol it runs a whole-repo grep restricted to
+        // *_test.go files. Any test file calling the symbol that is NOT in
+        // m.FileOwnership is reported as a TestCascadeError.
+        //
+        // Returns Result[[]TestCascadeError].
+        // Returns SUCCESS with empty slice when no orphaned test callers found.
+        // Returns PARTIAL with warnings when symbol extraction was ambiguous.
+        // Returns FATAL when repoDir is unreadable or manifest is nil.
+        func CheckTestCascade(ctx context.Context, m *IMPLManifest, repoDir string) result.Result[[]TestCascadeError]
+      location: pkg/protocol/check_test_cascade.go
+    - name: WaveStructureProblem
+      description: A wave structure issue where callers of a changed interface are in the wrong wave.
+      definition: |
+        // WaveStructureProblem describes an E21A-inducing IMPL pattern.
+        type WaveStructureProblem struct {
+            Symbol        string   `json:"symbol"`         // changed function/type name
+            ChangedInWave int      `json:"changed_in_wave"` // wave where signature change occurs
+            CallerWave    int      `json:"caller_wave"`    // wave where callers live (problematic)
+            CallerFiles   []string `json:"caller_files"`   // files with unprotected callers
+            Message       string   `json:"message"`        // description of the problem
+        }
+      location: pkg/protocol/suggest_wave_structure.go
+    - name: SuggestWaveStructure
+      description: |-
+        Validate that all callers of any changed interface are in the same wave as
+        the change or in a downstream wave with correct depends_on.
+      definition: |
+        // SuggestWaveStructure validates wave structure safety for interface changes.
+        // For each interface contract or file in m, it identifies exported symbols
+        // whose signatures change relative to the current codebase. For each such
+        // symbol it finds all callers in m.FileOwnership and checks:
+        //   1. If callers are in an earlier wave than the definition: error.
+        //   2. If callers are in the same wave as the definition but a different
+        //      agent with no bridge pattern: warning.
+        //   3. If callers are in a later wave but depends_on does not include the
+        //      defining agent: error.
+        // Returns Result[[]WaveStructureProblem].
+        func SuggestWaveStructure(ctx context.Context, m *IMPLManifest, repoDir string) result.Result[[]WaveStructureProblem]
+      location: pkg/protocol/suggest_wave_structure.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## Context
+            You are implementing two new library functions in `pkg/protocol/` for the
+            sawtools-scout-automation feature. These functions help Scout agents perform
+            deterministic symbol lookup during IMPL planning. All code must use the
+            `result.Result[T]` pattern (not `(T, error)`) and must be fast (<2s).
+
+            ## Files to Create
+            - `pkg/protocol/check_callers.go` — `CheckCallers` and `ListErrorRanges` functions
+            - `pkg/protocol/check_callers_test.go` — tests for both functions
+
+            ## Interface Contracts
+
+            ### CallerSite
+            ```go
+            type CallerSite struct {
+                File    string `json:"file"`    // repo-relative path
+                Line    int    `json:"line"`    // 1-indexed line number
+                Context string `json:"context"` // surrounding line content (trimmed)
+            }
+            ```
+
+            ### CheckCallers
+            ```go
+            // CheckCallers scans repoDir for all call sites of symbolName.
+            // symbolName may be a plain function name ("GetData") or a method call
+            // expression ("cache.Get") — both styles are matched via regex grep.
+            // Test files are included in the scan. Returns every (file, line, context)
+            // tuple where symbolName appears as a call expression.
+            func CheckCallers(ctx context.Context, repoDir, symbolName string) result.Result[[]CallerSite]
+            ```
+
+            Implementation notes:
+            - Use `filepath.Walk` to scan all `.go` files under repoDir (do NOT skip _test.go)
+            - Skip `vendor/` and `.git/` directories
+            - For each file, read lines and scan for `symbolName` as a substring (simple string scan is sufficient)
+            - The `Context` field should be the full trimmed line content where symbolName appears
+            - On empty symbolName: return `result.NewFailure` with a `result.NewFatal("X001_INVALID_INPUT", "symbolName must not be empty")`
+            - On repoDir unreadable: return `result.NewFailure` with `result.NewFatal("X001_INVALID_INPUT", ...)`
+            - On success: return `result.NewSuccess(sites)` where sites is `[]CallerSite`
+            - If no callers found, return `result.NewSuccess([]CallerSite{})` (empty, not nil)
+
+            ### ErrorCodeRange
+            ```go
+            type ErrorCodeRange struct {
+                Prefix      string `json:"prefix"`      // e.g. "V", "K", "C"
+                Start       int    `json:"start"`       // first code number in range (1-indexed)
+                End         int    `json:"end"`         // last code number in range (inclusive)
+                Description string `json:"description"` // e.g. "Validation errors"
+            }
+            ```
+
+            ### ListErrorRanges
+            ```go
+            // ListErrorRanges parses the package-doc comment block in pkg/result/codes.go
+            // and returns all declared error code ranges.
+            func ListErrorRanges(ctx context.Context, repoDir string) result.Result[[]ErrorCodeRange]
+            ```
+
+            Implementation notes:
+            - Read the file at `filepath.Join(repoDir, "pkg/result/codes.go")`
+            - Parse the package doc comment (the `//` lines before `package result`)
+            - Each range line has the format: `\tPREFIX001-PREFIX099: Description`
+            - Use a regex: `\t([A-Z]+)(\d+)-[A-Z]+(\d+):\s*(.+)`
+            - Parse Prefix, Start, End, Description from each match
+            - Return `result.NewSuccess(ranges)` on success
+            - On file read error: return `result.NewFailure` with `result.NewFatal("X002_FILE_READ", ...)`
+
+            ## Imports required
+            ```go
+            import (
+                "bufio"
+                "context"
+                "os"
+                "path/filepath"
+                "regexp"
+                "strconv"
+                "strings"
+
+                "github.com/blackwell-systems/scout-and-wave-go/pkg/result"
+            )
+            ```
+            Package declaration: `package protocol`
+
+            ## Tests
+            In `pkg/protocol/check_callers_test.go`:
+            - Test `CheckCallers` with a temp directory containing a simple Go file that calls a known function
+            - Test that `CheckCallers` includes test files (create a `*_test.go` in temp dir)
+            - Test that empty symbolName returns FATAL result
+            - Test `ListErrorRanges` against the actual `pkg/result/codes.go` in the repo
+              (use `../../../` relative path from test dir, or pass repoDir as the test repo root)
+            - Verify at least the V, W, B, G, A, N, K, C code ranges are returned
+
+            ## Verification Gate
+            ```bash
+            cd /Users/dayna.blackwell/workspace/code/scout-and-wave-go
+            go build ./pkg/protocol/...
+            go vet ./pkg/protocol/...
+            go test ./pkg/protocol/... -run TestCheckCallers -run TestListErrorRanges -v
+            ```
+          files:
+            - pkg/protocol/check_callers.go
+            - pkg/protocol/check_callers_test.go
+        - id: B
+          task: |
+            ## Context
+            You are implementing `SuggestWaveStructure` library function in `pkg/protocol/`
+            for the sawtools-scout-automation feature. This function validates that callers
+            of changed interface symbols are in the correct downstream waves. All code must
+            use `result.Result[T]` (not `(T, error)`).
+
+            ## Files to Create
+            - `pkg/protocol/suggest_wave_structure.go`
+            - `pkg/protocol/suggest_wave_structure_test.go`
+
+            ### WaveStructureProblem
+            ```go
+            type WaveStructureProblem struct {
+                Symbol        string   `json:"symbol"`
+                ChangedInWave int      `json:"changed_in_wave"`
+                CallerWave    int      `json:"caller_wave"`
+                CallerFiles   []string `json:"caller_files"`
+                Message       string   `json:"message"`
+            }
+            ```
+
+            ### SuggestWaveStructure
+            ```go
+            func SuggestWaveStructure(ctx context.Context, m *IMPLManifest, repoDir string) result.Result[[]WaveStructureProblem]
+            ```
+
+            Implementation algorithm:
+            1. Build a map: `symbolDefinedInWave map[string]int` and `symbolOwnerAgent map[string]string`
+               - For each `FileOwnership` entry, if the agent's task (from the corresponding Wave.Agents entry)
+                 contains keywords "migrate", "update signature", "change return type", "rename",
+                 extract the symbol names from the task text using a heuristic: find backtick-quoted names like
+                 `` `SymbolName` `` or function names in parentheses.
+            2. For each `InterfaceContract`, the contract's `Location` is the defining file.
+               Find the wave for that file from `FileOwnership`. Record `symbolDefinedInWave[contract.Name] = wave`.
+            3. For each symbol in `symbolDefinedInWave`, grep for callers in other files in `m.FileOwnership`.
+               For each caller file, look up its wave. Check:
+               - `callerWave < definedInWave`: definite error (caller in earlier wave)
+               - `callerWave == definedInWave`: check if the caller's agent lists the defining agent in `depends_on`; if not, warning
+               - `callerWave > definedInWave`: verify the caller's wave agents have `depends_on` referencing the defining wave's agents; if not, error
+            4. Return `result.NewSuccess(problems)` — empty slice means clean.
+
+            ## Imports required
+            ```go
+            import (
+                "bufio"
+                "context"
+                "os"
+                "path/filepath"
+                "regexp"
+                "strings"
+
+                "github.com/blackwell-systems/scout-and-wave-go/pkg/result"
+            )
+            ```
+            Package declaration: `package protocol`
+
+            ## Tests
+            In `pkg/protocol/suggest_wave_structure_test.go`:
+            - Test `SuggestWaveStructure` with a simple manifest where callers are in a downstream wave with correct depends_on — expect no problems
+            - Test with callers in an earlier wave than the definition — expect at least one WaveStructureProblem
+            - Test with nil manifest returns FATAL result
+
+            ## Verification Gate
+            ```bash
+            cd /Users/dayna.blackwell/workspace/code/scout-and-wave-go
+            go build ./pkg/protocol/...
+            go vet ./pkg/protocol/...
+            go test ./pkg/protocol/... -run TestSuggestWaveStructure -v
+            ```
+          files:
+            - pkg/protocol/suggest_wave_structure.go
+            - pkg/protocol/suggest_wave_structure_test.go
+        - id: C
+          task: |
+            ## Context
+            You are implementing `CheckTestCascade` in `pkg/protocol/` and adding new error
+            code constants to `pkg/result/codes.go`. This is a pre-flight gate that runs
+            after Scout writes the IMPL doc to verify that test files calling changed symbols
+            are all assigned to agents.
+
+            ## Files to Modify/Create
+            - `pkg/result/codes.go` — add new error code range for scout automation checks
+            - `pkg/protocol/check_test_cascade.go` — new file
+            - `pkg/protocol/check_test_cascade_test.go` — new file
+
+            ## pkg/result/codes.go Changes
+
+            The package doc comment at the top of codes.go lists allocated ranges. Add a new range
+            for scout automation static analysis errors. The next available prefix after the existing
+            ranges is "X" (X001-X099: Scout automation static analysis errors).
+
+            1. Add to the package-doc comment block (the `//` lines before `package result`):
+               ```
+               //	X001-X099: Scout automation static analysis errors (check-callers, check-test-cascade, suggest-wave-structure)
+               ```
+            2. Add a new `const` block at the end of the file:
+               ```go
+               // Scout automation error codes (X001-X099)
+               const (
+                   // CodeCheckCallerInvalidInput is emitted when check-callers receives invalid input
+                   CodeCheckCallerInvalidInput = "X001_INVALID_INPUT"
+                   // CodeCheckCallerFileRead is emitted when a file cannot be read during caller scan
+                   CodeCheckCallerFileRead = "X002_FILE_READ"
+                   // CodeTestCascadeOrphan is emitted when a test file calls a changed symbol but is not assigned to any agent
+                   CodeTestCascadeOrphan = "X003_TEST_CASCADE_ORPHAN"
+                   // CodeWaveStructureCallerBefore is emitted when callers of a changed symbol are in an earlier wave
+                   CodeWaveStructureCallerBefore = "X004_WAVE_STRUCTURE_CALLER_BEFORE"
+                   // CodeWaveStructureMissingDep is emitted when callers in a later wave lack depends_on for the changing agent
+                   CodeWaveStructureMissingDep = "X005_WAVE_STRUCTURE_MISSING_DEP"
+               )
+               ```
+
+            ## pkg/protocol/check_test_cascade.go
+
+            ### TestCascadeError
+            ```go
+            type TestCascadeError struct {
+                Symbol   string   `json:"symbol"`    // function/method name that changed
+                TestFile string   `json:"test_file"` // repo-relative path to *_test.go
+                Line     int      `json:"line"`      // line in test file
+                Context  string   `json:"context"`   // surrounding line content
+                Agents   []string `json:"agents"`    // agents that own the symbol definition
+            }
+            ```
+
+            ### CheckTestCascade
+            ```go
+            func CheckTestCascade(ctx context.Context, m *IMPLManifest, repoDir string) result.Result[[]TestCascadeError]
+            ```
+
+            Implementation algorithm:
+            1. Build a set of owned test files: `ownedTestFiles map[string]bool` from `m.FileOwnership` where file ends in `_test.go`
+            2. Build a map of `changedSymbols map[string][]string` (symbol -> owning agent IDs):
+               - For each FileOwnership entry, find the corresponding agent task text in `m.Waves`
+               - If the task text contains change keywords ("change signature", "migrate",
+                 "update signature", "change return type", "rename", "changed signature"):
+                 extract backtick-quoted names `` `Name` `` from the task
+               - Map each extracted name to the owning agent
+            3. Build an owned files set: `ownedFiles map[string]bool` from all `m.FileOwnership`
+            4. For each `(symbol, agents)` in `changedSymbols`:
+               - Walk `repoDir` looking for `*_test.go` files
+               - For each test file, scan lines for the symbol name as a substring
+               - If the test file path (repo-relative) is NOT in `ownedFiles`:
+                 append a `TestCascadeError`
+            5. Return `result.NewSuccess(errors)` — empty slice is the happy path
+            6. Return `result.NewFailure` only for nil manifest or unreadable repoDir
+
+            ## Imports for check_test_cascade.go
+            ```go
+            import (
+                "bufio"
+                "context"
+                "os"
+                "path/filepath"
+                "strings"
+
+                "github.com/blackwell-systems/scout-and-wave-go/pkg/result"
+            )
+            ```
+            Package declaration: `package protocol`
+
+            ## Tests
+            In `pkg/protocol/check_test_cascade_test.go`:
+            - Test with a manifest that has an agent task containing "change signature to" with backtick-quoted symbol name, and a temp dir with a `*_test.go` that calls that symbol but the test file is not in FileOwnership — expect TestCascadeError
+            - Test where the test file IS in FileOwnership — expect no error
+            - Test with nil manifest returns FATAL
+            - Test with empty changedSymbols (no keywords) returns SUCCESS with empty slice
+
+            ## Verification Gate
+            ```bash
+            cd /Users/dayna.blackwell/workspace/code/scout-and-wave-go
+            go build ./pkg/result/... ./pkg/protocol/...
+            go vet ./pkg/result/... ./pkg/protocol/...
+            go test ./pkg/protocol/... -run TestCheckTestCascade -v
+            ```
+          files:
+            - pkg/protocol/check_test_cascade.go
+            - pkg/protocol/check_test_cascade_test.go
+            - pkg/result/codes.go
+    - number: 2
+      agents:
+        - id: D
+          task: |
+            ## Context
+            You are implementing three new CLI commands in `cmd/sawtools/`:
+            - `check-callers` — wraps `protocol.CheckCallers`
+            - `list-error-ranges` — wraps `protocol.ListErrorRanges`
+            - `suggest-wave-structure` — wraps `protocol.SuggestWaveStructure`
+
+            Wave 1 (Agents A, B, C) must be merged before this wave starts.
+            The library functions `CheckCallers`, `ListErrorRanges`, and `SuggestWaveStructure`
+            are in `pkg/protocol/` (added by Wave 1).
+
+            ## Files to Create
+            - `cmd/sawtools/check_callers_cmd.go`
+            - `cmd/sawtools/list_error_ranges_cmd.go`
+            - `cmd/sawtools/suggest_wave_structure_cmd.go`
+
+            ## cmd/sawtools/check_callers_cmd.go
+
+            ```go
+            package main
+
+            import (
+                "context"
+                "encoding/json"
+                "fmt"
+
+                "github.com/blackwell-systems/scout-and-wave-go/pkg/protocol"
+                "github.com/spf13/cobra"
+            )
+
+            func newCheckCallersCmd() *cobra.Command {
+                cmd := &cobra.Command{
+                    Use:   "check-callers <symbol-name>",
+                    Short: "Find all call sites of a function/method across the repo",
+                    Long: `Scans the entire repository for all call sites of the named symbol.
+            Test files are included. Returns JSON array of {file, line, context}.
+
+            Used by Scout during test cascade detection to ensure no callers are missed.
+
+            Example:
+              sawtools check-callers "cache.Get" --repo-dir /path/to/repo
+              sawtools check-callers "ParseFile" --repo-dir /path/to/repo`,
+                    Args: cobra.ExactArgs(1),
+                    RunE: func(cmd *cobra.Command, args []string) error {
+                        symbolName := args[0]
+                        res := protocol.CheckCallers(context.TODO(), repoDir, symbolName)
+                        if res.IsFatal() {
+                            for _, e := range res.Errors {
+                                fmt.Fprintln(cmd.ErrOrStderr(), e.Error())
+                            }
+                            return fmt.Errorf("check-callers failed")
+                        }
+                        out, err := json.MarshalIndent(res.GetData(), "", "  ")
+                        if err != nil {
+                            return fmt.Errorf("marshal output: %w", err)
+                        }
+                        fmt.Fprintln(cmd.OutOrStdout(), string(out))
+                        return nil
+                    },
+                }
+                return cmd
+            }
+            ```
+
+            ## cmd/sawtools/list_error_ranges_cmd.go
+
+            ```go
+            package main
+
+            import (
+                "context"
+                "encoding/json"
+                "fmt"
+
+                "github.com/blackwell-systems/scout-and-wave-go/pkg/protocol"
+                "github.com/spf13/cobra"
+            )
+
+            func newListErrorRangesCmd() *cobra.Command {
+                cmd := &cobra.Command{
+                    Use:   "list-error-ranges",
+                    Short: "List all allocated error code ranges from pkg/result/codes.go",
+                    Long: `Parses pkg/result/codes.go and returns all allocated error code ranges
+            as JSON. Lets Scout and agents choose an unoccupied range without guessing.
+
+            Example:
+              sawtools list-error-ranges --repo-dir /path/to/repo`,
+                    Args: cobra.NoArgs,
+                    RunE: func(cmd *cobra.Command, args []string) error {
+                        res := protocol.ListErrorRanges(context.TODO(), repoDir)
+                        if res.IsFatal() {
+                            for _, e := range res.Errors {
+                                fmt.Fprintln(cmd.ErrOrStderr(), e.Error())
+                            }
+                            return fmt.Errorf("list-error-ranges failed")
+                        }
+                        out, err := json.MarshalIndent(res.GetData(), "", "  ")
+                        if err != nil {
+                            return fmt.Errorf("marshal output: %w", err)
+                        }
+                        fmt.Fprintln(cmd.OutOrStdout(), string(out))
+                        return nil
+                    },
+                }
+                return cmd
+            }
+            ```
+
+            ## cmd/sawtools/suggest_wave_structure_cmd.go
+
+            ```go
+            package main
+
+            import (
+                "context"
+                "encoding/json"
+                "fmt"
+
+                "github.com/blackwell-systems/scout-and-wave-go/pkg/protocol"
+                "github.com/spf13/cobra"
+            )
+
+            func newSuggestWaveStructureCmd() *cobra.Command {
+                cmd := &cobra.Command{
+                    Use:   "suggest-wave-structure <manifest-path>",
+                    Short: "Validate wave structure for interface changes",
+                    Long: `Validates that all callers of any changed interface are either
+            in the same wave as the change, or in a downstream wave with correct depends_on.
+            Returns JSON report of wave structure problems.
+
+            Exit code 0: no problems found (or SUCCESS/PARTIAL with only warnings).
+            Exit code 1: problems found that would cause E21A failures.
+
+            Example:
+              sawtools suggest-wave-structure docs/IMPL/IMPL-feature.yaml --repo-dir /path/to/repo`,
+                    Args: cobra.ExactArgs(1),
+                    RunE: func(cmd *cobra.Command, args []string) error {
+                        manifestPath := args[0]
+                        m, err := protocol.Load(context.TODO(), manifestPath)
+                        if err != nil {
+                            return fmt.Errorf("failed to load manifest: %w", err)
+                        }
+                        res := protocol.SuggestWaveStructure(context.TODO(), m, repoDir)
+                        if res.IsFatal() {
+                            for _, e := range res.Errors {
+                                fmt.Fprintln(cmd.ErrOrStderr(), e.Error())
+                            }
+                            return fmt.Errorf("suggest-wave-structure failed")
+                        }
+                        problems := res.GetData()
+                        out, err := json.MarshalIndent(problems, "", "  ")
+                        if err != nil {
+                            return fmt.Errorf("marshal output: %w", err)
+                        }
+                        fmt.Fprintln(cmd.OutOrStdout(), string(out))
+                        if len(problems) > 0 {
+                            return fmt.Errorf("suggest-wave-structure: %d problem(s) found", len(problems))
+                        }
+                        return nil
+                    },
+                }
+                return cmd
+            }
+            ```
+
+            ## Verification Gate
+            ```bash
+            cd /Users/dayna.blackwell/workspace/code/scout-and-wave-go
+            go build ./cmd/sawtools/...
+            go vet ./cmd/sawtools/...
+            ```
+          files:
+            - cmd/sawtools/check_callers_cmd.go
+            - cmd/sawtools/list_error_ranges_cmd.go
+            - cmd/sawtools/suggest_wave_structure_cmd.go
+          dependencies:
+            - A
+        - id: E
+          task: |
+            ## Context
+            You are implementing one new CLI command and updating an existing command in `cmd/sawtools/`:
+            - `check-test-cascade` — wraps `protocol.CheckTestCascade`
+            - `pre-wave-validate` — add check-test-cascade as a 3rd mandatory check
+
+            Wave 1 (Agent C) must be merged before this wave starts.
+            The library function `CheckTestCascade` is in `pkg/protocol/` (added by Wave 1).
+
+            ## Files to Create/Modify
+            - `cmd/sawtools/check_test_cascade_cmd.go` (new)
+            - `cmd/sawtools/pre_wave_validate_cmd.go` (modify — add Step 3)
+
+            ## cmd/sawtools/check_test_cascade_cmd.go
+
+            ```go
+            package main
+
+            import (
+                "context"
+                "encoding/json"
+                "fmt"
+
+                "github.com/blackwell-systems/scout-and-wave-go/pkg/protocol"
+                "github.com/spf13/cobra"
+            )
+
+            func newCheckTestCascadeCmd() *cobra.Command {
+                cmd := &cobra.Command{
+                    Use:   "check-test-cascade <manifest-path>",
+                    Short: "Pre-flight gate: verify test files for changed symbols are in file_ownership",
+                    Long: `After Scout writes the IMPL, before wave execution begins:
+            verify that every _test.go file calling a function with a changed
+            signature is assigned to an agent in file_ownership.
+
+            Exit code 0: all test callers are covered.
+            Exit code 1: orphaned test callers found.
+
+            Example:
+              sawtools check-test-cascade docs/IMPL/IMPL-feature.yaml --repo-dir /path/to/repo`,
+                    Args: cobra.ExactArgs(1),
+                    RunE: func(cmd *cobra.Command, args []string) error {
+                        manifestPath := args[0]
+                        m, err := protocol.Load(context.TODO(), manifestPath)
+                        if err != nil {
+                            return fmt.Errorf("failed to load manifest: %w", err)
+                        }
+                        res := protocol.CheckTestCascade(context.TODO(), m, repoDir)
+                        if res.IsFatal() {
+                            for _, e := range res.Errors {
+                                fmt.Fprintln(cmd.ErrOrStderr(), e.Error())
+                            }
+                            return fmt.Errorf("check-test-cascade: internal error")
+                        }
+                        cascadeErrors := res.GetData()
+                        out, err := json.MarshalIndent(cascadeErrors, "", "  ")
+                        if err != nil {
+                            return fmt.Errorf("marshal output: %w", err)
+                        }
+                        fmt.Fprintln(cmd.OutOrStdout(), string(out))
+                        if len(cascadeErrors) > 0 {
+                            return fmt.Errorf("check-test-cascade: %d orphaned test caller(s) found", len(cascadeErrors))
+                        }
+                        return nil
+                    },
+                }
+                return cmd
+            }
+            ```
+
+            ## pre_wave_validate_cmd.go — Add Step 3
+
+            The existing `pre_wave_validate_cmd.go` has Steps 1 (E16 FullValidate) and 2 (E35).
+            You must add Step 3: test cascade check.
+
+            Read the current file at:
+            `/Users/dayna.blackwell/workspace/code/scout-and-wave-go/cmd/sawtools/pre_wave_validate_cmd.go`
+
+            The `PreWaveValidateResult` struct currently has two fields: `Validation` and `E35Gaps`.
+            Add a third field:
+            ```go
+            type PreWaveValidateResult struct {
+                Validation protocol.FullValidateData `json:"validation"`
+                E35Gaps    E35GapsResult             `json:"e35_gaps"`
+                TestCascade TestCascadeCheckResult    `json:"test_cascade"` // NEW
+            }
+
+            // TestCascadeCheckResult holds the result of the check-test-cascade pre-flight gate.
+            type TestCascadeCheckResult struct {
+                Passed bool                        `json:"passed"`
+                Errors []protocol.TestCascadeError `json:"errors"`
+            }
+            ```
+
+            In the `RunE` function, after Step 2 (E35 detection), add Step 3 before combining results:
+            ```go
+            // Step 3: Run test cascade check
+            cascadeRes := protocol.CheckTestCascade(context.TODO(), manifest, repoRoot)
+            var testCascadeResult TestCascadeCheckResult
+            if cascadeRes.IsFatal() {
+                // Log but don't fail — cascade check failure is non-blocking if manifest is valid
+                fmt.Fprintf(os.Stderr, "pre-wave-validate: test cascade check failed: %v\n", cascadeRes.Errors)
+                testCascadeResult = TestCascadeCheckResult{Passed: true, Errors: nil}
+            } else {
+                cascadeErrors := cascadeRes.GetData()
+                testCascadeResult = TestCascadeCheckResult{
+                    Passed: len(cascadeErrors) == 0,
+                    Errors: cascadeErrors,
+                }
+            }
+            ```
+
+            Update the `output` struct initialization to include the new field:
+            ```go
+            output := PreWaveValidateResult{
+                Validation: validateRes.GetData(),
+                E35Gaps: E35GapsResult{
+                    Passed: len(e35Gaps) == 0,
+                    Gaps:   e35Gaps,
+                },
+                TestCascade: testCascadeResult, // NEW
+            }
+            ```
+
+            Update the exit condition to also fail on cascade errors:
+            ```go
+            if !output.Validation.Valid || !output.E35Gaps.Passed || !output.TestCascade.Passed {
+                return fmt.Errorf("pre-wave validation failed")
+            }
+            ```
+
+            Do NOT modify any other lines in the file.
+
+            ## Verification Gate
+            ```bash
+            cd /Users/dayna.blackwell/workspace/code/scout-and-wave-go
+            go build ./cmd/sawtools/...
+            go vet ./cmd/sawtools/...
+            ```
+          files:
+            - cmd/sawtools/check_test_cascade_cmd.go
+            - cmd/sawtools/pre_wave_validate_cmd.go
+          dependencies:
+            - C
+    - number: 3
+      agents:
+        - id: F
+          task: |
+            ## Context
+            You are registering four new commands in `cmd/sawtools/main.go`.
+
+            Wave 1 must be merged before this wave. Agents D and E (this wave) must
+            complete before you run: their command constructor functions must exist for
+            main.go to compile.
+
+            ## Files to Modify
+            - `cmd/sawtools/main.go` — register 4 new commands
+
+            ## cmd/sawtools/main.go
+
+            Read the current file at:
+            `/Users/dayna.blackwell/workspace/code/scout-and-wave-go/cmd/sawtools/main.go`
+
+            The `rootCmd.AddCommand(...)` call registers all commands. After the last existing
+            `AddCommand` call (currently `newPreWaveValidateCmd()`), add the four new commands:
+            ```go
+            newCheckCallersCmd(),
+            newListErrorRangesCmd(),
+            newSuggestWaveStructureCmd(),
+            newCheckTestCascadeCmd(),
+            ```
+
+            Add them immediately before the closing `)` of the `rootCmd.AddCommand(...)` call.
+            There is exactly 1 `rootCmd.AddCommand(` call in main.go. All four new functions
+            were created by Agents D and E in this wave.
+
+            ## Verification Gate
+            ```bash
+            cd /Users/dayna.blackwell/workspace/code/scout-and-wave-go
+            go build ./cmd/sawtools/...
+            go vet ./cmd/sawtools/...
+            ```
+          files:
+            - cmd/sawtools/main.go
+          dependencies:
+            - D
+            - E
+    - number: 4
+      agents:
+        - id: G
+          task: |
+            ## Context
+            You are updating `scout.md` to integrate the two new Scout-time sawtools commands
+            into the Scout agent's standard workflow. The changes are targeted additions to
+            existing sections — do not rewrite sections wholesale.
+
+            ## File to Modify
+            `/Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/prompts/agents/scout.md`
+
+            ## Change 1: Update test cascade algorithm (Step 4 section)
+
+            Find the section in scout.md that describes test cascade detection (around line 371,
+            "Test file cascade detection (after dependency analysis)"). It contains an algorithm
+            block with a step 2 that uses `grep -rn "SymbolName" . --include="*.go"`. Replace
+            that algorithm step with the check-callers invocation:
+
+            Update this to instruct Scout to use `sawtools check-callers` instead of manual grep.
+            The new text should describe:
+            - For each interface with a changed signature, run:
+              `sawtools check-callers "<SymbolName>" --repo-dir <repo-path>`
+            - The output includes test files; filter for `_test.go` paths
+            - Any test file not in file_ownership is a test cascade miss — assign it to an agent
+
+            Also add a note that after writing the IMPL doc, Scout should run:
+            `sawtools check-test-cascade <impl-path> --repo-dir <repo-path>`
+            to catch any remaining test cascade misses before E37.
+
+            ## Change 2: Add list-error-ranges mention (Step 5 section)
+
+            Find the section on "Define interface contracts" (Step 5). At the end of that section,
+            after the existing content about integration_required and wiring detection, add a note:
+
+            ```
+            **Error code range lookup:** Before defining new error code constants, run
+            `sawtools list-error-ranges --repo-dir <repo-path>` to see all allocated
+            ranges in pkg/result/codes.go. Choose an unoccupied prefix letter to avoid
+            the collision that occurred in gatecache-review (Agent C chose K001-K099 because
+            C001 was occupied, causing a string mismatch with Agent A's hardcoded "CACHE_MISS").
+            ```
+
+            ## Rules
+            - Make surgical additions only. Do not modify existing text that is not in scope.
+            - Maintain the existing markdown style of the file (header levels, code fences, etc.)
+            - Do not change the version string on line 9 (`<!-- scout v0.13.0 -->`)
+            - Do not modify Step numbering or other steps
+
+            ## Verification Gate
+            Verify the file still has the correct structure:
+            ```bash
+            grep -c "sawtools check-callers" /Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/prompts/agents/scout.md
+            grep -c "sawtools list-error-ranges" /Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/prompts/agents/scout.md
+            grep -c "sawtools check-test-cascade" /Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/prompts/agents/scout.md
+            ```
+            Each grep must return at least 1.
+          files:
+            - implementations/claude-code/prompts/agents/scout.md
+          dependencies:
+            - D
+            - E
+        - id: H
+          task: |
+            ## Context
+            You are updating three protocol/docs files to reflect the new sawtools commands
+            that handle what was previously manual or critic-only work.
+
+            ## Files to Modify
+            - `/Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/prompts/agents/critic-agent.md`
+            - `/Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/prompts/saw-skill.md`
+            - `/Users/dayna.blackwell/code/scout-and-wave/protocol/execution-rules.md`
+
+            ## critic-agent.md Changes
+
+            Read the full file first (225 lines).
+
+            ### Check 8: caller_exhaustiveness
+            Add a note that `sawtools check-callers` is now available for Scout agents to use
+            when building the IMPL, and that the critic can verify exhaustiveness by running it:
+
+            ```
+            **Tool-assisted check:** Run `sawtools check-callers "<symbol>" --repo-dir <repo>`
+            to enumerate all call sites including test files. Compare against file_ownership.
+            Any file in the output not in file_ownership = severity: error (missed caller).
+            ```
+
+            ## saw-skill.md Changes
+
+            Read the full file first (167 lines).
+
+            Find the line about pre-wave-validate step (step 3):
+            ```
+            3. **E16+E35: Validate IMPL doc.** `sawtools pre-wave-validate "<path>" --wave 1 --fix`.
+            ```
+
+            Update the description to mention the new Step 3 (test cascade check):
+            ```
+            3. **E16+E35+TestCascade: Validate IMPL doc.** `sawtools pre-wave-validate "<path>" --wave 1 --fix`.
+               Exit 0 = proceed. Exit 1 = send errors to Scout (resume), retry once. Failure = BLOCKED.
+               Now includes Step 3: test cascade check — verifies that *_test.go files calling changed
+               symbols are assigned to agents. See `references/pre-wave-validation.md`.
+            ```
+
+            ## execution-rules.md Changes
+
+            Read lines 1970-2025 of execution-rules.md (the Cross-References section at the bottom).
+
+            Add a new E47 entry at the end of the cross-references list (E46 is already occupied by Test File Cascade Detection):
+            ```
+            - E47: Scout Automation Gates — four new sawtools commands replace Scout manual grep and
+              guessing: `check-callers` (whole-repo caller lookup including test files),
+              `list-error-ranges` (occupied code ranges in pkg/result/codes.go),
+              `suggest-wave-structure` (wave ordering safety for interface migrations),
+              `check-test-cascade` (pre-flight orphaned test caller detection, runs as Step 3
+              of `sawtools pre-wave-validate`). — see also E35, E37, E16
+            ```
+
+            Also find the existing test cascade detection section (around line 1971-1989) and update
+            Detection Layer 1 to reference `sawtools check-callers`:
+
+            Find text:
+            ```
+            - Run: `find <package-dir> -name "*_test.go" -exec grep -l "InterfaceName" {} \;`
+            ```
+            Replace with:
+            ```
+            - Run: `sawtools check-callers "<InterfaceName>" --repo-dir <repo-path>` (returns JSON including test files)
+            - Filter the output for `_test.go` files; assign unowned test files to the interface-changing agent
+            ```
+
+            Also update Detection Layer 2 to note the Step 3 addition:
+            Find text about `pre-wave-validate` running E35 detection; append:
+            ```
+            As of E46, pre-wave-validate also runs Step 3: `check-test-cascade`, which performs a whole-repo
+            scan for test files calling changed symbols. Exit 1 if any orphaned test callers are found.
+            ```
+
+            ## Verification Gate
+            ```bash
+            grep -c "check-callers" /Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/prompts/agents/critic-agent.md
+            grep -c "E47" /Users/dayna.blackwell/code/scout-and-wave/protocol/execution-rules.md
+            grep -c "TestCascade" /Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/prompts/saw-skill.md
+            ```
+            Each must return at least 1.
+          files:
+            - implementations/claude-code/prompts/agents/critic-agent.md
+            - implementations/claude-code/prompts/saw-skill.md
+            - protocol/execution-rules.md
+          dependencies:
+            - D
+            - E
+        - id: I
+          task: |
+            ## Context
+            You are updating the end-user documentation to describe the five new sawtools commands.
+            These documents explain what sawtools provides to new users.
+
+            ## Files to Modify
+            - `/Users/dayna.blackwell/code/scout-and-wave/docs/GETTING_STARTED.md`
+            - `/Users/dayna.blackwell/code/scout-and-wave/docs/INSTALLATION.md`
+
+            ## GETTING_STARTED.md Changes
+
+            Read the full file. Find the section that discusses the `sawtools` CLI (around the
+            "CLI (`sawtools`)" heading or equivalent). After the existing description of sawtools
+            commands, add a subsection describing these four new scout automation commands:
+
+            ```markdown
+            ### Scout Automation Commands
+
+            These four commands replace manual grep and guessing during Scout planning:
+
+            | Command | Purpose |
+            |---------|---------|
+            | `sawtools check-callers <symbol>` | Find all call sites of a function/method across the repo (including test files) |
+            | `sawtools list-error-ranges` | List all allocated error code ranges from `pkg/result/codes.go` |
+            | `sawtools suggest-wave-structure <impl-path>` | Validate that callers of changed interfaces are in correct downstream waves |
+            | `sawtools check-test-cascade <impl-path>` | Pre-flight gate: verify test files calling changed symbols are assigned to agents |
+
+            `check-test-cascade` runs automatically as Step 3 of `sawtools pre-wave-validate`.
+            ```
+
+            Insert this after existing sawtools command descriptions, before any next major section.
+
+            ## INSTALLATION.md Changes
+
+            Read the full file. Find the section that discusses sawtools capabilities (around
+            "Step 2: CLI Tools (`sawtools`)" or the table of sawtools uses).
+
+            Add a brief mention of the scout automation commands. Find the existing list of what
+            sawtools does and add one bullet:
+            ```
+            - Scout automation: `check-callers`, `list-error-ranges`, `suggest-wave-structure`,
+              and `check-test-cascade` replace manual grep during planning
+            ```
+
+            ## Verification Gate
+            ```bash
+            grep -c "check-callers" /Users/dayna.blackwell/code/scout-and-wave/docs/GETTING_STARTED.md
+            grep -c "check-callers" /Users/dayna.blackwell/code/scout-and-wave/docs/INSTALLATION.md
+            ```
+            Each must return at least 1.
+          files:
+            - docs/GETTING_STARTED.md
+            - docs/INSTALLATION.md
+          dependencies:
+            - D
+            - E
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./...
+          required: true
+          repo: scout-and-wave-go
+        - type: test
+          command: go test ./...
+          required: true
+          repo: scout-and-wave-go
+        - type: lint
+          command: go vet ./...
+          required: false
+          repo: scout-and-wave-go
+pre_mortem:
+    overall_risk: medium
+    rows:
+        - scenario: |-
+            Wave 1 library functions use `filepath.Walk` which may be slow on large
+            repos; the <2s performance requirement could be violated on very large codebases.
+          likelihood: low
+          impact: medium
+          mitigation: |-
+            Implement a depth-first walk with early termination on context cancellation.
+            Skip vendor/, node_modules/, and .git/ directories. If still too slow, add
+            --include-dirs flag to limit scope. The requirement is for typical repos; document
+            the caveat in the Long help text.
+        - scenario: |-
+            Agent F modifies prepare_wave.go to add the validate-contracts pre-flight and
+            must move the `projectRoot` declaration earlier. If Agent F misreads the current
+            code structure, it may introduce a build error or change behavior.
+          likelihood: medium
+          impact: high
+          mitigation: |-
+            Agent F brief explicitly states the current ordering and final ordering. The
+            brief includes the exact block to move verbatim. Critic Check 3 will verify the
+            pattern matches. If in doubt, Agent F should run `go build ./cmd/sawtools/...`
+            before committing.
+        - scenario: |-
+            Wave 1 introduces new types in pkg/protocol/.
+            If two Wave 1 agents accidentally define the same type name, merge will fail.
+          likelihood: low
+          impact: high
+          mitigation: |-
+            Interface contracts explicitly assign each type to a specific file:
+            CallerSite/ErrorCodeRange in check_callers.go (Agent A),
+            WaveStructureProblem in suggest_wave_structure.go (Agent B),
+            TestCascadeError in check_test_cascade.go (Agent C).
+            No shared types are needed — each command has its own output type.
+        - scenario: |-
+            The `SuggestWaveStructure` implementation relies on heuristic keyword scanning
+            of agent task text to identify "changed symbols". False negatives (missed keywords)
+            produce no output, which is safe but unhelpful.
+          likelihood: medium
+          impact: low
+          mitigation: |-
+            Document clearly in the command's Long help that detection is keyword-driven.
+            The command is a Scout aid, not a hard gate — it supplements rather than
+            replaces human review. False negatives do not block wave execution.
+        - scenario: |-
+            Documentation agents G, H, I are modifying files in the scout-and-wave repo
+            (not scout-and-wave-go). If the human reviewer runs quality gates for
+            scout-and-wave-go only, doc changes could be missed.
+          likelihood: low
+          impact: low
+          mitigation: |-
+            Quality gates are scoped to scout-and-wave-go for Go code. Documentation
+            changes are verified via targeted grep checks in each agent's verification gate.
+            The post-merge checklist should include reviewing all three doc files.
+critic_report:
+    verdict: PASS
+    agent_reviews:
+        A:
+            agent_id: A
+            verdict: PASS
+        B:
+            agent_id: B
+            verdict: PASS
+        C:
+            agent_id: C
+            verdict: PASS
+        D:
+            agent_id: D
+            verdict: PASS
+        E:
+            agent_id: E
+            verdict: PASS
+        F:
+            agent_id: F
+            verdict: PASS
+        G:
+            agent_id: G
+            verdict: PASS
+        H:
+            agent_id: H
+            verdict: PASS
+        I:
+            agent_id: I
+            verdict: PASS
+            issues:
+                - check: symbol_accuracy
+                  severity: warning
+                  description: 'Context paragraph at line 1091 still reads five new sawtools commands but the table the agent inserts contains only four commands. This is a warning-level inaccuracy; the table text itself (line 1108: These four commands) is correct and the verification gate is now accurate. Agent I is unlikely to add a fifth command because all four are explicitly listed in the table.'
+                  file: docs/GETTING_STARTED.md
+                  symbol: five new sawtools commands
+    summary: 'Agent I''s two reported issues from the previous run were addressed. Fix 1 (verification gate): the INSTALLATION.md gate now greps for ''check-callers'' (lines 1136-1137) instead of ''validate-contracts'' — the error is resolved. Fix 2 (context paragraph): line 1091 still reads ''five new sawtools commands'' rather than ''four'', so the warning-level inaccuracy remains. Because only a warning survives and no errors exist across any agent, the overall verdict is PASS. Agents A through H: all previously verified PASS verdicts hold — modify-action files (pre_wave_validate_cmd.go, main.go, codes.go) confirmed present; new protocol files (check_callers.go, suggest_wave_structure.go, check_test_cascade.go) confirmed absent. Wave execution may proceed.'
+    reviewed_at: "2026-04-02T17:29:33Z"
+    issue_count: 1
+state: "REVIEWED"
+injection_method: hook
