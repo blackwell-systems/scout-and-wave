@@ -17,7 +17,7 @@ The distinction is mechanical, not philosophical. Systems in categories 1-3 rely
 
 ## What SAW Is
 
-SAW is a coordination protocol for safely parallelizing LLM agent work on shared codebases. It is language-agnostic, provider-agnostic, and enforces correctness through six invariants (I1-I6) and 45 execution rules (E1-E45) that govern every phase from planning through post-merge verification.
+SAW is a coordination protocol for safely parallelizing LLM agent work on shared codebases. It is language-agnostic, provider-agnostic, and enforces correctness through six invariants (I1-I6) and 46 execution rules (E1-E46) that govern every phase from planning through post-merge verification.
 
 The protocol has three layers:
 
@@ -154,7 +154,7 @@ Each agent type (`scout`, `wave-agent`, `critic-agent`, `planner`, `integration-
 |------------|-----------|-----------------|
 | `scout` | ~787 lines | Suitability gate (5-question assessment), implementation process (18-step IMPL production), output format |
 | `wave-agent` | ~330 lines | Worktree isolation protocol, completion report format, 9-field execution checklist |
-| `critic-agent` | ~210 lines | 8-check verification procedure, structured CriticResult format |
+| `critic-agent` | ~230 lines | 10-check verification procedure, structured CriticResult format |
 | `planner` | ~557 lines | Suitability gate, PROGRAM manifest process (10 steps), annotated example manifest |
 | `integration-agent` | ~233 lines | Connector wiring patterns, integration report format |
 | `scaffold-agent` | ~159 lines | Type stub creation rules, scaffold status reporting |
@@ -194,7 +194,7 @@ The CLI is callable from CI/CD pipelines, shell scripts, cron jobs, or other orc
 Batching commands (`run-scout`, `prepare-wave`, `finalize-wave`, `finalize-impl`, `prepare-tier`, `finalize-tier`) package multi-step workflows as atomic operations. Each succeeds or fails as a unit with structured JSON output. Forgotten steps -- the most common source of silent protocol violations -- are eliminated by design.
 
 Additional CLI surface includes 75+ commands across all protocol phases:
-- **Validation:** `validate` (E16 with --fix auto-correction), `run-critic` (E37), `set-critic-review` (critic agent result writer), `check-type-collisions` (E41), `detect-shared-types` (E45), `validate-program`, `validate-integration --wiring` (E35), `check-impl-conflicts` (P1+), `check-program-conflicts` (tier-scoped P1+ conflict check), `validate-scaffolds`, `validate-scaffold`, `freeze-check`, `pre-wave-gate` (composite readiness check: E16 + E37 + scaffold status + IMPL state), `pre-wave-validate` (E16 + E35 same-package caller gap detection)
+- **Validation:** `validate` (E16 with --fix auto-correction), `run-critic` (E37), `set-critic-review` (critic agent result writer), `check-type-collisions` (E41), `detect-shared-types` (E45), `validate-program`, `validate-integration --wiring` (E35), `check-impl-conflicts` (P1+), `check-program-conflicts` (tier-scoped P1+ conflict check), `validate-scaffolds`, `validate-scaffold`, `freeze-check`, `pre-wave-gate` (composite readiness check: E16 + E37 + scaffold status + IMPL state), `pre-wave-validate` (E16 + E35 same-package caller gap detection), `check-callers` (whole-repo call site scanner including test files; used by Scout step 4 and Critic Check 8 to replace manual grep), `list-error-ranges` (parses `pkg/result/codes.go` and returns all allocated range prefixes; Scout uses this before defining new error constants to avoid collisions), `validate-briefs` (language-agnostic symbol-existence and line-reference validation of all agent briefs; Scout runs in step 17 to catch stale references before the critic gate), `check-test-cascade` (E46 pre-flight gate: detects test files referencing changed symbols that are not assigned to any agent; integrated as Step 3 in `pre-wave-validate`), `suggest-wave-structure` (validates wave ordering: callers of changed symbols in earlier waves → predicted E21A failure before worktrees are created)
 - **Execution:** `run-wave`, `create-worktrees`, `create-program-worktrees`, `prepare-agent`, `journal-init`, `journal-context` (E23A), `install-hooks`, `verify-hook-installed`, `verify-isolation` (E12: confirms agent is on assigned worktree branch)
 - **Analysis:** `analyze-suitability`, `analyze-deps`, `extract-commands`, `detect-scaffolds`, `detect-cascades`, `detect-wiring` (cross-agent function call detection → wiring declarations), `diagnose-build-failure` (multi-language error classification), `solve` (wave solver), `assign-agent-ids` (sequential or category-grouped ID assignment, up to 234 agents)
 - **Verification:** `verify-commits`, `verify-build`, `scan-stubs` (E20), `run-gates` (E21/E21A with caching E38), `run-review` (LLM-powered diff review), `predict-conflicts` (E11 hunk-level conflict prediction), `pre-commit-check` (lint + build gates as git pre-commit entry point)
@@ -252,7 +252,7 @@ The web application (`scout-and-wave-web`) is built on this SDK. Every CLI comma
 - Dependency conflict detection (`pkg/deps`) -- parses IMPL file ownership, extracts external imports from owned files, and cross-references lock files (go.mod, Cargo.lock, package-lock.json) to detect missing dependencies and version conflicts before wave launch
 - Format detection (`pkg/format`) -- auto-detects project formatter from toolchain markers (go.mod → gofmt, package.json → prettier, pyproject.toml/setup.py → ruff, Cargo.toml → cargo fmt); produces check and fix commands for gate integration
 - Agent ID generation (`pkg/idgen`) -- generates agent IDs matching `^[A-Z][2-9]?$`; sequential mode (A-Z then A2-Z2, max 234) or category-grouped mode (agents with shared category tags get same-letter multi-generation IDs, e.g., `["data","data","api"]` → `["A","A2","B"]`)
-- Unified error code catalog (`pkg/result`) -- 8 code domains (V/W/B/G/A/N/P/T), 60+ named constants; all engine errors carry a structured `SAWError` with Code, Message, and Cause for programmatic error handling
+- Unified error code catalog (`pkg/result`) -- 17 code domains (V/W/B/G/A/N/P/T/S/C/K/I/D/E/X/Q/R), 60+ named constants; all engine errors carry a structured `SAWError` with Code, Message, and Cause for programmatic error handling
 
 ## What Makes SAW Different
 
@@ -292,6 +292,8 @@ This extends to multi-feature coordination: the PROGRAM layer's P1+ conflict che
 
 **E11: Pre-Merge Conflict Prediction.** Before merging agent branches, SAW performs hunk-level diff analysis: `git diff --unified=0 mergeBase..branch -- file` for each agent, parsing `@@ -a,b @@` ranges and checking whether any two agents' modified line ranges overlap. Cascade patch patterns — where multiple agents modify callers in the same file at different functions — produce non-overlapping hunks and are identified as safe to merge. Only true overlapping edits (two agents modifying the same lines) or same-position insertions are flagged. This eliminates a class of false positives that would otherwise force manual merge steps on every multi-wave cascade refactor.
 
+Append-only conflicts (the common case when multiple agents add test cases at different positions in the same file) are automatically resolved by `finalize-wave --auto-merge-append`: `AnalyzeDiffPattern()` classifies the change pattern and `StepAutoMergeAppendConflicts()` merges in file-sorted order without human intervention.
+
 ### Interface Contracts Before Implementation
 
 **I2: Interface Contracts Precede Parallel Implementation.** The Scout identifies all cross-agent boundaries. A Scaffold Agent materializes shared types as real source files committed to HEAD before any Wave Agent launches. Agents compile against committed types, not hallucinated APIs. Interface contracts freeze when worktrees are created (E2) -- no mid-wave drift.
@@ -317,6 +319,7 @@ Protocol compliance is not advisory. Lifecycle hooks enforce invariants mechanic
 - **PostToolUse (`check_branch_drift`)**: Detects when an agent has drifted off its assigned worktree branch.
 - **PostToolUse (`check_git_ownership`)**: Catches git operations that modify files outside the ownership list -- the layer-2 defense that catches merge conflict resolutions bypassing Write/Edit hooks.
 - **PostToolUse (`warn_stubs`)**: E20 stub detection -- non-blocking warnings when Write/Edit creates files containing stub patterns (TODO, FIXME, NotImplementedError, panic("not implemented"), etc.) across 8 languages.
+- **PreToolUse (`block_git_stash`)**: Blocks `git stash` in wave-agent worktrees. Stashing hides uncommitted work from `finalize-wave`'s commit verification (I5) and risks data loss on worktree cleanup. Agents redirect to `git commit --no-verify` when parallel agents have unmerged type dependencies.
 
 **E43: Hook-Based Worktree Isolation.** Four hooks enforce worktree isolation mechanically rather than through agent instructions:
 - `inject_worktree_env` (SubagentStart): Sets 5 environment variables (SAW_AGENT_WORKTREE, SAW_AGENT_ID, SAW_WAVE_NUMBER, SAW_IMPL_PATH, SAW_BRANCH) when wave agents launch
@@ -326,11 +329,13 @@ Protocol compliance is not advisory. Lifecycle hooks enforce invariants mechanic
 
 **E44: Context Injection Observability.** Scout records how reference files were received (`injection_method`: hook/manual-fallback/unknown), and `prepare-agent` writes `context_source` to each agent entry (prepared-brief/cross-repo-full/fallback-full-context) for telemetry and debugging.
 
-Agents cannot violate the protocol even if prompted to. Enforcement lives below the agent's decision layer. The three enforcement layers are:
+Agents cannot violate the protocol even if prompted to. Enforcement lives below the agent's decision layer. The five enforcement layers are:
 
 1. **Claude Code hooks** (Layer 1) -- 17 hooks across PreToolUse/PostToolUse/SubagentStop/UserPromptSubmit: enforcement hooks block protocol violations (ownership I1, role separation I6, worktree isolation E43, branch drift, IMPL validation E16, pre-launch gate H5, git ownership, agent completion E42); injection hooks prepend conditional reference content at two layers (`inject_skill_context` targets the Orchestrator via `UserPromptSubmit` + `additionalContext`, `validate_agent_launch` targets subagents via `PreToolUse` + `updatedInput` for 3 conditional references); observability hooks emit structured events for monitoring and cost tracking.
 2. **Git pre-commit hooks** (Layer 2) -- ownership verification at commit time, catching violations that bypass Layer 1.
 3. **SDK constraint middleware** (Layer 3) -- `tools.Constraints` on every backend, enforcing the same rules programmatically for CLI and daemon execution where Claude Code hooks are not present.
+4. **Critic Check 9 (`i1_disjoint_ownership`)** (Layer 4) -- pre-wave brief review validates the IMPL's `file_ownership` table for I1 violations before worktrees are created; any (wave, file) pair owned by multiple agents blocks execution before any agent launches.
+5. **PrepareWave fast-fail** (Layer 5) -- `prepare-wave` enforces a hard stop before worktree creation when I1 violations are detected in the ownership table, preventing wasted compute on structurally conflicting wave configurations.
 
 ### The IMPL Doc as Coordination Artifact
 
@@ -342,6 +347,8 @@ Chat output is ephemeral. The IMPL doc is the record. Downstream agents, the orc
 
 **E37: Pre-Wave Brief Review.** Before agents launch, a critic agent reviews each brief for symbol accuracy, import conflicts, stale references, and ownership gaps. This catches errors in the plan before agents waste compute implementing against incorrect assumptions. The critic produces a structured report with pass/issues/fail verdict; execution blocks on unresolved errors.
 
+**Check 9 (`i1_disjoint_ownership`)** validates the IMPL's `file_ownership` table for I1 violations before worktrees are created — any (wave, file) pair owned by multiple agents surfaces as an error. **Check 10 (`result_code_semantics`)** verifies correct `result.Result[T]` usage in agent briefs — flags comparisons of `.Code` against error code constants (which belong in `Errors[0].Code`) and `IsFatal()` misuse when `NewFailure` was used.
+
 ### Type Collision Detection
 
 **E41: Cross-Agent Type Name Conflicts.** When multiple agents in a wave define types that will coexist after merge, name collisions cause compilation failures. `check-type-collisions` statically analyzes agent briefs and file ownership to detect type name conflicts before agents launch. This is a pre-flight check in `prepare-wave` -- collisions are reported with specific agent/file/type details so the orchestrator can revise briefs before wasting compute.
@@ -349,6 +356,10 @@ Chat output is ephemeral. The IMPL doc is the record. Downstream agents, the orc
 ### Shared Data Structure Detection
 
 **E45: Scaffold Detection for Shared Types.** Scout automatically detects data structures (structs, enums, type aliases, traits) referenced by 2+ agents by scanning agent task prompts and file ownership. For each detected shared type, Scout adds an entry to the Scaffolds section. The `detect-shared-types` tool automates this via import pattern matching, fuzzy path resolution, and circular dependency detection across Go, Rust, TypeScript, and Python. This prevents I1 violations from duplicate type definitions -- if Agent A and Agent B both define `PreviewData`, the merge fails. Scaffolding shared types before Wave 1 eliminates this class of failure.
+
+### Test File Cascade Detection
+
+**E46: Test File Cascade Detection.** When interfaces change, test files in other packages calling the changed symbols are the most commonly missed ownership category. Three detection layers: Scout step 4 uses `sawtools check-callers` to enumerate all call sites including test files; `pre-wave-validate` runs `check-test-cascade` as Step 3 to detect orphaned test callers before worktrees are created; post-merge verification flags remaining gaps. Test files assigned to the same wave as their interface changes prevent silent test failures after merge.
 
 ### Wiring Obligation Tracking
 
@@ -396,7 +407,7 @@ SAW uses **atomic batching commands** to combine multi-step workflows into singl
 **Core batching commands:**
 - **`run-scout`**: Launch Scout → Validate (E16) → Auto-fix → Finalize gates → Detect shared types (E45) → Return validated IMPL
 - **`prepare-wave`**: Baseline gates (E21A) → Repo validation → Create worktrees → Extract briefs → Init journals → Verify hooks (E43) → Type collision check (E41) → Critic review (E37) → Return worktree paths
-- **`finalize-wave`**: Verify commits (I5) → Scan stubs (E20) → Run gates (E21) → Merge → Verify build → Integration gaps (E25/E26) → Wiring validation (E35) → Cleanup → Return result
+- **`finalize-wave`**: Verify commits (I5) → Scan stubs (E20) → Run gates (E21) → Merge → Verify build → Integration gaps (E25/E26) → Wiring validation (E35) → Cleanup → Return result. Writes `.saw-state/wave{N}/branch-refs.json` before any step executes — if finalization fails mid-run, re-running restores branch refs from this file for a clean retry rather than re-scanning cleaned-up worktrees.
 - **`finalize-impl`**: Validate (E16) → Populate gates → Validate again → Return status
 - **`prepare-tier`**: Cross-IMPL conflict check (P1+) → Create IMPL branches (E28B, P5) → Coordinate worktree creation → Return tier readiness
 - **`finalize-tier`**: Tier gate verification (E29) → Contract freezing (E30) → Cross-IMPL merge coordination → Return tier completion
@@ -437,7 +448,7 @@ The observability event schema (E40) defines three event types -- `cost` (token 
 
 **Validation:** E16 IMPL structural validation with auto-fix (`validate --fix` auto-corrects invalid gate types and strips unknown keys), E37 critic brief review with pass/issues/fail verdict, E41 type collision detection (AST-based duplicate detection in same package), E45 shared data structure detection (prevents duplicate type definitions), P1+ cross-IMPL file ownership conflict detection, E21A/E21B baseline gate verification (pre-wave build/test verification with parallel execution and gate result caching E38, including cross-repo), H5 pre-launch agent validation (8 checks), scaffold correctness verification, E35 wiring obligation enforcement.
 
-**Execution:** Wave agents in git worktrees with E43 hook-based isolation enforcement (4 hooks: environment injection, auto-cd, path validation, compliance verification), solo wave optimization for single-agent waves (executes directly on branch without worktree overhead), 3-layer ownership enforcement (hooks, git pre-commit, SDK middleware), tool journal tracking (E23A) with checkpoint system and prior-work context injection for retries, incremental commits with auto-commit for API/Bedrock agents, cross-repository orchestration with coordinated merge ordering, integration waves (E27) for wiring-only work, LLM-powered code review with dimensional scoring, agent launch prioritization (critical path depth scheduling), per-role model configuration (Scout/Wave/Critic/Scaffold/Integration/Planner each configurable).
+**Execution:** Wave agents in git worktrees with E43 hook-based isolation enforcement (4 hooks: environment injection, auto-cd, path validation, compliance verification), solo wave optimization for single-agent waves (executes directly on branch without worktree overhead), 5-layer ownership enforcement (hooks, git pre-commit, SDK middleware, Critic Check 9 pre-wave brief review, PrepareWave fast-fail before worktree creation), tool journal tracking (E23A) with checkpoint system and prior-work context injection for retries, incremental commits with auto-commit for API/Bedrock agents, cross-repository orchestration with coordinated merge ordering, integration waves (E27) for wiring-only work, LLM-powered code review with dimensional scoring, agent launch prioritization (critical path depth scheduling), per-role model configuration (Scout/Wave/Critic/Scaffold/Integration/Planner each configurable).
 
 **Finalization:** Post-merge build verification (per-repo for cross-repo IMPLs), E20 stub scanning (8 stub patterns across 8 languages), E25/E26 integration gap detection and automated wiring (AST-based export scanning with action prefix/suffix classification), E35 wiring obligation verification (Layer 3B: validates all declared wiring fulfilled), IMPL archival with CONTEXT.md history (E18), gate caching (E38) for idempotent re-runs (5-minute TTL keyed on headCommit+diffStat+command), gate timing split (pre-merge vs post-merge execution), cross-repo merge coordination (branches checked/merged/cleaned in correct sibling repos), worktree reuse for agent reruns.
 
