@@ -133,3 +133,38 @@
   - IMPL doc: docs/IMPL/complete/IMPL-gatecache-review.yaml
 - **sawtools-scout-automation**: completed 2026-04-02, 4 waves, 9 agents
   - IMPL doc: docs/IMPL/complete/IMPL-sawtools-scout-automation.yaml
+
+## Established Interfaces
+
+### Brief Validation (validate-briefs)
+
+**Location:** `pkg/protocol/brief_validator.go` (scout-and-wave-go repo)
+
+**Purpose:** Automated validation of agent briefs for symbol and line accuracy.
+Language-agnostic approach using grep and line counting. Runs in Scout step 17
+to catch errors before the critic gate.
+
+**Key types:**
+- `BriefValidationData` — top-level result with per-agent validation results
+- `AgentBriefResult` — per-agent validation outcome with issues list
+- `BriefIssue` — single validation failure with suggestions
+
+**Main function:**
+```go
+func ValidateBriefs(ctx context.Context, implPath string) (BriefValidationData, error)
+```
+
+**CLI command:** `sawtools validate-briefs <impl-path>`
+
+**Checks performed:**
+1. Symbol existence: all symbols in briefs exist in owned files (grep-based)
+2. Line number validity: line references are within file bounds (wc -l)
+3. Suggestions: fuzzy-matched alternatives for missing symbols
+
+**Integration point:** Scout agent runs this in step 17 after schema validation
+passes. Output is JSON with actionable fix suggestions. Reduces critic gate
+round-trip time by catching errors at source (~5 min saved per critic cycle).
+
+**Cross-repo support:** Handles multi-repo IMPLs via FileOwnership.Repo field.
+
+**Performance:** <2s for typical IMPL with 4-6 agents.
