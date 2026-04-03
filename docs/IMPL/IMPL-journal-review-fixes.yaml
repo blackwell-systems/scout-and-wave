@@ -963,36 +963,7 @@ waves:
 
             **`pkg/orchestrator/journal_integration.go`**
 
-            Two call sites:
-
-            Site 1 — `journal.NewObserver` in `PrepareAgentContext`:
-            ```go
-            // Before:
-            observer, err = journal.NewObserver(ji.repoPath, agentPath)
-            if err != nil {
-                ji.logger("Failed to create journal observer", ...)
-                return originalPrompt, nil, fmt.Errorf(...)
-            }
-            // After:
-            obsRes := journal.NewObserver(ji.repoPath, agentPath)
-            if obsRes.IsFatal() {
-                ji.logger("Failed to create journal observer", ...)
-                return originalPrompt, nil, fmt.Errorf("create journal observer: %s", obsRes.Errors[0].Message)
-            }
-            observer = obsRes.Data
-            ```
-            Note: the local `observer` variable must be pre-declared (not `:=`) since it
-            is returned by the function. Check if the function signature returns `observer`;
-            adjust declaration accordingly.
-
-            Wait — `PrepareAgentContext` is in `pkg/orchestrator/journal_integration.go`,
-            not `pkg/engine/runner.go`. Confirm this by re-reading the file. The method
-            signature is:
-            ```go
-            func (ji *JournalIntegration) PrepareAgentContext(...) (enrichedPrompt string, observer *journal.JournalObserver, err error)
-            ```
-
-            Site 2 — `journal.GenerateContext(entries, maxEntries)`:
+            One call site — `journal.GenerateContext(entries, maxEntries)`:
             ```go
             // Before:
             contextMd, genErr := journal.GenerateContext(entries, maxEntries)
@@ -1002,20 +973,7 @@ waves:
             // After:
             contextMd := journal.GenerateContext(entries, maxEntries)
             ```
-            Remove the `if genErr != nil` block.
-
-            Also update `observer.Sync()` if it is called in `journal_integration.go`
-            (check for calls in `StartPeriodicSync`):
-            ```go
-            // Before:
-            if _, err := observer.Sync(); err != nil {
-                ji.logger("Periodic sync failed", "error", err)
-            }
-            // After:
-            if sr := observer.Sync(); sr.IsFatal() {
-                ji.logger("Periodic sync failed", "error", sr.Errors[0].Message)
-            }
-            ```
+            Remove the `if genErr != nil` block. This is the only change needed in this file.
 
             ### Verification gate
 
@@ -1094,5 +1052,43 @@ pre_mortem:
           mitigation: |-
             Agent F brief explicitly states that debug_journal.go has engine-local types that are
             unaffected by context.go changes. Verify with `go build ./pkg/engine/...`.
+critic_report:
+    verdict: ISSUES
+    agent_reviews:
+        A:
+            agent_id: A
+            verdict: PASS
+        B:
+            agent_id: B
+            verdict: PASS
+        C:
+            agent_id: C
+            verdict: PASS
+        D:
+            agent_id: D
+            verdict: PASS
+        E:
+            agent_id: E
+            verdict: PASS
+        F:
+            agent_id: F
+            verdict: PASS
+        G:
+            agent_id: G
+            verdict: ISSUES
+            issues:
+                - check: symbol_accuracy
+                  severity: error
+                  description: The brief instructs Agent G to update a journal.NewObserver call in PrepareAgentContext in pkg/orchestrator/journal_integration.go (Site 1). No such call exists in that file. PrepareAgentContext constructs the journal path directly and calls loadJournalEntries; it never calls journal.NewObserver. There is nothing to update for Site 1 in this file.
+                  file: pkg/orchestrator/journal_integration.go
+                  symbol: journal.NewObserver
+                - check: symbol_accuracy
+                  severity: error
+                  description: The brief instructs Agent G to update an observer.Sync() call in StartPeriodicSync in pkg/orchestrator/journal_integration.go. No StartPeriodicSync method exists in that file; it is defined in pkg/engine/runner.go and is already assigned to Agent F. There is no Sync() call to update in pkg/orchestrator/journal_integration.go.
+                  file: pkg/orchestrator/journal_integration.go
+                  symbol: StartPeriodicSync
+    summary: 'Agents A through F have accurate briefs fully verified against the codebase. Agent G has two errors in its description of pkg/orchestrator/journal_integration.go: the file contains no call to journal.NewObserver in PrepareAgentContext (the function reads the journal index directly via loadJournalEntries and never constructs an observer), and the file has no StartPeriodicSync method (that method lives in pkg/engine/runner.go). The only real change needed in journal_integration.go is dropping the error return from journal.GenerateContext at line 70. Agent G should skip Site 1 (NewObserver update) and the Sync update for journal_integration.go entirely, and only apply the GenerateContext change.'
+    reviewed_at: "2026-04-03T05:27:15Z"
+    issue_count: 2
 state: SCOUT_PENDING
 injection_method: hook
