@@ -1991,6 +1991,37 @@ time. However, this is a late failure — E45 exists to prevent it proactively.
 
 ---
 
+## Supplemental Rule Identifiers
+
+The following identifiers appear in implementation code and comments as
+cross-references. They are defined here to prevent documentation drift.
+
+### R3: Pre-Merge Per-Agent Gate Retry
+
+**Definition:** Pre-merge per-agent gate retry with fix attempts. When an
+agent's quality gate (build, test, lint) fails before merge, the orchestrator
+invokes a fix agent in the agent's worktree (closed-loop: fix attempt +
+re-run gate), repeating up to MaxRetries times. Implemented by
+`engine.ClosedLoopGateRetry`.
+
+**Related Rules:** E21 (post-wave verification gates), E21B (parallel gate
+execution), E42 (SubagentStop validation).
+
+---
+
+### C9: Self-Healing Validation
+
+**Definition:** Self-healing validation — automatic correction loop for Scout
+validation failures. When Scout output fails `protocol.Validate()`, the
+orchestrator automatically re-prompts Scout with the validation errors (up to
+3 retries). On exhaustion, state is set to `BLOCKED`. Implemented by
+`engine.ScoutCorrectionLoop`.
+
+**Related Rules:** See E16 (Scout Output Validation) and its correction loop
+subsection for the full specification.
+
+---
+
 ## Cross-References
 
 - See `preconditions.md` for conditions that must hold before execution begins
