@@ -42,7 +42,7 @@ Scout-and-Wave is a protocol for parallel agent coordination in software develop
 
 ## Agent Types
 
-Scout-and-Wave coordinates six asynchronous agent types plus the synchronous Orchestrator. Each type has mechanically enforced boundaries; a model prompted to violate its role is blocked before the tool executes.
+Scout-and-Wave coordinates seven asynchronous agent roles plus the synchronous Orchestrator. Each type has mechanically enforced boundaries; a model prompted to violate its role is blocked before the tool executes.
 
 | Agent Type | Subagent Tag | Role | Tool Access |
 |------------|-------------|------|-------------|
@@ -50,7 +50,7 @@ Scout-and-Wave coordinates six asynchronous agent types plus the synchronous Orc
 | **Scaffold Agent** | `scaffold-agent` | Materializes shared type stubs as committed source files before Wave 1 | Read, Write, Edit, Bash |
 | **Wave Agent** | `wave-agent` | Implements assigned files in an isolated git worktree | Read, Write, Edit, Bash, Glob, Grep |
 | **Critic Agent** | `critic-agent` | Reviews IMPL doc agent briefs against the actual codebase (E37); never modifies source files | Read, Glob, Grep, Bash |
-| **Integration Agent** | `integration-agent` | Wires new exports into caller code post-merge; restricted to `integration_connectors` files | Read, Write, Edit, Bash |
+| **Integration Agent** | `integration-agent` | Wires new exports into caller code post-merge; restricted to `integration_connectors` files. Also serves as hotfix agent for between-wave caller cascade fixes (E47). | Read, Write, Edit, Bash |
 | **Planner** | `planner` | Decomposes a program into features, assigns tiers, produces PROGRAM manifest | Read, Glob, Grep, Bash |
 
 ### Critic Agent (E37)
@@ -128,12 +128,13 @@ repo/
 
 **E43 Hook-Based Enforcement (v0.65.0+):**
 
-In Claude Code implementations, worktree isolation is enforced mechanically via four lifecycle hooks rather than relying on agent cooperation:
+In Claude Code implementations, worktree isolation is enforced mechanically via five lifecycle hooks rather than relying on agent cooperation:
 
 1. **SubagentStart: Environment injection** — Sets `SAW_AGENT_WORKTREE`, `SAW_AGENT_ID`, `SAW_WAVE_NUMBER`, `SAW_IMPL_PATH`, `SAW_BRANCH` when wave agents launch
-2. **PreToolUse:Bash: CD auto-injection** — Prepends `cd $SAW_AGENT_WORKTREE &&` to every bash command, ensuring commands run in the correct working directory automatically
-3. **PreToolUse:Write/Edit: Path validation** — Blocks relative paths and paths outside worktree boundaries at the tool boundary (exit 2), preventing the "Agent B leak" scenario where files are created in the main repo instead of the worktree
-4. **SubagentStop: Compliance verification** — Checks completion report exists and commits exist on branch, creating an audit trail for post-hoc violation analysis
+2. **SubagentStart: Worktree isolation validation** (`validate_worktree_isolation`) — Two-phase check: Phase 1 validates pwd+branch pattern; Phase 2 verifies exact branch via `.saw-agent-brief.md` frontmatter
+3. **PreToolUse:Bash: CD auto-injection** — Prepends `cd $SAW_AGENT_WORKTREE &&` to every bash command, ensuring commands run in the correct working directory automatically
+4. **PreToolUse:Write/Edit: Path validation** — Blocks relative paths and paths outside worktree boundaries at the tool boundary (exit 2), preventing the "Agent B leak" scenario where files are created in the main repo instead of the worktree
+5. **SubagentStop: Compliance verification** — Checks completion report exists and commits exist on branch, creating an audit trail for post-hoc violation analysis
 
 This defense-in-depth approach makes isolation violations impossible at the tool boundary rather than merely detected after merge. Other implementations must provide equivalent enforcement at their tool invocation boundary or fall back to instruction-based isolation (Field 0 self-verification).
 
@@ -141,12 +142,12 @@ See E43 in `protocol/execution-rules.md` for full specification.
 
 ### 3. Protocol SDK (sawtools CLI)
 
-The `sawtools` binary provides 71+ commands covering all protocol operations. Key commands include:
+The `sawtools` binary provides 75+ commands covering all protocol operations. Key commands include:
 
 **Batching commands (atomic multi-step workflows):**
 - `run-scout` — Launch Scout, validate IMPL, auto-correct IDs, finalize gates
 - `prepare-wave` — Check deps, create worktrees, extract briefs, init journals, verify hooks
-- `finalize-wave` — Verify commits, scan stubs, run gates, merge, verify build, cleanup
+- `finalize-wave` — Verify commits, scan stubs, run gates, merge, verify build, apply cascade hotfix (E47), cleanup; supports `--dry-run` flag
 - `finalize-impl` — Validate, populate gates, re-validate
 - `run-wave` — Fully automated wave execution
 
@@ -167,7 +168,7 @@ The `sawtools` binary provides 71+ commands covering all protocol operations. Ke
 - `scan-stubs` / `detect-scaffolds` / `validate-scaffolds` — E20 stub and scaffold detection
 - `run-gates` / `tier-gate` — E21 quality gate verification
 - `check-conflicts` / `check-type-collisions` — I1 ownership and type collision detection
-- `run-critic` / `set-critic-review` / `run-review` — Code review system
+- `run-critic` / `set-critic-review` / `set-critic-verdict` / `run-review` — Code review system
 
 **Program layer (multi-IMPL coordination):**
 - `create-program` / `list-programs` / `program-status` — Program lifecycle
@@ -283,7 +284,9 @@ External observer pattern that preserves agent execution context across Claude C
 - `cmd/sawtools/debug_journal.go` — CLI for debugging failed agents
 
 **Integration points:**
-- Orchestrator: `runner.go` calls `observer.Sync()` + `observer.GenerateContext()` before agent launch
+- `prepare-wave` / `prepare-agent`: JSON output includes `journal_context_available` and `journal_context_file` per agent, enabling the orchestrator to prepend journal context to agent prompts
+- `launchAgent`: Prepends journal context to the agent's launch prompt when available (restores working memory after compaction or interruption)
+- Periodic sync: 30-second goroutine runs during agent execution to keep journals current
 - Wave agents: Receive prepended context in prompt (transparent, no agent changes needed)
 
 See [tool-journaling.md](./tool-journaling.md) for full documentation.
@@ -514,7 +517,7 @@ The Program manifest system coordinates multiple related IMPLs that together del
 
 ## Protocol State Machine
 
-IMPL manifests track lifecycle state via 11 states with enforced transition guards. Invalid transitions are rejected by `protocol.SetImplState()`.
+IMPL manifests track lifecycle state via 12 states (including SCOUT_VALIDATING) with enforced transition guards. Invalid transitions are rejected by `protocol.SetImplState()`.
 
 ```
 INTERVIEWING ──> SCOUT_PENDING ──> REVIEWED ──> SCAFFOLD_PENDING ──> WAVE_PENDING
@@ -568,7 +571,7 @@ A requirements-gathering pathway that launches an interactive interview session 
 
 ## Go Engine Package Structure
 
-The Go engine (`scout-and-wave-go`) contains 32+ packages under `pkg/`. Key packages beyond the core:
+The Go engine (`scout-and-wave-go`) contains 40 packages under `pkg/`. Key packages beyond the core:
 
 | Package | Purpose |
 |---------|---------|
@@ -626,6 +629,6 @@ The web application (`scout-and-wave-web`) provides an HTTP/SSE interface for th
 ## See Also
 
 - [Protocol Invariants](../protocol/invariants.md) — I1-I6 formal specification
-- [Protocol Execution Rules](../protocol/execution-rules.md) — E1-E46 orchestrator rules
+- [Protocol Execution Rules](../protocol/execution-rules.md) — E1-E47 orchestrator rules
 - [Tool Journaling](./tool-journaling.md) — Compaction safety system
 - [Orchestrator Skill](../implementations/claude-code/prompts/saw-skill.md) — /saw command implementation
