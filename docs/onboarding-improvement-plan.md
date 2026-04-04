@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-22
 **Author:** Claire (research agent)
-**Status:** Proposal — ready for review and prioritization
+**Status:** Living document — last audited 2026-04-04
 
 ---
 
@@ -12,12 +12,10 @@
 
 A new user who discovers SAW and wants to try it goes through these steps:
 
-1. **Read the README** (206 lines). Encounters seven participant roles, six invariants, five preconditions, 41 execution rules, worktree isolation layers, scaffold agents, interface contracts, and wave sequencing — before seeing `Quick Start`.
-2. **Follow Quick Start** — must clone one repo, run `install.sh`, clone a second repo (`scout-and-wave-go`), build a Go binary (`go build -o ~/.local/bin/sawtools ./cmd/sawtools`), ensure `~/.local/bin` is on PATH, edit `~/.claude/settings.json` to add Agent permissions, optionally create `saw.config.json`.
-3. **Run `sawtools verify-install`** to check the setup.
-4. **Navigate to GETTING_STARTED.md** to understand the three interfaces (skill, web, CLI).
-5. **Navigate to `implementations/claude-code/QUICKSTART.md`** for a step-by-step walkthrough.
-6. **Finally run `/saw scout "feature"`** — and wait 30-90 seconds for a result they need protocol knowledge to evaluate.
+1. **Read the README** (206 lines). Encounters seven participant roles, six invariants, five preconditions, 47 execution rules, worktree isolation layers, scaffold agents, interface contracts, and wave sequencing — before seeing `Quick Start`.
+2. **Follow Quick Start** — clone the protocol repo, run `install.sh` (handles skill symlinks, hook registration, settings.json merge, Agent permission), `brew install blackwell-systems/tap/sawtools`, optionally run `sawtools verify-install`.
+3. **Navigate to `implementations/claude-code/QUICKSTART.md`** for a step-by-step walkthrough.
+4. **Run `/saw scout "feature"`** (or `/saw auto "feature"` for the single-command flow) — and wait 30-90 seconds for a result they need protocol knowledge to evaluate.
 
 **Minimum steps before first productive use: ~4** (clone protocol repo, run install.sh, `brew install blackwell-systems/tap/sawtools`, run `/saw scout`). Previously 9 steps before `go install` and Homebrew were available. Compare with AO's 1 step: `ao start <url>`.
 
@@ -63,7 +61,7 @@ That is seven protocol-specific concepts, all required upfront. A user who skips
 | Wave sequencing (I3) | - | Can learn by doing (system handles it) |
 | Worktree isolation | - | Can learn by doing (invisible to user) |
 | Seven participant roles | - | Can learn later (most are invisible) |
-| `sawtools` binary and its 20+ commands | Must learn (to install) | Can defer (skill handles orchestration) |
+| `sawtools` binary and its 75+ commands | Must learn (to install) | Can defer (skill handles orchestration) |
 | `saw.config.json` format | Must learn (for web app) | Can defer (CLI auto-detects) |
 | Agent permissions in Claude Code | Must learn | - |
 | Three-repo architecture | Must learn (to install) | Can defer understanding why |
@@ -134,12 +132,12 @@ One command that:
 
 | Concept | AO | Paperclip | SAW (current) |
 |---|---|---|---|
-| Project setup | Auto-detect | One command | 9 steps |
+| Project setup | Auto-detect | One command | ~4 steps (was 9, now: clone, install.sh, brew install, /saw scout) |
 | Planning phase | None (skip to execution) | CEO delegates tasks | Scout (required, must understand) |
-| Correctness model | None | None | 6 invariants (front-loaded in docs) |
+| Correctness model | None | None | 6 invariants, 47 execution rules (front-loaded in docs) |
 | Agent roles | Hidden (one agent per issue) | Corporate metaphor (CEO, CTO, engineer) | 7 roles (front-loaded in README) |
-| Configuration | Zero-config | `--yes` defaults | Manual `saw.config.json` + 3 repos |
-| First productive use | 30 seconds | 2 minutes | 15-30 minutes |
+| Configuration | Zero-config | `--yes` defaults | `install.sh` + `sawtools init` auto-generates config |
+| First productive use | 30 seconds | 2 minutes | ~5 minutes (was 15-30, improved by install.sh + Homebrew + /saw auto) |
 
 ---
 
@@ -159,7 +157,7 @@ One command that:
 
 **What the system hides:**
 - Protocol invariants (I1-I6)
-- Execution rules (E1-E45)
+- Execution rules (E1-E47)
 - Participant roles (all seven)
 - IMPL doc format (YAML structure)
 - Worktree isolation mechanics
@@ -300,11 +298,10 @@ saw init [--repo <path>] [--force]
 4. **If sawtools is missing**, print install instructions:
    ```
    sawtools not found. Install it:
-     go install github.com/blackwell-systems/scout-and-wave-go/cmd/sawtools@latest
+     brew install blackwell-systems/tap/sawtools
 
-   Or build from source:
-     git clone https://github.com/blackwell-systems/scout-and-wave-go.git
-     cd scout-and-wave-go && go build -o ~/.local/bin/sawtools ./cmd/sawtools
+   Or via Go install:
+     go install github.com/blackwell-systems/scout-and-wave-go/cmd/sawtools@latest
    ```
 
 5. **Print next steps:**
@@ -512,14 +509,10 @@ The skill prompt tells the orchestrator to "print what's missing and how to inst
 SAW needs the 'sawtools' command-line tool, but it's not installed.
 
 Install it (choose one):
-  go install github.com/blackwell-systems/scout-and-wave-go/cmd/sawtools@latest
+  brew install blackwell-systems/tap/sawtools
 
-  Or build from source:
-    git clone https://github.com/blackwell-systems/scout-and-wave-go.git
-    cd scout-and-wave-go && go build -o ~/.local/bin/sawtools ./cmd/sawtools
-
-Then add to your PATH if needed:
-  export PATH="$HOME/.local/bin:$PATH"
+  Or via Go install:
+    go install github.com/blackwell-systems/scout-and-wave-go/cmd/sawtools@latest
 
 After installing, try your command again.
 ```
@@ -643,9 +636,9 @@ Options:
 
 They share the engine (`pkg/`), not each other. That's correct architecture.
 
-**The installation friction was solved by `go install` and Homebrew** (v0.92.0, 2026-03-25). Both binaries are now easy to install without building from source.
+**The installation friction was solved by `go install` and Homebrew** (v0.92.0, 2026-03-25). Both binaries are now easy to install without building from source. `brew install blackwell-systems/tap/sawtools` works. The README documents Homebrew as the primary install method.
 
-**Note:** The fact that this proposal was generated at all is itself an onboarding signal — the two-binary architecture and its rationale need to be documented clearly in INSTALLATION.md and the README. If a researcher reading the codebase can't tell why they're separate, new users can't either.
+**Note:** The fact that this proposal was generated at all is itself an onboarding signal -- the two-binary architecture and its rationale need to be documented clearly in INSTALLATION.md and the README. If a researcher reading the codebase can't tell why they're separate, new users can't either.
 
 ### 4.7 `saw plan` as Alias for Scout
 
@@ -679,16 +672,22 @@ In the web app, the "New Plan" button already uses "Plan" language. This makes C
 
 ## 5. Implementation Priority
 
-**Last Updated:** 2026-03-28 (completion audit)
-**Overall Completion:** ~15% (2 of 13 actionable items complete)
+**Last Updated:** 2026-04-04 (reality audit)
+**Overall Completion:** ~40% (5 of 13 actionable items complete or shipped via other work)
 
-### ✅ Completed Items
-- **4.1 `sawtools init`** (Tier 2) — Completed 2026-03-25, documented in CHANGELOG v0.69.0
-- **4.4 Web UI tooltips** (Tier 1, partial) — Completed 2026-03-20 via IMPL-webapp-ux-onboarding.yaml
+### Completed Items
+- **4.1 `sawtools init`** -- Completed 2026-03-25, documented in CHANGELOG v0.69.0
+- **4.4 Web UI tooltips** (partial) -- Completed 2026-03-20 via IMPL-webapp-ux-onboarding.yaml
+- **4.6 Unified binary** -- REJECTED and resolved. Homebrew formula shipped (`brew install blackwell-systems/tap/sawtools`), eliminating install friction without merging binaries.
+- **install.sh overhaul** (not in original plan) -- Shipped. Handles hook registration (18 hooks), skill symlinks, settings.json merge, Agent permission, smoke tests. Reduces manual steps from 9 to ~4.
+- **`/saw auto` command** (not in original plan) -- Shipped. Collapses scout + review + wave into one command, addressing the "too many steps" friction from section 1.1.
+- **`sawtools verify-install`** -- Exists in sawtools CLI (`verify_install_cmd.go`)
+- **QUICKSTART.md** -- Comprehensive step-by-step walkthrough with example output, error handling, and troubleshooting
+- **README.md** -- Updated with 7-step install guide, Homebrew instructions, hook documentation
 
-### 🚫 Rejected/Deferred Items
-- **4.7 `saw plan` alias** — Deferred (second review, line 730)
-- **4.4 Hide advanced model selectors** — Rejected (line 746, all 7 stay visible)
+### Rejected/Deferred Items
+- **4.7 `saw plan` alias** -- Deferred (second review, line 730)
+- **4.4 Hide advanced model selectors** -- Rejected (line 746, all 7 stay visible)
 
 ---
 
@@ -700,7 +699,7 @@ In the web app, the "New Plan" button already uses "Plan" language. This makes C
 |---|---|---|---|---|---|---|
 | 1 | **4.5 Error messages as teaching moments** (skill prompt templates) | High — every new user hits at least one error | Small | scout-and-wave | None | **INCOMPLETE** — No verbatim templates in saw-skill.md |
 | 2 | **4.7 `saw plan` alias** | ~~High~~ Low — removes first jargon barrier | Small | scout-and-wave-go, scout-and-wave | None | **DEFERRED** — Overloads "plan", no standalone CLI (see line 730) |
-| 3 | **4.8 `saw run` alias** (if needed; `saw wave` is acceptable) | Low — "wave" is distinctive and learnable | Small | scout-and-wave-go, scout-and-wave | None | **NOT STARTED** |
+| 3 | **4.8 `saw run` alias** (if needed; `saw wave` is acceptable) | Low — "wave" is distinctive and learnable | Small | scout-and-wave-go, scout-and-wave | None | **NOT STARTED** — `/saw auto` partially addresses this by collapsing the multi-command flow |
 | 4 | **4.4 Concept renaming** (UI labels only) | High — reduces cognitive load on every page | Small-Medium | scout-and-wave-web | None | **PARTIAL** — Tooltips done (IMPL-webapp-ux-onboarding, 2026-03-20), model selectors kept visible (REJECTED) |
 | 5 | **README screenshot/recording** (from Tier 1 revised, line 748) | High — 10-second GIF converts evaluators | Small | scout-and-wave | None | **INCOMPLETE** — No visual in first 20 lines |
 
@@ -710,7 +709,7 @@ In the web app, the "New Plan" button already uses "Plan" language. This makes C
 |---|---|---|---|---|---|---|
 | 5 | **4.2 Guided first run** (CLI skill prompt changes) | High — transforms first experience | Medium | scout-and-wave | None | **INCOMPLETE** |
 | 6 | **4.3 Web app empty state** redesign | High — eliminates dead-end first impression | Medium | scout-and-wave-web | None | **INCOMPLETE** |
-| 7 | **~~4.1 `sawtools init`~~** | — | — | COMPLETE (2026-03-25) | — | ✅ **COMPLETE** |
+| 7 | **~~4.1 `sawtools init`~~** | -- | -- | COMPLETE (2026-03-25) | -- | **COMPLETE** |
 | 8 | **4.5 Error messages** (Go-side UserMessage fields) | Medium — better diagnostics compound over time | Medium | scout-and-wave-go | None | **INCOMPLETE** |
 
 ### Tier 3: High Impact, Large Effort (do third)
@@ -775,8 +774,8 @@ Independent review verdict: **APPROVE WITH CHANGES**. Status of each condition:
 
 | # | Proposal | Impact | Effort | Rationale |
 |---|---|---|---|---|
-| 10 | **`saw plan` alias (4.7)** | Low | Small | Deferred — overloads "plan" and no standalone CLI exists. Revisit if CLI entry point is built. |
-| 11 | **~~`sawtools init` command (4.1)~~** | — | — | COMPLETE (2026-03-25). Implemented as `sawtools init` with auto-detection. |
+| 10 | **`saw plan` alias (4.7)** | Low | Small | Deferred -- overloads "plan" and no standalone CLI exists. Revisit if CLI entry point is built. |
+| 11 | **~~`sawtools init` command (4.1)~~** | -- | -- | COMPLETE (2026-03-25). Implemented as `sawtools init` with auto-detection. |
 | 12 | **Protocol doc renaming (4.4 docs)** | Low | Large | Docs are secondary to the product experience. |
 | 13 | **Interactive web tutorial** | Medium | Large | Guided overlay in web app. Nice to have. |
 
@@ -832,7 +831,7 @@ Key files that would be modified by these proposals:
 - `/Users/dayna.blackwell/code/scout-and-wave/README.md` — simplify Quick Start to `saw init` + `saw plan`
 
 **scout-and-wave-go (Go engine):**
-- `/Users/dayna.blackwell/code/scout-and-wave-go/cmd/sawtools/` — new `init_cmd.go`, aliases for `plan`/`build`
+- `/Users/dayna.blackwell/code/scout-and-wave-go/cmd/sawtools/` — `init_cmd.go` (COMPLETE), 75+ commands total
 - `/Users/dayna.blackwell/code/scout-and-wave-go/pkg/protocol/validate.go` — add `UserMessage` to validation errors
 - `/Users/dayna.blackwell/code/scout-and-wave-go/pkg/engine/runner.go` — enhanced error context in `RunScout`, `RunSingleWave`
 
