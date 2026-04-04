@@ -354,5 +354,5 @@ pre_mortem:
           mitigation: |-
             Each brief explicitly names the other agent's file as off-limits. Disjoint
             ownership is enforced at merge time.
-state: SCOUT_PENDING
+state: "REVIEWED"
 injection_method: hook
