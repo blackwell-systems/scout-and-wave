@@ -4,6 +4,8 @@
 
 This guide walks you through your first SAW session step-by-step, showing exactly what to expect at each stage.
 
+**New to the terminology?** See [GLOSSARY.md](../../GLOSSARY.md) for quick definitions of SAW-specific terms (IMPL doc, wave, scaffold, etc.).
+
 ## Prerequisites
 
 Before starting, ensure you've completed the [installation steps](README.md#installation) in the main README:
@@ -614,8 +616,25 @@ Solution: This shouldn't happen with disjoint ownership. If it does, file an iss
 
 Solution: This is the point of the unscoped test gate. Fix the cross-package issue (usually a missing field in a struct constructor or changed function signature).
 
+**Problem: `duplicate key in YAML manifest`**
+
+Solution: The IMPL doc has two top-level keys with the same name (usually `critic_report`). Open the IMPL YAML, search for the duplicated key, and remove the extra occurrence. Use `sawtools set-critic-verdict <path> --verdict pass` instead of manually editing the critic_report field.
+
+**Problem: `baseline verification failed: baseline_verification_failed`**
+
+Solution: The codebase doesn't build clean before agents launch (E21A). Check the JSON output for `gate_results` — it shows which command failed (build, test, lint, or custom). Fix the build on main first, then retry `prepare-wave`.
+
+**Problem: `ISOLATION VIOLATION` from `validate_worktree_isolation` hook**
+
+Solution: The wave agent's working directory or branch doesn't match the expected worktree. The error message shows expected vs actual branch and a remedy command. Run the suggested `git checkout` or re-run `prepare-wave` to recreate worktrees.
+
+**Problem: `check-type-collisions failed — collisions detected`**
+
+Solution: Two agents defined the same type (e.g., both created a struct with the same name). Remove the duplicate from the agent whose file doesn't define the canonical version. The collision report in the JSON output shows which agents and which type — "Keep B, remove from C" style guidance.
+
 ## Further Reading
 
+- [GLOSSARY.md](../../GLOSSARY.md) - Quick definitions of SAW-specific terms
 - [README](../README.md) - Main documentation
 - [Protocol specification](../../protocol/) - Formal specification
 - [Blog series](https://blog.blackwell-systems.com/posts/scout-and-wave/) - Pattern evolution and lessons learned

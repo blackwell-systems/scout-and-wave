@@ -29,7 +29,7 @@ Most frameworks try to solve this with better prompts. SAW solves it with struct
 - **Human review before execution.** You see the full plan - file assignments, interface contracts, wave structure - and approve it before any agent launches. This is the last point where changing the architecture is cheap.
 - **Suitability gate.** SAW says "no" when the work doesn't decompose cleanly. A poor-fit assessment prevents bad decompositions from producing expensive failures.
 
-Seven participants coordinate within a single session: the **Orchestrator** (your Claude Code session), **Scout** (analyzes codebase, assigns files), **Scaffold Agent** (creates shared types), **Wave Agents** (implement in parallel worktrees), **Integration Agent** (wires exports post-merge), **Critic Agent** (reviews wave output against quality gates), and **Planner** (coordinates cross-IMPL program execution). The scout enforces disjoint ownership at planning time, the scaffold agent creates interface contracts before parallelization, wave agents work in isolated worktrees, the integration agent connects the pieces post-merge, the critic reviews quality, and the planner manages multi-feature programs. Everything is coordinated by a single orchestrator that holds full state.
+The system has seven participant roles, but you interact with two: the **Orchestrator** (your Claude Code session — coordinates everything) and the **Scout** (analyzes codebase, assigns files, writes the plan). The other five — Scaffold Agent, Wave Agents, Integration Agent, Critic Agent, Planner — run automatically when needed. See [protocol/participants.md](protocol/participants.md) for the full role breakdown.
 
 ## How
 
@@ -159,7 +159,7 @@ The protocol is defined independent of any implementation. Read these to underst
 - **[protocol/participants.md](protocol/participants.md)** - Seven participant roles and their responsibilities
 - **[protocol/preconditions.md](protocol/preconditions.md)** - Five preconditions for suitability gate
 - **[protocol/invariants.md](protocol/invariants.md)** - Six invariants (I1–I6) — formal correctness rules that every implementation must satisfy (e.g., I1: disjoint file ownership, I2: interface contracts precede parallel implementation)
-- **[protocol/execution-rules.md](protocol/execution-rules.md)** - Execution rules (E1–E46) governing state transitions, agent launches, completion handling, merge procedures, verification gates, IMPL doc lifecycle, Scout output validation (E16A/B/C), project memory lifecycle (E17/E18), failure taxonomy (E19), stub detection (E20), post-wave quality gates (E21), scaffold build verification (E22), per-agent context extraction (E23), integration validation (E25), integration agent (E26), planned integration waves (E27), program execution (E28–E34), wiring obligation (E35), IMPL amendment (E36), critic gate (E37), gate caching (E38), interview mode (E39), observability (E40), type collision detection (E41), SubagentStop validation (E42), hook-based isolation enforcement (E43), context injection observability (E44), shared data structure scaffold detection (E45), and test file cascade detection (E46)
+- **[protocol/execution-rules.md](protocol/execution-rules.md)** - 47 execution rules (E1–E47) governing the full lifecycle: state transitions, agent launches, merge procedures, verification gates, failure recovery, integration, and hook-based enforcement. You don't need to read these to use SAW — the tooling enforces them automatically.
 - **[protocol/state-machine.md](protocol/state-machine.md)** - Protocol states and transitions
 - **[protocol/message-formats.md](protocol/message-formats.md)** - IMPL doc and completion report schemas
 - **[protocol/procedures.md](protocol/procedures.md)** - Step-by-step merge and verification procedures
@@ -202,7 +202,7 @@ Agents don't always respect isolation instructions. v0.6.0 adds a layered defens
 | 0 | **Pre-commit hook** - installed automatically by `sawtools create-worktrees` (embedded in Go SDK at `pkg/worktree/manager.go`). Blocks commits to main during active waves. Agents receive an instructive error. Orchestrator bypasses via `SAW_ALLOW_MAIN_COMMIT=1`. | Prevention |
 | 1 | **Manual worktree pre-creation** - Orchestrator creates all worktrees before any agent launches | Deterministic |
 | 2 | **`isolation: "worktree"` parameter** - each agent launch specifies worktree isolation at the tool level. **Omitted for cross-repo waves** (would create worktrees in the wrong repo); Layer 1 and Layer 3 provide isolation instead. See `saw-worktree.md` Cross-Repo Mode. | Tool-level |
-| 3 | **Field 0 self-verification** - agents verify their own branch and working directory on startup | Cooperative |
+| 3 | **Field 0 self-verification** - agents confirm branch via brief check (primary enforcement is the `validate_worktree_isolation` SubagentStart hook) | Cooperative |
 | 4 | **Merge-time trip wire** - Orchestrator counts commits per worktree branch before merging. Zero commits = isolation failure. Stops with recovery options. | Deterministic |
 
 E43 (hook-based enforcement) and Layers 0 and 4 are the structural guarantees: E43 prevents violations at the tool boundary, Layer 0 prevents agents from committing to main, Layer 4 detects if isolation failed by any mechanism. Layers 1-3 are defense-in-depth.
