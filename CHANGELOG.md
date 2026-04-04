@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added (2026-04-04)
+- **`saw_orchestrator_stop` Stop hook** — New Stop lifecycle hook warns when a session ends with an active IMPL in WAVE_PENDING or WAVE_EXECUTING state, or with active worktrees under `.claude/worktrees/saw/`. Non-blocking (systemMessage warning only, exit 0 always); uses `stop_hook_active` to prevent re-trigger loops. Registered in `install.sh` as hook #21.
 - **E47: Between-Wave Caller Cascade Hotfix** — `finalize-wave` auto-applies inline hotfix when verify-build fails exclusively due to caller-cascade compile errors in future-wave-owned files; `--dry-run` flag for diagnosis without launching agent
 - **P6: Incremental Agent Commits** — `wave-agent.md` I5 section updated to "Commit Incrementally (Rate-Limit Resilience)": agents commit after each file, not a single batch at the end; new `auto_commit_on_write` PostToolUse hook (async) auto-commits Write/Edit operations in worktree context as safety net; registered in `install.sh` as hook #19
 - **`sawtools finalize-scout`** — Scout prompt steps 16-18 consolidated to single command; prompt shrunk ~55 lines; Scout retains fix-between-retries loop (Option A: validation-only, not auto-retry)
