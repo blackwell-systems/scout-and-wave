@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# PostToolUse hook: Auto-commit after Write/Edit in SAW worktree context
+# Ensures incremental work preservation against rate-limit interruptions.
+# async: true — never blocks agent execution
+set -uo pipefail
+
+# Only activate in SAW worktree context
+[[ -z "${SAW_AGENT_WORKTREE:-}" ]] && exit 0
+
+# Read JSON from stdin
+input=$(cat)
+tool_name=$(echo "$input" | jq -r '.tool_name // empty')
+
+# Only trigger on Write/Edit completions
+[[ "$tool_name" != "Write" && "$tool_name" != "Edit" ]] && exit 0
+
+file_path=$(echo "$input" | jq -r '.tool_input.file_path // empty')
+[[ -z "$file_path" ]] && exit 0
+
+# Verify file is inside worktree
+case "$file_path" in
+  "$SAW_AGENT_WORKTREE"/*) ;;
+  *) exit 0 ;;
+esac
+
+# Auto-commit (silent failures — this is a safety net, not a requirement)
+filename=$(basename "$file_path")
+git -C "$SAW_AGENT_WORKTREE" add "$file_path" 2>/dev/null || exit 0
+git -C "$SAW_AGENT_WORKTREE" commit --no-verify -m "auto-save: $filename" 2>/dev/null || exit 0
+exit 0
