@@ -881,93 +881,38 @@ C001 was occupied, causing a string mismatch with Agent A's hardcoded "CACHE_MIS
     Do not omit any of these three. If the work is simple, these sections may be
     brief, but they must be present.
 
-16. **Self-validate (mandatory, do not skip).** After writing the IMPL doc, run both
-    validation commands in sequence:
+16. **Finalize Scout output (mandatory, do not skip).** After writing the IMPL doc, run:
 
     ```bash
-    sawtools validate --fix "<absolute-path-to-impl-doc>"
-    sawtools pre-wave-validate "<absolute-path-to-impl-doc>" --wave 1 --fix
+    sawtools finalize-scout "<absolute-path-to-impl-doc>" --injection-method <value>
     ```
 
-    Run `sawtools validate --fix` first (schema/structure). If it passes, run
-    `sawtools pre-wave-validate --wave 1 --fix` (E35 gaps + wiring). Fix any failures
-    from either command before proceeding. Re-run until both pass (max 3 attempts each).
-    Do NOT finish without both passing. If all 3 attempts fail on either command, set
-    `state: "SCOUT_VALIDATION_FAILED"` and report remaining errors in your final output.
-    The orchestrator also validates as defense-in-depth, but catching errors here prevents
-    unnecessary retry loops — especially E35 gaps, which require IMPL restructuring.
+    This single command runs all validation checks in sequence:
+    1. Schema/structural validation with auto-fix (E16)
+    2. Pre-wave validation: E35 gaps, test cascade, wave structure
+    3. Brief accuracy validation (symbol existence, line references)
+    4. Auto-sets injection_method on the IMPL doc
 
-17. **Brief accuracy self-check (mandatory, do not skip).** After schema validation
-    passes, perform a targeted accuracy check on the briefs you just wrote. The critic
-    gate also verifies these, but catching errors here saves a full critic round trip
-    (~3-5 min) that blocks wave execution.
+    If exit 1, read the JSON output to identify which step failed (`failed_step` field).
+    Fix the reported errors in the IMPL doc and re-run. Max 3 attempts. If all 3 fail,
+    set `state: "SCOUT_VALIDATION_FAILED"` and report remaining errors.
 
-    For each agent, re-read its owned files and verify:
+    **Injection method value:** Determine from your context:
+    - `hook` — if you see `<!-- Part of scout agent procedure. Inlined from -->` or `<!-- injected: -->` markers
+    - `manual-fallback` — if those markers are absent and you read reference files manually
+    - `unknown` — if uncertain
 
-    **a. File ownership completeness.** Every file mentioned in an agent's brief must
-    appear in `file_ownership`. New files that do not yet exist on disk must have
-    `action: new`. Check your interface contracts and brief text for any filenames you
-    referenced but may have omitted from `file_ownership` (common miss: a new helper
-    file like `logger.go` or `types.go` described in the interface contracts but not
-    listed as an ownership entry).
+    **Manual checks still needed** (not covered by the automated command):
 
-    **b. Symbol existence validation (automated).** Run `sawtools validate-briefs` to
-    check all symbol references in agent briefs automatically:
+    **a. Package scope check.** If a brief defines a new unexported function (e.g.,
+    `func loggerFrom(...)`), verify no other file in the same Go package declares the
+    same name. Two files in `package foo` cannot both declare `func loggerFrom`.
 
+    **b. Multiplicity check.** For "find struct X and add field Y" instructions, grep
+    the file to count occurrences. If >1, the brief must state the count explicitly:
     ```bash
-    sawtools validate-briefs <absolute-path-to-impl-doc>
+    grep -c "StructName{" path/to/file.go
     ```
-
-    This command checks:
-    - All symbols referenced in briefs exist in owned files (grep-based, language-agnostic)
-    - Line number references are valid (file has enough lines)
-    - Provides suggestions for missing symbols
-
-    If validation fails, the command outputs JSON with per-agent issues and suggestions.
-    Fix all reported errors before proceeding. Re-run until output shows `"valid": true`.
-
-    Manual spot-checks are no longer needed — the automated check covers all symbols across
-    all agents comprehensively. However, if you want to verify a specific symbol manually
-    after fixing validation errors, you can still use grep:
-
-    ```bash
-    grep -n "SymbolName" path/to/owned/file.go
-    ```
-
-    **c. Package scope check for new function definitions.** If a brief instructs an
-    agent to define a new unexported function (e.g., `func loggerFrom(...)`,
-    `func newHelper(...)`), check whether another file in the same Go package would
-    also define a function with the same name. Two files in `package foo` cannot both
-    declare `func loggerFrom`. If multiple files in the same package need the helper,
-    the brief must say: define it in exactly one file, use it from the others without
-    re-declaring.
-
-    **d. Multiplicity check.** For any brief instruction like "find struct X and add
-    field Y" or "find the construction of X and add Z", grep the file to count actual
-    occurrences. If more than 1, the brief must explicitly state the count and require
-    all occurrences to be updated:
-    ```bash
-    grep -c "StructName{" path/to/file.go  # count struct literal occurrences
-    ```
-
-    Fix any issues found before completing. Typically takes 3-5 minutes with automated
-    validation (down from 5-10 minutes with manual spot-checks). Do not skip this step —
-    it directly reduces critic gate errors and prevents wave execution delays.
-
-18. **Write injection_method to IMPL doc.** Before completing, record how you received
-    your reference file content by running:
-
-    ```bash
-    sawtools set-injection-method <impl-doc-path> --method <value>
-    ```
-
-    Determine the value as follows:
-    - If you see `<!-- Part of scout agent procedure. Inlined from references/scout-suitability-gate.md -->` markers in your context (indicating inlined content): `--method hook`
-    - If you see `<!-- injected: references/scout-program-contracts.md -->` markers (indicating conditional injection worked): `--method hook`
-    - If those markers are absent and you read the reference files manually: `--method manual-fallback`
-    - If you are uncertain: `--method unknown`
-
-    This creates an audit trail of whether hook-based progressive disclosure is working.
 
 ---
 
