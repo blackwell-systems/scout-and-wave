@@ -128,13 +128,14 @@ repo/
 
 **E43 Hook-Based Enforcement (v0.65.0+):**
 
-In Claude Code implementations, worktree isolation is enforced mechanically via five lifecycle hooks rather than relying on agent cooperation:
+In Claude Code implementations, worktree isolation is enforced mechanically via six lifecycle hooks rather than relying on agent cooperation:
 
 1. **SubagentStart: Environment injection** — Sets `SAW_AGENT_WORKTREE`, `SAW_AGENT_ID`, `SAW_WAVE_NUMBER`, `SAW_IMPL_PATH`, `SAW_BRANCH` when wave agents launch
 2. **SubagentStart: Worktree isolation validation** (`validate_worktree_isolation`) — Two-phase check: Phase 1 validates pwd+branch pattern; Phase 2 verifies exact branch via `.saw-agent-brief.md` frontmatter
 3. **PreToolUse:Bash: CD auto-injection** — Prepends `cd $SAW_AGENT_WORKTREE &&` to every bash command, ensuring commands run in the correct working directory automatically
 4. **PreToolUse:Write/Edit: Path validation** — Blocks relative paths and paths outside worktree boundaries at the tool boundary (exit 2), preventing the "Agent B leak" scenario where files are created in the main repo instead of the worktree
 5. **SubagentStop: Compliance verification** — Checks completion report exists and commits exist on branch, creating an audit trail for post-hoc violation analysis
+6. **Stop: Orchestrator stop warning** (`saw_orchestrator_stop`) — Warns when the session ends with an active IMPL in WAVE_PENDING or WAVE_EXECUTING state, or with active worktrees present. Non-blocking (exit 0 always); uses `stop_hook_active` to prevent re-trigger loops.
 
 This defense-in-depth approach makes isolation violations impossible at the tool boundary rather than merely detected after merge. Other implementations must provide equivalent enforcement at their tool invocation boundary or fall back to instruction-based isolation (Field 0 self-verification).
 
