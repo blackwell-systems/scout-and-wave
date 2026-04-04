@@ -362,7 +362,7 @@ Waves execute sequentially (I3: Wave sequencing). When Wave N completes, its imp
 
 ## State Machine Correctness Properties
 
-When all invariants (I1–I6, P5) and execution rules (E1–E45, including sub-rules E7a, E11a, E21A, E21B, E23A, E28A, E28B) are maintained:
+When all invariants (I1–I6, P5) and execution rules (E1–E47, including sub-rules E7a, E11a, E21A, E21B, E23A, E28A, E28B) are maintained:
 
 - **Progress:** The state machine always advances or terminates. No infinite loops.
 - **Human checkpoints enforced:** REVIEWED state requires explicit approval. Suitability gate requires human review of NOT SUITABLE verdicts.
@@ -420,18 +420,10 @@ The Program state machine is an **outer loop** containing the IMPL state machine
 - Program contracts defined at PROGRAM_REVIEWED freeze before any IMPL executes (interface freeze applies at program scope)
 - Each IMPL has its own Scout, Scaffold Agent, and Wave Agents — the Planner does not write IMPL docs
 
-### Phase 2 Scope
-
-Full program execution rules, invariants, and orchestrator procedures for the Program layer will be defined in **Phase 2** of the Program Layer implementation. This section provides the state catalog and conceptual model. Phase 2 will define:
-- Program state transition guards
-- Program-level invariants (P1, P2, P3, etc.)
-- Orchestrator procedures for tier execution
-- Program completion criteria
-- Cross-tier dependency validation
-
 **Related documents:**
 - `protocol/program-manifest.md` — PROGRAM manifest structure and schema
-- `protocol/program-invariants.md` — Program-level invariants (P1, P2, P3)
+- `protocol/program-invariants.md` — Program-level invariants (P1–P5)
+- `protocol/execution-rules.md` — Program execution rules (E28–E34)
 
 ---
 
