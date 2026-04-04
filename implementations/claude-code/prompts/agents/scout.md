@@ -765,6 +765,19 @@ C001 was occupied, causing a string mismatch with Agent A's hardcoded "CACHE_MIS
    `(count of ## E{N} headings) + 1`. Put the confirmed last rule name and number
    in the agent's task prompt so the agent can verify before inserting.
 
+   **Derive "do not" constraints from the pre-mortem.** For each agent task,
+   include a `### Constraints` subsection that explicitly lists the top 2–3
+   most likely wrong actions, drawn directly from the pre-mortem scenarios for
+   that agent. Do not bury these in prose — make them visually distinct. Example:
+   ```
+   ### Constraints
+   - Do NOT add stub definitions for `FooType` — that type is owned by Agent B.
+     If your branch fails to compile without it, declare it as a scaffold.
+   - Do NOT modify files outside your ownership list.
+   ```
+   If the pre-mortem has no scenario for a given agent, still include the
+   standard constraint: "Do NOT modify files not in your ownership list."
+
 11. **Determine verification gates from the build system.**
 
    ```bash

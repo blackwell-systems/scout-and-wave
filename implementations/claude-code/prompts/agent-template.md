@@ -157,6 +157,11 @@ func ExistingFunction(param Type) ReturnType
 
 ## 4. What to Implement
 
+**Before modifying any existing file, read it in full and confirm the insertion
+point exists as described.** If the surrounding context in the brief doesn't
+match what you see in the file, stop and report the discrepancy in your
+completion report rather than guessing at a nearby location.
+
 {Functional description of the behavior. Describe *what*, not *how*.
 Reference specific files to read first. Describe edge cases, error handling
 expectations, and any constraints on the approach.}
@@ -206,6 +211,12 @@ on the merged result after all agents complete; this is cleaner than requiring
 every agent to know and run the project's exact auto-fix command.
 
 ## 7. Constraints
+
+**Error-handling pattern:** State explicitly whether errors are fatal (return
+error / exit 1) or non-fatal (log at Debug/Warn and continue with original
+value). Default assumption is fatal unless stated otherwise. Agents must not
+invent an error-handling strategy — if the task doesn't specify, ask via the
+completion report rather than guessing.
 
 {Any additional hard rules: non-fatal error handling, stderr vs stdout,
 backward compatibility requirements, things to explicitly avoid.}
