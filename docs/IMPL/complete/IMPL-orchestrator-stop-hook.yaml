@@ -1,3 +1,4 @@
+completion_date: "2026-04-04"
 title: Orchestrator Stop Hook (saw_orchestrator_stop)
 feature_slug: orchestrator-stop-hook
 verdict: SUITABLE
@@ -554,6 +555,7 @@ waves:
             - docs/architecture.md
             - implementations/claude-code/prompts/saw-skill.md
             - CHANGELOG.md
+      base_commit: 36a644f7a9728b87b019f3e7e3ac8395b272ae29
 quality_gates:
     level: standard
     gates:
@@ -565,6 +567,35 @@ quality_gates:
           command: bash install.sh --test
           required: false
           description: Smoke tests for hook installation (requires hooks already installed)
+completion_reports:
+    A:
+        status: complete
+        branch: saw/orchestrator-stop-hook/wave1-agent-A
+        commit: 2c2cc52
+        files_created:
+            - implementations/claude-code/hooks/saw_orchestrator_stop
+        verification: PASS
+        notes: 'Hook created with re-entrant loop prevention, repo root detection, IMPL state grep, worktree directory scan. All verification gates pass: syntax check clean, stop_hook_active guard works, executable bit set.'
+    B:
+        status: complete
+        branch: saw/orchestrator-stop-hook/wave1-agent-B
+        commit: 56f55a4
+        files_changed:
+            - install.sh
+        verification: PASS
+        notes: 'Three targeted changes: added saw_orchestrator_stop to HOOK_SCRIPTS array, added Stop add_hook call after UserPromptSubmit, updated summary count from 20 to 21 and added echo line. Syntax check clean, grep confirms 3 occurrences.'
+    C:
+        status: complete
+        branch: saw/orchestrator-stop-hook/wave1-agent-C
+        commit: 5eca778
+        files_changed:
+            - implementations/claude-code/hooks/README.md
+            - POSITION.md
+            - docs/architecture.md
+            - implementations/claude-code/prompts/saw-skill.md
+            - CHANGELOG.md
+        verification: PASS
+        notes: All 5 documentation files updated. Hook counts corrected (20->21 in README, 17->18 in POSITION.md, five->six in architecture.md). Hook 15 section added to README. Session stop detection note added to saw-skill.md. CHANGELOG entry added.
 pre_mortem:
     overall_risk: low
     rows:
@@ -627,5 +658,5 @@ critic_report:
     summary: 'All three agent briefs verified against the codebase. Agent A creates a new bash hook script with no external dependencies — the target file does not yet exist (correct for action: new) and the pattern matches existing hooks in the directory. Agent B modifies install.sh: all three text anchors verified (HOOK_SCRIPTS array closing pattern, add_hook UserPromptSubmit line, summary echo block). Minor: the brief notes auto_commit_on_write ''at line 48'' but it is on line 47 with the closing paren on line 48 — the anchor text used for the edit is accurate and the change will land correctly. Agent C modifies five documentation files: all five files exist, all text anchors verified (README.md header, emit_agent_completion table row, symlink count line, Maintenance section header; POSITION.md Layer 1 count on line 334; architecture.md five lifecycle hooks sentence on line 131 and SubagentStop item 5 on line 137; saw-skill.md Resume detection line 97; CHANGELOG.md Added 2026-04-04 section on line 11). Hook counts are internally consistent: README.md 20 → 21, POSITION.md 17 → 18 (separate tracking), architecture.md five → six. No stale symbols, no missing registrations, no import chain issues.'
     reviewed_at: "2026-04-04T13:40:22Z"
     issue_count: 0
-state: REVIEWED
+state: COMPLETE
 injection_method: hook

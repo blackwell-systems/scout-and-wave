@@ -194,3 +194,5 @@ round-trip time by catching errors at source (~5 min saved per critic cycle).
   - IMPL doc: docs/IMPL/complete/IMPL-scout-brief-precision.yaml
 - **field-zero-hook-migration**: completed 2026-04-04, 1 waves, 2 agents
   - IMPL doc: docs/IMPL/complete/IMPL-field-zero-hook-migration.yaml
+- **orchestrator-stop-hook**: completed 2026-04-04, 1 waves, 3 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-orchestrator-stop-hook.yaml
