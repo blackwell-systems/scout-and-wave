@@ -120,7 +120,9 @@ Rate-limited agents lose all uncommitted work when the worktree is cleaned up fo
 | **Web** | `pkg/api/wave_runner.go` — no changes. The web agent runner already collects all commits on the branch. Add real-time commit count to the agent progress SSE event: `{"agent": "A", "commits": 3, "status": "running"}`. |
 | **Hook** | Consider a `PostToolUse` hook on `Write|Edit` that auto-commits after each file write in worktree context. Aggressive but guarantees no work is lost. |
 
-### P7: `finalize-wave` Solo-Wave Merge Bug (High — data loss)
+### P7: `finalize-wave` Solo-Wave Merge Bug (High — data loss) ⚠️ HIT IN PRACTICE
+
+**Confirmed 2026-04-04:** During `journal-integration` finalize-wave, cross-repo Agent D's worktree was cleaned without merging its branch. Agent D's commit was lost and had to be re-applied manually. The bug manifests in cross-repo waves where finalize-wave partially merges some repos but fails to merge others.
 
 `finalize-wave` skips merge when worktree branches exist but worktree directories are gone. **Depends on P1** — if P1 leaves HEAD on the wrong branch, P7's detection logic runs against the wrong base.
 
@@ -147,7 +149,9 @@ The code at `cmd/sawtools/finalize_wave.go` has two checks: `WorktreesAbsent()` 
 
 **Fix:** Remove outdated hedge "(or update state to COMPLETE manually if command not yet available)" from `program-flow.md` Phase 4. Remove redundant step 2 (update-context) since mark-program-complete handles it.
 
-### P13: E37 Enforcement Divergence Between `prepare-tier` and `prepare-wave`
+### P13: E37 Enforcement Divergence Between `prepare-tier` and `prepare-wave` (Partially Fixed)
+
+**Partially addressed by P5 fix** — `CriticGatePasses()` function now exists. Unification into a single call site across both prepare-tier and prepare-wave may still be incomplete.
 
 `prepare-tier` and `prepare-wave` both enforce E37 critic gate but with different logic. `prepare-tier` uses `criticPassed()` (checks `CriticReport.Verdict == "PASS"`). `prepare-wave` at lines 116-138 checks `CriticVerdictIssues` and blocks on ANY issues regardless of severity. These should be unified into a single SDK function.
 
@@ -201,11 +205,12 @@ Future phases: interface contracts as compiled types (verify scaffold stubs impl
 
 ## E23A Integration Backlog
 
-**Status:** Core journal shipped (v0.27.0). E23A documented in execution-rules.md. CLI commands (`journal-init`, `journal-context`) exist.
+**Status:** Core journal shipped (v0.27.0). Runner integration shipped (journal-integration IMPL, 2026-04-04). CLI commands (`journal-init`, `journal-context`) exist.
+
+~~Runner integration~~ ✅ **SHIPPED:** `launchAgent` in `pkg/orchestrator` calls `Sync()` + `GenerateContext()` and prepends context to agent prompt. `RunSingleAgent` calls `PrepareAgentContext` on reruns. `prepare-wave` and `prepare-agent` expose `journal_context_available` / `journal_context_file` in JSON output. 30s periodic sync goroutine runs during agent execution.
 
 Remaining integration work:
 
 - **Backend integration** -- Hook journaling into all agent backends (Anthropic API, CLI, OpenAI). Each has different tool call shapes; journal must normalize to common schema.
-- **Runner integration** -- Load journal before agent launch, inject `context.md` into prompt, periodic sync during execution.
 - **E19 failure recovery** -- Preserve journal across retries, include "you tried X before" context, detect retry loops from journal.
 - **Web UI** -- Real-time journal display in Observatory, agent detail tabs (Tool History, Raw Journal, Checkpoints), failed agent debugging panel.
