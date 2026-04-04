@@ -7,7 +7,7 @@ Scout-and-Wave is a protocol for parallel agent coordination in software develop
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │ Orchestrator (synchronous, /saw skill in Claude Code)          │
-│ • Launches Scout/Scaffold/Wave/Integration agents              │
+│ • Launches Scout/Scaffold/Wave/Integration/Critic agents       │
 │ • Enforces invariants (I1-I6)                                  │
 │ • Manages wave lifecycle                                       │
 │ • Does NOT perform analysis or implementation itself           │
@@ -23,22 +23,65 @@ Scout-and-Wave is a protocol for parallel agent coordination in software develop
 │ • Writes IMPL  │  │ • Commits to   │  │ • Run tests    │
 │   manifest     │  │   main branch  │  │ • Write to     │
 └────────────────┘  └────────────────┘  │   worktrees    │
-                                        └────────────────┘
-                                             │ (parallel)
-                                        ┌────┴────┐
-                                        ▼         ▼
-                                   Agent A    Agent B
-                                   (wave1)    (wave1)
-                                        │
-                                        ▼ (after merge)
-                                  ┌──────────────────┐
-                                  │ Integration Agent │
-                                  │ (async, serial)   │
-                                  │ • Wires exports   │
-                                  │   into callers    │
-                                  │ • Runs on main    │
-                                  └──────────────────┘
+         │                              └────────────────┘
+         │ (after E16 validation)            │ (parallel)
+         ▼                             ┌────┴────┐
+┌────────────────┐                     ▼         ▼
+│ Critic Agent   │                Agent A    Agent B
+│ (async, E37)   │                (wave1)    (wave1)
+│ • Reviews IMPL │                     │
+│   briefs vs    │                     ▼ (after merge)
+│   codebase     │           ┌──────────────────┐
+│ • Writes       │           │ Integration Agent │
+│   CriticResult │           │ (async, serial)   │
+│ • Never edits  │           │ • Wires exports   │
+│   source files │           │   into callers    │
+└────────────────┘           │ • Runs on main    │
+                             └──────────────────┘
 ```
+
+## Agent Types
+
+Scout-and-Wave coordinates six asynchronous agent types plus the synchronous Orchestrator. Each type has mechanically enforced boundaries; a model prompted to violate its role is blocked before the tool executes.
+
+| Agent Type | Subagent Tag | Role | Tool Access |
+|------------|-------------|------|-------------|
+| **Scout** | `scout` | Analyzes codebase, produces IMPL manifest with file ownership and interface contracts | Read, Glob, Grep, Bash (no Write/Edit on source files) |
+| **Scaffold Agent** | `scaffold-agent` | Materializes shared type stubs as committed source files before Wave 1 | Read, Write, Edit, Bash |
+| **Wave Agent** | `wave-agent` | Implements assigned files in an isolated git worktree | Read, Write, Edit, Bash, Glob, Grep |
+| **Critic Agent** | `critic-agent` | Reviews IMPL doc agent briefs against the actual codebase (E37); never modifies source files | Read, Glob, Grep, Bash |
+| **Integration Agent** | `integration-agent` | Wires new exports into caller code post-merge; restricted to `integration_connectors` files | Read, Write, Edit, Bash |
+| **Planner** | `planner` | Decomposes a program into features, assigns tiers, produces PROGRAM manifest | Read, Glob, Grep, Bash |
+
+### Critic Agent (E37)
+
+The Critic Agent is a pre-wave quality gate that runs **after E16 IMPL validation** and **before the REVIEWED state**. It is auto-triggered when wave 1 has 3 or more agents, or when `file_ownership` contains entries from 2 or more repos. It can be suppressed with `--no-critic`.
+
+**What it does:**
+
+1. Reads the full IMPL manifest (all agent briefs, interface contracts, file ownership table)
+2. For each agent brief, reads every source file in that agent's ownership list
+3. Runs 10 verification checks against the actual codebase:
+   - Check 1 (`file_existence`): `action=modify` files must exist; `action=new` files must not
+   - Check 2 (`symbol_accuracy`): Function/type/method names in briefs must exist as stated
+   - Check 3 (`pattern_accuracy`): Implementation patterns described must match actual source patterns
+   - Check 4 (`interface_consistency`): Interface contracts must be syntactically valid and consistent with source types
+   - Check 5 (`import_chains`): All packages referenced in interface contracts must be importable
+   - Check 6 (`side_effect_completeness`): New exported symbols that require registration (CLI commands, HTTP routes, React components) must have their registration file in `file_ownership`
+   - Check 7 (`complexity_balance`): Warning if any agent owns >8 files or >40% of total IMPL files
+   - Check 8 (`caller_exhaustiveness`): All callers of changed symbols must be in `file_ownership`; uses `sawtools check-callers` to enumerate call sites
+   - Check 9 (`i1_disjoint_ownership`): Validates `file_ownership` table for I1 violations before worktrees are created
+   - Check 10 (`result_code_semantics`): Verifies correct `result.Result[T]` usage in agent briefs
+4. Writes a structured `CriticResult` to the IMPL doc's `critic_report` field via `sawtools set-critic-review`
+5. Emits overall verdict: `PASS` (all agents pass, or only warnings present) or `ISSUES` (one or more agents have errors)
+
+**Enforcement:** `prepare-wave` checks the critic verdict before creating worktrees. Verdict `ISSUES` blocks worktree creation with exit code 1. Verdict `PASS` (including warning-only) proceeds.
+
+**What it does NOT do:** The Critic Agent never modifies source files or fixes briefs. It verifies accuracy only. Brief corrections are applied by the Orchestrator or human after reviewing the `CriticResult` summary; the critic is then re-run until verdict is `PASS`.
+
+**CLI note (Claude Code sessions):** In CLI orchestration mode, the Orchestrator uses `Agent(subagent_type=critic-agent, ...)` rather than `sawtools run-critic`. The `sawtools run-critic` command is only valid for programmatic/API orchestration outside of a Claude Code session.
+
+See E37 in `protocol/execution-rules.md` for full specification.
 
 ## Core Components
 
@@ -142,7 +185,7 @@ The `sawtools` binary provides 71+ commands covering all protocol operations. Ke
 - `daemon` — Continuous queue-processing daemon
 
 **Analysis and utilities:**
-- `analyze-deps` / `check-deps` / `detect-cascades` — Dependency analysis
+- `analyze-deps` / `check-deps` / `detect-cascades` — Dependency analysis (`analyze-deps` is a thin CLI wrapper over `BuildGraph` + `ToOutput`; the `AnalyzeDeps` Go function was deleted and replaced by `BuildGraph(ctx, repoRoot, files)` + `ToOutput(graph)`)
 - `analyze-suitability` — Codebase suitability assessment
 - `assign-agent-ids` / `extract-commands` — IMPL utilities
 - `journal-init` / `journal-context` — Journal management
@@ -253,7 +296,9 @@ See [tool-journaling.md](./tool-journaling.md) for full documentation.
 2. Orchestrator launches Scout agent (async, `subagent_type: scout`)
 3. Scout analyzes codebase, identifies interfaces, writes IMPL manifest
 4. Orchestrator validates IMPL manifest (E16: `sawtools validate`)
-5. User reviews and approves decomposition
+5. Orchestrator checks E37 trigger conditions: if wave 1 has 3+ agents or `file_ownership` spans 2+ repos, launches Critic Agent (async, `subagent_type: critic-agent`)
+6. Critic reads every brief and owned file, runs 10 verification checks, writes `CriticResult` to IMPL doc; execution blocks if `verdict: ISSUES`
+7. User reviews and approves decomposition; IMPL transitions to `REVIEWED` state
 
 ### Phase 2: Scaffold (if needed)
 
@@ -352,6 +397,12 @@ See `protocol/invariants.md` for full specification.
 
 ## Error Handling
 
+### Engine Error Pattern (`result.Result[T]`)
+
+All engine functions that can partially succeed use the `result.Result[T]` generic wrapper from `pkg/result`. A `Result[T]` carries a `Status` (`SUCCESS`, `PARTIAL`, or `FATAL`), a typed `Value`, and an `Errors` slice of `SAWError` structs. Each `SAWError` has a structured `Code` (domain-prefixed constant from `pkg/result/codes.go`), a human-readable `Message`, and an optional `Cause`.
+
+The `.Code` field on a `Result` holds the top-level status code (`SUCCESS`/`PARTIAL`/`FATAL`). Domain-specific error codes live in `result.Errors[0].Code`. Agent briefs that compare `.Code` against domain error constants (e.g., `result.Code == V001`) are flagged by Critic Check 10 (`result_code_semantics`).
+
 ### Agent Failure Types (E19)
 
 Agents report failure via `failure_type` field in completion report:
@@ -425,6 +476,7 @@ Project-local config at `<repo>/saw.config.json` or global default at `~/.claude
     "scout_model": "claude-sonnet-4-6",
     "wave_model": "claude-sonnet-4-6",
     "chat_model": "claude-sonnet-4-6",
+    "critic_model": "claude-sonnet-4-6",
     "integration_model": "claude-sonnet-4-6",
     "scaffold_model": "claude-sonnet-4-6",
     "planner_model": "claude-sonnet-4-6"
@@ -450,9 +502,55 @@ The Program manifest system coordinates multiple related IMPLs that together del
 - **Contract freezing** — Cross-IMPL interfaces are frozen before dependent tiers execute
 - **Cascade detection** — Identifies when changes in one IMPL affect others
 
+**Tier-gated execution (T-series rules):** The PROGRAM manifest defines tiers with ordered execution. `program-execute` drives the tier loop: for each tier it runs Scouts in parallel (E31), tracks cross-IMPL progress (E32), runs the tier gate (E29), freezes cross-IMPL contracts (E30), and auto-advances in `--auto` mode (E33). Tier N+1 does not launch until tier N's gate verification passes (P3).
+
+**Tier batching commands:**
+- `prepare-tier` — Cross-IMPL conflict check (P1+), create IMPL branches (E28B/P5), coordinate worktree creation, return tier readiness
+- `finalize-tier` — Tier gate verification (E29), contract freezing (E30), cross-IMPL merge coordination, return tier completion
+
 **Protocol spec:** `protocol/program-invariants.md`, `protocol/program-manifest.md`
 
-**Commands:** `create-program`, `program-execute`, `program-replan`, `program-status`, `list-programs`, `finalize-tier`, `tier-gate`, `freeze-contracts`, `freeze-check`, `check-program-conflicts`, `import-impls`, `mark-program-complete`, `validate-program`
+**Commands:** `create-program`, `program-execute`, `program-replan`, `program-status`, `list-programs`, `prepare-tier`, `finalize-tier`, `tier-gate`, `freeze-contracts`, `freeze-check`, `check-program-conflicts`, `import-impls`, `mark-program-complete`, `validate-program`
+
+## Protocol State Machine
+
+IMPL manifests track lifecycle state via 11 states with enforced transition guards. Invalid transitions are rejected by `protocol.SetImplState()`.
+
+```
+INTERVIEWING ──> SCOUT_PENDING ──> REVIEWED ──> SCAFFOLD_PENDING ──> WAVE_PENDING
+                                      │                                    │
+                                      v                                    v
+                                NOT_SUITABLE                        WAVE_EXECUTING
+                                                                          │
+                                                                          v
+                                                                    WAVE_MERGING
+                                                                          │
+                                                                          v
+                                                                   WAVE_VERIFIED ──> COMPLETE
+                                                                          │
+                                                                          v
+                                                              (next wave: WAVE_EXECUTING)
+
+Any active state ──> BLOCKED (recoverable)
+```
+
+**State descriptions:**
+
+| State | Meaning |
+|-------|---------|
+| `INTERVIEWING` | Requirements-gathering session in progress (E39); transitions to `SCOUT_PENDING` when REQUIREMENTS.md is written |
+| `SCOUT_PENDING` | Scout agent is running or IMPL manifest is being written |
+| `REVIEWED` | IMPL manifest has passed E16 validation and E37 critic gate; awaiting wave execution approval |
+| `SCAFFOLD_PENDING` | Scaffold Agent is materializing shared types; transitions to `WAVE_PENDING` when all scaffolds are `committed` |
+| `WAVE_PENDING` | Ready to execute the current wave; worktrees not yet created |
+| `WAVE_EXECUTING` | Wave agents are running in their worktrees |
+| `WAVE_MERGING` | Agent branches are being merged to main |
+| `WAVE_VERIFIED` | Post-merge verification (build, tests, stubs) passed; either advances to next wave or to `COMPLETE` |
+| `BLOCKED` | Recoverable error state; requires human intervention before execution can resume |
+| `COMPLETE` | All waves merged and verified; IMPL archived |
+| `NOT_SUITABLE` | Scout determined the feature is not suitable for parallel execution |
+
+The Program state machine wraps these with 9 program-level states: `PROGRAM_PLANNING`, `PROGRAM_REVIEWED`, `PROGRAM_EXECUTING`, `PROGRAM_TIER_GATE`, `PROGRAM_BLOCKED`, `PROGRAM_REPLANNING`, `PROGRAM_COMPLETE`, `PROGRAM_NOT_SUITABLE`, and `PROGRAM_CONTRACTED`.
 
 ## Daemon, Queue, and Autonomy
 
@@ -481,8 +579,9 @@ The Go engine (`scout-and-wave-go`) contains 32+ packages under `pkg/`. Key pack
 | `pkg/orchestrator` | State machine, event publishing, wave management |
 | `pkg/types` | Shared type definitions used across all packages |
 | `pkg/worktree` | Git worktree creation and management |
-| `pkg/suitability` | Codebase suitability analysis |
-| `pkg/solver` | Dependency solver for wave agent assignment |
+| `pkg/suitability` | Codebase suitability analysis and pre-implementation scanning |
+| `pkg/analyzer` | Multi-language dependency graph construction; key API: `BuildGraph(ctx, repoRoot, files)` → `*DepGraph`; `CascadeCandidate` is the unified cascade type (`CascadeFile` removed); `DetectCascades`, `DetectWiring` |
+| `pkg/solver` | Dependency solver for wave agent assignment (topological sort, Kahn's algorithm) |
 | `pkg/observability` | Event emission system (E40) |
 | `pkg/queue` | Work queue for daemon mode |
 | `pkg/autonomy` | Autonomy level settings and enforcement |
@@ -490,10 +589,11 @@ The Go engine (`scout-and-wave-go`) contains 32+ packages under `pkg/`. Key pack
 | `pkg/resume` | Session resumption detection and context recovery |
 | `pkg/retry` / `pkg/retryctx` | Failure retry logic and context building |
 | `pkg/scaffold` / `pkg/scaffoldval` | Scaffold creation and validation |
-| `pkg/collision` | Type collision detection across agents |
-| `pkg/deps` | Dependency analysis |
+| `pkg/result` | Unified `result.Result[T]` generic for consistent error handling; `SUCCESS`/`PARTIAL`/`FATAL` status codes; 280+ named error constants across 20 domains (V/W/B/G/A/N/O/P/T/S/C/K/I/D/E/X/Q/R/J/Z) |
+| `pkg/collision` | Type collision detection across agents (AST-based, E41) |
+| `pkg/deps` | Dependency conflict detection (lock files: go.mod, Cargo.lock, package-lock.json) |
 | `pkg/builddiag` | Build failure diagnosis |
-| `pkg/codereview` | Critic/review agent support |
+| `pkg/codereview` | LLM-powered diff review (`run-review`); scores diffs across quality dimensions; separate from the E37 critic agent (which is a prompt-based subagent, not an SDK package) |
 | `pkg/hooks` | Git hook installation and verification |
 | `pkg/pipeline` | Execution pipeline management |
 | `pkg/format` | Output formatting |
@@ -526,6 +626,6 @@ The web application (`scout-and-wave-web`) provides an HTTP/SSE interface for th
 ## See Also
 
 - [Protocol Invariants](../protocol/invariants.md) — I1-I6 formal specification
-- [Protocol Execution Rules](../protocol/execution-rules.md) — E1-E45 orchestrator rules
+- [Protocol Execution Rules](../protocol/execution-rules.md) — E1-E46 orchestrator rules
 - [Tool Journaling](./tool-journaling.md) — Compaction safety system
 - [Orchestrator Skill](../implementations/claude-code/prompts/saw-skill.md) — /saw command implementation
