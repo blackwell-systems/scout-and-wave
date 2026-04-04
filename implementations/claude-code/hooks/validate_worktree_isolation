@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+# validate_worktree_isolation — SubagentStart hook for wave agent isolation
+# Event: SubagentStart
+# Purpose: Block wave agents that are not running in a SAW worktree branch
+# Phase 1: pwd pattern + git branch pattern checks
+# Phase 2: exact branch check via .saw-agent-brief.md frontmatter
+# Exit 2 = block agent from starting
+# Exit 0 = proceed (isolation verified or not a wave agent)
+#
+# Test 1: Non-wave agent — should exit 0
+#   echo '{}' | CLAUDE_CODE_AGENT_NAME="helper" ./validate_worktree_isolation
+# Test 2: Wave agent not in worktree — should exit 0 (passthrough)
+#   echo '{}' | CLAUDE_CODE_AGENT_NAME="[SAW:wave1:agent-A] task" PWD=/tmp ./validate_worktree_isolation
+# Test 3: Wave agent in worktree on wrong branch — should exit 2
+# Test 4: Wave agent in worktree on correct branch, no brief — should exit 0
+# Test 5: Wave agent in worktree with brief, exact branch match — should exit 0
+# Test 6: Wave agent in worktree with brief, branch mismatch — should exit 2
+
+set -euo pipefail
+
+# Read stdin (SubagentStart sends JSON, but we don't need it)
+read -r _ || true
+
+# Get agent name from CLAUDE_CODE_AGENT_NAME env var
+agent_name="${CLAUDE_CODE_AGENT_NAME:-}"
+
+# Only process wave agents (format: [SAW:wave{N}:agent-{ID}] ...)
+if [[ ! "$agent_name" =~ ^\[SAW:wave([0-9]+):agent-([A-Z][2-9]?)\] ]]; then
+  # Not a wave agent — pass through
+  exit 0
+fi
+
+wave_num="${BASH_REMATCH[1]}"
+agent_id="${BASH_REMATCH[2]}"
+
+# Phase 1 check — pwd pattern:
+# If PWD does not contain .claude/worktrees/saw/, this is not a worktree context.
+# Pass through to avoid blocking non-worktree scenarios (e.g. solo waves).
+if [[ ! "$PWD" =~ \.claude/worktrees/saw/ ]]; then
+  exit 0
+fi
+
+# Phase 1 check — git branch pattern:
+# Wave agent is in a worktree path, so it must be on a saw/* branch.
+actual_branch=$(git branch --show-current 2>/dev/null || echo "")
+
+if [[ ! "$actual_branch" =~ ^saw/ ]]; then
+  echo "ISOLATION VIOLATION: Not on a SAW branch" >&2
+  echo "  Agent: $agent_name" >&2
+  echo "  Expected branch pattern: saw/*" >&2
+  if [[ -z "$actual_branch" ]]; then
+    echo "  Actual branch: unknown" >&2
+  else
+    echo "  Actual branch: $actual_branch" >&2
+  fi
+  echo "  Current directory: $PWD" >&2
+  exit 2
+fi
+
+# Phase 2 check — exact branch (conditional on .saw-agent-brief.md):
+# If brief does not exist in PWD, skip and allow through.
+if [[ ! -f .saw-agent-brief.md ]]; then
+  exit 0
+fi
+
+# Extract impl_doc field from brief frontmatter
+impl_doc=$(grep -m1 "^impl_doc:" .saw-agent-brief.md | sed 's/^impl_doc: *//' || echo "")
+
+if [[ -z "$impl_doc" ]]; then
+  # Cannot determine expected branch from brief — skip Phase 2
+  exit 0
+fi
+
+# Extract slug from IMPL path:
+# e.g. /path/to/IMPL-my-feature.yaml -> my-feature
+slug=$(basename "$impl_doc" .yaml | sed 's/^IMPL-//')
+
+if [[ -z "$slug" ]]; then
+  # Cannot derive slug — skip Phase 2
+  exit 0
+fi
+
+# Construct expected branch
+expected_branch="saw/${slug}/wave${wave_num}-agent-${agent_id}"
+
+# Compare against actual branch
+if [[ "$actual_branch" != "$expected_branch" ]]; then
+  echo "ISOLATION VIOLATION: Wrong branch" >&2
+  echo "  Agent: $agent_name" >&2
+  echo "  Expected: $expected_branch" >&2
+  echo "  Actual:   $actual_branch" >&2
+  echo "  Directory: $PWD" >&2
+  echo "  Remedy:   cd $PWD && git checkout $expected_branch" >&2
+  exit 2
+fi
+
+# All checks passed
+exit 0
