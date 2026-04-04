@@ -96,6 +96,8 @@ If 1-3 fail, print what's missing (see `docs/INSTALLATION.md`) and stop.
 
 **Resume detection:** Run `sawtools resume-detect` before `wave` or `status` execution. For `status`, include resume state in report. For `wave`, report interrupted session and use `sawtools build-retry-context` for failed agents.
 
+**Session stop detection:** The `saw_orchestrator_stop` Stop hook warns automatically when the session ends with an active IMPL in WAVE_PENDING or WAVE_EXECUTING state, or with active worktrees. No action needed — the hook fires passively at session end.
+
 See `references/impl-targeting.md` for discovery commands, resolution logic, auto-selection rules, and cross-repo handling.
 
 **On-demand reference routing:** If args start with `program `, read `references/program-flow.md` and stop. If args start with `amend `, read `references/amend-flow.md` and stop. Otherwise, continue below.
