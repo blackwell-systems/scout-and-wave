@@ -67,30 +67,19 @@ Each item specifies SDK (engine function in `scout-and-wave-go`), CLI (`sawtools
 
 **Implementation:** `pkg/engine/prepare.go` lines 253-265 — saves branch with `git branch --show-current`, deferred restore in all cases. `pkg/engine/step_types.go` line 40 — added `OriginalBranch string` field to result struct.
 
-### P2: Cross-Repo Build in `finalize-wave`
+### ~~P2: Cross-Repo Build in `finalize-wave`~~ ✅ FIXED (SDK+CLI)
 
-`finalize-wave` only verifies the merged repo builds. Cross-repo dependents (e.g., web repo importing go repo) can break silently. Currently caught at next wave's `prepare-wave` (E21B), which is correct but late — the integration gap is already merged.
+**Status:** Fixed in roadmap-hardening IMPL (2026-04-04). SDK and CLI implemented. Web integration pending.
 
-| Layer | Scope |
-|-------|-------|
-| **SDK** | `pkg/engine/wave_finalize.go` — add `CrossRepoVerify bool` to `FinalizeWaveOpts`. When true, after primary repo merge + verify-build, run `RunCrossRepoBaselineGates` on all repos from the IMPL's `file_ownership`. Add `CrossRepoResults map[string]*BaselineData` to `FinalizeWaveResult`. |
-| **CLI** | `cmd/sawtools/finalize_wave.go` — add `--cross-repo-verify` flag, pass to SDK. Include cross-repo results in JSON output. |
-| **Web** | `pkg/api/wave_runner.go` — always enable cross-repo verify in web flows (web users can't easily fix post-merge). Emit `cross_repo_verify` SSE event with per-repo pass/fail status. Add red/green indicators to wave finalization UI. |
+`FinalizeWaveOpts.CrossRepoVerify` field + `--cross-repo-verify` CLI flag. Step 5.7 runs `RunBaselineGates` on non-primary repos after primary merge. Informational (warnings, not fatal). Orchestrator prompt updated to include flag for cross-repo IMPLs.
 
-### P3: Stale Briefs in Pre-Existing IMPLs (Program Mode Only)
+**Remaining:** Web UI (`pkg/api/wave_runner.go`) — always enable in web flows, emit SSE event, add red/green indicators.
 
-**Scope:** Pre-existing IMPLs (status "reviewed") imported into Tier 2+ via `import-impls`. Newly scouted IMPLs don't have this problem — E31 launches Scouts per-tier, so they see the post-Tier-1 codebase.
+### ~~P3: Stale Briefs in Pre-Existing IMPLs (Program Mode Only)~~ ✅ FIXED (SDK+CLI+Orchestrator)
 
-**Problem:** Tier 1 changes function names, deletes types, and adds new APIs — but pre-existing Tier 2 briefs still reference the old state. Required 20 manual replacements in repo-entry-unification.
+**Status:** Fixed in roadmap-hardening IMPL (2026-04-04). All three layers implemented.
 
-**Root cause:** Pre-existing IMPLs skip Scout (E28A) — they were scouted outside program context and imported wholesale. Their briefs reference the codebase state at their original Scout time, not at tier-boundary time.
-
-| Layer | Scope |
-|-------|-------|
-| **Protocol** | Document the limitation in `program-flow.md` E28A section: "Pre-existing IMPLs imported to Tier 2+ may have stale briefs if Tier 1 modifies their dependencies. Recommend re-scouting with `--refresh-brief` after importing." |
-| **CLI** | Add `sawtools run-scout --resume <impl-doc> --refresh-brief` flag: re-runs Scout but preserves file ownership/wave structure, only updates agent briefs to reflect current codebase state. |
-| **Orchestrator** | Add tier-boundary checklist after Tier N completes: list pre-existing IMPLs in Tier N+1, ask "These IMPLs may have stale briefs. Re-scout? (y/n)", run `--refresh-brief` if confirmed. |
-| **Alternative (rejected)** | Symbol validation at prepare-wave time: high false-positive rate (briefs may reference symbols the agent will create), doesn't fix stale briefs (user still does 20 manual replacements), language-specific. |
+`RunScoutFullOpts.RefreshBrief` field + `sawtools run-scout --refresh-brief` CLI flag. Re-runs Scout preserving file ownership and wave structure, only updating agent task descriptions. Orchestrator prompt (`program-flow.md`) updated with tier-boundary stale brief checklist at E28A validation step.
 
 ### P4: Cross-Tier Dependency Graph Validation
 
@@ -108,33 +97,19 @@ Tier 1 created `config/state.go` importing `protocol`, making `protocol → conf
 
 **Implementation:** Created `pkg/protocol/CriticGatePasses(m *IMPLManifest, autoMode bool)` helper function. Updated prepare-wave CLI and prepare-tier SDK to use severity-aware logic. ISSUES verdicts with warnings-only now pass in auto mode. ISSUES verdicts with any errors always block, regardless of mode.
 
-### P6: Incremental Agent Commits (Rate-Limit Resilience)
+### ~~P6: Incremental Agent Commits (Rate-Limit Resilience)~~ ✅ FIXED (Protocol+Hook)
 
-Rate-limited agents lose all uncommitted work when the worktree is cleaned up for retry. Agent A did 7/8 files but couldn't commit — the retry found a clean worktree and only fixed 1 file.
+**Status:** Fixed in roadmap-hardening IMPL (2026-04-04). Protocol and hook layers implemented. Web SSE enhancement pending.
 
-| Layer | Scope |
-|-------|-------|
-| **Protocol** | Update `agents/wave-agent.md` Field 4: "Commit incrementally. After each owned file is modified and verified, run `git add <file> && git commit -m 'partial: <file description>'`. Do not accumulate all changes for a single final commit. This ensures work survives rate limits, crashes, and context compaction." |
-| **SDK** | `pkg/protocol/merge_agents.go` — `MergeAgents` already handles multi-commit branches via no-fast-forward merge (`git.MergeNoFFWithOwnership`). All commits on the branch are preserved. No SDK changes needed. |
-| **CLI** | No changes — the `/saw` skill already uses `sawtools set-completion` which works with multi-commit branches. |
-| **Web** | `pkg/api/wave_runner.go` — no changes. The web agent runner already collects all commits on the branch. Add real-time commit count to the agent progress SSE event: `{"agent": "A", "commits": 3, "status": "running"}`. |
-| **Hook** | Consider a `PostToolUse` hook on `Write|Edit` that auto-commits after each file write in worktree context. Aggressive but guarantees no work is lost. |
+`wave-agent.md` I5 section updated: agents commit after each file, not in a single batch. New `auto_commit_on_write` PostToolUse hook (async) auto-commits Write/Edit operations in worktree context as a safety net. SDK already handles multi-commit branches (`MergeNoFFWithOwnership`).
 
-### P7: `finalize-wave` Solo-Wave Merge Bug (High — data loss) ⚠️ HIT IN PRACTICE
+**Remaining:** Web UI — real-time commit count in agent progress SSE event.
 
-**Confirmed 2026-04-04:** During `journal-integration` finalize-wave, cross-repo Agent D's worktree was cleaned without merging its branch. Agent D's commit was lost and had to be re-applied manually. The bug manifests in cross-repo waves where finalize-wave partially merges some repos but fails to merge others.
+### ~~P7: `finalize-wave` Solo-Wave Merge Bug (High — data loss)~~ ✅ FIXED
 
-`finalize-wave` skips merge when worktree branches exist but worktree directories are gone. **Depends on P1** — if P1 leaves HEAD on the wrong branch, P7's detection logic runs against the wrong base.
+**Status:** Fixed in roadmap-hardening IMPL (2026-04-04). Previously confirmed 2026-04-04 during `journal-integration` finalize-wave (Agent D's commit lost).
 
-The code at `cmd/sawtools/finalize_wave.go` has two checks: `WorktreesAbsent()` (line 111) and `AllBranchesAbsent()` (line 129). The bug is ordering: `WorktreesAbsent` runs first and short-circuits — if worktree directories were cleaned up but branches still exist, merge is skipped. The `AllBranchesAbsent` path only handles the idempotent re-run case (already merged AND cleaned), not the "worktrees gone, branches remain" case.
-
-**Fix:** Check branches first, worktree directories second. If `git branch --list 'saw/{slug}/wave{N}-agent-*'` returns any branches, proceed to merge regardless of worktree directory state.
-
-| Layer | Scope |
-|-------|-------|
-| **SDK** | `pkg/engine/wave_finalize.go` — reorder: branch check before worktree check. If branches exist, merge them. If branches don't exist AND worktrees don't exist, skip (idempotent). |
-| **CLI** | `cmd/sawtools/finalize_wave.go` — same reorder at lines 109-143. |
-| **Web** | `pkg/api/wave_runner.go` — no changes (SDK fix). |
+Solo-wave detection in `FinalizeWave` now checks `AllBranchesAbsent` in addition to `WorktreesAbsent`. When branches exist but worktree directories are gone, the pipeline proceeds to full merge instead of skipping. Test: `TestFinalizeWave_WorktreesGoneBranchesRemain`.
 
 
 ### ~~P11: `mark-program-complete` Archive~~ ✅ ALREADY IMPLEMENTED

@@ -161,7 +161,7 @@ Read .saw-agent-brief.md and follow exactly.
    ```bash
    sawtools finalize-wave "<absolute-manifest-path>" --wave <N> --repo-dir "<repo-path>"
    ```
-   **Always use absolute path for `<manifest-path>`.** Cross-repo IMPLs fail with relative paths. Combines 6 steps: (1) verify-commits (E7), (2) scan-stubs (E20), (3) run-gates (E21), (4) merge-agents, (5) verify-build, (6) cleanup. Exit 1 = failure. For solo agents, run `verify-build` manually. For integration waves, skip merge-agents (no worktree branches).
+   **Always use absolute path for `<manifest-path>`.** Cross-repo IMPLs fail with relative paths. For cross-repo IMPLs, add `--cross-repo-verify` to run baseline gates on all repos after primary merge (catches cross-repo breakage early). Combines 6 steps: (1) verify-commits (E7), (2) scan-stubs (E20), (3) run-gates (E21), (4) merge-agents, (5) verify-build, (6) cleanup. Exit 1 = failure. For solo agents, run `verify-build` manually. For integration waves, skip merge-agents (no worktree branches).
 8a. **E25/E26/E35: Integration gap detection.** After finalization succeeds, read `references/integration-gap-detection.md` for the 7-step integration gap detection workflow.
 8b. **E47: Caller cascade hotfix.** `finalize-wave` automatically runs
    `apply-cascade-hotfix` (step 6a) when `CallerCascadeOnly=true`.

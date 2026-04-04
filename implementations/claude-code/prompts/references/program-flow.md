@@ -171,6 +171,15 @@ Partition tier N IMPLs by status (E28A):
   - Run: `sawtools validate --fix "<impl-doc-path>"`
   - Check P2 compliance: `sawtools freeze-check "<program-manifest>" --impl "<slug>"`
   - If validation fails, enter BLOCKED
+- **Stale brief check (Tier 2+):** Pre-existing IMPLs imported to Tier 2+ may have
+  stale briefs if earlier tiers modified their dependencies. After Tier N completes,
+  list pre-existing IMPLs in Tier N+1 and ask: "These IMPLs may have stale briefs.
+  Re-scout? (y/n)". If yes, run:
+  ```bash
+  sawtools run-scout --resume "<impl-doc-path>" --refresh-brief
+  ```
+  This re-runs Scout preserving file ownership and wave structure, only updating
+  agent task descriptions to reflect the current (post-Tier-N) codebase state.
 
 > **Tip:** Use `sawtools import-impls` before program execution to bulk-import
 > pre-existing IMPL docs into the PROGRAM manifest with correct tier assignments
