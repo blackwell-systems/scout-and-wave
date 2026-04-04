@@ -8,6 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed
+- **Onboarding friction sweep:** Protocol Version updated to 0.9.3 (was 0.77.0) in QUICKSTART.md and implementations README; `TodoWrite` references updated to `TaskCreate` (Claude Code rename); hook count corrected to 20 across all docs (was 18, missed `auto_commit_on_write` and `auto_format_saw_agent_names`); version badge in README updated to 0.9.3
+- **sawtools binary distribution:** Added pre-built binary download path (curl one-liner with version auto-resolution) to implementations README, INSTALLATION.md, and main README Quick Start; Go no longer listed as hard prerequisite (pre-built binaries available for darwin/linux, arm64/amd64); main README Quick Start now includes sawtools install step (was missing entirely)
+- **README.md:** "Standalone CLI (saw)" → "Go engine + sawtools CLI" (cmd/saw removed); version-anchored worktree isolation prose replaced with version-free description; "Go CLI" → "sawtools" terminology alignment
+
 ### Added
 - **`pkg/result` and `pkg/resume` canonicalized (Go engine):** All public fallible functions in `pkg/result` and `pkg/resume` now return `result.Result[T]`; all error construction uses `result.NewFatal`/`NewError`/`NewWarning` builders; inline error strings eliminated. Includes new `CodeSessionSaveFailed = "N088_SESSION_SAVE_FAILED"`, renamed `CodeDispatchNoAdapters`/`CodeDispatchAllFailed` values to `N086_`/`N087_` prefixed forms, and deletion of `pkg/result/errors.go` (zero non-test callers).
 - **`block_git_stash` hook:** New `PreToolUse:Bash` hook blocks `git stash` in wave agent worktrees. Wave agents working in parallel cannot stash — stashing hides uncommitted work from `finalize-wave` merge verification, risks losing work on worktree cleanup, and defeats the I5 invariant (commit before reporting). The hook fires only when `agent_type == "wave-agent"` and the bash command matches `git stash`. Block message instructs agents to commit with `--no-verify` instead. Registered in `install.sh` alongside the other 16 enforcement hooks.

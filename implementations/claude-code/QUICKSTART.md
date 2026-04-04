@@ -1,6 +1,6 @@
 # First Run Walkthrough
 
-**Protocol Version:** 0.77.0
+**Protocol Version:** 0.9.3
 
 This guide walks you through your first SAW session step-by-step, showing exactly what to expect at each stage.
 
@@ -221,7 +221,7 @@ Creating worktrees:
 
 Pre-commit hook installed: guards against accidental commits to main
 
-**Hook-based enforcement (E43):** The installer registers 18 hooks across enforcement, injection, and observability layers. Four E43 hooks enforce worktree isolation automatically: environment injection (SubagentStart), bash cd auto-injection (PreToolUse), path validation (PreToolUse), and compliance verification (SubagentStop). Agents no longer need manual `cd` commands or `$WORKTREE` variable usage. Additional hooks enforce I1 (file ownership), I6 (Scout boundaries), E16 (IMPL validation), E20 (stub warnings), E42 (completion validation), E12 (agent isolation), and H2-H5 (pre-launch gates). See `implementations/claude-code/hooks/README.md` for details.
+**Hook-based enforcement (E43):** The installer registers 20 hooks across enforcement, injection, and observability layers. Four E43 hooks enforce worktree isolation automatically: environment injection (SubagentStart), bash cd auto-injection (PreToolUse), path validation (PreToolUse), and compliance verification (SubagentStop). Agents no longer need manual `cd` commands or `$WORKTREE` variable usage. Additional hooks enforce I1 (file ownership), I6 (Scout boundaries), E16 (IMPL validation), E20 (stub warnings), E42 (completion validation), E12 (agent isolation), and H2-H5 (pre-launch gates). See `implementations/claude-code/hooks/README.md` for details.
 ```
 
 Each agent gets its own isolated working directory (git worktree). They share git history but have separate file trees.

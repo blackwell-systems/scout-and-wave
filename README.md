@@ -1,7 +1,7 @@
 # Scout-and-Wave
 
 [![Blackwell Systems™](https://raw.githubusercontent.com/blackwell-systems/blackwell-docs-theme/main/badge-trademark.svg)](https://github.com/blackwell-systems)
-![Version](https://img.shields.io/badge/version-0.76.0-blue)
+![Version](https://img.shields.io/badge/version-0.9.3-blue)
 [![Agent Skills](assets/badge-agentskills.svg)](https://agentskills.io)
 
 SAW is published as an [Agent Skill](https://agentskills.io) — a portable, tool-agnostic package for adding capabilities to AI coding agents.
@@ -89,11 +89,16 @@ ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/saw-bootstrap.m
 ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agent-template.md ~/.claude/skills/saw/agent-template.md
 ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agents ~/.claude/skills/saw/agents
 
-# 2. Initialize your project (auto-detects language, build, and test commands)
+# 2. Install sawtools CLI (pick one)
+brew install blackwell-systems/tap/sawtools                                     # Homebrew
+go install github.com/blackwell-systems/scout-and-wave-go/cmd/sawtools@latest   # Go install
+# Or download binary: https://github.com/blackwell-systems/scout-and-wave-go/releases/latest
+
+# 3. Initialize your project (auto-detects language, build, and test commands)
 cd your-project
 sawtools init
 
-# 3. Restart Claude Code, then in any session on any project:
+# 4. Restart Claude Code, then in any session on any project:
 /saw scout "add a caching layer to the API client"
 # → Scout analyzes the codebase, assigns files to agents, writes docs/IMPL/IMPL-caching-layer.yaml
 # → Orchestrator shows you the wave structure and interface contracts for review
@@ -144,10 +149,10 @@ SAW has three interfaces backed by separate repositories, all implementing the s
 | Interface | Repository | Description |
 |-----------|------------|-------------|
 | Claude Code skill (`/saw`) | [scout-and-wave](https://github.com/blackwell-systems/scout-and-wave) (this repo) | Runs inside Claude Code as a slash command. The orchestrator is Claude itself. Fastest way to get started. |
-| Standalone CLI (`saw`) | [scout-and-wave-go](https://github.com/blackwell-systems/scout-and-wave-go) | Go binary with built-in engine and SDK. Supports both API and CLI backends. Works with Claude Max (no API key required). |
+| Go engine + `sawtools` CLI | [scout-and-wave-go](https://github.com/blackwell-systems/scout-and-wave-go) | Protocol SDK, 75+ CLI commands, and LLM-agnostic engine. Supports Anthropic, OpenAI, and local (Ollama) backends. |
 | Web UI (`saw serve`) | [scout-and-wave-web](https://github.com/blackwell-systems/scout-and-wave-web) | Browser-based dashboard with real-time SSE updates. Imports scout-and-wave-go as dependency. |
 
-All implement the same SAW protocol and produce identical IMPL docs. Use the Claude Code skill to start quickly. Use the Go CLI for standalone operation, or the Web UI for a browser-based dashboard with real-time monitoring.
+All implement the same SAW protocol and produce identical IMPL docs. Use the Claude Code skill to start quickly. Use `sawtools` for programmatic orchestration, or the Web UI for a browser-based dashboard with real-time monitoring.
 
 ## Documentation
 
@@ -192,7 +197,7 @@ Neither constraint substitutes for the other. Disjoint ownership without worktre
 
 ### Worktree Isolation Defense (6 layers)
 
-Agents don't always respect isolation instructions. v0.6.0 adds a layered defense model that treats worktree isolation as an infrastructure problem, not a cooperation problem. v0.65.0+ adds hook-based enforcement (E43) as the primary mechanism.
+Agents don't always respect isolation instructions. SAW treats worktree isolation as an infrastructure problem, not a cooperation problem, with hook-based enforcement (E43) as the primary mechanism.
 
 (Layers numbered 0-4, plus E43 hook-based enforcement. Layer 0 is the foundational prevention layer; higher layers add defense-in-depth.)
 

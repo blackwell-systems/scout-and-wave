@@ -5,15 +5,19 @@
 Five commands from nothing to your first `/saw scout`. Copy-paste in order:
 
 ```bash
-# 0. Prerequisites: Git 2.20+, Go 1.25+, jq 1.6+
-git --version && go version && jq --version
+# 0. Prerequisites: Git 2.20+, jq 1.6+
+git --version && jq --version
 
 # 1. Install skill files, hooks, and Agent permission
 git clone https://github.com/blackwell-systems/scout-and-wave.git
 cd scout-and-wave && ./install.sh
 
-# 2. Install the CLI
-go install github.com/blackwell-systems/scout-and-wave-go/cmd/sawtools@latest
+# 2. Install the CLI (pick one)
+brew install blackwell-systems/tap/sawtools            # Homebrew
+go install github.com/blackwell-systems/scout-and-wave-go/cmd/sawtools@latest  # Go install
+
+# Or download a pre-built binary (no Go/Homebrew required):
+# https://github.com/blackwell-systems/scout-and-wave-go/releases/latest
 
 # 3. Initialize your project
 cd /path/to/your-project
@@ -39,7 +43,7 @@ That's it for most users. The Web UI is optional -- see [Step 3](#step-3-web-ui-
 | Tool | Minimum Version | Check With | Required For |
 |---|---|---|---|
 | Git | 2.20+ | `git --version` | All (worktree support) |
-| Go | 1.25+ | `go version` | `sawtools` binary |
+| Go | 1.25+ | `go version` | Only if using `go install` (pre-built binaries available) |
 | jq | 1.6+ | `jq --version` | Installer + hooks at runtime |
 | yq | 4.x | `yq --version` | Pre-launch validation (H5); grep fallback exists |
 | Node.js | 18+ | `node --version` | Web UI only |
@@ -51,7 +55,7 @@ Most users need **two repos**: this one (protocol + skill files + hooks) and `sa
 | What | Install method | Required? |
 |---|---|---|
 | Protocol + skill + hooks | `git clone` + `./install.sh` | Yes |
-| `sawtools` CLI | `brew install` or `go install` | Yes |
+| `sawtools` CLI | `brew install`, `go install`, or [binary download](https://github.com/blackwell-systems/scout-and-wave-go/releases/latest) | Yes |
 | Web UI | `git clone` + `npm build` + `go build` | No -- only if you want the browser dashboard |
 
 ## Installation Steps
@@ -179,9 +183,9 @@ Start the server with:
 ./saw serve
 ```
 
-## Hooks (18 total)
+## Hooks (20 total)
 
-The hook installer registers 18 hooks across five lifecycle events. All hook scripts live in `implementations/claude-code/hooks/` and are symlinked to `~/.local/bin/`.
+The hook installer registers 20 hooks across five lifecycle events. All hook scripts live in `implementations/claude-code/hooks/` and are symlinked to `~/.local/bin/`.
 
 ### SubagentStart (2 hooks — fire when an agent session starts)
 

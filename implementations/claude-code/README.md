@@ -1,6 +1,6 @@
 # Claude Code Reference Implementation
 
-**Protocol Version:** 0.77.0
+**Protocol Version:** 0.9.3
 
 Scout-and-Wave implemented as a Claude Code skill for fully automated parallel agent execution.
 
@@ -34,7 +34,7 @@ cat > ~/.claude/settings.json <<'EOF'
       "Grep",
       "WebFetch",
       "WebSearch",
-      "TodoWrite"
+      "TaskCreate"
     ]
   }
 }
@@ -56,7 +56,7 @@ EOF
 **Why these permissions:**
 - **`"Agent"`** (critical): Launches Scout and Wave agents without blocking
 - `"Bash"`, `"Read"`, `"Write"`, `"Edit"`, `"Glob"`, `"Grep"`: Git commands, worktree management, IMPL doc writes, codebase reads
-- `"TodoWrite"`: Wave progress tracking
+- `"TaskCreate"`: Wave progress tracking
 - `"WebFetch"`, `"WebSearch"`: Doc/API lookups during scout analysis
 
 For project-scoped settings, add the same block to `.claude/settings.json` in the project root.
@@ -68,6 +68,13 @@ For project-scoped settings, add the same block to `.claude/settings.json` in th
 ```bash
 # Homebrew (macOS/Linux)
 brew install blackwell-systems/tap/sawtools
+
+# Or download a pre-built binary (no Go/Homebrew required)
+# Releases: https://github.com/blackwell-systems/scout-and-wave-go/releases/latest
+VERSION=$(curl -sI https://github.com/blackwell-systems/scout-and-wave-go/releases/latest | grep -i location | sed 's|.*/v||;s/\r//')
+curl -sL "https://github.com/blackwell-systems/scout-and-wave-go/releases/download/v${VERSION}/sawtools_${VERSION}_darwin_arm64.tar.gz" | tar xz
+mkdir -p ~/.local/bin && mv sawtools ~/.local/bin/
+# Replace darwin_arm64 with: darwin_amd64, linux_amd64, or linux_arm64
 
 # Or via Go install (requires Go 1.21+)
 go install github.com/blackwell-systems/scout-and-wave-go/cmd/sawtools@latest
@@ -164,7 +171,7 @@ cd ~/code/scout-and-wave/implementations/claude-code/hooks
 ./install.sh
 ```
 
-The installer symlinks all 18 hook scripts to `~/.local/bin/`, registers them in `~/.claude/settings.json`, and verifies each hook is executable. It will print a summary of what was installed.
+The installer symlinks all 20 hook scripts to `~/.local/bin/`, registers them in `~/.claude/settings.json`, and verifies each hook is executable. It will print a summary of what was installed.
 
 **If `~/.local/bin` is not on your `$PATH`**, add it:
 ```bash
@@ -259,7 +266,7 @@ This implementation uses Claude Code's tool suite:
 - **Read/Write/Edit:** IMPL doc and source file operations
 - **Bash:** Git commands, build/test execution
 - **Glob/Grep:** Codebase analysis during scout phase
-- **TodoWrite:** Wave progress tracking
+- **TaskCreate:** Wave progress tracking
 
 ## Skill Architecture
 

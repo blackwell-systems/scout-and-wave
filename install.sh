@@ -357,7 +357,7 @@ install_claude_code() {
     exit 1
   }
 
-  echo "Installation complete (Claude Code). 19 hooks active:"
+  echo "Installation complete (Claude Code). 20 hooks active:"
   echo ""
   echo "  SubagentStart:     inject_worktree_env        (E43 env var injection)"
   echo "  SubagentStart:     validate_agent_isolation   (E12 isolation verification)"
