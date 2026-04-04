@@ -1,6 +1,6 @@
 # First Run Walkthrough
 
-**Protocol Version:** 0.26.0
+**Protocol Version:** 0.77.0
 
 This guide walks you through your first SAW session step-by-step, showing exactly what to expect at each stage.
 
@@ -42,7 +42,7 @@ Scout is analyzing your codebase:
 -> Designing wave structure
 -> Defining interface contracts
 -> Assigning files to agents
--> Writing docs/IMPL/IMPL-simple-cache.md...
+-> Writing docs/IMPL/IMPL-simple-cache.yaml...
 ```
 
 **Scout completes and reports:**
@@ -219,7 +219,7 @@ Creating worktrees:
 
 Pre-commit hook installed: guards against accidental commits to main
 
-**Hook-based enforcement (E43):** The installer registers 17 hooks across enforcement, injection, and observability layers. Four E43 hooks enforce worktree isolation automatically: environment injection (SubagentStart), bash cd auto-injection (PreToolUse), path validation (PreToolUse), and compliance verification (SubagentStop). Agents no longer need manual `cd` commands or `$WORKTREE` variable usage. Additional hooks enforce I1 (file ownership), I6 (Scout boundaries), E16 (IMPL validation), E20 (stub warnings), E42 (completion validation), and H2-H5 (pre-launch gates). See `implementations/claude-code/hooks/README.md` for details.
+**Hook-based enforcement (E43):** The installer registers 18 hooks across enforcement, injection, and observability layers. Four E43 hooks enforce worktree isolation automatically: environment injection (SubagentStart), bash cd auto-injection (PreToolUse), path validation (PreToolUse), and compliance verification (SubagentStop). Agents no longer need manual `cd` commands or `$WORKTREE` variable usage. Additional hooks enforce I1 (file ownership), I6 (Scout boundaries), E16 (IMPL validation), E20 (stub warnings), E42 (completion validation), E12 (agent isolation), and H2-H5 (pre-launch gates). See `implementations/claude-code/hooks/README.md` for details.
 ```
 
 Each agent gets its own isolated working directory (git worktree). They share git history but have separate file trees.
@@ -351,7 +351,12 @@ Disjoint file ownership (I1) guarantees conflict-free merges. Agent A and Agent 
 
 **What finalize-wave does:**
 
-This is an **atomic batching command** that combines 6 operations: (1) verify-commits, (2) scan-stubs, (3) run-gates, (4) merge-agents, (5) verify-build, (6) cleanup. If any step fails, the command stops and returns diagnostics. You never run these steps individually — `finalize-wave` handles the entire post-agent pipeline.
+This is an **atomic batching command** that combines 6 operations: (1) verify-commits, (2) scan-stubs, (3) run-gates, (4) merge-agents, (5) verify-build, (6) cleanup. Step 6a runs `apply-cascade-hotfix` automatically when only caller-cascade changes caused the build to fail (E47) — if the hotfix succeeds, `finalize-wave` exits 0 and you proceed normally. If any step fails, the command stops and returns diagnostics. You never run these steps individually — `finalize-wave` handles the entire post-agent pipeline.
+
+To inspect how `finalize-wave` would classify a build failure without running the merge:
+```bash
+sawtools finalize-wave docs/IMPL/IMPL-simple-cache.yaml --wave 1 --dry-run
+```
 
 **Why unscoped tests matter:**
 
