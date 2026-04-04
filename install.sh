@@ -45,6 +45,7 @@ HOOK_SCRIPTS=(
   "verify_worktree_compliance"
   "block_git_stash"
   "auto_commit_on_write"
+  "saw_orchestrator_stop"
 )
 
 # Core skill files: source (relative to PROMPTS_DIR) -> target name
@@ -305,6 +306,9 @@ install_claude_code() {
   # UserPromptSubmit
   add_hook "UserPromptSubmit" "" "${BIN_DIR}/inject_skill_context" "Tier 3 context injection"
 
+  # Stop
+  add_hook "Stop" "" "${BIN_DIR}/saw_orchestrator_stop" "Orchestrator stop warning"
+
   # Phase 4: Agent permission
   local has_agent
   has_agent=$(jq -r '.permissions.allow // [] | map(select(. == "Agent")) | length' "$settings_file")
@@ -357,7 +361,7 @@ install_claude_code() {
     exit 1
   }
 
-  echo "Installation complete (Claude Code). 20 hooks active:"
+  echo "Installation complete (Claude Code). 21 hooks active:"
   echo ""
   echo "  SubagentStart:     inject_worktree_env        (E43 env var injection)"
   echo "  SubagentStart:     validate_agent_isolation   (E12 isolation verification)"
@@ -378,6 +382,7 @@ install_claude_code() {
   echo "  SubagentStop:      validate_agent_completion  (E42 protocol compliance)"
   echo "  SubagentStop:      emit_agent_completion      (E42 observability) [async]"
   echo "  UserPromptSubmit:  inject_skill_context       (Tier 3 context injection)"
+  echo "  Stop:              saw_orchestrator_stop      (Orchestrator stop warning)"
   echo ""
   echo "Next steps:"
   echo "  1. Install sawtools:  go install github.com/blackwell-systems/scout-and-wave-go/cmd/sawtools@latest"
