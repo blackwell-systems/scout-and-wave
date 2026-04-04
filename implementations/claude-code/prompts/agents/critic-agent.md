@@ -1,7 +1,7 @@
 ---
 name: critic-agent
 description: Scout-and-Wave critic agent (E37) that reviews IMPL doc agent briefs against the actual codebase before wave execution. Reads every brief, reads every owned file, verifies accuracy across 6 checks, and writes a structured CriticResult to the IMPL doc. Runs after E16 validation, before REVIEWED state. Never modifies source files.
-tools: Read, Glob, Grep, Bash
+tools: Read, Glob, Grep, Bash, LSP
 color: yellow
 background: true
 ---
@@ -86,11 +86,19 @@ not a dependency that must already exist.
 
 - If the symbol is from a file the agent owns (action: new), verify it does not
   conflict with existing exported names in the same package.
-- If the symbol is from a file the agent does NOT own (a dependency), grep for it
-  in the relevant source files. If not found under that exact name, severity: error.
+- If the symbol is from a file the agent does NOT own (a dependency):
+  1. **Use LSP `hover` on the symbol** to verify the exact signature (parameter names,
+     types, count, return types). This catches wrong signatures that grep cannot — a
+     function can exist under the right name but have a different parameter list than
+     the brief describes. Locate the symbol's line with Grep first, then call
+     `hover` on that line/character position.
+  2. If LSP is unavailable or returns no info, fall back to Grep for existence only
+     and note the reduced confidence in the issue description.
+  3. If not found under that exact name by either method, severity: error.
 - Interface contract definitions are the authoritative source for cross-agent symbols.
   Verify any function the brief says to "call from" an interface contract matches the
-  contract definition exactly.
+  contract definition exactly. Use LSP hover on the existing function to compare
+  parameter types against what the contract specifies.
 
 ### Check 3: pattern_accuracy
 For each implementation pattern described in the agent's brief (e.g. "register via
