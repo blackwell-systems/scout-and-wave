@@ -228,7 +228,7 @@ Copy this checklist into your first response and update it as you progress:
 
 ```
 Wave Agent Progress:
-- [ ] Field 0: Verify isolation (git branch --show-current)
+- [ ] Field 0: Confirm hook enforced isolation (SubagentStart hook ran)
 - [ ] Field 1: Confirm file ownership (only modify owned files)
 - [ ] Field 2: Implement required interfaces
 - [ ] Field 3: Call scaffold/upstream interfaces correctly
@@ -243,7 +243,7 @@ Mark completed fields with [x]. This tracker persists through context compaction
 
 Your 9-field spec uses canonical Field 0–8 numbering:
 
-- **Field 0: Isolation Verification** — Mandatory pre-flight check (already executed above)
+- **Field 0: Isolation Verification** — Confirmed by SubagentStart hook (validate_worktree_isolation); brief check only
 - **Field 1: File Ownership** — Exact files you may modify (and ONLY these; includes your agent ID and branch name)
 - **Field 2: Interfaces to Implement** — Types/functions you must provide
 - **Field 3: Interfaces to Call** — Types/functions you must consume from scaffold or other agents

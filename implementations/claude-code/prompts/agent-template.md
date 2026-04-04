@@ -47,72 +47,24 @@ implementation wave. There is no Wave 0; the Scaffold Agent creates shared type 
 
 You are Wave {N} Agent {ID}. {One-sentence summary of your task.}
 
-## 0. CRITICAL: Isolation Verification (RUN FIRST)
+## 0. Isolation Verification
 
-⚠️ **MANDATORY PRE-FLIGHT CHECK - Run BEFORE any file modifications**
+The SubagentStart hook (`validate_worktree_isolation`) runs automatically
+before your first action and blocks if isolation is wrong. If you reached
+this point, isolation is confirmed.
 
-**Step 1: Navigate to worktree**
-
-```bash
-# Navigate to expected worktree location (strict - must succeed)
-cd {absolute-repo-path}/.claude/worktrees/saw/{slug}/wave{N}-agent-{ID}
-```
-
-**Step 2: Verify isolation (strict fail-fast after self-correction attempt)**
+Verify briefly that you are on the expected branch:
 
 ```bash
-# Check working directory
-ACTUAL_DIR=$(pwd)
-EXPECTED_DIR="{absolute-repo-path}/.claude/worktrees/saw/{slug}/wave{N}-agent-{ID}"
-
-if [ "$ACTUAL_DIR" != "$EXPECTED_DIR" ]; then
-  echo "ISOLATION FAILURE: Wrong directory (even after cd attempt)"
-  echo "Expected: $EXPECTED_DIR"
-  echo "Actual: $ACTUAL_DIR"
-  exit 1
-fi
-
-# Check git branch
-ACTUAL_BRANCH=$(git branch --show-current)
-EXPECTED_BRANCH="saw/{slug}/wave{N}-agent-{ID}"
-
-if [ "$ACTUAL_BRANCH" != "$EXPECTED_BRANCH" ]; then
-  echo "ISOLATION FAILURE: Wrong branch"
-  echo "Expected: $EXPECTED_BRANCH"
-  echo "Actual: $ACTUAL_BRANCH"
-  exit 1
-fi
-
-# Verify worktree in git's records
-git worktree list | grep -q "$EXPECTED_BRANCH" || {
-  echo "ISOLATION FAILURE: Worktree not in git worktree list"
-  exit 1
-}
-
-echo "✓ Isolation verified: $ACTUAL_DIR on $ACTUAL_BRANCH"
+git -C $SAW_AGENT_WORKTREE branch --show-current
+# Expected: saw/{slug}/wave{N}-agent-{ID}
 ```
 
-**If verification fails:** Write error to completion report and exit immediately (do NOT modify files):
+If the branch is wrong despite reaching this point, report immediately:
+- Write completion report with status: blocked, failure_type: escalate
+- Do NOT modify any files
 
-```
-### Agent {ID} - Completion Report
-
-**ISOLATION VERIFICATION FAILED**
-
-Expected: .claude/worktrees/saw/{slug}/wave{N}-agent-{ID} on branch saw/{slug}/wave{N}-agent-{ID}
-Actual: [paste output from pwd and git branch]
-
-**No work performed.** Cannot proceed without confirmed isolation.
-```
-
-**If verification passes:** Document briefly in completion report, then proceed with work.
-
-**Rationale:** Defense-in-depth isolation enforcement. The Bash tool does not preserve working directory between invocations; every git operation must specify the path explicitly.
-
-**E4: Worktree isolation is MANDATORY for all Wave agents.** No exceptions for work type (documentation-only, simple refactors, etc.). If work is too small for worktrees, use sequential implementation instead.
-- Layer 4: Orchestrator trip wire — counts commits per branch before merging; zero commits = isolation failure (E4)
-
-**Cross-repository scenarios:** When orchestrating repo B from repo A, the orchestrator should NOT use `isolation: "worktree"` parameter (it creates worktrees in repo A's context). Instead: manually create worktrees in repo B (Layer 1), and rely on Field 0 cd (Layer 1.5) as the primary navigation mechanism. The strict cd in Step 1 works correctly in both scenarios: when the isolation parameter positions the agent (same-repo), it's a no-op that succeeds; when agents start in the wrong repo (cross-repo), it navigates to the correct location or fails fast if the worktree doesn't exist.
+**E4:** Worktree isolation is mandatory for all Wave agents.
 
 ## 1. File Ownership
 
