@@ -138,7 +138,9 @@ If a `docs/IMPL/IMPL-*.yaml` file already exists:
 
    Returns JSON with worktree paths and agent metadata. Result also written to `.saw-state/wave{N}/prepare-result.json` for automation-friendly access.
 
-6. **Agent launching.** For each agent, launch with `subagent_type: wave-agent` and `run_in_background: true`. Prepend journal context if exists. Use short IMPL-referencing prompts (~60 tokens). Agent reads full brief from `.saw-agent-brief.md`.
+6. **Agent launching.** For each agent, launch with `subagent_type: wave-agent` and `run_in_background: true`. Use short IMPL-referencing prompts (~60 tokens). Agent reads full brief from `.saw-agent-brief.md`.
+
+   **Journal context recovery (resumed agents):** The `prepare-wave` and `prepare-agent` JSON output includes `"journal_context_available"` per agent. If `true`, read the file at `"journal_context_file"` and prepend its contents to the agent's launch prompt (before the IMPL doc comment block). This restores working memory for agents resuming after context compaction or interruption. If `journal_context_available` is `false` (first launch or no prior history), omit this step.
 
 **E44: Agent naming from brief metadata.** Read `.saw-agent-brief.md` frontmatter and extract `saw_name` field. Use this as the `name` parameter for the Agent tool call. The brief metadata contains the SAW-formatted name `[SAW:wave{N}:agent-{ID}] {task_summary}`. If frontmatter is missing or `saw_name` field is absent (old briefs), the `auto_format_saw_agent_names` PreToolUse hook provides fallback formatting.
 
