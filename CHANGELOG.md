@@ -8,7 +8,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
-### Changed
+### Added (2026-04-04)
+- **E47: Between-Wave Caller Cascade Hotfix** — `finalize-wave` auto-applies inline hotfix when verify-build fails exclusively due to caller-cascade compile errors in future-wave-owned files; `--dry-run` flag for diagnosis without launching agent
+- **P6: Incremental Agent Commits** — `wave-agent.md` I5 section updated to "Commit Incrementally (Rate-Limit Resilience)": agents commit after each file, not a single batch at the end; new `auto_commit_on_write` PostToolUse hook (async) auto-commits Write/Edit operations in worktree context as safety net; registered in `install.sh` as hook #19
+- **`sawtools finalize-scout`** — Scout prompt steps 16-18 consolidated to single command; prompt shrunk ~55 lines; Scout retains fix-between-retries loop (Option A: validation-only, not auto-retry)
+- **LSP hover for signature accuracy** — `scout.md` Step 5 (interface contracts): "Before finalizing any contract referencing an existing symbol, use LSP hover to confirm the exact current signature"; `wave-agent.md` LSP rule expanded to include hover for pre-implementation signature verification (not just findReferences for call sites)
+
+### Changed (2026-04-04)
+- **P7 documented and fixed** — `finalize-wave` solo-wave merge bug (data loss when branches exist but worktrees are gone) confirmed and fixed in Go engine; ROADMAP.md updated to ✅ FIXED
+- **P2 documented and wired** — `sawtools finalize-wave --cross-repo-verify` flag added to Go engine and wired into `saw-skill.md` step 8 orchestrator prompt; ROADMAP.md updated to ✅ FIXED (SDK+CLI)
+- **P3 documented and wired** — `sawtools run-scout --refresh-brief` flag added to Go engine and wired into `program-flow.md` E28A tier-boundary stale brief checklist; ROADMAP.md updated to ✅ FIXED
+- **`validate_impl_on_write` hook** — matcher changed from `Write` to `Write|Edit`; Edit tool previously bypassed IMPL validation entirely
+- **POSITION.md batching commands** — all 6 batching command step chains expanded to include previously omitted steps (I3 sequencing gate, E11 conflict prediction, PostMergeGates, E47, workspace restore, etc.); `finalize-scout` added
+- **Scout prompt** — Step 10: E-rule numbering via grep (not assumed); Step 6: same-package scaffold trigger instruction; `agent-template.md` Field 7: error-handling pattern must be stated explicitly; Field 4: read-and-verify preamble
+
+### Changed (Onboarding friction sweep)
 - **Onboarding friction sweep:** Protocol Version updated to 0.9.3 (was 0.77.0) in QUICKSTART.md and implementations README; `TodoWrite` references updated to `TaskCreate` (Claude Code rename); hook count corrected to 20 across all docs (was 18, missed `auto_commit_on_write` and `auto_format_saw_agent_names`); version badge in README updated to 0.9.3
 - **sawtools binary distribution:** Added pre-built binary download path (curl one-liner with version auto-resolution) to implementations README, INSTALLATION.md, and main README Quick Start; Go no longer listed as hard prerequisite (pre-built binaries available for darwin/linux, arm64/amd64); main README Quick Start now includes sawtools install step (was missing entirely)
 - **README.md:** "Standalone CLI (saw)" → "Go engine + sawtools CLI" (cmd/saw removed); version-anchored worktree isolation prose replaced with version-free description; "Go CLI" → "sawtools" terminology alignment
