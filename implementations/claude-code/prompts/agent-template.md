@@ -205,6 +205,22 @@ cd /path/to/project
 <lint command>     # e.g., go vet ./... | npm run lint | ruff check
 <test command>     # e.g., go test ./... | npm test | pytest -x
 
+**Postcondition checks** (run after build/test pass):
+```bash
+# Example: confirm field was added exactly once
+grep -c 'V048Exempt' pkg/protocol/types.go
+# Expected output: 1
+
+# Example: confirm no stub definitions leaked into the wrong file
+grep -c 'type CallerCascadeClassification struct' pkg/engine/finalize_steps.go
+# Expected output: 0
+```
+
+The Scout derives 1-3 postconditions per agent from the task description
+and places them here. Postconditions verify structural outcome (symbol
+exists, count matches) rather than just compilation. Run all postconditions
+and confirm each produces the expected output before reporting completion.
+
 **Note:** You do not need to run linter auto-fix (e.g., `golangci-lint run --fix`,
 `ruff --fix`, `eslint --fix`). The orchestrator applies a single auto-fix pass
 on the merged result after all agents complete; this is cleaner than requiring
