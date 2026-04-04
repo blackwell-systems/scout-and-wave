@@ -1,14 +1,14 @@
 # Observability Roadmap
 
-**Version:** 0.1.0
-**Date:** 2026-03-21
+**Version:** 0.2.0
+**Date:** 2026-04-04
 **Status:** Draft
 
 ---
 
 ## Current State
 
-SAW's observability system has strong abstractions but no working storage layer. Here is exactly what exists today and what is missing.
+The observability pipeline has a working storage layer and query surface, but the engine does not yet write events during normal workflow execution. The result: the store exists, the CLI reads from it, but no data flows through automatically.
 
 ### What Exists
 
@@ -29,16 +29,22 @@ SAW's observability system has strong abstractions but no working storage layer.
 - High-level query functions: `GetAgentHistory`, `GetIMPLMetrics`, `GetProgramSummary`, `GetCostBreakdown`, `GetFailurePatterns`
 - 13 helper constructors for common `ActivityEvent` subtypes in `emitter.go`
 
+**SQLite Store** (`scout-and-wave-go/pkg/observability/sqlite/`):
+- Concrete `Store` implementation backed by SQLite with WAL mode (pure Go via `modernc.org/sqlite`)
+- `Open(path)` creates/opens database, auto-creates schema
+- `RecordEvent`, `QueryEvents` (with type/time filtering + in-Go JSON-field filtering for impl/program/agent), `GetRollup` (delegates to SDK rollup functions), `Close`
+- Schema uses `(id, type, time, data)` — simpler than the originally planned dimension-indexed schema; JSON-field filtering happens in Go after SQL fetch
+
 **Engine integration** (`scout-and-wave-go/pkg/engine/`):
 - `ObsEmitter *observability.Emitter` field on `FinalizeWaveOpts`, `FinalizeIMPLOpts`, `TierLoopOpts`, and the engine config
 - Emit calls wired into: `runner.go` (scout launch/complete), `finalize.go` (gate executed, wave failed, wave merge, impl complete), `program_tier_loop.go` (tier gate passed/failed, tier advanced)
-- All emit calls are no-ops today because no Store is ever constructed
+- Emit helper functions exist in `cmd/sawtools/finalize_wave_obs.go` and `prepare_wave_obs.go` but are never called — no code constructs an Emitter and passes it through
 
 **CLI** (`sawtools`):
-- `sawtools query events` — query observability events with filters
+- `sawtools query events` — query observability events with filters (`--type`, `--impl`, `--program`, `--agent`, `--since`, `--format table|json|csv`)
 - `sawtools metrics <impl-slug>` — show IMPL metrics (cost, duration, success rate), with `--breakdown` and `--program` flags
-- Both commands accept `--store` DSN flag (default: `~/.saw/observability.db`)
-- Both commands return empty results because no SQLite store exists
+- Both commands open a SQLite store (default: `~/.saw/observability.db`) and return real results if events exist in the database
+- Events must be recorded externally or via manual testing; the engine pipeline does not yet write events automatically
 
 **Web app** (`scout-and-wave-web/pkg/api/observability.go`):
 - Five HTTP endpoints registered: `GET /api/observability/metrics/{impl_slug}`, `GET /api/observability/metrics/program/{program_slug}`, `GET /api/observability/events`, `GET /api/observability/rollup`, `GET /api/observability/cost-breakdown/{impl_slug}`
@@ -48,13 +54,12 @@ SAW's observability system has strong abstractions but no working storage layer.
 
 ### What Is Missing
 
-1. **No `Store` implementation.** The `Store` interface has zero concrete implementations. No SQLite package, no PostgreSQL package, nothing. This single gap renders the entire observability pipeline inert.
-2. **No store initialization in engine or web app.** Neither `sawtools` nor `saw serve` constructs a store at startup or passes it to the Emitter.
-3. **No cost extraction from agents.** No code parses agent output (Claude Code JSONL logs, etc.) to produce `CostEvent` records. Cost events would need to be emitted manually or by a post-wave extraction step.
-4. **No invariant violation tracking.** The existing event types track operational metrics (cost, performance, activity) but not protocol-level correctness (did I1 hold? did I2 hold?).
-5. **No budget policies.** No mechanism to set spend limits or enforce them at wave boundaries.
-6. **Cost is tracked as `float64` dollars.** Accumulation of floating-point costs will produce rounding errors over time.
-7. **No dashboard UI.** The web app has API endpoints but no frontend components to display observability data.
+1. **No store initialization in engine or web app.** The CLI query commands (`metrics`, `query events`) open a SQLite store per-invocation. But `prepare-wave`, `finalize-wave`, `run-wave`, and `saw serve` do not construct a store or Emitter. The emit helpers in `finalize_wave_obs.go` and `prepare_wave_obs.go` are dead code.
+2. **No cost extraction from agents.** No code parses agent output (Claude Code JSONL logs, etc.) to produce `CostEvent` records. Cost events would need to be emitted manually or by a post-wave extraction step.
+3. **No invariant violation tracking.** The existing event types track operational metrics (cost, performance, activity) but not protocol-level correctness (did I1 hold? did I2 hold?).
+4. **No budget policies.** No mechanism to set spend limits or enforce them at wave boundaries.
+5. **Cost is tracked as `float64` dollars.** Accumulation of floating-point costs will produce rounding errors over time.
+6. **No dashboard UI.** The web app has API endpoints but no frontend components to display observability data.
 
 ---
 
@@ -62,30 +67,22 @@ SAW's observability system has strong abstractions but no working storage layer.
 
 ### Storage Format
 
-**SQLite with a single `events` table and a JSON data column.** Each event is stored as a row with indexed dimension columns (event_type, impl_slug, program_slug, agent_id, wave_number, timestamp) plus a `data_json TEXT` column containing the full event payload. This provides fast filtered queries on common dimensions while preserving the full event structure for forward-compatible evolution.
+**SQLite with a single `events` table and a JSON data column.** SQLite is the right choice because SAW runs locally per-repo. WAL mode handles concurrent reads (CLI queries) during writes (Emitter goroutines). No external database dependency.
 
-SQLite is the right choice because SAW runs locally per-repo. WAL mode handles concurrent reads (CLI queries) during writes (Emitter goroutines). No external database dependency.
-
-Schema:
+The shipped schema (`pkg/observability/sqlite/`) is minimal:
 
 ```sql
-CREATE TABLE events (
-    id           TEXT PRIMARY KEY,
-    event_type   TEXT NOT NULL,
-    impl_slug    TEXT,
-    program_slug TEXT,
-    agent_id     TEXT,
-    wave_number  INTEGER,
-    timestamp    TEXT NOT NULL,          -- ISO 8601
-    data_json    TEXT NOT NULL,          -- full event as JSON
-    created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+CREATE TABLE IF NOT EXISTS events (
+    id   TEXT PRIMARY KEY,
+    type TEXT NOT NULL,
+    time TEXT NOT NULL,
+    data TEXT NOT NULL          -- full event as JSON
 );
-
-CREATE INDEX idx_events_type_time ON events(event_type, timestamp);
-CREATE INDEX idx_events_impl ON events(impl_slug, event_type, timestamp);
-CREATE INDEX idx_events_program ON events(program_slug, event_type, timestamp);
-CREATE INDEX idx_events_agent ON events(agent_id, event_type, timestamp);
+CREATE INDEX IF NOT EXISTS idx_events_type ON events(type);
+CREATE INDEX IF NOT EXISTS idx_events_time ON events(time);
 ```
+
+This is simpler than the originally planned dimension-indexed schema. Filtering by `impl_slug`, `program_slug`, `agent_id`, and `wave_number` happens in Go after the SQL fetch by deserializing the JSON `data` column. This is adequate for small-to-medium event volumes but may need indexed dimension columns if query performance degrades at scale.
 
 ### Event Schema Evolution
 
@@ -101,7 +98,7 @@ Each repo has its own `.saw/observability.db` file. If multiple SAW instances (C
 
 ### Cost Representation
 
-Integer cents (`cost_cents int`) instead of floating-point dollars (`cost_usd float64`). This eliminates rounding errors in financial aggregations. Display logic converts cents to dollars. The protocol spec's `cost_usd` field name is preserved in JSON output for backward compatibility, but the internal representation is integer cents. This change must land before the SQLite store ships to avoid a data migration.
+**Planned but not yet implemented.** Integer cents (`cost_cents int`) instead of floating-point dollars (`cost_usd float64`). This eliminates rounding errors in financial aggregations. Display logic converts cents to dollars. The protocol spec's `cost_usd` field name is preserved in JSON output for backward compatibility, but the internal representation is integer cents. The SQLite store shipped before this change landed (T1.2), so any cost events already recorded will need migration when the field type changes. Since the engine does not yet write cost events (T1.3 pending), no real data migration is needed as of 2026-04-04.
 
 ---
 
@@ -117,27 +114,15 @@ Integer cents (`cost_cents int`) instead of floating-point dollars (`cost_usd fl
 
 ## Tier 1: Foundation (Activate What Exists)
 
-The goal of Tier 1 is to make the existing observability pipeline produce and store real data. Every abstraction is already written -- the only missing piece is a concrete Store and the wiring to initialize it.
-
-### T1.1: SQLite Store Implementation
-
-**What it is:** A concrete implementation of the `observability.Store` interface backed by SQLite with WAL mode. Implements `RecordEvent`, `QueryEvents`, `GetRollup`, and `Close`. Lives in a new package `pkg/observability/sqlite/`.
-
-**Why it matters:** This is the single change that activates every existing emit call, query function, rollup computation, CLI command, and web API endpoint. Without it, the entire observability pipeline is inert.
-
-**Dependencies:** None. This is the foundation.
-
-**Scope:** Medium. The interface is already defined; this is a straightforward SQL implementation with JSON marshaling/unmarshaling. Includes schema creation, WAL mode configuration, and index creation.
-
-**Repos:** scout-and-wave-go
+The goal of Tier 1 is to make the existing observability pipeline produce and store real data. The SQLite store is shipped. The remaining work is wiring the store into the engine so events flow automatically, and fixing the cost representation before data accumulates.
 
 ### T1.2: Integer Cents for Cost Tracking
 
 **What it is:** Change `CostEvent.CostUSD float64` to `CostCents int` in the Go struct. Update all rollup functions, query functions, and display logic to use integer arithmetic internally and convert to dollars only at display boundaries.
 
-**Why it matters:** Floating-point cost accumulation produces rounding errors. Every financial system uses integer minor units for this reason. This must land before the Store ships to avoid a data migration.
+**Why it matters:** Floating-point cost accumulation produces rounding errors. Every financial system uses integer minor units for this reason. This should land before the engine starts writing real cost events to avoid a data migration.
 
-**Dependencies:** None. Should land before or alongside T1.1.
+**Dependencies:** None.
 
 **Scope:** Small. Field type change, update ~10 functions that reference `CostUSD`, update protocol spec's CostEvent documentation.
 
@@ -145,13 +130,15 @@ The goal of Tier 1 is to make the existing observability pipeline produce and st
 
 ### T1.3: Wire Store into Engine and Web App
 
-**What it is:** Construct a SQLite store at startup in both `sawtools` commands and `saw serve`. Pass the store to `observability.NewEmitter()` and inject it into the engine's `ObsEmitter` field and the web server's `SetObservabilityStore`. Default database path: `~/.saw/observability.db` (CLI) or configurable via `--store` flag / environment variable.
+**What it is:** Construct a SQLite store at startup in `prepare-wave`, `finalize-wave`, `run-wave`, and `saw serve`. Pass the store to `observability.NewEmitter()` and inject it into the engine's `ObsEmitter` field and the web server's `SetObservabilityStore`. Default database path: `~/.saw/observability.db` or configurable via `--store` flag / environment variable.
 
-**Why it matters:** The emit calls already exist in the engine. The API endpoints already exist in the web app. This wiring is what connects producers to the store and the store to consumers.
+**Current state:** The CLI query commands (`sawtools metrics`, `sawtools query events`) already open a SQLite store per-invocation via `openStore()`. The emit helper functions in `finalize_wave_obs.go` and `prepare_wave_obs.go` exist but are never called because no code constructs an Emitter in the workflow commands. The engine's `runner.go` checks `if opts.ObsEmitter != nil` but callers always pass nil.
 
-**Dependencies:** T1.1 (SQLite Store must exist).
+**What remains:** ~20 lines in each of `prepare_wave.go`, `finalize_wave.go`, and `run_wave_cmd.go` to open the store, create an Emitter, and pass it through. Same for `saw serve` startup to enable web API endpoints.
 
-**Scope:** Small. ~20 lines in each of `sawtools` main, engine initialization, and web server startup.
+**Dependencies:** None (SQLite store shipped).
+
+**Scope:** Small.
 
 **Repos:** scout-and-wave-go (CLI wiring), scout-and-wave-web (server wiring)
 
@@ -161,7 +148,7 @@ The goal of Tier 1 is to make the existing observability pipeline produce and st
 
 **Why it matters:** The existing emit calls were written without a store to verify against. Some lifecycle transitions may be missing emit calls. This test establishes the baseline event stream.
 
-**Dependencies:** T1.1, T1.3.
+**Dependencies:** T1.3.
 
 **Scope:** Small. One integration test plus any missing emit calls discovered.
 
@@ -169,13 +156,13 @@ The goal of Tier 1 is to make the existing observability pipeline produce and st
 
 ### T1.5: CLI Commands Return Real Results
 
-**What it is:** Verify that `sawtools query events` and `sawtools metrics <slug>` return meaningful data after a wave execution. Fix any serialization or query issues discovered. Add `--format json|table` flag for output formatting.
+**What it is:** Verify that `sawtools query events` and `sawtools metrics <slug>` return meaningful data after a wave execution. Fix any serialization or query issues discovered.
 
-**Why it matters:** These commands are the first user-facing observability surface. They must work correctly before building dashboards on top.
+**Current state:** Both commands exist with `--format table|json|csv` support and open the SQLite store correctly. They will return real results once T1.3 wires the Emitter into the engine pipeline. This item is primarily a verification pass after T1.3 lands.
 
-**Dependencies:** T1.1, T1.3, T1.4.
+**Dependencies:** T1.3, T1.4.
 
-**Scope:** Small. Mostly verification; the commands already exist.
+**Scope:** Small. Mostly verification.
 
 **Repos:** scout-and-wave-go
 
@@ -191,7 +178,7 @@ The goal of Tier 2 is to track things no competitor tracks: whether the protocol
 
 **Why it matters:** Answers the question "did the protocol hold?" This is SAW's unique value proposition. Over time, the invariant pass/fail history reveals which invariants are most frequently stressed, which IMPL patterns produce violations, and where the protocol needs strengthening.
 
-**Dependencies:** T1.1 (Store must exist to record events).
+**Dependencies:** T1.3 (engine must write events to the store).
 
 **Scope:** Medium. New event type, ~6 new emit points in the engine (one per invariant check), update Store deserialization to handle the new type.
 
@@ -203,7 +190,7 @@ The goal of Tier 2 is to track things no competitor tracks: whether the protocol
 
 **Why it matters:** Answers "is the wave structure actually saving time?" and "which failure types cause the most retries?" These metrics justify the protocol's complexity and identify optimization targets.
 
-**Dependencies:** T1.1, T1.4 (need real event data to compute from).
+**Dependencies:** T1.3, T1.4 (need real event data to compute from).
 
 **Scope:** Medium. New query functions in `pkg/observability/`, new `sawtools efficiency <impl-slug>` command.
 
@@ -215,7 +202,7 @@ The goal of Tier 2 is to track things no competitor tracks: whether the protocol
 
 **Why it matters:** Answers "which decomposition patterns produce clean integrations and which produce gaps?" This feeds back into Scout quality -- if certain agent boundary patterns consistently require post-merge integration fixes, the Scout prompt can be updated to avoid those patterns.
 
-**Dependencies:** T1.1, E25/E26 implementation (must be emitting integration events).
+**Dependencies:** T1.3, E25/E26 implementation (must be emitting integration events).
 
 **Scope:** Medium. New event subtype for integration gaps, emit points in integration validation/agent code, aggregation query.
 
@@ -227,7 +214,7 @@ The goal of Tier 2 is to track things no competitor tracks: whether the protocol
 
 **Why it matters:** Raw cost is misleading. An IMPL that costs $5 and merges cleanly in 2 waves is more efficient than one that costs $3 but requires 4 retries. This metric captures the true cost of getting correct output.
 
-**Dependencies:** T1.1, T1.4 (need both cost and performance events).
+**Dependencies:** T1.3, T1.4 (need both cost and performance events).
 
 **Scope:** Small. New function in `pkg/observability/query.go` that joins cost and performance data. New field in `IMPLMetrics`.
 
@@ -239,7 +226,7 @@ The goal of Tier 2 is to track things no competitor tracks: whether the protocol
 
 **Why it matters:** Answers "is the Scout actually good at predicting difficulty?" If Scout consistently underestimates risk for certain patterns, the Scout prompt can be calibrated. If risk predictions are uncorrelated with outcomes, the field is noise and should be removed or redesigned.
 
-**Dependencies:** T1.1, T2.1 (need invariant and performance data), IMPL docs with risk fields.
+**Dependencies:** T1.3, T2.1 (need invariant and performance data), IMPL docs with risk fields.
 
 **Scope:** Medium. Parse risk fields from IMPL docs, correlate with wave outcomes, produce calibration report.
 
@@ -257,7 +244,7 @@ The goal of Tier 3 is to close the loop -- use observability data to automatical
 
 **Why it matters:** Answers "how do I prevent runaway costs?" Cost tracking without enforcement is just reporting. Budget policies make cost observability actionable. The wave-boundary enforcement model is natural for SAW -- unlike Paperclip's per-invocation checking, SAW can enforce at the coarser (and less disruptive) wave boundary.
 
-**Dependencies:** T1.1, T1.3 (need working cost event recording).
+**Dependencies:** T1.3 (need working cost event recording).
 
 **Scope:** Large. New config format, policy evaluation engine, integration into `prepare-wave`, notification emission, web UI for policy management.
 
@@ -269,7 +256,7 @@ The goal of Tier 3 is to close the loop -- use observability data to automatical
 
 **Why it matters:** Answers "can agents fix CI failures before the wave gate runs?" Currently, agents discover CI failures only at wave finalization. Earlier feedback reduces wasted agent time on doomed approaches.
 
-**Dependencies:** T1.1, CI integration (GitHub Actions API or similar).
+**Dependencies:** T1.3, CI integration (GitHub Actions API or similar).
 
 **Scope:** Large. New polling subsystem, CI provider abstraction (GitHub, GitLab), event emission, optional agent notification mechanism, web UI for real-time CI status per agent.
 
@@ -281,7 +268,7 @@ The goal of Tier 3 is to close the loop -- use observability data to automatical
 
 **Why it matters:** Answers "how do I write better IMPL docs?" The Scout prompt can be updated with empirical data: "decompositions with N agents per wave and M files per agent historically produce X% first-try merge rates." This turns observability data into Scout quality improvement.
 
-**Dependencies:** T1.1, T2.1, T2.3, T2.4 (need rich historical data).
+**Dependencies:** T1.3, T2.1, T2.3, T2.4 (need rich historical data).
 
 **Scope:** Large. Historical data aggregation, pattern extraction, report generation, potentially automatic Scout prompt tuning.
 
@@ -305,7 +292,7 @@ The goal of Tier 3 is to close the loop -- use observability data to automatical
 
 **Why it matters:** Answers "what exactly did the agent do?" Text journals are human-readable but not machine-parseable. Structured logs enable automatic cost extraction (T1 gap: no cost extraction from agents), error pattern detection, and efficient streaming to the web UI.
 
-**Dependencies:** T1.1 (store for indexing), agent adapter changes.
+**Dependencies:** T1.3 (store for indexing), agent adapter changes.
 
 **Scope:** Medium. New log format, writer in engine, parser for cost extraction, integrity hashing.
 
@@ -323,7 +310,7 @@ The goal of Tier 4 is to make observability data visible and exportable. The API
 
 **Why it matters:** Answers "what is the overall health of my SAW usage?" at a glance. The API layer is already built; this is purely frontend work.
 
-**Dependencies:** T1.1, T1.3 (API endpoints need a working store behind them).
+**Dependencies:** T1.3 (API endpoints need a working store behind them).
 
 **Scope:** Medium. React components, chart library integration, new page in the web app navigation.
 
@@ -335,7 +322,7 @@ The goal of Tier 4 is to make observability data visible and exportable. The API
 
 **Why it matters:** Answers "what happened during this IMPL execution?" The timeline view makes wave sequencing, parallelism, and bottlenecks visually obvious.
 
-**Dependencies:** T1.1, T4.1 (dashboard infrastructure).
+**Dependencies:** T1.3, T4.1 (dashboard infrastructure).
 
 **Scope:** Medium. Timeline component, event-to-timeline mapping, drill-down navigation.
 
@@ -347,7 +334,7 @@ The goal of Tier 4 is to make observability data visible and exportable. The API
 
 **Why it matters:** Answers "how much did this program cost and how is it trending?" Programs are multi-IMPL efforts that can span weeks; program-level visibility is essential for cost planning.
 
-**Dependencies:** T1.1, T4.1 (dashboard infrastructure), program execution data.
+**Dependencies:** T1.3, T4.1 (dashboard infrastructure), program execution data.
 
 **Scope:** Small. Extend existing `GetProgramSummary`, add tier grouping, frontend component.
 
@@ -359,7 +346,7 @@ The goal of Tier 4 is to make observability data visible and exportable. The API
 
 **Why it matters:** Answers "is this IMPL performing normally or is something off?" Context makes individual metrics meaningful.
 
-**Dependencies:** T1.1, T2.4, sufficient historical data (need ~10 completed IMPLs for meaningful comparison).
+**Dependencies:** T1.3, T2.4, sufficient historical data (need ~10 completed IMPLs for meaningful comparison).
 
 **Scope:** Medium. Similarity scoring, historical aggregation, comparison UI.
 
@@ -371,7 +358,7 @@ The goal of Tier 4 is to make observability data visible and exportable. The API
 
 **Why it matters:** Answers "how do I integrate SAW metrics into my existing monitoring stack?" Teams with established observability infrastructure should not need to use SAW's built-in dashboard exclusively.
 
-**Dependencies:** T1.1, T1.4 (need reliable event stream to export).
+**Dependencies:** T1.3, T1.4 (need reliable event stream to export).
 
 **Scope:** Large. OTLP client implementation, webhook delivery with retry, configuration format, backpressure handling.
 
@@ -383,15 +370,15 @@ The goal of Tier 4 is to make observability data visible and exportable. The API
 
 The tiers are sequential in priority but not strictly blocking. Recommended execution order:
 
-1. **T1.1 + T1.2** first (Store + integer cents) -- these are the foundation
-2. **T1.3** immediately after (wire everything up)
+1. **T1.2** first (integer cents -- must land before real cost data accumulates)
+2. **T1.3** immediately after (wire the store into the engine pipeline)
 3. **T1.4 + T1.5** to validate the pipeline works end-to-end
 4. **T2.1** next (invariant tracking is SAW's differentiator)
 5. **T4.1** can start as soon as T1.3 is done (frontend work is independent)
 6. **T2.2 through T2.5** as data accumulates
 7. **T3.x and T4.x** based on user demand and data volume
 
-The critical path is: T1.1 -> T1.3 -> T1.4 -> T2.1. Everything else builds on that foundation.
+The critical path is: T1.2 -> T1.3 -> T1.4 -> T2.1. Everything else builds on that foundation.
 
 ---
 
@@ -399,9 +386,9 @@ The critical path is: T1.1 -> T1.3 -> T1.4 -> T2.1. Everything else builds on th
 
 - Protocol event schema: `protocol/observability-events.md`
 - Go SDK observability package: `scout-and-wave-go/pkg/observability/`
+- SQLite store: `scout-and-wave-go/pkg/observability/sqlite/`
 - Engine emit points: `scout-and-wave-go/pkg/engine/runner.go`, `finalize.go`, `program_tier_loop.go`
+- CLI emit helpers (unwired): `scout-and-wave-go/cmd/sawtools/finalize_wave_obs.go`, `prepare_wave_obs.go`
 - Web app API endpoints: `scout-and-wave-web/pkg/api/observability.go`
 - CLI commands: `sawtools query events`, `sawtools metrics`
-- Competitive analysis (Paperclip): `docs/competitive/paperclip.md` Section 7
-- Competitive analysis (AO): `docs/competitive/agent-orchestrator.md` Section 3.4
 - Protocol invariants: `protocol/invariants.md`
