@@ -239,7 +239,7 @@ This prevents the Agent B leak scenario where files are accidentally created in 
 
 See `implementations/claude-code/hooks/README.md` for full hook documentation.
 
-For detailed hook documentation, see [HOOKS.md](HOOKS.md).
+For detailed hook documentation, see [hooks/README.md](../implementations/claude-code/hooks/README.md).
 
 ### Symlinks Created
 
@@ -414,7 +414,7 @@ If any are missing, re-run the installer: `./install.sh`
    ./install.sh
    ```
 
-See [HOOKS.md](HOOKS.md) for detailed troubleshooting of individual hooks.
+See [hooks/README.md](../implementations/claude-code/hooks/README.md) for detailed troubleshooting of individual hooks.
 
 ### "Git worktree error" or worktree creation fails
 
@@ -493,7 +493,7 @@ This removes skill file symlinks and hook script symlinks. Hook registrations in
 - [Getting Started](GETTING_STARTED.md) -- decide which interface to use
 - [First Run Walkthrough](../implementations/claude-code/QUICKSTART.md) -- step-by-step example
 - [Protocol Specification](../protocol/) -- deep dive into how SAW works
-- [Hook System](HOOKS.md) -- detailed documentation for all enforcement hooks
+- [Hook System](../implementations/claude-code/hooks/README.md) -- detailed documentation for all enforcement hooks
 
 ---
 
