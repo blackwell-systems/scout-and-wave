@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+# saw_orchestrator_stop - Stop hook: warn when session ends with active SAW orchestration
+# Stop lifecycle hook — runs synchronously, exit 0 always (warn-only)
+#
+# Checks:
+#   1. Active IMPL docs (state: WAVE_PENDING or WAVE_EXECUTING)
+#   2. Active worktrees under .claude/worktrees/saw/
+# If either check fires, emits systemMessage warning to stdout.
+# Uses stop_hook_active field to prevent re-trigger loops.
+
+set -uo pipefail
+
+# Read Stop event JSON from stdin
+input=$(cat)
+
+# Re-entrant loop prevention: if stop hook is already active, exit immediately
+stop_hook_active=$(echo "$input" | grep -o '"stop_hook_active":[^,}]*' | grep -o 'true\|false' | head -1)
+if [[ "$stop_hook_active" == "true" ]]; then
+  exit 0
+fi
+
+# Detect repo root by walking up from $PWD looking for .git
+repo_root=""
+dir="$PWD"
+while [[ "$dir" != "/" ]]; do
+  if [[ -d "$dir/.git" ]]; then
+    repo_root="$dir"
+    break
+  fi
+  dir="$(dirname "$dir")"
+done
+
+# If no repo root found, nothing to check
+if [[ -z "$repo_root" ]]; then
+  exit 0
+fi
+
+# --- Check 1: Active IMPL docs ---
+impl_slugs=()
+impl_dir="$repo_root/docs/IMPL"
+if [[ -d "$impl_dir" ]]; then
+  while IFS= read -r -d '' impl_file; do
+    if grep -qE '^state: (WAVE_PENDING|WAVE_EXECUTING)' "$impl_file" 2>/dev/null; then
+      # Extract slug: basename, strip IMPL- prefix and .yaml suffix
+      basename_val="$(basename "$impl_file")"
+      slug="${basename_val#IMPL-}"
+      slug="${slug%.yaml}"
+      state_val="$(grep -E '^state:' "$impl_file" | head -1 | awk '{print $2}')"
+      impl_slugs+=("${slug}(${state_val})")
+    fi
+  done < <(find "$impl_dir" -maxdepth 1 -name 'IMPL-*.yaml' -print0 2>/dev/null)
+fi
+
+# --- Check 2: Active worktrees ---
+worktree_slugs=()
+worktree_dir="$repo_root/.claude/worktrees/saw"
+if [[ -d "$worktree_dir" ]]; then
+  while IFS= read -r -d '' entry; do
+    slug="$(basename "$entry")"
+    worktree_slugs+=("$slug")
+  done < <(find "$worktree_dir" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null)
+fi
+
+# --- Decision logic ---
+if [[ ${#impl_slugs[@]} -eq 0 && ${#worktree_slugs[@]} -eq 0 ]]; then
+  exit 0
+fi
+
+# Format lists for output
+if [[ ${#impl_slugs[@]} -gt 0 ]]; then
+  impl_list="$(IFS=', '; echo "${impl_slugs[*]}")"
+else
+  impl_list="none"
+fi
+
+if [[ ${#worktree_slugs[@]} -gt 0 ]]; then
+  worktree_list="$(IFS=', '; echo "${worktree_slugs[*]}")"
+else
+  worktree_list="none"
+fi
+
+# Emit systemMessage warning
+printf '{
+  "hookSpecificOutput": {
+    "hookEventName": "Stop",
+    "systemMessage": "SAW WARNING: Active orchestration detected. Run /saw status or /saw wave to resume.\n\nActive IMPL docs: %s\nActive worktrees: %s"
+  }
+}\n' "$impl_list" "$worktree_list"
+
+exit 0
