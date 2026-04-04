@@ -522,6 +522,18 @@ C001 was occupied, causing a string mismatch with Agent A's hardcoded "CACHE_MIS
    command automates detection by scanning agent task prompts for import statements
    and type references, reducing the risk of missed scaffolds that cause I1 violations.
 
+   **Same-package constants and types are also scaffold triggers.** When two same-wave
+   agents work in the same Go package (e.g., both in `pkg/engine`), each agent's
+   worktree is isolated — Agent C cannot see Agent B's not-yet-merged types or
+   constants even if they're in the same package directory. If Agent B defines a
+   type `Foo` and Agent C references `Foo`, Agent C's branch will fail to compile
+   in isolation. The correct fix is to declare `Foo` as a scaffold before worktrees
+   are created, so all agents compile against the same stub. Do NOT assign a shared
+   type to one agent and instruct the other to stub it — this produces duplicate
+   declarations at merge time. This applies equally to error code constants: if Agent
+   A adds `CodeFoo = "N099_FOO"` and Agent B uses `result.CodeFoo`, declare
+   `CodeFoo` as a scaffold constant stub.
+
    **Scaffolds section format:**
 
    | File | Contents | Import path | Status |
@@ -741,6 +753,17 @@ C001 was occupied, causing a string mismatch with Agent A's hardcoded "CACHE_MIS
    section. Use the standard 9-field format (see [agent template](agent-template.md)).
    The prompt must be self-contained: an agent receiving it should need nothing
    beyond the prompt and the existing codebase to do its work.
+
+   **Execution rule numbering:** When assigning a task that adds a new rule to
+   `protocol/execution-rules.md`, do NOT assume the last rule number from memory
+   or the cross-references section. Run:
+   ```bash
+   grep -c '^## E[0-9]' /path/to/protocol/execution-rules.md
+   ```
+   Count only `## E{N}` section headings — these are the actual rules. Cross-reference
+   list entries at the bottom of the file are NOT rules. The next rule number is
+   `(count of ## E{N} headings) + 1`. Put the confirmed last rule name and number
+   in the agent's task prompt so the agent can verify before inserting.
 
 11. **Determine verification gates from the build system.**
 
