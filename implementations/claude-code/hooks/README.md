@@ -1,6 +1,6 @@
 # SAW Claude Code Hooks
 
-Enforcement and injection hooks for CLI-based SAW agents. 20 hooks across SubagentStart, PreToolUse, PostToolUse, SubagentStop, and UserPromptSubmit events.
+Enforcement and injection hooks for CLI-based SAW agents. 21 hooks across SubagentStart, PreToolUse, PostToolUse, SubagentStop, UserPromptSubmit, and Stop events.
 
 ## Hook Summary
 
@@ -38,6 +38,7 @@ Enforcement and injection hooks for CLI-based SAW agents. 20 hooks across Subage
 | Hook | Event | Matcher | Description |
 |------|-------|---------|-------------|
 | emit_agent_completion | SubagentStop | — | Emits structured completion event for claudewatch/SSE (async, non-blocking) |
+| saw_orchestrator_stop | Stop | — | Warns when session ends with active IMPL in WAVE_PENDING/EXECUTING state (non-blocking) |
 
 ## Injection Patterns
 
@@ -113,7 +114,7 @@ cd ~/code/scout-and-wave/implementations/claude-code/hooks
 ```
 
 The installer:
-- Creates symlinks in `~/.local/bin/` for all 20 hook scripts
+- Creates symlinks in `~/.local/bin/` for all 21 hook scripts
 - Merges hook configs into `~/.claude/settings.json` (preserves existing hooks)
 - Verifies installation and runs basic tests
 
@@ -914,6 +915,63 @@ echo '{"description":"[SAW:wave1:agent-A] implement feature"}' | emit_agent_comp
 # Test with non-SAW agent (should exit silently)
 echo '{"description":"helper agent"}' | emit_agent_completion
 echo $?  # 0 (no output)
+```
+
+---
+
+---
+
+## Hook 15: Orchestrator Stop Warning
+
+**Stop** — Warns when the session ends with an active SAW orchestration in progress.
+
+### How It Works
+
+1. Claude Code calls the script when the session is about to stop
+2. Script checks `stop_hook_active` field — if true, exits 0 immediately (loop prevention)
+3. Scans `docs/IMPL/IMPL-*.yaml` for any IMPL with `state: WAVE_PENDING` or `state: WAVE_EXECUTING`
+4. Checks if `.claude/worktrees/saw/` contains any active worktree directories
+5. If either check finds active work -> emit `systemMessage` warning (non-blocking, exit 0)
+6. If no active work -> exit 0 silently
+
+This hook is **warn-only** — it never blocks the session from ending. The `stop_hook_active`
+field prevents infinite re-trigger loops (Claude Code sets this to `true` on re-entrant calls).
+
+### Manual Installation
+
+1. Symlink:
+   ```bash
+   ln -sf ~/code/scout-and-wave/implementations/claude-code/hooks/saw_orchestrator_stop ~/.local/bin/saw_orchestrator_stop
+   ```
+
+2. Add to `~/.claude/settings.json`:
+   ```json
+   {
+     "hooks": {
+       "Stop": [
+         {
+           "hooks": [
+             {
+               "type": "command",
+               "command": "$HOME/.local/bin/saw_orchestrator_stop"
+             }
+           ]
+         }
+       ]
+     }
+   }
+   ```
+
+### Testing
+
+```bash
+# Test: stop_hook_active=true should produce no output and exit 0
+echo '{"stop_hook_active":true,"session_id":"test"}' | saw_orchestrator_stop
+echo $?  # 0, no output
+
+# Test: no active IMPLs — should exit 0 silently
+echo '{"stop_hook_active":false,"session_id":"test"}' | saw_orchestrator_stop
+echo $?  # 0
 ```
 
 ---
