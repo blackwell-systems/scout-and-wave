@@ -1,0 +1,406 @@
+title: Move Wave Agent Isolation Check from Field 0 to SubagentStart Hook
+feature_slug: field-zero-hook-migration
+verdict: SUITABLE
+suitability_assessment: |
+    The work decomposes cleanly into 2 disjoint agents:
+      Agent A: create the new hook script (new file)
+      Agent B: update agent-template.md + wave-agent.md (existing files, no overlap with A)
+
+    Suitability check:
+    1. File decomposition: 3 files change, all disjoint across 2 agents.
+    2. No investigation-first items: the existing validate_agent_isolation hook
+       demonstrates the SubagentStart event and env-var patterns exactly. The
+       design is fully specified.
+    3. Interface contracts: the hook receives input via stdin (JSON) and env vars;
+       behavior is fully specified in the feature description. No ambiguity.
+    4. Implementation status: validate_agent_isolation (SubagentStart hook) already
+       exists and does Phase 2-style work via `sawtools verify-isolation`. The new
+       hook replaces that with a self-contained pure-bash implementation (no sawtools
+       dependency). Field 0 in agent-template.md is currently ~65 lines. The
+       wave-agent.md progress tracker references Field 0 and also needs updating.
+       settings.json already has SubagentStart hooks; the new hook needs to be added
+       there and in install.sh's hook registration list (Agent B scope).
+    5. Parallelization value: Both agents touch independent files. Total sequential
+       time ~20 min. Parallel time ~12 min (both agents can work simultaneously).
+       Modest speedup plus coordination artifact value.
+
+    Pre-implementation status check:
+    - validate_agent_isolation exists and is registered — it does Phase 2-style
+      verification via `sawtools verify-isolation`. The new hook replaces/augments
+      this with pure-bash logic that does not depend on sawtools.
+    - Field 0 in agent-template.md is present at lines 50-115 (~65 lines of bash
+      isolation enforcement). Phase 1 removes most of this.
+    - wave-agent.md progress tracker at line 231 says "Field 0: Verify isolation"
+      — needs updating to reflect hook-based enforcement.
+    - install.sh (root-level) registers hooks; Agent B must add the new hook there.
+
+    Estimated times:
+    - Scout phase: ~15 min
+    - Agent execution: ~2 agents × ~10 min, accounting for parallelism = ~12 min
+    - Merge and verification: ~3 min
+    Total SAW time: ~30 min
+
+    Sequential baseline: ~25 min (small, focused changes)
+    Recommendation: Marginal speed gain; primary value is coordination artifact.
+test_command: shellcheck implementations/claude-code/hooks/validate_worktree_isolation
+lint_command: shellcheck implementations/claude-code/hooks/validate_worktree_isolation
+file_ownership:
+    - file: implementations/claude-code/hooks/validate_worktree_isolation
+      agent: A
+      wave: 1
+      action: new
+    - file: implementations/claude-code/prompts/agent-template.md
+      agent: B
+      wave: 1
+      action: modify
+    - file: implementations/claude-code/prompts/agents/wave-agent.md
+      agent: B
+      wave: 1
+      action: modify
+    - file: implementations/claude-code/hooks/README.md
+      agent: B
+      wave: 1
+      action: modify
+    - file: install.sh
+      agent: B
+      wave: 1
+      action: modify
+interface_contracts:
+    - name: validate_worktree_isolation (shell hook)
+      description: |-
+        SubagentStart hook that enforces wave agent worktree isolation.
+        Phase 1 checks pwd + branch patterns. Phase 2 reads .saw-agent-brief.md
+        frontmatter and verifies exact branch match. Non-wave agents pass through.
+      definition: |
+        Input:  JSON on stdin (SubagentStart event payload, may be empty `{}`)
+                CLAUDE_CODE_AGENT_NAME env var — contains agent description string
+                PWD — working directory of the subagent at launch
+        Output: exit 0  — agent allowed to start
+                exit 2  — agent blocked; human-readable error to stderr
+        Passthrough conditions (exit 0 immediately):
+          - CLAUDE_CODE_AGENT_NAME does not match \[SAW:wave
+          - PWD does not match *.claude/worktrees/saw/* (non-wave-worktree context)
+        Phase 1 checks (both must pass, else exit 2):
+          1. pwd matches *.claude/worktrees/saw/* pattern
+          2. git branch --show-current matches saw/* pattern
+        Phase 2 checks (conditional on .saw-agent-brief.md existing in PWD):
+          1. Read frontmatter field: saw_name (format: [SAW:wave{N}:agent-{ID}])
+          2. Extract slug from IMPL doc path in frontmatter (impl_doc field)
+          3. Derive expected branch: saw/{slug}/wave{N}-agent-{ID}
+          4. Compare against git branch --show-current
+          5. On mismatch: exit 2 with expected vs actual and remedy message
+        Error message format:
+          ISOLATION VIOLATION: Wrong branch
+            Expected: saw/{slug}/wave{N}-agent-{ID}
+            Actual:   {actual-branch}
+            Remedy:   cd {worktree-path} && git checkout {expected-branch}
+      location: implementations/claude-code/hooks/validate_worktree_isolation
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## What to implement
+
+            Create a new SubagentStart hook script at
+            `implementations/claude-code/hooks/validate_worktree_isolation`.
+
+            This hook enforces worktree isolation for wave agents at the
+            infrastructure layer, replacing the manual bash checks in Field 0 of
+            agent-template.md. Study the existing `validate_agent_isolation` hook
+            (at the same directory) for the shell script style, exit-code conventions,
+            and CLAUDE_CODE_AGENT_NAME env var pattern. Also read `inject_worktree_env`
+            for the SubagentStart JSON input pattern.
+
+            ### Script structure
+
+            The hook is a bash script with shebang `#!/usr/bin/env bash` and `set -euo pipefail`.
+
+            Header comment block (same style as existing hooks):
+            ```
+            # validate_worktree_isolation — SubagentStart hook for wave agent isolation
+            # Event: SubagentStart
+            # Purpose: Block wave agents that are not running in a SAW worktree branch
+            # Phase 1: pwd pattern + git branch pattern checks
+            # Phase 2: exact branch check via .saw-agent-brief.md frontmatter
+            # Exit 2 = block agent from starting
+            # Exit 0 = proceed (isolation verified or not a wave agent)
+            ```
+
+            The script must:
+            1. Read stdin (consume it; SubagentStart sends JSON but we don't need it):
+               `read -r _ || true`
+            2. Get agent name from `CLAUDE_CODE_AGENT_NAME` env var
+            3. If name does not match `[SAW:wave` pattern, exit 0 (not a wave agent)
+            4. Parse wave number and agent ID from the tag:
+               regex: `^\[SAW:wave([0-9]+):agent-([A-Z][2-9]?)\]`
+            5. **Phase 1 check — pwd pattern:**
+               If `$PWD` does NOT contain `.claude/worktrees/saw/`, exit 0
+               (agent is not in a worktree context; pass through to avoid blocking
+               non-worktree scenarios such as solo waves)
+            6. **Phase 1 check — git branch pattern:**
+               Run: `actual_branch=$(git branch --show-current 2>/dev/null || echo "")`
+               If `actual_branch` does NOT match `^saw/`, emit error and exit 2:
+               ```
+               ISOLATION VIOLATION: Not on a SAW branch
+                 Agent: $agent_name
+                 Expected branch pattern: saw/*
+                 Actual branch: $actual_branch (or "unknown" if git failed)
+                 Current directory: $PWD
+               ```
+            7. **Phase 2 check — exact branch (conditional on .saw-agent-brief.md):**
+               If `.saw-agent-brief.md` does NOT exist in PWD, skip Phase 2 and exit 0
+               If it exists:
+                 a. Extract impl_doc field:
+                    `impl_doc=$(grep -m1 "^impl_doc:" .saw-agent-brief.md | sed 's/^impl_doc: *//' || echo "")`
+                 b. Extract slug from IMPL path: basename without extension, strip "IMPL-" prefix
+                    e.g. `/path/to/IMPL-my-feature.yaml` → `my-feature`
+                 c. Construct expected branch: `saw/${slug}/wave${wave_num}-agent-${agent_id}`
+                 d. If `actual_branch != expected_branch`, emit structured error and exit 2:
+                    ```
+                    ISOLATION VIOLATION: Wrong branch
+                      Agent: $agent_name
+                      Expected: $expected_branch
+                      Actual:   $actual_branch
+                      Directory: $PWD
+                      Remedy:   cd $PWD && git checkout $expected_branch
+                    ```
+            8. If all checks pass, exit 0
+
+            ### Idempotency and safety
+            - The hook must NOT modify any state. Read-only operations only.
+            - `git branch --show-current` is the only git command used.
+            - No calls to sawtools (pure bash + git).
+
+            ### Test cases in header comment
+            Include these test cases as comments at the top of the script (same style
+            as existing hooks have test cases documented):
+            ```
+            # Test 1: Non-wave agent — should exit 0
+            #   echo '{}' | CLAUDE_CODE_AGENT_NAME="helper" ./validate_worktree_isolation
+            # Test 2: Wave agent not in worktree — should exit 0 (passthrough)
+            #   echo '{}' | CLAUDE_CODE_AGENT_NAME="[SAW:wave1:agent-A] task" PWD=/tmp ./validate_worktree_isolation
+            # Test 3: Wave agent in worktree on wrong branch — should exit 2
+            # Test 4: Wave agent in worktree on correct branch, no brief — should exit 0
+            # Test 5: Wave agent in worktree with brief, exact branch match — should exit 0
+            # Test 6: Wave agent in worktree with brief, branch mismatch — should exit 2
+            ```
+
+            ### Make executable
+            After creating the file, run:
+            ```bash
+            chmod +x implementations/claude-code/hooks/validate_worktree_isolation
+            ```
+
+            ## Verification gate
+
+            ```bash
+            # shellcheck passes
+            shellcheck implementations/claude-code/hooks/validate_worktree_isolation
+
+            # Script is executable
+            ls -la implementations/claude-code/hooks/validate_worktree_isolation
+
+            # Non-wave agent passthrough (exit 0)
+            echo '{}' | CLAUDE_CODE_AGENT_NAME="" bash implementations/claude-code/hooks/validate_worktree_isolation
+            echo "Exit code: $?"
+
+            # Wave agent NOT in worktree path → exits 0 (passthrough, Phase 1 pwd check)
+            echo '{}' | CLAUDE_CODE_AGENT_NAME="[SAW:wave1:agent-A] test" PWD=/tmp bash implementations/claude-code/hooks/validate_worktree_isolation
+            echo "Exit code: $?"
+            ```
+
+            ## Constraints
+            - Do NOT modify any existing files. This agent creates one new file only.
+            - Do NOT call sawtools. Pure bash + git only.
+            - The hook must be idempotent (read-only, no state changes).
+            - Follow the same shell style as validate_agent_isolation:
+              shebang, set -euo pipefail, # comments on logic sections.
+            - Exit code 2 blocks the agent (per Claude Code hook conventions).
+            - All error messages go to stderr.
+          files:
+            - implementations/claude-code/hooks/validate_worktree_isolation
+        - id: B
+          task: |
+            ## What to implement
+
+            Three coordinated changes that reduce Field 0 in agent-template.md and
+            register the new hook (created by Agent A) in settings.json via install.sh.
+
+            ### Change 1: Reduce Field 0 in agent-template.md
+
+            File: `implementations/claude-code/prompts/agent-template.md`
+
+            Read the file in full first. Field 0 is at approximately lines 50-115
+            (between `## 0. CRITICAL: Isolation Verification (RUN FIRST)` and
+            `## 1. File Ownership`).
+
+            Replace the current ~65-line Field 0 block with a condensed version:
+
+            ```markdown
+            ## 0. Isolation Verification
+
+            The SubagentStart hook (`validate_worktree_isolation`) runs automatically
+            before your first action and blocks if isolation is wrong. If you reached
+            this point, isolation is confirmed.
+
+            Verify briefly that you are on the expected branch:
+
+            ```bash
+            git -C $SAW_AGENT_WORKTREE branch --show-current
+            # Expected: saw/{slug}/wave{N}-agent-{ID}
+            ```
+
+            If the branch is wrong despite reaching this point, report immediately:
+            - Write completion report with status: blocked, failure_type: escalate
+            - Do NOT modify any files
+
+            **E4:** Worktree isolation is mandatory for all Wave agents.
+            ```
+
+            The key reduction: remove the multi-step bash isolation script (cd, ACTUAL_DIR
+            check, git branch check, git worktree list check) and the "ISOLATION FAILURE"
+            error block. Replace with the single verification line and hook reference above.
+
+            Keep Field 0 in the numbered field list (don't renumber Fields 1-8).
+
+            ### Change 2: Update wave-agent.md progress tracker
+
+            File: `implementations/claude-code/prompts/agents/wave-agent.md`
+
+            Find the progress tracker checklist (around line 231):
+            ```
+            - [ ] Field 0: Verify isolation (git branch --show-current)
+            ```
+            Update it to:
+            ```
+            - [ ] Field 0: Confirm hook enforced isolation (SubagentStart hook ran)
+            ```
+
+            Also find the Field 0 description in the "Your Task - Progress Tracker" section
+            (around line 246):
+            ```
+            - **Field 0: Isolation Verification** — Mandatory pre-flight check (already executed above)
+            ```
+            Update to:
+            ```
+            - **Field 0: Isolation Verification** — Confirmed by SubagentStart hook (validate_worktree_isolation); brief check only
+            ```
+
+            ### Change 3: Register the hook in install.sh and README.md
+
+            File: `install.sh` (root of repo)
+
+            Read install.sh in full. Find where SubagentStart hooks are registered
+            (search for `SubagentStart` or `inject_worktree_env`). Add
+            `validate_worktree_isolation` to the same SubagentStart block.
+
+            The registration should follow the same pattern as `validate_agent_isolation`
+            which is the existing SubagentStart enforcement hook. Add after it:
+            ```json
+            {
+              "type": "command",
+              "command": "$HOME/.local/bin/validate_worktree_isolation"
+            }
+            ```
+
+            Also add a symlink creation line for `validate_worktree_isolation` alongside
+            the other hook symlinks in install.sh (find the block that creates symlinks
+            for `validate_agent_isolation` and add a parallel line).
+
+            File: `implementations/claude-code/hooks/README.md`
+
+            Add a new row to the Hook Summary table (Enforcement hooks section):
+            ```
+            | validate_worktree_isolation | SubagentStart | — | E12 | Phase 1: pwd+branch pattern check; Phase 2: exact branch via .saw-agent-brief.md frontmatter |
+            ```
+
+            Add it after the `validate_agent_isolation` row.
+
+            ## Verification gate
+
+            ```bash
+            # Confirm Field 0 is reduced in agent-template.md
+            grep -c "ACTUAL_DIR" implementations/claude-code/prompts/agent-template.md
+            # Expected output: 0
+
+            # Confirm progress tracker updated in wave-agent.md
+            grep "Field 0:" implementations/claude-code/prompts/agents/wave-agent.md
+            # Expected: shows "SubagentStart hook" in the output
+
+            # Confirm install.sh references the new hook
+            grep "validate_worktree_isolation" install.sh
+            # Expected: at least 2 lines (symlink + settings registration)
+
+            # Confirm README table updated
+            grep "validate_worktree_isolation" implementations/claude-code/hooks/README.md
+            # Expected: 1 line
+            ```
+
+            ## Constraints
+            - Do NOT create or modify the hook script itself — that is Agent A's scope.
+            - Do NOT renumber Fields 1–8 in agent-template.md.
+            - Do NOT remove Field 0 from the numbered list — keep it as Field 0 but
+              with reduced content referencing the hook.
+            - When editing install.sh, be careful to maintain valid JSON for the
+              settings.json merge block. Find the exact insertion point by reading
+              the file first and locating the SubagentStart hooks array.
+            - The wave-agent.md changes are minimal: only the two Field 0 description
+              lines in the progress tracker and field description list.
+          files:
+            - implementations/claude-code/prompts/agent-template.md
+            - implementations/claude-code/prompts/agents/wave-agent.md
+            - implementations/claude-code/hooks/README.md
+            - install.sh
+quality_gates:
+    level: standard
+    gates:
+        - type: custom
+          command: shellcheck implementations/claude-code/hooks/validate_worktree_isolation
+          required: true
+        - type: custom
+          command: |
+            echo '{}' | CLAUDE_CODE_AGENT_NAME="[SAW:wave1:agent-A] test" implementations/claude-code/hooks/validate_worktree_isolation
+          required: false
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: |-
+            Agent B edits install.sh JSON block incorrectly, breaking the hook
+            registration for all hooks (not just the new one).
+          likelihood: medium
+          impact: high
+          mitigation: |-
+            Agent B must read install.sh in full before editing. The verification
+            gate checks `grep "validate_worktree_isolation" install.sh` for 2 lines.
+            Human should also run `./install.sh --dry-run` or `./install.sh` after merge
+            to verify the JSON is valid and hooks are symlinked correctly.
+        - scenario: |-
+            The new hook blocks solo-wave agents or scouts because the pwd pattern
+            check incorrectly matches non-worktree paths.
+          likelihood: low
+          impact: high
+          mitigation: |-
+            Phase 1 passthrough condition: if PWD does NOT contain
+            `.claude/worktrees/saw/`, exit 0 immediately. Scouts and non-wave agents
+            never have this path. The hook spec explicitly requires this passthrough.
+        - scenario: |-
+            `CLAUDE_CODE_AGENT_NAME` env var is unavailable or uses a different
+            name than expected (API change in Claude Code).
+          likelihood: low
+          impact: medium
+          mitigation: |-
+            The existing validate_agent_isolation hook already uses CLAUDE_CODE_AGENT_NAME
+            successfully (it's in production use). This is a confirmed env var.
+            Fallback: if env var is empty, exit 0 (non-blocking passthrough).
+        - scenario: |-
+            Field 0 reduction removes a fallback that agents currently rely on when
+            the hook is not registered (e.g., fresh installs without running install.sh).
+          likelihood: medium
+          impact: low
+          mitigation: |-
+            The condensed Field 0 retains a brief `git -C $SAW_AGENT_WORKTREE branch
+            --show-current` check and an instruction to report blocked status if wrong.
+            This is sufficient as a manual fallback. The hook handles the automated case.
+state: SCOUT_PENDING
+injection_method: hook

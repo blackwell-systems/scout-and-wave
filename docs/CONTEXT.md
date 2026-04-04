@@ -190,3 +190,5 @@ round-trip time by catching errors at source (~5 min saved per critic cycle).
   - IMPL doc: docs/IMPL/complete/IMPL-critic-improvements.yaml
 - **journal-review-fixes**: completed 2026-04-02, 4 waves, 7 agents
   - IMPL doc: docs/IMPL/complete/IMPL-journal-review-fixes.yaml
+- **scout-brief-precision**: completed 2026-04-04, 1 waves, 2 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-scout-brief-precision.yaml

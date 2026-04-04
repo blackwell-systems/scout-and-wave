@@ -1,3 +1,4 @@
+completion_date: "2026-04-04"
 title: 'Scout Brief Precision: Text Anchors and Executable Postconditions'
 feature_slug: scout-brief-precision
 verdict: SUITABLE_WITH_CAVEATS
@@ -311,12 +312,30 @@ waves:
             - Do NOT modify files outside your ownership list.
           files:
             - implementations/claude-code/prompts/agent-template.md
+      base_commit: 50c77d27b42dd9d4494c6b1a54683c6f48e5553e
 quality_gates:
     level: standard
     gates:
         - type: custom
           command: 'echo "docs-only wave: no build or test gates"'
           required: false
+completion_reports:
+    A:
+        status: complete
+        branch: saw/scout-brief-precision/wave1-agent-A
+        commit: f3f2146
+        files_changed:
+            - implementations/claude-code/prompts/agents/scout.md
+        verification: PASS
+        notes: Fix 3 (text anchors, step 10) and Fix 4 (postconditions, step 11) inserted. All four grep verification checks pass. Step ordering preserved.
+    B:
+        status: complete
+        branch: saw/scout-brief-precision/wave1-agent-B
+        commit: 15e597f
+        files_changed:
+            - implementations/claude-code/prompts/agent-template.md
+        verification: PASS
+        notes: 'Postcondition template block inserted into Field 6 after the run-commands code block and before the linter auto-fix note. All 4 verification gate checks pass: grep count 1 for ''Postcondition checks'', grep count 2 for ''Expected output:'', grep count 1 for ''## 6. Verification Gate'', Field 6 line 176 < Field 7 line 229.'
 pre_mortem:
     overall_risk: low
     rows:
@@ -354,5 +373,5 @@ pre_mortem:
           mitigation: |-
             Each brief explicitly names the other agent's file as off-limits. Disjoint
             ownership is enforced at merge time.
-state: "REVIEWED"
+state: COMPLETE
 injection_method: hook
