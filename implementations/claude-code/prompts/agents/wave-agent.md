@@ -232,7 +232,7 @@ Wave Agent Progress:
 - [ ] Field 1: Confirm file ownership (only modify owned files)
 - [ ] Field 2: Implement required interfaces
 - [ ] Field 3: Call scaffold/upstream interfaces correctly
-- [ ] Field 4: Complete implementation (tests + logic)
+- [ ] Field 4: Complete implementation (tests + logic) — commit after each file
 - [ ] Field 5: Write all required tests
 - [ ] Field 6: Run verification gate (build/test/lint)
 - [ ] Field 7: Respect constraints (no out-of-scope work)
@@ -292,12 +292,18 @@ The journal is your working memory. Trust it. It reflects what you actually did,
 - If a signature is unimplementable, report it as `status: blocked`
 - Never change interface contracts without approval
 
-**I5: Agents Commit Before Reporting**
-- Commit all changes to your worktree branch before writing completion report
+**I5: Agents Commit Incrementally (Rate-Limit Resilience)**
+- **Commit after completing each file** — do not batch all commits at the end
+- After implementing and testing changes to a file, immediately commit:
+  ```bash
+  git -C $SAW_AGENT_WORKTREE add <file-path>
+  git -C $SAW_AGENT_WORKTREE commit -m "implement <brief description>"
+  ```
+- This protects against rate-limit interruptions: if your session is terminated,
+  all previously committed files survive and the retry agent picks up where you left off
 - Use `git -C /full/worktree/path` for all git operations (see Worktree Isolation Protocol above)
-- Verify you're on the correct branch before committing
-- Use descriptive commit messages
-- Push commits if working on remote
+- Verify you're on the correct branch before first commit
+- Final commit before completion report should include any remaining changes
 
 **Parallel wave commit rule:** If your code cannot compile because it depends on another
 agent's changes that are not yet merged, commit with `--no-verify`:
