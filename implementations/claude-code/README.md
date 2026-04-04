@@ -1,6 +1,6 @@
 # Claude Code Reference Implementation
 
-**Protocol Version:** 0.26.0
+**Protocol Version:** 0.77.0
 
 Scout-and-Wave implemented as a Claude Code skill for fully automated parallel agent execution.
 
@@ -114,8 +114,6 @@ ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agent-template.
 
 **Why symlinks?** The SAW repo is the single source of truth. Symlinks mean `git pull` on the repo automatically updates the skill — no reinstall step needed.
 
-**What changed in v0.5.0:** The skill now uses the Claude Code Skills API instead of the legacy commands API. Supporting files are co-located in the skill directory and referenced via `${CLAUDE_SKILL_DIR}`, eliminating hardcoded paths and environment variables.
-
 ### Step 5: Install Custom Agent Types (Required)
 
 SAW uses custom Claude Code agent types that provide structural tool restrictions (e.g., scout cannot edit source files, wave agents cannot spawn sub-agents) and behavioral instructions. These must be installed for the skill to function.
@@ -159,7 +157,7 @@ These files are loaded on-demand only when the matching subcommand is invoked or
 
 ### Step 6: Install Hooks (Required)
 
-Hooks enforce the protocol's correctness guarantees at the Claude Code level — preventing Scout from writing source files (I6), blocking wave agents from touching files they don't own (I1), validating IMPL docs on write (E16), checking agent launch/completion protocol (E42/H5), enforcing worktree isolation (E43), detecting stub patterns (E20/H3), preventing branch drift (H4), blocking git stash in wave-agent worktrees, and emitting observability events (E40). **Without hooks, many invariants are advisory only.**
+Hooks enforce the protocol's correctness guarantees at the Claude Code level — preventing Scout from writing source files (I6), blocking wave agents from touching files they don't own (I1), validating IMPL docs on write (E16), checking agent launch/completion protocol (E42/H5), enforcing worktree isolation (E43), verifying agent isolation on launch (E12), detecting stub patterns (E20/H3), preventing branch drift (H4), blocking git stash in wave-agent worktrees, and emitting observability events (E40). **Without hooks, many invariants are advisory only.**
 
 ```bash
 cd ~/code/scout-and-wave/implementations/claude-code/hooks
@@ -230,7 +228,7 @@ Navigate to a project with existing code and run:
 
 0. **Bootstrap (new projects only):** `/saw bootstrap "description"` designs package structure, interface contracts, and wave layout for a new repo before any code is written.
 
-1. **Scout:** `/saw scout "feature description"` analyzes the codebase, runs the suitability gate, and produces `docs/IMPL/IMPL-<feature>.md`. This file, the IMPL doc, is the coordination artifact: it contains file ownership (which agent owns which files), interface contracts (exact function signatures crossing agent boundaries), and a per-agent prompt for each wave agent. The orchestrator will show you a summary before any agent starts.
+1. **Scout:** `/saw scout "feature description"` analyzes the codebase, runs the suitability gate, and produces `docs/IMPL/IMPL-<feature>.yaml`. This file, the IMPL doc, is the coordination artifact: it contains file ownership (which agent owns which files), interface contracts (exact function signatures crossing agent boundaries), and a per-agent prompt for each wave agent. The orchestrator will show you a summary before any agent starts.
 
 2. **Review:** Read the IMPL doc. Verify ownership is clean, interfaces are correct, and wave order makes sense. Adjust before proceeding. This is the last moment to change interface signatures.
 
@@ -244,7 +242,7 @@ Navigate to a project with existing code and run:
 
 **When you run `/saw scout "feature"` + `/saw wave`:**
 
-1. **Scout** analyzes your codebase and writes `docs/IMPL/IMPL-<feature>.md`
+1. **Scout** analyzes your codebase and writes `docs/IMPL/IMPL-<feature>.yaml`
 2. **You review** the wave structure and interface contracts (last chance to change them)
 3. **Scaffold Agent** creates shared type files if needed (10-30s)
 4. **Wave Agents** (multiple agents per wave) implement their assigned files in parallel (2-5min per wave)
@@ -373,13 +371,6 @@ prompts/
 5. Agents execute with both layers: type layer (wave-agent.md) provides shared behavior, instance brief provides task-specific details
 
 Wave agents never read `agent-template.md` directly — they receive the Scout-generated brief from the IMPL doc. The template exists to ensure Scout writes consistent, protocol-compliant agent briefs.
-
-## Examples
-
-Real IMPL docs from dogfooding sessions:
-- [`examples/brewprune-IMPL-brew-native.md`](examples/brewprune-IMPL-brew-native.md) - Multi-wave refactor of a Go CLI tool
-
-These demonstrate how the protocol handles complex features in practice.
 
 ## When to Use It
 
