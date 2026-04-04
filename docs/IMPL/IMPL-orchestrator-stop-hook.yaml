@@ -1,0 +1,631 @@
+title: Orchestrator Stop Hook (saw_orchestrator_stop)
+feature_slug: orchestrator-stop-hook
+verdict: SUITABLE
+suitability_assessment: |-
+    Three distinct file ownership groups with no cross-agent dependencies:
+    - Agent A: new hook script (saw_orchestrator_stop) — independent bash script
+    - Agent B: install.sh registration — adds to HOOK_SCRIPTS array and add_hook call
+    - Agent C: documentation updates — hooks/README.md, POSITION.md, architecture.md, saw-skill.md, CHANGELOG.md
+
+    All three agents work on disjoint files. Agent B needs only the hook name (known upfront:
+    "saw_orchestrator_stop") to update install.sh. Agent C needs hook behavior description
+    (fully specified in feature request) to update docs. No agent blocks another.
+
+    The hook itself is a Stop event hook (not SubagentStop). It reads stop_hook_active from
+    stdin JSON (standard Claude Code Stop event field), checks for active IMPL docs in
+    WAVE_PENDING/EXECUTING state and active worktrees under .claude/worktrees/saw/, and
+    emits a systemMessage warning (exit 0, non-blocking) if either check fires.
+
+    Estimated times:
+    - Scout phase: ~10 min
+    - Agent execution: ~3 agents x 8 min avg, single wave = ~8 min total
+    - Merge & verification: ~3 min
+    Total SAW time: ~21 min
+
+    Sequential baseline: ~3 agents x 10 min = ~30 min
+    Time savings: ~9 min (30% faster)
+
+    Recommendation: Clear speedup. Single-wave parallelism with fully independent agents.
+test_command: none
+lint_command: none
+file_ownership:
+    - file: implementations/claude-code/hooks/saw_orchestrator_stop
+      agent: A
+      wave: 1
+      action: new
+    - file: install.sh
+      agent: B
+      wave: 1
+      action: modify
+    - file: implementations/claude-code/hooks/README.md
+      agent: C
+      wave: 1
+      action: modify
+    - file: POSITION.md
+      agent: C
+      wave: 1
+      action: modify
+    - file: docs/architecture.md
+      agent: C
+      wave: 1
+      action: modify
+    - file: implementations/claude-code/prompts/saw-skill.md
+      agent: C
+      wave: 1
+      action: modify
+    - file: CHANGELOG.md
+      agent: C
+      wave: 1
+      action: modify
+interface_contracts:
+    - name: saw_orchestrator_stop
+      description: |-
+        Stop hook that warns when a Claude session ends with an active SAW orchestration
+        in progress (IMPL in WAVE_PENDING or WAVE_EXECUTING state, or worktrees present).
+      definition: |-
+        Input (stdin): JSON with Claude Code Stop event fields
+          {
+            "stop_hook_active": bool,   // true if already inside a stop hook — skip to prevent loops
+            "session_id": string,
+            ...
+          }
+
+        Checks:
+          1. Active IMPL doc: docs/IMPL/IMPL-*.yaml with state WAVE_PENDING or WAVE_EXECUTING
+          2. Active worktrees: .claude/worktrees/saw/<slug>/ directories exist
+
+        Output on active session (exit 0, systemMessage, non-blocking):
+          {
+            "hookSpecificOutput": {
+              "hookEventName": "Stop",
+              "systemMessage": "SAW session in progress: <slug> is <state>. Run /saw status to resume. Active worktrees: <list>."
+            }
+          }
+
+        Output on clean session: exit 0, no output
+        Output when stop_hook_active=true: exit 0, no output (loop prevention)
+
+        Exit codes:
+          0 — Always (warn-only, never blocks stopping)
+      location: implementations/claude-code/hooks/saw_orchestrator_stop
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |-
+            ## Task: Write the saw_orchestrator_stop hook script
+
+            Create a new Stop hook at `implementations/claude-code/hooks/saw_orchestrator_stop`.
+            This hook fires when the Claude session is about to stop (the user ends the conversation
+            or Claude completes its response). It warns when active SAW work is in progress so the
+            user can decide to resume.
+
+            ### File to create
+            - `implementations/claude-code/hooks/saw_orchestrator_stop`
+
+            ### Hook behavior
+
+            The Stop event JSON from Claude Code contains a `stop_hook_active` field that is `true`
+            when the stop hook is already running (re-entrant call). ALWAYS check this first and
+            exit 0 immediately if true — this prevents infinite re-trigger loops.
+
+            **Two checks to perform (both are fast, local-only, no network):**
+
+            **Check 1 — Active IMPL doc:**
+            Scan `docs/IMPL/IMPL-*.yaml` (NOT `docs/IMPL/complete/`) for any IMPL where the
+            `state` field is `WAVE_PENDING` or `WAVE_EXECUTING`. Use grep, not sawtools, so the
+            hook has no external dependencies beyond bash and grep.
+
+            Look for lines matching: `^state: (WAVE_PENDING|WAVE_EXECUTING)`
+
+            Collect the matching filenames (extract the slug from the path).
+
+            **Check 2 — Active worktrees:**
+            Check if `.claude/worktrees/saw/` exists and contains any subdirectory entries.
+            List them. These are slugs of features with active worktrees.
+
+            **Decision logic:**
+            - If `stop_hook_active` is true → exit 0, no output
+            - If NEITHER check found anything → exit 0, no output
+            - If EITHER check found something → emit systemMessage warning and exit 0
+
+            **Output format (when warning):**
+
+            ```json
+            {
+              "hookSpecificOutput": {
+                "hookEventName": "Stop",
+                "systemMessage": "SAW WARNING: Active orchestration detected. Run /saw status or /saw wave to resume.\n\nActive IMPL docs: <comma-separated slugs with states>\nActive worktrees: <comma-separated slugs or 'none'>"
+              }
+            }
+            ```
+
+            If only one check fired, list the other as "none" or omit it.
+
+            ### Implementation notes
+
+            - The hook is ALWAYS non-blocking (exit 0 always, even on errors)
+            - Use `set -uo pipefail` (NOT `-e` — the hook must never fatal-exit)
+            - Repo root detection: walk up from `$PWD` checking for `.git` directory
+            - The grep for IMPL state should be robust: use `grep -l` to find files first,
+              then extract state and slug
+            - Slug extraction: basename of path with `IMPL-` prefix and `.yaml` suffix stripped
+            - Handle missing directories gracefully (no docs/IMPL/ = no active IMPLs)
+            - Emit all output to stdout (systemMessage format); errors to /dev/null or stderr
+            - The hook runs synchronously (not async) — keep it fast (< 1 second)
+
+            ### Script header template (follow this pattern)
+
+            ```bash
+            #!/usr/bin/env bash
+            # saw_orchestrator_stop - Stop hook: warn when session ends with active SAW orchestration
+            # Stop lifecycle hook — runs synchronously, exit 0 always (warn-only)
+            #
+            # Checks:
+            #   1. Active IMPL docs (state: WAVE_PENDING or WAVE_EXECUTING)
+            #   2. Active worktrees under .claude/worktrees/saw/
+            # If either check fires, emits systemMessage warning to stdout.
+            # Uses stop_hook_active field to prevent re-trigger loops.
+            ```
+
+            ### Verification gate
+
+            After writing the script:
+            ```bash
+            # Syntax check
+            bash -n implementations/claude-code/hooks/saw_orchestrator_stop
+            echo $?  # must be 0
+
+            # Test: stop_hook_active=true should produce no output and exit 0
+            echo '{"stop_hook_active":true,"session_id":"test"}' \
+              | bash implementations/claude-code/hooks/saw_orchestrator_stop
+            echo "exit: $?"  # exit: 0, no stdout output
+
+            # Test: no active IMPLs should produce no output and exit 0
+            echo '{"stop_hook_active":false,"session_id":"test"}' \
+              | bash implementations/claude-code/hooks/saw_orchestrator_stop
+            echo "exit: $?"  # exit: 0
+
+            # Verify script is executable
+            chmod +x implementations/claude-code/hooks/saw_orchestrator_stop
+            ls -la implementations/claude-code/hooks/saw_orchestrator_stop | grep -q "^-rwx"
+            echo "executable: $?"  # 0
+            ```
+
+            ### Constraints
+            - Do NOT make the hook blocking (do not use exit 2 or exit 1)
+            - Do NOT call sawtools — use bash builtins and grep only
+            - Do NOT modify install.sh, README.md, or any other file
+            - Do NOT create any file other than `implementations/claude-code/hooks/saw_orchestrator_stop`
+          files:
+            - implementations/claude-code/hooks/saw_orchestrator_stop
+        - id: B
+          task: |-
+            ## Task: Register saw_orchestrator_stop in install.sh
+
+            Update `install.sh` to include the new `saw_orchestrator_stop` hook in three places:
+            1. The `HOOK_SCRIPTS` array (so it gets symlinked to ~/.local/bin/)
+            2. An `add_hook` call in `install_claude_code()` (so it registers in settings.json)
+            3. The summary output at the bottom of `install_claude_code()` (so it appears in the install log)
+
+            ### File to modify
+            - `install.sh`
+
+            ### Change 1: HOOK_SCRIPTS array
+
+            The array currently ends with `"auto_commit_on_write"` at line 48. Add the new hook
+            as the 21st entry.
+
+            Find this exact text:
+            ```bash
+              "auto_commit_on_write"
+            )
+            ```
+
+            Replace with:
+            ```bash
+              "auto_commit_on_write"
+              "saw_orchestrator_stop"
+            )
+            ```
+
+            ### Change 2: add_hook call in install_claude_code()
+
+            The Stop event hooks section needs a new `add_hook` call. The Stop hooks come after
+            the UserPromptSubmit section. Find the UserPromptSubmit add_hook line:
+
+            ```bash
+              add_hook "UserPromptSubmit" "" "${BIN_DIR}/inject_skill_context" "Tier 3 context injection"
+            ```
+
+            After this line, add a Stop hook section:
+
+            ```bash
+
+              # Stop
+              add_hook "Stop" "" "${BIN_DIR}/saw_orchestrator_stop" "Orchestrator stop warning"
+            ```
+
+            ### Change 3: Summary output
+
+            The summary echo block currently says "Installation complete (Claude Code). 20 hooks active:".
+            Update to 21 hooks and add the new hook to the list.
+
+            Find this exact text:
+            ```bash
+              echo "Installation complete (Claude Code). 20 hooks active:"
+            ```
+
+            Replace with:
+            ```bash
+              echo "Installation complete (Claude Code). 21 hooks active:"
+            ```
+
+            Then find the UserPromptSubmit line in the echo block:
+            ```bash
+              echo "  UserPromptSubmit:  inject_skill_context       (Tier 3 context injection)"
+            ```
+
+            After it, add:
+            ```bash
+              echo "  Stop:              saw_orchestrator_stop      (Orchestrator stop warning)"
+            ```
+
+            ### Verification gate
+
+            ```bash
+            # Syntax check
+            bash -n install.sh
+            echo "syntax: $?"  # 0
+
+            # Verify hook appears in HOOK_SCRIPTS array
+            grep -c "saw_orchestrator_stop" install.sh
+            # Expected: 3 (array entry + add_hook call + echo line)
+
+            # Verify Stop hook is registered
+            grep "add_hook.*Stop.*saw_orchestrator_stop" install.sh
+            # Expected: one matching line
+
+            # Verify hook count updated
+            grep "21 hooks active" install.sh
+            # Expected: one matching line
+            ```
+
+            ### Constraints
+            - Do NOT modify any hook scripts or documentation files
+            - Do NOT change any existing hook registrations
+            - Make exactly 3 targeted changes: array, add_hook call, summary output
+          files:
+            - install.sh
+        - id: C
+          task: |-
+            ## Task: Update documentation for saw_orchestrator_stop hook
+
+            Update 5 documentation files to reflect the addition of the 21st hook
+            (saw_orchestrator_stop on the Stop event).
+
+            ### Files to modify
+            1. `implementations/claude-code/hooks/README.md`
+            2. `POSITION.md`
+            3. `docs/architecture.md`
+            4. `implementations/claude-code/prompts/saw-skill.md`
+            5. `CHANGELOG.md`
+
+            ---
+
+            ### File 1: implementations/claude-code/hooks/README.md
+
+            **Change 1a — Header hook count:**
+            Find:
+            ```
+            Enforcement and injection hooks for CLI-based SAW agents. 20 hooks across SubagentStart, PreToolUse, PostToolUse, SubagentStop, and UserPromptSubmit events.
+            ```
+            Replace with:
+            ```
+            Enforcement and injection hooks for CLI-based SAW agents. 21 hooks across SubagentStart, PreToolUse, PostToolUse, SubagentStop, UserPromptSubmit, and Stop events.
+            ```
+
+            **Change 1b — Observability hooks table:**
+            Add a new row in the "Observability hooks" table after `emit_agent_completion`:
+
+            Find the table row:
+            ```
+            | emit_agent_completion | SubagentStop | — | Emits structured completion event for claudewatch/SSE (async, non-blocking) |
+            ```
+
+            After it, add:
+            ```
+            | saw_orchestrator_stop | Stop | — | Warns when session ends with active IMPL in WAVE_PENDING/EXECUTING state (non-blocking) |
+            ```
+
+            **Change 1c — Installation section:**
+            Find:
+            ```
+            - Creates symlinks in `~/.local/bin/` for all 20 hook scripts
+            ```
+            Replace with:
+            ```
+            - Creates symlinks in `~/.local/bin/` for all 21 hook scripts
+            ```
+
+            **Change 1d — Add a new Hook section at the end** (before the Maintenance section).
+
+            After Hook 14 (Agent Completion Event Emission) and before the Maintenance section,
+            add a new Hook 15 section describing the new hook. Model it after the existing hook
+            sections. The section should document:
+            - Event: Stop
+            - Behavior: reads stop_hook_active from stdin, checks for active IMPL docs and worktrees,
+              emits systemMessage if found, always exits 0
+            - Manual installation: symlink + settings.json Stop event config
+            - Testing: example test commands
+
+            Find the exact text that begins the Maintenance section:
+            ```
+            ## Maintenance
+            ```
+
+            Insert this before it:
+
+            ```
+            ---
+
+            ## Hook 15: Orchestrator Stop Warning
+
+            **Stop** — Warns when the session ends with an active SAW orchestration in progress.
+
+            ### How It Works
+
+            1. Claude Code calls the script when the session is about to stop
+            2. Script checks `stop_hook_active` field — if true, exits 0 immediately (loop prevention)
+            3. Scans `docs/IMPL/IMPL-*.yaml` for any IMPL with `state: WAVE_PENDING` or `state: WAVE_EXECUTING`
+            4. Checks if `.claude/worktrees/saw/` contains any active worktree directories
+            5. If either check finds active work -> emit `systemMessage` warning (non-blocking, exit 0)
+            6. If no active work -> exit 0 silently
+
+            This hook is **warn-only** — it never blocks the session from ending. The `stop_hook_active`
+            field prevents infinite re-trigger loops (Claude Code sets this to `true` on re-entrant calls).
+
+            ### Manual Installation
+
+            1. Symlink:
+               ```bash
+               ln -sf ~/code/scout-and-wave/implementations/claude-code/hooks/saw_orchestrator_stop ~/.local/bin/saw_orchestrator_stop
+               ```
+
+            2. Add to `~/.claude/settings.json`:
+               ```json
+               {
+                 "hooks": {
+                   "Stop": [
+                     {
+                       "hooks": [
+                         {
+                           "type": "command",
+                           "command": "$HOME/.local/bin/saw_orchestrator_stop"
+                         }
+                       ]
+                     }
+                   ]
+                 }
+               }
+               ```
+
+            ### Testing
+
+            ```bash
+            # Test: stop_hook_active=true should produce no output and exit 0
+            echo '{"stop_hook_active":true,"session_id":"test"}' | saw_orchestrator_stop
+            echo $?  # 0, no output
+
+            # Test: no active IMPLs — should exit 0 silently
+            echo '{"stop_hook_active":false,"session_id":"test"}' | saw_orchestrator_stop
+            echo $?  # 0
+            ```
+
+            ---
+
+            ```
+
+            ---
+
+            ### File 2: POSITION.md
+
+            **Change 2a — Layer 1 hook count:**
+            Find:
+            ```
+            1. **Claude Code hooks** (Layer 1) -- 17 hooks across PreToolUse/PostToolUse/SubagentStop/UserPromptSubmit:
+            ```
+            Replace with:
+            ```
+            1. **Claude Code hooks** (Layer 1) -- 18 hooks across PreToolUse/PostToolUse/SubagentStop/UserPromptSubmit/Stop:
+            ```
+            Note: The text says "17 hooks" currently; add 1 for saw_orchestrator_stop = 18.
+
+            Also update the enforcement hook description in the same sentence to mention the Stop hook:
+            Find the phrase:
+            ```
+            observability hooks emit structured events for monitoring and cost tracking.
+            ```
+            The sentence ends there. After it, in the same bullet item, add:
+            ```
+             Stop hooks warn when sessions end with active orchestration in progress.
+            ```
+            (append to the end of that bullet's text)
+
+            ---
+
+            ### File 3: docs/architecture.md
+
+            Find the E43 Hook-Based Enforcement section that lists the five lifecycle hooks.
+            The section currently says "five lifecycle hooks". Update to "six lifecycle hooks"
+            and add the Stop hook as item 6.
+
+            Find:
+            ```
+            In Claude Code implementations, worktree isolation is enforced mechanically via five lifecycle hooks rather than relying on agent cooperation:
+            ```
+            Replace with:
+            ```
+            In Claude Code implementations, worktree isolation is enforced mechanically via six lifecycle hooks rather than relying on agent cooperation:
+            ```
+
+            Then find the last item in the numbered list:
+            ```
+            5. **SubagentStop: Compliance verification** — Checks completion report exists and commits exist on branch, creating an audit trail for post-hoc violation analysis
+            ```
+            After it, add:
+            ```
+            6. **Stop: Orchestrator stop warning** (`saw_orchestrator_stop`) — Warns when the session ends with an active IMPL in WAVE_PENDING or WAVE_EXECUTING state, or with active worktrees present. Non-blocking (exit 0 always); uses `stop_hook_active` to prevent re-trigger loops.
+            ```
+
+            ---
+
+            ### File 4: implementations/claude-code/prompts/saw-skill.md
+
+            Add a note about the Stop hook in the context of session interruption. Find the
+            **Resume detection** line:
+
+            ```
+            **Resume detection:** Run `sawtools resume-detect` before `wave` or `status` execution. For `status`, include resume state in report. For `wave`, report interrupted session and use `sawtools build-retry-context` for failed agents.
+            ```
+
+            After this line, add:
+
+            ```
+
+            **Session stop detection:** The `saw_orchestrator_stop` Stop hook warns automatically when the session ends with an active IMPL in WAVE_PENDING or WAVE_EXECUTING state, or with active worktrees. No action needed — the hook fires passively at session end.
+            ```
+
+            ---
+
+            ### File 5: CHANGELOG.md
+
+            Add a new entry in the `## [Unreleased]` / `### Added (2026-04-04)` section.
+
+            Find:
+            ```
+            ### Added (2026-04-04)
+            ```
+
+            After that header line, add a new bullet as the first item:
+            ```
+            - **`saw_orchestrator_stop` Stop hook** — New Stop lifecycle hook warns when a session ends with an active IMPL in WAVE_PENDING or WAVE_EXECUTING state, or with active worktrees under `.claude/worktrees/saw/`. Non-blocking (systemMessage warning only, exit 0 always); uses `stop_hook_active` to prevent re-trigger loops. Registered in `install.sh` as hook #21.
+            ```
+
+            ---
+
+            ### Verification gate
+
+            ```bash
+            # Verify README hook count updated
+            grep "21 hooks across" implementations/claude-code/hooks/README.md
+            # Expected: one match
+
+            # Verify Hook 15 section exists
+            grep -c "Hook 15: Orchestrator Stop Warning" implementations/claude-code/hooks/README.md
+            # Expected: 1
+
+            # Verify POSITION.md hook count updated
+            grep "18 hooks across" POSITION.md
+            # Expected: one match
+
+            # Verify architecture.md updated
+            grep "six lifecycle hooks" docs/architecture.md
+            # Expected: one match
+
+            # Verify saw-skill.md updated
+            grep "saw_orchestrator_stop" implementations/claude-code/prompts/saw-skill.md
+            # Expected: one match
+
+            # Verify CHANGELOG.md updated
+            grep "saw_orchestrator_stop.*Stop hook" CHANGELOG.md
+            # Expected: one match
+            ```
+
+            ### Constraints
+            - Do NOT modify hook scripts or install.sh
+            - Do NOT create new files; update existing files only
+            - The hook count in README.md header: 20 → 21
+            - The hook count in POSITION.md Layer 1 sentence: 17 → 18
+            - The count in architecture.md: five → six lifecycle hooks
+          files:
+            - implementations/claude-code/hooks/README.md
+            - POSITION.md
+            - docs/architecture.md
+            - implementations/claude-code/prompts/saw-skill.md
+            - CHANGELOG.md
+quality_gates:
+    level: standard
+    gates:
+        - type: custom
+          command: bash -n implementations/claude-code/hooks/saw_orchestrator_stop
+          required: true
+          description: Bash syntax check on new hook script
+        - type: custom
+          command: bash install.sh --test
+          required: false
+          description: Smoke tests for hook installation (requires hooks already installed)
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: |-
+            Agent A makes hook blocking by using exit 2 or exit 1, causing Claude sessions
+            to be forcibly stopped whenever active SAW work is in progress.
+          likelihood: medium
+          impact: high
+          mitigation: |-
+            Agent A constraints explicitly state "do NOT make the hook blocking". Verification
+            gate tests exit 0 behavior. Hook description says "warn-only, never blocks stopping".
+        - scenario: |-
+            Agent A calls sawtools in the hook script, adding an external dependency that
+            causes the hook to fail silently on systems where sawtools is not on PATH.
+          likelihood: low
+          impact: medium
+          mitigation: |-
+            Agent A constraints explicitly forbid calling sawtools. Use only bash builtins
+            and grep for IMPL state detection. Pattern is consistent with other hook scripts
+            that degrade gracefully when sawtools is absent.
+        - scenario: |-
+            Agent B adds the add_hook call inside an incorrect event block (e.g., SubagentStop
+            instead of Stop) or omits the Stop section entirely.
+          likelihood: low
+          impact: medium
+          mitigation: |-
+            Verification gate checks for "add_hook.*Stop.*saw_orchestrator_stop" pattern.
+            Agent B brief explicitly shows the exact placement after UserPromptSubmit.
+        - scenario: |-
+            Agent C updates hook counts inconsistently across files (e.g., README gets 21
+            but POSITION.md stays at 17 or gets 21 instead of 18).
+          likelihood: medium
+          impact: low
+          mitigation: |-
+            Verification gate checks each file individually with specific grep patterns.
+            Agent C brief calls out each count change explicitly: README 20→21, POSITION.md
+            17→18 (separate count tracking enforcement hooks vs. total hooks), architecture.md
+            five→six.
+        - scenario: |-
+            Hook triggers on every session end even when no SAW work is in progress,
+            producing noisy warnings for non-SAW projects.
+          likelihood: low
+          impact: low
+          mitigation: |-
+            Check 1 only fires if docs/IMPL/IMPL-*.yaml files with WAVE_PENDING/WAVE_EXECUTING
+            exist. Check 2 only fires if .claude/worktrees/saw/ has entries. Both checks are
+            gated. Non-SAW projects will have neither condition.
+critic_report:
+    verdict: PASS
+    agent_reviews:
+        A:
+            agent_id: A
+            verdict: PASS
+        B:
+            agent_id: B
+            verdict: PASS
+        C:
+            agent_id: C
+            verdict: PASS
+    summary: 'All three agent briefs verified against the codebase. Agent A creates a new bash hook script with no external dependencies — the target file does not yet exist (correct for action: new) and the pattern matches existing hooks in the directory. Agent B modifies install.sh: all three text anchors verified (HOOK_SCRIPTS array closing pattern, add_hook UserPromptSubmit line, summary echo block). Minor: the brief notes auto_commit_on_write ''at line 48'' but it is on line 47 with the closing paren on line 48 — the anchor text used for the edit is accurate and the change will land correctly. Agent C modifies five documentation files: all five files exist, all text anchors verified (README.md header, emit_agent_completion table row, symlink count line, Maintenance section header; POSITION.md Layer 1 count on line 334; architecture.md five lifecycle hooks sentence on line 131 and SubagentStop item 5 on line 137; saw-skill.md Resume detection line 97; CHANGELOG.md Added 2026-04-04 section on line 11). Hook counts are internally consistent: README.md 20 → 21, POSITION.md 17 → 18 (separate tracking), architecture.md five → six. No stale symbols, no missing registrations, no import chain issues.'
+    reviewed_at: "2026-04-04T13:40:22Z"
+    issue_count: 0
+state: REVIEWED
+injection_method: hook
