@@ -1,0 +1,358 @@
+title: 'Scout Brief Precision: Text Anchors and Executable Postconditions'
+feature_slug: scout-brief-precision
+verdict: SUITABLE_WITH_CAVEATS
+suitability_assessment: |
+    Two targeted prompt improvements to reduce agent failure modes caused by drifting
+    line numbers and unverifiable postconditions.
+
+    File decomposition: 2 distinct files change (scout.md, agent-template.md), with fully
+    disjoint ownership. Agent A owns scout.md (steps 10 and 11); Agent B owns
+    agent-template.md (Field 6). No conflicts.
+
+    Investigation-first: Not applicable. Both insertion points are known; the behavior
+    to add is fully specified in the feature description.
+
+    Interface discoverability: No cross-agent interfaces. Both agents make independent
+    additive edits to non-overlapping sections.
+
+    Pre-implementation status check: Both changes are TODO. Neither instruction exists
+    in the current files.
+
+    Parallelization value: Low per-agent implementation time (~5 min each sequential).
+    SAW overhead exceeds pure speed benefit. Value is coordination (audit trail, clear
+    insertion specs, postcondition verification). Proceeding as SUITABLE_WITH_CAVEATS.
+
+    Caveat: Sequential implementation (~10 min total) would be marginally faster than
+    the full SAW pipeline. The IMPL doc provides value as a precise insertion spec and
+    change audit.
+
+    Estimated times:
+    - Scout phase: ~10 min (reading files, writing IMPL doc)
+    - Agent execution: ~10 min (2 agents x ~5 min avg, run in parallel)
+    - Merge and verification: ~3 min
+    Total SAW time: ~23 min
+
+    Sequential baseline: ~12 min (2 tasks x ~6 min avg sequential)
+    Time savings: marginal (overhead dominates)
+
+    Recommendation: Marginal gains from parallelism. Proceed for coordination value.
+test_command: 'echo "docs-only: no tests"'
+lint_command: none
+file_ownership:
+    - file: implementations/claude-code/prompts/agents/scout.md
+      agent: A
+      wave: 1
+      action: modify
+    - file: implementations/claude-code/prompts/agent-template.md
+      agent: B
+      wave: 1
+      action: modify
+interface_contracts:
+    - name: TextAnchorInstruction
+      description: |-
+        Instruction added to scout.md step 10 requiring verbatim surrounding-context
+        anchors for all insertion points in existing files. Replaces line-number references.
+      definition: |-
+        For every insertion point in an existing file (instructions like "insert after",
+        "add before", "modify at"), Scout must read the actual file, extract 3-5 lines
+        of surrounding context, and embed that context verbatim in the task using a fenced
+        block. Do NOT use line numbers as insertion anchors. Line numbers drift; verbatim
+        text context does not.
+      location: implementations/claude-code/prompts/agents/scout.md
+    - name: PostconditionTemplate
+      description: |-
+        Template added to agent-template.md Field 6 showing postcondition check format.
+        Requires 1-3 grep/count assertions after build/test pass.
+      definition: |-
+        Postcondition checks section showing grep -c examples with expected output
+        comments. Placed in Field 6 (Verification Gate) after the run-commands block
+        and before the linter auto-fix note.
+      location: implementations/claude-code/prompts/agent-template.md
+    - name: PostconditionScoutInstruction
+      description: |-
+        Instruction added to scout.md step 11 requiring Scout to derive 1-3 postcondition
+        checks per agent from the task description.
+      definition: |-
+        For each agent, derive 1-3 postcondition checks from the task description.
+        Postconditions verify: (a) target symbol exists in expected file, (b) it does NOT
+        exist in files where it should not appear, (c) counts match expectations. Include
+        expected output as a comment so the agent knows what pass looks like.
+      location: implementations/claude-code/prompts/agents/scout.md
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            You are Wave 1 Agent A. Your task is to add two new instruction blocks to
+            implementations/claude-code/prompts/agents/scout.md: one in step 10 (text
+            anchors for insertion points) and one in step 11 (postcondition checks).
+
+            ## 1. File Ownership
+
+            You own one file:
+            - implementations/claude-code/prompts/agents/scout.md (modify)
+
+            Do NOT touch implementations/claude-code/prompts/agent-template.md.
+            That file is owned by Agent B.
+
+            ## 2. Interfaces You Must Implement
+
+            Two additive instruction blocks inserted into existing steps in scout.md.
+            No new functions or types. Pure markdown text additions.
+
+            ## 3. Interfaces You May Call
+
+            The existing step 10 and step 11 content in scout.md (read before editing).
+
+            ## 4. What to Implement
+
+            Read implementations/claude-code/prompts/agents/scout.md in full before
+            making any edits. Confirm each insertion point by finding the exact
+            surrounding text described below.
+
+            ### Fix 3: Text anchors in step 10
+
+            Find step 10. It begins with:
+              10. **Write agent prompts under `## Wave N` headers.**
+
+            Within step 10, find the "Derive do not constraints" subsection. Its final
+            paragraph ends with this line:
+              standard constraint: "Do NOT modify files not in your ownership list."
+
+            After that closing line (the last line of step 10 before the blank line that
+            precedes step 11), append the following new block as part of step 10. It must
+            appear BEFORE the line that begins "11. **Determine verification gates".
+
+            Insert this block (use 3-space indent matching the rest of step 10 body):
+
+              **Text anchors for insertion points (mandatory).** For every instruction in
+              an agent task that describes inserting, adding, or modifying content at a
+              specific location in an existing file (e.g., "insert after X", "add before Y",
+              "modify the block at Z"), Scout MUST:
+              1. Read the actual file before writing the agent brief.
+              2. Extract the 3-5 lines of surrounding context at the insertion point.
+              3. Embed that context verbatim in the task using a fenced block, for example:
+
+                 Insert after this exact text:
+                 ```go
+                 agentSpec.Task = retryPrefix + agentSpec.Task
+                 }
+                 // End retry prefix block
+                 ```
+
+              Do NOT use line numbers as insertion anchors. Line numbers drift whenever
+              any other change is made to the file; verbatim text context does not.
+              Agents use the Edit tool with exact string matching -- give them the exact
+              string to match.
+
+            ### Fix 4: Postcondition instruction in step 11
+
+            Find step 11. It begins with:
+              11. **Determine verification gates from the build system.**
+
+            Within step 11, find the focused/full test command table. The last row is:
+              | Python   | `pytest path/to/test_foo.py` | `pytest` |
+
+            After that table row and closing pipe, but still within step 11 (before the
+            blank line that precedes "12. **Emit quality gates"), append the following
+            block:
+
+              **Postcondition checks (mandatory per agent).** For each agent, derive 1-3
+              postcondition checks from the task description and include them in the
+              agent's verification gate (Field 6). Postconditions are cheap grep/count
+              assertions that verify structural outcome, not just compilation. They run
+              after build/test pass.
+
+              For each agent, verify:
+              - (a) the target symbol/field/function EXISTS in the expected file
+              - (b) it does NOT exist in files where it should not appear
+              - (c) counts match expectations (e.g., field added exactly once)
+
+              Include the expected output as a comment so the agent knows what "pass"
+              looks like. Use the format defined in agent-template.md Field 6.
+
+            ## 5. Tests to Write
+
+            This is a docs-only change. No test files exist for markdown prompt files.
+            No tests to write.
+
+            ## 6. Verification Gate
+
+            Run these checks from /Users/dayna.blackwell/code/scout-and-wave:
+
+            Confirm Fix 3 was inserted (text anchor instruction present):
+              grep -c "verbatim text context does not" implementations/claude-code/prompts/agents/scout.md
+              Expected output: 1
+
+            Confirm the line-numbers warning is present:
+              grep -c "Do NOT use line numbers as insertion anchors" implementations/claude-code/prompts/agents/scout.md
+              Expected output: 1
+
+            Confirm Fix 4 was inserted (postcondition instruction present):
+              grep -c "Postcondition checks (mandatory per agent)" implementations/claude-code/prompts/agents/scout.md
+              Expected output: 1
+
+            Confirm step 10 still precedes step 11 (structure not broken):
+              grep -n "10\. \*\*Write agent prompts" implementations/claude-code/prompts/agents/scout.md
+              grep -n "11\. \*\*Determine verification gates" implementations/claude-code/prompts/agents/scout.md
+              Expected: step 10 line number < step 11 line number
+
+            ## 7. Constraints
+
+            - Do NOT modify agent-template.md. That is Agent B's file.
+            - Do NOT renumber any existing steps. Steps 10 and 11 keep their numbers.
+            - Do NOT modify any existing text in steps 10 or 11. Only append new
+              paragraphs within each step's body.
+            - The new text must appear within the step's body (before the next step's
+              heading line), not as a new numbered step.
+            - Preserve existing 3-space indent for step body text.
+            - Do NOT modify files outside your ownership list.
+          files:
+            - implementations/claude-code/prompts/agents/scout.md
+        - id: B
+          task: |
+            You are Wave 1 Agent B. Your task is to add a postcondition check template
+            section to Field 6 (Verification Gate) in
+            implementations/claude-code/prompts/agent-template.md.
+
+            ## 1. File Ownership
+
+            You own one file:
+            - implementations/claude-code/prompts/agent-template.md (modify)
+
+            Do NOT touch implementations/claude-code/prompts/agents/scout.md.
+            That file is owned by Agent A.
+
+            ## 2. Interfaces You Must Implement
+
+            A postcondition template block inserted into Field 6 of agent-template.md.
+            No new functions or types. Pure markdown text addition.
+
+            ## 3. Interfaces You May Call
+
+            The existing Field 6 content in agent-template.md (read before editing).
+
+            ## 4. What to Implement
+
+            Read implementations/claude-code/prompts/agent-template.md in full before
+            making any edits. Confirm the insertion point by finding the exact surrounding
+            text described below.
+
+            ### Postcondition template in Field 6
+
+            Find Field 6. It begins with:
+              ## 6. Verification Gate
+
+            Within Field 6, find the run-commands code block. It ends with:
+              <test command>     # e.g., go test ./... | npm test | pytest -x
+
+            After the closing triple-backtick of that code block, and BEFORE the line
+            that begins:
+              **Note:** You do not need to run linter auto-fix
+
+            Insert the following block verbatim (no leading indent needed; this is
+            top-level content inside the ``` code template):
+
+            **Postcondition checks** (run after build/test pass):
+            ```bash
+            # Example: confirm field was added exactly once
+            grep -c 'V048Exempt' pkg/protocol/types.go
+            # Expected output: 1
+
+            # Example: confirm no stub definitions leaked into the wrong file
+            grep -c 'type CallerCascadeClassification struct' pkg/engine/finalize_steps.go
+            # Expected output: 0
+            ```
+
+            The Scout derives 1-3 postconditions per agent from the task description
+            and places them here. Postconditions verify structural outcome (symbol
+            exists, count matches) rather than just compilation. Run all postconditions
+            and confirm each produces the expected output before reporting completion.
+
+            Note: The insertion is INSIDE the large fenced code block that wraps the
+            entire agent prompt template (the block opened by the triple-backtick on
+            line 45 of the file). You are inserting markdown text content inside that
+            wrapper block, not adding a new outer code block.
+
+            ## 5. Tests to Write
+
+            This is a docs-only change. No test files exist for markdown prompt files.
+            No tests to write.
+
+            ## 6. Verification Gate
+
+            Run these checks from /Users/dayna.blackwell/code/scout-and-wave:
+
+            Confirm postcondition template was inserted in Field 6:
+              grep -c "Postcondition checks" implementations/claude-code/prompts/agent-template.md
+              Expected output: 1
+
+            Confirm expected output comment pattern is present:
+              grep -c "Expected output:" implementations/claude-code/prompts/agent-template.md
+              Expected output: 2
+
+            Confirm Field 6 heading still present (structure not broken):
+              grep -c "## 6. Verification Gate" implementations/claude-code/prompts/agent-template.md
+              Expected output: 1
+
+            Confirm Field 7 heading still follows Field 6:
+              grep -n "## 6. Verification Gate" implementations/claude-code/prompts/agent-template.md
+              grep -n "## 7. Constraints" implementations/claude-code/prompts/agent-template.md
+              Expected: Field 6 line number < Field 7 line number
+
+            ## 7. Constraints
+
+            - Do NOT modify scout.md. That is Agent A's file.
+            - Do NOT renumber any existing fields. Fields 6 and 7 keep their numbers.
+            - Do NOT modify any existing text in Field 6. Only insert the new
+              postcondition template block.
+            - The new block must appear after the run-commands code block and before
+              the "Note: You do not need to run linter auto-fix" paragraph.
+            - Do NOT modify files outside your ownership list.
+          files:
+            - implementations/claude-code/prompts/agent-template.md
+quality_gates:
+    level: standard
+    gates:
+        - type: custom
+          command: 'echo "docs-only wave: no build or test gates"'
+          required: false
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: |-
+            Agent A inserts text at wrong location within step 10, breaking the step
+            structure (e.g., between the "Derive do not constraints" heading and its body
+            rather than after its closing paragraph).
+          likelihood: low
+          impact: medium
+          mitigation: |-
+            Brief specifies the exact closing paragraph text to find before inserting.
+            Agent must confirm the surrounding text matches before editing.
+        - scenario: |-
+            Agent B inserts the postcondition template after Field 7 instead of within
+            Field 6, misidentifying the boundary between fields.
+          likelihood: low
+          impact: medium
+          mitigation: |-
+            Brief specifies the exact text to find as the lower bound of the insertion
+            window ("Note: You do not need to run linter auto-fix"). Agent must grep
+            for that anchor text first to confirm its line number.
+        - scenario: |-
+            Agent B is confused by the nested fenced code block context (the entire
+            agent template is wrapped in a triple-backtick block) and adds the
+            postcondition template outside the template wrapper.
+          likelihood: medium
+          impact: medium
+          mitigation: |-
+            Brief explicitly notes that the insertion is inside the large outer fenced
+            code block that wraps the entire agent prompt template. Agent should read the
+            file in full and understand the nesting before editing.
+        - scenario: Both agents accidentally modify the same file due to misread ownership.
+          likelihood: low
+          impact: high
+          mitigation: |-
+            Each brief explicitly names the other agent's file as off-limits. Disjoint
+            ownership is enforced at merge time.
+state: SCOUT_PENDING
+injection_method: hook
