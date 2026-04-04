@@ -451,6 +451,12 @@ They are NOT the structure of your output. Your output is PURE YAML following th
    both a `type: integration` wave and `integration_connectors` exist, the
    planned wave handles known wiring and E25/E26 catches any gaps missed.
 
+   **Signature accuracy:** Before finalizing any interface contract that
+   references an existing symbol (function, method, type), use LSP `hover`
+   on that symbol to confirm the exact current signature. Briefs written
+   against stale signatures are the most common critic gate error. If LSP
+   is unavailable, read the file directly. Do not rely on memory alone.
+
    **Wiring detection aid (E35):** After writing interface contracts, run
    `sawtools detect-wiring <impl-path>` to auto-generate wiring declarations from
    agent task prompts. The command scans for patterns like "calls `FunctionName()`"
