@@ -44,6 +44,7 @@ HOOK_SCRIPTS=(
   "validate_write_paths"
   "verify_worktree_compliance"
   "block_git_stash"
+  "auto_commit_on_write"
 )
 
 # Core skill files: source (relative to PROMPTS_DIR) -> target name
@@ -277,6 +278,7 @@ install_claude_code() {
   add_hook "PostToolUse" "Bash" "${BIN_DIR}/check_git_ownership" "I1 git ownership" "true"
   add_hook "PostToolUse" "Write|Edit" "${BIN_DIR}/warn_stubs" "H3 stub detection"
   add_hook "PostToolUse" "Bash" "${BIN_DIR}/check_branch_drift" "H4 branch drift"
+  add_hook "PostToolUse" "Write|Edit" "${BIN_DIR}/auto_commit_on_write" "P6 incremental auto-save" "true"
 
   # SubagentStart
   add_hook "SubagentStart" "" "${BIN_DIR}/inject_worktree_env" "E43 env var injection"
@@ -355,7 +357,7 @@ install_claude_code() {
     exit 1
   }
 
-  echo "Installation complete (Claude Code). 18 hooks active:"
+  echo "Installation complete (Claude Code). 19 hooks active:"
   echo ""
   echo "  SubagentStart:     inject_worktree_env        (E43 env var injection)"
   echo "  SubagentStart:     validate_agent_isolation   (E12 isolation verification)"
@@ -371,6 +373,7 @@ install_claude_code() {
   echo "  PostToolUse:       check_git_ownership        (I1 git-level ownership) [async]"
   echo "  PostToolUse:       warn_stubs                 (H3 stub pattern detection)"
   echo "  PostToolUse:       check_branch_drift         (H4 branch drift detection)"
+  echo "  PostToolUse:       auto_commit_on_write       (P6 incremental auto-save) [async]"
   echo "  SubagentStop:      verify_worktree_compliance (E42/I5 compliance check)"
   echo "  SubagentStop:      validate_agent_completion  (E42 protocol compliance)"
   echo "  SubagentStop:      emit_agent_completion      (E42 observability) [async]"
