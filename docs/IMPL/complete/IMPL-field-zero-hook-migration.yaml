@@ -1,3 +1,4 @@
+completion_date: "2026-04-04"
 title: Move Wave Agent Isolation Check from Field 0 to SubagentStart Hook
 feature_slug: field-zero-hook-migration
 verdict: SUITABLE
@@ -42,8 +43,8 @@ suitability_assessment: |
 
     Sequential baseline: ~25 min (small, focused changes)
     Recommendation: Marginal speed gain; primary value is coordination artifact.
-test_command: "echo docs-only"
-lint_command: "echo docs-only"
+test_command: echo docs-only
+lint_command: echo docs-only
 file_ownership:
     - file: implementations/claude-code/hooks/validate_worktree_isolation
       agent: A
@@ -352,12 +353,33 @@ waves:
             - implementations/claude-code/prompts/agents/wave-agent.md
             - implementations/claude-code/hooks/README.md
             - install.sh
+      base_commit: f2ae84bfc5d50168f7076ad4f011ebdc9d118311
 quality_gates:
     level: standard
     gates:
         - type: custom
-          command: "echo ok"
+          command: echo ok
           required: true
+completion_reports:
+    A:
+        status: complete
+        branch: saw/field-zero-hook-migration/wave1-agent-A
+        commit: 83ab25b
+        files_created:
+            - implementations/claude-code/hooks/validate_worktree_isolation
+        verification: PASS
+        notes: Pure-bash hook created, shellcheck clean. Phase 1 (pwd+branch pattern) and Phase 2 (exact branch via brief frontmatter) both verified. All passthrough tests exit 0, isolation violation paths return exit 2.
+    B:
+        status: complete
+        branch: saw/field-zero-hook-migration/wave1-agent-B
+        commit: c181cb2
+        files_changed:
+            - implementations/claude-code/prompts/agent-template.md
+            - implementations/claude-code/prompts/agents/wave-agent.md
+            - implementations/claude-code/hooks/README.md
+            - install.sh
+        verification: PASS
+        notes: Field 0 reduced from ~65 lines to 13 lines. Progress tracker updated in wave-agent.md (both checklist item and field description). validate_worktree_isolation added to HOOK_SCRIPTS array, SubagentStart registration, and summary echo in install.sh. README.md table row added after validate_agent_isolation.
 pre_mortem:
     overall_risk: low
     rows:
@@ -398,5 +420,5 @@ pre_mortem:
             The condensed Field 0 retains a brief `git -C $SAW_AGENT_WORKTREE branch
             --show-current` check and an instruction to report blocked status if wrong.
             This is sufficient as a manual fallback. The hook handles the automated case.
-state: "REVIEWED"
+state: COMPLETE
 injection_method: hook
