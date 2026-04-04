@@ -778,6 +778,26 @@ C001 was occupied, causing a string mismatch with Agent A's hardcoded "CACHE_MIS
    If the pre-mortem has no scenario for a given agent, still include the
    standard constraint: "Do NOT modify files not in your ownership list."
 
+   **Text anchors for insertion points (mandatory).** For every instruction in
+   an agent task that describes inserting, adding, or modifying content at a
+   specific location in an existing file (e.g., "insert after X", "add before Y",
+   "modify the block at Z"), Scout MUST:
+   1. Read the actual file before writing the agent brief.
+   2. Extract the 3-5 lines of surrounding context at the insertion point.
+   3. Embed that context verbatim in the task using a fenced block, for example:
+
+      Insert after this exact text:
+      ```go
+      agentSpec.Task = retryPrefix + agentSpec.Task
+      }
+      // End retry prefix block
+      ```
+
+   Do NOT use line numbers as insertion anchors. Line numbers drift whenever
+   any other change is made to the file; verbatim text context does not.
+   Agents use the Edit tool with exact string matching -- give them the exact
+   string to match.
+
 11. **Determine verification gates from the build system.**
 
    ```bash
@@ -809,6 +829,20 @@ C001 was occupied, causing a string mismatch with Agent A's hardcoded "CACHE_MIS
    | Rust     | `cargo test test_foo` | `cargo test` |
    | Node     | `npm test -- --grep "foo"` | `npm test` |
    | Python   | `pytest path/to/test_foo.py` | `pytest` |
+
+   **Postcondition checks (mandatory per agent).** For each agent, derive 1-3
+   postcondition checks from the task description and include them in the
+   agent's verification gate (Field 6). Postconditions are cheap grep/count
+   assertions that verify structural outcome, not just compilation. They run
+   after build/test pass.
+
+   For each agent, verify:
+   - (a) the target symbol/field/function EXISTS in the expected file
+   - (b) it does NOT exist in files where it should not appear
+   - (c) counts match expectations (e.g., field added exactly once)
+
+   Include the expected output as a comment so the agent knows what "pass"
+   looks like. Use the format defined in agent-template.md Field 6.
 
 12. **Emit quality gates (optional).** If the project has a known build toolchain, add a `## Quality Gates` section to the IMPL doc between Suitability Assessment and Scaffolds. Use typed-block fence syntax ```` ```yaml type=impl-quality-gates ````:
 
