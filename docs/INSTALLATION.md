@@ -71,7 +71,7 @@ cd scout-and-wave
 The installer auto-detects Claude Code (checks for `~/.claude`) and does four things:
 
 1. **Symlinks skill files** to `~/.claude/skills/saw/` (SKILL.md, agent definitions, references, scripts).
-2. **Symlinks hook scripts** to `~/.local/bin/` (17 enforcement hooks, see [Hooks](#hooks-17-total) below).
+2. **Symlinks hook scripts** to `~/.local/bin/` (18 enforcement hooks, see [Hooks](#hooks-18-total) below).
 3. **Registers hooks** in `~/.claude/settings.json` under `PreToolUse`, `PostToolUse`, `SubagentStart`, `SubagentStop`, and `UserPromptSubmit` lifecycle events.
 4. **Adds `Agent` permission** to `~/.claude/settings.json` so SAW can launch agents without manual approval.
 
@@ -474,7 +474,7 @@ The installer supports multiple platforms via flags:
 
 - Worktree management: `prepare-wave`, `finalize-wave`, `create-worktree`
 - Validation: `pre-wave-validate`, `verify-install`, `validate-impl`, `validate-briefs`
-- Configuration: `init`, `set-completion`, `advance-state`
+- Configuration: `init`, `set-completion`, `set-impl-state`
 - Scout automation: `check-callers`, `list-error-ranges`, `suggest-wave-structure`,
   and `check-test-cascade` replace manual grep during planning
 
@@ -497,4 +497,4 @@ This removes skill file symlinks and hook script symlinks. Hook registrations in
 
 ---
 
-Last reviewed: 2026-03-25
+Last reviewed: 2026-04-03
