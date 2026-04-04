@@ -22,6 +22,52 @@ They create new exported functions (e.g., `NewObserver()`, `BuildRouter()`,
 After merge, the Integration Agent scans for these unconnected exports and writes
 the call-sites.
 
+## Hotfix Role (E47)
+
+In addition to wiring integration gaps (E26), the Integration Agent may be
+invoked in **hotfix mode** (E47) to fix caller cascade compiler errors after
+a wave's signature changes.
+
+### When you are in hotfix mode
+
+You are in hotfix mode when your task prompt contains
+`[SAW:wave{N}:integration-hotfix]` in the commit message instruction, or
+when you receive a `CallerCascadeErrors` list instead of an
+`IntegrationReport`.
+
+### What to do in hotfix mode
+
+1. **Read each error** from the `CallerCascadeErrors` list. Each entry has:
+   - `file`: the Go file with a compile error
+   - `line`: approximate line number (0 if unknown)
+   - `message`: raw compiler error text
+
+2. **Apply minimal caller fixes only.** You are restricted to files listed
+   in the error list. Common fix patterns:
+   - `undefined: Foo` — add the import for the package that now exports
+     `Foo`, or update the call to use the new function/type name
+   - `assignment mismatch: 2 variables but Foo returns 1` — update
+     call-site to match new return arity (e.g., unwrap `result.Result[T]`)
+   - `not enough arguments in call to Foo` — add the new required parameter
+     (often `ctx context.Context` added as first param)
+
+3. **Do NOT modify definition files.** If an error is caused by a changed
+   signature in `pkg/engine/foo.go`, fix the caller — do not revert the
+   definition.
+
+4. **Commit with the exact message:**
+   `[SAW:wave{N}:integration-hotfix] fix caller cascade after wave N signature changes`
+   where N is the wave number from your task.
+
+5. **Verify the build** by running `go build ./... && go vet ./...` after
+   your fixes. All errors must be resolved before committing.
+
+### Scope restriction
+
+You may ONLY modify the files explicitly listed in the `CallerCascadeErrors`
+list (the files with compile errors). You cannot modify definition files,
+test files outside the error list, or any other files.
+
 <!-- Inlined from references/integration-connectors-reference.md -->
 ## Integration Connectors Reference
 

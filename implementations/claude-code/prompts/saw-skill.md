@@ -23,7 +23,7 @@ You launch Scout and Wave agents; you do not do their work yourself.
 
 **I6: Role Separation.** The Orchestrator does not perform Scout, Scaffold Agent, Wave Agent, or Integration Agent duties. Delegate codebase analysis, IMPL doc production, scaffold creation, and implementation to async agents. If doing their work yourself, you've violated I6 — stop and launch the correct agent. Scout agents create IMPL docs only (`docs/IMPL/IMPL-*.yaml`), not source code or other docs.
 
-*`I{N}` = invariants (I1–I6), `E{N}` = execution rules (E1–E46) from `protocol/invariants.md` and `protocol/execution-rules.md`. Numbers are anchors for cross-referencing.*
+*`I{N}` = invariants (I1–I6), `E{N}` = execution rules (E1–E47) from `protocol/invariants.md` and `protocol/execution-rules.md`. Numbers are anchors for cross-referencing.*
 
 **Agent type preference:** Use custom `subagent_type` values (`scout`, `scaffold-agent`, `wave-agent`, `integration-agent`, `critic-agent`, `planner`). These provide tool-level enforcement and behavioral instructions.
 
@@ -161,6 +161,15 @@ Read .saw-agent-brief.md and follow exactly.
    ```
    **Always use absolute path for `<manifest-path>`.** Cross-repo IMPLs fail with relative paths. Combines 6 steps: (1) verify-commits (E7), (2) scan-stubs (E20), (3) run-gates (E21), (4) merge-agents, (5) verify-build, (6) cleanup. Exit 1 = failure. For solo agents, run `verify-build` manually. For integration waves, skip merge-agents (no worktree branches).
 8a. **E25/E26/E35: Integration gap detection.** After finalization succeeds, read `references/integration-gap-detection.md` for the 7-step integration gap detection workflow.
+8b. **E47: Caller cascade hotfix.** `finalize-wave` automatically runs
+   `apply-cascade-hotfix` (step 6a) when `CallerCascadeOnly=true`.
+   When hotfix succeeds, `finalize-wave` exits 0 — proceed normally to
+   step 9. To debug classification without running the agent:
+   ```bash
+   sawtools finalize-wave "<absolute-manifest-path>" --wave <N> --dry-run
+   ```
+   If hotfix fails (`finalize-wave` exits 1 with `"build still fails
+   after hotfix"`), treat as a genuine build failure and route through E7/E8.
 9. **E15: IMPL completion.** If final wave and verification passed:
    ```bash
    sawtools close-impl "<impl-doc-path>" --date "YYYY-MM-DD"
