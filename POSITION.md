@@ -17,7 +17,7 @@ Systems in categories 1-3 rely on probabilistic outcomes -- files might not conf
 
 ## What SAW Is
 
-SAW is a coordination protocol for safely parallelizing LLM agent work on shared codebases. It is language-agnostic, provider-agnostic, and enforces correctness through six invariants (I1-I6) and 46 execution rules (E1-E46) that govern every phase from planning through post-merge verification.
+SAW is a coordination protocol for safely parallelizing LLM agent work on shared codebases. It is language-agnostic, provider-agnostic, and enforces correctness through six invariants (I1-I6) and 47 execution rules (E1-E47) that govern every phase from planning through post-merge verification.
 
 The protocol has three layers:
 
