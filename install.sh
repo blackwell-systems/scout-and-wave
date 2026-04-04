@@ -274,7 +274,7 @@ install_claude_code() {
   add_hook "PreToolUse" "Bash" "${BIN_DIR}/block_git_stash" "I5 no-stash enforcement"
 
   # PostToolUse
-  add_hook "PostToolUse" "Write" "${BIN_DIR}/validate_impl_on_write" "E16 IMPL validation"
+  add_hook "PostToolUse" "Write|Edit" "${BIN_DIR}/validate_impl_on_write" "E16 IMPL validation"
   add_hook "PostToolUse" "Bash" "${BIN_DIR}/check_git_ownership" "I1 git ownership" "true"
   add_hook "PostToolUse" "Write|Edit" "${BIN_DIR}/warn_stubs" "H3 stub detection"
   add_hook "PostToolUse" "Bash" "${BIN_DIR}/check_branch_drift" "H4 branch drift"

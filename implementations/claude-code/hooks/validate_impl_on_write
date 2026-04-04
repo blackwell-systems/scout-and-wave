@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# PostToolUse hook: auto-validate IMPL docs after Write
+# PostToolUse hook: auto-validate IMPL docs after Write/Edit
 # Reads tool input JSON from stdin, checks if file is an IMPL doc,
 # runs sawtools validate, blocks on failure.
 #
 # Install: symlink to ~/.local/bin/validate_impl_on_write
-# Config:  PostToolUse hook with matcher "Write" in ~/.claude/settings.json
+# Config:  PostToolUse hook with matcher "Write|Edit" in ~/.claude/settings.json
 
 set -euo pipefail
 
