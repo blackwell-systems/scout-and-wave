@@ -868,6 +868,8 @@ C001 was occupied, causing a string mismatch with Agent A's hardcoded "CACHE_MIS
 
     **Docs-only waves:** If a wave owns only `.md`, `.yaml`, `.yml`, or `.txt` files, `sawtools run-gates` will automatically skip `build`, `test`, and `lint` gates for that wave — no action needed. Do NOT emit a `type: build` or `type: test` gate whose only purpose is to verify documentation files. If you want explicit verification for a docs-only wave, use `type: custom` with a relevant command (e.g., `sawtools validate docs/IMPL/IMPL-*.yaml` or `echo "docs-only: no tests"`).
 
+    **Do not add `required: true` quality gates that test `action: new` files.** Quality gates run on the baseline (before agents execute), so any gate that checks a file marked `action: new` will always fail — the file doesn't exist yet. Put post-creation checks (e.g., `bash -n <new-hook-script>`, `go build <new-package>`) in the agent's verification gate instead, not in `quality_gates`.
+
 13. **Emit post-merge checklist (optional).** After Known Issues and before Dependency Graph, add a `## Post-Merge Checklist` section using typed-block fence syntax ```` ```yaml type=impl-post-merge-checklist ```` if orchestrator-level verification steps are needed beyond quality gates:
 
     Include orchestrator-facing post-merge verification steps: full workspace builds after merge, cross-package integration tests, end-to-end tests spanning multiple agents' work, cross-repo dependency checks.
