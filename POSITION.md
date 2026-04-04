@@ -30,7 +30,7 @@ The architecture is three repositories:
 | Repository | Purpose | Contents |
 |---|---|---|
 | **scout-and-wave** | Language-agnostic protocol spec | Invariants, execution rules, agent prompts, `/saw` skill |
-| **scout-and-wave-go** | Go SDK + CLI engine | 30+ packages: engine, protocol, hooks, resume, retry, journal, collision detection, autonomy, suitability analysis, wave solver, build diagnostics, error parsing, code review, 4 LLM backends |
+| **scout-and-wave-go** | Go SDK + CLI engine | 39 packages: engine, protocol, hooks, resume, retry, journal, collision detection, autonomy, suitability analysis, wave solver, build diagnostics, error parsing, code review, 4 LLM backends |
 | **scout-and-wave-web** | Web application | HTTP/SSE real-time dashboard, React UI with command palette and Base16 theming, Go API server with Bedrock SSO device auth |
 
 CLI commands and web API routes are thin I/O wrappers over the same SDK functions. There is one source of truth for business logic.
@@ -152,9 +152,9 @@ Each agent type (`scout`, `wave-agent`, `critic-agent`, `planner`, `integration-
 
 | Agent Type | Definition | What It Contains |
 |------------|-----------|-----------------|
-| `scout` | ~787 lines | Suitability gate (5-question assessment), implementation process (18-step IMPL production), output format |
-| `wave-agent` | ~330 lines | Worktree isolation protocol, completion report format, 9-field execution checklist |
-| `critic-agent` | ~230 lines | 10-check verification procedure, structured CriticResult format |
+| `scout` | ~961 lines | Suitability gate (5-question assessment), implementation process (18-step IMPL production), output format |
+| `wave-agent` | ~351 lines | Worktree isolation protocol, completion report format, 9-field execution checklist |
+| `critic-agent` | ~261 lines | 10-check verification procedure, structured CriticResult format |
 | `planner` | ~557 lines | Suitability gate, PROGRAM manifest process (10 steps), annotated example manifest |
 | `integration-agent` | ~233 lines | Connector wiring patterns, integration report format |
 | `scaffold-agent` | ~159 lines | Type stub creation rules, scaffold status reporting |
@@ -252,7 +252,7 @@ The web application (`scout-and-wave-web`) is built on this SDK. Every CLI comma
 - Dependency conflict detection (`pkg/deps`) -- parses IMPL file ownership, extracts external imports from owned files, and cross-references lock files (go.mod, Cargo.lock, package-lock.json) to detect missing dependencies and version conflicts before wave launch
 - Format detection (`pkg/format`) -- auto-detects project formatter from toolchain markers (go.mod → gofmt, package.json → prettier, pyproject.toml/setup.py → ruff, Cargo.toml → cargo fmt); produces check and fix commands for gate integration
 - Agent ID generation (`pkg/idgen`) -- generates agent IDs matching `^[A-Z][2-9]?$`; sequential mode (A-Z then A2-Z2, max 234) or category-grouped mode (agents with shared category tags get same-letter multi-generation IDs, e.g., `["data","data","api"]` → `["A","A2","B"]`)
-- Unified error code catalog (`pkg/result`) -- 17 code domains (V/W/B/G/A/N/P/T/S/C/K/I/D/E/X/Q/R), 60+ named constants; all engine errors carry a structured `SAWError` with Code, Message, and Cause for programmatic error handling
+- Unified error code catalog (`pkg/result`) -- 20 code domains (V/W/B/G/A/N/O/P/T/S/C/K/I/D/E/X/Q/R/J/Z), 280+ named constants; all engine errors carry a structured `SAWError` with Code, Message, and Cause for programmatic error handling
 
 ## What Makes SAW Different
 
@@ -458,13 +458,15 @@ The observability event schema (E40) defines three event types -- `cost` (token 
 
 ## Evidence
 
-The protocol is self-hosting. The scout-and-wave protocol repository, Go SDK, and web application were built using SAW. CONTEXT.md records 30+ completed features executed through the protocol, ranging from 1-wave/2-agent documentation fixes to 5-wave/26-agent cross-cutting refactors. The PROGRAM layer's first real execution (a 3-tier, 5-IMPL unification project) drove the discovery and resolution of 13 integration gaps (P1-P13) -- gaps that would not have been found without running the protocol at scale on its own codebase.
+The protocol is self-hosting. The scout-and-wave protocol repository, Go SDK, and web application were built using SAW. CONTEXT.md records 130+ completed features executed through the protocol, ranging from 1-wave/2-agent documentation fixes to 6-wave/31-agent cross-cutting refactors. The PROGRAM layer's first real execution (a 3-tier, 5-IMPL unification project) drove the discovery and resolution of 13 integration gaps (P1-P13) -- gaps that would not have been found without running the protocol at scale on its own codebase.
+
+A full canonicalization review of all 39 `pkg/` packages was completed via the SAW PROGRAM layer: every package was reviewed for result.Result[T] adoption, error code migration, API hygiene, and test coverage. Packages where the review found issues had dedicated fix IMPLs executed immediately. The `AnalyzeDeps` function was deleted and replaced by `BuildGraph(ctx, repoRoot, files)` + `ToOutput(graph)`. The `CascadeFile` type was unified into `CascadeCandidate`. All 39 packages are now reviewed and closed.
 
 Dogfooding surfaces real issues. A Scout analyzing the Go engine's agent prompt loading discovered two pre-existing silent path bugs: `RunScout` was loading from `implementations/claude-code/prompts/scout.md` (does not exist) and `RunPlanner` from `agents/planner.md` (relative to repo root, also does not exist). `RunPlanner` had a fallback string that masked the failure; `RunScout` would have errored on any web/API execution path. Both were caught before execution, fixed in the same IMPL that added reference injection. This is the expected property of a system that analyzes itself before acting.
 
 The critic gate also catches planning errors before compute is wasted. During the progressive disclosure extraction project, a pre-wave critic review caught that the planned hook output format used `additionalContext` (which targets the orchestrator's context) rather than `updatedInput` (which modifies the subagent's prompt). Three critic cycles -- not execution failures -- corrected the mechanism before any agent ran. The correctness of the final implementation is traceable to the review process, not to getting it right on the first try.
 
-The Go SDK contains 32 packages across engine, protocol, hooks, resume, retry, journal, collision detection, autonomy, suitability analysis, wave solver, pipeline framework, build diagnostics, error parsing, code review, scaffold validation, notification system, gate caching, worktree management, four LLM backends (Anthropic API, Bedrock, OpenAI-compatible, CLI), constraint enforcement, configuration, dependency conflict detection, format detection, agent ID generation, and a unified error code catalog (60+ named codes across 8 domains). The CLI exposes 75+ commands. The web app ships 75+ React components with real-time SSE streaming, Base16 theming, and Bedrock SSO -- all embedded in a single Go binary.
+The Go SDK contains 39 packages across engine, protocol, hooks, resume, retry, journal, collision detection, autonomy, suitability analysis, wave solver, pipeline framework, build diagnostics, error parsing, code review, scaffold validation, notification system, gate caching, worktree management, four LLM backends (Anthropic API, Bedrock, OpenAI-compatible, CLI), constraint enforcement, configuration, dependency conflict detection, format detection, agent ID generation, and a unified error code catalog (280+ named codes across 20 domains). The CLI exposes 75+ commands. The web app ships 75+ React components with real-time SSE streaming, Base16 theming, and Bedrock SSO -- all embedded in a single Go binary.
 
 A 6-wave, 31-agent cascade refactor threading `context.Context` through the entire codebase surfaced two protocol tooling gaps during dogfooding: the E11 conflict predictor was blocking on every wave because it checked file names rather than hunk ranges (cascade patches legitimately touch the same file at different positions), and the E37 gate was blocking `prepare-wave` on warnings-only critic reports (violating its own documented semantics of "blocks on unresolved errors"). Both were fixed against the live IMPL doc rather than in a separate branch — the IMPL for the fixes and the IMPL being fixed coexisted in the same repo. This is the expected property of a self-hosting system.
 
