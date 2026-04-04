@@ -398,5 +398,5 @@ pre_mortem:
             The condensed Field 0 retains a brief `git -C $SAW_AGENT_WORKTREE branch
             --show-current` check and an instruction to report blocked status if wrong.
             This is sufficient as a manual fallback. The hook handles the automated case.
-state: SCOUT_PENDING
+state: "REVIEWED"
 injection_method: hook
