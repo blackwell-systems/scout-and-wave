@@ -1,6 +1,6 @@
 # Scout-and-Wave: Position Statement
 
-## The Problem
+## Background
 
 LLM agents can write code. That stopped being the bottleneck. The bottleneck is what happens when you run multiple agents simultaneously on the same codebase: merge conflicts, ownership violations, hallucinated APIs, integration failures discovered only after all agents finish, and no reliable way to know whether the assembled result actually works.
 
@@ -13,7 +13,7 @@ Most approaches to parallel agent coordination fall into one of four failure mod
 
 Scout-and-Wave (SAW) treats parallel agent work as a distributed systems problem and solves it structurally: disjoint ownership eliminates conflicts by construction, interface contracts eliminate coordination drift, and wave sequencing eliminates cascade failures.
 
-The distinction is mechanical, not philosophical. Systems in categories 1-3 rely on probabilistic outcomes -- files might not conflict, merges might succeed, humans might catch issues. SAW eliminates the probability: I1 makes conflicts impossible by construction, I2 makes API drift impossible by construction, and I3 makes cascade failures detectable at wave boundaries rather than at the end. The protocol's correctness properties are enforced by tool-level hooks, not by agent cooperation -- a model prompted to violate ownership will be blocked before the tool executes.
+Systems in categories 1-3 rely on probabilistic outcomes -- files might not conflict, merges might succeed, humans might catch issues. SAW eliminates the probability: I1 makes conflicts impossible by construction, I2 makes API drift impossible by construction, and I3 makes cascade failures detectable at wave boundaries rather than at the end. The protocol's correctness properties are enforced by tool-level hooks, not by agent cooperation -- a model prompted to violate ownership will be blocked before the tool executes.
 
 ## What SAW Is
 
@@ -30,7 +30,7 @@ The architecture is three repositories:
 | Repository | Purpose | Contents |
 |---|---|---|
 | **scout-and-wave** | Language-agnostic protocol spec | Invariants, execution rules, agent prompts, `/saw` skill |
-| **scout-and-wave-go** | Go SDK + CLI engine | 39 packages: engine, protocol, hooks, resume, retry, journal, collision detection, autonomy, suitability analysis, wave solver, build diagnostics, error parsing, code review, 4 LLM backends |
+| **scout-and-wave-go** | Go SDK + CLI engine | 40 packages: engine, protocol, hooks, resume, retry, journal, collision detection, autonomy, suitability analysis, wave solver, build diagnostics, error parsing, code review, 4 LLM backends |
 | **scout-and-wave-web** | Web application | HTTP/SSE real-time dashboard, React UI with command palette and Base16 theming, Go API server with Bedrock SSO device auth |
 
 CLI commands and web API routes are thin I/O wrappers over the same SDK functions. There is one source of truth for business logic.
@@ -80,7 +80,7 @@ The primary interactive experience. The `/saw` skill is a YAML-frontmatter + mar
 - Interview mode (E39): structured 6-phase requirements gathering (`/saw interview`) that produces a REQUIREMENTS.md for Scout consumption -- an alternative entry point when the user needs guided decomposition before planning
 - Because the skill conforms to the open standard, it is not structurally locked to Claude Code. Any agent runtime that supports the skills standard can load the same `saw-skill.md` file
 
-### Advanced Progressive Disclosure Architecture
+### Context Window Architecture
 
 SAW implements a **hook-based deterministic injection architecture** that extends the Agent Skills specification's three-tier model with automatic context loading. Rather than relying on models to follow routing instructions ("read this file when needed"), SAW uses lifecycle hooks and script-based conditional logic to inject references before the model runs. Always-needed content is inlined directly in agent definitions; conditional references (3 total) are injected by scripts when specific scenarios are detected. This section documents the complete architecture.
 
@@ -90,9 +90,9 @@ The skill uses a four-tier progressive disclosure model to keep the Orchestrator
 
 - **Tier 0** (CLAUDE.md) -- discovery index, always present, zero invocation cost
 - **Tier 1** (frontmatter metadata, ~20 lines) -- parsed by the Skills API before context construction; standard Skills API fields only (name, description, allowed-tools, etc.)
-- **Tier 2** (core skill body, ~140 lines) -- loads on invocation; covers scout, wave, status, bootstrap, and interview (the operations needed on >90% of sessions); reduced from original 365-line monolith via extraction to reference files
+- **Tier 2** (core skill body, ~170 lines) -- loads on invocation; covers scout, wave, status, bootstrap, and interview (the operations needed on >90% of sessions); reduced from original 365-line monolith via extraction to reference files
 - **Tier 3** (on-demand reference files) -- loads only when a subcommand match fires: program execution, IMPL amendment, and failure routing stay out of context until needed
-- **Tier 3 reference files:** `model-selection.md` (81 lines), `pre-wave-validation.md` (151 lines), `wave-agent-contracts.md` (137 lines), `impl-targeting.md` (195 lines)
+- **Tier 3 reference files:** `model-selection.md` (81 lines), `pre-wave-validation.md` (283 lines), `wave-agent-contracts.md` (159 lines), `impl-targeting.md` (244 lines)
 
 #### Script-Based Conditional Dispatch
 
@@ -144,7 +144,7 @@ The hook architecture uses two distinct output fields for different injection ta
 
 `additionalContext` in `UserPromptSubmit` adds content to the orchestrator before it starts. `updatedInput.prompt` in `PreToolUse/Agent` modifies the `Agent` tool's `prompt` parameter before Claude Code launches the subagent. The subagent receives the modified prompt as its initial message -- the reference content is present before it takes its first step.
 
-**This distinction is non-obvious.** Early implementations tried `additionalContext` in `PreToolUse` -- this augmented the orchestrator's context, not the subagent's. Three critic review cycles caught the error before any agent ran. The correct mechanism is `updatedInput.prompt` in `PreToolUse/Agent`.
+Early implementations tried `additionalContext` in `PreToolUse` -- this augmented the orchestrator's context, not the subagent's. Three critic review cycles caught the error before any agent ran. The correct mechanism is `updatedInput.prompt` in `PreToolUse/Agent`.
 
 #### Agent Type Definitions
 
@@ -156,7 +156,7 @@ Each agent type (`scout`, `wave-agent`, `critic-agent`, `planner`, `integration-
 | `wave-agent` | ~351 lines | Worktree isolation protocol, completion report format, 9-field execution checklist |
 | `critic-agent` | ~261 lines | 10-check verification procedure, structured CriticResult format |
 | `planner` | ~557 lines | Suitability gate, PROGRAM manifest process (10 steps), annotated example manifest |
-| `integration-agent` | ~233 lines | Connector wiring patterns, integration report format |
+| `integration-agent` | ~234 lines | Connector wiring patterns, integration report format |
 | `scaffold-agent` | ~159 lines | Type stub creation rules, scaffold status reporting |
 
 Three references are delivered conditionally via the `inject-agent-context` script, because they apply only in specific scenarios:
@@ -252,7 +252,7 @@ The web application (`scout-and-wave-web`) is built on this SDK. Every CLI comma
 - Dependency conflict detection (`pkg/deps`) -- parses IMPL file ownership, extracts external imports from owned files, and cross-references lock files (go.mod, Cargo.lock, package-lock.json) to detect missing dependencies and version conflicts before wave launch
 - Format detection (`pkg/format`) -- auto-detects project formatter from toolchain markers (go.mod → gofmt, package.json → prettier, pyproject.toml/setup.py → ruff, Cargo.toml → cargo fmt); produces check and fix commands for gate integration
 - Agent ID generation (`pkg/idgen`) -- generates agent IDs matching `^[A-Z][2-9]?$`; sequential mode (A-Z then A2-Z2, max 234) or category-grouped mode (agents with shared category tags get same-letter multi-generation IDs, e.g., `["data","data","api"]` → `["A","A2","B"]`)
-- Unified error code catalog (`pkg/result`) -- 20 code domains (V/W/B/G/A/N/O/P/T/S/C/K/I/D/E/X/Q/R/J/Z), 280+ named constants; all engine errors carry a structured `SAWError` with Code, Message, and Cause for programmatic error handling
+- Unified error code catalog (`pkg/result`) -- 20 code domains (V/W/B/G/A/N/O/P/T/S/C/K/I/D/E/X/Q/R/J/Z), 90+ named constants; all engine errors carry a structured `SAWError` with Code, Message, and Cause for programmatic error handling
 
 ## What Makes SAW Different
 
@@ -460,13 +460,13 @@ The observability event schema (E40) defines three event types -- `cost` (token 
 
 The protocol is self-hosting. The scout-and-wave protocol repository, Go SDK, and web application were built using SAW. CONTEXT.md records 130+ completed features executed through the protocol, ranging from 1-wave/2-agent documentation fixes to 6-wave/31-agent cross-cutting refactors. The PROGRAM layer's first real execution (a 3-tier, 5-IMPL unification project) drove the discovery and resolution of 13 integration gaps (P1-P13) -- gaps that would not have been found without running the protocol at scale on its own codebase.
 
-A full canonicalization review of all 39 `pkg/` packages was completed via the SAW PROGRAM layer: every package was reviewed for result.Result[T] adoption, error code migration, API hygiene, and test coverage. Packages where the review found issues had dedicated fix IMPLs executed immediately. The `AnalyzeDeps` function was deleted and replaced by `BuildGraph(ctx, repoRoot, files)` + `ToOutput(graph)`. The `CascadeFile` type was unified into `CascadeCandidate`. All 39 packages are now reviewed and closed.
+A full canonicalization review of all 40 `pkg/` packages was completed via the SAW PROGRAM layer: every package was reviewed for result.Result[T] adoption, error code migration, API hygiene, and test coverage. Packages where the review found issues had dedicated fix IMPLs executed immediately. The `AnalyzeDeps` function was deleted and replaced by `BuildGraph(ctx, repoRoot, files)` + `ToOutput(graph)`. The `CascadeFile` type was unified into `CascadeCandidate`. All 40 packages are now reviewed and closed.
 
 Dogfooding surfaces real issues. A Scout analyzing the Go engine's agent prompt loading discovered two pre-existing silent path bugs: `RunScout` was loading from `implementations/claude-code/prompts/scout.md` (does not exist) and `RunPlanner` from `agents/planner.md` (relative to repo root, also does not exist). `RunPlanner` had a fallback string that masked the failure; `RunScout` would have errored on any web/API execution path. Both were caught before execution, fixed in the same IMPL that added reference injection. This is the expected property of a system that analyzes itself before acting.
 
 The critic gate also catches planning errors before compute is wasted. During the progressive disclosure extraction project, a pre-wave critic review caught that the planned hook output format used `additionalContext` (which targets the orchestrator's context) rather than `updatedInput` (which modifies the subagent's prompt). Three critic cycles -- not execution failures -- corrected the mechanism before any agent ran. The correctness of the final implementation is traceable to the review process, not to getting it right on the first try.
 
-The Go SDK contains 39 packages across engine, protocol, hooks, resume, retry, journal, collision detection, autonomy, suitability analysis, wave solver, pipeline framework, build diagnostics, error parsing, code review, scaffold validation, notification system, gate caching, worktree management, four LLM backends (Anthropic API, Bedrock, OpenAI-compatible, CLI), constraint enforcement, configuration, dependency conflict detection, format detection, agent ID generation, and a unified error code catalog (280+ named codes across 20 domains). The CLI exposes 75+ commands. The web app ships 75+ React components with real-time SSE streaming, Base16 theming, and Bedrock SSO -- all embedded in a single Go binary.
+The Go SDK contains 40 packages across engine, protocol, hooks, resume, retry, journal, collision detection, autonomy, suitability analysis, wave solver, pipeline framework, build diagnostics, error parsing, code review, scaffold validation, notification system, gate caching, worktree management, four LLM backends (Anthropic API, Bedrock, OpenAI-compatible, CLI), constraint enforcement, configuration, dependency conflict detection, format detection, agent ID generation, and a unified error code catalog (90+ named codes across 20 domains). The CLI exposes 75+ commands. The web app ships 75+ React components with real-time SSE streaming, Base16 theming, and Bedrock SSO -- all embedded in a single Go binary.
 
 A 6-wave, 31-agent cascade refactor threading `context.Context` through the entire codebase surfaced two protocol tooling gaps during dogfooding: the E11 conflict predictor was blocking on every wave because it checked file names rather than hunk ranges (cascade patches legitimately touch the same file at different positions), and the E37 gate was blocking `prepare-wave` on warnings-only critic reports (violating its own documented semantics of "blocks on unresolved errors"). Both were fixed against the live IMPL doc rather than in a separate branch — the IMPL for the fixes and the IMPL being fixed coexisted in the same repo. This is the expected property of a self-hosting system.
 
