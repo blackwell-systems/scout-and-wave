@@ -42,8 +42,8 @@ suitability_assessment: |
 
     Sequential baseline: ~25 min (small, focused changes)
     Recommendation: Marginal speed gain; primary value is coordination artifact.
-test_command: shellcheck implementations/claude-code/hooks/validate_worktree_isolation
-lint_command: shellcheck implementations/claude-code/hooks/validate_worktree_isolation
+test_command: echo "docs-only wave: no test suite"
+lint_command: echo "docs-only wave: no lint suite"
 file_ownership:
     - file: implementations/claude-code/hooks/validate_worktree_isolation
       agent: A
