@@ -1,0 +1,525 @@
+title: Wire preLaunchGate into prepare-agent flow
+feature_slug: wire-prelaunch-gate
+verdict: SUITABLE
+suitability_assessment: |
+    All five suitability questions resolve cleanly.
+
+    1. File decomposition: Four files change across two natural seams:
+       (a) export + PrepareAgent injection (prelaunch_gate.go, prepare_agent.go, prepare_agent_test.go)
+       (b) PrepareWave injection (prepare.go, prepare_test.go).
+       Ownership is fully disjoint.
+
+    2. No investigation needed. The function is fully built and the injection
+       points are unambiguously identified.
+
+    3. Interface contracts are trivially discoverable: the existing unexported
+       signature becomes the exported one; callers pass already-available locals.
+
+    4. Pre-implementation status:
+       - preLaunchGate built but unexported: TODO (export it)
+       - Wiring into PrepareAgent: TODO
+       - Wiring into extractBriefsAndInitJournals (PrepareWave path): TODO
+       - Tests for both injection points: TODO
+
+    5. Parallelization value: Two parallel agents, both touching separate files.
+       Go build/test cycle ~10-30s. Clear speedup over sequential.
+
+    Duplicate E37 check assessment: The critic gate check in preLaunchGate
+    duplicates the check already in prepare_wave.go CLI and in prepare.go
+    (engine-level). This is intentional defense-in-depth per the feature
+    constraints — the gate acts as a last-resort check at brief-write time,
+    catching cases where the IMPL state was modified between prepare-wave
+    orchestration and agent launch.
+
+    Estimated times:
+    - Scout: ~15 min (reading 6 files, interface analysis)
+    - Agent execution: ~2 agents x ~10 min avg = ~10 min with parallelism
+    - Merge: ~3 min
+    Total SAW time: ~28 min
+    Sequential baseline: ~25 min
+    Time savings: Marginal speed gain; coordination value is the primary benefit.
+test_command: go test ./pkg/hooks/... ./pkg/engine/... ./cmd/sawtools/...
+lint_command: go vet ./...
+file_ownership:
+    - file: pkg/hooks/prelaunch_gate.go
+      agent: A
+      wave: 1
+      action: modify
+    - file: pkg/engine/prepare_agent.go
+      agent: A
+      wave: 1
+      action: modify
+    - file: pkg/engine/prepare_agent_test.go
+      agent: A
+      wave: 1
+      action: modify
+    - file: pkg/engine/prepare.go
+      agent: B
+      wave: 1
+      action: modify
+    - file: pkg/engine/prepare_test.go
+      agent: B
+      wave: 1
+      action: modify
+interface_contracts:
+    - name: PreLaunchGate
+      description: |
+        Export the existing unexported preLaunchGate function. The signature is
+        identical; only the first letter changes from lowercase to uppercase.
+        Agent A exports this symbol; Agent B calls it via hooks.PreLaunchGate.
+      definition: |
+        // PreLaunchGate validates all preconditions before launching a wave agent.
+        // Returns result.Result[PreLaunchResult]: Success when all checks pass,
+        // Partial with errors when any check has status "fail".
+        func PreLaunchGate(
+            manifest *protocol.IMPLManifest,
+            waveNum int,
+            agentID string,
+            repoRoot string,
+            wtPath string,
+        ) result.Result[PreLaunchResult]
+      location: pkg/hooks/prelaunch_gate.go
+    - name: PreLaunchResult
+      description: |
+        Already exported. Contains Ready bool and Checks []PreLaunchCheck.
+        No changes needed to this type.
+      definition: |
+        type PreLaunchResult struct {
+            Ready  bool             `json:"ready"`
+            Checks []PreLaunchCheck `json:"checks"`
+        }
+      location: pkg/hooks/prelaunch_gate.go
+    - name: PreLaunchCheck
+      description: |
+        Already exported. Single check result with Name, Status ("pass"/"fail"/"warn"),
+        and Message. No changes needed to this type.
+      definition: |
+        type PreLaunchCheck struct {
+            Name    string `json:"name"`
+            Status  string `json:"status"`
+            Message string `json:"message"`
+        }
+      location: pkg/hooks/prelaunch_gate.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            **Role:** Export preLaunchGate and wire it into engine.PrepareAgent
+
+            ## What to implement
+
+            ### 1. Export preLaunchGate in pkg/hooks/prelaunch_gate.go
+
+            The function `preLaunchGate` (line 48) is currently unexported. Rename it
+            to `PreLaunchGate` (capital P). This is a single-character change to the
+            function definition line. The function doc comment says "NOTE: This function
+            is not yet integrated..." — update that comment to reflect it is now wired in.
+
+            The internal helper functions (`checkManifestValidation`, `checkWaveExists`,
+            etc.) remain unexported — do NOT export them.
+
+            The existing tests in `pkg/hooks/prelaunch_gate_test.go` call `preLaunchGate`
+            (lowercase) — update ALL 15 test call sites to `PreLaunchGate` as part of
+            this task.
+
+            Exact text to find for the function definition (to update):
+            ```go
+            func preLaunchGate(
+            	manifest *protocol.IMPLManifest,
+            	waveNum int,
+            	agentID string,
+            	repoRoot string,
+            	wtPath string,
+            ) result.Result[PreLaunchResult] {
+            ```
+
+            Replace with:
+            ```go
+            func PreLaunchGate(
+            	manifest *protocol.IMPLManifest,
+            	waveNum int,
+            	agentID string,
+            	repoRoot string,
+            	wtPath string,
+            ) result.Result[PreLaunchResult] {
+            ```
+
+            ### 2. Wire PreLaunchGate into engine.PrepareAgent (pkg/engine/prepare_agent.go)
+
+            Injection point: after the manifest is loaded and the agent task is found,
+            but before the brief is written. The exact insertion point is after this block:
+
+            ```go
+            	if agentTask == "" {
+            		return result.NewFailure[PrepareAgentResult]([]result.SAWError{
+            			result.NewFatal(result.CodePrepareWaveFailed, fmt.Sprintf("agent %s not found in wave %d", opts.AgentID, opts.WaveNum)),
+            		})
+            	}
+            ```
+
+            Insert the following block immediately after (before the `// Extract interface contracts` comment):
+
+            ```go
+            	// Pre-launch gate: validate preconditions before writing brief.
+            	// For solo/no-worktree agents, wtPath is empty; checkWorktreeBranch
+            	// gracefully skips when wtPath is "".
+            	wtPath := ""
+            	gateRes := hooks.PreLaunchGate(doc, opts.WaveNum, opts.AgentID, opts.ProjectRoot, wtPath)
+            	if gateRes.IsPartial() || !gateRes.IsSuccess() {
+            		var errParts []string
+            		for _, e := range gateRes.Errors {
+            			errParts = append(errParts, e.Message)
+            		}
+            		return result.NewFailure[PrepareAgentResult]([]result.SAWError{
+            			result.NewFatal(result.CodeWaveNotReady, fmt.Sprintf("pre-launch gate failed: %s", strings.Join(errParts, "; "))),
+            		})
+            	}
+            ```
+
+            Add the import for `pkg/hooks` to the import block in prepare_agent.go. The
+            current import block (lines 3-15) ends with `result`. Add hooks after journal:
+
+            ```go
+            	"github.com/blackwell-systems/scout-and-wave-go/pkg/hooks"
+            ```
+
+            Note: `strings` is already imported in prepare_agent.go. `result.CodeWaveNotReady`
+            is defined in pkg/result/codes.go as `"N007_WAVE_NOT_READY"`.
+
+            ### 3. Add tests in pkg/engine/prepare_agent_test.go
+
+            Add two new test functions after the existing tests:
+
+            **Test A: Gate blocks on uncommitted scaffold**
+
+            ```go
+            func TestPrepareAgent_PreLaunchGate_BlocksOnUncommittedScaffold(t *testing.T) {
+            	tmpDir := t.TempDir()
+
+            	// IMPL with an uncommitted scaffold — gate should block
+            	implYAML := `title: Test Feature
+            feature_slug: test-feature
+            verdict: SUITABLE
+            state: REVIEWED
+            test_command: "go test ./..."
+            scaffolds:
+              - file_path: pkg/types.go
+                status: pending
+            file_ownership:
+              - file: pkg/test/file.go
+                agent: A
+                wave: 1
+            waves:
+              - number: 1
+                agents:
+                  - id: A
+                    task: "Implement test feature"
+                    files:
+                      - pkg/test/file.go
+            `
+            	implPath := filepath.Join(tmpDir, "IMPL-test.yaml")
+            	if err := os.WriteFile(implPath, []byte(implYAML), 0644); err != nil {
+            		t.Fatalf("failed to write IMPL doc: %v", err)
+            	}
+
+            	res := PrepareAgent(context.Background(), PrepareAgentOpts{
+            		ManifestPath: implPath,
+            		ProjectRoot:  tmpDir,
+            		WaveNum:      1,
+            		AgentID:      "A",
+            		NoWorktree:   true,
+            	})
+
+            	if res.IsSuccess() {
+            		t.Error("expected PrepareAgent to fail when scaffold is uncommitted")
+            	}
+            	// Verify the error mentions the gate
+            	if len(res.Errors) == 0 {
+            		t.Fatal("expected errors")
+            	}
+            	msg := res.Errors[0].Message
+            	if !strings.Contains(msg, "pre-launch gate") {
+            		t.Errorf("expected error to mention pre-launch gate, got: %s", msg)
+            	}
+            }
+            ```
+
+            **Test B: Gate passes for valid IMPL**
+
+            ```go
+            func TestPrepareAgent_PreLaunchGate_PassesForValidIMPL(t *testing.T) {
+            	tmpDir := t.TempDir()
+
+            	implPath := filepath.Join(tmpDir, "IMPL-test.yaml")
+            	if err := os.WriteFile(implPath, []byte(minimalIMPLYAML("A", 1)), 0644); err != nil {
+            		t.Fatalf("failed to write IMPL doc: %v", err)
+            	}
+
+            	res := PrepareAgent(context.Background(), PrepareAgentOpts{
+            		ManifestPath: implPath,
+            		ProjectRoot:  tmpDir,
+            		WaveNum:      1,
+            		AgentID:      "A",
+            		NoWorktree:   true,
+            	})
+
+            	// Gate should pass and PrepareAgent should succeed
+            	if !res.IsSuccess() {
+            		t.Errorf("expected PrepareAgent to succeed for valid IMPL, errors: %v", res.Errors)
+            	}
+            }
+            ```
+
+            Note: the second test is essentially a regression test verifying the gate
+            does not break the existing happy path. `minimalIMPLYAML` is already defined
+            in prepare_agent_test.go.
+
+            ## Verification gate
+
+            ```bash
+            # Build
+            go build ./pkg/hooks/... ./pkg/engine/...
+
+            # Lint
+            go vet ./pkg/hooks/... ./pkg/engine/...
+
+            # Tests
+            go test ./pkg/hooks/... -run TestPreLaunchGate -v
+            go test ./pkg/engine/... -run TestPrepareAgent -v
+
+            # Postconditions
+            # (a) PreLaunchGate exported from pkg/hooks
+            grep -n "^func PreLaunchGate" /Users/dayna.blackwell/workspace/code/scout-and-wave-go/pkg/hooks/prelaunch_gate.go
+            # Expected: line number with: func PreLaunchGate(
+
+            # (b) preLaunchGate (lowercase) no longer exists
+            grep -n "^func preLaunchGate" /Users/dayna.blackwell/workspace/code/scout-and-wave-go/pkg/hooks/prelaunch_gate.go
+            # Expected: no output (0 matches)
+
+            # (c) hooks imported in prepare_agent.go
+            grep -n "pkg/hooks" /Users/dayna.blackwell/workspace/code/scout-and-wave-go/pkg/engine/prepare_agent.go
+            # Expected: 1 line with the import path
+
+            # (d) gate call present in prepare_agent.go
+            grep -n "PreLaunchGate" /Users/dayna.blackwell/workspace/code/scout-and-wave-go/pkg/engine/prepare_agent.go
+            # Expected: 1 line with the call
+            ```
+
+            ## Constraints
+            - Do NOT export the internal helper functions (checkManifestValidation, etc.)
+            - Do NOT modify files outside your ownership list (prepare.go is owned by Agent B)
+            - Do NOT change the function signature of PreLaunchGate
+            - Do NOT add a wtPath parameter to PrepareAgentOpts — solo agents always pass ""
+          files:
+            - pkg/hooks/prelaunch_gate.go
+            - pkg/engine/prepare_agent.go
+            - pkg/engine/prepare_agent_test.go
+        - id: B
+          task: |
+            **Role:** Wire PreLaunchGate into PrepareWave's extractBriefsAndInitJournals
+
+            ## What to implement
+
+            ### 1. Add hooks import to pkg/engine/prepare.go
+
+            The current import block (lines 3-21) does NOT include pkg/hooks.
+            Add it to the import block alongside the other pkg/* imports:
+
+            ```go
+            "github.com/blackwell-systems/scout-and-wave-go/pkg/hooks"
+            ```
+
+            The import block currently ends with:
+            ```go
+            	"github.com/blackwell-systems/scout-and-wave-go/pkg/resume"
+            )
+            ```
+
+            Add `hooks` after `journal` in the block (alphabetical order within the
+            pkg group):
+
+            ```go
+            	"github.com/blackwell-systems/scout-and-wave-go/pkg/hooks"
+            	"github.com/blackwell-systems/scout-and-wave-go/pkg/journal"
+            ```
+
+            ### 2. Wire PreLaunchGate into extractBriefsAndInitJournals (pkg/engine/prepare.go)
+
+            The injection point is inside the `for _, wtInfo := range worktrees` loop,
+            after the `agentTask == ""` guard check and before building the brief.
+
+            Find this exact block (lines ~893-895):
+
+            ```go
+            		if agentTask == "" {
+            			return nil, fmt.Errorf("agent %s not found in wave %d", agentID, opts.WaveNum)
+            		}
+            ```
+
+            Insert the following block immediately after (before the
+            `// Extract interface contracts` comment):
+
+            ```go
+            		// Pre-launch gate: validate preconditions before writing brief.
+            		// wtInfo.Path is the worktree path for this agent.
+            		gateRes := hooks.PreLaunchGate(doc, opts.WaveNum, agentID, opts.RepoPath, wtInfo.Path)
+            		if gateRes.IsPartial() || !gateRes.IsSuccess() {
+            			var errParts []string
+            			for _, e := range gateRes.Errors {
+            				errParts = append(errParts, e.Message)
+            			}
+            			return nil, fmt.Errorf("pre-launch gate failed for agent %s: %s", agentID, strings.Join(errParts, "; "))
+            		}
+            ```
+
+            Note: `strings` is already imported in prepare.go.
+
+            ### 3. Add test in pkg/engine/prepare_test.go
+
+            Add a test that verifies the step name "pre_launch_gate" appears in
+            PrepareWave output when the gate runs. Since full PrepareWave integration
+            requires a git repo, use a focused test on the gate failure message format.
+
+            Add after the existing tests:
+
+            ```go
+            func TestPrepareWave_PreLaunchGate_StepMessageFormat(t *testing.T) {
+            	// Verify that when PrepareWave fails early (before reaching extract_briefs),
+            	// the error does not contain "pre-launch gate" — the gate only fires
+            	// inside extractBriefsAndInitJournals which runs after worktree creation.
+            	// This test guards against false positives in error message detection.
+            	res, err := PrepareWave(context.Background(), PrepareWaveOpts{
+            		IMPLPath: "/tmp/nonexistent-impl-gate-test.yaml",
+            		RepoPath: "/tmp/nonexistent-repo",
+            		WaveNum:  1,
+            	})
+
+            	if err == nil {
+            		t.Fatal("expected error for nonexistent paths")
+            	}
+            	if res == nil {
+            		t.Fatal("expected partial result")
+            	}
+            	// Error should be a dep_check or load_manifest failure, not a gate failure
+            	if strings.Contains(err.Error(), "pre-launch gate") {
+            		t.Errorf("unexpected pre-launch gate error at early pipeline stage: %v", err)
+            	}
+            }
+            ```
+
+            ## Verification gate
+
+            ```bash
+            # Build
+            go build ./pkg/engine/...
+
+            # Lint
+            go vet ./pkg/engine/...
+
+            # Tests
+            go test ./pkg/engine/... -run TestPrepareWave -v
+
+            # Postconditions
+            # (a) hooks imported in prepare.go
+            grep -n "pkg/hooks" /Users/dayna.blackwell/workspace/code/scout-and-wave-go/pkg/engine/prepare.go
+            # Expected: 1 line with the import path
+
+            # (b) PreLaunchGate called in prepare.go
+            grep -n "PreLaunchGate" /Users/dayna.blackwell/workspace/code/scout-and-wave-go/pkg/engine/prepare.go
+            # Expected: 1 line with the call inside extractBriefsAndInitJournals
+
+            # (c) gate is inside extractBriefsAndInitJournals (not PrepareWave outer function)
+            grep -n -A 3 "PreLaunchGate" /Users/dayna.blackwell/workspace/code/scout-and-wave-go/pkg/engine/prepare.go
+            # Expected: output shows it's within the for-loop over worktrees
+            ```
+
+            ## Constraints
+            - Do NOT modify prelaunch_gate.go (owned by Agent A)
+            - Do NOT modify prepare_agent.go (owned by Agent A)
+            - Do NOT add a new top-level prepare-wave step called "pre_launch_gate" —
+              the gate runs inside extractBriefsAndInitJournals, not as a separate
+              PrepareWave pipeline step. The error surfaces as an extract_briefs failure.
+            - Do NOT change the PrepareWaveOpts struct signature
+            - The gate call must use wtInfo.Path (the actual worktree path), not ""
+          files:
+            - pkg/engine/prepare.go
+            - pkg/engine/prepare_test.go
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./...
+          required: true
+          repo: scout-and-wave-go
+        - type: lint
+          command: go vet ./...
+          required: true
+          repo: scout-and-wave-go
+        - type: test
+          command: go test ./pkg/hooks/... ./pkg/engine/...
+          required: true
+          repo: scout-and-wave-go
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: |
+            Agent A uses `preLaunchGate` (lowercase) instead of `PreLaunchGate` (uppercase)
+            when calling the function from prepare_agent.go, causing a compile error since
+            the lowercase version is being removed.
+          likelihood: low
+          impact: high
+          mitigation: |
+            Brief explicitly states: rename the function definition AND update all 15 call
+            sites in the test file. Postcondition (b) checks that the lowercase version
+            no longer exists in prelaunch_gate.go.
+        - scenario: |
+            Agent B calls hooks.PreLaunchGate before Agent A has exported it, causing
+            Agent B's branch to fail to compile in isolation.
+          likelihood: low
+          impact: medium
+          mitigation: |
+            Both agents are in Wave 1 (parallel). Each agent's worktree compiles
+            independently. Agent B's compile will fail until merged with Agent A's changes.
+            Mitigation: Agent B should verify the exported symbol is expected to exist
+            post-merge. The merge ordering matters: A must merge before B, or both
+            branches must be merged together. The orchestrator handles merge order.
+            If Agent B's tests fail to compile in isolation, that is acceptable —
+            the finalize-wave step runs tests on the merged result.
+        - scenario: |
+            The gate check for worktree_branch (check 4) uses wtInfo.Path which is the
+            actual git worktree directory. If the worktree branch name doesn't match
+            the expected saw/{slug}/wave{N}-agent-{ID} pattern, all PrepareWave calls
+            will fail with a gate error even when the worktree was legitimately created.
+          likelihood: medium
+          impact: high
+          mitigation: |
+            The checkWorktreeBranch function already handles both the full
+            saw/{slug}/wave{N}-agent-{ID} pattern and the legacy wave{N}-agent-{ID}
+            pattern. PrepareWave creates worktrees via protocol.CreateWorktrees which
+            always uses one of these patterns. The risk is low in practice.
+            Brief makes it explicit: use wtInfo.Path (the actual worktree path),
+            not "". If the check incorrectly blocks, the error message includes the
+            actual branch name and both expected patterns, making diagnosis easy.
+        - scenario: |
+            Agent A adds a `wtPath` local variable in PrepareAgent that shadows or
+            conflicts with an existing variable name in the function scope.
+          likelihood: low
+          impact: low
+          mitigation: |
+            PrepareAgent (prepare_agent.go) does not have a local variable named
+            wtPath in its current scope. Brief specifies `wtPath := ""` as a new
+            local variable declaration. No shadowing risk.
+        - scenario: |
+            The E37 critic check inside preLaunchGate fires for small manifests
+            that don't require a critic review, incorrectly blocking PrepareAgent
+            for common solo-agent workflows.
+          likelihood: low
+          impact: high
+          mitigation: |
+            checkCriticReviewRequired already calls protocol.E37Required(m) before
+            requiring a report, which only triggers for 3+ wave-1 agents or 2+ repos.
+            Solo waves (1 agent, 1 repo) will pass this check. The existing test
+            TestPreLaunchGate_AllPass with a 2-agent manifest verifies this passes.
+state: "REVIEWED"
+injection_method: hook
