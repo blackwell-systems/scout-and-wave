@@ -1,0 +1,405 @@
+title: 'Fix pkg/suitability errors: repoRoot existence check, default branch, ItemStatus ID/File, S004 emission'
+feature_slug: suitability-error-fixes
+verdict: SUITABLE
+suitability_assessment: |-
+    All four fixes are localized to pkg/suitability/scanner.go (different non-overlapping
+    regions) and their tests go to pkg/suitability/scanner_test.go. A single agent owns
+    both files with no cross-agent dependencies. One wave, one agent.
+
+    Fixes verified against current codebase:
+    - Fix 1 (repoRoot os.Stat): ScanPreImplementation — empty-string guard exists but no
+      directory-existence check. TODO.
+    - Fix 2 (switch default branch): ScanPreImplementation switch — has only DONE/PARTIAL/TODO
+      cases; unknown/zero-value strings silently break the Done+Partial+Todo==TotalItems
+      invariant. TODO.
+    - Fix 3 (populate ItemStatus on error): classifyRequirement — returns
+      ItemStatus{Missing: []string{}} on ClassifyFile error; ID and File are zero values.
+      TODO.
+    - Fix 4 (wire S004): ClassifyFile — bare fmt.Errorf used for non-IsNotExist read
+      failure; S004_FILE_READ_FAILED is defined in codes.go but never emitted. TODO.
+
+    Parallelization value: Low (single agent, single wave). Value is coordination record
+    and test coverage spec rather than speed savings.
+test_command: go test ./pkg/suitability/...
+lint_command: go vet ./pkg/suitability/...
+file_ownership:
+    - file: pkg/suitability/scanner.go
+      agent: A
+      wave: 1
+      action: modify
+    - file: pkg/suitability/scanner_test.go
+      agent: A
+      wave: 1
+      action: modify
+interface_contracts:
+    - name: ScanPreImplementation
+      description: |-
+        Existing function — gains a repoRoot existence check before processing
+        requirements. No signature change.
+      definition: |
+        func ScanPreImplementation(repoRoot string, requirements []Requirement) result.Result[SuitabilityResult]
+      location: pkg/suitability/scanner.go
+    - name: classifyRequirement
+      description: |-
+        Existing unexported function — error return path now populates ItemStatus.ID
+        and ItemStatus.File before returning.
+      definition: |
+        func classifyRequirement(repoRoot string, req Requirement) (ItemStatus, error)
+      location: pkg/suitability/scanner.go
+    - name: ClassifyFile
+      description: |-
+        Existing exported function — non-IsNotExist read failure path now emits
+        result.SAWError with Code result.CodeSuitabilityFileReadFailed (S004) instead
+        of a bare fmt.Errorf.
+      definition: |
+        func ClassifyFile(filePath string, req Requirement) (ItemStatus, error)
+      location: pkg/suitability/scanner.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |-
+            ## Role
+            Fix four coverage gaps and one dead error code in pkg/suitability/scanner.go,
+            then add test coverage for each fix in pkg/suitability/scanner_test.go.
+
+            ## Files owned
+            - pkg/suitability/scanner.go
+            - pkg/suitability/scanner_test.go
+
+            ## Constraints
+            - Do NOT modify any file outside your ownership list.
+            - Do NOT add new error code constants — all needed codes (S003, S004) are
+              already defined in pkg/result/codes.go.
+            - Do NOT remove or rename existing test functions.
+
+            ## Fix 1 — repoRoot existence check (scanner.go)
+
+            In ScanPreImplementation, insert an os.Stat guard immediately after the
+            existing empty-string guard. The empty-string guard ends with this exact block:
+
+            ```go
+            		return result.NewFailure[SuitabilityResult]([]result.SAWError{
+            			{
+            				Code:     result.CodeSuitabilityRepoRootEmpty,
+            				Message:  "repo root cannot be empty",
+            				Severity: "fatal",
+            			},
+            		})
+            	}
+            ```
+
+            Insert immediately after the closing brace of that if-block:
+
+            ```go
+            	if _, err := os.Stat(repoRoot); err != nil {
+            		sawErr := result.SAWError{
+            			Code:     result.CodeSuitabilityFileStatFailed,
+            			Message:  fmt.Sprintf("repo root does not exist or is not accessible: %s", repoRoot),
+            			Severity: "fatal",
+            		}.WithCause(err)
+            		return result.NewFailure[SuitabilityResult]([]result.SAWError{sawErr})
+            	}
+            ```
+
+            result.CodeSuitabilityFileStatFailed is "S003_FILE_STAT_FAILED" — already
+            defined in pkg/result/codes.go.
+
+            ## Fix 2 — default branch in switch (scanner.go)
+
+            In ScanPreImplementation, locate the switch on status.Status. It currently
+            reads:
+
+            ```go
+            		switch status.Status {
+            		case "DONE":
+            			scanResult.PreImplementation.Done++
+            		case "PARTIAL":
+            			scanResult.PreImplementation.Partial++
+            		case "TODO":
+            			scanResult.PreImplementation.Todo++
+            		}
+            ```
+
+            Add a default branch that counts unknown/zero-value status strings as Todo,
+            preserving the Done+Partial+Todo==TotalItems invariant:
+
+            ```go
+            		switch status.Status {
+            		case "DONE":
+            			scanResult.PreImplementation.Done++
+            		case "PARTIAL":
+            			scanResult.PreImplementation.Partial++
+            		case "TODO":
+            			scanResult.PreImplementation.Todo++
+            		default:
+            			// Unknown or zero-value status: count as Todo to preserve
+            			// the Done+Partial+Todo==TotalItems invariant.
+            			scanResult.PreImplementation.Todo++
+            		}
+            ```
+
+            ## Fix 3 — populate ItemStatus ID and File on error return (scanner.go)
+
+            In classifyRequirement, locate the for-loop that calls ClassifyFile. It
+            contains this exact error-return pattern:
+
+            ```go
+            		status, err := ClassifyFile(filepath.Join(repoRoot, file), req)
+            		if err != nil {
+            			return ItemStatus{Missing: []string{}}, err
+            		}
+            ```
+
+            Replace the error return to populate ID and File so callers can identify
+            which requirement and file failed:
+
+            ```go
+            		status, err := ClassifyFile(filepath.Join(repoRoot, file), req)
+            		if err != nil {
+            			return ItemStatus{ID: req.ID, File: filepath.Join(repoRoot, file), Missing: []string{}}, err
+            		}
+            ```
+
+            ## Fix 4 — wire S004 to non-IsNotExist read failure (scanner.go)
+
+            In ClassifyFile, after the IsNotExist branch returns cleanly, there is a
+            bare fmt.Errorf return for other read failures. It reads:
+
+            ```go
+            		return status, fmt.Errorf("failed to read file %s: %w", filePath, err)
+            ```
+
+            Replace it with a result.SAWError that carries S004:
+
+            ```go
+            		return status, result.SAWError{
+            			Code:     result.CodeSuitabilityFileReadFailed,
+            			Message:  fmt.Sprintf("failed to read file %s", filePath),
+            			Severity: "fatal",
+            		}.WithCause(err)
+            ```
+
+            result.CodeSuitabilityFileReadFailed is "S004_FILE_READ_FAILED" — already
+            defined in pkg/result/codes.go.
+
+            Before writing, verify that result.SAWError implements the error interface:
+            ```
+            grep -n "func.*SAWError.*Error()" /Users/dayna.blackwell/workspace/code/scout-and-wave-go/pkg/result/*.go
+            ```
+            If SAWError only implements error via a pointer receiver (*SAWError), adjust
+            the return to use a pointer.
+
+            ## Tests to add (scanner_test.go)
+
+            Add four new test functions after the existing tests. Do NOT modify existing
+            test functions. Add "errors" and
+            "github.com/blackwell-systems/scout-and-wave-go/pkg/result" to the import
+            block (current imports are: os, path/filepath, strings, testing).
+
+            ### TestScanPreImplementation_RepoRootNotExist
+            Calls ScanPreImplementation with a path that does not exist on disk.
+            Asserts IsFatal() == true and that Errors[0].Code ==
+            result.CodeSuitabilityFileStatFailed ("S003_FILE_STAT_FAILED").
+
+            ```go
+            func TestScanPreImplementation_RepoRootNotExist(t *testing.T) {
+                nonexistent := "/nonexistent/path/that/does/not/exist"
+                r := ScanPreImplementation(nonexistent, []Requirement{
+                    {ID: "R1", Description: "test", Files: []string{"foo.go"}},
+                })
+                if !r.IsFatal() {
+                    t.Fatal("expected fatal result for non-existent repoRoot")
+                }
+                if len(r.Errors) == 0 {
+                    t.Fatal("expected at least one error")
+                }
+                if r.Errors[0].Code != result.CodeSuitabilityFileStatFailed {
+                    t.Errorf("expected code %s, got %s",
+                        result.CodeSuitabilityFileStatFailed, r.Errors[0].Code)
+                }
+            }
+            ```
+
+            ### TestScanPreImplementation_CountInvariant
+            Asserts that Done + Partial + Todo == TotalItems for a mixed set of
+            requirements. This invariant must hold regardless of status values returned.
+            Use a tmpDir with one existing file (partial status, has TODO comment) and
+            one missing file (todo status). The invariant check catches regressions where
+            the default branch is removed or a new status is added without a case.
+
+            ```go
+            func TestScanPreImplementation_CountInvariant(t *testing.T) {
+                tmpDir := t.TempDir()
+                // Write a partial file (has a TODO marker)
+                partialContent := "package x\n\nfunc F() {\n\t// TODO: implement\n}\n"
+                if err := os.WriteFile(filepath.Join(tmpDir, "partial.go"), []byte(partialContent), 0644); err != nil {
+                    t.Fatal(err)
+                }
+                reqs := []Requirement{
+                    {ID: "R1", Description: "partial req", Files: []string{"partial.go"}},
+                    {ID: "R2", Description: "missing req", Files: []string{"missing.go"}},
+                }
+                r := ScanPreImplementation(tmpDir, reqs)
+                if r.IsFatal() {
+                    t.Fatalf("unexpected fatal: %v", r.Errors)
+                }
+                d := r.GetData()
+                total := d.PreImplementation.TotalItems
+                counted := d.PreImplementation.Done + d.PreImplementation.Partial + d.PreImplementation.Todo
+                if counted != total {
+                    t.Errorf("count invariant violated: Done(%d)+Partial(%d)+Todo(%d)=%d != TotalItems(%d)",
+                        d.PreImplementation.Done, d.PreImplementation.Partial,
+                        d.PreImplementation.Todo, counted, total)
+                }
+            }
+            ```
+
+            ### TestClassifyFile_UnreadableFilePopulatesIDAndFile
+            Makes a file unreadable (mode 0000) and calls ScanPreImplementation, which
+            calls classifyRequirement, which calls ClassifyFile. Asserts IsFatal() is
+            true (proving the error path ran) and that the fatal result was not a panic.
+            Skip on root (os.Getuid() == 0) because root can read mode-0000 files.
+
+            ```go
+            func TestClassifyFile_UnreadableFilePopulatesIDAndFile(t *testing.T) {
+                if os.Getuid() == 0 {
+                    t.Skip("root can read mode-0000 files; skip unreadable-file test")
+                }
+                tmpDir := t.TempDir()
+                unreadable := filepath.Join(tmpDir, "unreadable.go")
+                if err := os.WriteFile(unreadable, []byte("package x\n"), 0644); err != nil {
+                    t.Fatal(err)
+                }
+                if err := os.Chmod(unreadable, 0000); err != nil {
+                    t.Fatal(err)
+                }
+                r := ScanPreImplementation(tmpDir, []Requirement{
+                    {ID: "R1", Description: "unreadable", Files: []string{"unreadable.go"}},
+                })
+                if !r.IsFatal() {
+                    t.Fatal("expected fatal result for unreadable file")
+                }
+            }
+            ```
+
+            ### TestClassifyFile_NonExistReadErrorUsesS004
+            Directly calls ClassifyFile with a mode-0000 file (unreadable, not missing).
+            Asserts err != nil and unwraps to result.SAWError with
+            Code == result.CodeSuitabilityFileReadFailed. Skip on root.
+
+            ```go
+            func TestClassifyFile_NonExistReadErrorUsesS004(t *testing.T) {
+                if os.Getuid() == 0 {
+                    t.Skip("root can read mode-0000 files; skip unreadable-file test")
+                }
+                tmpDir := t.TempDir()
+                f := filepath.Join(tmpDir, "locked.go")
+                if err := os.WriteFile(f, []byte("package x\n"), 0644); err != nil {
+                    t.Fatal(err)
+                }
+                if err := os.Chmod(f, 0000); err != nil {
+                    t.Fatal(err)
+                }
+                req := Requirement{ID: "T1", Description: "locked", Files: []string{f}}
+                _, err := ClassifyFile(f, req)
+                if err == nil {
+                    t.Fatal("expected error for unreadable file")
+                }
+                var sawErr result.SAWError
+                if !errors.As(err, &sawErr) {
+                    t.Fatalf("expected result.SAWError, got %T: %v", err, err)
+                }
+                if sawErr.Code != result.CodeSuitabilityFileReadFailed {
+                    t.Errorf("expected code %s, got %s",
+                        result.CodeSuitabilityFileReadFailed, sawErr.Code)
+                }
+            }
+            ```
+
+            ## Verification gate
+            ```
+            go build ./pkg/suitability/...
+            go vet ./pkg/suitability/...
+            go test ./pkg/suitability/... -v -run "TestScanPreImplementation_RepoRootNotExist|TestScanPreImplementation_CountInvariant|TestClassifyFile_UnreadableFilePopulatesIDAndFile|TestClassifyFile_NonExistReadErrorUsesS004"
+            go test ./pkg/suitability/...
+            ```
+
+            Postconditions (run from repo root):
+            ```
+            # Verify S003 guard present in ScanPreImplementation
+            grep -c "CodeSuitabilityFileStatFailed" pkg/suitability/scanner.go
+            # expected: 1
+
+            # Verify default branch present in switch
+            grep -c "default:" pkg/suitability/scanner.go
+            # expected: 1
+
+            # Verify S004 wired in ClassifyFile
+            grep -c "CodeSuitabilityFileReadFailed" pkg/suitability/scanner.go
+            # expected: 1
+
+            # Verify ID/File populated on classifyRequirement error return
+            grep -c "req.ID" pkg/suitability/scanner.go
+            # expected: 1
+            ```
+          files:
+            - pkg/suitability/scanner.go
+            - pkg/suitability/scanner_test.go
+          context_source: prepared-brief
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./pkg/suitability/...
+          required: true
+          repo: scout-and-wave-go
+        - type: lint
+          command: go vet ./pkg/suitability/...
+          required: true
+          repo: scout-and-wave-go
+        - type: test
+          command: go test ./pkg/suitability/...
+          required: true
+          repo: scout-and-wave-go
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: |-
+            result.SAWError does not implement the error interface via a value receiver,
+            causing the ClassifyFile return (error interface) to be incompatible.
+          likelihood: low
+          impact: high
+          mitigation: |-
+            Agent must grep for "func.*SAWError.*Error()" in pkg/result/ before writing
+            Fix 4. If SAWError only implements error via *SAWError (pointer receiver), the
+            return must use a pointer or the code will not compile.
+        - scenario: |-
+            chmod 0000 tests pass on CI (Linux non-root) but fail locally on macOS when
+            developer is root.
+          likelihood: medium
+          impact: low
+          mitigation: |-
+            Both unreadable-file tests skip when os.Getuid() == 0. CI runs as non-root
+            so the tests execute there.
+        - scenario: |-
+            The default branch increments Todo for a future status value that should be
+            counted differently (e.g., "SKIP").
+          likelihood: low
+          impact: low
+          mitigation: |-
+            The default branch preserves the Done+Partial+Todo==TotalItems invariant.
+            A comment documents the intent. If a new status is added later, the switch
+            is updated at that time.
+        - scenario: |-
+            errors.As unwrap fails for TestClassifyFile_NonExistReadErrorUsesS004 because
+            SAWError wraps cause via a custom chain rather than the standard errors.Unwrap
+            method.
+          likelihood: low
+          impact: low
+          mitigation: |-
+            Check whether result.SAWError (or its WithCause variant) implements Unwrap()
+            by grepping pkg/result/. If not, fall back to type assertion (err.(result.SAWError))
+            or check err.Error() for the S004 code string.
+state: "REVIEWED"
+injection_method: manual-fallback
