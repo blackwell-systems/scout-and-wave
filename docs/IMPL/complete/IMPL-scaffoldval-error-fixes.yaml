@@ -1,0 +1,451 @@
+completion_date: "2026-04-04"
+title: 'Fix pkg/scaffoldval errors: findRepoRoot bad fallback, parseGoMod silent failure, dead extractImports'
+feature_slug: scaffoldval-error-fixes
+verdict: SUITABLE_WITH_CAVEATS
+suitability_assessment: |
+    All three errors are localized to two files in pkg/scaffoldval: validator.go
+    and validator_test.go. The changes are:
+    1. findRepoRoot — change return type to (string, error), return error when
+       no go.mod found instead of silent bad fallback
+    2. parseGoMod — change return type to (string, []string, error), propagate
+       os.ReadFile error instead of returning ("", nil)
+    3. extractImports — delete dead function and its test (TestExtractImports)
+    4. Update caller sites: ValidateScaffold (calls findRepoRoot), checkImports
+       (calls parseGoMod) — both in same file
+    5. Add 4 new tests for the fixed behavior
+
+    Only 2 files change. Single agent is appropriate. SUITABLE_WITH_CAVEATS
+    because parallelization adds no speed benefit — the value is in the
+    coordination artifact as audit trail.
+
+    Estimated times:
+    - Scout phase: ~5 min
+    - Agent execution: ~5 min (1 agent, focused changes)
+    - Merge & verification: ~2 min
+    Total SAW time: ~12 min
+
+    Sequential baseline: ~8 min
+    Time savings: -4 min (overhead dominates for single agent)
+
+    Recommendation: Marginal gains. Value is audit trail / tracking, not speed.
+test_command: go test ./pkg/scaffoldval/...
+lint_command: go vet ./pkg/scaffoldval/...
+file_ownership:
+    - file: pkg/scaffoldval/validator.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/scaffoldval/validator_test.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+interface_contracts:
+    - name: findRepoRoot
+      description: |
+        Change signature to return error when go.mod is not found, instead of
+        silently returning a bad fallback path.
+      definition: |
+        func findRepoRoot(startDir string) (string, error)
+        // Returns ("", error) when no go.mod found walking up to filesystem root.
+        // Returns (dir, nil) when go.mod found in dir.
+      location: pkg/scaffoldval/validator.go
+    - name: parseGoMod
+      description: |
+        Change signature to return error on file read failure, instead of
+        silently returning ("", nil).
+      definition: |
+        func parseGoMod(goModPath string) (string, []string, error)
+        // Returns ("", nil, error) when os.ReadFile fails.
+        // Returns (moduleName, requires, nil) on success.
+      location: pkg/scaffoldval/validator.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## What to implement
+
+            Fix three errors in pkg/scaffoldval/validator.go and update tests
+            in pkg/scaffoldval/validator_test.go. All changes are in these two
+            files only.
+
+            ### Error 1: findRepoRoot bad fallback (lines 110-123)
+
+            Current code returns `filepath.Dir(startDir)` when no go.mod is found.
+            Change signature from `func findRepoRoot(startDir string) string` to
+            `func findRepoRoot(startDir string) (string, error)`.
+
+            When no go.mod is found (reaching filesystem root), return
+            `("", fmt.Errorf("could not locate go.mod above %s", startDir))`.
+
+            Find the current function starting at this exact text:
+            ```go
+            // findRepoRoot walks upward from startDir looking for go.mod.
+            // Returns the directory containing go.mod if found.
+            // Falls back to filepath.Dir(startDir) if go.mod is not found.
+            func findRepoRoot(startDir string) string {
+            ```
+
+            Replace the entire function with:
+            ```go
+            // findRepoRoot walks upward from startDir looking for go.mod.
+            // Returns the directory containing go.mod, or an error if not found.
+            func findRepoRoot(startDir string) (string, error) {
+            	dir := startDir
+            	for {
+            		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+            			return dir, nil
+            		}
+            		parent := filepath.Dir(dir)
+            		if parent == dir {
+            			return "", fmt.Errorf("could not locate go.mod above %s", startDir)
+            		}
+            		dir = parent
+            	}
+            }
+            ```
+
+            Update the caller in ValidateScaffold. Find this exact text:
+            ```go
+            	root := repoRoot
+            	if root == "" {
+            		root = findRepoRoot(filepath.Dir(implPath))
+            	}
+
+            	imports := importsFromAST(astFile)
+            	missingImports := checkImports(imports, root)
+            ```
+
+            Replace with:
+            ```go
+            	root := repoRoot
+            	if root == "" {
+            		var err error
+            		root, err = findRepoRoot(filepath.Dir(implPath))
+            		if err != nil {
+            			vr.Imports.Status = "SKIP"
+            			vr.Imports.Errors = []string{err.Error()}
+            			// Continue to type references and build steps
+            		}
+            	}
+
+            	if vr.Imports.Status != "SKIP" {
+            		imports := importsFromAST(astFile)
+            		missingImports := checkImports(imports, root)
+
+            		if len(missingImports) > 0 {
+            			vr.Imports.Status = "FAIL"
+            			vr.Imports.Errors = missingImports
+            			vr.Imports.Fixes = []string{fmt.Sprintf("Add missing imports: %v", missingImports)}
+            			vr.Imports.AutoFixable = true
+            		} else {
+            			vr.Imports.Status = "PASS"
+            		}
+            	}
+            ```
+
+            ### Error 2: parseGoMod silent failure (lines 171-212)
+
+            Change signature from `func parseGoMod(goModPath string) (string, []string)`
+            to `func parseGoMod(goModPath string) (string, []string, error)`.
+
+            Find this exact text:
+            ```go
+            func parseGoMod(goModPath string) (string, []string) {
+            	data, err := os.ReadFile(goModPath)
+            	if err != nil {
+            		return "", nil
+            	}
+            ```
+
+            Replace the signature and error handling:
+            ```go
+            func parseGoMod(goModPath string) (string, []string, error) {
+            	data, err := os.ReadFile(goModPath)
+            	if err != nil {
+            		return "", nil, fmt.Errorf("reading go.mod: %w", err)
+            	}
+            ```
+
+            At the end of parseGoMod (line 211), change:
+            ```go
+            	return moduleName, requires
+            ```
+            to:
+            ```go
+            	return moduleName, requires, nil
+            ```
+
+            Update the caller checkImports. Find this exact text:
+            ```go
+            func checkImports(imports []string, repoRoot string) []string {
+            	moduleName, requires := parseGoMod(filepath.Join(repoRoot, "go.mod"))
+            ```
+
+            Change checkImports signature to return an error and propagate:
+            ```go
+            func checkImports(imports []string, repoRoot string) ([]string, error) {
+            	moduleName, requires, err := parseGoMod(filepath.Join(repoRoot, "go.mod"))
+            	if err != nil {
+            		return nil, fmt.Errorf("parsing go.mod: %w", err)
+            	}
+            ```
+
+            The rest of checkImports stays the same, but the final return changes from
+            `return missing` to `return missing, nil`.
+
+            Then update the call site in ValidateScaffold where checkImports is called.
+            The block (from Error 1 fix above) that calls checkImports needs to handle
+            the new error return:
+            ```go
+            	if vr.Imports.Status != "SKIP" {
+            		imports := importsFromAST(astFile)
+            		missingImports, err := checkImports(imports, root)
+            		if err != nil {
+            			vr.Imports.Status = "SKIP"
+            			vr.Imports.Errors = []string{err.Error()}
+            		} else if len(missingImports) > 0 {
+            			vr.Imports.Status = "FAIL"
+            			vr.Imports.Errors = missingImports
+            			vr.Imports.Fixes = []string{fmt.Sprintf("Add missing imports: %v", missingImports)}
+            			vr.Imports.AutoFixable = true
+            		} else {
+            			vr.Imports.Status = "PASS"
+            		}
+            	}
+            ```
+
+            ### Error 3: Delete dead extractImports function
+
+            Delete the entire `extractImports` function (lines 136-168) from
+            validator.go. Find and delete this exact block:
+            ```go
+            // extractImports parses import statements from Go source.
+            // Kept for backward compatibility with TestExtractImports.
+            func extractImports(content string) []string {
+            ```
+            Delete from the comment through the closing brace of the function.
+
+            Also remove the `"regexp"` import if it becomes unused (check — it may
+            not be imported currently).
+
+            In validator_test.go, delete the entire `TestExtractImports` function
+            (lines 276-354). Find and delete starting from:
+            ```go
+            func TestExtractImports(t *testing.T) {
+            ```
+            through its closing brace.
+
+            ### New tests to add in validator_test.go
+
+            Add these test functions at the end of the file:
+
+            ```go
+            func TestFindRepoRoot_NoGoMod(t *testing.T) {
+            	// Create a temp dir with no go.mod anywhere in ancestry
+            	tmpDir := t.TempDir()
+            	subDir := filepath.Join(tmpDir, "a", "b", "c")
+            	if err := os.MkdirAll(subDir, 0755); err != nil {
+            		t.Fatalf("Failed to create subdirectory: %v", err)
+            	}
+
+            	result, err := findRepoRoot(subDir)
+            	if err == nil {
+            		t.Errorf("Expected error when no go.mod found, got root: %s", result)
+            	}
+            	if result != "" {
+            		t.Errorf("Expected empty string when no go.mod found, got: %s", result)
+            	}
+            	if err != nil && !strings.Contains(err.Error(), "could not locate go.mod") {
+            		t.Errorf("Expected error to mention 'could not locate go.mod', got: %v", err)
+            	}
+            }
+
+            func TestFindRepoRoot_GoModFound(t *testing.T) {
+            	tmpDir := t.TempDir()
+            	// Create go.mod at tmpDir
+            	goModPath := filepath.Join(tmpDir, "go.mod")
+            	if err := os.WriteFile(goModPath, []byte("module test\n\ngo 1.21\n"), 0644); err != nil {
+            		t.Fatalf("Failed to create go.mod: %v", err)
+            	}
+            	// Search from a subdirectory
+            	subDir := filepath.Join(tmpDir, "pkg", "foo")
+            	if err := os.MkdirAll(subDir, 0755); err != nil {
+            		t.Fatalf("Failed to create subdirectory: %v", err)
+            	}
+
+            	result, err := findRepoRoot(subDir)
+            	if err != nil {
+            		t.Fatalf("Unexpected error: %v", err)
+            	}
+            	if result != tmpDir {
+            		t.Errorf("Expected root %s, got %s", tmpDir, result)
+            	}
+            }
+
+            func TestParseGoMod_FileNotFound(t *testing.T) {
+            	tmpDir := t.TempDir()
+            	goModPath := filepath.Join(tmpDir, "go.mod") // does not exist
+
+            	moduleName, requires, err := parseGoMod(goModPath)
+            	if err == nil {
+            		t.Error("Expected error for missing go.mod file")
+            	}
+            	if moduleName != "" {
+            		t.Errorf("Expected empty module name, got: %s", moduleName)
+            	}
+            	if requires != nil {
+            		t.Errorf("Expected nil requires, got: %v", requires)
+            	}
+            }
+
+            func TestParseGoMod_MalformedFile(t *testing.T) {
+            	tmpDir := t.TempDir()
+            	goModPath := filepath.Join(tmpDir, "go.mod")
+            	// Malformed: no module directive, just garbage
+            	if err := os.WriteFile(goModPath, []byte("this is not a valid go.mod\n"), 0644); err != nil {
+            		t.Fatalf("Failed to create go.mod: %v", err)
+            	}
+
+            	moduleName, requires, err := parseGoMod(goModPath)
+            	if err != nil {
+            		t.Fatalf("Unexpected error for readable but malformed go.mod: %v", err)
+            	}
+            	// File is readable but has no module directive — empty module name is expected
+            	if moduleName != "" {
+            		t.Errorf("Expected empty module name for malformed go.mod, got: %s", moduleName)
+            	}
+            	if len(requires) != 0 {
+            		t.Errorf("Expected no requires for malformed go.mod, got: %v", requires)
+            	}
+            }
+            ```
+
+            Add `"strings"` to the test file import block (needed for
+            TestFindRepoRoot_NoGoMod).
+
+            ### Existing test updates
+
+            TestCheckImports_StandardLib calls `checkImports(imports, "")` and
+            expects len(result) == 0. After the signature change, checkImports
+            returns ([]string, error). With repoRoot="" the parseGoMod call will
+            try to read "/go.mod" which will fail, now returning an error. Update
+            this test to expect the error:
+
+            ```go
+            func TestCheckImports_StandardLib(t *testing.T) {
+            	imports := []string{"fmt", "os", "strings", "io"}
+            	result, err := checkImports(imports, "")
+            	// With empty repoRoot, parseGoMod will fail to read go.mod
+            	if err == nil {
+            		// If no error, all std lib imports should pass
+            		if len(result) != 0 {
+            			t.Errorf("Expected no missing imports for standard library, got: %v", result)
+            		}
+            	}
+            	// Error is acceptable — go.mod at "/" won't exist
+            }
+            ```
+
+            Also update TestCheckImports_ThirdParty, TestCheckImports_ThirdPartyInGoMod,
+            and TestCheckImports_Mixed to handle the ([]string, error) return. These
+            tests create a go.mod in a temp dir so err should be nil — just add
+            `_, err` handling and `t.Fatalf` on unexpected error.
+
+            ## Interfaces
+
+            - `findRepoRoot(startDir string) (string, error)` — see contract above
+            - `parseGoMod(goModPath string) (string, []string, error)` — see contract above
+            - `checkImports(imports []string, repoRoot string) ([]string, error)` — updated to propagate parseGoMod error
+
+            ## Verification
+
+            ```bash
+            go build ./pkg/scaffoldval/...
+            go vet ./pkg/scaffoldval/...
+            go test ./pkg/scaffoldval/... -count=1 -v
+            ```
+
+            Postconditions:
+            ```bash
+            # findRepoRoot returns error — verify signature
+            grep -c 'func findRepoRoot(startDir string) (string, error)' pkg/scaffoldval/validator.go
+            # expected: 1
+
+            # parseGoMod returns error — verify signature
+            grep -c 'func parseGoMod(goModPath string) (string, \[\]string, error)' pkg/scaffoldval/validator.go
+            # expected: 1
+
+            # extractImports is deleted
+            grep -c 'func extractImports' pkg/scaffoldval/validator.go
+            # expected: 0
+
+            # TestExtractImports is deleted
+            grep -c 'func TestExtractImports' pkg/scaffoldval/validator_test.go
+            # expected: 0
+
+            # New tests exist
+            grep -c 'func TestFindRepoRoot_NoGoMod\|func TestFindRepoRoot_GoModFound\|func TestParseGoMod_FileNotFound\|func TestParseGoMod_MalformedFile' pkg/scaffoldval/validator_test.go
+            # expected: 4
+            ```
+
+            ## Constraints
+
+            - Do NOT modify any files outside pkg/scaffoldval/validator.go and
+              pkg/scaffoldval/validator_test.go.
+            - Do NOT add any new dependencies to go.mod.
+            - Do NOT change the ValidateScaffold public function signature — only
+              internal behavior changes.
+            - Do NOT leave extractImports or TestExtractImports in the codebase.
+          files:
+            - pkg/scaffoldval/validator.go
+            - pkg/scaffoldval/validator_test.go
+          context_source: prepared-brief
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./pkg/scaffoldval/...
+          required: true
+          repo: scout-and-wave-go
+        - type: lint
+          command: go vet ./pkg/scaffoldval/...
+          required: true
+          repo: scout-and-wave-go
+        - type: test
+          command: go test ./pkg/scaffoldval/... -count=1
+          required: true
+          repo: scout-and-wave-go
+completion_reports:
+    A:
+        status: complete
+        branch: saw/scaffoldval-error-fixes/wave1-agent-A
+        commit: c4be473
+        files_changed:
+            - pkg/scaffoldval/validator.go
+            - pkg/scaffoldval/validator_test.go
+        tests_added:
+            - TestFindRepoRoot_NoGoMod
+            - TestFindRepoRoot_GoModFound
+            - TestParseGoMod_FileNotFound
+            - TestParseGoMod_MalformedFile
+        verification: PASS
+        notes: All 3 errors fixed. findRepoRoot and parseGoMod now return errors. extractImports and TestExtractImports deleted. Existing tests updated for new signatures. Fixed subtle bug where initial SKIP status from NewValidationResult prevented import checking from running.
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: Agent forgets to update all checkImports call sites after signature change
+          likelihood: low
+          impact: high
+          mitigation: Build gate catches immediately — only one call site in ValidateScaffold
+        - scenario: TestCheckImports_StandardLib breaks because checkImports now returns error for empty repoRoot
+          likelihood: medium
+          impact: medium
+          mitigation: Agent brief explicitly describes how to update this test
+        - scenario: Agent leaves extractImports function or TestExtractImports in place
+          likelihood: low
+          impact: low
+          mitigation: Postcondition grep checks verify deletion
+state: COMPLETE

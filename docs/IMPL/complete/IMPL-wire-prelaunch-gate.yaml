@@ -1,3 +1,4 @@
+completion_date: "2026-04-05"
 title: Wire preLaunchGate into prepare-agent flow
 feature_slug: wire-prelaunch-gate
 verdict: SUITABLE
@@ -445,6 +446,7 @@ waves:
           files:
             - pkg/engine/prepare.go
             - pkg/engine/prepare_test.go
+      base_commit: ed83b4b6be0b7117fb004d4a0575fccbb3cf9340
 quality_gates:
     level: standard
     gates:
@@ -460,6 +462,40 @@ quality_gates:
           command: go test ./pkg/hooks/... ./pkg/engine/...
           required: true
           repo: scout-and-wave-go
+completion_reports:
+    A:
+        status: complete
+        branch: saw/wire-prelaunch-gate/wave1-agent-A
+        commit: 9c17fd9
+        files_changed:
+            - pkg/hooks/prelaunch_gate.go
+            - pkg/hooks/prelaunch_gate_test.go
+            - pkg/engine/prepare_agent.go
+            - pkg/engine/prepare_agent_test.go
+        tests_added:
+            - TestPrepareAgent_PreLaunchGate_BlocksOnUncommittedScaffold
+            - TestPrepareAgent_PreLaunchGate_PassesForValidIMPL
+        verification: PASS
+        notes: Exported PreLaunchGate (capital P), updated 15 test call sites in prelaunch_gate_test.go, wired gate into PrepareAgent after agent lookup. Updated minimalIMPLYAML to 2 agents to avoid V047 trivial-scope validation error that would cause existing journal tests to fail. All 17 hooks tests and 4 engine tests pass.
+    B:
+        status: complete
+        branch: saw/wire-prelaunch-gate/wave1-agent-B
+        commit: "7739326"
+        files_changed:
+            - pkg/engine/prepare.go
+            - pkg/engine/prepare_test.go
+        files_created:
+            - pkg/engine/prepare_test.go
+        tests_added:
+            - TestPrepareWave_PreLaunchGate_StepMessageFormat
+        verification: PASS
+        notes: 'Wired hooks.PreLaunchGate into extractBriefsAndInitJournals after agentTask guard. Import added alphabetically. Build requires Agent A to export PreLaunchGate (committed with --no-verify per parallel wave rule). Out-of-scope dep: hooks.PreLaunchGate export (Agent A scope).'
+integration_reports:
+    wave1:
+        wave: 1
+        gaps: []
+        valid: true
+        summary: 'Wave 1: all exports are integrated (no gaps detected)'
 pre_mortem:
     overall_risk: low
     rows:
@@ -521,5 +557,5 @@ pre_mortem:
             requiring a report, which only triggers for 3+ wave-1 agents or 2+ repos.
             Solo waves (1 agent, 1 repo) will pass this check. The existing test
             TestPreLaunchGate_AllPass with a 2-agent manifest verifies this passes.
-state: "REVIEWED"
+state: COMPLETE
 injection_method: hook
