@@ -1,872 +1,860 @@
-title: 'Multi-Server Routing'
+title: Multi-Server Routing
 feature_slug: multi-server-routing
 verdict: SUITABLE
 suitability_assessment: |
-  All five suitability questions resolve cleanly.
+    All five suitability questions resolve cleanly.
 
-  1. File decomposition: 4 distinct files change with disjoint ownership.
-     Agent A owns the new internal/lsp/manager.go and internal/config/parse.go.
-     Agent B owns cmd/lsp-mcp-go/main.go.
-     Agent C owns cmd/lsp-mcp-go/server.go.
-     Scaffold Agent creates internal/lsp/resolver.go and internal/config/config.go
-     before worktrees open. No cross-agent file conflicts.
+    1. File decomposition: 4 distinct files change with disjoint ownership.
+       Agent A owns the new internal/lsp/manager.go and internal/config/parse.go.
+       Agent B owns cmd/lsp-mcp-go/main.go.
+       Agent C owns cmd/lsp-mcp-go/server.go.
+       Scaffold Agent creates internal/lsp/resolver.go and internal/config/config.go
+       before worktrees open. No cross-agent file conflicts.
 
-  2. Investigation-first: None needed. This is a pure feature addition with
-     a well-understood design. The existing LSPClient already works; we add a
-     manager layer on top.
+    2. Investigation-first: None needed. This is a pure feature addition with
+       a well-understood design. The existing LSPClient already works; we add a
+       manager layer on top.
 
-  3. Interface discoverability: The ClientResolver interface (ClientForFile)
-     can be fully defined before agents start. Both Agent B and Agent C depend
-     on it, so it goes into a scaffold file.
+    3. Interface discoverability: The ClientResolver interface (ClientForFile)
+       can be fully defined before agents start. Both Agent B and Agent C depend
+       on it, so it goes into a scaffold file.
 
-  4. Pre-implementation status: Multi-server routing does not exist yet.
-     The codebase has exactly one LSPClient, wired directly into clientState.
-     All work is TODO.
+    4. Pre-implementation status: Multi-server routing does not exist yet.
+       The codebase has exactly one LSPClient, wired directly into clientState.
+       All work is TODO.
 
-  5. Parallelization value: 3 agents, each owning 1-2 files with non-trivial
-     logic (config parsing, manager lifecycle, tool dispatch refactor). Go build
-     is fast (~2s) but task complexity is moderate. Clear speedup over sequential.
+    5. Parallelization value: 3 agents, each owning 1-2 files with non-trivial
+       logic (config parsing, manager lifecycle, tool dispatch refactor). Go build
+       is fast (~2s) but task complexity is moderate. Clear speedup over sequential.
 
-  Reference implementations analyzed:
-  - /competitors/cclsp: TypeScript, cclsp.json format with extensions+command per entry
-  - /competitors/lsp-mcp: TypeScript LspManager with extensionToLsp map
-  - /competitors/mcp-lsp-bridge: Go, uses extension_language_map -> language -> server
-    indirection. The bridge.go routes by filepath.Ext. Their extension_language_map
-    (dot-prefixed, e.g. ".go" -> "go") is the definitive reference for which
-    file extensions map to which language IDs. Agent A uses this as the built-in
-    extension map. The cclsp.json format (extensions[] + command[] per server entry)
-    is simpler and is our primary config format.
+    Reference implementations analyzed:
+    - /competitors/cclsp: TypeScript, cclsp.json format with extensions+command per entry
+    - /competitors/lsp-mcp: TypeScript LspManager with extensionToLsp map
+    - /competitors/mcp-lsp-bridge: Go, uses extension_language_map -> language -> server
+      indirection. The bridge.go routes by filepath.Ext. Their extension_language_map
+      (dot-prefixed, e.g. ".go" -> "go") is the definitive reference for which
+      file extensions map to which language IDs. Agent A uses this as the built-in
+      extension map. The cclsp.json format (extensions[] + command[] per server entry)
+      is simpler and is our primary config format.
 
-  Design choice: Both Option A (config file) and Option B (multi-arg) are
-  supported. Option B (e.g. "go:gopls typescript:typescript-language-server,--stdio")
-  is the primary mode — it requires no config file on disk and is ergonomic for
-  simple cases. Option A ("--config /path/to/lsp-mcp.json") serves complex cases
-  with many servers or per-server options. Config file format matches cclsp.json.
-  Single-server legacy invocation ("lsp-mcp-go go gopls") remains backward-compatible.
+    Design choice: Both Option A (config file) and Option B (multi-arg) are
+    supported. Option B (e.g. "go:gopls typescript:typescript-language-server,--stdio")
+    is the primary mode — it requires no config file on disk and is ergonomic for
+    simple cases. Option A ("--config /path/to/lsp-mcp.json") serves complex cases
+    with many servers or per-server options. Config file format matches cclsp.json.
+    Single-server legacy invocation ("lsp-mcp-go go gopls") remains backward-compatible.
 
-  Pre-existing test failure: TestWaitForDiagnostics_SettlesAfterQuietWindow in
-  internal/lsp fails before this change. Agents must not attempt to fix it.
-  Quality gates exclude internal/lsp tests to avoid false positives.
+    Pre-existing test failure: TestWaitForDiagnostics_SettlesAfterQuietWindow in
+    internal/lsp fails before this change. Agents must not attempt to fix it.
+    Quality gates exclude internal/lsp tests to avoid false positives.
 
-  Estimated times:
-  - Scout phase: ~15 min (dependency mapping, interface contracts, IMPL doc)
-  - Agent execution: ~3 agents x 15 min avg, accounting for Wave 1 parallelism = ~15 min
-  - Merge and verification: ~5 min
-  Total SAW time: ~35 min
-  Sequential baseline: ~45 min (3 x 15 min sequential)
-  Time savings: ~10 min (22% faster)
-  Recommendation: Clear speedup plus coordination value from explicit interface contracts.
-
+    Estimated times:
+    - Scout phase: ~15 min (dependency mapping, interface contracts, IMPL doc)
+    - Agent execution: ~3 agents x 15 min avg, accounting for Wave 1 parallelism = ~15 min
+    - Merge and verification: ~5 min
+    Total SAW time: ~35 min
+    Sequential baseline: ~45 min (3 x 15 min sequential)
+    Time savings: ~10 min (22% faster)
+    Recommendation: Clear speedup plus coordination value from explicit interface contracts.
 test_command: cd /Users/dayna.blackwell/code/LSP-MCP-GO && GOWORK=off go test ./internal/tools/... ./internal/extensions/... ./cmd/... ./internal/config/...
 lint_command: cd /Users/dayna.blackwell/code/LSP-MCP-GO && GOWORK=off go vet ./...
-state: SCOUT_PENDING
-
-quality_gates:
-  level: standard
-  gates:
-    - type: build
-      command: cd /Users/dayna.blackwell/code/LSP-MCP-GO && GOWORK=off go build ./...
-      required: true
-      repo: LSP-MCP-GO
-    - type: lint
-      command: cd /Users/dayna.blackwell/code/LSP-MCP-GO && GOWORK=off go vet ./...
-      required: true
-      repo: LSP-MCP-GO
-    - type: test
-      # Exclude internal/lsp due to pre-existing flaky test TestWaitForDiagnostics_SettlesAfterQuietWindow
-      command: cd /Users/dayna.blackwell/code/LSP-MCP-GO && GOWORK=off go test ./internal/tools/... ./internal/extensions/... ./internal/config/... ./cmd/...
-      required: true
-      repo: LSP-MCP-GO
-
-# Scaffold files must be created by the Scaffold Agent BEFORE worktrees open.
-# Both main.go (Agent B) and server.go (Agent C) import lsp.ClientResolver.
-# internal/config/parse.go (Agent A) imports config.ServerEntry and config.Config.
-scaffolds:
-  - file_path: internal/lsp/resolver.go
-    import_path: github.com/blackwell-systems/lsp-mcp-go/internal/lsp
-    status: committed (4589e65)
-    contents: |
-      package lsp
-
-      import "context"
-
-      // ClientResolver resolves the appropriate LSPClient for a given file path.
-      // In single-server mode the manager returns the same client regardless of path.
-      // In multi-server mode it routes by file extension.
-      type ClientResolver interface {
-          // ClientForFile returns the LSPClient that should handle operations for
-          // the given absolute file path. Falls back to DefaultClient if the extension
-          // is not mapped. Returns nil only if the manager holds zero clients.
-          ClientForFile(filePath string) *LSPClient
-
-          // DefaultClient returns the primary (or only) LSPClient.
-          // Used for tools that are not file-specific (e.g. get_workspace_symbols).
-          DefaultClient() *LSPClient
-
-          // AllClients returns all managed clients, including nil entries filtered out.
-          AllClients() []*LSPClient
-
-          // Shutdown gracefully shuts down all managed LSP clients.
-          Shutdown(ctx context.Context) error
-      }
-
-  - file_path: internal/config/config.go
-    import_path: github.com/blackwell-systems/lsp-mcp-go/internal/config
-    status: committed (4589e65)
-    contents: |
-      // Package config holds types and parsing for multi-server configuration.
-      package config
-
-      // ServerEntry describes one language server to launch.
-      // The format matches cclsp.json: extensions[] + command[].
-      type ServerEntry struct {
-          // Extensions is the list of file extensions this server handles (without dot).
-          // e.g. ["go"] or ["ts", "tsx", "js", "jsx"]
-          Extensions []string `json:"extensions"`
-
-          // Command is [binary, arg1, arg2, ...].
-          // e.g. ["gopls"] or ["typescript-language-server", "--stdio"]
-          Command []string `json:"command"`
-
-          // LanguageID is used when opening documents (e.g. "go", "typescript").
-          // If empty, inferred from Extensions[0] via the built-in extension map.
-          LanguageID string `json:"language_id,omitempty"`
-      }
-
-      // Config is the top-level multi-server configuration.
-      // File format: {"servers": [{...}, ...]}
-      type Config struct {
-          Servers []ServerEntry `json:"servers"`
-      }
-
 file_ownership:
-  # Wave 1: all three agents in parallel
-  - file: internal/lsp/manager.go
-    agent: A
-    wave: 1
-    action: new
-    repo: LSP-MCP-GO
-    depends_on: []
-  - file: internal/config/parse.go
-    agent: A
-    wave: 1
-    action: new
-    repo: LSP-MCP-GO
-    depends_on: []
-  - file: cmd/lsp-mcp-go/main.go
-    agent: B
-    wave: 1
-    action: modify
-    repo: LSP-MCP-GO
-    depends_on: []
-  - file: cmd/lsp-mcp-go/server.go
-    agent: C
-    wave: 1
-    action: modify
-    repo: LSP-MCP-GO
-    depends_on: []
-
+    - file: internal/lsp/manager.go
+      agent: A
+      wave: 1
+      action: new
+      repo: LSP-MCP-GO
+    - file: internal/config/parse.go
+      agent: A
+      wave: 1
+      action: new
+      repo: LSP-MCP-GO
+    - file: cmd/lsp-mcp-go/main.go
+      agent: B
+      wave: 1
+      action: modify
+      repo: LSP-MCP-GO
+    - file: cmd/lsp-mcp-go/server.go
+      agent: C
+      wave: 1
+      action: modify
+      repo: LSP-MCP-GO
 interface_contracts:
-  - name: ClientResolver
-    description: |-
-      Interface for routing tool calls to the right LSPClient by file path.
-      Defined in scaffold internal/lsp/resolver.go. Used by server.go (Agent C)
-      and main.go (Agent B). Implemented by ServerManager (Agent A).
-    definition: |
-      type ClientResolver interface {
-          ClientForFile(filePath string) *LSPClient
-          DefaultClient() *LSPClient
-          AllClients() []*LSPClient
-          Shutdown(ctx context.Context) error
-      }
-    location: internal/lsp/resolver.go
+    - name: ClientResolver
+      description: |-
+        Interface for routing tool calls to the right LSPClient by file path.
+        Defined in scaffold internal/lsp/resolver.go. Used by server.go (Agent C)
+        and main.go (Agent B). Implemented by ServerManager (Agent A).
+      definition: |
+        type ClientResolver interface {
+            ClientForFile(filePath string) *LSPClient
+            DefaultClient() *LSPClient
+            AllClients() []*LSPClient
+            Shutdown(ctx context.Context) error
+        }
+      location: internal/lsp/resolver.go
+    - name: ServerManager
+      description: |-
+        Implements ClientResolver. Holds a slice of managedClient entries with
+        their extension sets. Created by Agent A in internal/lsp/manager.go.
+        Used by main.go (Agent B) after config parsing.
+      definition: |
+        // NewSingleServerManager wraps a single *LSPClient to satisfy ClientResolver.
+        // Used for the legacy single-server invocation mode.
+        func NewSingleServerManager(client *LSPClient) *ServerManager
 
-  - name: ServerManager
-    description: |-
-      Implements ClientResolver. Holds a slice of managedClient entries with
-      their extension sets. Created by Agent A in internal/lsp/manager.go.
-      Used by main.go (Agent B) after config parsing.
-    definition: |
-      // NewSingleServerManager wraps a single *LSPClient to satisfy ClientResolver.
-      // Used for the legacy single-server invocation mode.
-      func NewSingleServerManager(client *LSPClient) *ServerManager
+        // NewMultiServerManager creates a ServerManager from multiple ServerEntry
+        // configs. Does NOT start servers — deferred to StartAll.
+        func NewMultiServerManager(entries []config.ServerEntry) *ServerManager
 
-      // NewMultiServerManager creates a ServerManager from multiple ServerEntry
-      // configs. Does NOT start servers — deferred to StartAll.
-      func NewMultiServerManager(entries []config.ServerEntry) *ServerManager
+        // StartAll starts all configured LSP servers with the given root directory.
+        // Called from start_lsp tool handler in multi-server mode, or from main
+        // after initialization.
+        func (m *ServerManager) StartAll(ctx context.Context, rootDir string) error
 
-      // StartAll starts all configured LSP servers with the given root directory.
-      // Called from start_lsp tool handler in multi-server mode, or from main
-      // after initialization.
-      func (m *ServerManager) StartAll(ctx context.Context, rootDir string) error
+        // ClientForFile satisfies ClientResolver. Routes by filepath.Ext.
+        // Falls back to DefaultClient if extension is not mapped.
+        func (m *ServerManager) ClientForFile(filePath string) *LSPClient
 
-      // ClientForFile satisfies ClientResolver. Routes by filepath.Ext.
-      // Falls back to DefaultClient if extension is not mapped.
-      func (m *ServerManager) ClientForFile(filePath string) *LSPClient
+        // DefaultClient returns the first managed client (index 0).
+        func (m *ServerManager) DefaultClient() *LSPClient
 
-      // DefaultClient returns the first managed client (index 0).
-      func (m *ServerManager) DefaultClient() *LSPClient
+        // AllClients returns all non-nil client pointers.
+        func (m *ServerManager) AllClients() []*LSPClient
 
-      // AllClients returns all non-nil client pointers.
-      func (m *ServerManager) AllClients() []*LSPClient
+        // Shutdown gracefully shuts down all managed LSP clients.
+        func (m *ServerManager) Shutdown(ctx context.Context) error
+      location: internal/lsp/manager.go
+    - name: ParseArgs
+      description: |-
+        Parses command-line arguments into ParseResult. Handles three modes:
+        legacy, multi-arg, and config file. Defined in config/parse.go by Agent A.
+      definition: |
+        // ParseResult holds the outcome of argument parsing.
+        type ParseResult struct {
+            // Single-server fields (backward compat)
+            IsSingleServer bool
+            LanguageID     string
+            ServerPath     string
+            ServerArgs     []string
 
-      // Shutdown gracefully shuts down all managed LSP clients.
-      func (m *ServerManager) Shutdown(ctx context.Context) error
-    location: internal/lsp/manager.go
+            // Multi-server field
+            Config *Config
+        }
 
-  - name: ParseArgs
-    description: |-
-      Parses command-line arguments into ParseResult. Handles three modes:
-      legacy, multi-arg, and config file. Defined in config/parse.go by Agent A.
-    definition: |
-      // ParseResult holds the outcome of argument parsing.
-      type ParseResult struct {
-          // Single-server fields (backward compat)
-          IsSingleServer bool
-          LanguageID     string
-          ServerPath     string
-          ServerArgs     []string
+        // ParseArgs parses os.Args[1:].
+        // Mode 1 — legacy: lsp-mcp-go <language-id> <binary> [args...]
+        //   Detected when len>=2 AND args[0] contains no ":"
+        // Mode 2 — multi-arg: lsp-mcp-go go:gopls typescript:tsserver,--stdio
+        //   Detected when args[0] contains ":"
+        // Mode 3 — config file: lsp-mcp-go --config /path/to/lsp-mcp.json
+        func ParseArgs(args []string) (ParseResult, error)
 
-          // Multi-server field
-          Config *Config
-      }
+        // LoadConfig reads and parses a JSON config file.
+        // Format: {"servers": [{"extensions":["go"],"command":["gopls"]}]}
+        func LoadConfig(path string) (*Config, error)
+      location: internal/config/parse.go
+    - name: Run
+      description: |-
+        MCP server entry point in server.go. Signature changes from *lsp.LSPClient
+        to lsp.ClientResolver. Agent C updates the declaration; Agent B updates
+        the call site in main.go.
+      definition: |
+        // Old signature (to be replaced by Agent C):
+        // func Run(ctx context.Context, lspClient *lsp.LSPClient, registry *extensions.ExtensionRegistry, serverPath string, serverArgs []string) error
 
-      // ParseArgs parses os.Args[1:].
-      // Mode 1 — legacy: lsp-mcp-go <language-id> <binary> [args...]
-      //   Detected when len>=2 AND args[0] contains no ":"
-      // Mode 2 — multi-arg: lsp-mcp-go go:gopls typescript:tsserver,--stdio
-      //   Detected when args[0] contains ":"
-      // Mode 3 — config file: lsp-mcp-go --config /path/to/lsp-mcp.json
-      func ParseArgs(args []string) (ParseResult, error)
-
-      // LoadConfig reads and parses a JSON config file.
-      // Format: {"servers": [{"extensions":["go"],"command":["gopls"]}]}
-      func LoadConfig(path string) (*Config, error)
-    location: internal/config/parse.go
-
-  - name: Run
-    description: |-
-      MCP server entry point in server.go. Signature changes from *lsp.LSPClient
-      to lsp.ClientResolver. Agent C updates the declaration; Agent B updates
-      the call site in main.go.
-    definition: |
-      // Old signature (to be replaced by Agent C):
-      // func Run(ctx context.Context, lspClient *lsp.LSPClient, registry *extensions.ExtensionRegistry, serverPath string, serverArgs []string) error
-
-      // New signature:
-      func Run(ctx context.Context, resolver lsp.ClientResolver, registry *extensions.ExtensionRegistry, serverPath string, serverArgs []string) error
-    location: cmd/lsp-mcp-go/server.go
-
+        // New signature:
+        func Run(ctx context.Context, resolver lsp.ClientResolver, registry *extensions.ExtensionRegistry, serverPath string, serverArgs []string) error
+      location: cmd/lsp-mcp-go/server.go
 waves:
-  - number: 1
-    agents:
-      - id: A
-        task: |
-          ## Agent A: ServerManager + Config Parsing
-
-          ### Context
-          You are implementing the core multi-server infrastructure for lsp-mcp-go.
-          Two scaffold files already exist (created by Scaffold Agent before your
-          worktree opened):
-          - /Users/dayna.blackwell/code/LSP-MCP-GO/internal/lsp/resolver.go
-            Contains the ClientResolver interface.
-          - /Users/dayna.blackwell/code/LSP-MCP-GO/internal/config/config.go
-            Contains ServerEntry and Config types.
-
-          Reference implementations (read-only, do not modify):
-          - /Users/dayna.blackwell/code/competitors/lsp-mcp/src/lsp-manager.ts — extensionToLsp map pattern
-          - /Users/dayna.blackwell/code/competitors/mcp-lsp-bridge/lsp_config.example.json — comprehensive extension_language_map
-          - /Users/dayna.blackwell/code/competitors/cclsp/src/language-servers.ts — extensions per server entry
-
-          ### Files to create
-          - /Users/dayna.blackwell/code/LSP-MCP-GO/internal/lsp/manager.go
-          - /Users/dayna.blackwell/code/LSP-MCP-GO/internal/config/parse.go
-
-          Also create test files:
-          - /Users/dayna.blackwell/code/LSP-MCP-GO/internal/lsp/manager_test.go
-          - /Users/dayna.blackwell/code/LSP-MCP-GO/internal/config/parse_test.go
-
-          ### internal/lsp/manager.go — package lsp
-
-          Implement `ServerManager` which satisfies `ClientResolver` (already defined
-          in resolver.go).
-
-          ```go
-          package lsp
-
-          import (
-              "context"
-              "fmt"
-              "path/filepath"
-              "strings"
-              "sync"
-
-              "github.com/blackwell-systems/lsp-mcp-go/internal/config"
-              "github.com/blackwell-systems/lsp-mcp-go/internal/logging"
-          )
-
-          type ServerManager struct {
-              mu      sync.RWMutex
-              entries []*managedEntry
-          }
-
-          type managedEntry struct {
-              client     *LSPClient
-              extensions map[string]bool // lowercase, no dot; e.g. "go", "ts", "tsx"
-              languageID string
-              // preserved for StartAll
-              command []string
-          }
-          ```
-
-          Implement:
-          - `NewSingleServerManager(client *LSPClient) *ServerManager`
-            Creates one managedEntry with empty extensions (matches any file — fallback).
-          - `NewMultiServerManager(entries []config.ServerEntry) *ServerManager`
-            For each entry: builds extensions map (lowercase, strip leading dot if present),
-            infers languageID via InferLanguageID(entry) if entry.LanguageID is empty.
-            Sets entry.command = entry.Command. Does NOT call NewLSPClient yet.
-          - `(m *ServerManager) StartAll(ctx context.Context, rootDir string) error`
-            For each managedEntry: NewLSPClient(e.command[0], e.command[1:]),
-            Initialize(ctx, rootDir), store in e.client.
-            Returns first error.
-          - `(m *ServerManager) ClientForFile(filePath string) *LSPClient`
-            ext := strings.TrimPrefix(strings.ToLower(filepath.Ext(filePath)), ".")
-            Iterates entries: returns first e.client where e.extensions[ext] is true.
-            Falls back to DefaultClient() if no match (or empty ext).
-          - `(m *ServerManager) DefaultClient() *LSPClient`
-            Returns m.entries[0].client if len > 0, else nil.
-          - `(m *ServerManager) AllClients() []*LSPClient`
-            Returns non-nil clients from all entries.
-          - `(m *ServerManager) Shutdown(ctx context.Context) error`
-            Calls Shutdown on each non-nil client; returns last error.
-
-          Also add unexported helper:
-          ```go
-          // InferLanguageID returns a reasonable language ID from the server entry.
-          // If LanguageID is set, return it. Otherwise use Extensions[0] or "unknown".
-          // Mapping follows mcp-lsp-bridge convention:
-          // "ts" -> "typescript", "tsx" -> "typescript", "js" -> "javascript",
-          // "jsx" -> "javascript", "py" -> "python", "rs" -> "rust",
-          // "hs" -> "haskell", "lhs" -> "haskell", "rb" -> "ruby",
-          // "cs" -> "csharp", "kt" -> "kotlin", "kts" -> "kotlin",
-          // "ml" -> "ocaml", "mli" -> "ocaml" — everything else returns ext as-is.
-          func inferLanguageID(entry config.ServerEntry) string
-          ```
-
-          ### internal/config/parse.go — package config
-
-          Implement `ParseResult`, `ParseArgs`, and `LoadConfig`.
-
-          `ParseArgs(args []string) (ParseResult, error)`:
-          1. len(args) == 0: return error with usage message
-          2. args[0] == "--config": LoadConfig(args[1]); return ParseResult{Config: cfg}
-          3. len(args) >= 2 AND !strings.Contains(args[0], ":"): legacy mode.
-             Return ParseResult{IsSingleServer: true, LanguageID: args[0],
-             ServerPath: args[1], ServerArgs: args[2:]}.
-             Validate ServerPath exists with os.Stat.
-          4. Otherwise: multi-arg mode. Each arg is "language-id:binary,arg1,arg2...".
-             Split on first ":" to get languageID and rest.
-             Split rest on "," for command (command[0] = binary, rest = args).
-             Use the built-in extension map from mcp-lsp-bridge to assign extensions
-             based on languageID:
-               go -> ["go"]
-               typescript -> ["ts","tsx"]
-               javascript -> ["js","jsx","mjs","cjs"]
-               python -> ["py","pyw"]
-               rust -> ["rs"]
-               java -> ["java"]
-               cpp -> ["cpp","cc","cxx","c++","hpp","hxx"]
-               c -> ["c","h"]
-               csharp -> ["cs","csx"]
-               ruby -> ["rb","rake","gemspec"]
-               php -> ["php","phtml"]
-               swift -> ["swift"]
-               kotlin -> ["kt","kts"]
-               lua -> ["lua"]
-               haskell -> ["hs","lhs"]
-               ocaml -> ["ml","mli"]
-               zig -> ["zig"]
-               scala -> ["scala","sc","sbt"]
-               (default) -> [languageID]
-             Return ParseResult{Config: &Config{Servers: entries}}
-
-          `LoadConfig(path string) (*Config, error)`:
-          os.ReadFile(path), json.Unmarshal into &Config{}, return pointer.
-
-          ### Tests
-
-          internal/config/parse_test.go:
-          - TestParseArgs_Legacy: args ["go", "/usr/bin/gopls"] → IsSingleServer=true
-          - TestParseArgs_MultiArg: args ["go:gopls", "typescript:typescript-language-server,--stdio"]
-            → Config with 2 entries, first has Extensions=["go"], second has Extensions=["ts","tsx"]
-          - TestParseArgs_ConfigFlag: write temp JSON, args ["--config", path]
-            → Config loaded correctly
-          - TestParseArgs_Empty: 0 args → error
-          - TestLoadConfig_Valid: write {"servers":[{"extensions":["go"],"command":["gopls"]}]},
-            LoadConfig → Config.Servers[0].Extensions=["go"]
-          - TestLoadConfig_Missing: nonexistent path → error
-
-          internal/lsp/manager_test.go:
-          - TestNewSingleServerManager_ClientForFile: creates manager with fake client,
-            verifies ClientForFile("/any/file.go") returns same client
-          - TestClientForFile_ExtensionMatch: manager with two entries (go, ts),
-            ClientForFile("/foo.ts") returns ts client
-          - TestClientForFile_Fallback: unknown extension returns default
-          - TestServerManager_AllClients: returns all non-nil clients
-          - TestInferLanguageID: ts -> "typescript", go -> "go", rs -> "rust"
-
-          For manager tests, use a table-driven test with a mock/stub client that is
-          just a *LSPClient pointer (the value; not started). Create via
-          &LSPClient{serverPath: "fake"} using the exported constructor is preferred —
-          but since NewLSPClient is the public constructor, use it:
-          NewLSPClient("fake", nil).
-
-          ### Verification gate
-          ```
-          cd /Users/dayna.blackwell/code/LSP-MCP-GO
-          GOWORK=off go build ./internal/lsp/... ./internal/config/...
-          GOWORK=off go vet ./internal/lsp/... ./internal/config/...
-          GOWORK=off go test ./internal/lsp/... ./internal/config/... -run "TestParse|TestLoad|TestNewSingle|TestClientFor|TestServerManager|TestInfer" -v
-          # Postconditions:
-          grep -c "func.*ServerManager\b" /Users/dayna.blackwell/code/LSP-MCP-GO/internal/lsp/manager.go
-          # Expected: >= 7 (constructor + methods)
-          grep -n "func ParseArgs" /Users/dayna.blackwell/code/LSP-MCP-GO/internal/config/parse.go
-          # Expected: exactly 1 match
-          grep -n "func LoadConfig" /Users/dayna.blackwell/code/LSP-MCP-GO/internal/config/parse.go
-          # Expected: exactly 1 match
-          ```
-
-          ### Constraints
-          - Do NOT modify any existing files.
-          - Do NOT redefine ClientResolver — it exists in resolver.go (scaffold).
-          - Do NOT redefine ServerEntry or Config — they exist in config.go (scaffold).
-          - Do NOT modify files under test/ directory.
-          - GOWORK=off on all go commands.
-          - ServerManager must compile without requiring main.go or server.go changes.
-
-        files:
-          - internal/lsp/manager.go
-          - internal/config/parse.go
-        dependencies: []
-
-      - id: B
-        task: |
-          ## Agent B: main.go — multi-server argument parsing + startup
-
-          ### Context
-          Scaffold files already exist (Scaffold Agent created them before this worktree):
-          - internal/lsp/resolver.go — ClientResolver interface
-          - internal/config/config.go — ServerEntry, Config types
-
-          Agent A (parallel worktree) is implementing internal/lsp/manager.go and
-          internal/config/parse.go. You must import and use them. They compile
-          correctly against the scaffold types, so import paths work in your worktree.
-
-          ### File to modify
-          /Users/dayna.blackwell/code/LSP-MCP-GO/cmd/lsp-mcp-go/main.go
-
-          ### Current main.go content
-          The file currently does:
-          1. Parses args[0]=languageID, args[1]=serverPath, args[2:]=serverArgs
-          2. Validates serverPath with os.Stat
-          3. Creates lsp.NewLSPClient(serverPath, serverArgs)
-          4. Creates extensions.NewRegistry(), activates languageID
-          5. Signal handling with lspClient.Shutdown(shutdownCtx)
-          6. Calls runWithRecovery(ctx, lspClient, registry, serverPath, serverArgs)
-          7. runWithRecovery calls Run(ctx, lspClient, registry, serverPath, serverArgs)
-
-          ### What to change
-
-          **Step 1: Replace argument parsing block**
-
-          Find this exact text in main.go:
-          ```go
-          args := os.Args[1:]
-          if len(args) < 2 {
-          	fmt.Fprintln(os.Stderr, "usage: lsp-mcp-go <language-id> <lsp-server-binary> [lsp-server-args...]")
-          	fmt.Fprintln(os.Stderr, "  language-id        the language identifier (e.g. go, haskell, typescript)")
-          	fmt.Fprintln(os.Stderr, "  lsp-server-binary  path to the LSP server binary")
-          	os.Exit(1)
-          }
-
-          languageID := args[0]
-          serverPath := args[1]
-          serverArgs := args[2:]
-
-          // Validate the LSP server binary exists.
-          if _, err := os.Stat(serverPath); err != nil {
-          	fmt.Fprintf(os.Stderr, "error: LSP server binary not found: %s\n", serverPath)
-          	fmt.Fprintln(os.Stderr, "usage: lsp-mcp-go <language-id> <lsp-server-binary> [lsp-server-args...]")
-          	os.Exit(1)
-          }
-
-          // Create LSP client (do NOT call Initialize yet — start_lsp tool does that).
-          lspClient := lsp.NewLSPClient(serverPath, serverArgs)
-
-          // Create extension registry and activate the language extension (if any).
-          registry := extensions.NewRegistry()
-          if err := registry.Activate(languageID); err != nil {
-          	logging.Log(logging.LevelWarning, fmt.Sprintf("failed to activate extension for %s: %v", languageID, err))
-          }
-          ```
-
-          Replace with:
-          ```go
-          parsed, err := config.ParseArgs(os.Args[1:])
-          if err != nil {
-          	fmt.Fprintf(os.Stderr, "error: %s\n", err)
-          	fmt.Fprintln(os.Stderr, "usage (single-server): lsp-mcp-go <language-id> <lsp-server-binary> [args...]")
-          	fmt.Fprintln(os.Stderr, "usage (multi-server):   lsp-mcp-go go:gopls typescript:tsserver,--stdio")
-          	fmt.Fprintln(os.Stderr, "usage (config file):    lsp-mcp-go --config /path/to/lsp-mcp.json")
-          	os.Exit(1)
-          }
-
-          var resolver lsp.ClientResolver
-          registry := extensions.NewRegistry()
-
-          // Determine serverPath/serverArgs for start_lsp restart (single-server only).
-          var serverPath string
-          var serverArgs []string
-
-          if parsed.IsSingleServer {
-          	// Legacy single-server mode.
-          	lspClient := lsp.NewLSPClient(parsed.ServerPath, parsed.ServerArgs)
-          	resolver = lsp.NewSingleServerManager(lspClient)
-          	serverPath = parsed.ServerPath
-          	serverArgs = parsed.ServerArgs
-          	if err := registry.Activate(parsed.LanguageID); err != nil {
-          		logging.Log(logging.LevelWarning, fmt.Sprintf("failed to activate extension for %s: %v", parsed.LanguageID, err))
-          	}
-          } else {
-          	// Multi-server mode.
-          	resolver = lsp.NewMultiServerManager(parsed.Config.Servers)
-          	// Activate extensions for each server entry.
-          	for _, entry := range parsed.Config.Servers {
-          		langID := entry.LanguageID
-          		if langID == "" && len(entry.Extensions) > 0 {
-          			langID = entry.Extensions[0]
-          		}
-          		if err := registry.Activate(langID); err != nil {
-          			logging.Log(logging.LevelWarning, fmt.Sprintf("failed to activate extension for %s: %v", langID, err))
-          		}
-          	}
-          	// For start_lsp restart in multi-server mode: use first server's command.
-          	if len(parsed.Config.Servers) > 0 && len(parsed.Config.Servers[0].Command) > 0 {
-          		serverPath = parsed.Config.Servers[0].Command[0]
-          		if len(parsed.Config.Servers[0].Command) > 1 {
-          			serverArgs = parsed.Config.Servers[0].Command[1:]
-          		}
-          	}
-          }
-          ```
-
-          **Step 2: Update signal handler**
-
-          Find this exact text:
-          ```go
-          shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), gracefulShutdownTimeout)
-          defer shutdownCancel()
-          if err := lspClient.Shutdown(shutdownCtx); err != nil {
-          	logging.Log(logging.LevelWarning, fmt.Sprintf("LSP shutdown error: %v", err))
-          }
-          ```
-          Replace `lspClient.Shutdown` with `resolver.Shutdown`:
-          ```go
-          shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), gracefulShutdownTimeout)
-          defer shutdownCancel()
-          if err := resolver.Shutdown(shutdownCtx); err != nil {
-          	logging.Log(logging.LevelWarning, fmt.Sprintf("LSP shutdown error: %v", err))
-          }
-          ```
-
-          **Step 3: Update runWithRecovery call and signature**
-
-          Find this exact text:
-          ```go
-          // Run the MCP server with panic recovery.
-          if err := runWithRecovery(ctx, lspClient, registry, serverPath, serverArgs); err != nil {
-          ```
-          Replace `lspClient` with `resolver`:
-          ```go
-          // Run the MCP server with panic recovery.
-          if err := runWithRecovery(ctx, resolver, registry, serverPath, serverArgs); err != nil {
-          ```
-
-          Find this exact text:
-          ```go
-          func runWithRecovery(ctx context.Context, lspClient *lsp.LSPClient, registry *extensions.ExtensionRegistry, serverPath string, serverArgs []string) (runErr error) {
-          	defer func() {
-          		if r := recover(); r != nil {
-          			logging.Log(logging.LevelError, fmt.Sprintf("panic recovered: %v", r))
-          			// Attempt graceful shutdown after panic.
-          			shutdownCtx, cancel := context.WithTimeout(context.Background(), gracefulShutdownTimeout)
-          			defer cancel()
-          			_ = lspClient.Shutdown(shutdownCtx)
-          		}
-          	}()
-          	return Run(ctx, lspClient, registry, serverPath, serverArgs)
-          }
-          ```
-          Replace with:
-          ```go
-          func runWithRecovery(ctx context.Context, resolver lsp.ClientResolver, registry *extensions.ExtensionRegistry, serverPath string, serverArgs []string) (runErr error) {
-          	defer func() {
-          		if r := recover(); r != nil {
-          			logging.Log(logging.LevelError, fmt.Sprintf("panic recovered: %v", r))
-          			// Attempt graceful shutdown after panic.
-          			shutdownCtx, cancel := context.WithTimeout(context.Background(), gracefulShutdownTimeout)
-          			defer cancel()
-          			_ = resolver.Shutdown(shutdownCtx)
-          		}
-          	}()
-          	return Run(ctx, resolver, registry, serverPath, serverArgs)
-          }
-          ```
-
-          **Step 4: Add import for config package**
-          Add to the import block:
-          `"github.com/blackwell-systems/lsp-mcp-go/internal/config"`
-
-          ### Verification gate
-          ```
-          cd /Users/dayna.blackwell/code/LSP-MCP-GO
-          GOWORK=off go build ./cmd/lsp-mcp-go/...
-          GOWORK=off go vet ./cmd/lsp-mcp-go/...
-          # Postconditions:
-          grep -n "config.ParseArgs" /Users/dayna.blackwell/code/LSP-MCP-GO/cmd/lsp-mcp-go/main.go
-          # Expected: 1 match
-          grep -n "NewSingleServerManager\|NewMultiServerManager" /Users/dayna.blackwell/code/LSP-MCP-GO/cmd/lsp-mcp-go/main.go
-          # Expected: 2 matches (one per branch)
-          grep -n "resolver.Shutdown" /Users/dayna.blackwell/code/LSP-MCP-GO/cmd/lsp-mcp-go/main.go
-          # Expected: 2 matches (signal handler + panic recovery)
-          grep -n "lsp.ClientResolver" /Users/dayna.blackwell/code/LSP-MCP-GO/cmd/lsp-mcp-go/main.go
-          # Expected: at least 1 match (var resolver lsp.ClientResolver declaration)
-          ```
-
-          ### Constraints
-          - Do NOT modify server.go — Agent C owns that file.
-          - Do NOT modify internal/ files — Agent A owns those.
-          - Do NOT modify test/ directory.
-          - GOWORK=off on all go commands.
-          - Preserve the compile-time haskell extension import.
-          - The Run() function declaration is in server.go (Agent C). You only update
-            the call site in main.go. Both must agree on the new signature.
-
-        files:
-          - cmd/lsp-mcp-go/main.go
-        dependencies: []
-
-      - id: C
-        task: |
-          ## Agent C: server.go — ClientResolver-based tool dispatch
-
-          ### Context
-          Scaffold file already exists:
-          - internal/lsp/resolver.go — ClientResolver interface
-
-          Agent A (parallel) implements ServerManager in manager.go.
-          Agent B (parallel) updates main.go to pass lsp.ClientResolver to Run().
-          You change the Run() declaration and add file-routed client dispatch.
-
-          ### File to modify
-          /Users/dayna.blackwell/code/LSP-MCP-GO/cmd/lsp-mcp-go/server.go
-
-          ### What to change
-
-          **Step 1: Change Run() signature**
-
-          Find this exact text:
-          ```go
-          func Run(ctx context.Context, lspClient *lsp.LSPClient, registry *extensions.ExtensionRegistry, serverPath string, serverArgs []string) error {
-          	cs := &clientState{client: lspClient}
-          ```
-          Replace with:
-          ```go
-          func Run(ctx context.Context, resolver lsp.ClientResolver, registry *extensions.ExtensionRegistry, serverPath string, serverArgs []string) error {
-          	cs := &clientState{client: resolver.DefaultClient()}
-          ```
-
-          **Step 2: Add clientForFile helper**
-
-          After the closing `}` of the makeCallToolResult function
-          (the function that ends just before `// Run creates and starts the MCP server.`), add:
-
-          Find this exact text to use as insertion anchor:
-          ```go
-          // Run creates and starts the MCP server.
-          func Run(ctx context.Context, lspClient *lsp.LSPClient, registry *extensions.ExtensionRegistry, serverPath string, serverArgs []string) error {
-          ```
-
-          Insert before that block (before "// Run creates"):
-          ```go
-          // clientForFile returns the LSP client for the given file path using the resolver.
-          // Falls back to cs.get() (default client) if filePath is empty or no server
-          // is configured for the file's extension.
-          func clientForFile(resolver lsp.ClientResolver, cs *clientState, filePath string) *lsp.LSPClient {
-          	if filePath != "" {
-          		if c := resolver.ClientForFile(filePath); c != nil {
-          			return c
-          		}
-          	}
-          	return cs.get()
-          }
-          ```
-
-          **Step 3: Update file-specific tool handlers**
-
-          For each of the following tools, change the `cs.get()` call to
-          `clientForFile(resolver, cs, args.FilePath)`. The args struct field name
-          varies — use the exact field name from the args struct defined in server.go.
-
-          Tools to update (field name in parentheses):
-          - open_document: `cs.get()` → `clientForFile(resolver, cs, args.FilePath)`
-          - close_document: `cs.get()` → `clientForFile(resolver, cs, args.FilePath)`
-          - get_diagnostics: `cs.get()` → `clientForFile(resolver, cs, args.FilePath)`
-          - get_info_on_location: `cs.get()` → `clientForFile(resolver, cs, args.FilePath)`
-          - get_completions: `cs.get()` → `clientForFile(resolver, cs, args.FilePath)`
-          - get_signature_help: `cs.get()` → `clientForFile(resolver, cs, args.FilePath)`
-          - get_code_actions: `cs.get()` → `clientForFile(resolver, cs, args.FilePath)`
-          - get_document_symbols: `cs.get()` → `clientForFile(resolver, cs, args.FilePath)`
-          - get_references: `cs.get()` → `clientForFile(resolver, cs, args.FilePath)`
-          - go_to_definition: `cs.get()` → `clientForFile(resolver, cs, args.FilePath)`
-          - go_to_type_definition: `cs.get()` → `clientForFile(resolver, cs, args.FilePath)`
-          - go_to_implementation: `cs.get()` → `clientForFile(resolver, cs, args.FilePath)`
-          - go_to_declaration: `cs.get()` → `clientForFile(resolver, cs, args.FilePath)`
-          - rename_symbol: `cs.get()` → `clientForFile(resolver, cs, args.FilePath)`
-          - prepare_rename: `cs.get()` → `clientForFile(resolver, cs, args.FilePath)`
-          - format_document: `cs.get()` → `clientForFile(resolver, cs, args.FilePath)`
-          - format_range: `cs.get()` → `clientForFile(resolver, cs, args.FilePath)`
-
-          Tools to KEEP using cs.get() (no file_path or global scope):
-          - restart_lsp_server
-          - get_workspace_symbols
-          - apply_edit
-          - execute_command
-          - did_change_watched_files
-          - set_log_level
-          - start_lsp (this tool takes a getter/setter for clientState — leave unchanged)
-
-          **Step 4: Update diagnostics subscription**
-
-          Find this exact text:
-          ```go
-          // Subscribe to diagnostic updates for logging purposes.
-          if lspClient != nil {
-          	lspClient.SubscribeToDiagnostics(func(uri string, _ []types.LSPDiagnostic) {
-          		logging.Log(logging.LevelDebug, "diagnostics updated for: "+uri)
-          	})
-          }
-          ```
-          Replace with:
-          ```go
-          // Subscribe to diagnostic updates for logging purposes (all managed clients).
-          for _, c := range resolver.AllClients() {
-          	if c != nil {
-          		c.SubscribeToDiagnostics(func(uri string, _ []types.LSPDiagnostic) {
-          			logging.Log(logging.LevelDebug, "diagnostics updated for: "+uri)
-          		})
-          	}
-          }
-          ```
-
-          **Step 5: Update lspClient reference in resource handlers**
-
-          The three resource handlers use `client := cs.get()`. Leave them as-is.
-          They route to the default client — acceptable for resources in v1.
-
-          ### Verification gate
-          ```
-          cd /Users/dayna.blackwell/code/LSP-MCP-GO
-          GOWORK=off go build ./cmd/lsp-mcp-go/...
-          GOWORK=off go vet ./cmd/lsp-mcp-go/...
-          # Postconditions:
-          grep -c "clientForFile(resolver" /Users/dayna.blackwell/code/LSP-MCP-GO/cmd/lsp-mcp-go/server.go
-          # Expected: >= 17 (one per file-specific tool)
-          grep -n "lsp.ClientResolver" /Users/dayna.blackwell/code/LSP-MCP-GO/cmd/lsp-mcp-go/server.go
-          # Expected: at least 2 matches (Run param + clientForFile param)
-          grep -n "resolver.AllClients" /Users/dayna.blackwell/code/LSP-MCP-GO/cmd/lsp-mcp-go/server.go
-          # Expected: 1 match (diagnostics subscription)
-          grep -n "func clientForFile" /Users/dayna.blackwell/code/LSP-MCP-GO/cmd/lsp-mcp-go/server.go
-          # Expected: 1 match
-          ```
-
-          ### Constraints
-          - Do NOT modify main.go — Agent B owns that file.
-          - Do NOT modify internal/ files — Agent A owns those.
-          - Do NOT modify test/ directory.
-          - GOWORK=off on all go commands.
-          - Do NOT change the HandleStartLsp call — keep cs.get and cs.set as today.
-          - Do NOT move clientForFile to internal/tools — it belongs in server.go.
-          - The clientState struct, get(), and set() methods must remain exactly as-is.
-
-        files:
-          - cmd/lsp-mcp-go/server.go
-        dependencies: []
-
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## Agent A: ServerManager + Config Parsing
+
+            ### Context
+            You are implementing the core multi-server infrastructure for lsp-mcp-go.
+            Two scaffold files already exist (created by Scaffold Agent before your
+            worktree opened):
+            - /Users/dayna.blackwell/code/LSP-MCP-GO/internal/lsp/resolver.go
+              Contains the ClientResolver interface.
+            - /Users/dayna.blackwell/code/LSP-MCP-GO/internal/config/config.go
+              Contains ServerEntry and Config types.
+
+            Reference implementations (read-only, do not modify):
+            - /Users/dayna.blackwell/code/competitors/lsp-mcp/src/lsp-manager.ts — extensionToLsp map pattern
+            - /Users/dayna.blackwell/code/competitors/mcp-lsp-bridge/lsp_config.example.json — comprehensive extension_language_map
+            - /Users/dayna.blackwell/code/competitors/cclsp/src/language-servers.ts — extensions per server entry
+
+            ### Files to create
+            - /Users/dayna.blackwell/code/LSP-MCP-GO/internal/lsp/manager.go
+            - /Users/dayna.blackwell/code/LSP-MCP-GO/internal/config/parse.go
+
+            Also create test files:
+            - /Users/dayna.blackwell/code/LSP-MCP-GO/internal/lsp/manager_test.go
+            - /Users/dayna.blackwell/code/LSP-MCP-GO/internal/config/parse_test.go
+
+            ### internal/lsp/manager.go — package lsp
+
+            Implement `ServerManager` which satisfies `ClientResolver` (already defined
+            in resolver.go).
+
+            ```go
+            package lsp
+
+            import (
+                "context"
+                "fmt"
+                "path/filepath"
+                "strings"
+                "sync"
+
+                "github.com/blackwell-systems/lsp-mcp-go/internal/config"
+                "github.com/blackwell-systems/lsp-mcp-go/internal/logging"
+            )
+
+            type ServerManager struct {
+                mu      sync.RWMutex
+                entries []*managedEntry
+            }
+
+            type managedEntry struct {
+                client     *LSPClient
+                extensions map[string]bool // lowercase, no dot; e.g. "go", "ts", "tsx"
+                languageID string
+                // preserved for StartAll
+                command []string
+            }
+            ```
+
+            Implement:
+            - `NewSingleServerManager(client *LSPClient) *ServerManager`
+              Creates one managedEntry with empty extensions (matches any file — fallback).
+            - `NewMultiServerManager(entries []config.ServerEntry) *ServerManager`
+              For each entry: builds extensions map (lowercase, strip leading dot if present),
+              infers languageID via InferLanguageID(entry) if entry.LanguageID is empty.
+              Sets entry.command = entry.Command. Does NOT call NewLSPClient yet.
+            - `(m *ServerManager) StartAll(ctx context.Context, rootDir string) error`
+              For each managedEntry: NewLSPClient(e.command[0], e.command[1:]),
+              Initialize(ctx, rootDir), store in e.client.
+              Returns first error.
+            - `(m *ServerManager) ClientForFile(filePath string) *LSPClient`
+              ext := strings.TrimPrefix(strings.ToLower(filepath.Ext(filePath)), ".")
+              Iterates entries: returns first e.client where e.extensions[ext] is true.
+              Falls back to DefaultClient() if no match (or empty ext).
+            - `(m *ServerManager) DefaultClient() *LSPClient`
+              Returns m.entries[0].client if len > 0, else nil.
+            - `(m *ServerManager) AllClients() []*LSPClient`
+              Returns non-nil clients from all entries.
+            - `(m *ServerManager) Shutdown(ctx context.Context) error`
+              Calls Shutdown on each non-nil client; returns last error.
+
+            Also add unexported helper:
+            ```go
+            // InferLanguageID returns a reasonable language ID from the server entry.
+            // If LanguageID is set, return it. Otherwise use Extensions[0] or "unknown".
+            // Mapping follows mcp-lsp-bridge convention:
+            // "ts" -> "typescript", "tsx" -> "typescript", "js" -> "javascript",
+            // "jsx" -> "javascript", "py" -> "python", "rs" -> "rust",
+            // "hs" -> "haskell", "lhs" -> "haskell", "rb" -> "ruby",
+            // "cs" -> "csharp", "kt" -> "kotlin", "kts" -> "kotlin",
+            // "ml" -> "ocaml", "mli" -> "ocaml" — everything else returns ext as-is.
+            func inferLanguageID(entry config.ServerEntry) string
+            ```
+
+            ### internal/config/parse.go — package config
+
+            Implement `ParseResult`, `ParseArgs`, and `LoadConfig`.
+
+            `ParseArgs(args []string) (ParseResult, error)`:
+            1. len(args) == 0: return error with usage message
+            2. args[0] == "--config": LoadConfig(args[1]); return ParseResult{Config: cfg}
+            3. len(args) >= 2 AND !strings.Contains(args[0], ":"): legacy mode.
+               Return ParseResult{IsSingleServer: true, LanguageID: args[0],
+               ServerPath: args[1], ServerArgs: args[2:]}.
+               Validate ServerPath exists with os.Stat.
+            4. Otherwise: multi-arg mode. Each arg is "language-id:binary,arg1,arg2...".
+               Split on first ":" to get languageID and rest.
+               Split rest on "," for command (command[0] = binary, rest = args).
+               Use the built-in extension map from mcp-lsp-bridge to assign extensions
+               based on languageID:
+                 go -> ["go"]
+                 typescript -> ["ts","tsx"]
+                 javascript -> ["js","jsx","mjs","cjs"]
+                 python -> ["py","pyw"]
+                 rust -> ["rs"]
+                 java -> ["java"]
+                 cpp -> ["cpp","cc","cxx","c++","hpp","hxx"]
+                 c -> ["c","h"]
+                 csharp -> ["cs","csx"]
+                 ruby -> ["rb","rake","gemspec"]
+                 php -> ["php","phtml"]
+                 swift -> ["swift"]
+                 kotlin -> ["kt","kts"]
+                 lua -> ["lua"]
+                 haskell -> ["hs","lhs"]
+                 ocaml -> ["ml","mli"]
+                 zig -> ["zig"]
+                 scala -> ["scala","sc","sbt"]
+                 (default) -> [languageID]
+               Return ParseResult{Config: &Config{Servers: entries}}
+
+            `LoadConfig(path string) (*Config, error)`:
+            os.ReadFile(path), json.Unmarshal into &Config{}, return pointer.
+
+            ### Tests
+
+            internal/config/parse_test.go:
+            - TestParseArgs_Legacy: args ["go", "/usr/bin/gopls"] → IsSingleServer=true
+            - TestParseArgs_MultiArg: args ["go:gopls", "typescript:typescript-language-server,--stdio"]
+              → Config with 2 entries, first has Extensions=["go"], second has Extensions=["ts","tsx"]
+            - TestParseArgs_ConfigFlag: write temp JSON, args ["--config", path]
+              → Config loaded correctly
+            - TestParseArgs_Empty: 0 args → error
+            - TestLoadConfig_Valid: write {"servers":[{"extensions":["go"],"command":["gopls"]}]},
+              LoadConfig → Config.Servers[0].Extensions=["go"]
+            - TestLoadConfig_Missing: nonexistent path → error
+
+            internal/lsp/manager_test.go:
+            - TestNewSingleServerManager_ClientForFile: creates manager with fake client,
+              verifies ClientForFile("/any/file.go") returns same client
+            - TestClientForFile_ExtensionMatch: manager with two entries (go, ts),
+              ClientForFile("/foo.ts") returns ts client
+            - TestClientForFile_Fallback: unknown extension returns default
+            - TestServerManager_AllClients: returns all non-nil clients
+            - TestInferLanguageID: ts -> "typescript", go -> "go", rs -> "rust"
+
+            For manager tests, use a table-driven test with a mock/stub client that is
+            just a *LSPClient pointer (the value; not started). Create via
+            &LSPClient{serverPath: "fake"} using the exported constructor is preferred —
+            but since NewLSPClient is the public constructor, use it:
+            NewLSPClient("fake", nil).
+
+            ### Verification gate
+            ```
+            cd /Users/dayna.blackwell/code/LSP-MCP-GO
+            GOWORK=off go build ./internal/lsp/... ./internal/config/...
+            GOWORK=off go vet ./internal/lsp/... ./internal/config/...
+            GOWORK=off go test ./internal/lsp/... ./internal/config/... -run "TestParse|TestLoad|TestNewSingle|TestClientFor|TestServerManager|TestInfer" -v
+            # Postconditions:
+            grep -c "func.*ServerManager\b" /Users/dayna.blackwell/code/LSP-MCP-GO/internal/lsp/manager.go
+            # Expected: >= 7 (constructor + methods)
+            grep -n "func ParseArgs" /Users/dayna.blackwell/code/LSP-MCP-GO/internal/config/parse.go
+            # Expected: exactly 1 match
+            grep -n "func LoadConfig" /Users/dayna.blackwell/code/LSP-MCP-GO/internal/config/parse.go
+            # Expected: exactly 1 match
+            ```
+
+            ### Constraints
+            - Do NOT modify any existing files.
+            - Do NOT redefine ClientResolver — it exists in resolver.go (scaffold).
+            - Do NOT redefine ServerEntry or Config — they exist in config.go (scaffold).
+            - Do NOT modify files under test/ directory.
+            - GOWORK=off on all go commands.
+            - ServerManager must compile without requiring main.go or server.go changes.
+          files:
+            - internal/lsp/manager.go
+            - internal/config/parse.go
+        - id: B
+          task: |
+            ## Agent B: main.go — multi-server argument parsing + startup
+
+            ### Context
+            Scaffold files already exist (Scaffold Agent created them before this worktree):
+            - internal/lsp/resolver.go — ClientResolver interface
+            - internal/config/config.go — ServerEntry, Config types
+
+            Agent A (parallel worktree) is implementing internal/lsp/manager.go and
+            internal/config/parse.go. You must import and use them. They compile
+            correctly against the scaffold types, so import paths work in your worktree.
+
+            ### File to modify
+            /Users/dayna.blackwell/code/LSP-MCP-GO/cmd/lsp-mcp-go/main.go
+
+            ### Current main.go content
+            The file currently does:
+            1. Parses args[0]=languageID, args[1]=serverPath, args[2:]=serverArgs
+            2. Validates serverPath with os.Stat
+            3. Creates lsp.NewLSPClient(serverPath, serverArgs)
+            4. Creates extensions.NewRegistry(), activates languageID
+            5. Signal handling with lspClient.Shutdown(shutdownCtx)
+            6. Calls runWithRecovery(ctx, lspClient, registry, serverPath, serverArgs)
+            7. runWithRecovery calls Run(ctx, lspClient, registry, serverPath, serverArgs)
+
+            ### What to change
+
+            **Step 1: Replace argument parsing block**
+
+            Find this exact text in main.go:
+            ```go
+            args := os.Args[1:]
+            if len(args) < 2 {
+            	fmt.Fprintln(os.Stderr, "usage: lsp-mcp-go <language-id> <lsp-server-binary> [lsp-server-args...]")
+            	fmt.Fprintln(os.Stderr, "  language-id        the language identifier (e.g. go, haskell, typescript)")
+            	fmt.Fprintln(os.Stderr, "  lsp-server-binary  path to the LSP server binary")
+            	os.Exit(1)
+            }
+
+            languageID := args[0]
+            serverPath := args[1]
+            serverArgs := args[2:]
+
+            // Validate the LSP server binary exists.
+            if _, err := os.Stat(serverPath); err != nil {
+            	fmt.Fprintf(os.Stderr, "error: LSP server binary not found: %s\n", serverPath)
+            	fmt.Fprintln(os.Stderr, "usage: lsp-mcp-go <language-id> <lsp-server-binary> [lsp-server-args...]")
+            	os.Exit(1)
+            }
+
+            // Create LSP client (do NOT call Initialize yet — start_lsp tool does that).
+            lspClient := lsp.NewLSPClient(serverPath, serverArgs)
+
+            // Create extension registry and activate the language extension (if any).
+            registry := extensions.NewRegistry()
+            if err := registry.Activate(languageID); err != nil {
+            	logging.Log(logging.LevelWarning, fmt.Sprintf("failed to activate extension for %s: %v", languageID, err))
+            }
+            ```
+
+            Replace with:
+            ```go
+            parsed, err := config.ParseArgs(os.Args[1:])
+            if err != nil {
+            	fmt.Fprintf(os.Stderr, "error: %s\n", err)
+            	fmt.Fprintln(os.Stderr, "usage (single-server): lsp-mcp-go <language-id> <lsp-server-binary> [args...]")
+            	fmt.Fprintln(os.Stderr, "usage (multi-server):   lsp-mcp-go go:gopls typescript:tsserver,--stdio")
+            	fmt.Fprintln(os.Stderr, "usage (config file):    lsp-mcp-go --config /path/to/lsp-mcp.json")
+            	os.Exit(1)
+            }
+
+            var resolver lsp.ClientResolver
+            registry := extensions.NewRegistry()
+
+            // Determine serverPath/serverArgs for start_lsp restart (single-server only).
+            var serverPath string
+            var serverArgs []string
+
+            if parsed.IsSingleServer {
+            	// Legacy single-server mode.
+            	lspClient := lsp.NewLSPClient(parsed.ServerPath, parsed.ServerArgs)
+            	resolver = lsp.NewSingleServerManager(lspClient)
+            	serverPath = parsed.ServerPath
+            	serverArgs = parsed.ServerArgs
+            	if err := registry.Activate(parsed.LanguageID); err != nil {
+            		logging.Log(logging.LevelWarning, fmt.Sprintf("failed to activate extension for %s: %v", parsed.LanguageID, err))
+            	}
+            } else {
+            	// Multi-server mode.
+            	resolver = lsp.NewMultiServerManager(parsed.Config.Servers)
+            	// Activate extensions for each server entry.
+            	for _, entry := range parsed.Config.Servers {
+            		langID := entry.LanguageID
+            		if langID == "" && len(entry.Extensions) > 0 {
+            			langID = entry.Extensions[0]
+            		}
+            		if err := registry.Activate(langID); err != nil {
+            			logging.Log(logging.LevelWarning, fmt.Sprintf("failed to activate extension for %s: %v", langID, err))
+            		}
+            	}
+            	// For start_lsp restart in multi-server mode: use first server's command.
+            	if len(parsed.Config.Servers) > 0 && len(parsed.Config.Servers[0].Command) > 0 {
+            		serverPath = parsed.Config.Servers[0].Command[0]
+            		if len(parsed.Config.Servers[0].Command) > 1 {
+            			serverArgs = parsed.Config.Servers[0].Command[1:]
+            		}
+            	}
+            }
+            ```
+
+            **Step 2: Update signal handler**
+
+            Find this exact text:
+            ```go
+            shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), gracefulShutdownTimeout)
+            defer shutdownCancel()
+            if err := lspClient.Shutdown(shutdownCtx); err != nil {
+            	logging.Log(logging.LevelWarning, fmt.Sprintf("LSP shutdown error: %v", err))
+            }
+            ```
+            Replace `lspClient.Shutdown` with `resolver.Shutdown`:
+            ```go
+            shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), gracefulShutdownTimeout)
+            defer shutdownCancel()
+            if err := resolver.Shutdown(shutdownCtx); err != nil {
+            	logging.Log(logging.LevelWarning, fmt.Sprintf("LSP shutdown error: %v", err))
+            }
+            ```
+
+            **Step 3: Update runWithRecovery call and signature**
+
+            Find this exact text:
+            ```go
+            // Run the MCP server with panic recovery.
+            if err := runWithRecovery(ctx, lspClient, registry, serverPath, serverArgs); err != nil {
+            ```
+            Replace `lspClient` with `resolver`:
+            ```go
+            // Run the MCP server with panic recovery.
+            if err := runWithRecovery(ctx, resolver, registry, serverPath, serverArgs); err != nil {
+            ```
+
+            Find this exact text:
+            ```go
+            func runWithRecovery(ctx context.Context, lspClient *lsp.LSPClient, registry *extensions.ExtensionRegistry, serverPath string, serverArgs []string) (runErr error) {
+            	defer func() {
+            		if r := recover(); r != nil {
+            			logging.Log(logging.LevelError, fmt.Sprintf("panic recovered: %v", r))
+            			// Attempt graceful shutdown after panic.
+            			shutdownCtx, cancel := context.WithTimeout(context.Background(), gracefulShutdownTimeout)
+            			defer cancel()
+            			_ = lspClient.Shutdown(shutdownCtx)
+            		}
+            	}()
+            	return Run(ctx, lspClient, registry, serverPath, serverArgs)
+            }
+            ```
+            Replace with:
+            ```go
+            func runWithRecovery(ctx context.Context, resolver lsp.ClientResolver, registry *extensions.ExtensionRegistry, serverPath string, serverArgs []string) (runErr error) {
+            	defer func() {
+            		if r := recover(); r != nil {
+            			logging.Log(logging.LevelError, fmt.Sprintf("panic recovered: %v", r))
+            			// Attempt graceful shutdown after panic.
+            			shutdownCtx, cancel := context.WithTimeout(context.Background(), gracefulShutdownTimeout)
+            			defer cancel()
+            			_ = resolver.Shutdown(shutdownCtx)
+            		}
+            	}()
+            	return Run(ctx, resolver, registry, serverPath, serverArgs)
+            }
+            ```
+
+            **Step 4: Add import for config package**
+            Add to the import block:
+            `"github.com/blackwell-systems/lsp-mcp-go/internal/config"`
+
+            ### Verification gate
+            ```
+            cd /Users/dayna.blackwell/code/LSP-MCP-GO
+            GOWORK=off go build ./cmd/lsp-mcp-go/...
+            GOWORK=off go vet ./cmd/lsp-mcp-go/...
+            # Postconditions:
+            grep -n "config.ParseArgs" /Users/dayna.blackwell/code/LSP-MCP-GO/cmd/lsp-mcp-go/main.go
+            # Expected: 1 match
+            grep -n "NewSingleServerManager\|NewMultiServerManager" /Users/dayna.blackwell/code/LSP-MCP-GO/cmd/lsp-mcp-go/main.go
+            # Expected: 2 matches (one per branch)
+            grep -n "resolver.Shutdown" /Users/dayna.blackwell/code/LSP-MCP-GO/cmd/lsp-mcp-go/main.go
+            # Expected: 2 matches (signal handler + panic recovery)
+            grep -n "lsp.ClientResolver" /Users/dayna.blackwell/code/LSP-MCP-GO/cmd/lsp-mcp-go/main.go
+            # Expected: at least 1 match (var resolver lsp.ClientResolver declaration)
+            ```
+
+            ### Constraints
+            - Do NOT modify server.go — Agent C owns that file.
+            - Do NOT modify internal/ files — Agent A owns those.
+            - Do NOT modify test/ directory.
+            - GOWORK=off on all go commands.
+            - Preserve the compile-time haskell extension import.
+            - The Run() function declaration is in server.go (Agent C). You only update
+              the call site in main.go. Both must agree on the new signature.
+          files:
+            - cmd/lsp-mcp-go/main.go
+        - id: C
+          task: |
+            ## Agent C: server.go — ClientResolver-based tool dispatch
+
+            ### Context
+            Scaffold file already exists:
+            - internal/lsp/resolver.go — ClientResolver interface
+
+            Agent A (parallel) implements ServerManager in manager.go.
+            Agent B (parallel) updates main.go to pass lsp.ClientResolver to Run().
+            You change the Run() declaration and add file-routed client dispatch.
+
+            ### File to modify
+            /Users/dayna.blackwell/code/LSP-MCP-GO/cmd/lsp-mcp-go/server.go
+
+            ### What to change
+
+            **Step 1: Change Run() signature**
+
+            Find this exact text:
+            ```go
+            func Run(ctx context.Context, lspClient *lsp.LSPClient, registry *extensions.ExtensionRegistry, serverPath string, serverArgs []string) error {
+            	cs := &clientState{client: lspClient}
+            ```
+            Replace with:
+            ```go
+            func Run(ctx context.Context, resolver lsp.ClientResolver, registry *extensions.ExtensionRegistry, serverPath string, serverArgs []string) error {
+            	cs := &clientState{client: resolver.DefaultClient()}
+            ```
+
+            **Step 2: Add clientForFile helper**
+
+            After the closing `}` of the makeCallToolResult function
+            (the function that ends just before `// Run creates and starts the MCP server.`), add:
+
+            Find this exact text to use as insertion anchor:
+            ```go
+            // Run creates and starts the MCP server.
+            func Run(ctx context.Context, lspClient *lsp.LSPClient, registry *extensions.ExtensionRegistry, serverPath string, serverArgs []string) error {
+            ```
+
+            Insert before that block (before "// Run creates"):
+            ```go
+            // clientForFile returns the LSP client for the given file path using the resolver.
+            // Falls back to cs.get() (default client) if filePath is empty or no server
+            // is configured for the file's extension.
+            func clientForFile(resolver lsp.ClientResolver, cs *clientState, filePath string) *lsp.LSPClient {
+            	if filePath != "" {
+            		if c := resolver.ClientForFile(filePath); c != nil {
+            			return c
+            		}
+            	}
+            	return cs.get()
+            }
+            ```
+
+            **Step 3: Update file-specific tool handlers**
+
+            For each of the following tools, change the `cs.get()` call to
+            `clientForFile(resolver, cs, args.FilePath)`. The args struct field name
+            varies — use the exact field name from the args struct defined in server.go.
+
+            Tools to update (field name in parentheses):
+            - open_document: `cs.get()` → `clientForFile(resolver, cs, args.FilePath)`
+            - close_document: `cs.get()` → `clientForFile(resolver, cs, args.FilePath)`
+            - get_diagnostics: `cs.get()` → `clientForFile(resolver, cs, args.FilePath)`
+            - get_info_on_location: `cs.get()` → `clientForFile(resolver, cs, args.FilePath)`
+            - get_completions: `cs.get()` → `clientForFile(resolver, cs, args.FilePath)`
+            - get_signature_help: `cs.get()` → `clientForFile(resolver, cs, args.FilePath)`
+            - get_code_actions: `cs.get()` → `clientForFile(resolver, cs, args.FilePath)`
+            - get_document_symbols: `cs.get()` → `clientForFile(resolver, cs, args.FilePath)`
+            - get_references: `cs.get()` → `clientForFile(resolver, cs, args.FilePath)`
+            - go_to_definition: `cs.get()` → `clientForFile(resolver, cs, args.FilePath)`
+            - go_to_type_definition: `cs.get()` → `clientForFile(resolver, cs, args.FilePath)`
+            - go_to_implementation: `cs.get()` → `clientForFile(resolver, cs, args.FilePath)`
+            - go_to_declaration: `cs.get()` → `clientForFile(resolver, cs, args.FilePath)`
+            - rename_symbol: `cs.get()` → `clientForFile(resolver, cs, args.FilePath)`
+            - prepare_rename: `cs.get()` → `clientForFile(resolver, cs, args.FilePath)`
+            - format_document: `cs.get()` → `clientForFile(resolver, cs, args.FilePath)`
+            - format_range: `cs.get()` → `clientForFile(resolver, cs, args.FilePath)`
+
+            Tools to KEEP using cs.get() (no file_path or global scope):
+            - restart_lsp_server
+            - get_workspace_symbols
+            - apply_edit
+            - execute_command
+            - did_change_watched_files
+            - set_log_level
+            - start_lsp (this tool takes a getter/setter for clientState — leave unchanged)
+
+            **Step 4: Update diagnostics subscription**
+
+            Find this exact text:
+            ```go
+            // Subscribe to diagnostic updates for logging purposes.
+            if lspClient != nil {
+            	lspClient.SubscribeToDiagnostics(func(uri string, _ []types.LSPDiagnostic) {
+            		logging.Log(logging.LevelDebug, "diagnostics updated for: "+uri)
+            	})
+            }
+            ```
+            Replace with:
+            ```go
+            // Subscribe to diagnostic updates for logging purposes (all managed clients).
+            for _, c := range resolver.AllClients() {
+            	if c != nil {
+            		c.SubscribeToDiagnostics(func(uri string, _ []types.LSPDiagnostic) {
+            			logging.Log(logging.LevelDebug, "diagnostics updated for: "+uri)
+            		})
+            	}
+            }
+            ```
+
+            **Step 5: Update lspClient reference in resource handlers**
+
+            The three resource handlers use `client := cs.get()`. Leave them as-is.
+            They route to the default client — acceptable for resources in v1.
+
+            ### Verification gate
+            ```
+            cd /Users/dayna.blackwell/code/LSP-MCP-GO
+            GOWORK=off go build ./cmd/lsp-mcp-go/...
+            GOWORK=off go vet ./cmd/lsp-mcp-go/...
+            # Postconditions:
+            grep -c "clientForFile(resolver" /Users/dayna.blackwell/code/LSP-MCP-GO/cmd/lsp-mcp-go/server.go
+            # Expected: >= 17 (one per file-specific tool)
+            grep -n "lsp.ClientResolver" /Users/dayna.blackwell/code/LSP-MCP-GO/cmd/lsp-mcp-go/server.go
+            # Expected: at least 2 matches (Run param + clientForFile param)
+            grep -n "resolver.AllClients" /Users/dayna.blackwell/code/LSP-MCP-GO/cmd/lsp-mcp-go/server.go
+            # Expected: 1 match (diagnostics subscription)
+            grep -n "func clientForFile" /Users/dayna.blackwell/code/LSP-MCP-GO/cmd/lsp-mcp-go/server.go
+            # Expected: 1 match
+            ```
+
+            ### Constraints
+            - Do NOT modify main.go — Agent B owns that file.
+            - Do NOT modify internal/ files — Agent A owns those.
+            - Do NOT modify test/ directory.
+            - GOWORK=off on all go commands.
+            - Do NOT change the HandleStartLsp call — keep cs.get and cs.set as today.
+            - Do NOT move clientForFile to internal/tools — it belongs in server.go.
+            - The clientState struct, get(), and set() methods must remain exactly as-is.
+          files:
+            - cmd/lsp-mcp-go/server.go
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: cd /Users/dayna.blackwell/code/LSP-MCP-GO && GOWORK=off go build ./...
+          required: true
+          repo: LSP-MCP-GO
+        - type: lint
+          command: cd /Users/dayna.blackwell/code/LSP-MCP-GO && GOWORK=off go vet ./...
+          required: true
+          repo: LSP-MCP-GO
+        - type: test
+          command: cd /Users/dayna.blackwell/code/LSP-MCP-GO && GOWORK=off go test ./internal/tools/... ./internal/extensions/... ./internal/config/... ./cmd/...
+          required: true
+          repo: LSP-MCP-GO
+scaffolds:
+    - file_path: internal/lsp/resolver.go
+      contents: |
+        package lsp
+
+        import "context"
+
+        // ClientResolver resolves the appropriate LSPClient for a given file path.
+        // In single-server mode the manager returns the same client regardless of path.
+        // In multi-server mode it routes by file extension.
+        type ClientResolver interface {
+            // ClientForFile returns the LSPClient that should handle operations for
+            // the given absolute file path. Falls back to DefaultClient if the extension
+            // is not mapped. Returns nil only if the manager holds zero clients.
+            ClientForFile(filePath string) *LSPClient
+
+            // DefaultClient returns the primary (or only) LSPClient.
+            // Used for tools that are not file-specific (e.g. get_workspace_symbols).
+            DefaultClient() *LSPClient
+
+            // AllClients returns all managed clients, including nil entries filtered out.
+            AllClients() []*LSPClient
+
+            // Shutdown gracefully shuts down all managed LSP clients.
+            Shutdown(ctx context.Context) error
+        }
+      import_path: github.com/blackwell-systems/lsp-mcp-go/internal/lsp
+      status: committed (4589e65)
+    - file_path: internal/config/config.go
+      contents: |
+        // Package config holds types and parsing for multi-server configuration.
+        package config
+
+        // ServerEntry describes one language server to launch.
+        // The format matches cclsp.json: extensions[] + command[].
+        type ServerEntry struct {
+            // Extensions is the list of file extensions this server handles (without dot).
+            // e.g. ["go"] or ["ts", "tsx", "js", "jsx"]
+            Extensions []string `json:"extensions"`
+
+            // Command is [binary, arg1, arg2, ...].
+            // e.g. ["gopls"] or ["typescript-language-server", "--stdio"]
+            Command []string `json:"command"`
+
+            // LanguageID is used when opening documents (e.g. "go", "typescript").
+            // If empty, inferred from Extensions[0] via the built-in extension map.
+            LanguageID string `json:"language_id,omitempty"`
+        }
+
+        // Config is the top-level multi-server configuration.
+        // File format: {"servers": [{...}, ...]}
+        type Config struct {
+            Servers []ServerEntry `json:"servers"`
+        }
+      import_path: github.com/blackwell-systems/lsp-mcp-go/internal/config
+      status: committed (4589e65)
 pre_mortem:
-  overall_risk: medium
-  rows:
-    - scenario: |-
-        Agent B updates Run() call in main.go to pass lsp.ClientResolver, but
-        Agent C's server.go (same wave, different worktree) still has the old
-        signature func Run(ctx, lspClient *lsp.LSPClient, ...). Post-merge: type
-        mismatch compilation failure.
-      likelihood: high
-      impact: high
-      mitigation: |-
-        Both agents are given the exact new Run() signature. Agent B's brief
-        says "update the call site"; Agent C's brief says "change the declaration".
-        The scaffold ClientResolver interface exists in both worktrees independently.
-        Post-merge build gate catches mismatch immediately. If it occurs, the fix
-        is a one-line change to server.go's func Run signature.
-
-    - scenario: |-
-        Scaffold Agent does not commit internal/config/config.go before worktrees
-        open. Agent A's parse.go imports config.ServerEntry and cannot compile.
-        Agent B's main.go imports config.ParseArgs and cannot compile.
-      likelihood: high
-      impact: high
-      mitigation: |-
-        Orchestrator must create scaffolds and commit them to main branch before
-        opening any Wave 1 worktrees. This is the standard scaffold workflow. The
-        pre_mortem documents it explicitly so the Orchestrator is aware.
-
-    - scenario: |-
-        Multi-arg parsing with comma as arg separator fails for binary paths
-        containing commas (unlikely but possible on unusual systems).
-      likelihood: low
-      impact: low
-      mitigation: |-
-        Document this limitation in ParseArgs godoc. Config file mode (--config)
-        handles complex cases without this restriction.
-
-    - scenario: |-
-        In multi-server mode, start_lsp tool only restarts the first (default)
-        server. Users expecting per-language restart will be confused.
-      likelihood: medium
-      impact: low
-      mitigation: |-
-        Acceptable for v1. start_lsp tool description in server.go can note that
-        in multi-server mode it reinitializes the primary server only. Per-server
-        restart is future work.
-
-    - scenario: |-
-        Agent A writes inferLanguageID as an unexported function in manager.go.
-        If it is also needed by parse.go (same package config), the function would
-        need to be in a shared file. But manager.go is in package lsp and parse.go
-        is in package config — they are separate packages, so no conflict.
-      likelihood: low
-      impact: low
-      mitigation: |-
-        The extension map for multi-arg mode is inline in ParseArgs (package config).
-        inferLanguageID in manager.go is used for LanguageID inference in package lsp.
-        These are separate functions in separate packages — no conflict.
-
+    overall_risk: medium
+    rows:
+        - scenario: |-
+            Agent B updates Run() call in main.go to pass lsp.ClientResolver, but
+            Agent C's server.go (same wave, different worktree) still has the old
+            signature func Run(ctx, lspClient *lsp.LSPClient, ...). Post-merge: type
+            mismatch compilation failure.
+          likelihood: high
+          impact: high
+          mitigation: |-
+            Both agents are given the exact new Run() signature. Agent B's brief
+            says "update the call site"; Agent C's brief says "change the declaration".
+            The scaffold ClientResolver interface exists in both worktrees independently.
+            Post-merge build gate catches mismatch immediately. If it occurs, the fix
+            is a one-line change to server.go's func Run signature.
+        - scenario: |-
+            Scaffold Agent does not commit internal/config/config.go before worktrees
+            open. Agent A's parse.go imports config.ServerEntry and cannot compile.
+            Agent B's main.go imports config.ParseArgs and cannot compile.
+          likelihood: high
+          impact: high
+          mitigation: |-
+            Orchestrator must create scaffolds and commit them to main branch before
+            opening any Wave 1 worktrees. This is the standard scaffold workflow. The
+            pre_mortem documents it explicitly so the Orchestrator is aware.
+        - scenario: |-
+            Multi-arg parsing with comma as arg separator fails for binary paths
+            containing commas (unlikely but possible on unusual systems).
+          likelihood: low
+          impact: low
+          mitigation: |-
+            Document this limitation in ParseArgs godoc. Config file mode (--config)
+            handles complex cases without this restriction.
+        - scenario: |-
+            In multi-server mode, start_lsp tool only restarts the first (default)
+            server. Users expecting per-language restart will be confused.
+          likelihood: medium
+          impact: low
+          mitigation: |-
+            Acceptable for v1. start_lsp tool description in server.go can note that
+            in multi-server mode it reinitializes the primary server only. Per-server
+            restart is future work.
+        - scenario: |-
+            Agent A writes inferLanguageID as an unexported function in manager.go.
+            If it is also needed by parse.go (same package config), the function would
+            need to be in a shared file. But manager.go is in package lsp and parse.go
+            is in package config — they are separate packages, so no conflict.
+          likelihood: low
+          impact: low
+          mitigation: |-
+            The extension map for multi-arg mode is inline in ParseArgs (package config).
+            inferLanguageID in manager.go is used for LanguageID inference in package lsp.
+            These are separate functions in separate packages — no conflict.
 known_issues:
-  - title: Pre-existing flaky test in internal/lsp
-    description: |-
-      TestWaitForDiagnostics_SettlesAfterQuietWindow in internal/lsp/diagnostics_test.go
-      fails before this change (pre-existing flaky test). The quality gate test command
-      explicitly excludes internal/lsp to avoid false positives. Do not attempt to fix
-      this test as part of this feature.
+    - title: Pre-existing flaky test in internal/lsp
+      description: |-
+        TestWaitForDiagnostics_SettlesAfterQuietWindow in internal/lsp/diagnostics_test.go
+        fails before this change (pre-existing flaky test). The quality gate test command
+        explicitly excludes internal/lsp to avoid false positives. Do not attempt to fix
+        this test as part of this feature.
+critic_report:
+    verdict: PASS
+    agent_reviews:
+        A:
+            agent_id: A
+            verdict: PASS
+        B:
+            agent_id: B
+            verdict: PASS
+        C:
+            agent_id: C
+            verdict: PASS
+            issues:
+                - check: symbol_accuracy
+                  severity: warning
+                  description: call_hierarchy tool is omitted from both the update-list (17 file-specific tools) and the keep-list (6 global tools) in Agent C's brief. CallHierarchyArgs has a FilePath field (line 219 of server.go), which means it qualifies as a file-specific tool and should be updated to use clientForFile(resolver, cs, args.FilePath). Omitting it means call_hierarchy will always use the default client regardless of file extension in multi-server mode. This is a functional gap but does not cause a build failure.
+                  file: cmd/lsp-mcp-go/server.go
+                  symbol: call_hierarchy
+    summary: 'All three Wave 1 agent briefs verify cleanly against the codebase. Scaffold files (internal/lsp/resolver.go, internal/config/config.go) exist and match the interface_contracts exactly. Both action:modify files (main.go, server.go) exist and the exact landmark code blocks cited in Agent B and C briefs match line-for-line. The new files (manager.go, parse.go) correctly do not exist yet. Symbol references are accurate: NewLSPClient(serverPath, serverArgs), Initialize(ctx, rootDir), Shutdown(ctx), SubscribeToDiagnostics all have the signatures the briefs assume. Import paths (internal/lsp, internal/config, internal/logging, internal/extensions) all resolve. One advisory warning: Agent C''s brief omits call_hierarchy from both the update-list and the keep-list; CallHierarchyArgs has a FilePath field so it should arguably be updated, but this is a functional gap, not a build failure. File ownership is fully disjoint across all three agents.'
+    reviewed_at: "2026-04-06T19:46:45Z"
+    issue_count: 1
+state: "REVIEWED"
