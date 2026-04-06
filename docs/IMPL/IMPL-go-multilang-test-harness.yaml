@@ -1,0 +1,950 @@
+title: Port Multi-Language Integration Test Harness to Go
+feature_slug: go-multilang-test-harness
+verdict: SUITABLE
+suitability_assessment: |
+    Work decomposes cleanly into two disjoint agents:
+      Agent A: Copy all test fixtures from the TypeScript repo into the Go repo (30+ files,
+               no code authorship). This is purely file I/O — no compilation required.
+      Agent B: Write test/multi_lang_test.go — a 400+ line Go test file. Completely independent
+               of Agent A's copy step at authorship time because Agent B embeds absolute fixture
+               paths in the language config structs.
+
+    No root-cause analysis needed. The TypeScript source (multi-lang.test.js) is the complete
+    specification. The MCP Go SDK API (github.com/modelcontextprotocol/go-sdk v1.4.1) is
+    confirmed from source: mcp.NewClient, mcp.CommandTransport, ClientSession.CallTool,
+    CallToolParams, CallToolResult, TextContent.
+
+    All work is TODO. The Go repo has no test/fixtures/ directory and no multi-lang test.
+
+    Parallelization value: Agent A copies many files (no logic); Agent B writes substantial
+    Go test logic. Both are fully independent until merge.
+
+    Estimated times:
+    - Scout phase: ~10 min
+    - Agent execution: 2 agents x ~10 min avg = ~10 min wall-clock (parallel)
+    - Merge + verification: ~3 min
+    Total SAW time: ~23 min
+
+    Sequential baseline: ~25 min (fixture copy + test authoring sequential)
+    Time savings: marginal speed, but coordination value is primary (spec capture, interface
+    accuracy, wave tracking).
+
+    Recommendation: SUITABLE — coordination value justifies the IMPL doc even at modest
+    speed savings.
+test_command: GOWORK=off go test -v -run TestMultiLanguage ./...
+lint_command: GOWORK=off go vet ./...
+file_ownership:
+    - file: test/fixtures/go/main.go
+      agent: A
+      wave: 1
+      action: new
+      repo: LSP-MCP-GO
+    - file: test/fixtures/go/greeter.go
+      agent: A
+      wave: 1
+      action: new
+      repo: LSP-MCP-GO
+    - file: test/fixtures/go/go.mod
+      agent: A
+      wave: 1
+      action: new
+      repo: LSP-MCP-GO
+    - file: test/fixtures/python/main.py
+      agent: A
+      wave: 1
+      action: new
+      repo: LSP-MCP-GO
+    - file: test/fixtures/python/greeter.py
+      agent: A
+      wave: 1
+      action: new
+      repo: LSP-MCP-GO
+    - file: test/fixtures/python/pyrightconfig.json
+      agent: A
+      wave: 1
+      action: new
+      repo: LSP-MCP-GO
+    - file: test/fixtures/rust/Cargo.toml
+      agent: A
+      wave: 1
+      action: new
+      repo: LSP-MCP-GO
+    - file: test/fixtures/rust/Cargo.lock
+      agent: A
+      wave: 1
+      action: new
+      repo: LSP-MCP-GO
+    - file: test/fixtures/rust/.gitignore
+      agent: A
+      wave: 1
+      action: new
+      repo: LSP-MCP-GO
+    - file: test/fixtures/rust/src/main.rs
+      agent: A
+      wave: 1
+      action: new
+      repo: LSP-MCP-GO
+    - file: test/fixtures/rust/src/greeter.rs
+      agent: A
+      wave: 1
+      action: new
+      repo: LSP-MCP-GO
+    - file: test/fixtures/java/pom.xml
+      agent: A
+      wave: 1
+      action: new
+      repo: LSP-MCP-GO
+    - file: test/fixtures/java/.classpath
+      agent: A
+      wave: 1
+      action: new
+      repo: LSP-MCP-GO
+    - file: test/fixtures/java/.project
+      agent: A
+      wave: 1
+      action: new
+      repo: LSP-MCP-GO
+    - file: test/fixtures/java/.settings/org.eclipse.jdt.apt.core.prefs
+      agent: A
+      wave: 1
+      action: new
+      repo: LSP-MCP-GO
+    - file: test/fixtures/java/.settings/org.eclipse.jdt.core.prefs
+      agent: A
+      wave: 1
+      action: new
+      repo: LSP-MCP-GO
+    - file: test/fixtures/java/.settings/org.eclipse.m2e.core.prefs
+      agent: A
+      wave: 1
+      action: new
+      repo: LSP-MCP-GO
+    - file: test/fixtures/java/src/main/java/com/example/Person.java
+      agent: A
+      wave: 1
+      action: new
+      repo: LSP-MCP-GO
+    - file: test/fixtures/java/src/main/java/com/example/Greeter.java
+      agent: A
+      wave: 1
+      action: new
+      repo: LSP-MCP-GO
+    - file: test/fixtures/c/person.h
+      agent: A
+      wave: 1
+      action: new
+      repo: LSP-MCP-GO
+    - file: test/fixtures/c/person.c
+      agent: A
+      wave: 1
+      action: new
+      repo: LSP-MCP-GO
+    - file: test/fixtures/c/greeter.c
+      agent: A
+      wave: 1
+      action: new
+      repo: LSP-MCP-GO
+    - file: test/fixtures/c/compile_commands.json
+      agent: A
+      wave: 1
+      action: new
+      repo: LSP-MCP-GO
+    - file: test/fixtures/php/Person.php
+      agent: A
+      wave: 1
+      action: new
+      repo: LSP-MCP-GO
+    - file: test/fixtures/php/Greeter.php
+      agent: A
+      wave: 1
+      action: new
+      repo: LSP-MCP-GO
+    - file: test/fixtures/typescript/src/example.ts
+      agent: A
+      wave: 1
+      action: new
+      repo: LSP-MCP-GO
+    - file: test/fixtures/typescript/src/consumer.ts
+      agent: A
+      wave: 1
+      action: new
+      repo: LSP-MCP-GO
+    - file: test/fixtures/typescript/tsconfig.json
+      agent: A
+      wave: 1
+      action: new
+      repo: LSP-MCP-GO
+    - file: test/multi_lang_test.go
+      agent: B
+      wave: 1
+      action: new
+      repo: LSP-MCP-GO
+interface_contracts:
+    - name: mcp.NewClient
+      description: Creates a new MCP client
+      definition: |
+        func NewClient(impl *mcp.Implementation, options *mcp.ClientOptions) *mcp.Client
+        // Usage:
+        client := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "1.0"}, nil)
+      location: github.com/modelcontextprotocol/go-sdk/mcp/client.go:44
+    - name: mcp.CommandTransport
+      description: Transport that runs a command and communicates over stdin/stdout
+      definition: |
+        type CommandTransport struct {
+            Command           *exec.Cmd
+            TerminateDuration time.Duration
+        }
+        // Usage:
+        transport := &mcp.CommandTransport{Command: exec.Command(binaryPath, langID, lspBinaryPath, serverArgs...)}
+      location: github.com/modelcontextprotocol/go-sdk/mcp/cmd.go:20
+    - name: Client.Connect
+      description: Connects client to a server over the given transport; returns a ClientSession
+      definition: |
+        func (c *mcp.Client) Connect(ctx context.Context, t mcp.Transport, opts *mcp.ClientSessionOptions) (*mcp.ClientSession, error)
+      location: github.com/modelcontextprotocol/go-sdk/mcp/client.go:255
+    - name: ClientSession.CallTool
+      description: Calls a named tool on the connected MCP server
+      definition: |
+        func (cs *mcp.ClientSession) CallTool(ctx context.Context, params *mcp.CallToolParams) (*mcp.CallToolResult, error)
+
+        type CallToolParams struct {
+            Name      string `json:"name"`
+            Arguments any    `json:"arguments,omitempty"`
+        }
+
+        type CallToolResult struct {
+            Content     []mcp.Content `json:"content"`
+            IsError     bool          `json:"isError,omitempty"`
+        }
+
+        // Extracting text from result:
+        text := res.Content[0].(*mcp.TextContent).Text
+      location: github.com/modelcontextprotocol/go-sdk/mcp/client.go:989
+    - name: ClientSession.Close
+      description: Closes the MCP session; should be called via defer
+      definition: |
+        func (cs *mcp.ClientSession) Close() error
+      location: github.com/modelcontextprotocol/go-sdk/mcp/client.go:341
+    - name: langConfig
+      description: Per-language test configuration struct holding fixture paths and position metadata
+      definition: |
+        type langConfig struct {
+            name              string
+            id                string
+            binary            string
+            serverArgs        []string
+            javaHome          string // optional; set for java only
+            fixture           string // absolute path to fixture directory
+            file              string // absolute path to primary source file
+            hoverLine         int
+            hoverColumn       int
+            definitionLine    int
+            definitionColumn  int
+            callSiteLine      int
+            callSiteColumn    int
+            callSiteFile      string // optional; defaults to .file if empty
+            referenceLine     int
+            referenceColumn   int
+            completionLine    int
+            completionColumn  int
+            completionFile    string // optional; defaults to .file if empty
+            workspaceSymbol   string
+            supportsFormatting bool
+            secondFile        string // optional; path to cross-file fixture
+            symbolName        string
+            declarationLine   int    // C only
+            declarationColumn int    // C only
+        }
+      location: test/multi_lang_test.go
+    - name: toolResult
+      description: Result of a single Tier 2 tool test
+      definition: |
+        type toolResult struct {
+            tool   string
+            status string // "pass", "fail", "skip"
+            detail string
+        }
+      location: test/multi_lang_test.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## Role
+            Fixture Copier — create the test/fixtures/ and test/fixtures/typescript/
+            directory trees in the Go repo by writing each file with exact content
+            from the TypeScript repo reference below.
+
+            ## Repository
+            Work in: /Users/dayna.blackwell/code/LSP-MCP-GO
+
+            ## What to create
+            Create the following directory structure. All files must be written with
+            the EXACT content shown in the "File Contents" section below.
+            Do NOT use shell cp or rsync — write each file explicitly using the Write tool
+            so the content is verified. Do NOT copy compiled artifacts:
+            - rust/target/ — skip entirely
+            - java/target/ — skip entirely
+
+            ## Directory layout to create
+            ```
+            test/fixtures/go/main.go
+            test/fixtures/go/greeter.go
+            test/fixtures/go/go.mod
+            test/fixtures/python/main.py
+            test/fixtures/python/greeter.py
+            test/fixtures/python/pyrightconfig.json
+            test/fixtures/rust/Cargo.toml
+            test/fixtures/rust/Cargo.lock
+            test/fixtures/rust/.gitignore
+            test/fixtures/rust/src/main.rs
+            test/fixtures/rust/src/greeter.rs
+            test/fixtures/java/pom.xml
+            test/fixtures/java/.classpath
+            test/fixtures/java/.project
+            test/fixtures/java/.settings/org.eclipse.jdt.apt.core.prefs
+            test/fixtures/java/.settings/org.eclipse.jdt.core.prefs
+            test/fixtures/java/.settings/org.eclipse.m2e.core.prefs
+            test/fixtures/java/src/main/java/com/example/Person.java
+            test/fixtures/java/src/main/java/com/example/Greeter.java
+            test/fixtures/c/person.h
+            test/fixtures/c/person.c
+            test/fixtures/c/greeter.c
+            test/fixtures/c/compile_commands.json
+            test/fixtures/php/Person.php
+            test/fixtures/php/Greeter.php
+            test/fixtures/typescript/src/example.ts
+            test/fixtures/typescript/src/consumer.ts
+            test/fixtures/typescript/tsconfig.json
+            ```
+
+            ## Source locations (read these first)
+            Read each source file before writing it:
+
+            - /Users/dayna.blackwell/code/LSP-MCP/test/fixtures/go/main.go
+            - /Users/dayna.blackwell/code/LSP-MCP/test/fixtures/go/greeter.go
+            - /Users/dayna.blackwell/code/LSP-MCP/test/fixtures/go/go.mod
+            - /Users/dayna.blackwell/code/LSP-MCP/test/fixtures/python/main.py
+            - /Users/dayna.blackwell/code/LSP-MCP/test/fixtures/python/greeter.py
+            - /Users/dayna.blackwell/code/LSP-MCP/test/fixtures/python/pyrightconfig.json
+            - /Users/dayna.blackwell/code/LSP-MCP/test/fixtures/rust/Cargo.toml
+            - /Users/dayna.blackwell/code/LSP-MCP/test/fixtures/rust/Cargo.lock
+            - /Users/dayna.blackwell/code/LSP-MCP/test/fixtures/rust/.gitignore
+            - /Users/dayna.blackwell/code/LSP-MCP/test/fixtures/rust/src/main.rs
+            - /Users/dayna.blackwell/code/LSP-MCP/test/fixtures/rust/src/greeter.rs
+            - /Users/dayna.blackwell/code/LSP-MCP/test/fixtures/java/pom.xml
+            - /Users/dayna.blackwell/code/LSP-MCP/test/fixtures/java/.classpath
+            - /Users/dayna.blackwell/code/LSP-MCP/test/fixtures/java/.project
+            - /Users/dayna.blackwell/code/LSP-MCP/test/fixtures/java/.settings/org.eclipse.jdt.apt.core.prefs
+            - /Users/dayna.blackwell/code/LSP-MCP/test/fixtures/java/.settings/org.eclipse.jdt.core.prefs
+            - /Users/dayna.blackwell/code/LSP-MCP/test/fixtures/java/.settings/org.eclipse.m2e.core.prefs
+            - /Users/dayna.blackwell/code/LSP-MCP/test/fixtures/java/src/main/java/com/example/Person.java
+            - /Users/dayna.blackwell/code/LSP-MCP/test/fixtures/java/src/main/java/com/example/Greeter.java
+            - /Users/dayna.blackwell/code/LSP-MCP/test/fixtures/c/person.h
+            - /Users/dayna.blackwell/code/LSP-MCP/test/fixtures/c/person.c
+            - /Users/dayna.blackwell/code/LSP-MCP/test/fixtures/c/greeter.c
+            - /Users/dayna.blackwell/code/LSP-MCP/test/fixtures/c/compile_commands.json
+            - /Users/dayna.blackwell/code/LSP-MCP/test/fixtures/php/Person.php
+            - /Users/dayna.blackwell/code/LSP-MCP/test/fixtures/php/Greeter.php
+            - /Users/dayna.blackwell/code/LSP-MCP/test/ts-project/src/example.ts  (→ test/fixtures/typescript/src/example.ts)
+            - /Users/dayna.blackwell/code/LSP-MCP/test/ts-project/src/consumer.ts (→ test/fixtures/typescript/src/consumer.ts)
+            - /Users/dayna.blackwell/code/LSP-MCP/test/ts-project/tsconfig.json   (→ test/fixtures/typescript/tsconfig.json)
+
+            ## compile_commands.json special handling
+            The source compile_commands.json has placeholder directory "/placeholder".
+            When writing test/fixtures/c/compile_commands.json, replace the "directory"
+            value with the absolute path to the fixture directory:
+            /Users/dayna.blackwell/code/LSP-MCP-GO/test/fixtures/c
+
+            The updated file must be:
+            ```json
+            [
+              {
+                "directory": "/Users/dayna.blackwell/code/LSP-MCP-GO/test/fixtures/c",
+                "command": "cc -std=c11 person.c greeter.c -o person",
+                "file": "person.c"
+              },
+              {
+                "directory": "/Users/dayna.blackwell/code/LSP-MCP-GO/test/fixtures/c",
+                "command": "cc -std=c11 person.c greeter.c -o person",
+                "file": "greeter.c"
+              }
+            ]
+            ```
+
+            ## Verification gate
+            After writing all files, run these checks:
+
+            ```bash
+            # 1. Confirm file count (expect 28 files)
+            find /Users/dayna.blackwell/code/LSP-MCP-GO/test/fixtures -type f | wc -l
+            # expected: 28
+
+            # 2. Confirm no target/ dirs were created
+            find /Users/dayna.blackwell/code/LSP-MCP-GO/test/fixtures -type d -name target | wc -l
+            # expected: 0
+
+            # 3. Confirm compile_commands.json has correct directory
+            grep "LSP-MCP-GO" /Users/dayna.blackwell/code/LSP-MCP-GO/test/fixtures/c/compile_commands.json
+            # expected: line containing /Users/dayna.blackwell/code/LSP-MCP-GO/test/fixtures/c
+
+            # 4. Confirm Go fixture compiles
+            GOWORK=off go build /Users/dayna.blackwell/code/LSP-MCP-GO/test/fixtures/go/
+            # expected: exits 0 (or module-related warning, not a hard error)
+            ```
+
+            ## Constraints
+            - Do NOT modify integration_test.go or any existing files in /Users/dayna.blackwell/code/LSP-MCP-GO
+            - Do NOT copy rust/target/ or java/target/ compiled artifacts
+            - Do NOT modify files outside your ownership list
+            - The TypeScript repo at /Users/dayna.blackwell/code/LSP-MCP is READ-ONLY reference
+          files:
+            - test/fixtures/go/main.go
+            - test/fixtures/go/greeter.go
+            - test/fixtures/go/go.mod
+            - test/fixtures/python/main.py
+            - test/fixtures/python/greeter.py
+            - test/fixtures/python/pyrightconfig.json
+            - test/fixtures/rust/Cargo.toml
+            - test/fixtures/rust/Cargo.lock
+            - test/fixtures/rust/.gitignore
+            - test/fixtures/rust/src/main.rs
+            - test/fixtures/rust/src/greeter.rs
+            - test/fixtures/java/pom.xml
+            - test/fixtures/java/.classpath
+            - test/fixtures/java/.project
+            - test/fixtures/java/.settings/org.eclipse.jdt.apt.core.prefs
+            - test/fixtures/java/.settings/org.eclipse.jdt.core.prefs
+            - test/fixtures/java/.settings/org.eclipse.m2e.core.prefs
+            - test/fixtures/java/src/main/java/com/example/Person.java
+            - test/fixtures/java/src/main/java/com/example/Greeter.java
+            - test/fixtures/c/person.h
+            - test/fixtures/c/person.c
+            - test/fixtures/c/greeter.c
+            - test/fixtures/c/compile_commands.json
+            - test/fixtures/php/Person.php
+            - test/fixtures/php/Greeter.php
+            - test/fixtures/typescript/src/example.ts
+            - test/fixtures/typescript/src/consumer.ts
+            - test/fixtures/typescript/tsconfig.json
+        - id: B
+          task: |
+            ## Role
+            Test Author — create test/multi_lang_test.go in the Go repo. This is the
+            Go-native equivalent of the TypeScript multi-lang.test.js test suite, using
+            mcp.CommandTransport + ClientSession.CallTool from the go-sdk.
+
+            ## Repository
+            Work in: /Users/dayna.blackwell/code/LSP-MCP-GO
+
+            ## Package and imports
+            Package: package main_test (same as integration_test.go)
+
+            Required imports:
+            ```go
+            import (
+                "context"
+                "encoding/json"
+                "fmt"
+                "os"
+                "os/exec"
+                "path/filepath"
+                "runtime"
+                "testing"
+                "time"
+
+                "github.com/modelcontextprotocol/go-sdk/mcp"
+            )
+            ```
+
+            ## MCP client API (confirmed from go-sdk v1.4.1 source)
+            ```go
+            // Create client
+            client := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "1.0"}, nil)
+
+            // Create transport
+            transport := &mcp.CommandTransport{
+                Command: exec.Command(binaryPath, langID, lspBinaryPath, serverArgs...),
+            }
+            // Set env on the command if needed (e.g. JAVA_HOME):
+            transport.Command.Env = append(os.Environ(), "JAVA_HOME=...")
+
+            // Connect (returns *mcp.ClientSession)
+            session, err := client.Connect(ctx, transport, nil)
+            if err != nil { ... }
+            defer session.Close()
+
+            // Call a tool
+            res, err := session.CallTool(ctx, &mcp.CallToolParams{
+                Name:      "start_lsp",
+                Arguments: map[string]any{"root_dir": fixtureDir},
+            })
+            if err != nil { ... }
+            // Access text content:
+            text := res.Content[0].(*mcp.TextContent).Text
+            ```
+
+            ## Helper: fixtureDir
+            The test must resolve fixture paths relative to the test file's location.
+            Use runtime.Caller(0) to get the test file's directory, then construct
+            fixture paths relative to that:
+            ```go
+            func testDir(t *testing.T) string {
+                t.Helper()
+                _, filename, _, ok := runtime.Caller(0)
+                if !ok {
+                    t.Fatal("runtime.Caller failed")
+                }
+                return filepath.Dir(filename)
+            }
+            ```
+            Fixture base = filepath.Join(testDir(t), "fixtures")
+            TypeScript fixture = filepath.Join(testDir(t), "fixtures", "typescript")
+
+            ## langConfig struct
+            Define this struct at the top of the file (package-level):
+            ```go
+            type langConfig struct {
+                name              string
+                id                string
+                binary            string
+                serverArgs        []string
+                javaHome          string
+                fixture           string // absolute path to fixture dir
+                file              string // absolute path to primary source file
+                hoverLine         int
+                hoverColumn       int
+                definitionLine    int
+                definitionColumn  int
+                callSiteLine      int
+                callSiteColumn    int
+                callSiteFile      string // defaults to .file if empty
+                referenceLine     int
+                referenceColumn   int
+                completionLine    int
+                completionColumn  int
+                completionFile    string // defaults to .file if empty
+                workspaceSymbol   string
+                supportsFormatting bool
+                secondFile        string
+                symbolName        string
+                declarationLine   int    // C only
+                declarationColumn int    // C only
+            }
+            ```
+
+            ## toolResult struct
+            ```go
+            type toolResult struct {
+                tool   string
+                status string // "pass", "fail", "skip"
+                detail string
+            }
+            ```
+
+            ## Language configs
+            Build the LANGUAGES slice in buildLanguageConfigs(fixtureBase string) function
+            that takes the fixture base directory as argument (so paths are computed at
+            runtime from the actual test location). This function returns []langConfig.
+
+            Position metadata (MUST match exactly — these values are verified from the
+            TypeScript source multi-lang.test.js):
+
+            TypeScript:
+              id: "typescript", binary: "typescript-language-server", serverArgs: ["--stdio"]
+              fixture: filepath.Join(fixtureBase, "typescript")
+              file: filepath.Join(fixtureBase, "typescript", "src", "example.ts")
+              hoverLine: 11, hoverColumn: 18
+              definitionLine: 4, definitionColumn: 17
+              callSiteLine: 4, callSiteColumn: 14
+              callSiteFile: filepath.Join(fixtureBase, "typescript", "src", "consumer.ts")
+              referenceLine: 11, referenceColumn: 18
+              completionLine: 7, completionColumn: 26
+              completionFile: filepath.Join(fixtureBase, "typescript", "src", "consumer.ts")
+              workspaceSymbol: "Person", supportsFormatting: true
+              secondFile: filepath.Join(fixtureBase, "typescript", "src", "consumer.ts")
+              symbolName: "Person"
+
+            Python:
+              id: "python", binary: "pyright-langserver", serverArgs: ["--stdio"]
+              fixture: filepath.Join(fixtureBase, "python")
+              file: filepath.Join(fixtureBase, "python", "main.py")
+              hoverLine: 4, hoverColumn: 7
+              definitionLine: 1, definitionColumn: 5
+              callSiteLine: 15, callSiteColumn: 14
+              referenceLine: 4, referenceColumn: 7
+              completionLine: 14, completionColumn: 13
+              workspaceSymbol: "Person", supportsFormatting: false
+              secondFile: filepath.Join(fixtureBase, "python", "greeter.py")
+              symbolName: "Person"
+
+            Go:
+              id: "go", binary: "gopls", serverArgs: []string{}
+              fixture: filepath.Join(fixtureBase, "go")
+              file: filepath.Join(fixtureBase, "go", "main.go")
+              hoverLine: 6, hoverColumn: 6
+              definitionLine: 16, definitionColumn: 6
+              callSiteLine: 23, callSiteColumn: 17
+              referenceLine: 6, referenceColumn: 6
+              completionLine: 22, completionColumn: 19
+              workspaceSymbol: "Person", supportsFormatting: true
+              secondFile: filepath.Join(fixtureBase, "go", "greeter.go")
+              symbolName: "Person"
+
+            Rust:
+              id: "rust", binary: "rust-analyzer", serverArgs: []string{}
+              fixture: filepath.Join(fixtureBase, "rust")
+              file: filepath.Join(fixtureBase, "rust", "src", "main.rs")
+              hoverLine: 2, hoverColumn: 8
+              definitionLine: 23, definitionColumn: 4
+              callSiteLine: 30, callSiteColumn: 20
+              referenceLine: 2, referenceColumn: 12
+              completionLine: 28, completionColumn: 11
+              workspaceSymbol: "Person", supportsFormatting: true
+              secondFile: filepath.Join(fixtureBase, "rust", "src", "greeter.rs")
+              symbolName: "Person"
+
+            Java:
+              id: "java", binary: "jdtls"
+              serverArgs: []string{"-data", "/tmp/jdtls-workspace-lsp-mcp-test"}
+              javaHome: "/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home"
+              fixture: filepath.Join(fixtureBase, "java")
+              file: filepath.Join(fixtureBase, "java", "src", "main", "java", "com", "example", "Person.java")
+              hoverLine: 6, hoverColumn: 14
+              definitionLine: 20, definitionColumn: 23
+              callSiteLine: 27, callSiteColumn: 28
+              referenceLine: 6, referenceColumn: 14
+              completionLine: 25, completionColumn: 16
+              workspaceSymbol: "Person", supportsFormatting: true
+              secondFile: filepath.Join(fixtureBase, "java", "src", "main", "java", "com", "example", "Greeter.java")
+              symbolName: "Person"
+
+            C:
+              id: "c", binary: "clangd", serverArgs: []string{}
+              fixture: filepath.Join(fixtureBase, "c")
+              file: filepath.Join(fixtureBase, "c", "person.c")
+              hoverLine: 3, hoverColumn: 1
+              definitionLine: 10, definitionColumn: 5
+              callSiteLine: 16, callSiteColumn: 12
+              referenceLine: 3, referenceColumn: 1
+              completionLine: 15, completionColumn: 12
+              workspaceSymbol: "Person", supportsFormatting: true
+              secondFile: filepath.Join(fixtureBase, "c", "greeter.c")
+              symbolName: "create_person"
+              declarationLine: 3, declarationColumn: 1
+
+            PHP:
+              id: "php", binary: "intelephense", serverArgs: []string{"--stdio"}
+              fixture: filepath.Join(fixtureBase, "php")
+              file: filepath.Join(fixtureBase, "php", "Person.php")
+              hoverLine: 6, hoverColumn: 7
+              definitionLine: 20, definitionColumn: 24
+              callSiteLine: 27, callSiteColumn: 14
+              referenceLine: 6, referenceColumn: 7
+              completionLine: 26, completionColumn: 22
+              workspaceSymbol: "Person", supportsFormatting: false
+              secondFile: filepath.Join(fixtureBase, "php", "Greeter.php")
+              symbolName: "Person"
+
+            ## buildBinary helper
+            Reuse the buildBinary helper pattern from integration_test.go but define a
+            separate package-level var to cache the binary path so it is built once:
+            ```go
+            var (
+                multilangBinaryOnce sync.Once
+                multilangBinaryPath string
+            )
+
+            func getMultilangBinary(t *testing.T) string {
+                t.Helper()
+                multilangBinaryOnce.Do(func() {
+                    tmp, err := os.MkdirTemp("", "lsp-mcp-go-multi-*")
+                    if err != nil {
+                        return
+                    }
+                    p := filepath.Join(tmp, "lsp-mcp-go")
+                    cmd := exec.Command("go", "build", "-o", p, "./cmd/lsp-mcp-go")
+                    cmd.Env = append(os.Environ(), "GOWORK=off")
+                    cmd.Dir = filepath.Join(filepath.Dir(p), "..", "..", "..")
+                    // We need the repo root; use runtime.Caller to find test file dir
+                    // then go up two levels: test/ -> repo root
+                    multilangBinaryPath = p
+                })
+                return multilangBinaryPath
+            }
+            ```
+            Note: The repo root is two directories above the test file
+            (test/multi_lang_test.go → test/ → repo root). Use runtime.Caller(0) to
+            get the test file path, then filepath.Dir twice to reach repo root.
+            Set cmd.Dir to repo root before running go build.
+
+            ## TestMultiLanguage function structure
+            ```go
+            func TestMultiLanguage(t *testing.T) {
+                t.Parallel()
+
+                fixtureBase := filepath.Join(testDir(t), "fixtures")
+                binaryPath := getMultilangBinary(t)
+                if binaryPath == "" {
+                    t.Skip("failed to build lsp-mcp-go binary")
+                }
+
+                languages := buildLanguageConfigs(fixtureBase)
+
+                // Collect results for summary table
+                type langResult struct {
+                    name  string
+                    tier1 string // "pass", "fail", "skip"
+                    tier2 []toolResult
+                }
+                results := make([]langResult, 0, len(languages))
+
+                // Run subtests sequentially (LSP servers can collide when run in parallel)
+                for _, lang := range languages {
+                    lang := lang // capture loop var
+                    t.Run(lang.name, func(t *testing.T) {
+                        // Do NOT call t.Parallel() here — run sequentially
+                        r := runLanguageTest(t, binaryPath, lang)
+                        results = append(results, langResult{
+                            name:  lang.name,
+                            tier1: r.tier1,
+                            tier2: r.tier2,
+                        })
+                    })
+                }
+
+                printMultiLangSummary(t, results)
+            }
+            ```
+
+            ## runLanguageTest function
+            This function runs Tier 1 + Tier 2 tests for a single language. Signature:
+            ```go
+            type langTestResult struct {
+                tier1 string       // "pass", "fail", "skip"
+                tier2 []toolResult
+            }
+
+            func runLanguageTest(t *testing.T, binaryPath string, lang langConfig) langTestResult {
+            ```
+
+            Logic flow:
+            1. Check binary with exec.LookPath(lang.binary):
+               - if err != nil: t.Skipf("skipping %s: %s not found on PATH", lang.name, lang.binary)
+            2. Build exec.Command:
+               ```go
+               args := append([]string{lang.id, binaryPath_resolved}, lang.serverArgs...)
+               cmd := exec.Command(binaryPath, args...)
+               if lang.javaHome != "" {
+                   cmd.Env = append(os.Environ(), "JAVA_HOME="+lang.javaHome)
+               }
+               ```
+               Wait — the command is the lsp-mcp-go binary, and its args are:
+               <lang-id> <lsp-binary-path> [lsp-server-args...]
+               where lsp-binary-path is the full resolved path from exec.LookPath.
+            3. Create timeout context:
+               - Java: 120s timeout
+               - Others: 30s timeout
+            4. Connect via mcp.CommandTransport:
+               ```go
+               client := mcp.NewClient(&mcp.Implementation{Name: "multi-lang-test", Version: "1.0"}, nil)
+               transport := &mcp.CommandTransport{Command: cmd}
+               session, err := client.Connect(ctx, transport, nil)
+               if err != nil {
+                   t.Errorf("failed to connect MCP session for %s: %v", lang.name, err)
+                   return langTestResult{tier1: "fail"}
+               }
+               defer session.Close()
+               ```
+            5. Tier 1 — start_lsp:
+               Call start_lsp with Arguments: map[string]any{"root_dir": lang.fixture}
+               Assert content is non-empty.
+            6. LSP init wait: Java = 120s sleep, others = 4s sleep.
+               Use time.Sleep(initWait).
+            7. Tier 1 — open_document:
+               Call open_document with Arguments: map[string]any{"file_path": lang.file, "language_id": lang.id}
+            8. Sleep 3s for diagnostics to settle.
+            9. Tier 1 — get_diagnostics:
+               Call get_diagnostics with Arguments: map[string]any{"file_path": lang.file}
+               Parse JSON from content[0].(*mcp.TextContent).Text into []any to get count.
+               Store diagnostic count.
+            10. Tier 1 — get_info_on_location (hover):
+               Call get_info_on_location with:
+               map[string]any{
+                   "file_path": lang.file,
+                   "language_id": lang.id,
+                   "line": lang.hoverLine,
+                   "column": lang.hoverColumn,
+               }
+               Assert content non-empty and text length > 0.
+               If Tier 1 passes: mark tier1 = "pass"
+            11. Tier 2 — run all 6 helper functions (see below), collecting []toolResult
+            12. Return langTestResult{tier1: "pass", tier2: tier2Results}
+
+            On any Tier 1 error: log t.Errorf, set tier1 = "fail", return early without
+            running Tier 2.
+
+            ## Tier 2 helper functions
+            Each takes (t *testing.T, ctx context.Context, session *mcp.ClientSession, lang langConfig)
+            and returns toolResult.
+
+            ### testDocumentSymbols
+            - CallTool: name="get_document_symbols", Arguments: {file_path, language_id}
+            - Parse JSON array from text
+            - Assert array non-empty
+            - Assert at least one entry with "name" field containing lang.symbolName
+            - Return toolResult{tool: "get_document_symbols", ...}
+
+            ### testGoToDefinition
+            - CallTool: name="go_to_definition"
+            - Arguments: {file_path: callSiteFile (or lang.file if empty), language_id, line: callSiteLine, column: callSiteColumn}
+            - Parse JSON from text (may be object or array)
+            - Extract first element if array
+            - Assert result has "file" or "uri" field (non-empty)
+            - Assert result line is within ±1 of lang.definitionLine
+              (check "line" field; if absent, check "range.start.line" + 1)
+            - Return toolResult{tool: "go_to_definition", ...}
+
+            ### testGetReferences
+            - If lang.secondFile != "": first open_document for secondFile with sleep 2s
+            - CallTool: name="get_references"
+            - Arguments: {file_path: lang.file, language_id, line: referenceLine, column: referenceColumn, include_declaration: true}
+            - Parse JSON array
+            - Assert length >= 2 if secondFile non-empty, else >= 1
+            - Return toolResult{tool: "get_references", ...}
+
+            ### testGetCompletions
+            - CallTool: name="get_completions"
+            - Arguments: {file_path: completionFile (or lang.file), language_id, line: completionLine, column: completionColumn}
+            - Parse JSON array
+            - Assert non-empty
+            - Return toolResult{tool: "get_completions", ...}
+
+            ### testWorkspaceSymbols
+            - CallTool: name="get_workspace_symbols"
+            - Arguments: {query: lang.workspaceSymbol}
+            - Parse JSON array
+            - Assert non-empty
+            - Assert at least one entry whose "name" field contains lang.workspaceSymbol
+            - Return toolResult{tool: "get_workspace_symbols", ...}
+
+            ### testFormatDocument
+            - If !lang.supportsFormatting: return toolResult{tool: "format_document", status: "skip", detail: "not supported"}
+            - CallTool: name="format_document", Arguments: {file_path: lang.file, language_id}
+            - Attempt to parse JSON array (empty array is fine — file already formatted)
+            - If parse fails, treat as empty array (acceptable)
+            - Assert no CallTool error
+            - Return toolResult{tool: "format_document", status: "pass", ...}
+
+            ### testGoToDeclaration (C only)
+            - If lang.id != "c": return toolResult{tool: "go_to_declaration", status: "skip", detail: "not applicable"}
+            - First open_document for filepath.Join(lang.fixture, "person.h") with sleep 1s
+            - CallTool: name="go_to_declaration"
+            - Arguments: {file_path: lang.file, language_id, line: declarationLine, column: declarationColumn}
+            - Parse JSON (object or array)
+            - Extract first element if array
+            - Assert file field ends with "person.h"
+            - Return toolResult{tool: "go_to_declaration", ...}
+
+            ## printMultiLangSummary
+            Print after all subtests complete. Format matches TypeScript:
+            ```
+            Language     | T1 | symbols | definition | references | completions | workspace | format
+            -------------|----|---------|-----------:|------------|-------------|-----------|-------
+            TypeScript   | ✓  |  ✓  |  ✓  |  ✓  |  ✓  |  ✓  |  ✓  |
+            ...
+            ```
+            Use t.Logf to print the table so it appears in verbose test output.
+            Status symbols: pass = "✓", skip = "-", fail = "✗"
+
+            ## Error handling conventions
+            - All toolResult errors use err.Error() as detail
+            - JSON parse errors: return toolResult with status "fail" and detail
+              "failed to parse <tool> response: <raw text>"
+            - MCP CallTool errors: status "fail", detail err.Error()
+            - Always check res.IsError before accessing content
+
+            ## Additional: check res.IsError
+            After every CallTool, check:
+            ```go
+            if res.IsError {
+                return toolResult{tool: ..., status: "fail", detail: fmt.Sprintf("tool returned IsError=true: %v", res.Content)}
+            }
+            ```
+
+            ## Verification gate
+            ```bash
+            # 1. File compiles
+            cd /Users/dayna.blackwell/code/LSP-MCP-GO && GOWORK=off go build ./...
+            # expected: exits 0
+
+            # 2. Vet passes
+            cd /Users/dayna.blackwell/code/LSP-MCP-GO && GOWORK=off go vet ./...
+            # expected: exits 0
+
+            # 3. Test file is in correct package
+            grep "^package main_test" /Users/dayna.blackwell/code/LSP-MCP-GO/test/multi_lang_test.go
+            # expected: prints the line
+
+            # 4. TestMultiLanguage function exists
+            grep "^func TestMultiLanguage(" /Users/dayna.blackwell/code/LSP-MCP-GO/test/multi_lang_test.go
+            # expected: prints the line
+
+            # 5. langConfig struct exists
+            grep "type langConfig struct" /Users/dayna.blackwell/code/LSP-MCP-GO/test/multi_lang_test.go
+            # expected: prints the line
+
+            # 6. All 7 languages present in configs
+            grep -c '"typescript"\|"python"\|"go"\|"rust"\|"java"\|"c"\|"php"' /Users/dayna.blackwell/code/LSP-MCP-GO/test/multi_lang_test.go
+            # expected: 7 (one match per language id)
+            ```
+
+            ## Constraints
+            - Do NOT modify integration_test.go or any existing files
+            - Do NOT add a t.Parallel() call inside the per-language t.Run subtests
+              (top-level t.Parallel() is fine; subtests must run sequentially)
+            - Do NOT modify files outside your ownership list (test/multi_lang_test.go only)
+            - Use sync.Once for binary build caching (add "sync" to imports)
+            - GOWORK=off on all go build/test commands
+          files:
+            - test/multi_lang_test.go
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: GOWORK=off go build ./...
+          required: true
+          repo: LSP-MCP-GO
+        - type: test
+          command: GOWORK=off go test -v -run TestBinary ./...
+          required: true
+          repo: LSP-MCP-GO
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: Agent A copies compile_commands.json verbatim with "/placeholder" directory, which makes clangd unable to index the fixture. C tests would fail silently at runtime with "no compile commands found".
+          likelihood: medium
+          impact: medium
+          mitigation: Agent A's brief explicitly requires replacing "/placeholder" with the absolute path. Verification gate (step 3) greps for "LSP-MCP-GO" in the written file.
+        - scenario: Agent B uses t.Parallel() inside the per-language subtests, causing LSP server port/process collisions. Tests would intermittently fail with connection errors.
+          likelihood: medium
+          impact: high
+          mitigation: 'Constraint is explicit in Agent B''s brief: "Do NOT call t.Parallel() inside the per-language t.Run subtests." Outer t.Parallel() at TestMultiLanguage level is correct and expected.'
+        - scenario: Agent B hardcodes fixture paths as string literals (e.g. "/Users/dayna.blackwell/...") instead of computing them from runtime.Caller(0). Test would fail on any other machine.
+          likelihood: low
+          impact: high
+          mitigation: Brief explicitly specifies the testDir() + runtime.Caller(0) pattern and the buildLanguageConfigs(fixtureBase string) signature. No absolute user-specific paths should appear in the Go source.
+        - scenario: Agent B calls res.Content[0].(*mcp.TextContent).Text without type-asserting safely, causing a nil pointer panic when a tool returns non-text content or empty content.
+          likelihood: medium
+          impact: medium
+          mitigation: Brief includes the IsError check pattern and instructs checking content length before indexing. Agent should use len(res.Content) > 0 guard.
+        - scenario: Agent A accidentally copies rust/target/ or java/target/ directories, adding hundreds of compiled artifacts to the Go repo.
+          likelihood: low
+          impact: medium
+          mitigation: 'Brief lists explicit files (not directory rsync). Verification gate checks for absence of target/ dirs (find ... -name target | wc -l expected: 0).'
+        - scenario: Agent B uses a different struct name (e.g. languageConfig instead of langConfig) or omits fields like declarationLine/declarationColumn, causing a compile error when the C go_to_declaration test references those fields.
+          likelihood: low
+          impact: low
+          mitigation: Interface contract for langConfig lists all fields explicitly. Verification gate includes go build check.
+state: "REVIEWED"
+injection_method: hook
