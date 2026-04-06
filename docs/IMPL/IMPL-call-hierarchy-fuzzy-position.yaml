@@ -1,0 +1,875 @@
+title: Call Hierarchy Tool and Fuzzy Position Fallback
+feature_slug: call-hierarchy-fuzzy-position
+verdict: SUITABLE
+suitability_assessment: |-
+    Two independently implementable features with clean disjoint file ownership.
+
+    Feature 1 (Call Hierarchy) adopts the single-tool design from mcp-lsp-bridge
+    (/Users/dayna.blackwell/code/competitors/mcp-lsp-bridge/mcpserver/tools/call_hierarchy.go):
+    one `call_hierarchy` tool with a `direction` parameter ("incoming", "outgoing", "both").
+    This is preferred over cclsp's 3-tool design because:
+    - One round-trip for callers wanting both directions (default: "both")
+    - Simpler mental model for AI assistants -- no prepare/incoming/outgoing dance
+    - The LSP prepare step is internal; users never need to call it directly
+
+    LSP-MCP-GO outputs JSON (not formatted text like mcp-lsp-bridge). The handler
+    follows the existing repo pattern: JSON-marshal the result via types.TextResult.
+
+    Feature 1 decomposes into:
+    - Agent A: LSP client methods (internal/lsp/client.go) -- adds PrepareCallHierarchy,
+      GetIncomingCalls, GetOutgoingCalls, callHierarchyProvider capability in Initialize,
+      and requestTimeouts entries.
+    - Agent B: tool handler (internal/tools/callhierarchy.go, new file) -- single
+      HandleCallHierarchy handler with direction switch.
+    - Agent C: server registration (cmd/lsp-mcp-go/server.go) -- one tool, one arg struct,
+      count 24 to 25.
+
+    Feature 2 (Fuzzy Fallback) is a single agent:
+    - Agent D: adds fuzzyPositionFallback in internal/tools/fuzzy.go (new file) and
+      applies it in HandleGoToDefinition and HandleGetReferences in
+      internal/tools/navigation.go.
+
+    Agents A and B are fully parallel: B calls client methods that A adds, but the
+    interface contract is fixed before launch so both agents compile against the spec.
+    Agent C is in Wave 2 (depends on B exported symbol name).
+    Agent D is independent of A/B/C entirely.
+
+    Wave 1: A + B + D
+    Wave 2: C
+
+    Pre-implementation status: none of the call hierarchy tools exist today (confirmed
+    by grep). Fuzzy fallback helpers do not exist. All work is TODO.
+
+    Parallelization value: HIGH. 3 Wave 1 agents run in parallel. Build cycle ~2-4s.
+
+    Estimated times:
+    - Scout phase: ~15 min
+    - Agent execution: ~20 min (3 Wave 1 agents x ~10 min avg; Wave 2 ~6 min)
+    - Merge and verification: ~5 min
+    Total SAW time: ~40 min
+
+    Sequential baseline: ~4 agents x 11 min = ~44 min
+    Time savings: ~4 min (coordination value + interface contract precision)
+    Recommendation: Clear speedup for Feature 1 (3 parallel agents) plus precise
+    cross-agent interface contract at the client/handler boundary.
+test_command: GOWORK=off go test $(go list ./... | grep -v '/test$')
+lint_command: GOWORK=off go vet ./...
+file_ownership:
+    - file: internal/lsp/client.go
+      agent: A
+      wave: 1
+      action: modify
+    - file: internal/tools/callhierarchy.go
+      agent: B
+      wave: 1
+      action: new
+    - file: internal/tools/fuzzy.go
+      agent: D
+      wave: 1
+      action: new
+    - file: internal/tools/navigation.go
+      agent: D
+      wave: 1
+      action: modify
+    - file: cmd/lsp-mcp-go/server.go
+      agent: C
+      wave: 2
+      action: modify
+      depends_on:
+        - B
+interface_contracts:
+    - name: PrepareCallHierarchy
+      description: |-
+        LSP client method. Sends textDocument/prepareCallHierarchy and returns typed
+        CallHierarchyItem slice. Returns empty slice if server does not support
+        callHierarchyProvider. Unmarshals result via json.Unmarshal into []types.CallHierarchyItem.
+      definition: func (c *LSPClient) PrepareCallHierarchy(ctx context.Context, uri string, pos types.Position) ([]types.CallHierarchyItem, error)
+      location: internal/lsp/client.go
+    - name: GetIncomingCalls
+      description: |-
+        LSP client method. Sends callHierarchy/incomingCalls with the given CallHierarchyItem
+        and returns typed CallHierarchyIncomingCall slice. The item parameter is a typed
+        CallHierarchyItem from PrepareCallHierarchy; it marshals cleanly into request params.
+        No capability check needed -- PrepareCallHierarchy guards entry.
+      definition: func (c *LSPClient) GetIncomingCalls(ctx context.Context, item types.CallHierarchyItem) ([]types.CallHierarchyIncomingCall, error)
+      location: internal/lsp/client.go
+    - name: GetOutgoingCalls
+      description: |-
+        LSP client method. Sends callHierarchy/outgoingCalls with the given CallHierarchyItem.
+        Same contract as GetIncomingCalls.
+      definition: func (c *LSPClient) GetOutgoingCalls(ctx context.Context, item types.CallHierarchyItem) ([]types.CallHierarchyOutgoingCall, error)
+      location: internal/lsp/client.go
+    - name: HandleCallHierarchy
+      description: |-
+        Single MCP tool handler for call hierarchy. Extracts file_path/line/column/direction
+        from args. Direction must be "incoming", "outgoing", or "both" (default "both").
+        Opens the document via WithDocument, calls PrepareCallHierarchy, then calls
+        GetIncomingCalls and/or GetOutgoingCalls based on direction. Returns JSON with keys
+        "items" (prepared hierarchy items), "incoming" (omitted when direction is "outgoing"),
+        "outgoing" (omitted when direction is "incoming"). Returns a human-readable "no item
+        found" message when prepare returns empty.
+      definition: func HandleCallHierarchy(ctx context.Context, client *lsp.LSPClient, args map[string]interface{}) (types.ToolResult, error)
+      location: internal/tools/callhierarchy.go
+    - name: fuzzyPositionFallback
+      description: |-
+        Package-internal helper that retries a position-based LSP lookup using workspace
+        symbol search when the direct lookup returns an empty result. Extracts a symbol name
+        from hover at the original position, searches workspace symbols for that name, retries
+        lookupFn at each candidate position, and returns the first non-empty result set.
+        Returns an empty slice (not an error) if all fallback attempts also return empty.
+        line and col are 1-indexed (tool convention); the function converts internally.
+      definition: |-
+        func fuzzyPositionFallback(
+            ctx context.Context,
+            client *lsp.LSPClient,
+            fileURI string,
+            line, col int,
+            lookupFn func(pos types.Position) ([]types.Location, error),
+        ) ([]types.Location, error)
+      location: internal/tools/fuzzy.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |-
+            ## Role
+            Add three call hierarchy LSP client methods to internal/lsp/client.go and
+            update the Initialize client capabilities and requestTimeouts map.
+
+            ## Context
+            File: /Users/dayna.blackwell/code/LSP-MCP-GO/internal/lsp/client.go
+
+            The existing pattern for LSP operations:
+            1. Check capability with `c.hasCapability(key)` and return empty/nil if unsupported.
+            2. Call `c.sendRequest(ctx, method, params)` and unmarshal the result.
+            3. For typed array results, use json.Unmarshal(result, &slice) -- see parseLocations
+               in client.go for the reference pattern.
+
+            The `requestTimeouts` map currently ends with this exact text:
+            ```go
+            	"textDocument/prepareRename":    30 * time.Second,
+            }
+            ```
+
+            The Initialize function declares client capabilities under
+            `"capabilities" -> "textDocument"`. That map currently ends with:
+            ```go
+            			"publishDiagnostics": map[string]interface{}{
+            				"relatedInformation": true,
+            				"tagSupport": map[string]interface{}{
+            					"valueSet": []int{1, 2},
+            				},
+            			},
+            ```
+
+            The `GetWorkspaceSymbols` method is the last method before the
+            `// ---- Capability Helpers ----` comment. Add new methods after it.
+
+            ## What to implement
+
+            ### 1. Add timeout entries to requestTimeouts map
+            Insert after the `"textDocument/prepareRename"` entry (before the closing brace):
+            ```go
+            	"textDocument/prepareCallHierarchy": 30 * time.Second,
+            	"callHierarchy/incomingCalls":        60 * time.Second,
+            	"callHierarchy/outgoingCalls":         60 * time.Second,
+            ```
+            Use 60s for incomingCalls/outgoingCalls -- they require full workspace indexing.
+
+            ### 2. Add callHierarchyProvider to Initialize client capabilities
+            After the `"publishDiagnostics"` block (still inside the `"textDocument"` map),
+            add:
+            ```go
+            			"callHierarchy": map[string]interface{}{
+            				"dynamicRegistration": true,
+            			},
+            ```
+
+            ### 3. Add PrepareCallHierarchy method
+            Insert after the closing brace of GetWorkspaceSymbols and before the
+            `// ---- Capability Helpers ----` comment:
+            ```go
+            // PrepareCallHierarchy resolves the call hierarchy item at a position.
+            // Returns a typed slice or an empty slice if unsupported.
+            func (c *LSPClient) PrepareCallHierarchy(ctx context.Context, uri string, pos types.Position) ([]types.CallHierarchyItem, error) {
+            	if !c.hasCapability("callHierarchyProvider") {
+            		logging.Log(logging.LevelDebug, "server does not support callHierarchy")
+            		return []types.CallHierarchyItem{}, nil
+            	}
+            	result, err := c.sendRequest(ctx, "textDocument/prepareCallHierarchy", map[string]interface{}{
+            		"textDocument": map[string]interface{}{"uri": uri},
+            		"position":     pos,
+            	})
+            	if err != nil {
+            		return nil, err
+            	}
+            	if result == nil {
+            		return []types.CallHierarchyItem{}, nil
+            	}
+            	var items []types.CallHierarchyItem
+            	if err := json.Unmarshal(result, &items); err != nil {
+            		return nil, err
+            	}
+            	return items, nil
+            }
+            ```
+
+            ### 4. Add GetIncomingCalls method
+            Insert directly after PrepareCallHierarchy:
+            ```go
+            // GetIncomingCalls returns all callers of the given call hierarchy item.
+            func (c *LSPClient) GetIncomingCalls(ctx context.Context, item types.CallHierarchyItem) ([]types.CallHierarchyIncomingCall, error) {
+            	result, err := c.sendRequest(ctx, "callHierarchy/incomingCalls", map[string]interface{}{
+            		"item": item,
+            	})
+            	if err != nil {
+            		return nil, err
+            	}
+            	if result == nil {
+            		return []types.CallHierarchyIncomingCall{}, nil
+            	}
+            	var calls []types.CallHierarchyIncomingCall
+            	if err := json.Unmarshal(result, &calls); err != nil {
+            		return nil, err
+            	}
+            	return calls, nil
+            }
+            ```
+
+            ### 5. Add GetOutgoingCalls method
+            Insert directly after GetIncomingCalls:
+            ```go
+            // GetOutgoingCalls returns all functions called by the given call hierarchy item.
+            func (c *LSPClient) GetOutgoingCalls(ctx context.Context, item types.CallHierarchyItem) ([]types.CallHierarchyOutgoingCall, error) {
+            	result, err := c.sendRequest(ctx, "callHierarchy/outgoingCalls", map[string]interface{}{
+            		"item": item,
+            	})
+            	if err != nil {
+            		return nil, err
+            	}
+            	if result == nil {
+            		return []types.CallHierarchyOutgoingCall{}, nil
+            	}
+            	var calls []types.CallHierarchyOutgoingCall
+            	if err := json.Unmarshal(result, &calls); err != nil {
+            		return nil, err
+            	}
+            	return calls, nil
+            }
+            ```
+
+            GetIncomingCalls and GetOutgoingCalls do NOT check hasCapability because they are
+            follow-on calls to PrepareCallHierarchy; if the server does not support call
+            hierarchy, PrepareCallHierarchy returns empty before these are invoked.
+            The json.Unmarshal pattern matches parseLocations and other typed helpers in client.go.
+            `encoding/json` is already imported in the file.
+
+            ## Verification gate
+            ```
+            GOWORK=off go build ./...
+            GOWORK=off go vet ./...
+            # Postconditions:
+            grep -c "PrepareCallHierarchy\|GetIncomingCalls\|GetOutgoingCalls" /Users/dayna.blackwell/code/LSP-MCP-GO/internal/lsp/client.go
+            # Expected: >= 6 (3 func declarations + 3 comment lines)
+            grep -c "callHierarchyProvider" /Users/dayna.blackwell/code/LSP-MCP-GO/internal/lsp/client.go
+            # Expected: 2 (capability check + Initialize entry)
+            grep -c "callHierarchy/incomingCalls\|callHierarchy/outgoingCalls\|prepareCallHierarchy" /Users/dayna.blackwell/code/LSP-MCP-GO/internal/lsp/client.go
+            # Expected: 6 (3 timeout keys + 3 method string literals)
+            ```
+
+            ## Constraints
+            - Do NOT modify any file outside internal/lsp/client.go.
+            - Do NOT add test files or modify test/.
+            - Set GOWORK=off on all go commands.
+            - Use json.Unmarshal into typed slices (types.CallHierarchyItem, etc.) -- do NOT use parseInterfaceArray for these methods.
+          files:
+            - internal/lsp/client.go
+        - id: B
+          task: |-
+            ## Role
+            Create internal/tools/callhierarchy.go with a single HandleCallHierarchy
+            handler that accepts a `direction` parameter ("incoming", "outgoing", "both").
+
+            ## Design decision
+            This uses the single-tool design (one tool, direction param) rather than a
+            3-tool prepare/incoming/outgoing decomposition. The LSP prepare step is
+            internal to the handler -- callers only see `call_hierarchy`.
+
+            ## Context
+            File: /Users/dayna.blackwell/code/LSP-MCP-GO/internal/tools/callhierarchy.go (NEW)
+            Package: tools (must match all other files in internal/tools/)
+
+            Study these existing handler files to understand the patterns:
+            - internal/tools/navigation.go -- HandleGetReferences, HandleGoToDefinition
+            - internal/tools/analysis.go -- HandleGetDocumentSymbols, extractPosition, toInt
+            - internal/tools/helpers.go -- WithDocument, CheckInitialized
+
+            The LSP client methods you will call are defined by Agent A with these exact signatures:
+            ```go
+            func (c *LSPClient) PrepareCallHierarchy(ctx context.Context, uri string, pos types.Position) ([]types.CallHierarchyItem, error)
+            func (c *LSPClient) GetIncomingCalls(ctx context.Context, item types.CallHierarchyItem) ([]types.CallHierarchyIncomingCall, error)
+            func (c *LSPClient) GetOutgoingCalls(ctx context.Context, item types.CallHierarchyItem) ([]types.CallHierarchyOutgoingCall, error)
+            ```
+            Import path: `"github.com/blackwell-systems/lsp-mcp-go/internal/lsp"`
+
+            types.CallHierarchyItem, types.CallHierarchyIncomingCall, and types.CallHierarchyOutgoingCall
+            are defined in internal/types/types.go (already committed to the base branch).
+
+            ## What to implement
+
+            Create `/Users/dayna.blackwell/code/LSP-MCP-GO/internal/tools/callhierarchy.go`:
+
+            ```go
+            package tools
+
+            import (
+            	"context"
+            	"encoding/json"
+            	"fmt"
+            	"strings"
+
+            	"github.com/blackwell-systems/lsp-mcp-go/internal/lsp"
+            	"github.com/blackwell-systems/lsp-mcp-go/internal/types"
+            )
+
+            // callHierarchyResult is the JSON shape returned by HandleCallHierarchy.
+            type callHierarchyResult struct {
+            	Items    []types.CallHierarchyItem          `json:"items"`
+            	Incoming []types.CallHierarchyIncomingCall  `json:"incoming,omitempty"`
+            	Outgoing []types.CallHierarchyOutgoingCall  `json:"outgoing,omitempty"`
+            }
+
+            // HandleCallHierarchy resolves call hierarchy for the symbol at the given position.
+            // The direction argument controls which calls are returned:
+            //   - "incoming" -- callers of the function
+            //   - "outgoing" -- callees of the function
+            //   - "both"     -- both callers and callees (default when omitted or empty)
+            func HandleCallHierarchy(ctx context.Context, client *lsp.LSPClient, args map[string]interface{}) (types.ToolResult, error) {
+            	if err := CheckInitialized(client); err != nil {
+            		return types.ErrorResult(err.Error()), nil
+            	}
+
+            	filePath, ok := args["file_path"].(string)
+            	if !ok || filePath == "" {
+            		return types.ErrorResult("file_path is required"), nil
+            	}
+
+            	line, col, err := extractPosition(args)
+            	if err != nil {
+            		return types.ErrorResult(err.Error()), nil
+            	}
+
+            	direction := "both"
+            	if d, ok := args["direction"].(string); ok && d != "" {
+            		direction = strings.ToLower(d)
+            	}
+            	switch direction {
+            	case "incoming", "outgoing", "both":
+            		// valid
+            	default:
+            		return types.ErrorResult(fmt.Sprintf("invalid direction %q; must be \"incoming\", \"outgoing\", or \"both\"", direction)), nil
+            	}
+
+            	languageID, _ := args["language_id"].(string)
+            	if languageID == "" {
+            		languageID = "plaintext"
+            	}
+
+            	items, wErr := WithDocument[[]types.CallHierarchyItem](ctx, client, filePath, languageID, func(fileURI string) ([]types.CallHierarchyItem, error) {
+            		pos := types.Position{Line: line - 1, Character: col - 1}
+            		return client.PrepareCallHierarchy(ctx, fileURI, pos)
+            	})
+            	if wErr != nil {
+            		return types.ErrorResult(fmt.Sprintf("call_hierarchy (prepare): %s", wErr)), nil
+            	}
+
+            	if len(items) == 0 {
+            		return types.TextResult(fmt.Sprintf("No call hierarchy item found at %s:%d:%d", filePath, line, col)), nil
+            	}
+
+            	result := callHierarchyResult{Items: items}
+
+            	for _, item := range items {
+            		if direction == "incoming" || direction == "both" {
+            			calls, callErr := client.GetIncomingCalls(ctx, item)
+            			if callErr != nil {
+            				return types.ErrorResult(fmt.Sprintf("call_hierarchy (incoming): %s", callErr)), nil
+            			}
+            			result.Incoming = append(result.Incoming, calls...)
+            		}
+            		if direction == "outgoing" || direction == "both" {
+            			calls, callErr := client.GetOutgoingCalls(ctx, item)
+            			if callErr != nil {
+            				return types.ErrorResult(fmt.Sprintf("call_hierarchy (outgoing): %s", callErr)), nil
+            			}
+            			result.Outgoing = append(result.Outgoing, calls...)
+            		}
+            	}
+
+            	data, mErr := json.Marshal(result)
+            	if mErr != nil {
+            		return types.ErrorResult(fmt.Sprintf("marshaling call hierarchy result: %s", mErr)), nil
+            	}
+            	return types.TextResult(string(data)), nil
+            }
+            ```
+
+            ## Verification gate
+            ```
+            GOWORK=off go build ./...
+            GOWORK=off go vet ./...
+            # Postconditions:
+            grep -c "^func HandleCallHierarchy" /Users/dayna.blackwell/code/LSP-MCP-GO/internal/tools/callhierarchy.go
+            # Expected: 1
+            grep -c "callHierarchyResult" /Users/dayna.blackwell/code/LSP-MCP-GO/internal/tools/callhierarchy.go
+            # Expected: >= 2 (type declaration + usage)
+            grep -c "direction" /Users/dayna.blackwell/code/LSP-MCP-GO/internal/tools/callhierarchy.go
+            # Expected: >= 5 (param read + default + switch + 2 conditionals)
+            ```
+
+            Note: Agent A's client methods live in a parallel worktree and will not exist in
+            your branch. The worktree build WILL fail until merge. Write correct code against
+            the interface contract above -- the post-merge build gate verifies correctness.
+
+            ## Constraints
+            - Do NOT stub or re-declare PrepareCallHierarchy, GetIncomingCalls, or
+              GetOutgoingCalls -- those are owned by Agent A.
+            - Do NOT add separate HandlePrepareCallHierarchy, HandleGetIncomingCalls, or
+              HandleGetOutgoingCalls functions -- the design is a single HandleCallHierarchy.
+            - Do NOT modify navigation.go, analysis.go, helpers.go, or any other existing file.
+            - Do NOT add test files.
+            - The new file must be in package tools.
+            - Set GOWORK=off on all go commands.
+          files:
+            - internal/tools/callhierarchy.go
+        - id: D
+          task: |-
+            ## Role
+            Implement fuzzy position fallback for go_to_definition and get_references.
+            Create internal/tools/fuzzy.go and modify internal/tools/navigation.go.
+
+            ## Context
+            Files:
+            - internal/tools/fuzzy.go (NEW)
+            - internal/tools/navigation.go (MODIFY -- HandleGoToDefinition and HandleGetReferences only)
+
+            The existing pattern in navigation.go for both target handlers ends with:
+            ```go
+            	locs, wErr := WithDocument[[]types.Location](ctx, client, filePath, languageID, func(fileURI string) ([]types.Location, error) {
+            		pos := types.Position{Line: line - 1, Character: col - 1}
+            		return client.GetDefinition(ctx, fileURI, pos)
+            	})
+            	if wErr != nil {
+            		return types.ErrorResult(fmt.Sprintf("go_to_definition: %s", wErr)), nil
+            	}
+            	return locationsResult(locs)
+            }
+            ```
+            The fuzzy fallback fires only when len(locs) == 0 and wErr == nil.
+
+            Client methods available (already exist in internal/lsp/client.go):
+            - `client.GetInfoOnLocation(ctx, uri, pos) (string, error)` -- hover text
+            - `client.GetWorkspaceSymbols(ctx, query) ([]interface{}, error)` -- workspace search
+
+            Helpers in the tools package (do NOT re-declare):
+            - `CreateFileURI(filePath string) string` -- in helpers.go
+            - `types.Position`, `types.Location` -- in internal/types/types.go
+            - logging import path: `"github.com/blackwell-systems/lsp-mcp-go/internal/logging"`
+
+            ## What to implement
+
+            ### 1. Create internal/tools/fuzzy.go
+
+            ```go
+            package tools
+
+            import (
+            	"context"
+            	"encoding/json"
+            	"strings"
+
+            	"github.com/blackwell-systems/lsp-mcp-go/internal/lsp"
+            	"github.com/blackwell-systems/lsp-mcp-go/internal/logging"
+            	"github.com/blackwell-systems/lsp-mcp-go/internal/types"
+            )
+
+            // fuzzyPositionFallback retries a position-based lookup using workspace symbol
+            // candidates when the direct lookup returns empty results.
+            //
+            // It extracts a symbol name from hover at (line, col), searches workspace symbols
+            // for that name, and retries lookupFn at each candidate position. Returns the first
+            // non-empty result set, or an empty slice if all fallbacks also return empty.
+            //
+            // line and col are 1-indexed (tool convention); converted internally to 0-indexed.
+            func fuzzyPositionFallback(
+            	ctx context.Context,
+            	client *lsp.LSPClient,
+            	fileURI string,
+            	line, col int,
+            	lookupFn func(pos types.Position) ([]types.Location, error),
+            ) ([]types.Location, error) {
+            	hoverPos := types.Position{Line: line - 1, Character: col - 1}
+            	hoverText, err := client.GetInfoOnLocation(ctx, fileURI, hoverPos)
+            	if err != nil || hoverText == "" {
+            		logging.Log(logging.LevelDebug, "fuzzyFallback: no hover text, skipping")
+            		return []types.Location{}, nil
+            	}
+
+            	symbolName := extractSymbolName(hoverText)
+            	if symbolName == "" {
+            		logging.Log(logging.LevelDebug, "fuzzyFallback: could not extract symbol name from hover")
+            		return []types.Location{}, nil
+            	}
+
+            	logging.Log(logging.LevelDebug, "fuzzyFallback: searching workspace symbols for "+symbolName)
+
+            	rawSymbols, symErr := client.GetWorkspaceSymbols(ctx, symbolName)
+            	if symErr != nil || len(rawSymbols) == 0 {
+            		return []types.Location{}, nil
+            	}
+
+            	for _, rawSym := range rawSymbols {
+            		symMap, ok := rawSym.(map[string]interface{})
+            		if !ok {
+            			continue
+            		}
+            		loc, locOK := extractSymbolLocation(symMap)
+            		if !locOK {
+            			continue
+            		}
+            		candidatePos := types.Position{
+            			Line:      loc.Range.Start.Line,
+            			Character: loc.Range.Start.Character,
+            		}
+            		results, lErr := lookupFn(candidatePos)
+            		if lErr == nil && len(results) > 0 {
+            			logging.Log(logging.LevelDebug, "fuzzyFallback: found results via workspace symbol candidate")
+            			return results, nil
+            		}
+            	}
+
+            	return []types.Location{}, nil
+            }
+
+            // extractSymbolName parses a short identifier from hover text.
+            // Hover text from gopls typically starts with the symbol signature.
+            // We extract the first identifier-like token.
+            func extractSymbolName(hover string) string {
+            	hover = strings.TrimSpace(hover)
+            	if strings.HasPrefix(hover, "```") {
+            		lines := strings.SplitN(hover, "\n", 3)
+            		if len(lines) >= 2 {
+            			hover = lines[1]
+            		}
+            	}
+            	var sb strings.Builder
+            	for _, r := range hover {
+            		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
+            			sb.WriteRune(r)
+            		} else if sb.Len() > 0 {
+            			break
+            		}
+            	}
+            	return sb.String()
+            }
+
+            // extractSymbolLocation extracts a types.Location from a workspace symbol map.
+            func extractSymbolLocation(symMap map[string]interface{}) (types.Location, bool) {
+            	locRaw, ok := symMap["location"]
+            	if !ok {
+            		return types.Location{}, false
+            	}
+            	b, err := json.Marshal(locRaw)
+            	if err != nil {
+            		return types.Location{}, false
+            	}
+            	var loc types.Location
+            	if err := json.Unmarshal(b, &loc); err != nil || loc.URI == "" {
+            		return types.Location{}, false
+            	}
+            	return loc, true
+            }
+            ```
+
+            ### 2. Modify HandleGoToDefinition in internal/tools/navigation.go
+
+            Locate this exact block at the end of HandleGoToDefinition:
+            ```go
+            	locs, wErr := WithDocument[[]types.Location](ctx, client, filePath, languageID, func(fileURI string) ([]types.Location, error) {
+            		pos := types.Position{Line: line - 1, Character: col - 1}
+            		return client.GetDefinition(ctx, fileURI, pos)
+            	})
+            	if wErr != nil {
+            		return types.ErrorResult(fmt.Sprintf("go_to_definition: %s", wErr)), nil
+            	}
+            	return locationsResult(locs)
+            }
+            ```
+
+            Replace it with:
+            ```go
+            	fileURI := CreateFileURI(filePath)
+            	locs, wErr := WithDocument[[]types.Location](ctx, client, filePath, languageID, func(fURI string) ([]types.Location, error) {
+            		pos := types.Position{Line: line - 1, Character: col - 1}
+            		return client.GetDefinition(ctx, fURI, pos)
+            	})
+            	if wErr != nil {
+            		return types.ErrorResult(fmt.Sprintf("go_to_definition: %s", wErr)), nil
+            	}
+            	if len(locs) == 0 {
+            		locs, wErr = fuzzyPositionFallback(ctx, client, fileURI, line, col, func(pos types.Position) ([]types.Location, error) {
+            			return client.GetDefinition(ctx, fileURI, pos)
+            		})
+            		if wErr != nil {
+            			return types.ErrorResult(fmt.Sprintf("go_to_definition (fuzzy): %s", wErr)), nil
+            		}
+            	}
+            	return locationsResult(locs)
+            }
+            ```
+
+            ### 3. Modify HandleGetReferences in internal/tools/navigation.go
+
+            Locate this exact block at the end of HandleGetReferences:
+            ```go
+            	locs, wErr := WithDocument[[]types.Location](ctx, client, filePath, languageID, func(fileURI string) ([]types.Location, error) {
+            		pos := types.Position{Line: line - 1, Character: col - 1}
+            		return client.GetReferences(ctx, fileURI, pos, includeDecl)
+            	})
+            	if wErr != nil {
+            		return types.ErrorResult(fmt.Sprintf("get_references: %s", wErr)), nil
+            	}
+            	return locationsResult(locs)
+            }
+            ```
+
+            Replace it with:
+            ```go
+            	fileURI := CreateFileURI(filePath)
+            	locs, wErr := WithDocument[[]types.Location](ctx, client, filePath, languageID, func(fURI string) ([]types.Location, error) {
+            		pos := types.Position{Line: line - 1, Character: col - 1}
+            		return client.GetReferences(ctx, fURI, pos, includeDecl)
+            	})
+            	if wErr != nil {
+            		return types.ErrorResult(fmt.Sprintf("get_references: %s", wErr)), nil
+            	}
+            	if len(locs) == 0 {
+            		locs, wErr = fuzzyPositionFallback(ctx, client, fileURI, line, col, func(pos types.Position) ([]types.Location, error) {
+            			return client.GetReferences(ctx, fileURI, pos, includeDecl)
+            		})
+            		if wErr != nil {
+            			return types.ErrorResult(fmt.Sprintf("get_references (fuzzy): %s", wErr)), nil
+            		}
+            	}
+            	return locationsResult(locs)
+            }
+            ```
+
+            ## Verification gate
+            ```
+            GOWORK=off go build ./...
+            GOWORK=off go vet ./...
+            # Postconditions:
+            grep -c "fuzzyPositionFallback" /Users/dayna.blackwell/code/LSP-MCP-GO/internal/tools/fuzzy.go
+            # Expected: >= 2 (func declaration + doc comment reference)
+            grep -c "fuzzyPositionFallback" /Users/dayna.blackwell/code/LSP-MCP-GO/internal/tools/navigation.go
+            # Expected: 2 (one per modified function)
+            grep -c "extractSymbolName\|extractSymbolLocation" /Users/dayna.blackwell/code/LSP-MCP-GO/internal/tools/fuzzy.go
+            # Expected: >= 4 (2 declarations + 2 call sites)
+            ```
+
+            ## Constraints
+            - Do NOT modify any file except internal/tools/navigation.go and the new
+              internal/tools/fuzzy.go.
+            - Do NOT add the fallback to HandleGoToImplementation -- spec limits it to
+              definition and references only.
+            - fuzzyPositionFallback, extractSymbolName, and extractSymbolLocation must all be
+              unexported (lowercase first letter).
+            - Do NOT re-declare CreateFileURI -- it already exists in helpers.go.
+            - Do NOT add test files.
+            - Set GOWORK=off on all go commands.
+          files:
+            - internal/tools/fuzzy.go
+            - internal/tools/navigation.go
+    - number: 2
+      agents:
+        - id: C
+          task: |-
+            ## Role
+            Register the single call_hierarchy tool in cmd/lsp-mcp-go/server.go.
+
+            ## Context
+            File: /Users/dayna.blackwell/code/LSP-MCP-GO/cmd/lsp-mcp-go/server.go
+
+            Each tool has a typed args struct declared as a local type inside Run(), followed
+            by an mcp.AddTool call with a closure that calls a tools.Handle* function via
+            toolArgsToMap(args).
+
+            The handler you are wiring (created by Agent B): `tools.HandleCallHierarchy`
+
+            Locate the SetLogLevelArgs struct -- the last declared arg struct:
+            ```go
+            	type SetLogLevelArgs struct {
+            		Level string `json:"level"`
+            	}
+            ```
+
+            Locate the set_log_level registration -- the last mcp.AddTool call:
+            ```go
+            	mcp.AddTool(server, &mcp.Tool{
+            		Name:        "set_log_level",
+            		Description: "Set the server logging level. Use this tool to control the verbosity of logs generated by the LSP MCP server. Available levels from least to most verbose: emergency, alert, critical, error, warning, notice, info, debug. Increasing verbosity can help troubleshoot issues but may generate large amounts of output.",
+            	}, func(ctx context.Context, req *mcp.CallToolRequest, args SetLogLevelArgs) (*mcp.CallToolResult, any, error) {
+            		r, err := tools.HandleSetLogLevel(ctx, cs.get(), toolArgsToMap(args))
+            		return makeCallToolResult(r), nil, err
+            	})
+            ```
+
+            The `// ------- Register resources -------` comment follows after the last tool.
+
+            ## What to implement
+
+            ### 1. Add CallHierarchyArgs struct
+            After the SetLogLevelArgs struct, add:
+            ```go
+            	type CallHierarchyArgs struct {
+            		FilePath   string `json:"file_path"`
+            		LanguageID string `json:"language_id,omitempty"`
+            		Line       int    `json:"line"`
+            		Column     int    `json:"column"`
+            		Direction  string `json:"direction,omitempty"`
+            	}
+            ```
+
+            ### 2. Register the call_hierarchy tool
+            After the set_log_level mcp.AddTool block and before the
+            `// ------- Register resources -------` comment, add:
+            ```go
+            	mcp.AddTool(server, &mcp.Tool{
+            		Name:        "call_hierarchy",
+            		Description: "Show call hierarchy for a symbol at a position. Returns callers (incoming), callees (outgoing), or both depending on the direction parameter. Direction defaults to \"both\". Use this to understand code flow -- which functions call this function and which functions it calls.",
+            	}, func(ctx context.Context, req *mcp.CallToolRequest, args CallHierarchyArgs) (*mcp.CallToolResult, any, error) {
+            		r, err := tools.HandleCallHierarchy(ctx, cs.get(), toolArgsToMap(args))
+            		return makeCallToolResult(r), nil, err
+            	})
+            ```
+
+            ### 3. Update the tool count comment
+            Find:
+            ```go
+            	// ------- Register all 24 tools -------
+            ```
+            Change to:
+            ```go
+            	// ------- Register all 25 tools -------
+            ```
+
+            ## Verification gate
+            ```
+            GOWORK=off go build ./...
+            GOWORK=off go vet ./...
+            # Postconditions:
+            grep -c '"call_hierarchy"' /Users/dayna.blackwell/code/LSP-MCP-GO/cmd/lsp-mcp-go/server.go
+            # Expected: 1
+            grep -c "HandleCallHierarchy" /Users/dayna.blackwell/code/LSP-MCP-GO/cmd/lsp-mcp-go/server.go
+            # Expected: 1
+            grep -c "CallHierarchyArgs" /Users/dayna.blackwell/code/LSP-MCP-GO/cmd/lsp-mcp-go/server.go
+            # Expected: 2 (type declaration + handler signature)
+            grep "25 tools" /Users/dayna.blackwell/code/LSP-MCP-GO/cmd/lsp-mcp-go/server.go
+            # Expected: 1 line
+            ```
+
+            ## Constraints
+            - Do NOT modify any file outside cmd/lsp-mcp-go/server.go.
+            - Do NOT add test files.
+            - Do NOT reorder existing tool registrations.
+            - Do NOT add separate PrepareCallHierarchyArgs, GetIncomingCallsArgs, or
+              GetOutgoingCallsArgs structs -- the design uses a single CallHierarchyArgs.
+            - Set GOWORK=off on all go commands.
+            - Use toolArgsToMap(args) for arg conversion -- matches all existing handlers.
+          files:
+            - cmd/lsp-mcp-go/server.go
+          dependencies:
+            - B
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: GOWORK=off go build ./...
+          required: true
+          repo: LSP-MCP-GO
+        - type: lint
+          command: GOWORK=off go vet ./...
+          required: true
+          repo: LSP-MCP-GO
+        - type: test
+          command: GOWORK=off go test $(go list ./... | grep -v '/test$')
+          required: true
+          repo: LSP-MCP-GO
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: |-
+            Agent B calls client.PrepareCallHierarchy in its isolated worktree but Agent A
+            has not yet merged, so the method does not exist. Agent B's worktree build fails.
+          likelihood: high
+          impact: low
+          mitigation: |-
+            Expected and acceptable. Agent B writes code against the interface contract
+            signatures defined in this IMPL doc. The post-merge build gate verifies
+            correctness. Agent B's brief explicitly notes this.
+        - scenario: |-
+            Agent D modifies navigation.go while Agent B creates callhierarchy.go. Both are
+            in the same Go package (tools). D's changes are self-contained edits to existing
+            function bodies; B creates a new file. No shared symbols.
+          likelihood: low
+          impact: low
+          mitigation: |-
+            D does not reference B's symbols and vice versa. Worktree isolation keeps their
+            branches separate. D owns navigation.go, B owns callhierarchy.go -- strict I1.
+            No action needed.
+        - scenario: |-
+            Agent C registers tools.HandleCallHierarchy but Agent B has not merged yet, so
+            the symbol does not exist in the base branch. C's worktree build fails.
+          likelihood: high
+          impact: low
+          mitigation: |-
+            C is in Wave 2, which only launches after all Wave 1 agents merge. HandleCallHierarchy
+            will exist in the base branch before C starts. This is not a risk if wave ordering
+            is respected.
+        - scenario: |-
+            callHierarchyProvider capability check silently returns false for a server that
+            advertises the capability as an object rather than a bool true.
+          likelihood: medium
+          impact: medium
+          mitigation: |-
+            The existing hasCapability helper in client.go returns true for any non-nil,
+            non-false value -- it handles both bool and object shapes. Agent A uses
+            hasCapability("callHierarchyProvider") which covers this case.
+        - scenario: |-
+            fuzzyPositionFallback's extractSymbolName returns a poor token for LSP servers
+            other than gopls (e.g., Rust Analyzer emits rich hover markdown), causing
+            workspace symbol search to return unrelated results.
+          likelihood: medium
+          impact: low
+          mitigation: |-
+            The fallback is transparent -- if workspace symbol search returns empty or all
+            retried positions also return empty, the function returns an empty slice, identical
+            to the no-fallback path. No correctness regression; at worst a spurious workspace
+            symbol query fires.
+critic_report:
+    verdict: PASS
+    agent_reviews:
+        A:
+            agent_id: A
+            verdict: PASS
+        B:
+            agent_id: B
+            verdict: PASS
+        D:
+            agent_id: D
+            verdict: PASS
+    summary: 'All three Wave 1 agent briefs verified against the codebase. File existence checks pass: client.go exists for Agent A (modify), callhierarchy.go and fuzzy.go do not yet exist for Agents B and D (new), navigation.go exists for Agent D (modify). Symbol accuracy checks pass for Agents A and D: requestTimeouts map ends exactly with the prepareRename entry described; the publishDiagnostics block is the last entry in the textDocument capabilities map; GetWorkspaceSymbols is the last LSP method before the capability helpers comment section; parseInterfaceArray, hasCapability, sendRequest, GetInfoOnLocation, GetWorkspaceSymbols, CreateFileURI, extractPosition, WithDocument, CheckInitialized, and all types.Position/Location/Range field accesses are accurate. Agent B is all-new files so symbol_accuracy is skipped per protocol. Navigation.go code snippets in Agent D''s brief match the actual file verbatim. Import paths for all new files resolve to existing local packages. Disjoint ownership is maintained: no file is assigned to more than one agent in Wave 1. No complexity warnings triggered (3 files max per agent). No migration language present so caller exhaustiveness check is not applicable.'
+    reviewed_at: "2026-04-06T19:15:27Z"
+    issue_count: 0
+state: "REVIEWED"
