@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed (2026-04-05)
+- **`validate_agent_completion` scout gate** — Scout SubagentStop hook was calling `sawtools validate` (schema check only) instead of `sawtools pre-wave-validate --wave 1 --fix` (full gate: schema + E35 caller gaps + test cascade + wave structure). A Scout producing an IMPL doc with wave structure dependency problems could complete without being blocked; the Orchestrator had to discover the failure manually and send the IMPL doc back for correction. Now blocked at the exit gate.
+
 ### Added (2026-04-04)
 - **`saw_orchestrator_stop` Stop hook** — New Stop lifecycle hook warns when a session ends with an active IMPL in WAVE_PENDING or WAVE_EXECUTING state, or with active worktrees under `.claude/worktrees/saw/`. Non-blocking (systemMessage warning only, exit 0 always); uses `stop_hook_active` to prevent re-trigger loops. Registered in `install.sh` as hook #21.
 - **E47: Between-Wave Caller Cascade Hotfix** — `finalize-wave` auto-applies inline hotfix when verify-build fails exclusively due to caller-cascade compile errors in future-wave-owned files; `--dry-run` flag for diagnosis without launching agent
