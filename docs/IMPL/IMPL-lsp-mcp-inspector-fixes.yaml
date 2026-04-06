@@ -1,0 +1,857 @@
+title: LSP-MCP Inspector Fixes
+feature_slug: lsp-mcp-inspector-fixes
+verdict: SUITABLE
+suitability_assessment: |
+    All 13 findings decompose cleanly across 4 files with disjoint ownership:
+    - Agent A owns src/lspClient.ts (bugs 1, 2, 4 + uriToFilePath sites)
+    - Agent B owns src/tools/index.ts (withDocument helper, dead server param, import update)
+    - Agent C owns src/types/index.ts + src/shared/utils.ts (new file) (schema fixes 5, 7;
+      uriToFilePath utility; shared util move)
+    - Agent D owns index.ts + src/resources/index.ts + test/ (auto-init removal, layer fix,
+      test additions)
+
+    Cross-agent dependency: Agent B and D both import from src/shared/utils.ts (the new
+    shared utils file created by Agent C). This is a Wave 1 / Wave 2 dependency:
+    - Wave 1: Agent C creates the scaffold file src/shared/utils.ts with stubs
+    - Wave 1 (same wave): Agents A, B, D implement against the scaffold contracts
+    - Wave 1 is safe because Agent C creates the NEW file and A/B/D only import from it —
+      no ownership conflict. All four agents can run in parallel since A/B/D import from
+      the scaffold stub and the scaffold is created before any worktrees launch.
+
+    Actually the correct structure is: scaffold pre-created, then all four agents in Wave 1.
+
+    Suitability: SUITABLE — 4 agents, disjoint file ownership, interfaces fully specifiable
+    before implementation, no investigation-first items.
+
+    Estimated times:
+    - Scout phase: ~15 min
+    - Agent execution: ~4 agents x 10 min avg (parallel) = ~10 min
+    - Merge and verification: ~5 min
+    Total SAW time: ~30 min
+    Sequential baseline: ~4 x 12 min = ~48 min
+    Time savings: ~18 min (38% faster)
+    Recommendation: Clear speedup. Proceed.
+test_command: npm run build && npm test
+lint_command: npx tsc --noEmit
+file_ownership:
+    - file: src/lspClient.ts
+      agent: A
+      wave: 1
+      action: modify
+    - file: src/tools/index.ts
+      agent: B
+      wave: 1
+      action: modify
+    - file: src/types/index.ts
+      agent: C
+      wave: 1
+      action: modify
+    - file: src/shared/utils.ts
+      agent: C
+      wave: 1
+      action: new
+    - file: index.ts
+      agent: D
+      wave: 1
+      action: modify
+    - file: src/resources/index.ts
+      agent: D
+      wave: 1
+      action: modify
+    - file: test/typescript-lsp.test.js
+      agent: D
+      wave: 1
+      action: modify
+    - file: test/waitForDiagnostics.test.js
+      agent: D
+      wave: 1
+      action: modify
+    - file: src/shared/waitForDiagnostics.ts
+      agent: D
+      wave: 1
+      action: modify
+interface_contracts:
+    - name: uriToFilePath
+      description: |
+        Convert a file:// URI to an absolute filesystem path using URL parsing.
+        Replaces 7 ad-hoc URI stripping patterns (uri.replace(/^file:\/\//, ""),
+        uri.slice(7), etc.) with a single canonical implementation.
+      definition: |
+        export function uriToFilePath(uri: string): string {
+          return new URL(uri).pathname;
+        }
+      location: src/shared/utils.ts
+    - name: checkLspClientInitialized
+      description: |
+        Assert that an LSPClient reference is non-null. Throws if null.
+        Moved from src/tools/index.ts to src/shared/utils.ts to eliminate
+        the peer-layer violation where src/resources/index.ts imported from
+        src/tools/index.ts.
+      definition: |
+        export const checkLspClientInitialized = (lspClient: LSPClient | null): void => {
+          if (!lspClient) {
+            throw new Error("LSP server not ready yet – initialization is still in progress or failed.");
+          }
+        };
+      location: src/shared/utils.ts
+    - name: createFileUri
+      description: |
+        Create a file:// URI from a filesystem path. Moved from src/tools/index.ts
+        to src/shared/utils.ts. Signature unchanged.
+      definition: |
+        export const createFileUri = (filePath: string): string => {
+          return `file://${path.resolve(filePath)}`;
+        };
+      location: src/shared/utils.ts
+    - name: withDocument
+      description: |
+        Execute an LSP operation that requires a document to be open.
+        Encapsulates the 4-step pattern: checkLspClientInitialized -> readFile
+        -> createFileUri -> openDocument -> callback. Used by 16 of 24 handlers.
+      definition: |
+        async function withDocument<T>(
+          getLspClient: () => LSPClient | null,
+          filePath: string,
+          languageId: string,
+          callback: (lspClient: LSPClient, fileUri: string) => Promise<T>,
+        ): Promise<T> {
+          const lspClient = getLspClient();
+          checkLspClientInitialized(lspClient);
+          const fileContent = await fs.readFile(filePath, "utf-8");
+          const fileUri = createFileUri(filePath);
+          await lspClient!.openDocument(fileUri, fileContent, languageId);
+          return callback(lspClient!, fileUri);
+        }
+      location: src/tools/index.ts
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            You are Agent A working on src/lspClient.ts in the LSP-MCP repo at
+            /Users/dayna.blackwell/code/LSP-MCP.
+
+            ## What to implement
+
+            Apply three bug fixes to src/lspClient.ts:
+
+            ### Fix 1: Remove JSON brace-trimming heuristic (Bug 1, lines 149-170)
+
+            The current code checks whether the content ends with "}" and if not,
+            searches for the last "}" to truncate to. This corrupts array-valued LSP
+            responses (Location[] from references/implementations ends with "]" not "}").
+            Content-Length is authoritative — trust it.
+
+            Find and remove this entire block. Replace it with a single unconditional
+            buffer advance. The exact text to locate and remove:
+
+            ```typescript
+            // Make the parsing more robust by ensuring content ends with a closing brace
+            if (content[content.length - 1] !== "}") {
+              debug("Content doesn't end with '}', adjusting...");
+              const lastBraceIndex = content.lastIndexOf("}");
+              if (lastBraceIndex !== -1) {
+                const actualContentLength = lastBraceIndex + 1;
+                debug(
+                  `Adjusted content length from ${contentLength} to ${actualContentLength}`,
+                );
+                content = content.substring(0, actualContentLength);
+                // Update buffer position based on actual content length
+                this.buffer = this.buffer.substring(headerEnd + actualContentLength);
+              } else {
+                debug("No closing brace found, using original content length");
+                // No closing brace found, use original approach
+                this.buffer = this.buffer.substring(headerEnd + contentLength);
+              }
+            } else {
+              debug("Content ends with '}', no adjustment needed");
+              // Content looks good, remove precisely this processed message from buffer
+              this.buffer = this.buffer.substring(headerEnd + contentLength);
+            }
+            ```
+
+            Replace the entire if/else block above with:
+            ```typescript
+            this.buffer = this.buffer.substring(headerEnd + contentLength);
+            ```
+
+            The variable `content` is already assigned on the line above the removed block:
+            `let content = this.buffer.substring(headerEnd, headerEnd + contentLength);`
+            Change `let` to `const` since content is no longer reassigned.
+
+            ### Fix 2: initialized race (Bug 2, line 578-579)
+
+            The current code:
+            ```typescript
+            this.sendNotification("initialized", {});
+            this.initialized = true;
+            ```
+
+            Swap the order so the flag is set before the notification is sent:
+            ```typescript
+            this.initialized = true;
+            this.sendNotification("initialized", {});
+            ```
+
+            ### Fix 3: sendNotification silent failure (Bug 4, lines 457-461)
+
+            The current code returns silently when `this.process` is null:
+            ```typescript
+            if (!this.process) {
+              console.error("LSP server not initialized yet");
+              return;
+            }
+            ```
+
+            Replace with a thrown error to match all other `if (!this.process)` guards:
+            ```typescript
+            if (!this.process) {
+              throw new Error("LSP server not initialized yet");
+            }
+            ```
+
+            ### Fix 4: Apply uriToFilePath to lspClient.ts call sites
+
+            After the shared utility is created in src/shared/utils.ts, update lspClient.ts
+            to import and use it. There are two call sites in lspClient.ts that do ad-hoc
+            URI stripping:
+
+            1. Line ~640: `const originalPath = uri.replace(/^file:\/\//, "");`
+               Replace with: `const originalPath = uriToFilePath(uri);`
+
+            2. Line ~1248: `const filePath = uri.replace(/^file:\/\//, "");`
+               Replace with: `const filePath = uriToFilePath(uri);`
+
+            Add the import at the top of lspClient.ts:
+            ```typescript
+            import { uriToFilePath } from "./shared/utils.js";
+            ```
+
+            ## Interface contracts
+
+            - `uriToFilePath(uri: string): string` from `./shared/utils.js`
+
+            ## Tests to write
+
+            No new test file owned by this agent. The existing test/lspClient-helpers.test.js
+            exercises the LSP client. Verify that `npm run test:lspClient` passes after
+            your changes.
+
+            ## Verification gate
+
+            ```bash
+            cd /Users/dayna.blackwell/code/LSP-MCP
+            npm run build
+            npx tsc --noEmit
+            npm run test:lspClient
+            # Postcondition: brace-trimming heuristic is gone
+            grep -c "lastIndexOf.*}" src/lspClient.ts
+            # Expected output: 0
+            # Postcondition: initialized flag set before notification
+            grep -A2 "this.initialized = true" src/lspClient.ts | grep -c "sendNotification"
+            # Expected output: 1
+            # Postcondition: sendNotification throws on null process
+            grep -A3 "if (!this.process)" src/lspClient.ts | grep -c "throw new Error"
+            # Expected output: 1 (at minimum)
+            ```
+
+            ## Constraints
+            - Do NOT modify src/tools/index.ts, src/types/index.ts, index.ts, or any test files
+            - Do NOT define uriToFilePath locally in lspClient.ts — import it from src/shared/utils.ts
+            - Do NOT remove the Content-Length header parsing logic, only the brace-trimming heuristic
+          files:
+            - src/lspClient.ts
+        - id: B
+          task: |
+            You are Agent B working on src/tools/index.ts in the LSP-MCP repo at
+            /Users/dayna.blackwell/code/LSP-MCP.
+
+            ## What to implement
+
+            ### Task 1: Extract withDocument helper (Finding 8)
+
+            16 of 24 handlers copy-paste an identical 4-step pattern:
+            1. `const lspClient = getLspClient();`
+            2. `checkLspClientInitialized(lspClient);`
+            3. `const fileContent = await fs.readFile(args.file_path, 'utf-8');`
+            4. `const fileUri = createFileUri(args.file_path);`
+            5. `await lspClient!.openDocument(fileUri, fileContent, args.language_id);`
+
+            Extract this into a helper function `withDocument`:
+
+            ```typescript
+            async function withDocument<T>(
+              getLspClient: () => LSPClient | null,
+              filePath: string,
+              languageId: string,
+              callback: (lspClient: LSPClient, fileUri: string) => Promise<T>,
+            ): Promise<T> {
+              const lspClient = getLspClient();
+              checkLspClientInitialized(lspClient);
+              const fileContent = await fs.readFile(filePath, "utf-8");
+              const fileUri = createFileUri(filePath);
+              await lspClient!.openDocument(fileUri, fileContent, languageId);
+              return callback(lspClient!, fileUri);
+            }
+            ```
+
+            Apply this to the following 16 handlers (all handlers that follow the 4-step pattern):
+            - handleGetInfoOnLocation
+            - handleGetCompletions
+            - handleGetCodeActions
+            - handleGetReferences
+            - handleGoToDefinition
+            - handleGetDocumentSymbols
+            - handleGetSignatureHelp
+            - handleFormatDocument
+            - handleFormatRange
+            - handleRenameSymbol
+            - handleGoToTypeDefinition
+            - handleGoToImplementation
+            - handleGoToDeclaration
+            - handlePrepareRename
+            - handleExecuteCommand (verify pattern applies)
+            - handleApplyEdit (verify pattern applies — this one may not have language_id)
+
+            Note: handleExecuteCommand and handleApplyEdit do NOT call openDocument —
+            do not apply withDocument to them. The correct 14 handlers that do call
+            openDocument are: handleGetInfoOnLocation, handleGetCompletions,
+            handleGetCodeActions, handleGetReferences, handleGoToDefinition,
+            handleGetDocumentSymbols, handleGetSignatureHelp, handleFormatDocument,
+            handleFormatRange, handleRenameSymbol, handleGoToTypeDefinition,
+            handleGoToImplementation, handleGoToDeclaration, handlePrepareRename.
+
+            Example refactor of handleGetInfoOnLocation:
+            ```typescript
+            async function handleGetInfoOnLocation(
+              getLspClient: () => LSPClient | null,
+              args: z.infer<typeof GetInfoOnLocationArgsSchema>,
+            ): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> {
+              debug(`Getting info on location in file: ${args.file_path} (${args.line}:${args.column})`);
+              return withDocument(getLspClient, args.file_path, args.language_id, async (lspClient, fileUri) => {
+                const text = await lspClient.getInfoOnLocation(fileUri, {
+                  line: args.line - 1,
+                  character: args.column - 1
+                });
+                debug(`Returned info on location: ${text.slice(0, 100)}${text.length > 100 ? '...' : ''}`);
+                return { content: [{ type: "text", text }] };
+              });
+            }
+            ```
+
+            ### Task 2: Remove dead server parameter (Finding 11)
+
+            The `getToolHandlers` signature currently includes `server?: any` as the last
+            parameter. This parameter is declared but never read inside the function.
+
+            Current signature (line ~549):
+            ```typescript
+            export const getToolHandlers = (getLspClient: () => LSPClient | null, lspServerPath: string, lspServerArgs: string[], setLspClient: (client: LSPClient) => void, rootDir: string, setRootDir: (dir: string) => void, server?: any) => {
+            ```
+
+            Remove `server?: any` from the signature:
+            ```typescript
+            export const getToolHandlers = (getLspClient: () => LSPClient | null, lspServerPath: string, lspServerArgs: string[], setLspClient: (client: LSPClient) => void, rootDir: string, setRootDir: (dir: string) => void) => {
+            ```
+
+            ### Task 3: Update imports for shared utils (Finding 10)
+
+            The functions `createFileUri` and `checkLspClientInitialized` are being moved to
+            src/shared/utils.ts by Agent C. Update the import in src/tools/index.ts:
+
+            Remove the local definitions of `createFileUri` and `checkLspClientInitialized`
+            (lines ~44-53) and add an import:
+            ```typescript
+            import { createFileUri, checkLspClientInitialized } from "../shared/utils.js";
+            ```
+
+            Keep the export re-exports so existing importers of tools/index.ts still work:
+            ```typescript
+            export { createFileUri, checkLspClientInitialized } from "../shared/utils.js";
+            ```
+
+            Also update uri.replace call sites within tools/index.ts to use uriToFilePath:
+            In handleGetReferences (line ~254): `loc.uri.replace(/^file:\/\//, "")`
+            In handleGoToDefinition (line ~299): `loc.uri.replace(/^file:\/\//, "")`
+            In handleGoToTypeDefinition (line ~442): `loc.uri.replace(/^file:\/\//, "")`
+            In handleGoToImplementation (line ~467): `loc.uri.replace(/^file:\/\//, "")`
+            In handleGoToDeclaration (line ~516): `loc.uri.replace(/^file:\/\//, "")`
+
+            For each of these, replace `loc.uri.replace(/^file:\/\//, "")` with
+            `uriToFilePath(loc.uri)`.
+
+            Import uriToFilePath along with the other utils:
+            ```typescript
+            import { createFileUri, checkLspClientInitialized, uriToFilePath } from "../shared/utils.js";
+            ```
+
+            ## Interface contracts
+
+            Uses from src/shared/utils.ts:
+            - `createFileUri(filePath: string): string`
+            - `checkLspClientInitialized(lspClient: LSPClient | null): void`
+            - `uriToFilePath(uri: string): string`
+
+            ## Verification gate
+
+            ```bash
+            cd /Users/dayna.blackwell/code/LSP-MCP
+            npm run build
+            npx tsc --noEmit
+            npm run test:tools
+            # Postcondition: withDocument helper exists
+            grep -c "async function withDocument" src/tools/index.ts
+            # Expected output: 1
+            # Postcondition: dead server param is gone
+            grep -c "server?: any" src/tools/index.ts
+            # Expected output: 0
+            # Postcondition: local createFileUri definition removed (now imported)
+            grep -c "^export const createFileUri" src/tools/index.ts
+            # Expected output: 0 (it is re-exported, not defined)
+            ```
+
+            ## Constraints
+            - Do NOT modify src/lspClient.ts, src/types/index.ts, index.ts, or any test files
+            - Do NOT remove the re-export of createFileUri and checkLspClientInitialized from
+              tools/index.ts — resources/index.ts currently imports them from here and that
+              import is being updated by Agent D, but the re-export ensures it compiles in
+              both states during parallel development
+            - Do NOT apply withDocument to handlers that do not call openDocument
+              (handleOpenDocument, handleCloseDocument, handleGetDiagnostics, handleStartLsp,
+              handleSetLogLevel, handleRestartLspServer, handleGetWorkspaceSymbols,
+              handleDidChangeWatchedFiles, handleExecuteCommand, handleApplyEdit)
+          files:
+            - src/tools/index.ts
+        - id: C
+          task: |
+            You are Agent C working on src/types/index.ts and src/shared/utils.ts in the
+            LSP-MCP repo at /Users/dayna.blackwell/code/LSP-MCP.
+
+            ## What to implement
+
+            ### Task 1: Implement src/shared/utils.ts (Findings 9, 10)
+
+            The scaffold file src/shared/utils.ts has been pre-created with stubs.
+            Replace the stub contents with the full implementations:
+
+            ```typescript
+            import * as path from "path";
+            import { LSPClient } from "../lspClient.js";
+            import * as fs from "fs/promises";
+
+            /**
+             * Convert a file:// URI to an absolute filesystem path.
+             * Uses URL parsing for correctness; handles percent-encoded characters.
+             */
+            export function uriToFilePath(uri: string): string {
+              return new URL(uri).pathname;
+            }
+
+            /**
+             * Assert that an LSPClient reference is non-null. Throws if null.
+             * Moved from src/tools/index.ts to eliminate peer-layer import.
+             */
+            export const checkLspClientInitialized = (lspClient: LSPClient | null): void => {
+              if (!lspClient) {
+                throw new Error("LSP server not ready yet – initialization is still in progress or failed.");
+              }
+            };
+
+            /**
+             * Create a file:// URI from an absolute or relative file path.
+             * Moved from src/tools/index.ts to shared utilities.
+             */
+            export const createFileUri = (filePath: string): string => {
+              return `file://${path.resolve(filePath)}`;
+            };
+            ```
+
+            ### Task 2: Fix position schema .min(1) (Bug 5)
+
+            In src/types/index.ts, the following schemas have `line` and `column` fields
+            (and start_line/start_column/end_line/end_column variants) that accept 0,
+            producing LSP 0-based position -1.
+
+            Add `.min(1)` to ALL `line` and `column` fields across ALL position schemas.
+
+            The schemas to update are:
+            1. `GetInfoOnLocationArgsSchema` — fields: `line`, `column`
+            2. `GetCompletionsArgsSchema` — fields: `line`, `column`
+            3. `GetCodeActionsArgsSchema` — fields: `start_line`, `start_column`, `end_line`, `end_column`
+            4. `GetReferencesArgsSchema` — fields: `line`, `column`
+            5. `GoToDefinitionArgsSchema` — fields: `line`, `column`
+            6. `GetSignatureHelpArgsSchema` — fields: `line`, `column`
+            7. `FormatRangeArgsSchema` — fields: `start_line`, `start_column`, `end_line`, `end_column`
+            8. `RenameSymbolArgsSchema` — check for line/column fields (line ~187)
+            9. `GoToTypeDefinitionArgsSchema` — check for line/column fields
+            10. `GoToImplementationArgsSchema` — check for line/column fields
+            11. `GoToDeclarationArgsSchema` — check for line/column fields
+            12. `PrepareRenameArgsSchema` — check for line/column fields
+
+            For each field, change from:
+            ```typescript
+            line: z.coerce.number().describe("Line number (1-based)"),
+            ```
+            To:
+            ```typescript
+            line: z.coerce.number().min(1).describe("Line number (1-based)"),
+            ```
+
+            Apply the same `.min(1)` to all `column`, `start_line`, `start_column`,
+            `end_line`, and `end_column` fields in the schemas listed above.
+
+            ### Task 3: Add inverted range validation (Bug 7)
+
+            `GetCodeActionsArgsSchema` and `FormatRangeArgsSchema` accept ranges where
+            end < start. Add `.refine()` to both schemas.
+
+            For `GetCodeActionsArgsSchema`, after the `end_column` field, add:
+            ```typescript
+            }).refine(
+              (data) => data.start_line < data.end_line ||
+                (data.start_line === data.end_line && data.start_column <= data.end_column),
+              { message: "Range start must not be after range end" }
+            );
+            ```
+
+            For `FormatRangeArgsSchema`, add the same `.refine()` after `insert_spaces`:
+            ```typescript
+            }).refine(
+              (data) => data.start_line < data.end_line ||
+                (data.start_line === data.end_line && data.start_column <= data.end_column),
+              { message: "Range start must not be after range end" }
+            );
+            ```
+
+            Note: these schemas currently end with `});` — change to `}).refine(...)`.
+
+            ## Interface contracts
+
+            - `uriToFilePath(uri: string): string` — exported from src/shared/utils.ts
+            - `checkLspClientInitialized(lspClient: LSPClient | null): void` — exported
+            - `createFileUri(filePath: string): string` — exported
+
+            ## Verification gate
+
+            ```bash
+            cd /Users/dayna.blackwell/code/LSP-MCP
+            npm run build
+            npx tsc --noEmit
+            # Postcondition: uriToFilePath exported
+            grep -c "export function uriToFilePath" src/shared/utils.ts
+            # Expected output: 1
+            # Postcondition: .min(1) applied to position fields
+            grep -c "\.min(1)" src/types/index.ts
+            # Expected output: at least 10 (one per position field across all schemas)
+            # Postcondition: refine added to both range schemas
+            grep -c "\.refine(" src/types/index.ts
+            # Expected output: 2
+            ```
+
+            ## Constraints
+            - Do NOT modify src/tools/index.ts, src/lspClient.ts, index.ts, or test files
+            - The createFileUri and checkLspClientInitialized implementations you add to
+              src/shared/utils.ts must be identical to the current ones in src/tools/index.ts
+              (same behavior, same error messages) — do not change semantics
+            - Do NOT add .min(1) to non-position fields (e.g. tab_size, version fields)
+            - The .refine() must be added at the outermost z.object().refine() level, not
+              inside a nested field
+          files:
+            - src/types/index.ts
+            - src/shared/utils.ts
+        - id: D
+          task: |
+            You are Agent D working on index.ts, src/resources/index.ts, and test files
+            in the LSP-MCP repo at /Users/dayna.blackwell/code/LSP-MCP.
+
+            ## What to implement
+
+            ### Task 1: Remove auto-init timer from runServer (Bug 3)
+
+            In index.ts, the `runServer` function currently contains a 100ms timer that
+            auto-initializes the LSP client. This races with the explicit `start_lsp` tool
+            call (the documented workflow per README). Remove the timer entirely.
+
+            Locate this exact block in index.ts (lines ~410-422):
+            ```typescript
+            // Wait a brief moment for the MCP initialization handshake to complete
+            // before enabling notifications
+            setTimeout(async () => {
+              markServerInitialized();
+              info("Using LSP server:", lspServerPath);
+              if (lspServerArgs.length > 0) {
+                info("With arguments:", lspServerArgs.join(' '));
+              }
+
+              // Create LSP client instance and immediately initialize it
+              lspClient = new LSPClient(lspServerPath, lspServerArgs);
+              await lspClient.initialize(process.cwd());
+            }, 100); // Small delay to allow MCP handshake to complete
+            ```
+
+            Replace it with just the server-initialized marker and log lines (no LSP init):
+            ```typescript
+            markServerInitialized();
+            info("Using LSP server:", lspServerPath);
+            if (lspServerArgs.length > 0) {
+              info("With arguments:", lspServerArgs.join(' '));
+            }
+            ```
+
+            The LSP client is now initialized exclusively via the `start_lsp` tool call.
+
+            ### Task 2: Remove dead server argument from getToolHandlers call site (Finding 11)
+
+            In index.ts at line ~134, the call to `getToolHandlers` passes `server` as the
+            last argument. After Agent B removes the parameter from the signature, this
+            call will have a dangling argument that TypeScript will reject.
+
+            Current call:
+            ```typescript
+            const coreHandlers = getToolHandlers(() => lspClient, lspServerPath, lspServerArgs, setLspClient, rootDir, setRootDir, server);
+            ```
+
+            Replace with:
+            ```typescript
+            const coreHandlers = getToolHandlers(() => lspClient, lspServerPath, lspServerArgs, setLspClient, rootDir, setRootDir);
+            ```
+
+            ### Task 3: Fix peer-layer import in src/resources/index.ts (Finding 10)
+
+            src/resources/index.ts currently imports from src/tools/index.ts:
+            ```typescript
+            import { createFileUri, checkLspClientInitialized } from "../tools/index.js";
+            ```
+
+            This is a peer-layer violation (resources importing from tools). Update to
+            import from the shared utilities instead:
+            ```typescript
+            import { createFileUri, checkLspClientInitialized } from "../shared/utils.js";
+            ```
+
+            Also update the uri.slice(7) call in src/resources/index.ts (line ~357):
+            ```typescript
+            const filePath = uri.slice(7); // Remove 'file://' prefix
+            ```
+            Replace with:
+            ```typescript
+            import { uriToFilePath } from "../shared/utils.js";
+            // ...
+            const filePath = uriToFilePath(uri);
+            ```
+
+            (Add uriToFilePath to the import from shared/utils.js.)
+
+            ### Task 4: Add isError assertions to integration tests (Finding 12)
+
+            In test/typescript-lsp.test.js, the `runTest` blocks at lines ~399-528 do not
+            assert `!result.isError` before validating content. Add this assertion to each
+            block that receives a result and validates its content.
+
+            For each `executeTool` call that has a callback with content validation, add
+            at the TOP of the callback (before any existing assertions):
+            ```javascript
+            assert(!result.isError, `Tool call returned an error: ${JSON.stringify(result.content)}`);
+            ```
+
+            The test blocks to update are:
+            - 'Start LSP' test (~line 405)
+            - 'Open document' test (~line 418)
+            - 'Hover information' test (~line 429)
+            - 'Completions' test (~line 443)
+            - 'Diagnostics' test (~line 457)
+            - 'Code actions' test (~line 468)
+            - 'Get references' test (~line 485)
+            - 'Close document' test (~line 504)
+            - 'Restart LSP server' test (~line 514)
+
+            ### Task 5: Fix waitForDiagnostics empty array fast path (Bug 6)
+
+            In src/shared/waitForDiagnostics.ts, add an early return after the debug log
+            at line ~24 so that an empty targetUris array resolves immediately instead of
+            waiting 500ms for the stabilisation timer.
+
+            Add the early return for empty arrays:
+
+            ```typescript
+            if (targetUris.length === 0) {
+              return Promise.resolve();
+            }
+            ```
+
+            The exact insertion point — insert after this text:
+            ```typescript
+            debug(
+              `Waiting (≤ ${timeoutMs} ms) for diagnostics to stabilise for ` +
+                `${targetUris.length} file(s)…`,
+            );
+            ```
+
+            ## Interface contracts
+
+            Imports from src/shared/utils.ts:
+            - `createFileUri(filePath: string): string`
+            - `checkLspClientInitialized(lspClient: LSPClient | null): void`
+            - `uriToFilePath(uri: string): string`
+
+            ## Verification gate
+
+            ```bash
+            cd /Users/dayna.blackwell/code/LSP-MCP
+            npm run build
+            npx tsc --noEmit
+            npm run test:diagnostics
+            npm run test:resources
+            # Postcondition: auto-init timer removed
+            grep -c "setTimeout" index.ts
+            # Expected output: 0
+            # Postcondition: server param removed from call site
+            grep -c ", server)" index.ts
+            # Expected output: 0
+            # Postcondition: resources no longer imports from tools
+            grep -c "from.*tools/index" src/resources/index.ts
+            # Expected output: 0
+            # Postcondition: empty URI fast path present in waitForDiagnostics
+            grep -c "targetUris.length === 0" src/shared/waitForDiagnostics.ts
+            # Expected output: 1
+            ```
+
+            ## Constraints
+            - Do NOT modify src/lspClient.ts, src/tools/index.ts, or src/types/index.ts
+            - Do NOT modify src/shared/utils.ts (owned by Agent C)
+            - Do NOT remove the lspClient variable declaration or setLspClient function
+              from index.ts — only remove the auto-init timer body
+            - The isError assertion must be FIRST in each test callback, before content checks
+          files:
+            - index.ts
+            - src/resources/index.ts
+            - src/shared/waitForDiagnostics.ts
+            - test/typescript-lsp.test.js
+            - test/waitForDiagnostics.test.js
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: npm run build
+          required: true
+          repo: LSP-MCP
+        - type: typecheck
+          command: npx tsc --noEmit
+          required: true
+          repo: LSP-MCP
+        - type: test
+          command: npm run test:diagnostics && npm run test:tools && npm run test:resources && npm run test:lspClient
+          required: true
+          repo: LSP-MCP
+scaffolds:
+    - file_path: src/shared/utils.ts
+      contents: |
+        // Stub scaffold — Agent C will fill in full implementations.
+        // All agents may import from this file in Wave 1.
+
+        import * as path from "path";
+        import { LSPClient } from "../lspClient.js";
+
+        /**
+         * Convert a file:// URI to an absolute filesystem path.
+         * Uses URL parsing for correctness; handles encoded characters.
+         */
+        export function uriToFilePath(uri: string): string {
+          return new URL(uri).pathname;
+        }
+
+        /**
+         * Assert that lspClient is non-null. Throws if null.
+         * Moved from src/tools/index.ts to eliminate peer-layer import.
+         */
+        export const checkLspClientInitialized = (lspClient: LSPClient | null): void => {
+          if (!lspClient) {
+            throw new Error("LSP server not ready yet – initialization is still in progress or failed.");
+          }
+        };
+
+        /**
+         * Create a file:// URI from an absolute or relative file path.
+         * Moved from src/tools/index.ts to shared utilities.
+         */
+        export const createFileUri = (filePath: string): string => {
+          return `file://${path.resolve(filePath)}`;
+        };
+      import_path: ../shared/utils.js
+      status: committed (311fc7d)
+pre_mortem:
+    overall_risk: medium
+    rows:
+        - scenario: |
+            Agent B removes local definitions of createFileUri/checkLspClientInitialized from
+            tools/index.ts but forgets to add re-exports. Resources/index.ts still imports
+            from tools/index.ts (until Agent D updates it). If the re-export is missing,
+            resources/index.ts will fail to compile in isolation.
+          likelihood: medium
+          impact: high
+          mitigation: |
+            Agent B must add `export { createFileUri, checkLspClientInitialized } from
+            "../shared/utils.js"` to tools/index.ts alongside the import. This acts as a
+            bridge until Agent D's import update lands.
+        - scenario: |
+            Agent D removes the auto-init timer but the lspClient starts as null. If an
+            MCP client connects and immediately calls a tool before start_lsp, it gets
+            a "LSP server not ready" error. This is the intended behavior post-fix (per
+            README), but it could surprise integration tests.
+          likelihood: low
+          impact: low
+          mitigation: |
+            The README already documents start_lsp as the required first step. The
+            existing typescript-lsp.test.js calls start_lsp explicitly before other tools.
+            No test changes needed beyond what Finding 12 requires.
+        - scenario: |
+            Agent C adds .refine() to GetCodeActionsArgsSchema and FormatRangeArgsSchema.
+            These schemas currently end with `});`. If Agent C adds .refine() incorrectly
+            (e.g., chaining onto a field instead of the outer object), TypeScript will
+            show a subtle type mismatch that only appears after full build.
+          likelihood: medium
+          impact: medium
+          mitigation: |
+            Agent C must run `npx tsc --noEmit` after adding .refine() to confirm the
+            zod schema types compile correctly. The refine must be at the outermost
+            z.object() level.
+        - scenario: |
+            Agent A's fix to the brace-trimming heuristic changes `let content` to
+            `const content`. If any other code below that assignment also tries to
+            reassign `content`, the TypeScript build will fail.
+          likelihood: low
+          impact: medium
+          mitigation: |
+            Agent A should grep for reassignments of `content` between the assignment
+            and JSON.parse call. The extracted block was the only reassignment site.
+        - scenario: |
+            Agent D adds the waitForDiagnostics fast path fix to
+            src/shared/waitForDiagnostics.ts but also Agent C might modify the same
+            file if they mis-read their scope. waitForDiagnostics.ts is NOT in Agent C's
+            ownership list — it is in Agent D's list.
+          likelihood: low
+          impact: high
+          mitigation: |
+            File ownership is explicit: src/shared/waitForDiagnostics.ts belongs to
+            Agent D. Agent C owns only src/shared/utils.ts (new) and src/types/index.ts.
+            Both agents must verify their file lists before editing.
+critic_report:
+    verdict: PASS
+    agent_reviews:
+        A:
+            agent_id: A
+            verdict: PASS
+        B:
+            agent_id: B
+            verdict: PASS
+        C:
+            agent_id: C
+            verdict: PASS
+        D:
+            agent_id: D
+            verdict: PASS
+    summary: 'All three previously-flagged issues are resolved. (1) src/shared/utils.ts is now correctly marked action:new — the file does not exist in the repo (only waitForDiagnostics.ts is present in src/shared/), so no file_existence error. (2) The scaffold stub for createFileUri now uses the top-level ESM import (import * as path from "path") with no require() call — the ESM pattern_accuracy warning is cleared. (3) Agent D''s duplicate testEmptyUrisFastPath task was removed — the brief no longer instructs adding a redundant test, and the existing testEmptyTargetUris (line 107, wired at line 126) correctly covers the empty-array case. All other checks pass: brace-trimming block at lines 149-170 matches exactly, initialized/sendNotification ordering at lines 578-579 matches the bug description, sendNotification guard at lines 458-461 matches, URI replace call sites in lspClient.ts (lines 640, 1248) and tools/index.ts (lines 255, 299, 443, 468, 517) all match the brief, getToolHandlers signature with server?: any at line 549 matches, resources import from tools/index.js at line 5 matches, auto-init timer block at lines 412-422 matches, uri.slice(7) at resources line 357 matches, interface contract type signatures are syntactically valid with all referenced packages available, no disjoint ownership violations across wave 1, no missed callers for migration tasks, no result.Code semantic issues. All 9 owned files have correct action labels.'
+    reviewed_at: "2026-04-06T04:41:19Z"
+    issue_count: 0
+state: SCOUT_PENDING
+injection_method: hook
