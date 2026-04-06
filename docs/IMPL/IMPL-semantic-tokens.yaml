@@ -1,0 +1,802 @@
+title: 'Semantic Tokens MCP Tool for lsp-mcp-go'
+feature_slug: semantic-tokens
+verdict: SUITABLE
+suitability_assessment: |
+  This feature adds a single new MCP tool (get_semantic_tokens) backed by two
+  new files and modifications to two existing files. The work decomposes cleanly
+  into two independent parallel tasks with a thin integration wave:
+
+  1. Agent A owns the LSP client change (adding legend storage + GetSemanticTokens
+     method to internal/lsp/client.go).
+  2. Agent B owns the new tool handler (internal/tools/semantic_tokens.go) and its
+     unit tests (internal/tools/semantic_tokens_test.go). Agent B defines the
+     SemanticToken type in internal/types/types.go.
+  3. Wave 2 (integration) wires the new handler into cmd/lsp-mcp-go/server.go
+     and updates the tool-count comment.
+
+  File decomposition: disjoint — client.go (A), types.go (B), new handler file (B),
+  new test file (B), server.go (integration wave).
+
+  Interface discoverability: the contract between A and B is a single method
+  signature on LSPClient. This is fully specifiable before implementation begins.
+
+  Parallelization value: Both agents have non-trivial logic. Agent A must decode
+  the semanticTokensProvider capability correctly (bool | object | absent) and
+  store the legend under a new mutex-protected field. Agent B must implement the
+  delta-encoding decoder (5-integer tuples) and format output. Build+test cycles
+  for Go are fast (~5s), but the implementation tasks themselves are 15-20 min
+  each, making parallel execution worthwhile.
+
+  Estimated times:
+  - Scout phase: ~15 min (complete)
+  - Agent execution: ~20 min (2 parallel agents × ~20 min avg)
+  - Integration wave: ~10 min (1 agent, server.go wiring)
+  - Merge and verification: ~5 min
+  Total SAW time: ~50 min
+
+  Sequential baseline: ~60 min (3 tasks × ~20 min)
+  Time savings: ~10 min (modest, coordination value is primary benefit here)
+
+  Recommendation: Clear speedup for agent execution phase; coordination value
+  high due to interface contract between client and tool layers.
+
+test_command: cd /Users/dayna.blackwell/code/LSP-MCP-GO && GOWORK=off go test $(go list ./... | grep -v '/test$')
+lint_command: cd /Users/dayna.blackwell/code/LSP-MCP-GO && GOWORK=off go vet ./...
+state: "REVIEWED"
+
+quality_gates:
+  level: standard
+  gates:
+    - type: build
+      command: cd /Users/dayna.blackwell/code/LSP-MCP-GO && GOWORK=off go build ./...
+      required: true
+      repo: LSP-MCP-GO
+    - type: test
+      command: cd /Users/dayna.blackwell/code/LSP-MCP-GO && GOWORK=off go test $(go list ./... | grep -v '/test$')
+      required: true
+      repo: LSP-MCP-GO
+    - type: lint
+      command: cd /Users/dayna.blackwell/code/LSP-MCP-GO && GOWORK=off go vet ./...
+      required: true
+      repo: LSP-MCP-GO
+
+scaffolds:
+  - file_path: internal/types/types.go
+    contents: |
+      // SemanticToken is a single decoded semantic token with absolute position (1-based)
+      // and resolved type/modifier names.
+      type SemanticToken struct {
+          Line      int      `json:"line"`
+          Character int      `json:"character"`
+          Length    int      `json:"length"`
+          TokenType string   `json:"tokenType"`
+          Modifiers []string `json:"modifiers"`
+      }
+    import_path: github.com/blackwell-systems/lsp-mcp-go/internal/types
+    status: committed (5b86ef6)
+
+file_ownership:
+  - file: internal/lsp/client.go
+    agent: A
+    wave: 1
+    action: modify
+    depends_on: []
+  - file: internal/types/types.go
+    agent: B
+    wave: 1
+    action: modify
+    depends_on: []
+  - file: internal/tools/semantic_tokens.go
+    agent: B
+    wave: 1
+    action: new
+    depends_on: []
+  - file: internal/tools/semantic_tokens_test.go
+    agent: B
+    wave: 1
+    action: new
+    depends_on: []
+  - file: cmd/lsp-mcp-go/server.go
+    agent: C
+    wave: 2
+    action: modify
+    depends_on: [A, B]
+
+interface_contracts:
+  - name: GetSemanticTokens
+    description: |-
+      New method on LSPClient. Sends textDocument/semanticTokens/range (with
+      fallback to textDocument/semanticTokens/full) and returns decoded tokens
+      with absolute 1-based positions and human-readable type/modifier names.
+    definition: |
+      func (c *LSPClient) GetSemanticTokens(
+          ctx context.Context,
+          uri string,
+          rng types.Range,
+      ) ([]types.SemanticToken, error)
+    location: internal/lsp/client.go
+
+  - name: GetSemanticTokenLegend
+    description: |-
+      Accessor to retrieve the token legend captured during Initialize.
+      Returns nil slices if the server did not advertise semanticTokensProvider.
+    definition: |
+      func (c *LSPClient) GetSemanticTokenLegend() (tokenTypes []string, tokenModifiers []string)
+    location: internal/lsp/client.go
+
+  - name: SemanticToken
+    description: |-
+      Decoded token struct stored in internal/types/types.go. 1-based line and
+      character positions matching this project's output convention.
+    definition: |
+      type SemanticToken struct {
+          Line      int      `json:"line"`
+          Character int      `json:"character"`
+          Length    int      `json:"length"`
+          TokenType string   `json:"tokenType"`
+          Modifiers []string `json:"modifiers"`
+      }
+    location: internal/types/types.go
+
+  - name: HandleGetSemanticTokens
+    description: |-
+      Tool handler in internal/tools/semantic_tokens.go following the same
+      function signature as all other handlers in this package.
+    definition: |
+      func HandleGetSemanticTokens(
+          ctx context.Context,
+          client *lsp.LSPClient,
+          args map[string]interface{},
+      ) (types.ToolResult, error)
+    location: internal/tools/semantic_tokens.go
+
+waves:
+  - number: 1
+    agents:
+      - id: A
+        task: |
+          ## Role
+          You are implementing the LSP client changes needed to support semantic tokens
+          in lsp-mcp-go. Your task is to add legend storage and a GetSemanticTokens
+          method to the LSPClient struct.
+
+          ## What to implement
+
+          ### 1. Add legend fields to LSPClient struct
+
+          In `internal/lsp/client.go`, add two new fields to the `LSPClient` struct.
+          The struct currently ends with:
+
+          ```go
+              // stderr drain
+              stderrBuf []byte
+              stderrMu  sync.Mutex
+          }
+          ```
+
+          Add the new fields BEFORE the stderr drain block (insert after the
+          capabilities block):
+
+          ```go
+              // semantic token legend (from initialize response)
+              legendMu        sync.RWMutex
+              legendTypes     []string
+              legendModifiers []string
+          ```
+
+          ### 2. Capture legend during Initialize
+
+          In the `Initialize` method, the code currently unmarshals initResult and
+          stores capabilities. After storing `c.capabilities`, add legend extraction.
+
+          Find this exact block in Initialize:
+          ```go
+          	if err := json.Unmarshal(result, &initResult); err == nil && initResult.Capabilities != nil {
+          		c.capsMu.Lock()
+          		c.capabilities = initResult.Capabilities
+          		c.capsMu.Unlock()
+          	}
+          ```
+
+          After that closing brace, add:
+          ```go
+          	// Extract semantic token legend if advertised.
+          	var fullResult struct {
+          		Capabilities struct {
+          			SemanticTokensProvider interface{} `json:"semanticTokensProvider"`
+          		} `json:"capabilities"`
+          	}
+          	if err := json.Unmarshal(result, &fullResult); err == nil && fullResult.Capabilities.SemanticTokensProvider != nil {
+          		// Legend may be nested inside an options object or at the top level.
+          		var legend struct {
+          			Legend struct {
+          				TokenTypes     []string `json:"tokenTypes"`
+          				TokenModifiers []string `json:"tokenModifiers"`
+          			} `json:"legend"`
+          			// Handle case where semanticTokensProvider IS the options object directly.
+          			TokenTypes     []string `json:"tokenTypes"`
+          			TokenModifiers []string `json:"tokenModifiers"`
+          		}
+          		b, _ := json.Marshal(fullResult.Capabilities.SemanticTokensProvider)
+          		if err := json.Unmarshal(b, &legend); err == nil {
+          			c.legendMu.Lock()
+          			if len(legend.Legend.TokenTypes) > 0 {
+          				c.legendTypes = legend.Legend.TokenTypes
+          				c.legendModifiers = legend.Legend.TokenModifiers
+          			} else if len(legend.TokenTypes) > 0 {
+          				c.legendTypes = legend.TokenTypes
+          				c.legendModifiers = legend.TokenModifiers
+          			}
+          			c.legendMu.Unlock()
+          		}
+          	}
+          ```
+
+          ### 3. Advertise semantic token support in clientCapabilities (Initialize params)
+
+          In the `initParams` map inside `Initialize`, find the `"textDocument"` block.
+          It currently ends with:
+          ```go
+          			"callHierarchy": map[string]interface{}{
+          				"dynamicRegistration": true,
+          			},
+          		},
+          ```
+
+          Add semantic token capability after callHierarchy:
+          ```go
+          			"semanticTokens": map[string]interface{}{
+          				"dynamicRegistration": true,
+          				"requests": map[string]interface{}{
+          					"range": true,
+          					"full":  true,
+          				},
+          				"tokenTypes":     []string{},
+          				"tokenModifiers": []string{},
+          				"formats":        []string{"relative"},
+          				"overlappingTokenSupport":  false,
+          				"multilineTokenSupport":    false,
+          			},
+          ```
+
+          ### 4. Add requestTimeouts entries
+
+          In the `requestTimeouts` map, add:
+          ```go
+          	"textDocument/semanticTokens/range": 30 * time.Second,
+          	"textDocument/semanticTokens/full":  30 * time.Second,
+          ```
+
+          The map currently ends with:
+          ```go
+          	"callHierarchy/incomingCalls":        60 * time.Second,
+          	"callHierarchy/outgoingCalls":         60 * time.Second,
+          }
+          ```
+
+          Insert the two new entries before the closing brace.
+
+          ### 5. Add GetSemanticTokenLegend method
+
+          Add a new method after the existing capability helpers section (after
+          `getCapabilityRaw`):
+
+          ```go
+          // GetSemanticTokenLegend returns the token type and modifier name arrays
+          // captured from the initialize response. Returns nil slices if the server
+          // did not advertise semanticTokensProvider.
+          func (c *LSPClient) GetSemanticTokenLegend() (tokenTypes []string, tokenModifiers []string) {
+          	c.legendMu.RLock()
+          	defer c.legendMu.RUnlock()
+          	return c.legendTypes, c.legendModifiers
+          }
+          ```
+
+          ### 6. Add GetSemanticTokens method
+
+          Add after GetSemanticTokenLegend:
+
+          ```go
+          // GetSemanticTokens sends textDocument/semanticTokens/range for the given range.
+          // Falls back to textDocument/semanticTokens/full when range is unsupported.
+          // Returns decoded tokens with absolute 1-based positions and human-readable
+          // type/modifier names resolved from the legend captured during Initialize.
+          func (c *LSPClient) GetSemanticTokens(ctx context.Context, uri string, rng types.Range) ([]types.SemanticToken, error) {
+          	// Check capability: semanticTokensProvider may be bool, object, or absent.
+          	cap := c.getCapabilityRaw("semanticTokensProvider")
+          	if cap == nil {
+          		logging.Log(logging.LevelDebug, "server does not support semanticTokens")
+          		return []types.SemanticToken{}, nil
+          	}
+
+          	c.legendMu.RLock()
+          	tokenTypes := make([]string, len(c.legendTypes))
+          	copy(tokenTypes, c.legendTypes)
+          	tokenModifiers := make([]string, len(c.legendModifiers))
+          	copy(tokenModifiers, c.legendModifiers)
+          	c.legendMu.RUnlock()
+
+          	// Try range request first; fall back to full if not supported.
+          	useRange := false
+          	switch v := cap.(type) {
+          	case map[string]interface{}:
+          		if req, ok := v["requests"].(map[string]interface{}); ok {
+          			_, useRange = req["range"]
+          		}
+          	case bool:
+          		// bool capability: full is implied, range may not be.
+          		useRange = false
+          	}
+
+          	var raw json.RawMessage
+          	var err error
+          	if useRange {
+          		raw, err = c.sendRequest(ctx, "textDocument/semanticTokens/range", map[string]interface{}{
+          			"textDocument": map[string]interface{}{"uri": uri},
+          			"range":        rng,
+          		})
+          	} else {
+          		raw, err = c.sendRequest(ctx, "textDocument/semanticTokens/full", map[string]interface{}{
+          			"textDocument": map[string]interface{}{"uri": uri},
+          		})
+          	}
+          	if err != nil {
+          		return nil, err
+          	}
+          	if raw == nil || string(raw) == "null" {
+          		return []types.SemanticToken{}, nil
+          	}
+
+          	var result struct {
+          		Data []int `json:"data"`
+          	}
+          	if err := json.Unmarshal(raw, &result); err != nil {
+          		return nil, fmt.Errorf("unmarshal semanticTokens response: %w", err)
+          	}
+
+          	return decodeSemanticTokens(result.Data, tokenTypes, tokenModifiers), nil
+          }
+
+          // decodeSemanticTokens converts the flat delta-encoded int array from LSP into
+          // absolute-position SemanticToken values. The LSP spec encodes tokens as a
+          // flat []int with 5 integers per token:
+          //   [deltaLine, deltaStartChar, length, tokenTypeIndex, tokenModifierBitmask]
+          // Positions are delta-encoded: deltaLine is relative to previous token's line;
+          // deltaStartChar is relative to previous token's startChar on the SAME line
+          // (resets to absolute when line changes).
+          func decodeSemanticTokens(data []int, tokenTypes []string, tokenModifiers []string) []types.SemanticToken {
+          	tokens := make([]types.SemanticToken, 0, len(data)/5)
+          	prevLine := 0
+          	prevChar := 0
+          	for i := 0; i+4 < len(data); i += 5 {
+          		deltaLine := data[i]
+          		deltaChar := data[i+1]
+          		length := data[i+2]
+          		typeIdx := data[i+3]
+          		modBitmask := data[i+4]
+
+          		if deltaLine > 0 {
+          			prevLine += deltaLine
+          			prevChar = deltaChar
+          		} else {
+          			prevChar += deltaChar
+          		}
+
+          		tokenType := ""
+          		if typeIdx >= 0 && typeIdx < len(tokenTypes) {
+          			tokenType = tokenTypes[typeIdx]
+          		}
+
+          		var modifiers []string
+          		for bit := 0; bit < len(tokenModifiers); bit++ {
+          			if modBitmask&(1<<bit) != 0 {
+          				modifiers = append(modifiers, tokenModifiers[bit])
+          			}
+          		}
+          		if modifiers == nil {
+          			modifiers = []string{}
+          		}
+
+          		tokens = append(tokens, types.SemanticToken{
+          			Line:      prevLine + 1,
+          			Character: prevChar + 1,
+          			Length:    length,
+          			TokenType: tokenType,
+          			Modifiers: modifiers,
+          		})
+          	}
+          	return tokens
+          }
+          ```
+
+          ## Constraints
+          - Do NOT add SemanticToken struct to types.go — that belongs to Agent B.
+            Your GetSemanticTokens method references types.SemanticToken, which Agent B
+            will define. If your branch fails to compile without it, add a temporary
+            stub `// type SemanticToken struct{...}` comment and note in your completion
+            report — the scaffold file handles this.
+          - Do NOT modify files outside internal/lsp/client.go.
+          - Do NOT change existing function signatures.
+
+          ## Verification gate
+          ```bash
+          cd /Users/dayna.blackwell/code/LSP-MCP-GO
+          go build ./internal/lsp/...
+          go vet ./internal/lsp/...
+          # Postcondition checks:
+          grep -c "legendTypes" internal/lsp/client.go
+          # Expected: >= 3 (field declaration + 2+ usages)
+          grep -c "GetSemanticTokens" internal/lsp/client.go
+          # Expected: >= 2 (method declaration + decodeSemanticTokens helper)
+          grep -c "GetSemanticTokenLegend" internal/lsp/client.go
+          # Expected: >= 1
+          grep -c "semanticTokens/range" internal/lsp/client.go
+          # Expected: >= 1
+          ```
+
+        files:
+          - internal/lsp/client.go
+        dependencies: []
+
+      - id: B
+        task: |
+          ## Role
+          You are implementing the MCP tool handler for semantic tokens in lsp-mcp-go.
+          Your task is to:
+          1. Add the SemanticToken struct to internal/types/types.go
+          2. Create internal/tools/semantic_tokens.go with the handler
+          3. Create internal/tools/semantic_tokens_test.go with unit tests
+
+          ## 1. Add SemanticToken type to internal/types/types.go
+
+          Add the following struct to the end of `internal/types/types.go`, after the
+          existing `Extension` interface:
+
+          ```go
+          // SemanticToken is a single decoded semantic token returned by get_semantic_tokens.
+          // Line and Character are 1-based, matching this server's position convention.
+          // TokenType is a human-readable name (e.g., "function", "variable", "keyword").
+          // Modifiers is the list of active modifier names (e.g., ["readonly", "static"]).
+          type SemanticToken struct {
+          	Line      int      `json:"line"`
+          	Character int      `json:"character"`
+          	Length    int      `json:"length"`
+          	TokenType string   `json:"tokenType"`
+          	Modifiers []string `json:"modifiers"`
+          }
+          ```
+
+          ## 2. Create internal/tools/semantic_tokens.go
+
+          Create the file with this exact content:
+
+          ```go
+          package tools
+
+          import (
+          	"context"
+          	"encoding/json"
+          	"fmt"
+
+          	"github.com/blackwell-systems/lsp-mcp-go/internal/lsp"
+          	"github.com/blackwell-systems/lsp-mcp-go/internal/types"
+          )
+
+          // HandleGetSemanticTokens retrieves semantic tokens for a range in a document.
+          // Uses textDocument/semanticTokens/range (or full as fallback).
+          // Returns an array of SemanticToken objects with 1-based positions and
+          // human-readable token type and modifier names.
+          func HandleGetSemanticTokens(ctx context.Context, client *lsp.LSPClient, args map[string]interface{}) (types.ToolResult, error) {
+          	if err := CheckInitialized(client); err != nil {
+          		return types.ErrorResult(err.Error()), nil
+          	}
+
+          	filePath, ok := args["file_path"].(string)
+          	if !ok || filePath == "" {
+          		return types.ErrorResult("file_path is required"), nil
+          	}
+
+          	rng, err := extractRange(args)
+          	if err != nil {
+          		return types.ErrorResult(err.Error()), nil
+          	}
+
+          	languageID, _ := args["language_id"].(string)
+          	if languageID == "" {
+          		languageID = "plaintext"
+          	}
+
+          	tokens, wErr := WithDocument[[]types.SemanticToken](ctx, client, filePath, languageID, func(fileURI string) ([]types.SemanticToken, error) {
+          		return client.GetSemanticTokens(ctx, fileURI, rng)
+          	})
+          	if wErr != nil {
+          		return types.ErrorResult(fmt.Sprintf("get_semantic_tokens: %s", wErr)), nil
+          	}
+
+          	if len(tokens) == 0 {
+          		return types.TextResult("No semantic tokens found in the specified range. The language server may not support semantic tokens, or there are no tokens in this range."), nil
+          	}
+
+          	data, mErr := json.Marshal(tokens)
+          	if mErr != nil {
+          		return types.ErrorResult(fmt.Sprintf("marshaling semantic tokens: %s", mErr)), nil
+          	}
+          	return types.TextResult(string(data)), nil
+          }
+          ```
+
+          ## 3. Create internal/tools/semantic_tokens_test.go
+
+          Create the file with the following unit tests. Tests follow the same
+          patterns as `internal/tools/tools_test.go` — nil client returns IsError,
+          validation errors surface as IsError (not Go errors), helper functions
+          tested directly.
+
+          ```go
+          package tools
+
+          import (
+          	"context"
+          	"testing"
+          )
+
+          // TestHandleGetSemanticTokens_NilClient verifies that a nil client returns
+          // IsError=true without panicking.
+          func TestHandleGetSemanticTokens_NilClient(t *testing.T) {
+          	ctx := context.Background()
+          	args := map[string]interface{}{
+          		"file_path":    "/some/file.go",
+          		"start_line":   float64(1),
+          		"start_column": float64(1),
+          		"end_line":     float64(10),
+          		"end_column":   float64(1),
+          	}
+          	result, err := HandleGetSemanticTokens(ctx, newNilClient(), args)
+          	if err != nil {
+          		t.Fatalf("unexpected Go error: %v", err)
+          	}
+          	if !result.IsError {
+          		t.Errorf("expected IsError=true for nil client, got false; text: %s", result.Content[0].Text)
+          	}
+          }
+
+          // TestHandleGetSemanticTokens_MissingFilePath verifies that an empty file_path
+          // returns IsError=true (validation fires before client check if client is nil,
+          // but nil client fires first; test via nil client path is sufficient to verify
+          // the handler returns ErrorResult not a Go error).
+          func TestHandleGetSemanticTokens_MissingFilePath(t *testing.T) {
+          	ctx := context.Background()
+          	args := map[string]interface{}{
+          		"start_line":   float64(1),
+          		"start_column": float64(1),
+          		"end_line":     float64(10),
+          		"end_column":   float64(1),
+          	}
+          	result, err := HandleGetSemanticTokens(ctx, newNilClient(), args)
+          	if err != nil {
+          		t.Fatalf("unexpected Go error: %v", err)
+          	}
+          	if !result.IsError {
+          		t.Errorf("expected IsError=true, got false")
+          	}
+          }
+
+          // TestHandleGetSemanticTokens_InvalidRange verifies that start_line > end_line
+          // is rejected. Uses nil client (CheckInitialized fires first) to confirm
+          // no panic. Range validation is separately tested via extractRange.
+          func TestHandleGetSemanticTokens_InvalidRange(t *testing.T) {
+          	ctx := context.Background()
+          	args := map[string]interface{}{
+          		"file_path":    "/some/file.go",
+          		"start_line":   float64(10),
+          		"start_column": float64(1),
+          		"end_line":     float64(5),
+          		"end_column":   float64(1),
+          	}
+          	result, err := HandleGetSemanticTokens(ctx, newNilClient(), args)
+          	if err != nil {
+          		t.Fatalf("unexpected Go error: %v", err)
+          	}
+          	if !result.IsError {
+          		t.Errorf("expected IsError=true for nil client, got false")
+          	}
+          }
+          ```
+
+          ## Constraints
+          - Do NOT add SemanticToken to internal/lsp/client.go — it belongs in
+            internal/types/types.go only.
+          - Do NOT modify internal/lsp/client.go — that belongs to Agent A.
+          - Do NOT add a decodeSemanticTokens function — that belongs to Agent A
+            (it is an internal helper inside client.go).
+          - The handler file must be in package `tools` (matches all other files in
+            internal/tools/).
+          - Do NOT modify files outside your ownership list.
+
+          ## Verification gate
+          ```bash
+          cd /Users/dayna.blackwell/code/LSP-MCP-GO
+          go build ./internal/tools/...
+          go vet ./internal/tools/...
+          go test ./internal/tools/... -run TestHandleGetSemanticTokens
+          # Expected: PASS (3 tests)
+          # Postcondition checks:
+          grep -c "SemanticToken" internal/types/types.go
+          # Expected: >= 3 (struct declaration + field references in struct)
+          grep -c "HandleGetSemanticTokens" internal/tools/semantic_tokens.go
+          # Expected: >= 1
+          ls internal/tools/semantic_tokens_test.go
+          # Expected: file exists
+          ```
+
+        files:
+          - internal/types/types.go
+          - internal/tools/semantic_tokens.go
+          - internal/tools/semantic_tokens_test.go
+        dependencies: []
+
+  - number: 2
+    type: integration
+    agents:
+      - id: C
+        task: |
+          ## Role
+          You are wiring the new get_semantic_tokens tool into the MCP server
+          registration in cmd/lsp-mcp-go/server.go.
+
+          ## What to implement
+
+          ### 1. Add args struct
+
+          In `cmd/lsp-mcp-go/server.go`, find the block of Args struct definitions
+          inside the `Run` function. The last struct is:
+
+          ```go
+          	type CallHierarchyArgs struct {
+          		FilePath   string `json:"file_path"`
+          		LanguageID string `json:"language_id,omitempty"`
+          		Line       int    `json:"line"`
+          		Column     int    `json:"column"`
+          		Direction  string `json:"direction,omitempty"`
+          	}
+          ```
+
+          Add the new args struct immediately after CallHierarchyArgs:
+
+          ```go
+          	type GetSemanticTokensArgs struct {
+          		FilePath    string `json:"file_path"`
+          		LanguageID  string `json:"language_id,omitempty"`
+          		StartLine   int    `json:"start_line"`
+          		StartColumn int    `json:"start_column"`
+          		EndLine     int    `json:"end_line"`
+          		EndColumn   int    `json:"end_column"`
+          	}
+          ```
+
+          ### 2. Register the tool
+
+          Find the comment `// ------- Register all 25 tools -------` and update it to:
+          `// ------- Register all 26 tools -------`
+
+          Then find the last `mcp.AddTool` call in the tool registration block.
+          It is the call_hierarchy registration:
+
+          ```go
+          	mcp.AddTool(server, &mcp.Tool{
+          		Name:        "call_hierarchy",
+          		Description: "Show call hierarchy for a symbol at a position. Returns callers (incoming), callees (outgoing), or both depending on the direction parameter. Direction defaults to \"both\". Use this to understand code flow -- which functions call this function and which functions it calls.",
+          	}, func(ctx context.Context, req *mcp.CallToolRequest, args CallHierarchyArgs) (*mcp.CallToolResult, any, error) {
+          		r, err := tools.HandleCallHierarchy(ctx, cs.get(), toolArgsToMap(args))
+          		return makeCallToolResult(r), nil, err
+          	})
+          ```
+
+          Add the new tool AFTER that closing `})`:
+
+          ```go
+          	mcp.AddTool(server, &mcp.Tool{
+          		Name:        "get_semantic_tokens",
+          		Description: "Get semantic tokens for a range in a file. Returns each token's type (function, variable, keyword, parameter, type, etc.) and modifiers (readonly, static, deprecated, etc.) with 1-based line/character positions. Use this to understand the syntactic role of code elements — distinct from hover which gives documentation. Only available when the language server supports textDocument/semanticTokens.",
+          	}, func(ctx context.Context, req *mcp.CallToolRequest, args GetSemanticTokensArgs) (*mcp.CallToolResult, any, error) {
+          		r, err := tools.HandleGetSemanticTokens(ctx, cs.get(), toolArgsToMap(args))
+          		return makeCallToolResult(r), nil, err
+          	})
+          ```
+
+          ## Constraints
+          - Do NOT modify any other part of server.go.
+          - Do NOT modify files outside your ownership list (cmd/lsp-mcp-go/server.go).
+          - The tool name must be exactly `get_semantic_tokens` (matches the feature spec).
+
+          ## Verification gate
+          ```bash
+          cd /Users/dayna.blackwell/code/LSP-MCP-GO
+          go build ./cmd/lsp-mcp-go/...
+          go vet ./cmd/lsp-mcp-go/...
+          go test ./...
+          # Postcondition checks:
+          grep -c "get_semantic_tokens" cmd/lsp-mcp-go/server.go
+          # Expected: >= 1
+          grep -c "Register all 26 tools" cmd/lsp-mcp-go/server.go
+          # Expected: 1
+          grep -c "GetSemanticTokensArgs" cmd/lsp-mcp-go/server.go
+          # Expected: >= 2 (struct declaration + usage)
+          ```
+
+        files:
+          - cmd/lsp-mcp-go/server.go
+        dependencies: [A, B]
+
+pre_mortem:
+  overall_risk: low
+  rows:
+    - scenario: |-
+        Agent A places SemanticToken struct definition in client.go or types.go
+        instead of leaving it for Agent B, causing duplicate declaration at merge.
+      likelihood: medium
+      impact: high
+      mitigation: |-
+        The scaffold pre-defines SemanticToken in types.go. Agent A's brief
+        explicitly prohibits defining the struct and instructs the agent to
+        reference types.SemanticToken as if it exists. The scaffold resolves the
+        compile-time dependency.
+
+    - scenario: |-
+        The capability check logic is wrong: semanticTokensProvider can be bool
+        (true), a full options object, or absent. If Agent A only handles the
+        object case, servers that return `semanticTokensProvider: true` will
+        silently return empty tokens because GetSemanticTokens returns early.
+      likelihood: medium
+      impact: medium
+      mitigation: |-
+        Agent A's brief includes the switch statement that handles both `bool`
+        and `map[string]interface{}` cases. The bool case falls back to full
+        (not range). The brief is explicit about this logic.
+
+    - scenario: |-
+        Delta-decoding bug: when deltaLine > 0, prevChar must reset to deltaChar
+        (absolute on the new line), not increment from the previous character.
+        A naive implementation that always does prevChar += deltaChar produces
+        wrong absolute positions.
+      likelihood: medium
+      impact: high
+      mitigation: |-
+        Agent A's brief provides the complete decodeSemanticTokens implementation
+        verbatim, including the if/else branch on deltaLine. No re-implementation
+        is needed.
+
+    - scenario: |-
+        Agent C's server.go registration fails to compile because types.SemanticToken
+        or HandleGetSemanticTokens are not yet merged when Agent C runs (integration
+        wave runs after Wave 1 merges, so this should not occur — but if Wave 1
+        merge is partial, it will).
+      likelihood: low
+      impact: medium
+      mitigation: |-
+        Wave 2 is an integration wave that runs only after Wave 1 completes and
+        merges. The orchestrator enforces this sequencing.
+
+    - scenario: |-
+        Legend is populated but has wrong structure because gopls returns
+        semanticTokensProvider as a nested object where the legend is at
+        capabilities.semanticTokensProvider.legend (not at the top level).
+        Agent A must handle both shapes.
+      likelihood: medium
+      impact: medium
+      mitigation: |-
+        Agent A's brief handles both shapes: it tries `legend.Legend.TokenTypes`
+        first (the nested case) and falls back to `legend.TokenTypes` (the
+        flat case). The JSON struct in the brief covers both layouts.
+
+known_issues:
+  - title: validate_briefs false positives on cross-repo IMPL
+    description: |-
+      finalize-scout validate_briefs reports false positives for Agents A and C.
+      Two categories: (1) symbols that exist in the target files (Initialize, LSPClient,
+      requestTimeouts, getCapabilityRaw, initParams, Run, CallHierarchyArgs) cannot be
+      found because this is a cross-repo IMPL and paths resolve under LSP-MCP-GO, not
+      scout-and-wave. Manual verification confirms all symbols exist. (2) New symbols
+      to be created (decodeSemanticTokens, SemanticToken, GetSemanticTokensArgs,
+      get_semantic_tokens) do not exist yet by design. The IMPL doc is correct.
+      This is a known tool limitation on cross-repo IMPLs.
