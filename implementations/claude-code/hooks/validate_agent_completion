@@ -347,13 +347,14 @@ case "$agent_type" in
     ;;
 
   scout)
-    # Verify IMPL doc exists and passes validation
-    # We already verified existence above. Run sawtools validate if available.
+    # Verify IMPL doc passes full pre-wave validation (schema + E35 gaps + wave structure).
+    # sawtools validate only checks schema; pre-wave-validate is the complete gate.
     if command -v sawtools &>/dev/null; then
-      if ! sawtools validate "$impl_path" &>/dev/null; then
-        echo "E42: Scout IMPL doc failed validation: ${impl_path}" >&2
+      validate_output=$(sawtools pre-wave-validate "$impl_path" --wave 1 --fix 2>&1) || {
+        echo "E42: Scout IMPL doc failed pre-wave validation: ${impl_path}" >&2
+        echo "$validate_output" >&2
         exit 2
-      fi
+      }
     fi
     ;;
 
