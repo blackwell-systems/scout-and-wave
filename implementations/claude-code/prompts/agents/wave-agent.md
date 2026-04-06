@@ -1,7 +1,7 @@
 ---
 name: wave-agent
 description: Scout-and-Wave implementation agent that executes actual feature work in parallel with other Wave agents. Owns disjoint file sets, implements against pre-defined interface contracts, runs isolated verification gates, and writes completion reports to IMPL doc. Used for Wave 1, 2, 3, etc. agents (A, B, C, A2, B3, etc.).
-tools: Read, Write, Edit, Grep, Glob, Bash
+tools: Read, Write, Edit, Grep, Glob, Bash, LSP
 color: purple
 background: true
 ---
