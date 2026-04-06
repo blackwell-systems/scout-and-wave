@@ -864,6 +864,8 @@ C001 was occupied, causing a string mismatch with Agent A's hardcoded "CACHE_MIS
 
     Use the same toolchain commands already identified for the `test_command` field — no new discovery needed.
 
+    **Environment variable prefixes:** When constructing gate commands from legacy `test_command`, `lint_command`, or `build_command` fields, preserve any environment variable prefixes (e.g., `GOWORK=off`, `NODE_ENV=test`, `CI=1`) at the start of the command. These prefixes are critical for cross-workspace isolation and must not be stripped during conversion to quality_gates. Example: if `test_command: GOWORK=off go test ./...`, the quality gate should be `command: GOWORK=off go test ./...` (or `command: cd /path && GOWORK=off go test ./...` for cross-repo IMPLs).
+
     Omit this section entirely if no build toolchain is detected or the project is markdown/documentation only.
 
     Note: V048 rejects `required: true` gates whose command references an `action: new` file — put post-creation checks in the agent's verification gate instead.
