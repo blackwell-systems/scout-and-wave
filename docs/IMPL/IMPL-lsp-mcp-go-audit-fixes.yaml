@@ -29,7 +29,7 @@ suitability_assessment: |-
     Time savings: ~25 min (~33% faster)
 
     Recommendation: Clear speedup. All findings are well-specified; proceed.
-test_command: env GOWORK=off go test ./...
+test_command: env GOWORK=off go test ./internal/... ./cmd/... ./extensions/... .
 lint_command: env GOWORK=off go vet ./...
 file_ownership:
     - file: internal/session/manager.go
@@ -1553,7 +1553,7 @@ quality_gates:
           required: true
           repo: LSP-MCP-GO
         - type: test
-          command: env GOWORK=off go test ./...
+          command: env GOWORK=off go test ./internal/... ./cmd/... ./extensions/... .
           required: true
           repo: LSP-MCP-GO
 completion_reports:
