@@ -297,6 +297,29 @@ case "$agent_type" in
       exit 2
     fi
 
+    # Verify IMPL doc completion report is committed (not just present in working tree)
+    if [[ -n "$ownership_file" ]]; then
+      worktree_root=$(dirname "$ownership_file")
+      impl_basename=$(basename "$impl_path")
+
+      # Check if IMPL doc has uncommitted changes containing the completion report
+      cd "$worktree_root" 2>/dev/null || cd .
+
+      # Check unstaged changes
+      if git diff --name-only 2>/dev/null | grep -q "docs/IMPL/${impl_basename}$"; then
+        echo "E42: Agent ${agent_id} completion report exists but IMPL doc has uncommitted changes." >&2
+        echo "     Run 'git add docs/IMPL/${impl_basename} && git commit' before completing." >&2
+        exit 2
+      fi
+
+      # Check staged but not committed
+      if git diff --cached --name-only 2>/dev/null | grep -q "docs/IMPL/${impl_basename}$"; then
+        echo "E42: Agent ${agent_id} completion report is staged but not committed." >&2
+        echo "     Run 'git commit' before completing." >&2
+        exit 2
+      fi
+    fi
+
     # Verify verification field format (must be "PASS" or "FAIL (...)")
     verification=""
     if command -v yq &>/dev/null; then
