@@ -1,0 +1,1659 @@
+title: LSP-MCP-Go Audit Fixes
+feature_slug: lsp-mcp-go-audit-fixes
+verdict: SUITABLE
+suitability_assessment: |-
+    24 findings (9 errors, 15 warnings) across 5 distinct subsystems with fully
+    disjoint file ownership. The four primary fix areas touch non-overlapping files:
+    internal/session/ (race fixes, uriToPath, Discard snapshot, Commit error),
+    internal/tools/ (open_document path validation, execute_command key fix,
+    simulation.go marshal errors), cmd/lsp-mcp-go/server.go (clientForFile routing,
+    applyEdit response), and internal/lsp/client.go (applyWorkspaceEdit extract,
+    rootURI encoding). Test files are in separate packages so Agent E (session tests)
+    owns manager_test.go without touching manager.go (Agent A's file).
+
+    File decomposition: 5 agents, all disjoint. No two agents touch the same file.
+    Investigation-first: All bugs are structurally confirmed (key mismatch, mutex
+    gap, interface mismatch) — no root-cause investigation needed before implementing.
+    Interface discoverability: The only cross-agent interface is SetStatus() on
+    SimulationSession, which Agent A adds and Agent E tests. Contract is definable now.
+    Parallelization value: Go test cycle >10s, 4-7 files per agent, non-trivial logic
+    changes (mutex discipline, disk-read elimination, percent-encoding). Clear speedup.
+
+    Estimated times:
+    - Scout phase: ~15 min (audit analysis, interface contracts, IMPL doc)
+    - Agent execution: ~30 min (5 agents × ~6 min avg, run in parallel)
+    - Merge and verification: ~5 min
+    Total SAW time: ~50 min
+
+    Sequential baseline: ~75 min (5 agents × 15 min sequential)
+    Time savings: ~25 min (~33% faster)
+
+    Recommendation: Clear speedup. All findings are well-specified; proceed.
+test_command: go test ./...
+lint_command: go vet ./...
+file_ownership:
+    - file: internal/session/manager.go
+      agent: A
+      wave: 2
+      action: modify
+      depends_on:
+        - D
+    - file: internal/session/types.go
+      agent: A
+      wave: 2
+      action: modify
+      depends_on:
+        - D
+    - file: internal/tools/session.go
+      agent: B
+      wave: 3
+      action: modify
+      depends_on:
+        - D
+    - file: internal/tools/workspace.go
+      agent: B
+      wave: 3
+      action: modify
+      depends_on:
+        - D
+    - file: internal/tools/simulation.go
+      agent: B
+      wave: 3
+      action: modify
+      depends_on:
+        - D
+    - file: cmd/lsp-mcp-go/server.go
+      agent: C
+      wave: 3
+      action: modify
+      depends_on:
+        - D
+    - file: internal/lsp/client.go
+      agent: D
+      wave: 1
+      action: modify
+    - file: internal/resources/resources.go
+      agent: D
+      wave: 1
+      action: modify
+    - file: internal/lsp/manager.go
+      agent: D
+      wave: 1
+      action: modify
+    - file: internal/resources/resources_test.go
+      agent: D
+      wave: 1
+      action: modify
+    - file: internal/tools/tools_test.go
+      agent: D
+      wave: 1
+      action: modify
+    - file: internal/extensions/registry_test.go
+      agent: D
+      wave: 1
+      action: modify
+    - file: internal/lsp/client_test.go
+      agent: D
+      wave: 1
+      action: modify
+    - file: internal/tools/semantic_tokens_test.go
+      agent: D
+      wave: 1
+      action: modify
+    - file: internal/session/manager_test.go
+      agent: E
+      wave: 3
+      action: modify
+      depends_on:
+        - A
+        - D
+    - file: internal/types/types.go
+      agent: F
+      wave: 2
+      action: modify
+      depends_on:
+        - D
+    - file: docs/architecture.md
+      agent: F
+      wave: 2
+      action: modify
+      depends_on:
+        - D
+interface_contracts:
+    - name: SimulationSession.SetStatus
+      description: |-
+        New mutex-guarded method for all external status transitions on
+        SimulationSession. Replaces direct session.Status = X assignments
+        in manager.go. Added by Agent A; called by Agent A in manager.go;
+        tested by Agent E in manager_test.go.
+      definition: |
+        // SetStatus transitions the session to the given status under s.mu.
+        // Callers must NOT hold s.mu when calling this method.
+        func (s *SimulationSession) SetStatus(status SessionStatus) {
+            s.mu.Lock()
+            defer s.mu.Unlock()
+            s.Status = status
+        }
+      location: internal/session/types.go
+    - name: SimulationSession.OriginalContents
+      description: |-
+        New field added to SimulationSession to store per-file pre-edit content
+        at baseline time. Used by Discard to revert LSP state without re-reading
+        disk. Added by Agent A in types.go; populated in ApplyEdit (baseline branch).
+      definition: |
+        // In SimulationSession struct:
+        OriginalContents map[string]string // per-file original content at baseline time
+      location: internal/session/types.go
+    - name: uriToPath (session package — replacement)
+      description: |-
+        Replace session.uriToPath with the url.Parse-based implementation already
+        present in internal/lsp/client.go. Must handle percent-encoded paths (spaces,
+        Unicode). Agent A owns this change; no cross-agent dependency.
+      definition: |
+        // uriToPath converts a file:// URI to a filesystem path,
+        // correctly decoding percent-encoded characters per RFC 3986.
+        func uriToPath(uri string) string {
+            if u, err := url.Parse(uri); err == nil && u.Path != "" {
+                return u.Path
+            }
+            if strings.HasPrefix(uri, "file://") {
+                return uri[len("file://"):]
+            }
+            return uri
+        }
+      location: internal/session/manager.go
+    - name: HandleExecuteCommand args key fix
+      description: |-
+        In HandleExecuteCommand (workspace.go line 207), the map lookup key must
+        be "arguments" (matching the JSON tag on ExecuteCommandArgs.Arguments in
+        server.go) not "args". One-line fix; no signature change.
+      definition: |
+        // Change:
+        if v, ok := args["args"].([]interface{}); ok {
+        // To:
+        if v, ok := args["arguments"].([]interface{}); ok {
+      location: internal/tools/workspace.go
+    - name: ValidateFilePath call in HandleOpenDocument
+      description: |-
+        HandleOpenDocument (session.go) must call ValidateFilePath before
+        CreateFileURI. The filePath must be validated against client.RootDir()
+        the same way WithDocument does internally. Agent B owns this change.
+      definition: |
+        // After extracting filePath and before CreateFileURI:
+        if _, err := ValidateFilePath(filePath, client.RootDir()); err != nil {
+            return types.ErrorResult(fmt.Sprintf("invalid file_path: %s", err)), nil
+        }
+      location: internal/tools/session.go
+    - name: workspace/applyEdit error propagation
+      description: |-
+        In client.go dispatch (around line 286), the ApplyWorkspaceEdit error must
+        be checked and the response set to applied=false with failureReason when it
+        fails. Agent D owns this change.
+      definition: |
+        // Change (in workspace/applyEdit case):
+        applyErr := c.ApplyWorkspaceEdit(context.Background(), p.Edit)
+        applied := applyErr == nil
+        result := map[string]interface{}{"applied": applied}
+        if applyErr != nil {
+            result["failureReason"] = applyErr.Error()
+        }
+        c.sendResponse(*msg.ID, result)
+      location: internal/lsp/client.go
+    - name: clientForFile routing fix
+      description: |-
+        clientForFile (server.go line 108) must delegate to resolver.ClientForFile(filePath)
+        instead of always returning cs.get(). The csResolver.ClientForFile already
+        delegates to the real resolver correctly; clientForFile just needs to use it.
+        Agent C owns this change.
+      definition: |
+        // Change:
+        func clientForFile(resolver lsp.ClientResolver, cs *clientState, filePath string) *lsp.LSPClient {
+            return cs.get()
+        }
+        // To:
+        func clientForFile(resolver lsp.ClientResolver, cs *clientState, filePath string) *lsp.LSPClient {
+            if filePath == "" {
+                return cs.get()
+            }
+            if c := resolver.ClientForFile(filePath); c != nil {
+                return c
+            }
+            return cs.get()
+        }
+      location: cmd/lsp-mcp-go/server.go
+    - name: Initialize rootURI encoding fix
+      description: |-
+        In client.go Initialize (line 488), rootURI must use url.URL{Scheme:"file",
+        Path:rootDir}.String() instead of bare "file://"+rootDir concatenation.
+        Agent D owns this change; import "net/url" is already present in client.go.
+      definition: |
+        // Change:
+        rootURI := "file://" + rootDir
+        // To:
+        rootURI := (&url.URL{Scheme: "file", Path: rootDir}).String()
+      location: internal/lsp/client.go
+waves:
+    - number: 1
+      agents:
+        - id: D
+          task: |-
+            ## Agent D — LSP Client: applyEdit Response, rootURI Encoding, ApplyWorkspaceEdit Extract; Resources URI Encoding; Manager Multi-Error Shutdown
+
+            ### Context
+            Four bugs span `internal/lsp/client.go`, `internal/resources/resources.go`,
+            and `internal/lsp/manager.go`:
+            1. `workspace/applyEdit` dispatch always responds `applied:true` even on failure
+            2. `Initialize` uses bare `"file://" + rootDir` instead of url.URL
+            3. `HandleHoverResource` and `HandleCompletionsResource` use bare `"file://" + filePath`
+            4. `Shutdown` discards all but the last error from multi-server shutdown
+
+            Additionally two refactors (warning severity):
+            5. Extract `applyDocumentChanges` helper from `ApplyWorkspaceEdit`
+            6. Extract `parseResourceQueryParams` helper shared by Hover and Completions resource handlers
+
+            **Files to modify:**
+            - `internal/lsp/client.go`
+            - `internal/resources/resources.go`
+            - `internal/lsp/manager.go`
+
+            ### Task 1 — Fix workspace/applyEdit error propagation (client.go)
+
+            In the dispatch function (around line 279), find this exact block:
+            ```go
+            	case "workspace/applyEdit":
+            		// Apply the workspace edit and respond with ApplyWorkspaceEditResult.
+            		if msg.ID != nil {
+            			var p struct {
+            				Edit interface{} `json:"edit"`
+            			}
+            			if err := json.Unmarshal(msg.Params, &p); err == nil && p.Edit != nil {
+            				_ = c.ApplyWorkspaceEdit(context.Background(), p.Edit)
+            			}
+            			c.sendResponse(*msg.ID, map[string]interface{}{"applied": true})
+            		}
+            ```
+
+            Replace with:
+            ```go
+            	case "workspace/applyEdit":
+            		// Apply the workspace edit and respond with ApplyWorkspaceEditResult.
+            		// Per LSP spec: respond applied=false with failureReason on error.
+            		if msg.ID != nil {
+            			var p struct {
+            				Edit interface{} `json:"edit"`
+            			}
+            			var applyErr error
+            			if err := json.Unmarshal(msg.Params, &p); err == nil && p.Edit != nil {
+            				applyErr = c.ApplyWorkspaceEdit(context.Background(), p.Edit)
+            			}
+            			result := map[string]interface{}{"applied": applyErr == nil}
+            			if applyErr != nil {
+            				result["failureReason"] = applyErr.Error()
+            			}
+            			c.sendResponse(*msg.ID, result)
+            		}
+            ```
+
+            ### Task 2 — Fix rootURI encoding in Initialize (client.go)
+
+            In `Initialize` (line 488), find:
+            ```go
+            	c.rootDir = rootDir
+            	rootURI := "file://" + rootDir
+            ```
+
+            Replace with:
+            ```go
+            	c.rootDir = rootDir
+            	rootURI := (&url.URL{Scheme: "file", Path: rootDir}).String()
+            ```
+
+            `net/url` is already imported in client.go (used by `uriToPath` at line 1797).
+            No import change needed.
+
+            ### Task 3 — Extract applyDocumentChanges helper (client.go)
+
+            The `documentChanges` dispatch branch inside `ApplyWorkspaceEdit` (lines
+            1409-1462) is 54 lines handling 4 cases. Extract it to a private helper.
+
+            In `ApplyWorkspaceEdit`, find the block starting with:
+            ```go
+            	// Process documentChanges first if present.
+            	if dc, ok := editMap["documentChanges"]; ok {
+            		b, _ := json.Marshal(dc)
+            		// documentChanges is (TextDocumentEdit | CreateFile | RenameFile | DeleteFile)[].
+            		// Each entry is discriminated by the presence of a "kind" field.
+            		var raw []json.RawMessage
+            		if err := json.Unmarshal(b, &raw); err == nil {
+            ```
+
+            Replace the entire `if dc, ok := editMap["documentChanges"]; ok { ... return nil }` block
+            (ending at the `return nil` on line ~1462) with a call to the new helper:
+            ```go
+            	// Process documentChanges first if present.
+            	if dc, ok := editMap["documentChanges"]; ok {
+            		return c.applyDocumentChanges(ctx, dc)
+            	}
+            ```
+
+            Then add the extracted helper immediately before `ApplyWorkspaceEdit`:
+            ```go
+            // applyDocumentChanges handles the documentChanges branch of a WorkspaceEdit.
+            // documentChanges is (TextDocumentEdit | CreateFile | RenameFile | DeleteFile)[].
+            // Each entry is discriminated by the presence of a "kind" field.
+            func (c *LSPClient) applyDocumentChanges(ctx context.Context, dc interface{}) error {
+            	b, _ := json.Marshal(dc)
+            	var raw []json.RawMessage
+            	if err := json.Unmarshal(b, &raw); err != nil {
+            		return nil // not an array; ignore
+            	}
+            	for _, entry := range raw {
+            		var disc struct {
+            			Kind string `json:"kind"`
+            		}
+            		_ = json.Unmarshal(entry, &disc)
+            		switch disc.Kind {
+            		case "create":
+            			var op struct {
+            				URI string `json:"uri"`
+            			}
+            			if err := json.Unmarshal(entry, &op); err == nil && op.URI != "" {
+            				path := uriToPath(op.URI)
+            				if _, err := os.Stat(path); os.IsNotExist(err) {
+            					_ = os.WriteFile(path, []byte{}, 0644)
+            				}
+            			}
+            		case "rename":
+            			var op struct {
+            				OldURI string `json:"oldUri"`
+            				NewURI string `json:"newUri"`
+            			}
+            			if err := json.Unmarshal(entry, &op); err == nil {
+            				_ = os.Rename(uriToPath(op.OldURI), uriToPath(op.NewURI))
+            			}
+            		case "delete":
+            			var op struct {
+            				URI string `json:"uri"`
+            			}
+            			if err := json.Unmarshal(entry, &op); err == nil && op.URI != "" {
+            				_ = os.Remove(uriToPath(op.URI))
+            			}
+            		default:
+            			// TextDocumentEdit (no kind field).
+            			var te struct {
+            				TextDocument struct {
+            					URI string `json:"uri"`
+            				} `json:"textDocument"`
+            				Edits []textEdit `json:"edits"`
+            			}
+            			if err := json.Unmarshal(entry, &te); err == nil && te.TextDocument.URI != "" {
+            				if err := c.applyEditsToFile(ctx, te.TextDocument.URI, te.Edits); err != nil {
+            					return err
+            				}
+            			}
+            		}
+            	}
+            	return nil
+            }
+            ```
+
+            ### Task 4 — Fix bare URI construction in resources.go
+
+            In `HandleDiagnosticsResource` (resources.go line 91), find:
+            ```go
+            	fileURI := "file://" + path
+            ```
+            This is already using `url.Parse` for the incoming URI, but constructs the
+            outgoing URI with bare concatenation. Replace with:
+            ```go
+            	fileURI := (&url.URL{Scheme: "file", Path: path}).String()
+            ```
+
+            In `HandleHoverResource` (resources.go line 152), find:
+            ```go
+            	fileURI := "file://" + filePath
+            ```
+            Replace with:
+            ```go
+            	fileURI := (&url.URL{Scheme: "file", Path: filePath}).String()
+            ```
+
+            In `HandleCompletionsResource` (resources.go line 205), find:
+            ```go
+            	fileURI := "file://" + filePath
+            ```
+            Replace with:
+            ```go
+            	fileURI := (&url.URL{Scheme: "file", Path: filePath}).String()
+            ```
+
+            `"net/url"` is already imported in resources.go (line 7) — no import change needed.
+
+            ### Task 5 — Extract parseResourceQueryParams helper (resources.go)
+
+            `HandleHoverResource` (lines 116-167) and `HandleCompletionsResource`
+            (lines 169-225) share identical 20-line prefix code for parsing query params.
+            Extract a private helper.
+
+            Add this function before `HandleHoverResource`:
+            ```go
+            // parseResourceQueryParams parses the file path, position, and language ID
+            // from an lsp-hover:// or lsp-completions:// URI.
+            // Returns an error if required query params are missing or invalid.
+            func parseResourceQueryParams(uri string) (filePath string, pos types.Position, languageID string, err error) {
+            	parsed, pErr := url.Parse(uri)
+            	if pErr != nil {
+            		return "", types.Position{}, "", fmt.Errorf("invalid URI %q: %w", uri, pErr)
+            	}
+
+            	filePath = parsed.Path
+            	q := parsed.Query()
+
+            	lineStr := q.Get("line")
+            	colStr := q.Get("column")
+            	languageID = q.Get("language_id")
+
+            	if lineStr == "" || colStr == "" || languageID == "" {
+            		return "", types.Position{}, "", fmt.Errorf("URI missing required query params (line, column, language_id)")
+            	}
+
+            	line, lErr := strconv.Atoi(lineStr)
+            	if lErr != nil {
+            		return "", types.Position{}, "", fmt.Errorf("invalid line %q: %w", lineStr, lErr)
+            	}
+            	col, cErr := strconv.Atoi(colStr)
+            	if cErr != nil {
+            		return "", types.Position{}, "", fmt.Errorf("invalid column %q: %w", colStr, cErr)
+            	}
+
+            	// URI params are 1-indexed; LSP is 0-indexed.
+            	pos = types.Position{Line: line - 1, Character: col - 1}
+            	return filePath, pos, languageID, nil
+            }
+            ```
+
+            Then refactor `HandleHoverResource` to use the helper. Replace lines 118-145:
+            ```go
+            func HandleHoverResource(ctx context.Context, client *lsp.LSPClient, uri string) (ResourceResult, error) {
+            	parsed, err := url.Parse(uri)
+            	if err != nil {
+            		return ResourceResult{}, fmt.Errorf("invalid URI %q: %w", uri, err)
+            	}
+
+            	filePath := parsed.Path
+            	q := parsed.Query()
+
+            	lineStr := q.Get("line")
+            	colStr := q.Get("column")
+            	languageID := q.Get("language_id")
+
+            	if lineStr == "" || colStr == "" || languageID == "" {
+            		return ResourceResult{}, fmt.Errorf("hover URI missing required query params (line, column, language_id)")
+            	}
+
+            	line, err := strconv.Atoi(lineStr)
+            	if err != nil {
+            		return ResourceResult{}, fmt.Errorf("invalid line %q: %w", lineStr, err)
+            	}
+            	col, err := strconv.Atoi(colStr)
+            	if err != nil {
+            		return ResourceResult{}, fmt.Errorf("invalid column %q: %w", colStr, err)
+            	}
+
+            	// URI params are 1-indexed; LSP is 0-indexed.
+            	pos := types.Position{Line: line - 1, Character: col - 1}
+            ```
+
+            With:
+            ```go
+            func HandleHoverResource(ctx context.Context, client *lsp.LSPClient, uri string) (ResourceResult, error) {
+            	filePath, pos, languageID, err := parseResourceQueryParams(uri)
+            	if err != nil {
+            		return ResourceResult{}, fmt.Errorf("hover resource: %w", err)
+            	}
+            ```
+
+            Apply the same refactoring to `HandleCompletionsResource` (lines 171-198):
+            Replace the identical prefix block with:
+            ```go
+            func HandleCompletionsResource(ctx context.Context, client *lsp.LSPClient, uri string) (ResourceResult, error) {
+            	filePath, pos, languageID, err := parseResourceQueryParams(uri)
+            	if err != nil {
+            		return ResourceResult{}, fmt.Errorf("completions resource: %w", err)
+            	}
+            ```
+
+            After refactoring, the `strconv` import in resources.go may still be needed
+            inside `parseResourceQueryParams` — confirm it remains in the import block.
+            Remove unused imports if `url` or `strconv` usage in the old handlers was
+            the only site.
+
+            ### Task 6 — Fix Shutdown multi-error in manager.go
+
+            In `internal/lsp/manager.go` `Shutdown` (lines 144-157), replace the
+            last-error-only pattern with `errors.Join`:
+
+            Find:
+            ```go
+            	var lastErr error
+            	for _, e := range m.entries {
+            		if e.client != nil {
+            			if err := e.client.Shutdown(ctx); err != nil {
+            				lastErr = err
+            			}
+            		}
+            	}
+            	return lastErr
+            ```
+
+            Replace with:
+            ```go
+            	var errs []error
+            	for _, e := range m.entries {
+            		if e.client != nil {
+            			if err := e.client.Shutdown(ctx); err != nil {
+            				errs = append(errs, err)
+            			}
+            		}
+            	}
+            	return errors.Join(errs...)
+            ```
+
+            Add `"errors"` to the import block of `internal/lsp/manager.go`.
+            Check the existing import block and add it alphabetically.
+
+            ### Verification Gate
+            ```
+            cd /Users/dayna.blackwell/workspace/code/LSP-MCP-GO
+            go build ./internal/lsp/... ./internal/resources/...
+            go vet ./internal/lsp/... ./internal/resources/...
+            go test ./internal/lsp/... ./internal/resources/...
+            # Postcondition checks:
+            grep '"applied": true' internal/lsp/client.go
+            # Expected: 0 (hardcoded true removed)
+            grep 'applyErr == nil' internal/lsp/client.go
+            # Expected: 1 match (new dynamic applied field)
+            grep 'applyDocumentChanges' internal/lsp/client.go
+            # Expected: 2 matches (definition + call site)
+            grep '"file://" + rootDir' internal/lsp/client.go
+            # Expected: 0 (bare concat removed)
+            grep '"file://" + ' internal/resources/resources.go
+            # Expected: 0 (all 3 bare concats replaced)
+            grep 'errors.Join' internal/lsp/manager.go
+            # Expected: 1 match
+            grep 'parseResourceQueryParams' internal/resources/resources.go
+            # Expected: 3 matches (definition + 2 call sites)
+            ```
+
+            ### Constraints
+            - Do NOT modify `internal/tools/helpers.go` — not in your ownership.
+            - Do NOT modify `cmd/lsp-mcp-go/server.go` — owned by Agent C.
+            - `errors.Join` requires Go 1.20+. The go.mod specifies `go 1.25.0` so this
+              is safe.
+            - After refactoring Hover/Completions handlers with the helper, run
+              `go build` to verify no unused imports remain.
+          files:
+            - internal/lsp/client.go
+            - internal/resources/resources.go
+            - internal/lsp/manager.go
+          context_source: prepared-brief
+    - number: 2
+      agents:
+        - id: A
+          task: |-
+            ## Agent A — Session Package: Race Fixes, uriToPath, Discard Snapshot, Commit Error
+
+            ### Context
+            The `internal/session/` package has four error-severity bugs that must all
+            be fixed together because they interact in the same session lifecycle.
+
+            **Files to modify:**
+            - `internal/session/types.go`
+            - `internal/session/manager.go`
+
+            ### Task 1 — Add SetStatus method and OriginalContents field (types.go)
+
+            In `internal/session/types.go`, make two changes:
+
+            **1a. Add `OriginalContents` field to `SimulationSession` struct.**
+
+            The current struct (lines 116-128) has `Contents map[string]string` but no
+            field for the pre-edit baseline content. Add `OriginalContents` immediately
+            after `Contents`:
+
+            Find this exact text in types.go:
+            ```go
+            	Contents  map[string]string // per-file current content (in-memory)
+            	Workspace string
+            ```
+            Insert after it (replacing it with):
+            ```go
+            	Contents         map[string]string // per-file current content (in-memory)
+            	OriginalContents map[string]string // per-file content at baseline time (for Discard)
+            	Workspace string
+            ```
+
+            **1b. Add `SetStatus` method after `IsTerminal`.**
+
+            The `IsTerminal` method ends at line 152. Add the new method after it:
+            ```go
+            // SetStatus transitions the session to the given status under s.mu.
+            // Callers must NOT hold s.mu when calling this method.
+            func (s *SimulationSession) SetStatus(status SessionStatus) {
+            	s.mu.Lock()
+            	defer s.mu.Unlock()
+            	s.Status = status
+            }
+            ```
+
+            **1c. Remove unused constants.**
+
+            Remove `StatusTimedOut` (line 24) and `ConfidenceStale` (line 33) from the
+            const blocks. These are defined but never assigned anywhere in the codebase.
+
+            Find and remove:
+            ```go
+            	StatusTimedOut   SessionStatus = "timed_out"
+            ```
+            Find and remove:
+            ```go
+            	ConfidenceStale    Confidence = "stale"
+            ```
+
+            ### Task 2 — Fix all direct Status mutations in manager.go
+
+            In `internal/session/manager.go`, replace all 6 direct `session.Status = ...`
+            assignments with calls to `session.SetStatus(...)`:
+
+            Find and replace each occurrence:
+
+            At line 161 (ApplyEdit):
+            ```go
+            	session.Status = StatusMutated
+            ```
+            Replace with:
+            ```go
+            	session.SetStatus(StatusMutated)
+            ```
+
+            At line 197 (Evaluate, before executor.Acquire):
+            ```go
+            	session.Status = StatusEvaluating
+            ```
+            Replace with:
+            ```go
+            	session.SetStatus(StatusEvaluating)
+            ```
+
+            At line 241 (Evaluate, after diagnostic diff):
+            ```go
+            	session.Status = StatusEvaluated
+            ```
+            Replace with:
+            ```go
+            	session.SetStatus(StatusEvaluated)
+            ```
+
+            At line 342 (Commit):
+            ```go
+            	session.Status = StatusCommitted
+            ```
+            Replace with:
+            ```go
+            	session.SetStatus(StatusCommitted)
+            ```
+
+            At line 388 (Discard):
+            ```go
+            	session.Status = StatusDiscarded
+            ```
+            Replace with:
+            ```go
+            	session.SetStatus(StatusDiscarded)
+            ```
+
+            At line 406 (Destroy):
+            ```go
+            	session.Status = StatusDestroyed
+            ```
+            Replace with:
+            ```go
+            	session.SetStatus(StatusDestroyed)
+            ```
+
+            ### Task 3 — Fix uriToPath in manager.go
+
+            The current `uriToPath` function at the bottom of manager.go (lines 466-470)
+            only strips the `"file://"` prefix without percent-decoding. Replace it with
+            the url.Parse-based implementation from internal/lsp/client.go.
+
+            Find this exact function body:
+            ```go
+            // uriToPath converts a file:// URI to a filesystem path.
+            func uriToPath(uri string) string {
+            	// Simple conversion: strip "file://" prefix.
+            	// For production, use proper URI decoding.
+            	return strings.TrimPrefix(uri, "file://")
+            }
+            ```
+
+            Replace with:
+            ```go
+            // uriToPath converts a file:// URI to a filesystem path,
+            // correctly decoding percent-encoded characters per RFC 3986.
+            func uriToPath(uri string) string {
+            	if u, err := url.Parse(uri); err == nil && u.Path != "" {
+            		return u.Path
+            	}
+            	if strings.HasPrefix(uri, "file://") {
+            		return uri[len("file://"):]
+            	}
+            	return uri
+            }
+            ```
+
+            Add `"net/url"` to the import block at the top of manager.go. The import
+            block currently imports `"strings"` — add `"net/url"` in the same block.
+
+            ### Task 4 — Fix Discard: use OriginalContents instead of re-reading disk
+
+            In `Discard` (manager.go lines 371-385), replace the `os.ReadFile` call with
+            a lookup from `session.OriginalContents`.
+
+            Find this exact block (inside the `for uri := range session.Contents` loop):
+            ```go
+            	path := uriToPath(uri)
+            	originalContent, err := os.ReadFile(path)
+            	if err != nil {
+            		session.MarkDirty(fmt.Errorf("reading original content for %s: %w", path, err))
+            		return fmt.Errorf("reading original content for %s: %w", path, err)
+            	}
+
+            	// Send original content back to LSP.
+            	if err := session.Client.OpenDocument(ctx, uri, string(originalContent), session.Language); err != nil {
+            		session.MarkDirty(fmt.Errorf("reverting document %s: %w", uri, err))
+            		return fmt.Errorf("reverting document %s: %w", uri, err)
+            	}
+            ```
+
+            Replace with:
+            ```go
+            	originalContent, ok := session.OriginalContents[uri]
+            	if !ok {
+            		// Fallback: if no snapshot exists (session created but no edit applied),
+            		// nothing to revert for this URI.
+            		continue
+            	}
+
+            	// Send original content back to LSP.
+            	if err := session.Client.OpenDocument(ctx, uri, originalContent, session.Language); err != nil {
+            		session.MarkDirty(fmt.Errorf("reverting document %s: %w", uri, err))
+            		return fmt.Errorf("reverting document %s: %w", uri, err)
+            	}
+            ```
+
+            Also update the initialization of sessions in `CreateSession` to initialize
+            `OriginalContents`. Find the session struct literal (around line 55):
+            ```go
+            	session := &SimulationSession{
+            		ID:        id,
+            		Status:    StatusCreated,
+            		Client:    client,
+            		Edits:     []AppliedEdit{},
+            		Baselines: make(map[string]DiagnosticsSnapshot),
+            		Versions:  make(map[string]int),
+            		Contents:  make(map[string]string),
+            		Workspace: workspaceRoot,
+            		Language:  language,
+            	}
+            ```
+            Replace with:
+            ```go
+            	session := &SimulationSession{
+            		ID:               id,
+            		Status:           StatusCreated,
+            		Client:           client,
+            		Edits:            []AppliedEdit{},
+            		Baselines:        make(map[string]DiagnosticsSnapshot),
+            		Versions:         make(map[string]int),
+            		Contents:         make(map[string]string),
+            		OriginalContents: make(map[string]string),
+            		Workspace:        workspaceRoot,
+            		Language:         language,
+            	}
+            ```
+
+            Also snapshot OriginalContents at baseline time in `ApplyEdit`. In the lazy
+            baseline block (after line 131 where `session.Contents[fileURI] = string(content)`
+            is set), add:
+            ```go
+            		// Snapshot original content for Discard revert (only on first edit per file).
+            		if _, alreadySnapped := session.OriginalContents[fileURI]; !alreadySnapped {
+            			session.OriginalContents[fileURI] = string(content)
+            		}
+            ```
+
+            ### Task 5 — Fix Commit: propagate OpenDocument error
+
+            In `Commit` (manager.go lines 334-338), the OpenDocument failure after
+            writing files must mark the session dirty instead of silently logging.
+
+            Find this exact block:
+            ```go
+            		// Notify LSP of the change by sending didChange.
+            		if err := session.Client.OpenDocument(ctx, uri, content, session.Language); err != nil {
+            			logging.Log(logging.LevelWarning, fmt.Sprintf("notifying LSP of committed change for %s: %v", uri, err))
+            		}
+            ```
+
+            Replace with:
+            ```go
+            		// Notify LSP of the change by sending didChange.
+            		// If notification fails, mark session dirty — LSP state is now stale
+            		// relative to disk content and callers must be informed.
+            		if err := session.Client.OpenDocument(ctx, uri, content, session.Language); err != nil {
+            			session.MarkDirty(fmt.Errorf("LSP notification failed after commit for %s: %w", uri, err))
+            			logging.Log(logging.LevelWarning, fmt.Sprintf("notifying LSP of committed change for %s: %v", uri, err))
+            		}
+            ```
+
+            ### Verification Gate
+            ```
+            cd /Users/dayna.blackwell/workspace/code/LSP-MCP-GO
+            go build ./internal/session/...
+            go vet ./internal/session/...
+            go test ./internal/session/... -run TestApplyRangeEdit
+            # Postcondition checks:
+            grep -c 'SetStatus(' internal/session/manager.go
+            # Expected: 6 (one per status transition)
+            grep -c 'session\.Status = ' internal/session/manager.go
+            # Expected: 0 (no direct mutations remain)
+            grep 'OriginalContents' internal/session/types.go
+            # Expected: field present in SimulationSession struct
+            grep 'url.Parse' internal/session/manager.go
+            # Expected: at least 1 match (new uriToPath)
+            grep -c 'StatusTimedOut\|ConfidenceStale' internal/session/types.go
+            # Expected: 0 (constants removed)
+            ```
+
+            ### Constraints
+            - Do NOT modify `internal/session/manager_test.go` — that file is owned by Agent E.
+            - Do NOT import packages not already in the module (all needed packages are stdlib).
+            - Do NOT add `os` to imports if removing the `os.ReadFile` call makes it unused;
+              check whether `os.WriteFile` in Commit still requires it (it does).
+          files:
+            - internal/session/types.go
+            - internal/session/manager.go
+          dependencies:
+            - D
+        - id: F
+          task: |-
+            ## Agent F — Types and Architecture Doc Reconciliation
+
+            ### Context
+            `internal/types/types.go` defines a 4-method `Extension` interface that is
+            out of sync with the architecture doc (`docs/architecture.md`), which
+            documents a 7-method interface with different return types.
+
+            The audit finding notes this is doc drift — the features were "dropped or
+            deferred without updating the design doc." The correct resolution is to
+            update `docs/architecture.md` to match the implemented interface (not the
+            reverse), since the haskell extension and the registry both compile fine
+            against the current 4-method interface. Adding the missing 7-method methods
+            would be a new feature, not a bug fix.
+
+            The architecture doc also incorrectly states "24 MCP tool handlers" when the
+            server registers 34.
+
+            **Files to modify:**
+            - `internal/types/types.go`
+            - `docs/architecture.md`
+
+            ### Task 1 — Add doc comment to Extension interface (types.go)
+
+            The `Extension` interface (lines 145-151) has no doc comment. Add one that
+            clarifies the current scope and notes what the architecture doc describes
+            as deferred:
+
+            Find:
+            ```go
+            // Extension is implemented by per-language extension packages.
+            type Extension interface {
+            ```
+
+            Replace with:
+            ```go
+            // Extension is implemented by per-language extension packages.
+            // The current interface covers the four methods used by the extension
+            // registry. ToolDefinitions, UnsubscriptionHandlers, and PromptDefinitions
+            // (documented in docs/architecture.md) are deferred pending MCP SDK
+            // maturation and are not included here.
+            type Extension interface {
+            ```
+
+            ### Task 2 — Update architecture.md: Extension interface and tool count
+
+            In `docs/architecture.md`, update two items:
+
+            **2a. Tool count.** Find the line mentioning "24 MCP tool handlers" (line 15
+            per audit) and update it to "34 MCP tool handlers". Use grep to locate the
+            exact text first: `grep -n "24 MCP" docs/architecture.md`. Update the count
+            in the matched line.
+
+            **2b. Extension interface.** Find the Extension interface definition block
+            in the architecture doc and update it to match the currently implemented
+            4-method interface. The architecture doc currently shows 7 methods:
+            ```
+            ToolHandlers() map[string]ToolHandler
+            ToolDefinitions() []mcp.Tool
+            ResourceHandlers() map[string]ResourceHandler
+            SubscriptionHandlers() map[string]SubscriptionHandler
+            UnsubscriptionHandlers() map[string]UnsubscriptionHandler
+            PromptDefinitions() []mcp.Prompt
+            PromptHandlers() map[string]PromptHandler
+            ```
+
+            Update to show the 4 implemented methods, with a note that the others are deferred:
+            ```
+            ToolHandlers() map[string]ToolHandler
+            ResourceHandlers() map[string]ResourceHandler
+            SubscriptionHandlers() map[string]ResourceHandler
+            PromptHandlers() map[string]interface{}
+            // Note: ToolDefinitions, UnsubscriptionHandlers, PromptDefinitions are
+            // deferred features not yet implemented.
+            ```
+
+            Read `docs/architecture.md` fully before editing to find the exact surrounding
+            context for each change — use verbatim text anchors, not line numbers.
+
+            ### Verification Gate
+            ```
+            cd /Users/dayna.blackwell/workspace/code/LSP-MCP-GO
+            go build ./internal/types/...
+            go vet ./internal/types/...
+            # Postcondition checks:
+            grep 'ToolDefinitions\|UnsubscriptionHandlers\|PromptDefinitions' internal/types/types.go
+            # Expected: 0 matches (not added to the interface)
+            grep '34 MCP' docs/architecture.md
+            # Expected: 1 match
+            grep '24 MCP' docs/architecture.md
+            # Expected: 0 matches
+            ```
+
+            ### Constraints
+            - Do NOT add the 7-method interface to `types.go` — that would be a new feature.
+            - Do NOT modify the haskell extension or registry — not in your ownership.
+            - Read `docs/architecture.md` before editing to confirm the exact text at
+              each change point.
+          files:
+            - internal/types/types.go
+            - docs/architecture.md
+          dependencies:
+            - D
+    - number: 3
+      agents:
+        - id: B
+          task: |-
+            ## Agent B — Tools Package: execute_command Fix, open_document Validation, simulation.go Marshal Errors
+
+            ### Context
+            The `internal/tools/` package has three bugs:
+            1. `execute_command` reads `args["args"]` but the JSON key is `"arguments"` — silently drops all command arguments
+            2. `HandleOpenDocument` skips `ValidateFilePath` — path-traversal bypass
+            3. 8 `json.Marshal` errors in `simulation.go` silently discarded
+
+            **Files to modify:**
+            - `internal/tools/workspace.go`
+            - `internal/tools/session.go`
+            - `internal/tools/simulation.go`
+
+            ### Task 1 — Fix execute_command key mismatch (workspace.go)
+
+            In `HandleExecuteCommand` (workspace.go lines 206-209), the map lookup key
+            must change from `"args"` to `"arguments"`.
+
+            Find this exact block:
+            ```go
+            	var cmdArgs []interface{}
+            	if v, ok := args["args"].([]interface{}); ok {
+            		cmdArgs = v
+            	}
+            ```
+
+            Replace with:
+            ```go
+            	var cmdArgs []interface{}
+            	if v, ok := args["arguments"].([]interface{}); ok {
+            		cmdArgs = v
+            	}
+            ```
+
+            ### Task 2 — Add ValidateFilePath to HandleOpenDocument (session.go)
+
+            In `HandleOpenDocument` (session.go lines 63-82), add a `ValidateFilePath`
+            call after extracting `filePath` and before `CreateFileURI`.
+
+            Find this exact block:
+            ```go
+            	filePath, ok := args["file_path"].(string)
+            	if !ok || filePath == "" {
+            		return types.ErrorResult("file_path is required"), nil
+            	}
+
+            	languageID, _ := args["language_id"].(string)
+            ```
+
+            Replace with:
+            ```go
+            	filePath, ok := args["file_path"].(string)
+            	if !ok || filePath == "" {
+            		return types.ErrorResult("file_path is required"), nil
+            	}
+
+            	// Validate path to prevent traversal attacks, consistent with WithDocument.
+            	if _, err := ValidateFilePath(filePath, client.RootDir()); err != nil {
+            		return types.ErrorResult(fmt.Sprintf("invalid file_path: %s", err)), nil
+            	}
+
+            	languageID, _ := args["language_id"].(string)
+            ```
+
+            Add `"fmt"` to session.go imports if not already present (check the import block
+            at the top of session.go — it currently imports `"fmt"` so this is already there).
+
+            ### Task 3 — Fix silent json.Marshal discards in simulation.go
+
+            In `simulation.go`, 8 sites use `data, _ := json.Marshal(result)` (discarding
+            the error). Update each to use the explicit two-step error check pattern used
+            throughout the rest of the package.
+
+            The 8 locations are at lines: 40, 76, 105, 165, 192, 213, 234, 313.
+
+            For **every** occurrence of this pattern in simulation.go:
+            ```go
+            	data, _ := json.Marshal(result)
+            	return types.TextResult(string(data)), nil
+            ```
+
+            Replace with the explicit error check:
+            ```go
+            	data, mErr := json.Marshal(result)
+            	if mErr != nil {
+            		return types.ErrorResult(fmt.Sprintf("marshaling result: %s", mErr)), nil
+            	}
+            	return types.TextResult(string(data)), nil
+            ```
+
+            Each replacement uses the same local variable name `mErr` to avoid shadowing
+            `err` that may be in scope above it. Verify the variable name does not shadow
+            an existing `mErr` in the same scope (it won't — these are all at return points
+            with fresh scope).
+
+            The 8 specific sites to change (use exact surrounding context to locate each):
+
+            **Site 1** — after `HandleCreateSimulationSession` builds result map (line ~40):
+            ```go
+            	result := map[string]interface{}{
+            		"session_id": sessionID,
+            		"status":     "created",
+            	}
+            	data, _ := json.Marshal(result)
+            ```
+
+            **Site 2** — after `HandleSimulateEdit` calls `mgr.ApplyEdit` (line ~76):
+            ```go
+            	data, _ := json.Marshal(editResult)
+            	return types.TextResult(string(data)), nil
+            ```
+
+            **Site 3** — after `HandleEvaluateSession` calls `mgr.Evaluate` (line ~105):
+            ```go
+            	data, _ := json.Marshal(evalResult)
+            	return types.TextResult(string(data)), nil
+            ```
+
+            **Site 4** — after `HandleSimulateChain` calls `mgr.SimulateChain` (line ~165):
+            ```go
+            	data, _ := json.Marshal(chainResult)
+            	return types.TextResult(string(data)), nil
+            ```
+
+            **Site 5** — after `HandleCommitSession` calls `mgr.Commit` (line ~192):
+            ```go
+            	data, _ := json.Marshal(commitResult)
+            	return types.TextResult(string(data)), nil
+            ```
+
+            **Site 6** — after `HandleDiscardSession` builds result map (line ~213):
+            ```go
+            	result := map[string]interface{}{
+            		"session_id": sessionID,
+            		"status":     "discarded",
+            	}
+            	data, _ := json.Marshal(result)
+            ```
+
+            **Site 7** — after `HandleDestroySession` builds result map (line ~234):
+            ```go
+            	result := map[string]interface{}{
+            		"session_id": sessionID,
+            		"status":     "destroyed",
+            	}
+            	data, _ := json.Marshal(result)
+            ```
+
+            **Site 8** — after `HandleSimulateEditAtomic` calls `mgr.Evaluate` (line ~313):
+            ```go
+            	data, _ := json.Marshal(evalResult)
+            	return types.TextResult(string(data)), nil
+            ```
+
+            ### Verification Gate
+            ```
+            cd /Users/dayna.blackwell/workspace/code/LSP-MCP-GO
+            go build ./internal/tools/...
+            go vet ./internal/tools/...
+            go test ./internal/tools/...
+            # Postcondition checks:
+            grep 'args\["arguments"\]' internal/tools/workspace.go
+            # Expected: 1 match (the fixed execute_command key)
+            grep 'args\["args"\]' internal/tools/workspace.go
+            # Expected: 0 matches (old key removed)
+            grep 'ValidateFilePath' internal/tools/session.go
+            # Expected: at least 1 match in HandleOpenDocument
+            grep -c 'data, _ := json.Marshal' internal/tools/simulation.go
+            # Expected: 0 (all silent discards replaced)
+            grep -c 'data, mErr := json.Marshal' internal/tools/simulation.go
+            # Expected: 8
+            ```
+
+            ### Constraints
+            - Do NOT modify `internal/tools/helpers.go` — it is not in your ownership.
+            - Do NOT modify `internal/session/manager.go` — owned by Agent A.
+            - `ValidateFilePath` is already defined in `internal/tools/helpers.go` and
+              is in the same package — no import needed, just call it directly.
+          files:
+            - internal/tools/workspace.go
+            - internal/tools/session.go
+            - internal/tools/simulation.go
+          dependencies:
+            - D
+        - id: C
+          task: |-
+            ## Agent C — server.go: clientForFile Routing Fix
+
+            ### Context
+            `clientForFile` in `cmd/lsp-mcp-go/server.go` (line 108) always returns
+            `cs.get()` regardless of `filePath`, making multi-server routing dead.
+            The `csResolver` struct (lines 41-58) already implements `ClientForFile`
+            correctly by delegating to `r.delegate.ClientForFile(path)`. The fix is
+            to make `clientForFile` use the resolver instead of the clientState.
+
+            **File to modify:** `cmd/lsp-mcp-go/server.go`
+
+            ### Task — Fix clientForFile to route by file extension
+
+            Find this exact function at line 105:
+            ```go
+            // clientForFile returns the LSP client for the given file path.
+            // Always uses cs.get() which is updated by start_lsp.
+            // TODO: Multi-server routing should update both cs and resolver when servers start.
+            func clientForFile(resolver lsp.ClientResolver, cs *clientState, filePath string) *lsp.LSPClient {
+            	return cs.get()
+            }
+            ```
+
+            Replace with:
+            ```go
+            // clientForFile returns the LSP client for the given file path.
+            // Delegates to resolver.ClientForFile for extension-based routing (gopls for .go,
+            // clangd for .c, etc.). Falls back to cs.get() when filePath is empty or the
+            // resolver returns nil (single-server mode or server not yet started).
+            func clientForFile(resolver lsp.ClientResolver, cs *clientState, filePath string) *lsp.LSPClient {
+            	if filePath != "" {
+            		if c := resolver.ClientForFile(filePath); c != nil {
+            			return c
+            		}
+            	}
+            	return cs.get()
+            }
+            ```
+
+            No import changes are needed — `lsp.ClientResolver` is already imported.
+
+            ### Verification Gate
+            ```
+            cd /Users/dayna.blackwell/workspace/code/LSP-MCP-GO
+            go build ./cmd/lsp-mcp-go/...
+            go vet ./cmd/lsp-mcp-go/...
+            # Postcondition checks:
+            grep -A8 'func clientForFile' cmd/lsp-mcp-go/server.go
+            # Expected: function body calls resolver.ClientForFile, not just cs.get()
+            grep 'return cs.get()$' cmd/lsp-mcp-go/server.go
+            # Expected: 1 match (the fallback), not 2
+            grep 'TODO: Multi-server routing' cmd/lsp-mcp-go/server.go
+            # Expected: 0 (TODO comment removed with the fix)
+            ```
+
+            ### Constraints
+            - Do NOT modify any tool registration handlers below line 312 — they call
+              `clientForFile` correctly already.
+            - Do NOT add `clientForFile` call sites; only change the function body.
+            - Do NOT modify `csResolver.ClientForFile` — it is already correct.
+          files:
+            - cmd/lsp-mcp-go/server.go
+          dependencies:
+            - D
+        - id: E
+          task: |-
+            ## Agent E — Session Manager Tests: Evaluate, Commit, Discard, SimulateChain
+
+            ### Context
+            The four core `SessionManager` methods (`Evaluate`, `Commit`, `Discard`,
+            `SimulateChain`) have no unit tests. Agent A (Wave 1) added `SetStatus` and
+            `OriginalContents` to `SimulationSession`. This wave adds tests that exercise
+            the status-transition guards, error paths, and mock-LSP interactions.
+
+            **File to modify:** `internal/session/manager_test.go`
+
+            ### Context on existing tests
+            The existing test file covers: `TestNewSessionManager`, `TestCreateSession_ReturnsID`,
+            `TestGetSession_NotFound`, `TestApplyRangeEdit_*` (4 cases), and
+            `TestSessionDirtyState_BlocksCommit`. Your additions go after line 166
+            (the last existing test).
+
+            Note: `TestCreateSession_ReturnsID` currently asserts the error message is
+            `"no LSP client available"` but the actual error message in manager.go is
+            `"no LSP client available — call start_lsp first"`. Verify this matches
+            after Agent A's changes by reading manager.go before writing the assertion.
+            Update the existing test if the message doesn't match.
+
+            ### Task — Add tests for Evaluate, Commit, Discard, SimulateChain
+
+            You need a mock LSP client that records calls and controls return values.
+            Add a `mockLSPClient` type at the top of the test file (after the existing
+            `mockResolver`). The `SimulationSession.Client` field is `*lsp.LSPClient`
+            (a concrete type, not an interface), so you cannot use a mock for it directly.
+            Instead, test the status-guard paths using sessions with nil Client values —
+            these paths return errors before ever calling the client.
+
+            **Add the following tests after the last existing test (after line 166):**
+
+            ```go
+            // TestEvaluate_InvalidStatus verifies that Evaluate fails when session is not
+            // in mutated or evaluated state.
+            func TestEvaluate_InvalidStatus(t *testing.T) {
+            	mgr := NewSessionManager(&mockResolver{})
+            	ctx := context.Background()
+
+            	for _, status := range []SessionStatus{StatusCreated, StatusCommitted, StatusDiscarded} {
+            		t.Run(string(status), func(t *testing.T) {
+            			sess := &SimulationSession{
+            				ID:        "test-" + string(status),
+            				Status:    status,
+            				Baselines: make(map[string]DiagnosticsSnapshot),
+            				Versions:  make(map[string]int),
+            				Contents:  make(map[string]string),
+            			}
+            			mgr.mu.Lock()
+            			mgr.sessions[sess.ID] = sess
+            			mgr.mu.Unlock()
+
+            			_, err := mgr.Evaluate(ctx, sess.ID, "file", 0)
+            			if err == nil {
+            				t.Errorf("expected error for status %s, got nil", status)
+            			}
+            		})
+            	}
+            }
+
+            // TestCommit_InvalidStatus verifies that Commit fails when session is not in
+            // mutated or evaluated state.
+            func TestCommit_InvalidStatus(t *testing.T) {
+            	mgr := NewSessionManager(&mockResolver{})
+            	ctx := context.Background()
+
+            	for _, status := range []SessionStatus{StatusCreated, StatusCommitted, StatusDiscarded, StatusDirty} {
+            		t.Run(string(status), func(t *testing.T) {
+            			sess := &SimulationSession{
+            				ID:        "commit-" + string(status),
+            				Status:    status,
+            				Baselines: make(map[string]DiagnosticsSnapshot),
+            				Versions:  make(map[string]int),
+            				Contents:  make(map[string]string),
+            			}
+            			mgr.mu.Lock()
+            			mgr.sessions[sess.ID] = sess
+            			mgr.mu.Unlock()
+
+            			_, err := mgr.Commit(ctx, sess.ID, "", false)
+            			if err == nil {
+            				t.Errorf("expected error for status %s, got nil", status)
+            			}
+            		})
+            	}
+            }
+
+            // TestCommit_ApplyFalse_BuildsPatch verifies that Commit with apply=false
+            // returns a patch map without writing to disk.
+            func TestCommit_ApplyFalse_BuildsPatch(t *testing.T) {
+            	mgr := NewSessionManager(&mockResolver{})
+            	ctx := context.Background()
+
+            	sess := &SimulationSession{
+            		ID:     "commit-patch",
+            		Status: StatusMutated,
+            		Contents: map[string]string{
+            			"file:///tmp/test.go": "package main\n",
+            		},
+            		Baselines: make(map[string]DiagnosticsSnapshot),
+            		Versions:  make(map[string]int),
+            	}
+            	mgr.mu.Lock()
+            	mgr.sessions[sess.ID] = sess
+            	mgr.mu.Unlock()
+
+            	result, err := mgr.Commit(ctx, sess.ID, "", false)
+            	if err != nil {
+            		t.Fatalf("unexpected error: %v", err)
+            	}
+
+            	if result.FilesWritten != 0 {
+            		t.Errorf("expected 0 files written for apply=false, got %d", result.FilesWritten)
+            	}
+            	patch, ok := result.Patch.(map[string]string)
+            	if !ok {
+            		t.Fatalf("expected patch to be map[string]string, got %T", result.Patch)
+            	}
+            	if len(patch) != 1 {
+            		t.Errorf("expected 1 entry in patch, got %d", len(patch))
+            	}
+            	if sess.Status != StatusCommitted {
+            		t.Errorf("expected session status StatusCommitted after commit, got %s", sess.Status)
+            	}
+            }
+
+            // TestDiscard_TerminalSessionBlocked verifies that Discard fails when session
+            // is already in a terminal state.
+            func TestDiscard_TerminalSessionBlocked(t *testing.T) {
+            	mgr := NewSessionManager(&mockResolver{})
+            	ctx := context.Background()
+
+            	for _, status := range []SessionStatus{StatusCommitted, StatusDiscarded, StatusDestroyed} {
+            		t.Run(string(status), func(t *testing.T) {
+            			sess := &SimulationSession{
+            				ID:        "discard-" + string(status),
+            				Status:    status,
+            				Baselines: make(map[string]DiagnosticsSnapshot),
+            				Versions:  make(map[string]int),
+            				Contents:  make(map[string]string),
+            			}
+            			mgr.mu.Lock()
+            			mgr.sessions[sess.ID] = sess
+            			mgr.mu.Unlock()
+
+            			err := mgr.Discard(ctx, sess.ID)
+            			if err == nil {
+            				t.Errorf("expected error for terminal status %s, got nil", status)
+            			}
+            		})
+            	}
+            }
+
+            // TestDiscard_NoOriginalContents_Skips verifies that Discard skips files
+            // that have no OriginalContents snapshot (no edit was applied).
+            func TestDiscard_NoOriginalContents_Skips(t *testing.T) {
+            	mgr := NewSessionManager(&mockResolver{})
+            	ctx := context.Background()
+
+            	sess := &SimulationSession{
+            		ID:     "discard-no-orig",
+            		Status: StatusMutated,
+            		Contents: map[string]string{
+            			"file:///tmp/test.go": "modified content\n",
+            		},
+            		OriginalContents: make(map[string]string), // empty — no snapshot
+            		Baselines:        make(map[string]DiagnosticsSnapshot),
+            		Versions:         make(map[string]int),
+            		// Client is nil — if Discard tries to call OpenDocument it will panic.
+            		// The test verifies Discard skips files with no OriginalContents,
+            		// so OpenDocument should never be called.
+            	}
+            	mgr.mu.Lock()
+            	mgr.sessions[sess.ID] = sess
+            	mgr.mu.Unlock()
+
+            	// This should succeed without calling Client.OpenDocument
+            	// because OriginalContents is empty.
+            	err := mgr.Discard(ctx, sess.ID)
+            	if err != nil {
+            		t.Errorf("unexpected error: %v", err)
+            	}
+            	if sess.Status != StatusDiscarded {
+            		t.Errorf("expected StatusDiscarded, got %s", sess.Status)
+            	}
+            }
+
+            // TestSimulateChain_EmptyEdits_ReturnsZero verifies SimulateChain with no
+            // edits returns an empty result with SafeToApplyThroughStep == 0.
+            func TestSimulateChain_EmptyEdits_ReturnsZero(t *testing.T) {
+            	mgr := NewSessionManager(&mockResolver{})
+            	ctx := context.Background()
+
+            	sess := &SimulationSession{
+            		ID:               "chain-empty",
+            		Status:           StatusMutated,
+            		Baselines:        make(map[string]DiagnosticsSnapshot),
+            		Versions:         make(map[string]int),
+            		Contents:         make(map[string]string),
+            		OriginalContents: make(map[string]string),
+            	}
+            	mgr.mu.Lock()
+            	mgr.sessions[sess.ID] = sess
+            	mgr.mu.Unlock()
+
+            	result, err := mgr.SimulateChain(ctx, sess.ID, []ChainEdit{}, 0)
+            	if err != nil {
+            		t.Fatalf("unexpected error: %v", err)
+            	}
+            	if result.SafeToApplyThroughStep != 0 {
+            		t.Errorf("expected SafeToApplyThroughStep=0 for empty chain, got %d", result.SafeToApplyThroughStep)
+            	}
+            	if result.CumulativeDelta != 0 {
+            		t.Errorf("expected CumulativeDelta=0, got %d", result.CumulativeDelta)
+            	}
+            	if len(result.Steps) != 0 {
+            		t.Errorf("expected 0 steps, got %d", len(result.Steps))
+            	}
+            }
+
+            // TestSetStatus_IsThreadSafe verifies that SetStatus uses the mutex.
+            // This is a structural test: MarkDirty also acquires mu, and calling both
+            // concurrently should not deadlock or race.
+            func TestSetStatus_IsThreadSafe(t *testing.T) {
+            	sess := &SimulationSession{
+            		ID:     "race-test",
+            		Status: StatusMutated,
+            	}
+
+            	done := make(chan struct{})
+            	go func() {
+            		sess.SetStatus(StatusEvaluating)
+            		close(done)
+            	}()
+            	sess.MarkDirty(fmt.Errorf("concurrent dirty"))
+            	<-done
+            	// No assertion needed — race detector will catch unsynchronized access.
+            }
+
+            // TestUriToPath_PercentDecoded verifies that uriToPath correctly decodes
+            // percent-encoded characters in file URIs.
+            func TestUriToPath_PercentDecoded(t *testing.T) {
+            	cases := []struct {
+            		uri      string
+            		expected string
+            	}{
+            		{"file:///tmp/normal.go", "/tmp/normal.go"},
+            		{"file:///tmp/path%20with%20spaces/file.go", "/tmp/path with spaces/file.go"},
+            		{"file:///tmp/%E6%97%A5%E6%9C%AC%E8%AA%9E.go", "/tmp/\u65e5\u672c\u8a9e.go"},
+            	}
+
+            	for _, tc := range cases {
+            		t.Run(tc.uri, func(t *testing.T) {
+            			got := uriToPath(tc.uri)
+            			if got != tc.expected {
+            				t.Errorf("uriToPath(%q) = %q, want %q", tc.uri, got, tc.expected)
+            			}
+            		})
+            	}
+            }
+            ```
+
+            Add `"fmt"` to the import block if not already present. The existing import
+            block has `"context"`, `"testing"`, and two internal packages — add `"fmt"`.
+
+            ### Verification Gate
+            ```
+            cd /Users/dayna.blackwell/workspace/code/LSP-MCP-GO
+            go build ./internal/session/...
+            go vet ./internal/session/...
+            go test ./internal/session/... -v -race
+            # Postcondition checks:
+            grep -c 'func Test' internal/session/manager_test.go
+            # Expected: >= 14 (existing 6 + 8 new tests)
+            go test ./internal/session/... -run TestDiscard_NoOriginalContents_Skips -v
+            # Expected: PASS
+            go test ./internal/session/... -run TestUriToPath_PercentDecoded -v
+            # Expected: PASS
+            ```
+
+            ### Constraints
+            - Do NOT modify `internal/session/manager.go` or `internal/session/types.go`
+              — those are owned by Agent A (Wave 1, now merged).
+            - `OriginalContents` field and `SetStatus` method are added by Agent A and
+              will be present when Wave 2 runs. If they are missing, that is a merge
+              failure — report it rather than working around it.
+            - Use the `session` package's unexported `uriToPath` function directly in
+              `TestUriToPath_PercentDecoded` — the test is in `package session` (same
+              package) so unexported symbols are accessible.
+          files:
+            - internal/session/manager_test.go
+          dependencies:
+            - A
+            - D
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./...
+          required: true
+          repo: LSP-MCP-GO
+        - type: lint
+          command: go vet ./...
+          required: true
+          repo: LSP-MCP-GO
+        - type: test
+          command: go test ./...
+          required: true
+          repo: LSP-MCP-GO
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: |-
+            Agent A adds SetStatus and OriginalContents but forgets to initialize
+            OriginalContents map in CreateSession. Agent E's TestDiscard_NoOriginalContents_Skips
+            will panic with nil map assignment at runtime.
+          likelihood: medium
+          impact: medium
+          mitigation: |-
+            Agent A task explicitly includes the CreateSession initialization.
+            Agent E's test constructs sessions with an explicit `make(map[string]string)`
+            so the test itself won't panic, but the production code test will catch it.
+        - scenario: |-
+            Agent B's session.go ValidateFilePath call passes client.RootDir() but the
+            LSP client may not be initialized (RootDir() returns ""). ValidateFilePath
+            with empty rootDir skips the workspace boundary check, which is still
+            better than the current state (no check at all). However, if RootDir() is
+            non-empty, the check may reject valid absolute paths that were not originally
+            under the root (e.g., /tmp paths in tests).
+          likelihood: low
+          impact: low
+          mitigation: |-
+            ValidateFilePath only enforces rootDir boundary when rootDir is non-empty.
+            Empty string is a no-op. Agent B's task is to add the call — the semantics
+            already handle the partial-initialization case correctly.
+        - scenario: |-
+            Agent D refactors HandleHoverResource and HandleCompletionsResource using
+            parseResourceQueryParams helper but introduces an import cycle or leaves
+            unused imports (strconv, url) that break the build.
+          likelihood: medium
+          impact: medium
+          mitigation: |-
+            Agent D's task includes explicit postcondition check for zero bare URI
+            concats and an explicit note to verify imports after refactoring. The
+            go build gate will catch any unused import.
+        - scenario: |-
+            Agent E's new tests reference OriginalContents (field added by Agent A in
+            Wave 1) but Wave 2 starts before Agent A's changes are merged. The test
+            file will fail to compile.
+          likelihood: low
+          impact: high
+          mitigation: |-
+            Wave 2 is sequenced after Wave 1 completes and merges. The IMPL doc's
+            dependency chain (Agent E depends_on A) enforces this. The Orchestrator
+            will not launch Agent E until Wave 1 is merged.
+        - scenario: |-
+            Agent C changes clientForFile to delegate to resolver.ClientForFile but
+            in single-server mode the resolver returns nil for extension-unknown files.
+            The fallback to cs.get() handles this, but if cs is also nil (server not
+            started), all 18 tool handlers that previously silently returned the nil
+            client now also return nil — same behavior as before the fix.
+          likelihood: low
+          impact: low
+          mitigation: |-
+            The fallback `return cs.get()` preserves existing nil-client behavior.
+            CheckInitialized() in each handler returns a friendly error to the user.
+            No regression in single-server mode.
+        - scenario: |-
+            Agent A removes StatusTimedOut and ConfidenceStale constants. If any code
+            outside internal/session/ references them (e.g., integration tests or
+            extensions), the build will fail.
+          likelihood: low
+          impact: high
+          mitigation: |-
+            The audit confirmed via grep that these constants are never assigned
+            anywhere in the repository (high confidence finding). Agent A's postcondition
+            check verifies the grep count. `go build ./...` in the quality gate will
+            catch any missed reference.
+critic_report:
+    verdict: PASS
+    agent_reviews:
+        A:
+            agent_id: A
+            verdict: PASS
+            issues:
+                - check: symbol_accuracy
+                  severity: warning
+                  description: 'Task 2 header says "replace all 5 direct session.Status = ... assignments" but the body enumerates 6 replacements (lines 161, 197, 241, 342, 388, 406) and the verification gate says Expected: 6. The count "5" in the header is incorrect — there are 6 direct mutations including StatusDestroyed in Destroy() at line 406. An agent stopping at 5 would miss the Destroy replacement.'
+                  file: internal/session/manager.go
+                  symbol: session.Status = StatusDestroyed
+        B:
+            agent_id: B
+            verdict: PASS
+        C:
+            agent_id: C
+            verdict: PASS
+        D:
+            agent_id: D
+            verdict: PASS
+        E:
+            agent_id: E
+            verdict: PASS
+        F:
+            agent_id: F
+            verdict: PASS
+    summary: 'All six agents reviewed against the codebase. Every file existence check passes (all modify-action files exist). All named symbols are confirmed: ApplyWorkspaceEdit, uriToPath, RootDir(), ValidateFilePath, clientForFile, SimulationSession, SessionStatus constants, IsTerminal, MarkDirty, and ChainEdit all exist at the stated locations. Code patterns match — the hardcoded ''applied: true'' at client.go:288, the bare ''file://'' concatenations in resources.go at lines 91/152/205, the last-error-only pattern in manager.go Shutdown at lines 148-156, the args["args"] key at workspace.go:207, and the 8 silent json.Marshal discards in simulation.go all verify exactly as described. One advisory warning was found in Agent A''s brief: Task 2 header states ''replace all 5 direct session.Status = ... assignments'' but the task body lists 6 replacements and the verification gate says Expected: 6 — the count in the header is wrong, which could cause an agent reading it to stop at 5 and miss the Destroy StatusDestroyed assignment at line 406. All interface contracts are syntactically valid and the types they reference exist.'
+    reviewed_at: "2026-04-07T03:46:11Z"
+    issue_count: 1
+state: "REVIEWED"
+injection_method: hook
