@@ -1,3 +1,4 @@
+completion_date: "2026-04-06"
 title: Port Multi-Language Integration Test Harness to Go
 feature_slug: go-multilang-test-harness
 verdict: SUITABLE
@@ -908,6 +909,7 @@ waves:
             - GOWORK=off on all go build/test commands
           files:
             - test/multi_lang_test.go
+      base_commit: 58575c433e64bf371ce3036f92a0eb0079d95fd7
 quality_gates:
     level: standard
     gates:
@@ -919,6 +921,83 @@ quality_gates:
           command: GOWORK=off go test -v -run TestBinary ./...
           required: true
           repo: LSP-MCP-GO
+completion_reports:
+    A:
+        status: complete
+        branch: saw/go-multilang-test-harness/wave1-agent-A
+        commit: "1068560"
+        files_changed:
+            - test/fixtures/go/main.go
+            - test/fixtures/go/greeter.go
+            - test/fixtures/go/go.mod
+            - test/fixtures/python/main.py
+            - test/fixtures/python/greeter.py
+            - test/fixtures/python/pyrightconfig.json
+            - test/fixtures/rust/Cargo.toml
+            - test/fixtures/rust/Cargo.lock
+            - test/fixtures/rust/.gitignore
+            - test/fixtures/rust/src/main.rs
+            - test/fixtures/rust/src/greeter.rs
+            - test/fixtures/java/pom.xml
+            - test/fixtures/java/.classpath
+            - test/fixtures/java/.project
+            - test/fixtures/java/.settings/org.eclipse.jdt.apt.core.prefs
+            - test/fixtures/java/.settings/org.eclipse.jdt.core.prefs
+            - test/fixtures/java/.settings/org.eclipse.m2e.core.prefs
+            - test/fixtures/java/src/main/java/com/example/Person.java
+            - test/fixtures/java/src/main/java/com/example/Greeter.java
+            - test/fixtures/c/person.h
+            - test/fixtures/c/person.c
+            - test/fixtures/c/greeter.c
+            - test/fixtures/c/compile_commands.json
+            - test/fixtures/php/Person.php
+            - test/fixtures/php/Greeter.php
+            - test/fixtures/typescript/src/example.ts
+            - test/fixtures/typescript/src/consumer.ts
+            - test/fixtures/typescript/tsconfig.json
+        files_created:
+            - test/fixtures/go/main.go
+            - test/fixtures/go/greeter.go
+            - test/fixtures/go/go.mod
+            - test/fixtures/python/main.py
+            - test/fixtures/python/greeter.py
+            - test/fixtures/python/pyrightconfig.json
+            - test/fixtures/rust/Cargo.toml
+            - test/fixtures/rust/Cargo.lock
+            - test/fixtures/rust/.gitignore
+            - test/fixtures/rust/src/main.rs
+            - test/fixtures/rust/src/greeter.rs
+            - test/fixtures/java/pom.xml
+            - test/fixtures/java/.classpath
+            - test/fixtures/java/.project
+            - test/fixtures/java/.settings/org.eclipse.jdt.apt.core.prefs
+            - test/fixtures/java/.settings/org.eclipse.jdt.core.prefs
+            - test/fixtures/java/.settings/org.eclipse.m2e.core.prefs
+            - test/fixtures/java/src/main/java/com/example/Person.java
+            - test/fixtures/java/src/main/java/com/example/Greeter.java
+            - test/fixtures/c/person.h
+            - test/fixtures/c/person.c
+            - test/fixtures/c/greeter.c
+            - test/fixtures/c/compile_commands.json
+            - test/fixtures/php/Person.php
+            - test/fixtures/php/Greeter.php
+            - test/fixtures/typescript/src/example.ts
+            - test/fixtures/typescript/src/consumer.ts
+            - test/fixtures/typescript/tsconfig.json
+        verification: PASS
+        notes: All 28 fixture files written. compile_commands.json updated with correct absolute path. Go fixture builds clean. GOWORK=off go build ./... passes. TestBinary tests all pass (3/3).
+    B:
+        status: complete
+        branch: saw/go-multilang-test-harness/wave1-agent-B
+        commit: "7136377"
+        files_changed:
+            - test/multi_lang_test.go
+        files_created:
+            - test/multi_lang_test.go
+        tests_added:
+            - TestMultiLanguage
+        verification: PASS
+        notes: 'Created test/multi_lang_test.go with TestMultiLanguage covering 7 languages (TypeScript, Python, Go, Rust, Java, C, PHP). Tier 1 tests: start_lsp, open_document, get_diagnostics, get_info_on_location. Tier 2: get_document_symbols, go_to_definition, get_references, get_completions, get_workspace_symbols, format_document, go_to_declaration. Build and vet pass. Existing TestBinary tests unaffected.'
 pre_mortem:
     overall_risk: low
     rows:
@@ -946,5 +1025,5 @@ pre_mortem:
           likelihood: low
           impact: low
           mitigation: Interface contract for langConfig lists all fields explicitly. Verification gate includes go build check.
-state: "REVIEWED"
+state: COMPLETE
 injection_method: hook

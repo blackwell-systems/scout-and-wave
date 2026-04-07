@@ -1,3 +1,4 @@
+completion_date: "2026-04-06"
 title: Multi-Server Routing
 feature_slug: multi-server-routing
 verdict: SUITABLE
@@ -704,6 +705,7 @@ waves:
             - The clientState struct, get(), and set() methods must remain exactly as-is.
           files:
             - cmd/lsp-mcp-go/server.go
+      base_commit: eb49cf1527f1707a58b6abcfdf207fb71cc4604c
 quality_gates:
     level: standard
     gates:
@@ -775,6 +777,51 @@ scaffolds:
         }
       import_path: github.com/blackwell-systems/lsp-mcp-go/internal/config
       status: committed (4589e65)
+completion_reports:
+    A:
+        status: complete
+        branch: saw/multi-server-routing/wave1-agent-A
+        commit: eea89e9
+        files_changed:
+            - internal/lsp/manager.go
+            - internal/lsp/manager_test.go
+            - internal/config/parse.go
+            - internal/config/parse_test.go
+        files_created:
+            - internal/lsp/manager.go
+            - internal/lsp/manager_test.go
+            - internal/config/parse.go
+            - internal/config/parse_test.go
+        tests_added:
+            - TestNewSingleServerManager_ClientForFile
+            - TestClientForFile_ExtensionMatch
+            - TestClientForFile_Fallback
+            - TestServerManager_AllClients
+            - TestInferLanguageID
+            - TestParseArgs_Legacy
+            - TestParseArgs_MultiArg
+            - TestParseArgs_ConfigFlag
+            - TestParseArgs_Empty
+            - TestLoadConfig_Valid
+            - TestLoadConfig_Missing
+        verification: PASS
+        notes: ServerManager implements ClientResolver. ParseArgs handles legacy/multi-arg/config-file modes. inferLanguageID covers all mcp-lsp-bridge mappings. All 11 tests pass. Full build and vet clean.
+    B:
+        status: complete
+        branch: saw/multi-server-routing/wave1-agent-B
+        commit: 5f637bc
+        files_changed:
+            - cmd/lsp-mcp-go/main.go
+        verification: PASS
+        notes: 'All 4 steps applied: arg parsing replaced with config.ParseArgs, resolver var added, signal handler updated to resolver.Shutdown, runWithRecovery updated to lsp.ClientResolver. Build fails only due to parallel agent dependencies (ParseArgs + NewSingleServerManager/NewMultiServerManager from Agent A; Run signature from Agent C). All postconditions pass (grep checks). Committed with --no-verify per parallel wave protocol.'
+    C:
+        status: complete
+        branch: saw/multi-server-routing/wave1-agent-C
+        commit: 6156bb7
+        files_changed:
+            - cmd/lsp-mcp-go/server.go
+        verification: PASS
+        notes: 'server.go updated: Run() signature changed to lsp.ClientResolver, clientForFile() helper added, 17 file-specific tools routed via clientForFile, diagnostics subscription iterates resolver.AllClients(). Build/vet fail only in main.go (Agent B scope, expected parallel wave dep). Internal packages build and test clean. Out-of-scope dep: cmd/lsp-mcp-go/main.go:89 must pass lsp.ClientResolver to Run() (Agent B).'
 pre_mortem:
     overall_risk: medium
     rows:
@@ -857,4 +904,4 @@ critic_report:
     summary: 'All three Wave 1 agent briefs verify cleanly against the codebase. Scaffold files (internal/lsp/resolver.go, internal/config/config.go) exist and match the interface_contracts exactly. Both action:modify files (main.go, server.go) exist and the exact landmark code blocks cited in Agent B and C briefs match line-for-line. The new files (manager.go, parse.go) correctly do not exist yet. Symbol references are accurate: NewLSPClient(serverPath, serverArgs), Initialize(ctx, rootDir), Shutdown(ctx), SubscribeToDiagnostics all have the signatures the briefs assume. Import paths (internal/lsp, internal/config, internal/logging, internal/extensions) all resolve. One advisory warning: Agent C''s brief omits call_hierarchy from both the update-list and the keep-list; CallHierarchyArgs has a FilePath field so it should arguably be updated, but this is a functional gap, not a build failure. File ownership is fully disjoint across all three agents.'
     reviewed_at: "2026-04-06T19:46:45Z"
     issue_count: 1
-state: "REVIEWED"
+state: COMPLETE

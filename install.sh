@@ -127,6 +127,22 @@ install_hook_scripts() {
   echo ""
 }
 
+# Phase 1b: Symlink agent definitions into ~/.claude/agents/ (Claude Code only)
+install_claude_agents() {
+  local agents_dir="${HOME}/.claude/agents"
+  echo "1b. Symlinking agent definitions to ${agents_dir}..."
+  mkdir -p "${agents_dir}"
+
+  local ok=0
+  for src in "${PROMPTS_DIR}"/agents/*.md; do
+    [ -f "$src" ] || continue
+    ln -sf "$src" "${agents_dir}/$(basename "$src")"
+    ok=$((ok + 1))
+  done
+  echo "   ${ok} agent definitions linked"
+  echo ""
+}
+
 # Phase 3: Verify skill files and hook scripts exist
 # Args: $1 = skill directory
 verify_installation() {
@@ -221,8 +237,9 @@ install_claude_code() {
   echo "Installing Scout-and-Wave for Claude Code..."
   echo ""
 
-  # Phase 1 + 2: universal
+  # Phase 1 + 1b + 2: universal + Claude Code agent definitions
   install_skill_files "$skill_dir"
+  install_claude_agents
   install_hook_scripts
 
   # Phase 3: Register hooks in settings.json
@@ -326,6 +343,21 @@ install_claude_code() {
   # Phase 5: Verify
   verify_installation "$skill_dir" "4" || true
   local verify_errors=$?
+
+  # Verify ~/.claude/agents/ symlinks
+  local agents_dir="${HOME}/.claude/agents"
+  for src in "${PROMPTS_DIR}"/agents/*.md; do
+    [ -f "$src" ] || continue
+    local name
+    name=$(basename "$src")
+    if [ -L "${agents_dir}/${name}" ] && [ -e "${agents_dir}/${name}" ]; then
+      : # ok
+    else
+      echo "   FAIL  ~/.claude/agents/${name}" >&2
+      verify_errors=$((verify_errors + 1))
+    fi
+  done
+  echo "   OK  ~/.claude/agents/ (${AGENT_COUNT} definitions)"
 
   # Check settings.json hooks
   for event in PreToolUse PostToolUse SubagentStop UserPromptSubmit; do
@@ -450,6 +482,17 @@ do_uninstall() {
     if [ -d "$skill_dir" ]; then
       rm -rf "$skill_dir"
       echo "  Removed ${skill_dir}"
+    fi
+  done
+
+  # Remove ~/.claude/agents/ symlinks that point into this repo
+  for f in "${HOME}/.claude/agents/"*.md; do
+    [ -L "$f" ] || continue
+    local target
+    target=$(readlink "$f")
+    if [[ "$target" == "${REPO_DIR}"* ]]; then
+      rm "$f"
+      echo "  Removed ${f}"
     fi
   done
 

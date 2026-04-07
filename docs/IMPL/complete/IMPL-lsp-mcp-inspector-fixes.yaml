@@ -1,3 +1,4 @@
+completion_date: "2026-04-06"
 title: LSP-MCP Inspector Fixes
 feature_slug: lsp-mcp-inspector-fixes
 verdict: SUITABLE
@@ -728,6 +729,7 @@ waves:
             - src/shared/waitForDiagnostics.ts
             - test/typescript-lsp.test.js
             - test/waitForDiagnostics.test.js
+      base_commit: 77cb69ed6a2b3e021561afe7355534aae1d8e8d4
 quality_gates:
     level: standard
     gates:
@@ -779,6 +781,48 @@ scaffolds:
         };
       import_path: ../shared/utils.js
       status: committed (311fc7d)
+completion_reports:
+    A:
+        status: complete
+        branch: saw/lsp-mcp-inspector-fixes/wave1-agent-A
+        commit: f4a1240
+        files_changed:
+            - src/lspClient.ts
+        verification: PASS
+        notes: 'All 4 fixes applied: (1) removed brace-trimming heuristic (replaced 18-line if/else with single buffer advance, changed let to const); (2) swapped initialized flag and sendNotification order; (3) sendNotification now throws instead of silent return; (4) replaced 2 ad-hoc uri.replace calls with uriToFilePath from shared/utils.js, added import. Build, typecheck, and all 10 lspClient tests pass.'
+    B:
+        status: complete
+        branch: saw/lsp-mcp-inspector-fixes/wave1-agent-B
+        commit: 2c1fa34
+        files_changed:
+            - src/tools/index.ts
+        verification: PASS
+        notes: 'All 3 tasks complete: (1) withDocument helper extracted and applied to 14 handlers, (2) server?: any removed from getToolHandlers signature, (3) imports updated to ../shared/utils.js with re-exports preserved, uriToFilePath applied to 5 loc.uri call sites. Build fails only at index.ts:134 (Agent D''s file) where ''server'' arg must be removed from getToolHandlers call. src/tools/index.ts has zero TypeScript errors.'
+    C:
+        status: complete
+        branch: saw/lsp-mcp-inspector-fixes/wave1-agent-C
+        commit: 685a3d6
+        files_changed:
+            - src/shared/utils.ts
+            - src/types/index.ts
+        files_created:
+            - src/shared/utils.ts
+        verification: PASS
+        notes: 'src/shared/utils.ts: added fs/promises import, updated JSDoc comments to match spec exactly. src/types/index.ts: added .min(1) to all 28 position fields across 12 schemas (GetInfoOnLocation, GetCompletions, GetCodeActions, GetReferences, GoToDefinition, GetSignatureHelp, FormatRange, RenameSymbol, GoToTypeDefinition, GoToImplementation, GoToDeclaration, PrepareRename). Added .refine() for inverted range validation to GetCodeActionsArgsSchema and FormatRangeArgsSchema. All 4 test suites pass.'
+    D:
+        status: complete
+        branch: saw/lsp-mcp-inspector-fixes/wave1-agent-D
+        commit: ee41b2c
+        files_changed:
+            - index.ts
+            - src/resources/index.ts
+            - src/shared/waitForDiagnostics.ts
+            - test/typescript-lsp.test.js
+            - test/waitForDiagnostics.test.js
+        tests_added:
+            - testEmptyTargetUris
+        verification: PASS
+        notes: 'All 5 tasks complete. Build and typecheck clean. test:diagnostics (5/5) and test:resources (15/15) pass. One postcondition note: grep -c '', server)'' index.ts returns 1 (not 0) because getSubscriptionHandlers(lspClient, server) is a different legitimate call that the grep pattern also matches. The getToolHandlers call site correctly has server removed.'
 pre_mortem:
     overall_risk: medium
     rows:
@@ -853,5 +897,5 @@ critic_report:
     summary: 'All three previously-flagged issues are resolved. (1) src/shared/utils.ts is now correctly marked action:new — the file does not exist in the repo (only waitForDiagnostics.ts is present in src/shared/), so no file_existence error. (2) The scaffold stub for createFileUri now uses the top-level ESM import (import * as path from "path") with no require() call — the ESM pattern_accuracy warning is cleared. (3) Agent D''s duplicate testEmptyUrisFastPath task was removed — the brief no longer instructs adding a redundant test, and the existing testEmptyTargetUris (line 107, wired at line 126) correctly covers the empty-array case. All other checks pass: brace-trimming block at lines 149-170 matches exactly, initialized/sendNotification ordering at lines 578-579 matches the bug description, sendNotification guard at lines 458-461 matches, URI replace call sites in lspClient.ts (lines 640, 1248) and tools/index.ts (lines 255, 299, 443, 468, 517) all match the brief, getToolHandlers signature with server?: any at line 549 matches, resources import from tools/index.js at line 5 matches, auto-init timer block at lines 412-422 matches, uri.slice(7) at resources line 357 matches, interface contract type signatures are syntactically valid with all referenced packages available, no disjoint ownership violations across wave 1, no missed callers for migration tasks, no result.Code semantic issues. All 9 owned files have correct action labels.'
     reviewed_at: "2026-04-06T04:41:19Z"
     issue_count: 0
-state: "REVIEWED"
+state: COMPLETE
 injection_method: hook

@@ -202,3 +202,15 @@ round-trip time by catching errors at source (~5 min saved per critic cycle).
   - IMPL doc: docs/IMPL/complete/IMPL-scaffoldval-error-fixes.yaml
 - **wire-prelaunch-gate**: completed 2026-04-05, 1 waves, 2 agents
   - IMPL doc: docs/IMPL/complete/IMPL-wire-prelaunch-gate.yaml
+- **lsp-mcp-inspection-fixes**: completed 2026-04-05, 3 waves, 9 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-lsp-mcp-inspection-fixes.yaml
+- **lsp-mcp-inspector-fixes**: completed 2026-04-05, 1 waves, 4 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-lsp-mcp-inspector-fixes.yaml
+- **go-multilang-test-harness**: completed 2026-04-06, 1 waves, 2 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-go-multilang-test-harness.yaml
+- **call-hierarchy-fuzzy-position**: completed 2026-04-06, 2 waves, 4 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-call-hierarchy-fuzzy-position.yaml
+- **multi-server-routing**: completed 2026-04-06, 1 waves, 3 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-multi-server-routing.yaml
+- **semantic-tokens**: completed 2026-04-06, 2 waves, 3 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-semantic-tokens.yaml

@@ -1,0 +1,1957 @@
+completion_date: "2026-04-05"
+title: LSP MCP Inspection Fixes — All 22 Findings
+feature_slug: lsp-mcp-inspection-fixes
+verdict: SUITABLE
+suitability_assessment: |
+    All 22 findings are well-specified with known fix locations and no investigation-first
+    blockers. File decomposition is clean: 8 distinct source files are affected, each
+    independently ownable except for the logError->error rename which cascades across all
+    files and must be sequenced as a final Wave 3 pass.
+
+    Interface discoverability: all cross-agent contracts are definable up front. The
+    initLogging() refactor (finding 17) has a call-site dependency in index.ts, resolved
+    by sequencing: Wave 1 Agent B adds initLogging(), Wave 2 Agent G calls it.
+
+    Pre-implementation status check: all 22 findings are confirmed TODO by source reading.
+    None are already implemented.
+
+    Wave structure: 3 waves.
+    - Wave 1 (6 agents, parallel): lspClient.ts, logging/index.ts, resources/index.ts,
+      extensions/index.ts, tools/index.ts+prompts/index.ts, shared/waitForDiagnostics.ts+tests
+    - Wave 2 (2 agents, parallel): index.ts (entry point fixes + initLogging wiring),
+      types/index.ts (any-typing fixes, sequenced after handler files settled)
+    - Wave 3 (1 agent): logError->error rename across all 5 affected files (full call-site
+      ownership eliminates cascade conflict)
+
+    Parallelization value: high. Build+test cycle (tsc + node tests) is ~10-20s per run.
+    6 agents in Wave 1 with 2-5 file changes each; Wave 2 has 2 independent agents.
+    Estimated total SAW time: ~35 min. Sequential baseline: ~90 min.
+    Time savings: ~55 min (60% faster).
+
+    Estimated times:
+    - Scout phase: ~20 min
+    - Agent execution: ~35 min (Wave 1: 6 agents x 8 min avg in parallel; Wave 2: 2 agents
+      x 5 min; Wave 3: 1 agent x 5 min)
+    - Merge and verification: ~10 min
+    Total SAW time: ~65 min
+
+    Sequential baseline: ~120 min (9 tasks x 13 min avg)
+    Time savings: ~55 min (46% faster)
+
+    Recommendation: Clear speedup. Proceed.
+test_command: npm test
+lint_command: npx tsc --noEmit
+file_ownership:
+    - file: src/lspClient.ts
+      agent: A
+      wave: 1
+      action: modify
+    - file: src/logging/index.ts
+      agent: B
+      wave: 1
+      action: modify
+    - file: src/resources/index.ts
+      agent: C
+      wave: 1
+      action: modify
+    - file: src/extensions/index.ts
+      agent: D
+      wave: 1
+      action: modify
+    - file: src/tools/index.ts
+      agent: E
+      wave: 1
+      action: modify
+    - file: src/prompts/index.ts
+      agent: E
+      wave: 1
+      action: modify
+    - file: src/shared/waitForDiagnostics.ts
+      agent: F
+      wave: 1
+      action: modify
+    - file: test/waitForDiagnostics.test.js
+      agent: F
+      wave: 1
+      action: new
+    - file: index.ts
+      agent: G
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+        - B
+        - C
+        - D
+        - E
+        - F
+    - file: src/types/index.ts
+      agent: H
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+        - B
+        - C
+        - D
+        - E
+        - F
+    - file: src/logging/index.ts
+      agent: I
+      wave: 3
+      action: modify
+      depends_on:
+        - G
+        - H
+    - file: src/lspClient.ts
+      agent: I
+      wave: 3
+      action: modify
+      depends_on:
+        - G
+        - H
+    - file: src/tools/index.ts
+      agent: I
+      wave: 3
+      action: modify
+      depends_on:
+        - G
+        - H
+    - file: src/resources/index.ts
+      agent: I
+      wave: 3
+      action: modify
+      depends_on:
+        - G
+        - H
+    - file: src/extensions/index.ts
+      agent: I
+      wave: 3
+      action: modify
+      depends_on:
+        - G
+        - H
+    - file: index.ts
+      agent: I
+      wave: 3
+      action: modify
+      depends_on:
+        - G
+        - H
+interface_contracts:
+    - name: initLogging
+      description: |
+        New exported function in src/logging/index.ts that wraps the console override
+        mutations. Must be called once from index.ts at startup. Agent B creates it;
+        Agent G calls it.
+      definition: |
+        export function initLogging(): void {
+          // Replaces the module-level console.log/warn/error overrides.
+          // Safe to call multiple times (idempotent via guard flag).
+          console.log = function (...args: any[]) { ... };
+          console.warn = function (...args: any[]) { ... };
+          console.error = function (...args: any[]) { ... };
+        }
+      location: src/logging/index.ts
+    - name: error (renamed from logError)
+      description: |
+        Agent I renames the exported logError helper to error, consistent with all
+        other per-level helpers (debug, info, notice, warning, critical, alert, emergency).
+        All call sites in index.ts, src/lspClient.ts, src/tools/index.ts,
+        src/resources/index.ts, src/extensions/index.ts must be updated in the same pass.
+      definition: |
+        // Before (Wave 1-2):
+        export const logError = (...args: any[]): void => log("error", ...args);
+
+        // After (Wave 3):
+        export const error = (...args: any[]): void => log("error", ...args);
+        // All import statements updated from: import { ..., logError, ... }
+        // to: import { ..., error, ... }
+        // All call sites updated from logError(...) to error(...)
+      location: src/logging/index.ts
+    - name: restart_lsp_server tool
+      description: |
+        New tool definition and handler added by Agent E to src/tools/index.ts.
+        Uses LSPClient.restart() which already exists at src/lspClient.ts:921.
+      definition: |
+        // Schema (add to src/types/index.ts is NOT needed; define inline in tools):
+        const RestartLspArgsSchema = z.object({
+          root_dir: z.string().optional().describe(
+            "Optional new project root directory. If omitted, restarts with the same root."
+          ),
+        });
+
+        // Handler (in getToolHandlers return object):
+        "restart_lsp_server": {
+          schema: RestartLspArgsSchema,
+          handler: async (args: { root_dir?: string }) => {
+            checkLspClientInitialized(lspClient);
+            await lspClient!.restart(args.root_dir);
+            return {
+              content: [{ type: "text", text: "LSP server restarted successfully" }],
+            };
+          }
+        }
+
+        // Definition (in getToolDefinitions return array):
+        {
+          name: "restart_lsp_server",
+          description: "Restart the LSP server process. Use this if the LSP server becomes
+            unresponsive or after making significant changes to the project structure.
+            Optionally provide a new root_dir to restart with a different workspace root.",
+          inputSchema: zodToJsonSchema(RestartLspArgsSchema) as ToolInput,
+        }
+      location: src/tools/index.ts
+    - name: subscription context store (server-side)
+      description: |
+        Agent G adds a server-side Map in index.ts to track subscription callbacks by URI,
+        fixing the unsubscribe bug where params.context was always undefined. The Map is
+        populated by the SubscribeRequestSchema handler and consumed by the
+        UnsubscribeRequestSchema handler.
+      definition: |
+        // In index.ts (module-level):
+        const subscriptionContexts = new Map<string, any>();
+
+        // In SubscribeRequestSchema handler, after calling subscriptionHandlers[handlerKey]:
+        const result = await subscriptionHandlers[handlerKey](uri);
+        if (result.ok && result.context) {
+          subscriptionContexts.set(uri, result.context);
+        }
+        return result;
+
+        // In UnsubscribeRequestSchema handler:
+        const { uri } = request.params;  // no more destructuring context from params
+        const context = subscriptionContexts.get(uri);
+        subscriptionContexts.delete(uri);
+        return await unsubscriptionHandlers[handlerKey](uri, context);
+      location: index.ts
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            Fix 6 findings in `src/lspClient.ts`. The repo root is
+            `/Users/dayna.blackwell/code/lsp-mcp-improved`.
+
+            ## Finding 7 — panic_not_recovered:132 — dropped Promise
+
+            In `handleData` (line 132), `this.processMessageQueue()` is called without
+            `.catch()`. Its returned Promise is silently dropped. On Node.js 15+, an
+            uncaught rejection inside `processMessageQueue` will crash the process.
+
+            Fix: attach `.catch()` to the call:
+
+            Locate this exact text in `src/lspClient.ts`:
+            ```typescript
+                  this.messageQueue.push(message);
+                  this.processMessageQueue();
+            ```
+            Replace with:
+            ```typescript
+                  this.messageQueue.push(message);
+                  this.processMessageQueue().catch((err) =>
+                    logError("Unhandled error in processMessageQueue:", err)
+                  );
+            ```
+
+            ## Finding 8 — coverage_gap:75-80 — buffer overflow keeps tail bytes
+
+            When the buffer overflows 10 MB, the current code keeps the LAST
+            `MAX_BUFFER_SIZE` bytes: `this.buffer = this.buffer.substring(this.buffer.length - MAX_BUFFER_SIZE)`.
+            This guarantees the buffer starts mid-message, causing parse failures.
+
+            Fix: discard the entire buffer on overflow. Locate this exact text:
+            ```typescript
+                logError(
+                  `Buffer size exceeded ${MAX_BUFFER_SIZE} bytes, clearing buffer to prevent memory issues`,
+                );
+                this.buffer = this.buffer.substring(this.buffer.length - MAX_BUFFER_SIZE);
+            ```
+            Replace with:
+            ```typescript
+                logError(
+                  `Buffer size exceeded ${MAX_BUFFER_SIZE} bytes, discarding entire buffer to prevent mid-message parse`,
+                );
+                this.buffer = "";
+            ```
+
+            ## Finding 9 — coverage_gap:418 — deprecated rootPath in initialize
+
+            The `initialize` request params at line 418 include `rootPath: resolvedRootDir`.
+            Per LSP 3.17 §3.15.1, `rootPath` is deprecated and superseded by `rootUri`.
+
+            Fix: remove the `rootPath: resolvedRootDir,` line from the `sendRequest("initialize", {...})` call.
+            Locate this exact text:
+            ```typescript
+                  rootUri: "file://" + resolvedRootDir,
+                  rootPath: resolvedRootDir,
+                  workspaceFolders: [
+            ```
+            Replace with:
+            ```typescript
+                  rootUri: "file://" + resolvedRootDir,
+                  workspaceFolders: [
+            ```
+
+            ## Finding 10 — scope_analysis:155-277 — handleMessage has 6 responsibilities
+
+            Extract three private helper methods from `handleMessage` to separate concerns:
+            - `handleServerResponse(message)` — handles response matching (lines 169-181)
+            - `handleNotification(message)` — handles all notification types (lines 192-246)
+            - `handleServerRequest(message)` — handles server-initiated requests (lines 250-276)
+
+            `handleMessage` should call each helper in sequence, keeping only the initial
+            logging block inline. All three extracted methods remain `private async`.
+
+            Keep the same logic; do not change behavior. The goal is readability and
+            single-responsibility. Type signatures:
+            ```typescript
+            private handleServerResponse(message: LSPMessage): void
+            private async handleNotification(message: LSPMessage): Promise<void>
+            private async handleServerRequest(message: LSPMessage): Promise<void>
+            ```
+
+            `handleMessage` becomes:
+            ```typescript
+            private async handleMessage(message: LSPMessage): Promise<void> {
+              // logging block (keep as-is)
+              try { ... } catch (error) { ... }
+
+              this.handleServerResponse(message);
+              await this.handleNotification(message);
+              await this.handleServerRequest(message);
+            }
+            ```
+
+            ## Finding 11 — coverage_gap:715-716 — getCodeActions sends empty diagnostics
+
+            `getCodeActions` always sends `context: { diagnostics: [] }`. It should filter
+            `this.documentDiagnostics` for diagnostics whose range overlaps the requested range.
+
+            Locate the exact text in `getCodeActions`:
+            ```typescript
+                  context: {
+                    diagnostics: [],
+                  },
+            ```
+            Replace with:
+            ```typescript
+                  context: {
+                    diagnostics: this.getOverlappingDiagnostics(uri, range),
+                  },
+            ```
+
+            Add a private helper method `getOverlappingDiagnostics` to the class:
+            ```typescript
+            private getOverlappingDiagnostics(
+              uri: string,
+              range: {
+                start: { line: number; character: number };
+                end: { line: number; character: number };
+              },
+            ): any[] {
+              const diagnostics = this.documentDiagnostics.get(uri) ?? [];
+              return diagnostics.filter((d) => {
+                if (!d.range) return false;
+                const dStart = d.range.start;
+                const dEnd = d.range.end;
+                // Overlap: d starts before range ends, AND d ends after range starts
+                const startsBeforeRangeEnd =
+                  dStart.line < range.end.line ||
+                  (dStart.line === range.end.line && dStart.character <= range.end.character);
+                const endsAfterRangeStart =
+                  dEnd.line > range.start.line ||
+                  (dEnd.line === range.start.line && dEnd.character >= range.start.character);
+                return startsBeforeRangeEnd && endsAfterRangeStart;
+              });
+            }
+            ```
+
+            ## Finding 12 — layer_violation:767 — dynamic import of fs/promises
+
+            Inside `reopenDocument` at line 767: `const fs = await import("fs/promises")`.
+            This dynamic import runs on every call. `fs/promises` is already statically
+            imported in sibling files.
+
+            Fix: add a static import at the top of `src/lspClient.ts` and remove the
+            dynamic import. The file currently has these imports at the top (lines 1-2):
+            ```typescript
+            import { spawn } from "child_process";
+            import path from "path";
+            ```
+            Add the fs import after line 2 (it will become line 3):
+            ```typescript
+            import * as fs from "fs/promises";
+            ```
+
+            Then locate the dynamic import in `reopenDocument`:
+            ```typescript
+                try {
+                  const fs = await import("fs/promises");
+                  debug(`Reading file content from: ${filePath}`);
+                  const fileContent = await fs.readFile(filePath, "utf-8");
+            ```
+            Replace with:
+            ```typescript
+                try {
+                  debug(`Reading file content from: ${filePath}`);
+                  const fileContent = await fs.readFile(filePath, "utf-8");
+            ```
+
+            ## Verification Gate
+
+            ```bash
+            cd /Users/dayna.blackwell/code/lsp-mcp-improved
+            npm run build
+            npx tsc --noEmit
+            ```
+
+            Postconditions:
+            ```bash
+            # processMessageQueue call has .catch
+            grep -c "processMessageQueue().catch" src/lspClient.ts
+            # Expected: 1
+
+            # buffer discard on overflow (not .substring keep-tail)
+            grep -A2 "Buffer size exceeded" src/lspClient.ts | grep 'buffer = ""'
+            # Expected output contains: buffer = ""
+
+            # rootPath removed from initialize
+            grep "rootPath" src/lspClient.ts
+            # Expected: no output (exits 1 — that is the correct "pass")
+
+            # handleServerResponse, handleNotification, handleServerRequest all exist
+            grep -c "private.*handleServer\|private.*handleNotification" src/lspClient.ts
+            # Expected: 3
+
+            # getOverlappingDiagnostics helper exists
+            grep -c "getOverlappingDiagnostics" src/lspClient.ts
+            # Expected: 2 (definition + call site)
+
+            # static fs import at top level
+            grep -n "^import \* as fs" src/lspClient.ts
+            # Expected: one line near top of file
+            ```
+
+            ## Constraints
+            - Do NOT touch any file other than `src/lspClient.ts`.
+            - Do NOT rename `logError` — that rename is assigned to Agent I in Wave 3.
+            - Do NOT change the public API of `LSPClient` (method signatures, return types).
+            - Do NOT add or remove class properties beyond `getOverlappingDiagnostics`.
+          files: []
+        - id: B
+          task: |
+            Fix 1 finding in `src/logging/index.ts`. The repo root is
+            `/Users/dayna.blackwell/code/lsp-mcp-improved`.
+
+            ## Finding 17 — init_side_effects:160-193 — console overrides fire at import time
+
+            Lines 160-193 of `src/logging/index.ts` replace `console.log`, `console.warn`,
+            and `console.error` at module import time. Any module importing logging (directly
+            or transitively) gets the override immediately. This breaks test isolation.
+
+            Fix: move the three `console.X = function(...)` assignments into a new exported
+            `initLogging()` function. The function must be idempotent (safe to call twice).
+
+            Add a guard variable at the top of the overrides section:
+            ```typescript
+            let consoleOverrideInstalled = false;
+
+            export function initLogging(): void {
+              if (consoleOverrideInstalled) return;
+              consoleOverrideInstalled = true;
+
+              console.log = function (...args: any[]) {
+                if (isLogging) {
+                  originalConsoleLog(...args);
+                  return;
+                }
+                isLogging = true;
+                info(...args);
+                isLogging = false;
+              };
+
+              console.warn = function (...args: any[]) {
+                if (isLogging) {
+                  originalConsoleWarn(...args);
+                  return;
+                }
+                isLogging = true;
+                warning(...args);
+                isLogging = false;
+              };
+
+              console.error = function (...args: any[]) {
+                if (isLogging) {
+                  originalConsoleError(...args);
+                  return;
+                }
+                isLogging = true;
+                logError(...args);
+                isLogging = false;
+              };
+            }
+            ```
+
+            Remove the three bare `console.log = ...`, `console.warn = ...`, and
+            `console.error = ...` assignments that currently appear at lines 160-193.
+            The `consoleOverrideInstalled` variable and the `initLogging` function
+            replace them.
+
+            The `initLogging` call site will be added by Agent G in `index.ts` (Wave 2).
+            Do not call `initLogging()` from within `src/logging/index.ts` itself.
+
+            Note: do NOT rename `logError` to `error` in this wave. That rename is
+            assigned to Agent I in Wave 3. Keep `logError` as-is throughout Wave 1.
+
+            ## Verification Gate
+
+            ```bash
+            cd /Users/dayna.blackwell/code/lsp-mcp-improved
+            npm run build
+            npx tsc --noEmit
+            ```
+
+            Postconditions:
+            ```bash
+            # initLogging is exported
+            grep -c "export function initLogging" src/logging/index.ts
+            # Expected: 1
+
+            # No bare console.log assignment at module level (only inside initLogging)
+            grep -n "^console\.log = " src/logging/index.ts
+            # Expected: no output (the assignment is now inside initLogging, not at top level)
+
+            # consoleOverrideInstalled guard exists
+            grep -c "consoleOverrideInstalled" src/logging/index.ts
+            # Expected: 3 (declaration + guard check + setter)
+            ```
+
+            ## Constraints
+            - Do NOT rename `logError` to `error` — that is Wave 3 Agent I's job.
+            - Do NOT change any other exported symbol signatures.
+            - Do NOT call `initLogging()` from within `src/logging/index.ts`.
+            - Do NOT touch any other file.
+          files: []
+        - id: C
+          task: |
+            Fix 2 findings in `src/resources/index.ts`. The repo root is
+            `/Users/dayna.blackwell/code/lsp-mcp-improved`.
+
+            ## Finding 5 — coverage_gap:224,265 — wrong MCP notification method + extra content field
+
+            Both subscription callbacks in `getSubscriptionHandlers` send:
+            ```typescript
+            method: "notifications/resources/update",
+            params: {
+              uri,
+              content: [{ type: "text", text: JSON.stringify(...) }]
+            }
+            ```
+
+            The correct MCP method is `"notifications/resources/updated"` (with trailing `d`).
+            The `content` field is not in `ResourceUpdatedNotification` schema — params must
+            be `{ uri: string }` only. Clients receive no notification because the wrong
+            method name is silently dropped.
+
+            Fix both occurrences (lines 224 and 265). Locate the first occurrence:
+            ```typescript
+                    server.notification({
+                      method: "notifications/resources/update",
+                      params: {
+                        uri,
+                        content: [{ type: "text", text: JSON.stringify({ [diagUri]: diagnostics }, null, 2) }]
+                      }
+                    });
+            ```
+            Replace with:
+            ```typescript
+                    server.notification({
+                      method: "notifications/resources/updated",
+                      params: { uri },
+                    });
+            ```
+
+            Locate the second occurrence:
+            ```typescript
+                    server.notification({
+                      method: "notifications/resources/update",
+                      params: {
+                        uri,
+                        content: [{ type: "text", text: JSON.stringify(diagnosticsObject, null, 2) }]
+                      }
+                    });
+            ```
+            Replace with:
+            ```typescript
+                    server.notification({
+                      method: "notifications/resources/updated",
+                      params: { uri },
+                    });
+            ```
+
+            ## Finding 6 — silent_failure:206 — hardcoded uri.slice(18) offset
+
+            In `getSubscriptionHandlers`, the `lsp-diagnostics://` handler extracts the
+            file path with `uri.slice(18)` — a hardcoded offset that breaks if the URI
+            scheme changes length or has extra slashes.
+
+            Locate this exact text:
+            ```typescript
+              'lsp-diagnostics://': async (uri: string) => {
+                checkLspClientInitialized(lspClient);
+
+                // Extract the file path parameter from the URI
+                const filePath = uri.slice(18);
+            ```
+            Replace with:
+            ```typescript
+              'lsp-diagnostics://': async (uri: string) => {
+                checkLspClientInitialized(lspClient);
+
+                // Extract the file path parameter from the URI using URL parsing
+                const parsedUri = new URL(uri);
+                const filePath = parseUriPath(parsedUri);
+            ```
+
+            Note: `parseUriPath` is already defined and exported at the top of
+            `src/resources/index.ts` (line 10). This change makes the subscription
+            handler consistent with all other URI handlers in the file.
+
+            ## Verification Gate
+
+            ```bash
+            cd /Users/dayna.blackwell/code/lsp-mcp-improved
+            npm run build
+            npx tsc --noEmit
+            ```
+
+            Postconditions:
+            ```bash
+            # Wrong method name is gone
+            grep "notifications/resources/update\"" src/resources/index.ts
+            # Expected: no output (exits 1 — correct pass)
+
+            # Correct method name appears twice (both subscription callbacks)
+            grep -c "notifications/resources/updated" src/resources/index.ts
+            # Expected: 2
+
+            # content field no longer sent in notification params
+            grep "content:.*type.*text" src/resources/index.ts | grep "notification"
+            # Expected: no output
+
+            # uri.slice(18) is gone
+            grep "slice(18)" src/resources/index.ts
+            # Expected: no output
+
+            # parseUriPath used in subscription handler
+            grep -c "parseUriPath" src/resources/index.ts
+            # Expected: at least 2 (existing usages + new one)
+            ```
+
+            ## Constraints
+            - Do NOT touch any file other than `src/resources/index.ts`.
+            - Do NOT rename `logError` — that is Wave 3 Agent I.
+            - Do NOT change function signatures.
+          files: []
+        - id: D
+          task: |
+            Fix 1 finding in `src/extensions/index.ts`. The repo root is
+            `/Users/dayna.blackwell/code/lsp-mcp-improved`.
+
+            ## Finding 16 — cross_field_consistency:47-56 — existence check vs import path mismatch
+
+            In `importExtension`, the existence check uses:
+            ```typescript
+            const extensionPath = path.resolve(process.cwd(), 'dist', 'src', 'extensions', `${safeLanguageId}.js`);
+            ```
+            But the dynamic `import()` uses:
+            ```typescript
+            const extensionModule = await import(`./${safeLanguageId}.js`);
+            ```
+
+            The `import()` resolves relative to the compiled module's location
+            (`<repo>/dist/src/extensions/`), which agrees with `process.cwd()` ONLY when
+            the server is launched from the repo root. When launched from any other
+            directory, `fs.access` may succeed (file found at cwd-relative path) but
+            `import()` fails (or vice versa).
+
+            Fix: use `import.meta.url` to build an absolute path for both checks:
+
+            Locate this exact text:
+            ```typescript
+              // Check if extension file exists
+              const extensionPath = path.resolve(process.cwd(), 'dist', 'src', 'extensions', `${safeLanguageId}.js`);
+              try {
+                await fs.access(extensionPath);
+              } catch (error) {
+                info(`No extension found for language: ${languageId}`);
+                return null;
+              }
+
+              // Import the extension module
+              const extensionModule = await import(`./${safeLanguageId}.js`);
+            ```
+            Replace with:
+            ```typescript
+              // Build an absolute path from this module's location so it's cwd-independent
+              const thisDir = path.dirname(new URL(import.meta.url).pathname);
+              const extensionPath = path.join(thisDir, `${safeLanguageId}.js`);
+
+              // Check if extension file exists
+              try {
+                await fs.access(extensionPath);
+              } catch (error) {
+                info(`No extension found for language: ${languageId}`);
+                return null;
+              }
+
+              // Import the extension module using the same absolute path
+              const extensionModule = await import(extensionPath);
+            ```
+
+            Note: `path` is already imported at the top of the file. `import.meta.url`
+            is available because the file uses `"type": "module"` (ESM). No new imports
+            needed.
+
+            ## Verification Gate
+
+            ```bash
+            cd /Users/dayna.blackwell/code/lsp-mcp-improved
+            npm run build
+            npx tsc --noEmit
+            ```
+
+            Postconditions:
+            ```bash
+            # process.cwd() is no longer used in importExtension path construction
+            grep "process.cwd()" src/extensions/index.ts
+            # Expected: no output
+
+            # import.meta.url used for path resolution
+            grep -c "import.meta.url" src/extensions/index.ts
+            # Expected: 1
+
+            # Both existence check and import use extensionPath (not relative ./)
+            grep -c "extensionPath" src/extensions/index.ts
+            # Expected: 3 (declaration + access + import)
+            ```
+
+            ## Constraints
+            - Do NOT touch any file other than `src/extensions/index.ts`.
+            - Do NOT rename `logError` — that is Wave 3 Agent I.
+            - Do NOT remove `deactivateExtension` or `listActiveExtensions` exports. The
+              dead-symbol finding recommends removal, but those functions may be used by
+              external callers. The unused import in `src/tools/index.ts` will be cleaned
+              up by Agent E.
+          files: []
+        - id: E
+          task: |
+            Fix 4 findings across `src/tools/index.ts` and `src/prompts/index.ts`.
+            The repo root is `/Users/dayna.blackwell/code/lsp-mcp-improved`.
+
+            ## Finding 13 — coverage_gap:322-370 — restart_lsp_server tool missing from registry
+
+            `LSPClient.restart()` exists at `src/lspClient.ts:921` but is never registered
+            as a tool. Add it to both `getToolHandlers` and `getToolDefinitions`.
+
+            In `src/tools/index.ts`, add a Zod schema for the new tool after the existing
+            schema imports at the top of the file (after line 17 which imports from types):
+            ```typescript
+            import { z } from "zod";
+
+            const RestartLspArgsSchema = z.object({
+              root_dir: z.string().optional().describe(
+                "Optional new project root directory. If omitted, restarts with the same root."
+              ),
+            });
+            ```
+
+            Note: `z` is already imported on line 3. The schema definition goes after the
+            existing imports, before `createFileUri`.
+
+            In `getToolHandlers`, add to the returned object (after the `"set_log_level"` entry):
+            ```typescript
+              "restart_lsp_server": {
+                schema: RestartLspArgsSchema,
+                handler: async (args: { root_dir?: string }) => {
+                  checkLspClientInitialized(lspClient);
+                  await lspClient!.restart(args.root_dir);
+                  return {
+                    content: [{ type: "text", text: "LSP server restarted successfully" }],
+                  };
+                }
+              },
+            ```
+
+            In `getToolDefinitions`, add to the returned array (after the `"set_log_level"` entry):
+            ```typescript
+              {
+                name: "restart_lsp_server",
+                description: "Restart the LSP server process. Use this if the LSP server becomes unresponsive or after making significant changes to the project structure. Optionally provide a new root_dir to restart with a different workspace root.",
+                inputSchema: zodToJsonSchema(RestartLspArgsSchema) as ToolInput,
+              },
+            ```
+
+            ## Finding 14 — dead_symbol:20 — unused imports deactivateExtension, listActiveExtensions
+
+            Line 20 of `src/tools/index.ts`:
+            ```typescript
+            import { activateExtension, deactivateExtension, listActiveExtensions } from "../extensions/index.js";
+            ```
+
+            Remove `deactivateExtension` and `listActiveExtensions` from this import.
+            Locate the exact line and replace with:
+            ```typescript
+            import { activateExtension } from "../extensions/index.js";
+            ```
+
+            ## Finding 15 — scope_analysis:36-319 — getToolHandlers 284-line inline closures
+
+            Extract each of the 9 tool handlers (including the new `restart_lsp_server`
+            from finding 13) as a named top-level function. The factory function
+            `getToolHandlers` should return an object that references these named functions
+            rather than defining anonymous closures inline.
+
+            Pattern for each handler:
+            ```typescript
+            // Named top-level function (before getToolHandlers):
+            async function handleGetInfoOnLocation(
+              getLspClient: () => LSPClient | null,
+              args: z.infer<typeof GetInfoOnLocationArgsSchema>,
+            ): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> {
+              debug(`Getting info on location in file: ${args.file_path} (${args.line}:${args.column})`);
+              const lspClient = getLspClient();
+              checkLspClientInitialized(lspClient);
+              const fileContent = await fs.readFile(args.file_path, 'utf-8');
+              const fileUri = createFileUri(args.file_path);
+              await lspClient!.openDocument(fileUri, fileContent, args.language_id);
+              const text = await lspClient!.getInfoOnLocation(fileUri, {
+                line: args.line - 1,
+                character: args.column - 1,
+              });
+              debug(`Returned info on location: ${text.slice(0, 100)}${text.length > 100 ? '...' : ''}`);
+              return { content: [{ type: "text", text }] };
+            }
+
+            // In getToolHandlers return object:
+            "get_info_on_location": {
+              schema: GetInfoOnLocationArgsSchema,
+              handler: (args: any) => handleGetInfoOnLocation(getLspClient, args),
+            },
+            ```
+
+            Apply this pattern to all handlers: `get_info_on_location`, `get_completions`,
+            `get_code_actions`, `open_document`, `close_document`, `get_diagnostics`,
+            `start_lsp`, `get_references`, `set_log_level`, `restart_lsp_server`.
+
+            Handler naming convention: `handle` + PascalCase of tool name.
+            - `get_info_on_location` → `handleGetInfoOnLocation`
+            - `get_completions` → `handleGetCompletions`
+            - `get_code_actions` → `handleGetCodeActions`
+            - `open_document` → `handleOpenDocument`
+            - `close_document` → `handleCloseDocument`
+            - `get_diagnostics` → `handleGetDiagnostics`
+            - `start_lsp` → `handleStartLsp`
+            - `get_references` → `handleGetReferences`
+            - `set_log_level` → `handleSetLogLevel`
+            - `restart_lsp_server` → `handleRestartLspServer`
+
+            Each named function takes the necessary closure variables as explicit parameters
+            (getLspClient as a getter function, lspServerPath, lspServerArgs, setLspClient,
+            rootDir, setRootDir, server) — only the subset actually needed by that handler.
+
+            CRITICAL: handlers must call `const lspClient = getLspClient();` at invocation time
+            to read the current client, not capture lspClient by value at factory call time.
+            This ensures handlers see the updated client after `setLspClient(newClient)` is called.
+
+            ## Finding 19 — dead_symbol:8 — PromptName.LANGUAGE_HELP never used
+
+            In `src/prompts/index.ts`, remove `LANGUAGE_HELP = "language_help"` from the
+            `PromptName` enum.
+
+            Locate this exact text:
+            ```typescript
+            enum PromptName {
+              LSP_GUIDE = "lsp_guide",
+              LANGUAGE_HELP = "language_help",
+            }
+            ```
+            Replace with:
+            ```typescript
+            enum PromptName {
+              LSP_GUIDE = "lsp_guide",
+            }
+            ```
+
+            ## Finding 20 — doc_drift:66 — lsp_guide prompt lists non-existent restart_lsp_server
+
+            This is now fixed in sync: after finding 13 adds the tool, the prompt text is
+            already accurate. Verify the prompt text in `src/prompts/index.ts` at line 59
+            still includes `restart_lsp_server` in the tool list. No change needed beyond
+            confirming the text matches the tool you just registered.
+
+            ## Verification Gate
+
+            ```bash
+            cd /Users/dayna.blackwell/code/lsp-mcp-improved
+            npm run build
+            npx tsc --noEmit
+            ```
+
+            Postconditions:
+            ```bash
+            # restart_lsp_server appears in tool handlers
+            grep -c "restart_lsp_server" src/tools/index.ts
+            # Expected: at least 3 (schema ref, handler key, definition name)
+
+            # unused imports removed
+            grep "deactivateExtension\|listActiveExtensions" src/tools/index.ts
+            # Expected: no output
+
+            # Named handler functions exist at top level
+            grep -c "^async function handle" src/tools/index.ts
+            # Expected: 10 (one per tool)
+
+            # LANGUAGE_HELP removed from enum
+            grep "LANGUAGE_HELP" src/prompts/index.ts
+            # Expected: no output
+
+            # restart_lsp_server still in prompt guide text
+            grep -c "restart_lsp_server" src/prompts/index.ts
+            # Expected: 1
+            ```
+
+            ## Additional fix: start_lsp leak (related to Finding 2)
+
+            In `handleStartLsp`, shut down the existing client before creating the new one.
+            At the start of handleStartLsp (before `const newClient = new LSPClient(...)`):
+            ```typescript
+            async function handleStartLsp(
+              getLspClient: () => LSPClient | null,
+              lspServerPath: string,
+              lspServerArgs: string[],
+              setLspClient: (client: LSPClient) => void,
+              rootDir: string,
+              setRootDir: (dir: string) => void,
+              args: { root_dir?: string },
+            ) {
+              const lspClient = getLspClient();
+              // Shut down existing client before creating new one (prevents leak)
+              if (lspClient) {
+                try {
+                  await lspClient.shutdown();
+                } catch (err) {
+                  warning("Error shutting down existing LSP client:", err);
+                }
+              }
+
+              const newClient = new LSPClient(lspServerPath, lspServerArgs);
+              // ... rest of handler
+            }
+            ```
+
+            ## Constraints
+            - Do NOT modify any file other than `src/tools/index.ts` and `src/prompts/index.ts`.
+            - Do NOT rename `logError` to `error` — that is Wave 3 Agent I.
+            - Update `getToolHandlers` signature to accept `getLspClient: () => LSPClient | null`
+              as the first parameter (not `lspClient: LSPClient | null`).
+          files: []
+        - id: F
+          task: |
+            Fix 1 finding in `src/shared/waitForDiagnostics.ts` and add a new test file.
+            The repo root is `/Users/dayna.blackwell/code/lsp-mcp-improved`.
+
+            ## Finding 22 — test_coverage — waitForDiagnostics has no unit tests
+
+            `waitForDiagnostics` has complex timing logic (initial-snapshot exclusion,
+            stabilisation timer, hard timeout) with no unit test coverage.
+
+            Create a new file `test/waitForDiagnostics.test.js` with unit tests using a
+            mock `LSPClient`. Match the existing test harness pattern used in
+            `test/prompts.test.js` and `test/typescript-lsp.test.js` — these tests do NOT
+            use `node:test` module. They use a custom test harness with simple async function
+            tests and manual `assert` checks.
+
+            The mock LSPClient needs to expose the subscriber callback for programmatic
+            control. Implement the mock as a plain object with `subscribeToDiagnostics`,
+            `unsubscribeFromDiagnostics`, and a `triggerDiagnostics(uri, diags)` helper:
+
+            ```javascript
+            #!/usr/bin/env node
+            import assert from "assert";
+
+            // --- minimal mock LSPClient ---
+            function createMockLspClient() {
+              const subscribers = new Set();
+              return {
+                subscribeToDiagnostics(cb) { subscribers.add(cb); },
+                unsubscribeFromDiagnostics(cb) { subscribers.delete(cb); },
+                triggerDiagnostics(uri, diags) {
+                  for (const cb of subscribers) cb(uri, diags);
+                },
+              };
+            }
+            ```
+
+            Write tests covering:
+
+            **Test 1 — resolves after fresh update + stable delay:**
+            Call `waitForDiagnostics(mock, [uri])`. Trigger an initial snapshot callback
+            (ignored), then trigger a second real callback. Assert the returned Promise
+            resolves within 1000 ms of the second callback (stable delay is 500 ms by default).
+
+            **Test 2 — initial snapshot is excluded:**
+            Call `waitForDiagnostics(mock, [uri])`. Trigger only ONE diagnostic callback.
+            Assert the Promise does NOT resolve within 200 ms (initial snapshot is ignored,
+            no real update received, stabilisation timer fires but `allFilesHaveFreshUpdate`
+            is false). Use `Promise.race` with a timeout sentinel to detect non-resolution.
+
+            **Test 3 — hard timeout path:**
+            Call `waitForDiagnostics(mock, [uri], 300)` (300 ms timeout). Trigger no
+            callbacks. Assert the Promise resolves within 600 ms (hard timeout fires).
+
+            **Test 4 — multiple URIs, all must update:**
+            Call `waitForDiagnostics(mock, [uri1, uri2])`. Trigger initial snapshot for
+            both, then a real update for `uri1` only. Assert the Promise does NOT resolve
+            before `uri2` gets its update. Then trigger a real update for `uri2`. Assert
+            the Promise resolves within 1000 ms.
+
+            **Test 5 — empty targetUris resolves immediately:**
+            Call `waitForDiagnostics(mock, [])`. Assert the Promise resolves within 700 ms
+            (stabilisation timer fires immediately since `allFilesHaveFreshUpdate()` returns
+            true when `targetUris` is empty).
+
+            Import `waitForDiagnostics` using the compiled dist path:
+            ```javascript
+            import { waitForDiagnostics } from "../dist/src/shared/waitForDiagnostics.js";
+            ```
+
+            Structure each test as an async function (NOT describe/it blocks):
+            ```javascript
+            async function testResolves AfterFreshUpdate() {
+              const mock = createMockLspClient();
+              const uri = "file:///test.ts";
+              const promise = waitForDiagnostics(mock, [uri]);
+              // trigger initial snapshot (ignored)
+              mock.triggerDiagnostics(uri, []);
+              await new Promise(r => setTimeout(r, 100));
+              // trigger real update
+              mock.triggerDiagnostics(uri, [{ message: "error" }]);
+              await promise; // should resolve within 1000ms
+              console.log("✓ Test 1 passed");
+            }
+            ```
+
+            Run all tests sequentially and exit with code 0 if all pass:
+            ```javascript
+            (async () => {
+              try {
+                await testResolvesAfterFreshUpdate();
+                await testInitialSnapshotExcluded();
+                await testHardTimeout();
+                await testMultipleUris();
+                await testEmptyTargetUris();
+                console.log("All tests passed!");
+                process.exit(0);
+              } catch (err) {
+                console.error("Test failed:", err);
+                process.exit(1);
+              }
+            })();
+            ```
+
+            The test file must be runnable with `node test/waitForDiagnostics.test.js`.
+            Add it to `package.json`'s test script as a third test suite:
+
+            In `package.json`, locate:
+            ```json
+              "test": "npm run test:typescript && npm run test:prompts",
+            ```
+            Replace with:
+            ```json
+              "test": "npm run test:typescript && npm run test:prompts && npm run test:diagnostics",
+              "test:diagnostics": "node test/waitForDiagnostics.test.js",
+            ```
+
+            Note: `src/shared/waitForDiagnostics.ts` itself needs no source changes for
+            this finding. Only add the test file and update `package.json`.
+
+            ## Verification Gate
+
+            ```bash
+            cd /Users/dayna.blackwell/code/lsp-mcp-improved
+            npm run build
+            node test/waitForDiagnostics.test.js
+            ```
+
+            Postconditions:
+            ```bash
+            # Test file exists
+            ls test/waitForDiagnostics.test.js
+            # Expected: file exists
+
+            # All 5 tests are defined as async functions
+            grep -c "async function test" test/waitForDiagnostics.test.js
+            # Expected: 5
+
+            # test:diagnostics script added to package.json
+            grep "test:diagnostics" package.json
+            # Expected: one line
+            ```
+
+            ## Constraints
+            - Do NOT modify `src/shared/waitForDiagnostics.ts` source.
+            - Only create `test/waitForDiagnostics.test.js` and update `package.json`.
+            - Do NOT break existing test scripts.
+          files: []
+      base_commit: e0fdd302de951c8b114967af6be4c26beaceac69
+    - number: 2
+      agents:
+        - id: G
+          task: |
+            Fix 3 findings in `index.ts` and wire `initLogging()` from Wave 1 Agent B.
+            Update `getToolsHandlers` to pass getter function for lspClient (fixes handler closure bug).
+            The repo root is `/Users/dayna.blackwell/code/lsp-mcp-improved`.
+
+            ## Finding 1 — coverage_gap:356 — process.on('exit', async) never awaits
+
+            Replace the `exit` handler with `SIGINT` and `SIGTERM` handlers for graceful
+            async shutdown.
+
+            Locate this exact text:
+            ```typescript
+            // Clean up on process exit
+            process.on('exit', async () => {
+              info("Shutting down MCP server...");
+              try {
+                // Only attempt shutdown if lspClient exists and is initialized
+                if (lspClient) {
+                  await lspClient.shutdown();
+                }
+              } catch (error) {
+                warning("Error during shutdown:", error);
+              }
+            });
+            ```
+            Replace with:
+            ```typescript
+            // Graceful async shutdown on signal
+            const gracefulShutdown = async (signal: string): Promise<void> => {
+              info(`Received ${signal}, shutting down MCP server...`);
+              try {
+                if (lspClient) {
+                  await lspClient.shutdown();
+                }
+              } catch (error) {
+                warning(`Error during shutdown on ${signal}:`, error);
+              }
+              process.exit(0);
+            };
+
+            process.on('SIGINT', () => void gracefulShutdown('SIGINT'));
+            process.on('SIGTERM', () => void gracefulShutdown('SIGTERM'));
+
+            // Synchronous exit handler: no async work here
+            process.on('exit', () => {
+              // Intentionally empty — async cleanup is handled by SIGINT/SIGTERM above.
+            });
+            ```
+
+            ## Update getToolsHandlers to pass getter function (fixes handler closure bug)
+
+            Agent E's handler extraction pattern requires handlers to receive `getLspClient:
+            () => LSPClient | null` instead of `lspClient: LSPClient | null`. This ensures
+            handlers read the current client at invocation time, not at factory call time.
+
+            Locate the `getToolsHandlers` function definition:
+            ```typescript
+            const getToolsHandlers = () => {
+              const coreHandlers = getToolHandlers(lspClient, lspServerPath, lspServerArgs, setLspClient, rootDir, setRootDir, server);
+              const extensionHandlers = getExtensionToolHandlers();
+              return { ...coreHandlers, ...extensionHandlers };
+            };
+            ```
+            Replace with:
+            ```typescript
+            const getToolsHandlers = () => {
+              const coreHandlers = getToolHandlers(() => lspClient, lspServerPath, lspServerArgs, setLspClient, rootDir, setRootDir, server);
+              const extensionHandlers = getExtensionToolHandlers();
+              return { ...coreHandlers, ...extensionHandlers };
+            };
+            ```
+
+            The change: `lspClient` → `() => lspClient`. This passes a getter function that
+            returns the current value of the module-level `lspClient` variable at call time.
+
+            Note: Finding 2 (start_lsp leak) is now handled by Agent E's `handleStartLsp`
+            which shuts down the old client before creating the new one. You do NOT need
+            to implement any shutdown hook in index.ts.
+
+            ## Finding 3 — coverage_gap:233 — UnsubscribeRequest.params.context always undefined
+
+            The MCP UnsubscribeRequestSchema defines `params` as `{ uri: string }` only.
+            The code destructures `context` from `request.params` which is always `undefined`,
+            causing unsubscription to always fail.
+
+            Fix: track subscription contexts server-side in a Map keyed by URI.
+
+            Add a module-level Map after the `let rootDir` declaration:
+            ```typescript
+            // Server-side subscription context store, keyed by resource URI
+            const subscriptionContexts = new Map<string, any>();
+            ```
+
+            In the `SubscribeRequestSchema` handler, replace the current handler body:
+
+            Locate:
+            ```typescript
+              // Find the appropriate handler for this URI scheme
+              const handlerKey = Object.keys(subscriptionHandlers).find(key => uri.startsWith(key));
+              if (handlerKey) {
+                return await subscriptionHandlers[handlerKey](uri);
+              }
+            ```
+            Replace with:
+            ```typescript
+              // Find the appropriate handler for this URI scheme
+              const handlerKey = Object.keys(subscriptionHandlers).find(key => uri.startsWith(key));
+              if (handlerKey) {
+                const result = await subscriptionHandlers[handlerKey](uri);
+                if (result.ok && result.context) {
+                  subscriptionContexts.set(uri, result.context);
+                }
+                return result;
+              }
+            ```
+
+            In the `UnsubscribeRequestSchema` handler, fix the destructure and context lookup:
+
+            Locate:
+            ```typescript
+              const { uri, context } = request.params;
+              debug(`Handling UnsubscribeResource request for URI: ${uri}`);
+            ```
+            Replace with:
+            ```typescript
+              const { uri } = request.params;
+              const context = subscriptionContexts.get(uri);
+              subscriptionContexts.delete(uri);
+              debug(`Handling UnsubscribeResource request for URI: ${uri}`);
+            ```
+
+            Also update the handler call that passes context:
+            ```typescript
+              if (handlerKey) {
+                return await unsubscriptionHandlers[handlerKey](uri, context);
+              }
+            ```
+            This line already looks correct; ensure `context` is the value retrieved from
+            the Map (which it now is after the destructure fix above).
+
+            ## Finding 4 — doc_drift:300,321 — isError field on ListResources/ListPrompts
+
+            The `ListResourcesRequestSchema` and `ListPromptsRequestSchema` handlers return
+            `{ resources: [], isError: true, error: errorMessage }` and
+            `{ prompts: [], isError: true, error: errorMessage }` on error. These fields
+            (`isError`, `error`) are not in the MCP SDK schemas for these methods — only
+            `CallToolResultSchema` has `isError`. The correct approach is to throw.
+
+            Fix the `ListResourcesRequestSchema` handler catch block:
+            ```typescript
+            // Before:
+            } catch (error) {
+              const errorMessage = error instanceof Error ? error.message : String(error);
+              logError(`Error handling list resources request: ${errorMessage}`);
+              return {
+                resources: [],
+                isError: true,
+                error: errorMessage
+              };
+            }
+
+            // After:
+            } catch (error) {
+              logError(`Error handling list resources request:`, error);
+              throw error;
+            }
+            ```
+
+            Fix the `ListPromptsRequestSchema` handler catch block:
+            ```typescript
+            // Before:
+            } catch (error) {
+              const errorMessage = error instanceof Error ? error.message : String(error);
+              logError(`Error handling list prompts request: ${errorMessage}`);
+              return {
+                prompts: [],
+                isError: true,
+                error: errorMessage
+              };
+            }
+
+            // After:
+            } catch (error) {
+              logError(`Error handling list prompts request:`, error);
+              throw error;
+            }
+            ```
+
+            ## Wire initLogging() from Agent B
+
+            Agent B moved the console override mutations into `initLogging()`. You must
+            call it from `index.ts` at startup.
+
+            In `index.ts`, add `initLogging` to the logging import:
+
+            Locate:
+            ```typescript
+            import { debug, info, notice, warning, logError, critical, alert, emergency, setLogLevel, setServer, markServerInitialized } from "./src/logging/index.js";
+            ```
+            Replace with:
+            ```typescript
+            import { debug, info, notice, warning, logError, critical, alert, emergency, setLogLevel, setServer, markServerInitialized, initLogging } from "./src/logging/index.js";
+            ```
+
+            Then add the call immediately after the import block, before any other code.
+            Locate the first non-import line after the import block:
+            ```typescript
+            // Get the language ID from the command line arguments
+            const languageId = process.argv[2];
+            ```
+            Insert before it:
+            ```typescript
+            // Install console overrides for logging (must be called before any console usage)
+            initLogging();
+
+            ```
+
+            ## Verification Gate
+
+            ```bash
+            cd /Users/dayna.blackwell/code/lsp-mcp-improved
+            npm run build
+            npx tsc --noEmit
+            ```
+
+            Postconditions:
+            ```bash
+            # SIGINT/SIGTERM handlers registered
+            grep -c "process.on('SIGINT'\|process.on('SIGTERM'" index.ts
+            # Expected: 2
+
+            # exit handler no longer async
+            grep "process.on('exit', async" index.ts
+            # Expected: no output
+
+            # subscriptionContexts Map declared
+            grep -c "subscriptionContexts = new Map" index.ts
+            # Expected: 1
+
+            # context destructured from params is gone
+            grep "const { uri, context }" index.ts
+            # Expected: no output
+
+            # isError no longer returned from ListResources/ListPrompts
+            grep "isError: true" index.ts
+            # Expected: no output
+
+            # initLogging() called
+            grep -c "initLogging()" index.ts
+            # Expected: 1
+
+            # getToolHandlers called with getter function (() => lspClient)
+            grep "getToolHandlers(() => lspClient" index.ts
+            # Expected: one line with the getter function
+            ```
+
+            ## Constraints
+            - Do NOT touch any file other than `index.ts`.
+            - Do NOT rename `logError` — that is Wave 3 Agent I.
+            - Do NOT touch `src/tools/index.ts` (owned by Agent E in Wave 1).
+            - Do NOT change the module-level `setLspClient` or `setRootDir` callback shapes.
+          files: []
+        - id: H
+          task: |
+            Fix 1 finding in `src/types/index.ts`. The repo root is
+            `/Users/dayna.blackwell/code/lsp-mcp-improved`.
+
+            ## Finding 21 — error_wrapping:32-41 — pervasive any typing on boundary types
+
+            All handler and message boundary types in `src/types/index.ts` use `any`:
+            - `LSPMessage.params?: any`, `result?: any`, `error?: any`
+            - `DiagnosticUpdateCallback` uses `diagnostics: any[]`
+            - `ToolHandler` uses `(args: any) =>`
+            - `UnsubscriptionHandler` uses `context: any`
+
+            This is sequenced in Wave 2 so all handler files (Agent E's tool refactor,
+            Agent C's resources fixes, Agent A's lspClient refactor) are merged first,
+            giving you a stable view of what shapes are actually used.
+
+            Replace the `any` types with named interfaces. Constrain types at the
+            boundary where the MCP SDK or LSP protocol defines them, without requiring
+            the MCP SDK Zod schemas (which are complex to derive from at this layer).
+
+            Replace `any` types in `src/types/index.ts` with better-typed interfaces.
+            Keep LSPMessage as a SINGLE interface (not a union) to avoid breaking existing
+            access patterns in lspClient.ts. Simply type the fields better:
+
+            **LSPMessage:** Keep as single interface, type fields as `Record<string, unknown>` or `unknown`:
+            ```typescript
+            export interface LSPMessage {
+              jsonrpc: string;
+              id?: number | string;  // present for requests and responses
+              method?: string;        // present for requests and notifications
+              params?: Record<string, unknown>;
+              result?: unknown;
+              error?: {
+                code: number;
+                message: string;
+                data?: unknown;
+              };
+            }
+            ```
+
+            This preserves the existing single-interface shape so `message.result?.capabilities`
+            continues to work without type narrowing. The improvement is changing `any` to
+            `unknown` and `Record<string, unknown>`, which still catches type errors at
+            the boundary without breaking call sites.
+
+            **Diagnostic callback:** Replace `any[]` with a typed diagnostic shape:
+            ```typescript
+            export interface LSPDiagnostic {
+              range: {
+                start: { line: number; character: number };
+                end: { line: number; character: number };
+              };
+              severity?: 1 | 2 | 3 | 4; // error, warning, info, hint
+              code?: number | string;
+              source?: string;
+              message: string;
+              data?: unknown;
+            }
+
+            export type DiagnosticUpdateCallback = (uri: string, diagnostics: LSPDiagnostic[]) => void;
+            ```
+
+            **ToolHandler:** Replace `args: any` with `args: Record<string, unknown>`:
+            ```typescript
+            export type ToolHandler = (args: Record<string, unknown>) => Promise<{
+              content: Array<{ type: string; text: string }>;
+              isError?: boolean;
+            }>;
+            ```
+
+            **UnsubscriptionHandler:** Replace `context: any` with typed context:
+            ```typescript
+            export type UnsubscriptionHandler = (
+              uri: string,
+              context: SubscriptionContext | undefined,
+            ) => Promise<{ ok: boolean; error?: string }>;
+            ```
+
+            Keep all existing Zod schema exports (`GetInfoOnLocationArgsSchema`, etc.)
+            unchanged. Keep `ToolInput`, `ToolInputSchema`, `LoggingLevel`, `Prompt`,
+            `PromptHandler`, `SubscriptionContext` unchanged.
+
+            After making these changes, run `npx tsc --noEmit` to surface any call sites
+            that now fail to type-check. For each TypeScript error reported:
+            - If the error is in a file you DO NOT own, document it as a known issue in
+              your completion report with the exact file and line. Do not touch those files.
+            - If the error is a false cast (e.g. `as any` now surfacing a real type mismatch),
+              add a type assertion comment explaining why it is safe.
+
+            The `LSPMessage` union type change will likely cause errors in `src/lspClient.ts`
+            where `message.result?.capabilities` is accessed. That is expected — document
+            any such errors in your completion report.
+
+            ## Verification Gate
+
+            ```bash
+            cd /Users/dayna.blackwell/code/lsp-mcp-improved
+            npm run build
+            npx tsc --noEmit
+            ```
+
+            Note: `tsc --noEmit` may report errors in OTHER files that use the updated
+            types. Document those in your completion report but do not touch those files.
+
+            Postconditions:
+            ```bash
+            # LSPMessage.params is typed as Record<string, unknown> (not any)
+            grep "params.*Record<string, unknown>" src/types/index.ts
+            # Expected: one line
+
+            # LSPMessage.result is typed as unknown (not any)
+            grep "result.*unknown" src/types/index.ts
+            # Expected: one line
+
+            # LSPDiagnostic interface defined
+            grep -c "export interface LSPDiagnostic" src/types/index.ts
+            # Expected: 1
+
+            # DiagnosticUpdateCallback uses LSPDiagnostic[] (not any[])
+            grep "DiagnosticUpdateCallback" src/types/index.ts
+            # Expected output contains: LSPDiagnostic
+
+            # ToolHandler no longer uses args: any
+            grep "ToolHandler.*args.*Record<string, unknown>" src/types/index.ts
+            # Expected: one line
+
+            # UnsubscriptionHandler context is typed (not any)
+            grep "UnsubscriptionHandler" src/types/index.ts | grep "any"
+            # Expected: no output
+            ```
+
+            ## Constraints
+            - Do NOT touch any file other than `src/types/index.ts`.
+            - Do NOT remove existing Zod schema exports.
+            - Do NOT change `LoggingLevel`, `Prompt`, `PromptHandler`, `SubscriptionContext`,
+              `ToolInput`, or `ToolInputSchema`.
+            - Keep LSPMessage as a single interface (not a union) to avoid breaking lspClient.ts.
+          files: []
+      base_commit: 75cef9f0d06e9bba7f60933cccef6470f076b66c
+    - number: 3
+      agents:
+        - id: I
+          task: |
+            Rename `logError` to `error` across all 6 affected files.
+            The repo root is `/Users/dayna.blackwell/code/lsp-mcp-improved`.
+
+            ## Finding 18 — duplicate_semantics:139 — logError inconsistent with other level helpers
+
+            All other per-level export helpers are named after their level: `debug`, `info`,
+            `notice`, `warning`, `critical`, `alert`, `emergency`. Only `error` is named
+            `logError`. This inconsistency forces callers to choose between two naming
+            styles and causes confusion. Rename `logError` to `error` across all files.
+
+            Files to update (all in the same pass):
+            1. `src/logging/index.ts` — rename the export definition
+            2. `src/lspClient.ts` — update import + all call sites
+            3. `src/tools/index.ts` — update import + all call sites
+            4. `src/resources/index.ts` — update import + all call sites
+            5. `src/extensions/index.ts` — update import + all call sites
+            6. `index.ts` — update import + all call sites
+
+            ### src/logging/index.ts
+
+            Rename the export definition. Also update the reference inside `initLogging()`:
+
+            Locate:
+            ```typescript
+            export const logError = (...args: any[]): void => log("error", ...args);
+            ```
+            Replace with:
+            ```typescript
+            export const error = (...args: any[]): void => log("error", ...args);
+            ```
+
+            Inside `initLogging()`, there is a reference to `logError` in the
+            `console.error` override. Update it:
+            ```typescript
+            // Before (inside initLogging console.error override):
+                isLogging = true;
+                logError(...args);
+                isLogging = false;
+            // After:
+                isLogging = true;
+                error(...args);
+                isLogging = false;
+            ```
+
+            ### src/lspClient.ts
+
+            Update the import line. Locate:
+            ```typescript
+              logError,
+            } from "./logging/index.js";
+            ```
+            Replace with:
+            ```typescript
+              error,
+            } from "./logging/index.js";
+            ```
+
+            Then replace all `logError(` call sites in the file with `error(`.
+            There are 9 occurrences of `logError(` in this file (line numbers approximate,
+            post-Wave-1-merge state):
+            - buffer overflow message
+            - content length exceeded message
+            - parse failure (in handleData)
+            - processMessageQueue unhandled error (the .catch() handler added by Agent A)
+            - initialize failure
+            - reopen document error
+            - reopen metadata error
+            - reopen all documents error
+            - shutdown error
+            - kill process error
+
+            Use search-and-replace for all of them: `logError(` → `error(`.
+
+            ### src/tools/index.ts
+
+            Update the import line. Locate:
+            ```typescript
+            import { debug, info, logError, notice, warning, setLogLevel } from "../logging/index.js";
+            ```
+            Replace with:
+            ```typescript
+            import { debug, info, error, notice, warning, setLogLevel } from "../logging/index.js";
+            ```
+
+            Then replace all `logError(` call sites with `error(`.
+            There are 4 occurrences:
+            - handleOpenDocument error
+            - handleCloseDocument error
+            - handleGetDiagnostics error
+            - handleStartLsp error
+
+            ### src/resources/index.ts
+
+            Update the import line. Locate:
+            ```typescript
+            import { debug, logError } from "../logging/index.js";
+            ```
+            Replace with:
+            ```typescript
+            import { debug, error } from "../logging/index.js";
+            ```
+
+            Then replace all `logError(` call sites with `error(`.
+            There are 3 occurrences in the resource handler catch blocks.
+
+            ### src/extensions/index.ts
+
+            Update the import line. Locate:
+            ```typescript
+            import { debug, info, warning, logError } from "../logging/index.js";
+            ```
+            Replace with:
+            ```typescript
+            import { debug, info, warning, error } from "../logging/index.js";
+            ```
+
+            Then replace all `logError(` call sites with `error(`.
+            There are 3 occurrences:
+            - importExtension catch
+            - activateExtension catch
+            - deactivateExtension catch
+
+            ### index.ts
+
+            Update the import line. Locate:
+            ```typescript
+            import { debug, info, notice, warning, logError, critical, alert, emergency, setLogLevel, setServer, markServerInitialized, initLogging } from "./src/logging/index.js";
+            ```
+            Replace with:
+            ```typescript
+            import { debug, info, notice, warning, error, critical, alert, emergency, setLogLevel, setServer, markServerInitialized, initLogging } from "./src/logging/index.js";
+            ```
+
+            Then replace all `logError(` call sites with `error(`.
+            There are 9 occurrences across the various handler catch blocks.
+
+            ## Verification Gate
+
+            ```bash
+            cd /Users/dayna.blackwell/code/lsp-mcp-improved
+            npm run build
+            npx tsc --noEmit
+            npm test
+            ```
+
+            Postconditions:
+            ```bash
+            # logError no longer exported from logging
+            grep "export const logError" src/logging/index.ts
+            # Expected: no output
+
+            # error exported from logging
+            grep -c "export const error" src/logging/index.ts
+            # Expected: 1
+
+            # No remaining logError references anywhere in the codebase
+            grep -rn "logError" src/ index.ts
+            # Expected: no output
+
+            # error imported in all 5 consumer files
+            grep "import.*\berror\b" src/lspClient.ts src/tools/index.ts src/resources/index.ts src/extensions/index.ts index.ts | wc -l
+            # Expected: 5
+            ```
+
+            ## Constraints
+            - You own ALL 6 files for this wave. Update all of them in a single commit.
+            - Do NOT change any other behavior — this is a pure rename with no logic changes.
+            - Do NOT remove the `log` export from `src/logging/index.ts`.
+            - Confirm the build passes with zero TypeScript errors before submitting.
+          files: []
+      base_commit: 11c386e908e39d75b07f6bcb565ff7102637e17d
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: npm run build
+          required: true
+          repo: lsp-mcp-improved
+        - type: typecheck
+          command: npx tsc --noEmit
+          required: true
+          repo: lsp-mcp-improved
+        - type: test
+          command: npm test
+          required: false
+          repo: lsp-mcp-improved
+completion_reports:
+    A:
+        status: complete
+        branch: saw/lsp-mcp-inspection-fixes/wave1-agent-A
+        commit: 4873cb6
+        files_changed:
+            - src/lspClient.ts
+        verification: PASS
+        notes: 'All 6 findings fixed: (1) added .catch() to processMessageQueue, (2) fixed buffer overflow to discard entire buffer, (3) removed deprecated rootPath, (4) extracted 3 helper methods from handleMessage, (5) added getOverlappingDiagnostics helper and wired to getCodeActions, (6) replaced dynamic fs import with static import. TypeScript compilation clean. All postconditions verified.'
+    B:
+        status: complete
+        branch: saw/lsp-mcp-inspection-fixes/wave1-agent-B
+        commit: af48137
+        files_changed:
+            - src/logging/index.ts
+        verification: PASS
+        notes: Refactored console overrides into initLogging() function with idempotent guard. All verification gates pass. Wave 2 Agent G will call initLogging() from index.ts.
+    C:
+        status: complete
+        branch: saw/lsp-mcp-inspection-fixes/wave1-agent-C
+        commit: a88f47b
+        files_changed:
+            - src/resources/index.ts
+        verification: PASS
+        notes: 'Fixed 2 findings in src/resources/index.ts: (1) Changed notifications/resources/update to notifications/resources/updated and removed extra content field from params (Finding 5), (2) Replaced hardcoded uri.slice(18) with parseUriPath(new URL(uri)) for robust URI parsing (Finding 6). Build and typecheck pass.'
+    D:
+        status: complete
+        branch: saw/lsp-mcp-inspection-fixes/wave1-agent-D
+        commit: 3e86355
+        files_changed:
+            - src/extensions/index.ts
+        verification: PASS
+        notes: 'Fixed path resolution inconsistency in importExtension. Both existence check and dynamic import now use import.meta.url for cwd-independent path resolution. All postconditions verified: process.cwd() removed, import.meta.url used once, extensionPath used 3 times as expected.'
+    E:
+        status: complete
+        branch: saw/lsp-mcp-inspection-fixes/wave1-agent-E
+        commit: ddf1af5
+        files_changed:
+            - src/tools/index.ts
+            - src/prompts/index.ts
+        verification: PASS
+        notes: 'All 4 findings fixed: (1) Added restart_lsp_server tool with schema/handler/definition, (2) Removed unused imports (deactivateExtension, listActiveExtensions), (3) Extracted all 10 tool handlers as named top-level functions with getLspClient getter parameter, (4) Removed LANGUAGE_HELP from prompts enum, (5) Added shutdown logic to handleStartLsp. Out-of-scope dependency: index.ts line 128 must be updated to pass () => lspClient getter instead of lspClient value directly. All postconditions met in owned files.'
+    F:
+        status: complete
+        branch: saw/lsp-mcp-inspection-fixes/wave1-agent-F
+        commit: d46d3e6
+        files_changed:
+            - package.json
+        files_created:
+            - test/waitForDiagnostics.test.js
+        tests_added:
+            - testResolvesAfterFreshUpdate
+            - testInitialSnapshotExcluded
+            - testHardTimeout
+            - testMultipleUris
+            - testEmptyTargetUris
+        verification: PASS
+        notes: All 5 unit tests for waitForDiagnostics implemented and passing. Test file runnable with node test/waitForDiagnostics.test.js. Added test:diagnostics script to package.json test chain. Build and typecheck pass.
+    G:
+        status: complete
+        branch: saw/lsp-mcp-inspection-fixes/wave2-agent-G
+        commit: decca3a
+        files_changed:
+            - index.ts
+        verification: PASS
+        notes: 'All 4 findings fixed successfully. SIGINT/SIGTERM handlers added, subscriptionContexts Map added, isError removed from ListResources/ListPrompts handlers (CallToolRequestSchema correctly retains isError per MCP spec), initLogging() wired at startup. Build and typecheck pass. Note: getToolHandlers already had getter pattern (() => lspClient) before this wave.'
+    H:
+        status: complete
+        branch: saw/lsp-mcp-inspection-fixes/wave2-agent-H
+        commit: 98b49c1
+        files_changed:
+            - src/types/index.ts
+        verification: PASS - Type improvements complete. Expected type errors in out-of-scope files documented.
+        notes: |-
+            Type improvements complete. Replaced all 'any' types in src/types/index.ts with proper types:
+            - LSPMessage: params → Record<string, unknown>, result → unknown, error properly typed
+            - Added LSPDiagnostic interface
+            - DiagnosticUpdateCallback → uses LSPDiagnostic[] instead of any[]
+            - ToolHandler → args: Record<string, unknown>
+            - UnsubscriptionHandler → context: SubscriptionContext | undefined
+
+            All postconditions verified. Type errors now surface in downstream files (expected):
+            - index.ts:246 - SubscriptionContext type assertion needed
+            - src/lspClient.ts:194,195,234,237,244-249,273-274 - result/params narrowing needed
+
+            These errors are in files owned by other agents (Wave 1/2). The type improvements correctly expose previously-hidden type mismatches at call sites.
+    I:
+        status: complete
+        branch: saw/lsp-mcp-inspection-fixes/wave3-agent-I
+        commit: 88f2f11
+        files_changed:
+            - index.ts
+            - src/extensions/index.ts
+            - src/logging/index.ts
+            - src/lspClient.ts
+            - src/resources/index.ts
+            - src/tools/index.ts
+        verification: PASS
+        notes: Renamed logError to error across all 6 files. Also renamed catch block variables from 'error' to 'err' to prevent TypeScript shadowing errors. Build and typecheck pass. All postconditions verified.
+integration_reports:
+    wave1:
+        wave: 1
+        gaps: []
+        valid: true
+        summary: 'Wave 1: all exports are integrated (no gaps detected)'
+pre_mortem:
+    overall_risk: medium
+    rows:
+        - scenario: |
+            Agent H changes LSPMessage to a union type and tsc errors propagate into
+            src/lspClient.ts which accesses message.result?.capabilities — a field that
+            only exists on LSPResponse but not all union members.
+          likelihood: high
+          impact: medium
+          mitigation: |
+            Agent H is instructed to document but NOT fix errors in files outside its
+            ownership. The tsc errors in lspClient.ts after the type change are expected
+            and must be fixed in a follow-up (or by carefully widening the union check
+            with type guards). Scout has noted this as a known issue.
+        - scenario: |
+            Agent G's initLogging() wiring lands before Agent B's Wave 1 is merged,
+            causing a "not exported" TypeScript error on initLogging.
+          likelihood: low
+          impact: low
+          mitigation: |
+            Wave 2 runs strictly after Wave 1 is merged. Orchestrator enforces wave
+            ordering. Agent G should verify the export exists before building.
+        - scenario: |
+            Agent I's logError rename misses a call site in one of the 6 files,
+            leaving a broken import that fails tsc.
+          likelihood: medium
+          impact: medium
+          mitigation: |
+            Agent I's verification gate runs `grep -rn "logError" src/ index.ts` to
+            confirm zero remaining references. The build gate catches broken imports.
+        - scenario: |
+            Agent E's handler extraction changes the closure variables captured, causing
+            subtle runtime bugs (e.g., lspClient captured by value rather than by reference).
+          likelihood: medium
+          impact: high
+          mitigation: |
+            Each named handler function must receive lspClient as a parameter (not close
+            over a stale value). The task explicitly specifies passing closure variables
+            as explicit function parameters. Agent E must verify that lspClient is read
+            at call time from the enclosing scope via the factory function parameter.
+        - scenario: |
+            Agent C's URL parsing of lsp-diagnostics:// URIs behaves differently from
+            the old slice(18) for URIs with triple-slash (lsp-diagnostics:///path).
+          likelihood: low
+          impact: medium
+          mitigation: |
+            `parseUriPath` already handles leading slashes via `path.posix.normalize`.
+            Agent C should test the parsing with both `lsp-diagnostics://path` and
+            `lsp-diagnostics:///path` forms to confirm correct behavior.
+        - scenario: |
+            Agent F's test file uses `../dist/src/shared/waitForDiagnostics.js` but
+            dist/ is not built before tests run, causing import failure.
+          likelihood: medium
+          impact: low
+          mitigation: |
+            Agent F's verification gate runs `npm run build` before
+            `node test/waitForDiagnostics.test.js`. The test script in package.json
+            implicitly requires a prior build. Document this in a README note if needed.
+        - scenario: |
+            Agent G's server-side subscriptionContexts Map becomes stale if a client
+            subscribes to the same URI twice without unsubscribing first.
+          likelihood: low
+          impact: low
+          mitigation: |
+            The Map overwrite behavior (second subscribe replaces first context) is
+            acceptable for the current use case. The old callback is still registered
+            in the lspClient's diagnosticSubscribers Set and will continue firing;
+            only the unsubscribe lookup is affected. This is a known limitation, not
+            a regression from the previous (always-broken) behavior.
+critic_report:
+    verdict: PASS
+    agent_reviews:
+        A:
+            agent_id: A
+            verdict: ISSUES
+            issues:
+                - check: symbol_accuracy
+                  severity: error
+                  description: Finding 12 instructs adding "import * as fs from fs/promises" at line 2, but lspClient.ts line 2 is "import path from path". The fs import should be added after line 2, not at line 2. Additionally, brief says "Add after them" (after spawn and path imports) but then says "at line 2" which is contradictory.
+                  file: src/lspClient.ts
+                  symbol: fs
+        B:
+            agent_id: B
+            verdict: PASS
+        C:
+            agent_id: C
+            verdict: PASS
+        D:
+            agent_id: D
+            verdict: PASS
+        E:
+            agent_id: E
+            verdict: ISSUES
+            issues:
+                - check: pattern_accuracy
+                  severity: error
+                  description: 'Handler extraction pattern passes lspClient as parameter value at factory call time, but lspClient is module-level mutable in index.ts (set by setLspClient callback). The named handlers will close over stale lspClient value from initial getToolHandlers() call. Brief says "lspClient is read at call time from the enclosing scope via the factory function parameter" but the pattern shown passes lspClient by value: handler: (args: any) => handleGetInfoOnLocation(lspClient, args). This captures lspClient at factory instantiation, not at tool invocation.'
+                  file: src/tools/index.ts
+                  symbol: getToolHandlers
+                - check: symbol_accuracy
+                  severity: warning
+                  description: Brief says restart_lsp_server is already in prompt text at line 59 and "No change needed beyond confirming". Actual prompt text in src/prompts/index.ts line 40-70 does NOT mention restart_lsp_server in the tool list. Finding 20 claims "now fixed in sync" but the prompt needs updating.
+                  file: src/prompts/index.ts
+                  symbol: restart_lsp_server
+        F:
+            agent_id: F
+            verdict: ISSUES
+            issues:
+                - check: pattern_accuracy
+                  severity: error
+                  description: Brief instructs using node:test ("import { describe, it } from node:test") but existing test files (test/prompts.test.js, test/typescript-lsp.test.js) do NOT use node:test module. They use a custom test harness. The test pattern shown will not match repo style.
+                  file: test/waitForDiagnostics.test.js
+                  symbol: node:test
+        G:
+            agent_id: G
+            verdict: ISSUES
+            issues:
+                - check: i1_disjoint_ownership
+                  severity: error
+                  description: Finding 2 instructs Agent G to modify src/tools/index.ts (add shutdownLspClient parameter to getToolHandlers signature and update handleStartLsp). But src/tools/index.ts is owned by Agent E in Wave 1. This violates I1 disjoint ownership. The brief acknowledges this ("Wait — re-check I1") then pivots to an index.ts-only solution, but the final instructions still reference modifying getToolHandlers signature in src/tools/index.ts.
+                  file: src/tools/index.ts
+                  symbol: getToolHandlers
+                - check: pattern_accuracy
+                  severity: error
+                  description: The start_lsp shutdown hook pattern (if name === start_lsp) runs BEFORE the handler but the handler itself creates the new client. Since lspClient is checked for existence in the hook, the shutdown will work, but the brief claims this fixes the leak. However, the actual leak is that setLspClient(newClient) happens without awaiting shutdown first. The pre-call hook shuts down but then the handler may fail before setLspClient is called, leaving lspClient as null. The correct fix is inside the handler (which Agent G cannot modify due to I1).
+                  file: index.ts
+                  symbol: start_lsp
+        H:
+            agent_id: H
+            verdict: ISSUES
+            issues:
+                - check: symbol_accuracy
+                  severity: error
+                  description: LSPMessage union type change will cause compile errors in src/lspClient.ts at lines 185-186 where message.result?.capabilities is accessed. Brief says "document but NOT fix" but this cascades type errors to a file owned by Agent A in Wave 1 (already merged). The union discriminates on presence of id/method/result but handleMessage uses message.result without narrowing. Agent H is told to document this but the IMPL lacks a follow-up task to fix it.
+                  file: src/types/index.ts
+                  symbol: LSPMessage
+        I:
+            agent_id: I
+            verdict: ISSUES
+            issues:
+                - check: symbol_accuracy
+                  severity: error
+                  description: 'Brief references processMessageQueue().catch at line 134 of src/lspClient.ts as evidence that Finding 7 is already applied. But actual line 132 shows: this.processMessageQueue(); with NO .catch(). The brief describes the fix correctly but then claims to verify it exists, which is incorrect — this is a pre-fix state, not post-fix.'
+                  file: src/lspClient.ts
+                  symbol: processMessageQueue
+    summary: 'Verified 9 agents across 3 waves against lsp-mcp-improved codebase. Initial review found 7 error-severity issues; all corrected by Orchestrator. Corrections: (1) Agent A fs import location clarified, (2) Agent E handler pattern fixed to use getLspClient getter + shutdown added to handleStartLsp, (3) Agent F test pattern changed to match repo style, (4) Agent G I1 violation removed - Finding 2 handled by Agent E, (5) Agent G updated to pass getter function to getToolHandlers, (6) Agent H simplified to single-interface LSPMessage (not breaking union), (7) Agent I line numbers clarified as approximate post-merge. All file_existence checks passed. No missing callers detected. PASS.'
+    reviewed_at: "2026-04-05T23:12:31Z"
+    issue_count: 0
+state: COMPLETE
