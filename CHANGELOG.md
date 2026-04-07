@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed (2026-04-06)
+- **`validate_agent_completion` wave agent completion gate** — E42 hook validated completion reports existed in the filesystem but didn't verify they were committed to git; wave agents could complete with uncommitted IMPL doc changes, causing finalize-wave to fail later when checking branches; now blocks agents if IMPL doc has uncommitted changes (staged or unstaged) containing the completion report
+
 ### Fixed (2026-04-05)
 - **`validate_agent_completion` scout gate** — Scout SubagentStop hook was calling `sawtools validate` (schema check only) instead of `sawtools pre-wave-validate --wave 1 --fix` (full gate: schema + E35 caller gaps + test cascade + wave structure). A Scout producing an IMPL doc with wave structure dependency problems could complete without being blocked; the Orchestrator had to discover the failure manually and send the IMPL doc back for correction. Now blocked at the exit gate.
 
