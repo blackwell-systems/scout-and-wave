@@ -216,3 +216,5 @@ round-trip time by catching errors at source (~5 min saved per critic cycle).
   - IMPL doc: docs/IMPL/complete/IMPL-semantic-tokens.yaml
 - **lsp-mcp-go-audit-fixes**: completed 2026-04-06, 3 waves, 6 agents
   - IMPL doc: docs/IMPL/complete/IMPL-lsp-mcp-go-audit-fixes.yaml
+- **lsp-auto-infer-workspace**: completed 2026-04-07, 2 waves, 2 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-lsp-auto-infer-workspace.yaml

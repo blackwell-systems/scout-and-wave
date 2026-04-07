@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed (2026-04-07)
+- **LSP tools whitelisted for integration-agent, planner, scaffold-agent** — `LSP` added to the `tools` frontmatter of all three agents; MCP `mcp__lsp__*` tools propagate from global config automatically, but the frontmatter token ensures consistency with scout, wave-agent, and critic-agent; integration-agent benefits most: `get_references` confirms a symbol is truly unconnected before wiring call sites
+
 ### Fixed (2026-04-06)
 - **`validate_agent_completion` wave agent completion gate** — E42 hook validated completion reports existed in the filesystem but didn't verify they were committed to git; wave agents could complete with uncommitted IMPL doc changes, causing finalize-wave to fail later when checking branches; now blocks agents if IMPL doc has uncommitted changes (staged or unstaged) containing the completion report
 

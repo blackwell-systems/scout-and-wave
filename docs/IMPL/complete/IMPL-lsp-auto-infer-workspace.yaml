@@ -1,3 +1,4 @@
+completion_date: "2026-04-07"
 title: LSP Auto-Infer Workspace Root from File Path
 feature_slug: lsp-auto-infer-workspace
 verdict: SUITABLE
@@ -225,6 +226,7 @@ waves:
           files:
             - internal/config/infer.go
             - internal/config/infer_test.go
+      base_commit: 7d84059cfc5a8a69dfee02e9a42714f981df0bb6
     - number: 2
       agents:
         - id: B
@@ -494,6 +496,7 @@ waves:
             - internal/config/infer.go
           dependencies:
             - A
+      base_commit: 49332187d27b3af21c6e6ee64de89bdef51c2d9c
 quality_gates:
     level: standard
     gates:
@@ -509,6 +512,39 @@ quality_gates:
           command: env GOWORK=off go test ./internal/... ./cmd/... ./extensions/... .
           required: true
           repo: LSP-MCP-GO
+completion_reports:
+    A:
+        status: complete
+        branch: saw/lsp-auto-infer-workspace/wave1-agent-A
+        commit: 26c547a
+        files_changed:
+            - internal/config/infer.go
+            - internal/config/infer_test.go
+        files_created:
+            - internal/config/infer.go
+            - internal/config/infer_test.go
+        tests_added:
+            - TestInferWorkspaceRoot_GoMod
+            - TestInferWorkspaceRoot_PackageJSON
+            - TestInferWorkspaceRoot_CargoToml
+            - TestInferWorkspaceRoot_Pyproject
+            - TestInferWorkspaceRoot_SetupPy
+            - TestInferWorkspaceRoot_GitFallback
+            - TestInferWorkspaceRoot_Priority_GoModOverGit
+            - TestInferWorkspaceRoot_NoMarker
+            - TestInferWorkspaceRoot_FileAtRoot
+            - TestInferWorkspaceRoot_MarkerInParent
+        verification: PASS
+        notes: All 10 tests pass. Function is unexported, stdlib-only. Both files committed individually.
+    B:
+        status: complete
+        branch: saw/lsp-auto-infer-workspace/wave2-agent-B
+        commit: 945d0b3
+        files_changed:
+            - cmd/lsp-mcp-go/server.go
+            - internal/config/infer.go
+        verification: PASS
+        notes: Added InferWorkspaceRoot exported wrapper to internal/config/infer.go. Added autoInitClient package-level function and clientForFileWithAutoInit closure to server.go. Replaced all clientForFile(resolver, cs, args.FilePath) calls with clientForFileWithAutoInit(args.FilePath) across all 17 file-path-aware tool handlers, including call_hierarchy and get_semantic_tokens (which previously used cs.get() directly). All postconditions verified. Full test suite passes.
 pre_mortem:
     overall_risk: low
     rows:
@@ -551,5 +587,5 @@ pre_mortem:
             practice for absolute path containment. Edge case: file IS the root dir itself
             (rootDir == filePath). This edge case falls through to re-init, which is
             harmless since StartAll is idempotent within a session.
-state: "REVIEWED"
+state: COMPLETE
 injection_method: hook
