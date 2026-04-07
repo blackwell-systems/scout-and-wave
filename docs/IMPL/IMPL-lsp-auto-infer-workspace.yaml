@@ -1,0 +1,555 @@
+title: LSP Auto-Infer Workspace Root from File Path
+feature_slug: lsp-auto-infer-workspace
+verdict: SUITABLE
+suitability_assessment: |
+    Two-file decomposition is clean and disjoint:
+    - Agent A: new helper `internal/config/infer.go` + tests
+    - Agent B: modified `cmd/lsp-mcp-go/server.go` adding auto-init logic that calls
+      Agent A's helper
+
+    Interface is fully definable before implementation starts: the
+    `inferWorkspaceRoot(filePath string) (root, languageID string, err error)` signature
+    is specified here and Agent B imports it. No investigation-first work is required —
+    the feature is greenfield with a clear spec.
+
+    Pre-implementation status: no portion of this feature exists yet. The current
+    `clientForFile` helper has no auto-init logic; it returns whatever the resolver
+    holds without attempting to start anything.
+
+    Parallelization value: wave 1 is a single agent (inference helper + tests), wave 2
+    is a single agent (server wiring). Two sequential waves rather than parallel, but
+    the agent tasks are non-trivial (filesystem walking logic + thread-safety + tests),
+    build cycle is >5s, and the IMPL doc provides a useful coordination artifact and
+    audit trail. SUITABLE.
+
+    Estimated times:
+    - Scout phase: ~10 min
+    - Agent execution: ~15 min (2 agents × ~7 min avg, sequential waves)
+    - Merge and verification: ~5 min
+    Total SAW time: ~30 min
+
+    Sequential baseline: ~20 min
+    Time savings: marginal; primary value is coordination and audit trail.
+    Recommendation: Proceed. Two-wave decomposition with clear interface contract.
+test_command: env GOWORK=off go test ./internal/... ./cmd/... ./extensions/... .
+lint_command: env GOWORK=off go vet ./...
+file_ownership:
+    - file: internal/config/infer.go
+      agent: A
+      wave: 1
+      action: new
+    - file: internal/config/infer_test.go
+      agent: A
+      wave: 1
+      action: new
+    - file: internal/config/infer.go
+      agent: B
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+    - file: cmd/lsp-mcp-go/server.go
+      agent: B
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+interface_contracts:
+    - name: inferWorkspaceRoot
+      description: |
+        Walks up the directory tree from filePath to find a workspace root marker.
+        Returns the root directory path and a language ID string (or empty string if
+        only a .git marker was found). Returns an error only for unexpected I/O failures;
+        returns empty strings (no error) when no marker is found before the filesystem root.
+      definition: |
+        // inferWorkspaceRoot walks the directory tree from filePath upward, searching
+        // for workspace root markers in priority order:
+        //   go.mod        → language "go"
+        //   package.json  → language "typescript"
+        //   Cargo.toml    → language "rust"
+        //   pyproject.toml or setup.py → language "python"
+        //   .git          → language "" (fallback)
+        //
+        // Returns ("", "", nil) when no marker is found at or above the file's directory.
+        // Returns (root, languageID, nil) on success.
+        // Returns ("", "", err) only for unexpected os.Stat or os.Getwd errors.
+        func inferWorkspaceRoot(filePath string) (root, languageID string, err error)
+      location: internal/config/infer.go
+    - name: autoInitClient
+      description: |
+        Helper called inside tool handlers (in server.go) when clientForFile returns nil.
+        Infers the workspace root from filePath, calls StartAll (multi-server) or
+        Initialize (single-server), then updates cs. Thread-safe via a sync.Once-style
+        mutex guard: if multiple goroutines race to init, only one wins; the others
+        wait and use the result. Returns the initialized client or nil if inference failed.
+      definition: |
+        // autoInitClient attempts to infer a workspace root from filePath and
+        // initialize the resolver's servers. It is safe to call concurrently.
+        // If inference fails or filePath is empty, returns nil.
+        // If initialization succeeds, cs.set(c) is called and c is returned.
+        //
+        // initMu is a sync.Mutex declared alongside clientState in server.go;
+        // it prevents concurrent initialization races.
+        func autoInitClient(
+            ctx context.Context,
+            resolver lsp.ClientResolver,
+            cs *clientState,
+            initMu *sync.Mutex,
+            filePath string,
+        ) *lsp.LSPClient
+      location: cmd/lsp-mcp-go/server.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## Role
+            Implement the `inferWorkspaceRoot` helper in a new file `internal/config/infer.go`
+            plus comprehensive unit tests in `internal/config/infer_test.go`.
+
+            ## What to implement
+
+            ### internal/config/infer.go
+
+            Package: `package config`
+
+            Implement one exported-equivalent unexported function:
+
+            ```go
+            func inferWorkspaceRoot(filePath string) (root, languageID string, err error)
+            ```
+
+            Algorithm:
+            1. Take `filepath.Dir(filePath)` as the starting directory (handle the case
+               where filePath is already a directory by checking if it exists as a dir first).
+            2. Walk upward: at each directory check for markers in priority order:
+               - `go.mod`        → return (dir, "go", nil)
+               - `package.json`  → return (dir, "typescript", nil)
+               - `Cargo.toml`    → return (dir, "rust", nil)
+               - `pyproject.toml` → return (dir, "python", nil)
+               - `setup.py`      → return (dir, "python", nil)
+               - `.git`          → return (dir, "", nil)  [fallback: language unknown]
+            3. Move to the parent: `parent := filepath.Dir(dir)`. If `parent == dir`,
+               we have reached the filesystem root — return ("", "", nil) (no error).
+            4. Repeat from step 2 with `dir = parent`.
+
+            Use `os.Stat` to check for each marker. An `os.IsNotExist` error on Stat
+            means the marker is absent; continue to next marker. Any other Stat error
+            (permission denied, etc.) should be returned as `err`.
+
+            Do NOT use `os.ReadFile` or look inside the files — presence check only.
+
+            Export: the function should be unexported (`inferWorkspaceRoot`, lowercase i)
+            since it is only used within the `config` package. The test file uses package
+            `config_test` but tests via a thin wrapper (see below) or directly (since both
+            are in `internal/config`).
+
+            Actually: write the tests in `package config` (same package, not `config_test`)
+            so they can call the unexported function directly. This matches the pattern
+            used in `internal/config/parse_test.go` which uses `package config_test`.
+            Use `package config` (no `_test` suffix) for `infer_test.go` to allow direct
+            access to `inferWorkspaceRoot`.
+
+            ### internal/config/infer_test.go
+
+            Package: `package config`
+
+            Write table-driven tests covering:
+
+            1. **TestInferWorkspaceRoot_GoMod** — create a temp dir tree like
+               `<root>/go.mod`, `<root>/pkg/file.go`; call with the nested file path;
+               expect root = `<root>`, languageID = "go", err = nil.
+
+            2. **TestInferWorkspaceRoot_PackageJSON** — same pattern but `package.json`;
+               expect languageID = "typescript".
+
+            3. **TestInferWorkspaceRoot_CargoToml** — `Cargo.toml`; expect "rust".
+
+            4. **TestInferWorkspaceRoot_Pyproject** — `pyproject.toml`; expect "python".
+
+            5. **TestInferWorkspaceRoot_SetupPy** — `setup.py`; expect "python".
+
+            6. **TestInferWorkspaceRoot_GitFallback** — `.git` dir only (no other markers);
+               expect root = dir containing `.git`, languageID = "", err = nil.
+
+            7. **TestInferWorkspaceRoot_Priority_GoModOverGit** — dir has BOTH `go.mod`
+               and `.git`; expect languageID = "go" (go.mod wins).
+
+            8. **TestInferWorkspaceRoot_NoMarker** — temp dir with no markers at all;
+               expect root = "", languageID = "", err = nil.
+
+            9. **TestInferWorkspaceRoot_FileAtRoot** — file path that is directly in the
+               temp dir (no subdirectory); marker in that same dir; expect root = dir.
+
+            10. **TestInferWorkspaceRoot_MarkerInParent** — file is in a deeply nested
+                subdir; marker is 3 levels up; confirm the walk traverses correctly.
+
+            Use `t.TempDir()` for all test roots. Use `os.WriteFile` to create marker
+            files (content is irrelevant — presence-only check). Use `os.Mkdir` or
+            `os.MkdirAll` for subdirectory creation.
+
+            ## Interfaces from IMPL doc
+            The function signature is exactly:
+            ```go
+            func inferWorkspaceRoot(filePath string) (root, languageID string, err error)
+            ```
+            Do not add parameters or change the return signature.
+
+            ## Verification gate
+            ```bash
+            # Build
+            env GOWORK=off go build ./internal/config/...
+
+            # Lint
+            env GOWORK=off go vet ./internal/config/...
+
+            # Tests
+            env GOWORK=off go test ./internal/config/... -run TestInferWorkspaceRoot -v
+
+            # Postconditions
+            # (a) Function is defined:
+            grep -n "func inferWorkspaceRoot" /Users/dayna.blackwell/workspace/code/LSP-MCP-GO/internal/config/infer.go
+            # Expected: one line like "func inferWorkspaceRoot(filePath string) (root, languageID string, err error)"
+
+            # (b) Test file exists and has >=9 test functions:
+            grep -c "^func Test" /Users/dayna.blackwell/workspace/code/LSP-MCP-GO/internal/config/infer_test.go
+            # Expected: 10
+            ```
+
+            ## Constraints
+            - Do NOT modify `autodetect.go`, `config.go`, or `parse.go`. This is a new file only.
+            - Do NOT export `inferWorkspaceRoot` — it stays unexported.
+            - Do NOT add any new imports to `go.mod`; only use stdlib (`os`, `path/filepath`).
+            - Do NOT add a test wrapper function to expose the function — the test file is in
+              `package config` (same package) and can access unexported symbols directly.
+          files:
+            - internal/config/infer.go
+            - internal/config/infer_test.go
+    - number: 2
+      agents:
+        - id: B
+          task: |
+            ## Role
+            Wire auto-init logic into `cmd/lsp-mcp-go/server.go` so that tools with a
+            `file_path` argument auto-initialize the LSP client when none is running yet,
+            or reinitialize when the file is outside the current workspace root.
+
+            ## What to implement
+
+            All changes are in `cmd/lsp-mcp-go/server.go` (package `main`).
+
+            ### Step 1: Add `initMu` to the `Run` function scope
+
+            In the `Run` function, after the existing `cs := &clientState{...}` line,
+            add a mutex for guarding concurrent auto-init attempts:
+
+            The existing line to find:
+            ```go
+            cs := &clientState{client: resolver.DefaultClient()}
+            sessionMgr := session.NewSessionManager(&csResolver{cs: cs, delegate: resolver})
+            ```
+
+            Insert after `cs := &clientState{...}` (on the line between it and `sessionMgr`):
+            ```go
+            var initMu sync.Mutex
+            ```
+
+            The `sync` package is already imported in `server.go`.
+
+            ### Step 2: Add the `autoInitClient` helper function
+
+            Add a new package-level function (NOT inside `Run`; place it after
+            `clientForFile` at line 116) with this exact signature and behavior:
+
+            ```go
+            // autoInitClient attempts to infer a workspace root from filePath and
+            // initialize the resolver. Safe to call concurrently via initMu.
+            // Returns nil if filePath is empty, inference returns no root,
+            // or if the file is already within the current workspace root.
+            func autoInitClient(
+                ctx context.Context,
+                resolver lsp.ClientResolver,
+                cs *clientState,
+                initMu *sync.Mutex,
+                filePath string,
+            ) *lsp.LSPClient {
+                if filePath == "" {
+                    return nil
+                }
+
+                // Check if client is already initialized and file is within its root.
+                if existing := cs.get(); existing != nil {
+                    rootDir := existing.RootDir()
+                    if rootDir != "" && strings.HasPrefix(filePath, rootDir+"/") {
+                        return existing
+                    }
+                }
+
+                root, _, err := config.inferWorkspaceRoot(filePath)
+                if err != nil || root == "" {
+                    return nil
+                }
+
+                initMu.Lock()
+                defer initMu.Unlock()
+
+                // Re-check after acquiring lock (double-checked locking pattern).
+                if existing := cs.get(); existing != nil {
+                    existingRoot := existing.RootDir()
+                    if existingRoot != "" && strings.HasPrefix(filePath, existingRoot+"/") {
+                        return existing
+                    }
+                }
+
+                logging.Log(logging.LevelInfo, fmt.Sprintf(
+                    "auto-init: inferred workspace root %q for file %q", root, filePath))
+
+                if sm, ok := resolver.(*lsp.ServerManager); ok {
+                    if err := sm.StartAll(ctx, root); err != nil {
+                        logging.Log(logging.LevelWarning, fmt.Sprintf("auto-init StartAll failed: %v", err))
+                        return nil
+                    }
+                    if c := resolver.DefaultClient(); c != nil {
+                        cs.set(c)
+                        return c
+                    }
+                    return nil
+                }
+
+                // Single-server fallback: not supported via autoInitClient because
+                // serverPath/serverArgs are not in scope here. Return nil to fall
+                // through to the existing "LSP not initialized" error.
+                return nil
+            }
+            ```
+
+            Note: `config.inferWorkspaceRoot` is unexported, so it cannot be called from
+            `package main`. You will need to add an exported thin wrapper in
+            `internal/config/infer.go` OR call it through an exported adapter. The cleanest
+            approach is to add a single exported function in `internal/config/infer.go`:
+
+            ```go
+            // InferWorkspaceRoot is the exported entry point for inferWorkspaceRoot.
+            // See inferWorkspaceRoot for full documentation.
+            func InferWorkspaceRoot(filePath string) (root, languageID string, err error) {
+                return inferWorkspaceRoot(filePath)
+            }
+            ```
+
+            Then call `config.InferWorkspaceRoot(filePath)` in `autoInitClient`.
+
+            IMPORTANT: Coordinate with Agent A — Agent A owns `internal/config/infer.go`.
+            Since Agent A works in Wave 1 and you work in Wave 2, Agent A's file will be
+            merged before your wave begins. You must add the `InferWorkspaceRoot` exported
+            wrapper to `internal/config/infer.go` as part of YOUR wave 2 work (i.e., edit
+            that file to add the export). Agent A left only the unexported function.
+
+            ### Step 3: Update `clientForFile` to call `autoInitClient`
+
+            The current `clientForFile` function (lines 109-116 in server.go):
+            ```go
+            func clientForFile(resolver lsp.ClientResolver, cs *clientState, filePath string) *lsp.LSPClient {
+            	if filePath != "" {
+            		if c := resolver.ClientForFile(filePath); c != nil {
+            			return c
+            		}
+            	}
+            	return cs.get()
+            }
+            ```
+
+            This function is called from inside the `Run` closure, but `autoInitClient`
+            needs `initMu` which lives inside `Run`. Instead of changing `clientForFile`
+            (which is a package-level function that doesn't have access to `initMu`),
+            introduce a new closure `clientForFileWithAutoInit` inside `Run`, immediately
+            after the `var initMu sync.Mutex` line:
+
+            ```go
+            // clientForFileWithAutoInit extends clientForFile with auto-init behavior.
+            // If the resolver returns no client for filePath, attempt auto-initialization.
+            clientForFileWithAutoInit := func(filePath string) *lsp.LSPClient {
+                if c := clientForFile(resolver, cs, filePath); c != nil {
+                    return c
+                }
+                return autoInitClient(ctx, resolver, cs, &initMu, filePath)
+            }
+            ```
+
+            Then replace every call to `clientForFile(resolver, cs, args.FilePath)` inside
+            the tool handlers with `clientForFileWithAutoInit(args.FilePath)`.
+
+            Tools that have a `file_path` argument (replace these):
+            - `open_document` handler: `clientForFile(resolver, cs, args.FilePath)`
+            - `close_document` handler: `clientForFile(resolver, cs, args.FilePath)`
+            - `get_diagnostics` handler: `clientForFile(resolver, cs, args.FilePath)`
+            - `get_info_on_location` handler: `clientForFile(resolver, cs, args.FilePath)`
+            - `get_completions` handler: `clientForFile(resolver, cs, args.FilePath)`
+            - `get_signature_help` handler: `clientForFile(resolver, cs, args.FilePath)`
+            - `get_code_actions` handler: `clientForFile(resolver, cs, args.FilePath)`
+            - `get_document_symbols` handler: `clientForFile(resolver, cs, args.FilePath)`
+            - `get_references` handler: `clientForFile(resolver, cs, args.FilePath)`
+            - `go_to_definition` handler: `clientForFile(resolver, cs, args.FilePath)`
+            - `go_to_type_definition` handler: `clientForFile(resolver, cs, args.FilePath)`
+            - `go_to_implementation` handler: `clientForFile(resolver, cs, args.FilePath)`
+            - `go_to_declaration` handler: `clientForFile(resolver, cs, args.FilePath)`
+            - symbol-refactor handler: `clientForFile(resolver, cs, args.FilePath)`
+            - prepare-refactor handler: `clientForFile(resolver, cs, args.FilePath)`
+            - `format_document` handler: `clientForFile(resolver, cs, args.FilePath)`
+            - `format_range` handler: `clientForFile(resolver, cs, args.FilePath)`
+            - `call_hierarchy` handler — currently calls `cs.get()` directly; this tool
+              DOES have `file_path`, so switch to `clientForFileWithAutoInit(args.FilePath)`.
+            - `get_semantic_tokens` handler — currently calls `cs.get()` directly; this
+              tool DOES have `file_path`, so switch to `clientForFileWithAutoInit(args.FilePath)`.
+
+            Tools that do NOT have a `file_path` (leave these using `cs.get()` or keep as-is):
+            - `get_workspace_symbols` — no file_path, uses cs.get() — leave unchanged
+            - `apply_edit` — no file_path, uses cs.get() — leave unchanged
+            - `execute_command` — no file_path, uses cs.get() — leave unchanged
+            - `did_change_watched_files` — no file_path, uses cs.get() — leave unchanged
+            - `set_log_level` — no file_path, uses cs.get() — leave unchanged
+
+            ### Step 4: Add required import
+
+            Add `"github.com/blackwell-systems/lsp-mcp-go/internal/config"` to the import
+            block in `server.go` if it is not already present. Check the existing import
+            block — config is NOT currently imported in server.go.
+
+            Also verify `"fmt"` and `"strings"` are already imported (they are: strings
+            is imported, fmt is not currently imported in server.go — add it).
+
+            Current imports in server.go:
+            ```go
+            import (
+            	"context"
+            	"encoding/json"
+            	"strings"
+            	"sync"
+
+            	"github.com/blackwell-systems/lsp-mcp-go/internal/extensions"
+            	"github.com/blackwell-systems/lsp-mcp-go/internal/lsp"
+            	"github.com/blackwell-systems/lsp-mcp-go/internal/logging"
+            	"github.com/blackwell-systems/lsp-mcp-go/internal/resources"
+            	"github.com/blackwell-systems/lsp-mcp-go/internal/session"
+            	"github.com/blackwell-systems/lsp-mcp-go/internal/tools"
+            	"github.com/blackwell-systems/lsp-mcp-go/internal/types"
+            	"github.com/modelcontextprotocol/go-sdk/mcp"
+            )
+            ```
+
+            Add `"fmt"` (stdlib) and `"github.com/blackwell-systems/lsp-mcp-go/internal/config"`.
+
+            ## Interfaces from IMPL doc
+            - `config.InferWorkspaceRoot(filePath string) (root, languageID string, err error)`
+              — exported wrapper you add to `internal/config/infer.go` (Wave 1 file)
+            - `lsp.ServerManager.StartAll(ctx context.Context, rootDir string) error`
+              — already exists; `*lsp.ServerManager` type assertion is correct
+            - `cs.get() *lsp.LSPClient` — already exists on clientState
+            - `cs.set(c *lsp.LSPClient)` — already exists on clientState
+            - `resolver.DefaultClient() *lsp.LSPClient` — already exists
+
+            ## Verification gate
+            ```bash
+            # Build
+            env GOWORK=off go build ./cmd/lsp-mcp-go/...
+
+            # Lint
+            env GOWORK=off go vet ./cmd/lsp-mcp-go/...
+
+            # Tests (no unit tests in cmd/lsp-mcp-go; verify the full suite passes)
+            env GOWORK=off go test ./internal/... ./cmd/... ./extensions/... .
+
+            # Postconditions
+            # (a) autoInitClient function is present:
+            grep -n "func autoInitClient" /Users/dayna.blackwell/workspace/code/LSP-MCP-GO/cmd/lsp-mcp-go/server.go
+            # Expected: one match
+
+            # (b) clientForFileWithAutoInit closure is present:
+            grep -n "clientForFileWithAutoInit" /Users/dayna.blackwell/workspace/code/LSP-MCP-GO/cmd/lsp-mcp-go/server.go
+            # Expected: >=2 lines (definition + at least one call)
+
+            # (c) config import added:
+            grep -n '"github.com/blackwell-systems/lsp-mcp-go/internal/config"' /Users/dayna.blackwell/workspace/code/LSP-MCP-GO/cmd/lsp-mcp-go/server.go
+            # Expected: 1 match
+
+            # (d) InferWorkspaceRoot exported wrapper exists:
+            grep -n "func InferWorkspaceRoot" /Users/dayna.blackwell/workspace/code/LSP-MCP-GO/internal/config/infer.go
+            # Expected: 1 match
+            ```
+
+            ## Constraints
+            - Do NOT modify any file outside your ownership list EXCEPT:
+              `internal/config/infer.go` — you must add the `InferWorkspaceRoot` exported
+              wrapper to this file (Agent A left only the unexported version).
+            - Do NOT modify `start_lsp` tool handler logic — explicit calls take full
+              precedence and already work correctly.
+            - Do NOT attempt auto-init for the `get_workspace_symbols`, `apply_edit`,
+              `execute_command`, `did_change_watched_files`, or `set_log_level` tools.
+            - Do NOT add unit tests to `cmd/lsp-mcp-go/` — no test infrastructure exists
+              there; the existing integration test coverage is sufficient.
+            - The `autoInitClient` function must be at package level (not inside `Run`),
+              but `clientForFileWithAutoInit` must be a closure inside `Run` so it captures
+              `initMu`, `resolver`, `cs`, and `ctx`.
+          files:
+            - cmd/lsp-mcp-go/server.go
+            - internal/config/infer.go
+          dependencies:
+            - A
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: env GOWORK=off go build ./...
+          required: true
+          repo: LSP-MCP-GO
+        - type: lint
+          command: env GOWORK=off go vet ./...
+          required: true
+          repo: LSP-MCP-GO
+        - type: test
+          command: env GOWORK=off go test ./internal/... ./cmd/... ./extensions/... .
+          required: true
+          repo: LSP-MCP-GO
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: |
+            Agent B cannot call config.inferWorkspaceRoot because it is unexported.
+            Agent B may attempt to duplicate the logic or cause a compilation error.
+          likelihood: high
+          impact: medium
+          mitigation: |
+            Agent B's task explicitly instructs adding an exported InferWorkspaceRoot
+            wrapper to internal/config/infer.go (which Agent A created in Wave 1).
+            Agent B owns infer.go in Wave 2 ownership for this exact addition.
+        - scenario: |
+            Concurrent tool calls both reach autoInitClient and race to call StartAll,
+            causing a double-init or a use-after-free on the LSPClient process.
+          likelihood: medium
+          impact: high
+          mitigation: |
+            The autoInitClient implementation uses a double-checked locking pattern
+            with initMu (sync.Mutex). Only one goroutine calls StartAll; others wait
+            and then return the initialized client. The design is explicitly specified
+            in the interface contract.
+        - scenario: |
+            call_hierarchy and get_semantic_tokens currently use cs.get() directly
+            (not clientForFile). Agent B may miss switching these two tools, leaving
+            them without auto-init even though they have file_path arguments.
+          likelihood: medium
+          impact: low
+          mitigation: |
+            Agent B's task explicitly calls out these two tools by name as requiring
+            the switch to clientForFileWithAutoInit, with a note that they "currently
+            call cs.get() directly".
+        - scenario: |
+            strings.HasPrefix path comparison incorrectly rejects a valid file when
+            rootDir ends in "/" or the file path uses a different form of the same path.
+          likelihood: low
+          impact: low
+          mitigation: |
+            The containment check uses `rootDir + "/"` as the prefix which is standard
+            practice for absolute path containment. Edge case: file IS the root dir itself
+            (rootDir == filePath). This edge case falls through to re-init, which is
+            harmless since StartAll is idempotent within a session.
+state: "REVIEWED"
+injection_method: hook
