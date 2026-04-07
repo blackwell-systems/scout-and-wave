@@ -4,3 +4,4 @@
 .saw-agent-brief.md
 docs/IMPL/.saw-state/
 *.bak
+.serena/
