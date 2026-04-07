@@ -21,7 +21,7 @@ set -euo pipefail
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROMPTS_DIR="${REPO_DIR}/implementations/claude-code/prompts"
 HOOKS_DIR="${REPO_DIR}/implementations/claude-code/hooks"
-BIN_DIR="${HOME}/.local/bin"
+BIN_DIR="${HOME}/.claude/agents/hooks"
 
 # Hook script names (universal — same scripts work on any platform)
 HOOK_SCRIPTS=(
@@ -107,7 +107,7 @@ install_skill_files() {
 
 # Phase 2: Symlink hook scripts to ~/.local/bin
 install_hook_scripts() {
-  echo "2. Symlinking hook scripts to ${BIN_DIR}..."
+  echo "2. Symlinking hook scripts to ${BIN_DIR} (~/.claude/agents/hooks/)..."
   mkdir -p "${BIN_DIR}"
 
   local ok=0 warn=0
@@ -287,6 +287,7 @@ install_claude_code() {
   add_hook "PreToolUse" "Write|Edit|Bash" "${BIN_DIR}/block_claire_paths" ".claire path blocker"
   add_hook "PreToolUse" "Write|Edit|NotebookEdit" "${BIN_DIR}/check_wave_ownership" "I1 file ownership"
   add_hook "PreToolUse" "Agent" "${BIN_DIR}/validate_agent_launch" "H5 pre-launch validation"
+  add_hook "PreToolUse" "Agent" "${BIN_DIR}/auto_format_saw_agent_names" "E44 agent name formatting"
   add_hook "PreToolUse" "Bash" "${BIN_DIR}/inject_bash_cd" "E43 Bash cd injection"
   add_hook "PreToolUse" "Write|Edit" "${BIN_DIR}/validate_write_paths" "E43 Write path validation"
   add_hook "PreToolUse" "Bash" "${BIN_DIR}/block_git_stash" "I5 no-stash enforcement"
@@ -456,7 +457,7 @@ install_generic() {
   echo "Installation complete (generic)."
   echo ""
   echo "Skill files: ${skill_dir}/"
-  echo "Hook scripts: ${BIN_DIR}/"
+  echo "Hook scripts: ${BIN_DIR}/  (~/.claude/agents/hooks/)"
   echo ""
   echo "Hook registration is platform-specific. You need to register the hooks"
   echo "in your agent platform's configuration. The hook scripts in ${BIN_DIR}/"

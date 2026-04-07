@@ -1,3 +1,4 @@
+completion_date: "2026-04-07"
 title: LSP-MCP-Go Audit Fixes
 feature_slug: lsp-mcp-go-audit-fixes
 verdict: SUITABLE
@@ -990,6 +991,7 @@ waves:
             - docs/architecture.md
           dependencies:
             - D
+      base_commit: 955cec3b8d27e84af6aa9ae093d32b5056fc84d0
     - number: 3
       agents:
         - id: B
@@ -1541,6 +1543,7 @@ waves:
           dependencies:
             - A
             - D
+      base_commit: 3800af57891d5d7d3d0c38fa82244d5c4be52b66
 quality_gates:
     level: standard
     gates:
@@ -1557,6 +1560,33 @@ quality_gates:
           required: true
           repo: LSP-MCP-GO
 completion_reports:
+    A:
+        status: complete
+        branch: saw/lsp-mcp-go-audit-fixes/wave2-agent-A
+        commit: 86f772d
+        files_changed:
+            - internal/session/types.go
+            - internal/session/manager.go
+        verification: PASS
+        notes: 'All 5 tasks complete. SetStatus: 6 uses, 0 direct mutations remain. OriginalContents field added and populated in ApplyEdit baseline branch. Discard reverts from snapshot. Commit propagates LSP error via MarkDirty. uriToPath uses url.Parse. StatusTimedOut and ConfidenceStale constants removed. All tests pass (env GOWORK=off go test ./internal/... ./cmd/... ./extensions/... .).'
+    B:
+        status: complete
+        branch: saw/lsp-mcp-go-audit-fixes/wave3-agent-B
+        commit: af592eb
+        files_changed:
+            - internal/tools/workspace.go
+            - internal/tools/session.go
+            - internal/tools/simulation.go
+        verification: PASS
+        notes: 'Three bugs fixed: (1) execute_command key changed from ''args'' to ''arguments'' in workspace.go; (2) ValidateFilePath added to HandleOpenDocument in session.go; (3) All 8 silent json.Marshal discards in simulation.go replaced with explicit mErr checks. All postconditions verified. Full test suite passes.'
+    C:
+        status: complete
+        branch: saw/lsp-mcp-go-audit-fixes/wave3-agent-C
+        commit: 9b33eba
+        files_changed:
+            - cmd/lsp-mcp-go/server.go
+        verification: PASS
+        notes: clientForFile now delegates to resolver.ClientForFile for extension-based routing, falling back to cs.get() when filePath is empty or resolver returns nil. Build, vet, and all tests pass.
     D:
         status: complete
         branch: saw/lsp-mcp-go-audit-fixes/wave1-agent-D
@@ -1567,6 +1597,32 @@ completion_reports:
             - internal/lsp/manager.go
         verification: PASS
         notes: 'All 6 tasks complete. applyEdit error propagation fixed, rootURI encoding fixed, applyDocumentChanges helper extracted, bare file:// concats replaced in resources.go, parseResourceQueryParams helper extracted, Shutdown uses errors.Join. Worktree: /Users/dayna.blackwell/workspace/code/LSP-MCP-GO/.claude/worktrees/saw/lsp-mcp-go-audit-fixes/wave1-agent-D. Downstream agents A/B/C/F depend on this wave.'
+    E:
+        status: complete
+        branch: saw/lsp-mcp-go-audit-fixes/wave3-agent-E
+        commit: 741d55c
+        files_changed:
+            - internal/session/manager_test.go
+        tests_added:
+            - TestEvaluate_InvalidStatus
+            - TestCommit_InvalidStatus
+            - TestCommit_ApplyFalse_BuildsPatch
+            - TestDiscard_TerminalSessionBlocked
+            - TestDiscard_NoOriginalContents_Skips
+            - TestSimulateChain_EmptyEdits_ReturnsZero
+            - TestSetStatus_IsThreadSafe
+            - TestUriToPath_PercentDecoded
+        verification: PASS
+        notes: Added 8 new tests (16 total in file, up from 6 originals + 2 existing). All pass with -race. Full quality gate clean. Existing TestCreateSession_ReturnsID error message was already correct matching manager.go.
+    F:
+        status: complete
+        branch: saw/lsp-mcp-go-audit-fixes/wave2-agent-F
+        commit: d197354
+        files_changed:
+            - internal/types/types.go
+            - docs/architecture.md
+        verification: PASS
+        notes: 'Added doc comment to Extension interface in types.go. Updated architecture.md: corrected tool count from 24 to 34 and replaced 7-method Extension interface with 4-method implemented interface plus deferred note. All tests pass.'
 pre_mortem:
     overall_risk: low
     rows:
@@ -1666,5 +1722,5 @@ critic_report:
     summary: 'All six agents reviewed against the codebase. Every file existence check passes (all modify-action files exist). All named symbols are confirmed: ApplyWorkspaceEdit, uriToPath, RootDir(), ValidateFilePath, clientForFile, SimulationSession, SessionStatus constants, IsTerminal, MarkDirty, and ChainEdit all exist at the stated locations. Code patterns match — the hardcoded ''applied: true'' at client.go:288, the bare ''file://'' concatenations in resources.go at lines 91/152/205, the last-error-only pattern in manager.go Shutdown at lines 148-156, the args["args"] key at workspace.go:207, and the 8 silent json.Marshal discards in simulation.go all verify exactly as described. One advisory warning was found in Agent A''s brief: Task 2 header states ''replace all 5 direct session.Status = ... assignments'' but the task body lists 6 replacements and the verification gate says Expected: 6 — the count in the header is wrong, which could cause an agent reading it to stop at 5 and miss the Destroy StatusDestroyed assignment at line 406. All interface contracts are syntactically valid and the types they reference exist.'
     reviewed_at: "2026-04-07T03:46:11Z"
     issue_count: 1
-state: REVIEWED
+state: COMPLETE
 injection_method: hook
