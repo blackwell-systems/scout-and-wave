@@ -1,0 +1,1298 @@
+title: Contract Builder Phase
+feature_slug: contract-builder-phase
+repository: /Users/dayna.blackwell/workspace/code/scout-and-wave
+verdict: SUITABLE
+suitability_assessment: |-
+    **Verdict:** SUITABLE
+
+    The Contract Builder Phase spans all three repos (protocol, SDK, web) with clear file seams.
+    Work decomposes into 9 agents across 4 waves with disjoint ownership. Protocol agents (A, B, C)
+    write independently across distinct markdown files. SDK Agent D owns protocol types, Agent E
+    owns engine, Agent F owns the CLI command. Web agents G and I are sequenced because I (UI)
+    depends on H (API handler). The new E48 rule number is confirmed (last rule = E47, count = 53).
+
+    No investigation-first blockers. All interfaces can be defined before implementation starts.
+    Cross-agent type boundary: IntegrationHint and ContractBuilderResult are defined in a scaffold
+    before Wave 1 launches to prevent duplicate declarations.
+
+    Wave sequencing:
+    - Wave 1: A, B, C (protocol docs), D (SDK protocol types) — fully parallel, no deps
+    - Wave 2: E (engine, needs D), G (protocol saw-skill/execution-rules, needs A+C) — parallel
+    - Wave 3: F (CLI command, needs E), H (web API, needs E) — parallel, both depend on Wave 2 E
+    - Wave 4: I (web UI, needs H) — integration wave
+
+    **Estimated times:**
+    - Scout phase: ~25 min (three-repo analysis, interface contracts)
+    - Wave 1 execution: ~15 min (4 agents in parallel — protocol docs + SDK types)
+    - Wave 2 execution: ~15 min (2 agents in parallel — SDK engine + orchestrator protocol)
+    - Wave 3 execution: ~15 min (2 agents in parallel — CLI command + web API)
+    - Wave 4 execution: ~10 min (1 integration agent — web UI)
+    - Merge & verify: ~10 min
+    - Total (SAW): ~90 min
+    - Sequential baseline: ~180 min
+    - Time savings: ~90 min (~50% faster)
+
+    **Recommendation:** Proceed
+test_command: GOWORK=off go test ./...
+lint_command: GOWORK=off go vet ./...
+file_ownership:
+    - file: protocol/message-formats.md
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: implementations/claude-code/prompts/agent-template.md
+      agent: B
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: implementations/claude-code/prompts/agents/scout.md
+      agent: C
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: implementations/claude-code/prompts/agents/contract-builder.md
+      agent: C
+      wave: 1
+      action: new
+      repo: scout-and-wave
+    - file: pkg/protocol/contract_builder_types.go
+      agent: D
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/protocol/contract_builder_types_test.go
+      agent: D
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: pkg/protocol/types.go
+      agent: D
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/engine/contract_builder.go
+      agent: E
+      wave: 2
+      action: new
+      depends_on:
+        - D
+      repo: scout-and-wave-go
+    - file: pkg/engine/contract_builder_test.go
+      agent: E
+      wave: 2
+      action: new
+      depends_on:
+        - D
+      repo: scout-and-wave-go
+    - file: implementations/claude-code/prompts/saw-skill.md
+      agent: G
+      wave: 2
+      action: modify
+      depends_on:
+        - C
+      repo: scout-and-wave
+    - file: protocol/execution-rules.md
+      agent: G
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+      repo: scout-and-wave
+    - file: implementations/claude-code/prompts/references/pre-wave-validation.md
+      agent: G
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+      repo: scout-and-wave
+    - file: cmd/sawtools/contract_builder_cmd.go
+      agent: F
+      wave: 3
+      action: new
+      depends_on:
+        - E
+      repo: scout-and-wave-go
+    - file: cmd/sawtools/contract_builder_cmd_test.go
+      agent: F
+      wave: 3
+      action: new
+      depends_on:
+        - E
+      repo: scout-and-wave-go
+    - file: cmd/sawtools/root.go
+      agent: F
+      wave: 3
+      action: modify
+      depends_on:
+        - E
+      repo: scout-and-wave-go
+    - file: pkg/api/contract_builder_handler.go
+      agent: H
+      wave: 3
+      action: new
+      depends_on:
+        - E
+      repo: scout-and-wave-web
+    - file: pkg/api/contract_builder_handler_test.go
+      agent: H
+      wave: 3
+      action: new
+      depends_on:
+        - E
+      repo: scout-and-wave-web
+    - file: pkg/api/server.go
+      agent: H
+      wave: 3
+      action: modify
+      depends_on:
+        - E
+      repo: scout-and-wave-web
+    - file: pkg/api/notification_types.go
+      agent: H
+      wave: 3
+      action: modify
+      depends_on:
+        - E
+      repo: scout-and-wave-web
+    - file: web/src/components/wave/ContractBuilderCard.tsx
+      agent: I
+      wave: 4
+      action: new
+      depends_on:
+        - H
+      repo: scout-and-wave-web
+    - file: web/src/components/WaveBoard.tsx
+      agent: I
+      wave: 4
+      action: modify
+      depends_on:
+        - H
+      repo: scout-and-wave-web
+interface_contracts:
+    - name: IntegrationHint
+      description: |-
+        Structured cross-agent boundary hint emitted by Scout in the IMPL doc.
+        Describes the caller side, callee side, and inferred type signature of a
+        cross-agent API boundary. Consumed by the Contract Builder agent.
+      definition: |-
+        type IntegrationHint struct {
+          HintID            string `yaml:"hint_id" json:"hint_id"`
+          CallerAgent       string `yaml:"caller_agent" json:"caller_agent"`
+          CalleeAgent       string `yaml:"callee_agent" json:"callee_agent"`
+          CallSiteFile      string `yaml:"call_site_file" json:"call_site_file"`
+          CallSiteLine      int    `yaml:"call_site_line,omitempty" json:"call_site_line,omitempty"`
+          InferredSignature string `yaml:"inferred_signature" json:"inferred_signature"`
+          HintType          string `yaml:"hint_type" json:"hint_type"` // "function"|"interface"|"event"|"error"
+        }
+      location: pkg/protocol/contract_builder_types.go
+    - name: ContractBuilderResult
+      description: |-
+        Records the outcome of a Contract Builder phase run. Written to the IMPL
+        doc under contract_builder_result field. Read by the Orchestrator to determine
+        whether to proceed to Wave preparation.
+      definition: |-
+        type ContractBuilderResult struct {
+          Status           string   `yaml:"status" json:"status"` // "complete"|"partial"|"failed"
+          ContractsEmitted []string `yaml:"contracts_emitted,omitempty" json:"contracts_emitted,omitempty"`
+          HintsResolved    int      `yaml:"hints_resolved" json:"hints_resolved"`
+          HintsTotal       int      `yaml:"hints_total" json:"hints_total"`
+          CommitSHA        string   `yaml:"commit_sha,omitempty" json:"commit_sha,omitempty"`
+          FailureReason    string   `yaml:"failure_reason,omitempty" json:"failure_reason,omitempty"`
+          Timestamp        string   `yaml:"timestamp,omitempty" json:"timestamp,omitempty"`
+        }
+      location: pkg/protocol/contract_builder_types.go
+    - name: ContractBuilderData
+      description: |-
+        Return payload from RunContractBuilder. Matches pattern of ScaffoldData in
+        pkg/engine/runner_data_types.go.
+      definition: |-
+        type ContractBuilderData struct {
+          IMPLPath      string `json:"impl_path"`
+          HintsFound    int    `json:"hints_found"`
+          HintsResolved int    `json:"hints_resolved"`
+        }
+      location: pkg/protocol/contract_builder_types.go
+    - name: IMPLManifest.IntegrationHints
+      description: |-
+        New field on IMPLManifest: IntegrationHints and ContractBuilderResult.
+        Written by Scout (hints) and Contract Builder agent (result). Both optional.
+      definition: |-
+        // Add to IMPLManifest struct in pkg/protocol/types.go, after InterfaceContracts field:
+        IntegrationHints      []IntegrationHint          `yaml:"integration_hints,omitempty" json:"integration_hints,omitempty"`
+        ContractBuilderResult *ContractBuilderResult     `yaml:"contract_builder_result,omitempty" json:"contract_builder_result,omitempty"`
+      location: pkg/protocol/types.go
+    - name: RunContractBuilder
+      description: |-
+        Engine-level function that launches the Contract Builder agent. Reads
+        integration_hints from the IMPL doc, runs the agent, and updates
+        contract_builder_result in the IMPL doc. Pattern matches RunScaffold.
+      definition: |-
+        type RunContractBuilderOpts struct {
+          Ctx         context.Context
+          ImplPath    string
+          RepoPath    string
+          SAWRepoPath string
+          Model       string
+          OnEvent     func(Event)
+        }
+
+        func RunContractBuilder(opts RunContractBuilderOpts) result.Result[protocol.ContractBuilderData]
+      location: pkg/engine/contract_builder.go
+    - name: handleContractBuilderRun
+      description: |-
+        HTTP handler for POST /api/impl/{slug}/contract-builder. Pattern matches
+        handleScaffoldRerun in scaffold_handler.go.
+      definition: |-
+        type ContractBuilderRunResponse struct {
+          RunID string `json:"run_id"`
+        }
+
+        func (s *Server) handleContractBuilderRun(w http.ResponseWriter, r *http.Request)
+      location: pkg/api/contract_builder_handler.go
+    - name: SSE events for Contract Builder
+      description: |-
+        SSE events published to the wave broker during Contract Builder execution.
+        Consumed by the WaveBoard ContractBuilderCard component.
+      definition: |-
+        // contract_builder_started — payload: {impl_path string, hints_count int}
+        // contract_builder_progress — payload: {chunk string}
+        // contract_builder_complete — payload: {impl_path string, hints_resolved int, commit_sha string}
+        // contract_builder_failed — payload: {impl_path string, error string}
+        // contract_builder_cancelled — payload: {run_id string, slug string}
+      location: pkg/api/contract_builder_handler.go
+    - name: ContractBuilderCard
+      description: React component displayed in WaveBoard alongside ScaffoldCard.
+      definition: |-
+        interface ContractBuilderCardProps {
+          status: 'idle' | 'running' | 'complete' | 'failed'
+          hintsCount: number
+          hintsResolved: number
+          output: string
+          error?: string
+        }
+
+        export default function ContractBuilderCard(props: ContractBuilderCardProps): JSX.Element
+      location: web/src/components/wave/ContractBuilderCard.tsx
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |-
+            ## Wave 1 Agent A: Protocol — message-formats.md
+
+            Add the integration_hints section schema and contract_builder_result field to
+            `protocol/message-formats.md` in `/Users/dayna.blackwell/workspace/code/scout-and-wave`.
+
+            ### What to implement
+
+            **1.** Add the integration_hints root-level field to the YAML Manifest Structure section.
+            Find the exact text:
+
+            ```
+              integration_pattern: "register"  # append | register | inject | call
+            ```
+
+            After it, add the integration_hints YAML example (below):
+
+            ```yaml
+            integration_hints:  # optional - cross-agent call boundary hints emitted by Scout (E48)
+              - hint_id: "hint-001"
+                caller_agent: "A"
+                callee_agent: "B"
+                call_site_file: "pkg/handler/handler.go"
+                call_site_line: 42
+                inferred_signature: "func Parse(data []byte) (Result, error)"
+                hint_type: "function"  # "function"|"interface"|"event"|"error"
+
+            contract_builder_result:  # optional — written by Contract Builder agent (E48)
+              status: "complete"      # "complete" | "partial" | "failed"
+              contracts_emitted: ["pkg/contracts/parse_contract.go"]
+              hints_resolved: 3
+              hints_total: 3
+              commit_sha: "abc1234"
+            ```
+
+            **2.** Add a new `impl-integration-hints` typed block description to the Block Types
+            subsection. Place it after the `impl-known-issues` block description. Add:
+
+            ```markdown
+            **`impl-integration-hints` — Integration Hints (written by Scout, E48):**
+
+            Written by Scout when cross-agent call boundaries are detected during Step 5 (interface
+            contracts). Read by the Contract Builder agent before Wave agents launch. When empty or
+            absent, the Contract Builder phase is skipped.
+
+            ```yaml type=impl-integration-hints
+            - hint_id: hint-001
+              caller_agent: A
+              callee_agent: B
+              call_site_file: pkg/handler/handler.go
+              call_site_line: 42
+              inferred_signature: "func Parse(data []byte) (Result, error)"
+              hint_type: function
+            ```
+            ```
+
+            **3.** Update the Message Flow Sequence step 3. Find:
+
+            ```
+            3. **Scaffold Agent → IMPL doc:** Updates Scaffolds section Status column with commit SHAs or FAILED
+            ```
+
+            Replace with:
+
+            ```
+            3. **Contract Builder Agent → IMPL doc:** (E48, conditional) If integration_hints present, produces typed contract stubs committed to HEAD, writes contract_builder_result.
+            3a. **Scaffold Agent → IMPL doc:** Updates Scaffolds section Status column with commit SHAs or FAILED
+            ```
+
+            ### Verification gate
+
+            ```bash
+            grep -c "integration_hints" /Users/dayna.blackwell/workspace/code/scout-and-wave/protocol/message-formats.md
+            # Expected: >= 3
+
+            grep -c "contract_builder_result" /Users/dayna.blackwell/workspace/code/scout-and-wave/protocol/message-formats.md
+            # Expected: >= 1
+            ```
+
+            ### Constraints
+            - Do NOT modify any other protocol files.
+            - Do NOT change existing typed block schemas.
+          files:
+            - protocol/message-formats.md
+        - id: B
+          task: |-
+            ## Wave 1 Agent B: Protocol — agent-template.md Field 10
+
+            Add Field 10 (relevant_contracts) to
+            `implementations/claude-code/prompts/agent-template.md` in
+            `/Users/dayna.blackwell/workspace/code/scout-and-wave`.
+
+            ### What to implement
+
+            **1.** After the Field 8 (Report) section ends, add:
+
+            ```markdown
+            ## 10. Relevant Contracts (optional — present only when Contract Builder phase ran)
+
+            If the IMPL doc has a non-empty contract_builder_result field (status: complete),
+            the following contract stubs were produced for boundaries relevant to your work.
+            Import these types from the paths shown — do not redefine them.
+
+            {list of committed contract files relevant to this agent, with import paths}
+
+            If this section is empty or absent, no contract stubs were produced. Infer types
+            from the interface contracts in Field 2/3 as usual.
+            ```
+
+            **2.** Update the field summary table (find the `| **8. Report** |` row and add after):
+
+            ```
+            | **10. Relevant Contracts** | Contract stubs from Contract Builder phase (optional) | Pre-built type contracts for this agent's boundaries |
+            ```
+
+            ### Verification gate
+
+            ```bash
+            grep -c "Relevant Contracts" /Users/dayna.blackwell/workspace/code/scout-and-wave/implementations/claude-code/prompts/agent-template.md
+            # Expected: >= 2
+            ```
+
+            ### Constraints
+            - Do NOT modify any other protocol files.
+            - Field numbering: use 10 (9 is reserved for future use).
+          files:
+            - implementations/claude-code/prompts/agent-template.md
+        - id: C
+          task: |-
+            ## Wave 1 Agent C: Protocol — scout.md + contract-builder.md
+
+            Two tasks in `/Users/dayna.blackwell/workspace/code/scout-and-wave`:
+            1. Update `implementations/claude-code/prompts/agents/scout.md` to emit integration_hints.
+            2. Create `implementations/claude-code/prompts/agents/contract-builder.md`.
+
+            ### Task 1: Update scout.md
+
+            In `scout.md`, find this exact text (the start of step 5):
+
+            ```
+            5. **Define interface contracts.** For every function, method, or type that
+               will be called across agent boundaries, write the exact signature.
+            ```
+
+            After the full step 5 paragraph text ends (find the blank line before step 6), insert:
+
+            ```markdown
+            **Integration hints (cross-agent call detection):** After defining interface contracts,
+            scan for cross-agent call sites beyond type contracts: cases where agent A calls a
+            function owned by agent B. For each such boundary, emit a structured `IntegrationHint`
+            in the IMPL doc's `integration_hints:` list:
+
+            ```yaml
+            integration_hints:
+              - hint_id: "hint-{N:03d}"    # sequential: hint-001, hint-002, ...
+                caller_agent: "A"
+                callee_agent: "B"
+                call_site_file: "pkg/handler/handler.go"
+                call_site_line: 0           # 0 if not yet known
+                inferred_signature: "func Parse(data []byte) (Result, error)"
+                hint_type: "function"       # "function"|"interface"|"event"|"error"
+            ```
+
+            Emit hints only for boundaries where the signature is NOT already a full
+            `interface_contracts` entry AND the caller file is in a different agent's ownership.
+            If no such boundaries exist, omit the integration_hints section entirely (no-op path).
+            ```
+
+            ### Task 2: Create contract-builder.md
+
+            Create `implementations/claude-code/prompts/agents/contract-builder.md`. Read
+            `scaffold-agent.md` in the same directory first for the exact structure to follow.
+
+            The file must begin with YAML frontmatter:
+
+            ```yaml
+            ---
+            name: contract-builder
+            description: Scout-and-Wave Contract Builder agent that reads integration_hints from
+              the IMPL doc and produces typed contract stubs (Go interfaces, TypeScript types)
+              committed to HEAD before Wave agents launch. Ensures precise, LSP-verifiable
+              contracts at each cross-agent boundary. Never implements logic — only interface stubs.
+            tools: Read, Write, Bash, LSP
+            color: purple
+            background: true
+            ---
+            ```
+
+            After the frontmatter, write the agent body with these sections:
+
+            - **Step 0: Repository context** — derive repo root from IMPL doc path (same as scaffold-agent.md)
+            - **Session context recovery** — same pattern as scaffold-agent.md
+            - **Your Task** — steps: read integration_hints; if empty exit successfully; LSP-verify
+              each inferred_signature; emit contract files per hint type; run `go build ./pkg/contracts/...`
+              or equivalent; commit with `SAW_ALLOW_MAIN_COMMIT=1`; write contract_builder_result to IMPL doc
+            - **Output format** — how to write contract_builder_result (status, contracts_emitted,
+              hints_resolved, hints_total, commit_sha, timestamp)
+            - **Commit message format** — `contracts: add [N] contract stubs for [slug]`
+            - **Rules** — only create files for hints; LSP verify before emitting; no implementation
+              logic; all stubs must compile; use SAW_ALLOW_MAIN_COMMIT=1
+
+            ### Verification gate
+
+            ```bash
+            grep -c "integration_hints" /Users/dayna.blackwell/workspace/code/scout-and-wave/implementations/claude-code/prompts/agents/scout.md
+            # Expected: >= 1
+
+            test -f /Users/dayna.blackwell/workspace/code/scout-and-wave/implementations/claude-code/prompts/agents/contract-builder.md && echo "exists"
+            # Expected: exists
+
+            grep "^name: contract-builder" /Users/dayna.blackwell/workspace/code/scout-and-wave/implementations/claude-code/prompts/agents/contract-builder.md
+            # Expected: 1 match
+            ```
+
+            ### Constraints
+            - Do NOT modify `saw-skill.md` — Agent G's file in Wave 2.
+            - Do NOT modify `agent-template.md` — Agent B's file in Wave 1.
+            - Do NOT modify `protocol/message-formats.md` — Agent A's file in Wave 1.
+          files:
+            - implementations/claude-code/prompts/agents/scout.md
+            - implementations/claude-code/prompts/agents/contract-builder.md
+        - id: D
+          task: |-
+            ## Wave 1 Agent D: SDK Protocol Types (scout-and-wave-go)
+
+            Add protocol types for the Contract Builder phase. Working directory:
+            `/Users/dayna.blackwell/code/scout-and-wave-go`.
+
+            ### Files to modify/create
+
+            - `pkg/protocol/contract_builder_types.go` — the scaffold already created this file
+              with `IntegrationHint`, `ContractBuilderResult`, and `ContractBuilderData` stubs.
+              Read it first and verify/complete it.
+            - `pkg/protocol/contract_builder_types_test.go` — create with round-trip tests.
+            - `pkg/protocol/types.go` — add two new fields to `IMPLManifest` struct.
+
+            ### What to implement
+
+            **1. Complete `pkg/protocol/contract_builder_types.go`**
+
+            The scaffold created this file. Read it. It should contain `IntegrationHint`,
+            `ContractBuilderResult`, and `ContractBuilderData`. Verify all three are present
+            and have the correct field names and types matching the interface contracts above.
+            Add `package protocol` declaration and any missing imports. Do NOT add function bodies.
+
+            **2. Modify `pkg/protocol/types.go` — add fields to IMPLManifest**
+
+            Find the `IMPLManifest` struct. Locate this exact field:
+
+            ```go
+            	InterfaceContracts    []InterfaceContract            `yaml:"interface_contracts" json:"interface_contracts"`
+            ```
+
+            After it, add:
+
+            ```go
+            	// IntegrationHints are cross-agent call boundary hints emitted by Scout (E48).
+            	// The Contract Builder agent reads these and produces typed contract stubs.
+            	IntegrationHints      []IntegrationHint              `yaml:"integration_hints,omitempty" json:"integration_hints,omitempty"`
+            	// ContractBuilderResult records the outcome of the Contract Builder phase run.
+            	ContractBuilderResult *ContractBuilderResult         `yaml:"contract_builder_result,omitempty" json:"contract_builder_result,omitempty"`
+            ```
+
+            **3. Create `pkg/protocol/contract_builder_types_test.go`**
+
+            ```go
+            package protocol_test
+
+            import (
+              "testing"
+              "gopkg.in/yaml.v3"
+            )
+
+            func TestIntegrationHint_RoundTrip(t *testing.T) { ... }
+            func TestContractBuilderResult_RoundTrip(t *testing.T) { ... }
+            func TestIMPLManifest_IntegrationHints_Serialization(t *testing.T) { ... }
+            ```
+
+            Tests verify YAML marshal/unmarshal preserves all fields. The manifest test verifies
+            that an IMPLManifest with integration_hints serializes with the integration_hints key.
+
+            ### Verification gate
+
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go
+            GOWORK=off go build ./pkg/protocol/...
+            GOWORK=off go vet ./pkg/protocol/...
+            GOWORK=off go test ./pkg/protocol/... -run "TestIntegrationHint|TestContractBuilder" -v
+            ```
+
+            ### Postcondition checks
+
+            ```bash
+            grep -c "IntegrationHints\|ContractBuilderResult" /Users/dayna.blackwell/code/scout-and-wave-go/pkg/protocol/types.go
+            # Expected: 2
+
+            grep -c "IntegrationHint\b" /Users/dayna.blackwell/code/scout-and-wave-go/pkg/protocol/contract_builder_types.go
+            # Expected: >= 2
+            ```
+
+            ### Constraints
+            - Do NOT modify `pkg/engine/` files — Agent E's wave 2 responsibility.
+            - Do NOT modify existing `InterfaceContract` type — only ADD new fields to `IMPLManifest`.
+            - The scaffold file already exists; read it first, do NOT recreate it from scratch.
+          files:
+            - pkg/protocol/contract_builder_types.go
+            - pkg/protocol/contract_builder_types_test.go
+            - pkg/protocol/types.go
+    - number: 2
+      agents:
+        - id: E
+          task: |-
+            ## Wave 2 Agent E: SDK Engine (scout-and-wave-go)
+
+            Implement `pkg/engine/contract_builder.go`. Working directory:
+            `/Users/dayna.blackwell/code/scout-and-wave-go`.
+
+            ### What to implement
+
+            **`pkg/engine/contract_builder.go`** — mirror the pattern of `RunScaffold` in `runner.go`.
+            Read `runner.go` lines 546-640 and `runner_scaffold_opts.go` before writing.
+
+            ```go
+            package engine
+
+            // RunContractBuilderOpts holds parameters for RunContractBuilder.
+            type RunContractBuilderOpts struct {
+              Ctx         context.Context
+              ImplPath    string
+              RepoPath    string
+              SAWRepoPath string
+              Model       string
+              OnEvent     func(Event)
+            }
+
+            // RunContractBuilder reads integration_hints from the IMPL doc and launches
+            // the Contract Builder agent if hints are present. Returns a successful no-op
+            // when no hints are present. Writes contract_builder_result back to the manifest.
+            func RunContractBuilder(opts RunContractBuilderOpts) result.Result[protocol.ContractBuilderData]
+            ```
+
+            Implementation:
+            1. If `opts.ImplPath == ""` → return failure (CodeScaffoldRunFailed or define new code)
+            2. Load manifest via `protocol.Load(ctx, opts.ImplPath)`
+            3. If `len(manifest.IntegrationHints) == 0` → return `result.NewSuccess(protocol.ContractBuilderData{IMPLPath: opts.ImplPath})`
+            4. Locate `contract-builder.md` prompt via SAW_REPO env var (same as scaffold runner)
+            5. Publish `contract_builder_started` event: `struct{ IMPLPath string; HintsCount int }{...}`
+            6. Launch Contract Builder agent (same agent.Run pattern as scaffold in runner.go)
+            7. On failure: publish `contract_builder_failed`, return failure result
+            8. On success: publish `contract_builder_complete`, return `ContractBuilderData{...}`
+
+            **`pkg/engine/contract_builder_test.go`**
+
+            Tests:
+            - `TestRunContractBuilder_NoHints`: empty IntegrationHints → success, HintsFound=0
+            - `TestRunContractBuilder_MissingImplPath`: empty ImplPath → failure result
+            - `TestRunContractBuilder_EventsPublished`: verify started event fires when hints present
+
+            ### Interfaces to implement (from Wave 1, Agent D)
+
+            ```go
+            // Types are in pkg/protocol (Agent D):
+            protocol.IntegrationHint
+            protocol.ContractBuilderResult
+            protocol.ContractBuilderData
+            // manifest.IntegrationHints []protocol.IntegrationHint
+            // manifest.ContractBuilderResult *protocol.ContractBuilderResult
+            ```
+
+            ### Verification gate
+
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go
+            GOWORK=off go build ./pkg/engine/...
+            GOWORK=off go vet ./pkg/engine/...
+            GOWORK=off go test ./pkg/engine/... -run TestRunContractBuilder -v
+            ```
+
+            ### Postcondition checks
+
+            ```bash
+            grep -c "RunContractBuilder" /Users/dayna.blackwell/code/scout-and-wave-go/pkg/engine/contract_builder.go
+            # Expected: >= 2
+
+            grep -c "contract_builder_started\|contract_builder_complete\|contract_builder_failed" /Users/dayna.blackwell/code/scout-and-wave-go/pkg/engine/contract_builder.go
+            # Expected: 3
+            ```
+
+            ### Constraints
+            - Do NOT modify `runner.go`, `runner_scaffold_opts.go`, or any existing engine files.
+            - Do NOT define `RunContractBuilderOpts` in `engine.go` — define it in `contract_builder.go`.
+            - Do NOT modify `pkg/protocol/types.go` — that is Agent D's file (Wave 1).
+          files:
+            - pkg/engine/contract_builder.go
+            - pkg/engine/contract_builder_test.go
+          dependencies:
+            - D
+        - id: G
+          task: |-
+            ## Wave 2 Agent G: Protocol Orchestrator — saw-skill.md + execution-rules.md + pre-wave-validation.md
+
+            Wire Contract Builder into Orchestrator flow. Working directory:
+            `/Users/dayna.blackwell/workspace/code/scout-and-wave`.
+
+            ### Task 1: Update saw-skill.md
+
+            In `implementations/claude-code/prompts/saw-skill.md`, add Contract Builder step.
+            Find this exact line in the Scout flow section:
+
+            ```
+            6. **Scaffold Agent (conditional):** If Scaffolds has Status: pending, launch Scaffold Agent. If FAILED, stop. If committed, proceed.
+            ```
+
+            After it, insert:
+
+            ```
+            6a. **Contract Builder (conditional, E48):** If IMPL doc has non-empty integration_hints list, launch Contract Builder agent:
+                ```
+                Agent(
+                  subagent_type=contract-builder,
+                  run_in_background=true,
+                  description="[SAW:contract-builder:<slug>] build typed contracts — <IMPL doc path>",
+                  prompt="<IMPL doc path>\n<repo root path>"
+                )
+                ```
+                Wait for completion. Read `contract_builder_result.status` from IMPL doc.
+                - complete: proceed to Wave execution
+                - partial or failed: surface failure to human; do not proceed to Wave execution
+                If integration_hints is empty or absent, skip entirely.
+            ```
+
+            Also update the YAML frontmatter `allowed-tools` line. Find:
+
+            ```
+              Agent(subagent_type=scaffold-agent), Agent(subagent_type=integration-agent),
+            ```
+
+            Replace with:
+
+            ```
+              Agent(subagent_type=scaffold-agent), Agent(subagent_type=contract-builder),
+              Agent(subagent_type=integration-agent),
+            ```
+
+            ### Task 2: Add E48 to execution-rules.md
+
+            The last rule is E47 (verified: 53 total `## E{N}` headings). Add E48 at the end of
+            the file, after the complete E47 section. Append:
+
+            ```markdown
+            ## E48: Contract Builder Phase
+
+            **Trigger:** Scout produced an IMPL doc with a non-empty integration_hints section.
+
+            **Required Action:** Before launching Scaffold Agent (or Wave agents if no scaffolds),
+            the Orchestrator MUST launch the Contract Builder agent. Contract Builder reads
+            integration_hints, produces typed contract stubs committed to HEAD, and writes
+            contract_builder_result to the IMPL doc.
+
+            **When to skip:** integration_hints is empty or absent — Contract Builder phase is
+            a no-op; skip without error.
+
+            **Failure handling:** If contract_builder_result.status is "partial" or "failed",
+            the Orchestrator MUST NOT create worktrees or launch Wave agents. Surface the failure
+            to the human with the failure_reason field from contract_builder_result.
+
+            **Ordering:**
+            - E48 runs AFTER E16 validation and E37 Critic Gate
+            - E48 runs BEFORE Scaffold Agent (E22)
+            - Contract stubs committed by E48 are available to all Wave agents via their worktrees
+
+            **Why this is not optional:** Without contract stubs, Wave agents infer cross-boundary
+            types from prose in the IMPL doc. Type inference errors cause compilation failures that
+            only surface at merge time, requiring manual fixes. E48 front-loads this work.
+            ```
+
+            ### Task 3: Update pre-wave-validation.md
+
+            In `implementations/claude-code/prompts/references/pre-wave-validation.md`, find:
+
+            ```
+            **Scout flow (new IMPL):**
+            1. Scout completes → Read IMPL doc
+            2. Run `sawtools pre-wave-validate` (combines E16 + E35 + E46 check-test-cascade)
+            3. If validation failed → send errors to Scout for correction, retry once
+            4. If E37 triggered → Run E37 (this file § E37)
+            5. Present for human review
+            ```
+
+            After step 5, add:
+
+            ```
+            5a. **E48: Contract Builder (conditional):** If integration_hints is non-empty, run
+                Contract Builder before Scaffold Agent. See E48 in execution-rules.md.
+            ```
+
+            ### Verification gate
+
+            ```bash
+            grep -c "contract-builder\|contract_builder" /Users/dayna.blackwell/workspace/code/scout-and-wave/implementations/claude-code/prompts/saw-skill.md
+            # Expected: >= 2
+
+            grep -c "^## E48" /Users/dayna.blackwell/workspace/code/scout-and-wave/protocol/execution-rules.md
+            # Expected: 1
+
+            grep -c "^## E[0-9]" /Users/dayna.blackwell/workspace/code/scout-and-wave/protocol/execution-rules.md
+            # Expected: 54
+
+            grep -c "E48" /Users/dayna.blackwell/workspace/code/scout-and-wave/implementations/claude-code/prompts/references/pre-wave-validation.md
+            # Expected: >= 1
+            ```
+
+            ### Constraints
+            - Do NOT modify `agents/contract-builder.md` — Agent C's file (Wave 1).
+            - Do NOT modify `agents/scout.md` — Agent C's file (Wave 1).
+            - Do NOT modify `agent-template.md` — Agent B's file (Wave 1).
+            - Do NOT modify `protocol/message-formats.md` — Agent A's file (Wave 1).
+            - Insert E48 AFTER the last line of the E47 section (not in the middle of another rule).
+          files:
+            - implementations/claude-code/prompts/saw-skill.md
+            - protocol/execution-rules.md
+            - implementations/claude-code/prompts/references/pre-wave-validation.md
+          dependencies:
+            - A
+            - C
+    - number: 3
+      agents:
+        - id: F
+          task: |-
+            ## Wave 3 Agent F: SDK CLI Command (scout-and-wave-go)
+
+            Implement the `sawtools contract-builder` CLI command. Working directory:
+            `/Users/dayna.blackwell/code/scout-and-wave-go`.
+
+            ### Files to create/modify
+
+            - `cmd/sawtools/contract_builder_cmd.go` (new)
+            - `cmd/sawtools/contract_builder_cmd_test.go` (new)
+            - `cmd/sawtools/root.go` (modify — add command registration)
+
+            ### What to implement
+
+            **1. `cmd/sawtools/contract_builder_cmd.go`**
+
+            Read `cmd/sawtools/validate_scaffold_cmd.go` and `cmd/sawtools/run_scout_cmd.go` first
+            for the exact cobra command pattern used. Then implement:
+
+            ```
+            sawtools contract-builder <impl-doc-path> [--repo-dir <path>] [--model <model>]
+            ```
+
+            - Parse positional `implPath`, optional `--repo-dir` (default: dirname of implPath), `--model`
+            - Call `engine.RunContractBuilder(engine.RunContractBuilderOpts{Ctx, ImplPath, RepoPath, Model, OnEvent})`
+            - `OnEvent` prints progress events to stdout
+            - On success: print JSON `{"status":"complete","hints_resolved":N,"hints_total":N,"impl_path":"..."}`
+            - On failure: exit 1 with JSON error
+
+            **2. `cmd/sawtools/root.go` — register command**
+
+            Read `root.go` to find how existing commands are added (e.g., the `validate` or
+            `scaffold` command registration). Add `contractBuilderCmd` in the same style and location.
+
+            **3. `cmd/sawtools/contract_builder_cmd_test.go`**
+
+            - `TestContractBuilderCmd_NoArgs`: missing impl path arg → error
+            - `TestContractBuilderCmd_MissingImpl`: non-existent path → error
+
+            ### Interfaces to call (from Wave 2, Agent E)
+
+            ```go
+            // From pkg/engine (Agent E, Wave 2):
+            engine.RunContractBuilder(engine.RunContractBuilderOpts{
+              Ctx:      ctx,
+              ImplPath: implPath,
+              RepoPath: repoPath,
+              Model:    model,
+              OnEvent:  onEvent,
+            }) result.Result[protocol.ContractBuilderData]
+            ```
+
+            ### Verification gate
+
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go
+            GOWORK=off go build ./cmd/sawtools/...
+            GOWORK=off go vet ./cmd/sawtools/...
+            GOWORK=off go test ./cmd/sawtools/... -run TestContractBuilderCmd -v
+
+            # Verify command appears in help
+            GOWORK=off go run ./cmd/sawtools/... --help 2>&1 | grep "contract-builder"
+            # Expected: at least one line
+            ```
+
+            ### Postcondition checks
+
+            ```bash
+            grep -c "contract.builder\|ContractBuilder" /Users/dayna.blackwell/code/scout-and-wave-go/cmd/sawtools/root.go
+            # Expected: >= 1
+            ```
+
+            ### Constraints
+            - Do NOT modify `pkg/engine/contract_builder.go` — Agent E's file (Wave 2).
+            - Do NOT modify any existing command files beyond `root.go` (command registration only).
+            - Follow the exact cobra command pattern used by other commands in this directory.
+          files:
+            - cmd/sawtools/contract_builder_cmd.go
+            - cmd/sawtools/contract_builder_cmd_test.go
+            - cmd/sawtools/root.go
+          dependencies:
+            - E
+        - id: H
+          task: |-
+            ## Wave 3 Agent H: Web API Handler (scout-and-wave-web)
+
+            Implement the contract-builder API endpoint. Working directory:
+            `/Users/dayna.blackwell/code/scout-and-wave-web`.
+
+            ### Files to create/modify
+
+            - `pkg/api/contract_builder_handler.go` (new)
+            - `pkg/api/contract_builder_handler_test.go` (new)
+            - `pkg/api/server.go` (modify — route + contractBuilderRuns field)
+            - `pkg/api/notification_types.go` (modify — add NotifyContractBuilderComplete)
+
+            ### What to implement
+
+            **1. `pkg/api/contract_builder_handler.go`**
+
+            Read `pkg/api/scaffold_handler.go` first — follow that pattern exactly.
+
+            ```go
+            package api
+
+            // ContractBuilderRunResponse is JSON for POST /api/impl/{slug}/contract-builder.
+            type ContractBuilderRunResponse struct {
+              RunID string `json:"run_id"`
+            }
+
+            func (s *Server) handleContractBuilderRun(w http.ResponseWriter, r *http.Request)
+            func (s *Server) runContractBuilderAgent(ctx context.Context, slug, runID, implPath string)
+            ```
+
+            In `runContractBuilderAgent`, call `engine.RunContractBuilder(...)` and forward events
+            to `s.broker.Publish(slug, SSEEvent{Event: ev.Event, Data: ev.Data})`.
+            Read contract_builder_model from config (add `ContractBuilderModel string` to
+            `saw.config.json` agent config — but do NOT modify config package, just use empty
+            string fallback for now).
+
+            On success, publish notification:
+            ```go
+            s.notificationBus.Notify(NotificationEvent{
+              Type:     NotifyContractBuilderComplete,
+              Slug:     slug,
+              Title:    "Contracts Built",
+              Message:  "Integration contracts materialized and committed to HEAD",
+              Severity: "success",
+            })
+            ```
+
+            **2. Add `contractBuilderRuns sync.Map` to Server struct in `server.go`**
+
+            Find the Server struct in `server.go`. Find this exact field:
+
+            ```go
+            	scaffoldRuns     sync.Map        // runID -> context.CancelFunc; tracks in-progress scaffold reruns
+            ```
+
+            After it, add:
+
+            ```go
+            	contractBuilderRuns sync.Map     // runID -> context.CancelFunc; tracks in-progress contract builder runs
+            ```
+
+            **3. Register route in `server.go`**
+
+            Find this exact line:
+
+            ```go
+            	s.mux.HandleFunc("POST /api/impl/{slug}/scaffold/rerun", s.handleScaffoldRerun)
+            ```
+
+            After it, add:
+
+            ```go
+            	s.mux.HandleFunc("POST /api/impl/{slug}/contract-builder", s.handleContractBuilderRun)
+            ```
+
+            **4. `pkg/api/notification_types.go` — add constant**
+
+            Read this file. Add NotifyContractBuilderComplete to the existing notification type
+            const block, following the pattern of `NotifyScaffoldComplete` or similar.
+
+            **5. `pkg/api/contract_builder_handler_test.go`**
+
+            - `TestHandleContractBuilderRun_NotFound`: non-existent slug → 404
+            - `TestHandleContractBuilderRun_Returns202`: create temp IMPL file, call endpoint → 202
+
+            ### Interfaces to call (from Wave 2, Agent E)
+
+            ```go
+            engine.RunContractBuilder(engine.RunContractBuilderOpts{
+              Ctx:      ctx,
+              ImplPath: implPath,
+              RepoPath: s.cfg.RepoPath,
+              Model:    "",  // optional, fall back to empty
+              OnEvent:  onEvent,
+            })
+            ```
+
+            ### Verification gate
+
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-web
+            GOWORK=off go build ./pkg/api/...
+            GOWORK=off go vet ./pkg/api/...
+            GOWORK=off go test ./pkg/api/... -run TestHandleContractBuilder -v
+            ```
+
+            ### Postcondition checks
+
+            ```bash
+            grep -c "contract-builder\|ContractBuilder" /Users/dayna.blackwell/code/scout-and-wave-web/pkg/api/server.go
+            # Expected: >= 2
+
+            grep -c "NotifyContractBuilderComplete" /Users/dayna.blackwell/code/scout-and-wave-web/pkg/api/notification_types.go
+            # Expected: 1
+            ```
+
+            ### Constraints
+            - Do NOT modify `scaffold_handler.go` — read it as pattern reference only.
+            - Do NOT modify `pkg/engine/` files — Agent E's Wave 2 files.
+            - Use `contractBuilderRuns` (new field), not `scaffoldRuns` — avoid key collisions.
+          files:
+            - pkg/api/contract_builder_handler.go
+            - pkg/api/contract_builder_handler_test.go
+            - pkg/api/server.go
+            - pkg/api/notification_types.go
+          dependencies:
+            - E
+    - number: 4
+      agents:
+        - id: I
+          task: |-
+            ## Wave 4 Agent I: Web UI Component (scout-and-wave-web)
+
+            Add the `ContractBuilderCard` React component and wire into `WaveBoard.tsx`.
+            Working directory: `/Users/dayna.blackwell/code/scout-and-wave-web`.
+
+            ### Files to create/modify
+
+            - `web/src/components/wave/ContractBuilderCard.tsx` (new)
+            - `web/src/components/WaveBoard.tsx` (modify)
+
+            ### What to implement
+
+            **1. `web/src/components/wave/ContractBuilderCard.tsx`**
+
+            Read `web/src/components/wave/ScaffoldCard.tsx` first — follow that pattern exactly.
+
+            ```tsx
+            interface ContractBuilderCardProps {
+              status: 'idle' | 'running' | 'complete' | 'failed'
+              hintsCount: number
+              hintsResolved: number
+              output: string
+              error?: string
+            }
+
+            export default function ContractBuilderCard(props: ContractBuilderCardProps): JSX.Element
+            ```
+
+            Visual styling (matching ScaffoldCard but purple for idle state):
+            - Idle: `borderColor: 'rgb(139, 92, 246)'`, `boxShadow: '0 0 12px rgba(139, 92, 246, 0.4)'`
+            - Running: blue (same as ScaffoldCard)
+            - Complete: green (same as ScaffoldCard)
+            - Failed: red (same as ScaffoldCard)
+            - Avatar: "Cb" (two letters, matching ScaffoldCard's "Sc")
+            - Label: "Contract Builder"
+            - Show hints counter below header: `{hintsResolved} / {hintsCount} contracts built`
+              (only when hintsCount > 0)
+
+            **2. Wire `ContractBuilderCard` into `WaveBoard.tsx`**
+
+            Read `WaveBoard.tsx` in full first to understand the state management and how
+            ScaffoldCard is rendered.
+
+            Add import:
+
+            ```tsx
+            import ContractBuilderCard from './wave/ContractBuilderCard'
+            ```
+
+            Add state variables (near ScaffoldCard state, if any):
+
+            ```tsx
+            const [contractBuilderStatus, setContractBuilderStatus] = useState<'idle' | 'running' | 'complete' | 'failed'>('idle')
+            const [contractBuilderOutput, setContractBuilderOutput] = useState('')
+            const [contractBuilderError, setContractBuilderError] = useState<string | undefined>()
+            const [contractBuilderHintsCount, setContractBuilderHintsCount] = useState(0)
+            const [contractBuilderHintsResolved, setContractBuilderHintsResolved] = useState(0)
+            ```
+
+            Add SSE event handlers (in the wave events handler, same place as scaffold events):
+
+            ```tsx
+            case 'contract_builder_started':
+              setContractBuilderStatus('running')
+              setContractBuilderOutput('')
+              setContractBuilderHintsCount(ev.data?.hints_count ?? 0)
+              break
+            case 'contract_builder_progress':
+              setContractBuilderOutput(prev => prev + (ev.data?.chunk ?? ''))
+              break
+            case 'contract_builder_complete':
+              setContractBuilderStatus('complete')
+              setContractBuilderHintsResolved(ev.data?.hints_resolved ?? 0)
+              break
+            case 'contract_builder_failed':
+              setContractBuilderStatus('failed')
+              setContractBuilderError(ev.data?.error ?? 'Contract builder failed')
+              break
+            ```
+
+            Render the card (after ScaffoldCard render, if ScaffoldCard is shown):
+
+            ```tsx
+            {(contractBuilderStatus !== 'idle' || implData?.contract_builder_result) && (
+              <ContractBuilderCard
+                status={contractBuilderStatus}
+                hintsCount={contractBuilderHintsCount || implData?.contract_builder_result?.hints_total || 0}
+                hintsResolved={contractBuilderHintsResolved || implData?.contract_builder_result?.hints_resolved || 0}
+                output={contractBuilderOutput}
+                error={contractBuilderError}
+              />
+            )}
+            ```
+
+            Note: `implData` is already fetched by WaveBoard and has type `IMPLDocResponse | null`.
+            Add `contract_builder_result?: { hints_total?: number; hints_resolved?: number }` to the
+            `IMPLDocResponse` interface in `web/src/types.ts` if it doesn't exist, or use optional
+            chaining with `as any` cast to avoid TypeScript errors.
+
+            ### Verification gate
+
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-web
+            npx tsc --noEmit 2>&1 | head -20
+            # Expected: exit 0 or only pre-existing errors
+
+            test -f /Users/dayna.blackwell/code/scout-and-wave-web/web/src/components/wave/ContractBuilderCard.tsx && echo "exists"
+            # Expected: exists
+            ```
+
+            ### Postcondition checks
+
+            ```bash
+            grep -c "ContractBuilderCard" /Users/dayna.blackwell/code/scout-and-wave-web/web/src/components/WaveBoard.tsx
+            # Expected: >= 2
+
+            grep -c "contract_builder_started\|contract_builder_complete" /Users/dayna.blackwell/code/scout-and-wave-web/web/src/components/WaveBoard.tsx
+            # Expected: >= 2
+            ```
+
+            ### Constraints
+            - Do NOT modify `pkg/api/` files — Agent H's files (Wave 3).
+            - Do NOT add API calls — consume SSE events from the existing wave SSE stream.
+            - Do NOT modify `ScaffoldCard.tsx` — read it as reference only.
+            - Read WaveBoard.tsx in full before editing. It is large. Follow existing ScaffoldCard
+              state management pattern precisely.
+          files:
+            - web/src/components/wave/ContractBuilderCard.tsx
+            - web/src/components/WaveBoard.tsx
+          dependencies:
+            - H
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: GOWORK=off go build ./...
+          required: true
+          repo: scout-and-wave-go
+        - type: test
+          command: GOWORK=off go test ./pkg/protocol/... ./pkg/engine/...
+          required: true
+          repo: scout-and-wave-go
+        - type: lint
+          command: GOWORK=off go vet ./pkg/...
+          required: false
+          repo: scout-and-wave-go
+        - type: build
+          command: GOWORK=off go build ./...
+          required: true
+          repo: scout-and-wave-web
+        - type: test
+          command: GOWORK=off go test ./pkg/...
+          required: true
+          repo: scout-and-wave-web
+scaffolds:
+    - file_path: pkg/protocol/contract_builder_types.go
+      contents: |-
+        package protocol
+
+        // IntegrationHint describes a cross-agent call boundary that the Scout
+        // identified during suitability analysis. The Contract Builder agent reads
+        // these hints and produces typed contract stubs.
+        type IntegrationHint struct {
+          HintID            string `yaml:"hint_id" json:"hint_id"`
+          CallerAgent       string `yaml:"caller_agent" json:"caller_agent"`
+          CalleeAgent       string `yaml:"callee_agent" json:"callee_agent"`
+          CallSiteFile      string `yaml:"call_site_file" json:"call_site_file"`
+          CallSiteLine      int    `yaml:"call_site_line,omitempty" json:"call_site_line,omitempty"`
+          InferredSignature string `yaml:"inferred_signature" json:"inferred_signature"`
+          HintType          string `yaml:"hint_type" json:"hint_type"` // "function"|"interface"|"event"|"error"
+        }
+
+        // ContractBuilderResult records the outcome of a Contract Builder phase run.
+        type ContractBuilderResult struct {
+          Status           string   `yaml:"status" json:"status"` // "complete"|"partial"|"failed"
+          ContractsEmitted []string `yaml:"contracts_emitted,omitempty" json:"contracts_emitted,omitempty"`
+          HintsResolved    int      `yaml:"hints_resolved" json:"hints_resolved"`
+          HintsTotal       int      `yaml:"hints_total" json:"hints_total"`
+          CommitSHA        string   `yaml:"commit_sha,omitempty" json:"commit_sha,omitempty"`
+          FailureReason    string   `yaml:"failure_reason,omitempty" json:"failure_reason,omitempty"`
+          Timestamp        string   `yaml:"timestamp,omitempty" json:"timestamp,omitempty"`
+        }
+
+        // ContractBuilderData contains metadata from a successful RunContractBuilder operation.
+        type ContractBuilderData struct {
+          IMPLPath      string `json:"impl_path"`
+          HintsFound    int    `json:"hints_found"`
+          HintsResolved int    `json:"hints_resolved"`
+        }
+      import_path: github.com/blackwell-systems/scout-and-wave-go/pkg/protocol
+      status: pending
+integration_connectors:
+    - file: cmd/sawtools/root.go
+      reason: Agent F adds contract-builder command registration
+    - file: pkg/api/server.go
+      reason: Agent H adds POST /api/impl/{slug}/contract-builder route and contractBuilderRuns field
+    - file: pkg/api/notification_types.go
+      reason: Agent H adds NotifyContractBuilderComplete constant
+pre_mortem:
+    overall_risk: medium
+    rows:
+        - scenario: |-
+            Agent D modifies types.go to add IMPLManifest fields but the type definitions
+            (IntegrationHint, ContractBuilderResult) are in the scaffold file — Agent D might
+            try to redefine them in types.go, causing duplicate declarations.
+          likelihood: medium
+          impact: high
+          mitigation: |-
+            Agent D brief explicitly says to read the scaffold first. The scaffold file
+            already contains the canonical definitions. Agent D only adds IMPLManifest
+            field references (not new type declarations) in types.go.
+        - scenario: |-
+            Agent E's RunContractBuilder function return type uses protocol.ContractBuilderData
+            but the type isn't fully exported with the right JSON tags when Agent E builds.
+          likelihood: low
+          impact: medium
+          mitigation: |-
+            ContractBuilderData is defined in the scaffold (Wave 0) and completed by Agent D
+            (Wave 1). Wave 2 agents depend on Wave 1 completing. The scaffold ensures the type
+            exists before any Wave 1 agent starts.
+        - scenario: |-
+            Agent F fails to register the contract-builder command in root.go, so the command
+            compiles but is unreachable via CLI.
+          likelihood: low
+          impact: medium
+          mitigation: |-
+            Agent F owns root.go. Brief explicitly says to read root.go first and follow the
+            exact pattern for registering existing commands. Postcondition grep verifies registration.
+        - scenario: Agent G adds E48 to execution-rules.md at the wrong location (mid-file, not after E47).
+          likelihood: low
+          impact: low
+          mitigation: |-
+            Brief uses exact grep anchor for E47 section and says append after the last line of
+            that section. Postcondition verifies `grep -c "^## E[0-9]" == 54`.
+        - scenario: |-
+            Wave 3 web agents (F and H) import engine types that aren't yet published because
+            go.work resolves to a stale local checkout.
+          likelihood: low
+          impact: high
+          mitigation: |-
+            Both agents use `GOWORK=off` in all build/test commands, forcing module resolution
+            via the local go.mod. Changes from Wave 2 are already merged to main before Wave 3
+            launches (I3 wave sequencing invariant).
+        - scenario: |-
+            Agent I cannot safely add contract_builder_result field access in WaveBoard.tsx
+            because the TypeScript interface type IMPLDocResponse doesn't include it.
+          likelihood: medium
+          impact: medium
+          mitigation: |-
+            Agent I brief says to use optional chaining and add contract_builder_result to
+            IMPLDocResponse in types.ts if needed. Optional chaining prevents runtime errors
+            even without explicit type addition.
+        - scenario: |-
+            Agents C and G both reference the contract-builder flow with slightly different
+            naming conventions (e.g., "Contract Builder" vs "contract-builder") creating
+            inconsistency across docs.
+          likelihood: medium
+          impact: low
+          mitigation: |-
+            Interface contracts define exact names. Agents use exact verbatim text anchors
+            for insertion points. Post-merge human review catches any naming drift.
+known_issues:
+    - title: Brief validator false positive for Agent G (cross-repo path resolution)
+      description: |-
+        The sawtools validate-briefs command cannot resolve file paths for cross-repo IMPL docs
+        that use short repo names (e.g., repo: scout-and-wave) in file_ownership entries.
+        The briefResolveFilePath function uses fo.Repo as a literal directory prefix, producing
+        relative paths like "scout-and-wave/implementations/..." that don't exist on disk.
+        This causes Agent G's symbol checks to fail even though the symbols (FAILED, committed,
+        complete, partial, failed) do exist in saw-skill.md and pre-wave-validation.md.
+        This is a known tool limitation for cross-repo IMPLs.
+      status: pre-existing tool limitation — does not block wave execution
+      workaround: Brief validator step in finalize-scout reports exit 1 but errors are false positives. Structural validation (sawtools validate) passes. Proceed to human review.
+state: SCOUT_PENDING
+injection_method: manual-fallback

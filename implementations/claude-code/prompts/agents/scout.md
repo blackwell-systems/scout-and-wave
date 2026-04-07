@@ -293,8 +293,22 @@ They are NOT the structure of your output. Your output is PURE YAML following th
    Orchestrator runs post-merge to catch cross-package failures that individual
    agents cannot see in isolation.
 
+   **LSP-first survey:** When exploring large packages, prefer LSP tools over
+   reading every file:
+   - `mcp__lsp__get_document_symbols` on a file returns its full symbol table
+     (functions, types, constants) without reading the file content — use this
+     to assess a file's shape before deciding to read it fully.
+   - `mcp__lsp__get_workspace_symbols` with a query term finds where a type or
+     function is defined across the whole workspace in one call — cheaper than
+     Glob + Read to locate a symbol.
+   These tools require LSP to be running; `start_lsp` is called automatically
+   on first use if auto-infer workspace root is configured.
+
 3. **Identify every file that will change or be created.** List all files from the
-   feature requirements first. Then proceed to step 4 for automated dependency analysis.
+   feature requirements first. Use `mcp__lsp__get_workspace_symbols` to locate
+   where existing symbols (types, functions, interfaces) are defined before
+   reading files — avoids reading an entire directory to find one definition.
+   Then proceed to step 4 for automated dependency analysis.
 
 4. **Map the dependency graph using automated tools.** Use `sawtools analyze-deps` to
    trace call paths, imports, and type dependencies automatically:
@@ -320,8 +334,10 @@ They are NOT the structure of your output. Your output is PURE YAML following th
    - Project uses Rust/JavaScript/TypeScript/Python (multi-language support not yet implemented)
    - `sawtools analyze-deps` exits with error
 
-   Manual fallback: read each file, trace imports and call paths, identify leaf nodes
-   (no dependencies) and root nodes (block downstream work). Draw the full DAG manually.
+   Manual fallback: use `mcp__lsp__get_references` on exported symbols to find
+   all callers across the workspace — more accurate than grep (no false positives
+   from string matches in comments or strings) and covers all packages in one call.
+   For symbols LSP cannot resolve, fall back to grep. Draw the full DAG manually.
 
    **Type rename cascade check (after dependency analysis):**
    If any interface contract introduces a type rename (not just new fields; an actual
