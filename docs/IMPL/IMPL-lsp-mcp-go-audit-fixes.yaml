@@ -29,8 +29,8 @@ suitability_assessment: |-
     Time savings: ~25 min (~33% faster)
 
     Recommendation: Clear speedup. All findings are well-specified; proceed.
-test_command: go test ./...
-lint_command: go vet ./...
+test_command: GOWORK=off go test ./...
+lint_command: GOWORK=off go vet ./...
 file_ownership:
     - file: internal/session/manager.go
       agent: A
@@ -1545,17 +1545,28 @@ quality_gates:
     level: standard
     gates:
         - type: build
-          command: go build ./...
+          command: GOWORK=off go build ./...
           required: true
           repo: LSP-MCP-GO
         - type: lint
-          command: go vet ./...
+          command: GOWORK=off go vet ./...
           required: true
           repo: LSP-MCP-GO
         - type: test
-          command: go test ./...
+          command: GOWORK=off go test ./...
           required: true
           repo: LSP-MCP-GO
+completion_reports:
+    D:
+        status: complete
+        branch: saw/lsp-mcp-go-audit-fixes/wave1-agent-D
+        commit: ecfe7fd
+        files_changed:
+            - internal/lsp/client.go
+            - internal/resources/resources.go
+            - internal/lsp/manager.go
+        verification: PASS
+        notes: 'All 6 tasks complete. applyEdit error propagation fixed, rootURI encoding fixed, applyDocumentChanges helper extracted, bare file:// concats replaced in resources.go, parseResourceQueryParams helper extracted, Shutdown uses errors.Join. Worktree: /Users/dayna.blackwell/workspace/code/LSP-MCP-GO/.claude/worktrees/saw/lsp-mcp-go-audit-fixes/wave1-agent-D. Downstream agents A/B/C/F depend on this wave.'
 pre_mortem:
     overall_risk: low
     rows:
@@ -1655,5 +1666,5 @@ critic_report:
     summary: 'All six agents reviewed against the codebase. Every file existence check passes (all modify-action files exist). All named symbols are confirmed: ApplyWorkspaceEdit, uriToPath, RootDir(), ValidateFilePath, clientForFile, SimulationSession, SessionStatus constants, IsTerminal, MarkDirty, and ChainEdit all exist at the stated locations. Code patterns match — the hardcoded ''applied: true'' at client.go:288, the bare ''file://'' concatenations in resources.go at lines 91/152/205, the last-error-only pattern in manager.go Shutdown at lines 148-156, the args["args"] key at workspace.go:207, and the 8 silent json.Marshal discards in simulation.go all verify exactly as described. One advisory warning was found in Agent A''s brief: Task 2 header states ''replace all 5 direct session.Status = ... assignments'' but the task body lists 6 replacements and the verification gate says Expected: 6 — the count in the header is wrong, which could cause an agent reading it to stop at 5 and miss the Destroy StatusDestroyed assignment at line 406. All interface contracts are syntactically valid and the types they reference exist.'
     reviewed_at: "2026-04-07T03:46:11Z"
     issue_count: 1
-state: "REVIEWED"
+state: REVIEWED
 injection_method: hook
