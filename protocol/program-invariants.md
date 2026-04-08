@@ -109,6 +109,13 @@ If P1 is violated, the Planner is issued a correction prompt (analogous to Scout
 - **Same tier:** No coordination allowed. IMPLs execute fully independently.
 - **Different tiers:** Coordination via committed code. Tier N+1 Scouts read Tier N's committed outputs as ordinary source files.
 
+**Failure isolation guarantee:** When an IMPL within a tier enters BLOCKED state,
+execution of other IMPLs in the same tier continues uninterrupted. IMPL failures
+do not cascade across same-tier peers. Only tier *progression* is gated — the
+Orchestrator cannot advance to Tier N+1 until all IMPLs in Tier N reach "complete".
+An IMPL that is permanently blocked may be removed from the tier (and the PROGRAM
+re-planned) to unblock tier progression without re-running completed IMPLs.
+
 **Related Rules:**
 - See I1 (disjoint file ownership) in `protocol/invariants.md`
 - See E28 (Tier Execution Loop), E29 (Tier Gate Verification), E31 (Parallel Scout Launching) in `protocol/execution-rules.md`

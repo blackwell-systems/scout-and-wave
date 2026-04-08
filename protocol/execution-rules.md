@@ -1275,7 +1275,25 @@ After all IMPLs in the tier are scouted and reviewed, the Orchestrator executes 
 
 3. **Unified review gate.** Present all IMPLs in the tier for human review together — both newly scouted IMPLs and validated pre-existing IMPLs. The reviewer sees the full tier picture and can reject any IMPL (new or imported) before wave execution begins.
 
-4. **Proceed to wave execution.** After review approval, execute waves for all IMPLs in the tier. Pre-existing IMPLs with status "complete" skip wave execution entirely. Pre-existing IMPLs with status "reviewed" enter wave execution normally.
+4. **Stale brief check (Tier 2+, pre-existing IMPLs only).** Before proceeding to wave
+   execution for Tier N (N ≥ 2), check whether pre-existing IMPLs in this tier have briefs
+   that reference symbols modified by Tier N-1. Tier N-1 may have changed function signatures,
+   added types, or restructured packages — making Tier N agent task descriptions stale.
+
+   **When to check:** If the tier contains pre-existing IMPLs (status "reviewed") AND any
+   Tier N-1 IMPL modified exported symbols in packages that Tier N IMPLs' owned files import.
+
+   **Resolution:** Re-run Scout in brief-refresh mode for the affected IMPL. This re-runs
+   Scout's analysis but preserves existing file ownership and wave structure — only agent
+   task descriptions are updated to reflect the current (post-Tier-N-1) codebase state.
+   The IMPL does not regress to SCOUT_PENDING; it stays at REVIEWED with updated briefs.
+
+   This check is optional in non-auto mode (surface to human as a prompt). In auto mode,
+   brief refresh runs automatically when stale briefs are detected.
+
+5. **Proceed to wave execution.** After review approval and stale brief resolution, execute
+   waves for all IMPLs in the tier. Pre-existing IMPLs with status "complete" skip wave
+   execution entirely. Pre-existing IMPLs with status "reviewed" enter wave execution normally.
 
 **Failure Handling:**
 
