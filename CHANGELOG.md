@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added (2026-04-07)
+- **Protocol spec enrichment — behavioral knowledge extracted from agent prompts** — Five rounds of extraction from scout.md, wave-agent.md, critic-agent.md, and reference files into language-agnostic protocol spec:
+  - `procedures.md`: test file cascade detection algorithm (4a/4b/4c), integration completeness audit (6a), same-package scaffold trigger, text anchor + constraint derivation requirement (step 7), call site discovery before modifying exports, parallel wave compilation isolation + 3 bypass conditions, BUILD STUB vs COMPLETE distinction, incremental commit clarification
+  - `preconditions.md`: P5 parallelization thresholds (high/low/coordination), time-to-value estimate format with sequential baseline
+  - `execution-rules.md`: E11b Scout-time conflict patterns (4 types: test append-only, registry append-only, line edits, mixed), E37 critic check taxonomy scope filters + full-repo search requirement + project-specific check slot, E35 scope boundary (same-package callers only)
+- **`close-impl` branch restoration** — reads `original_branch` from IMPL manifest (written by `prepare-wave`); supports any branching strategy; falls back to `.saw-state` then `"main"` — previously hard-coded `checkout main`
+- **`IMPLManifest.OriginalBranch` field** — written once by `prepare-wave` on first run; persists in IMPL doc across `.saw-state` cleanup
+
 ### Changed (2026-04-07)
 - **LSP tools whitelisted for integration-agent, planner, scaffold-agent** — `LSP` added to the `tools` frontmatter of all three agents; MCP `mcp__lsp__*` tools propagate from global config automatically, but the frontmatter token ensures consistency with scout, wave-agent, and critic-agent; integration-agent benefits most: `get_references` confirms a symbol is truly unconnected before wiring call sites
 
