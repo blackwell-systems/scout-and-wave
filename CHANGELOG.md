@@ -9,6 +9,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added (2026-04-07)
+- **Protocol spec enrichment — full extraction pass across all implementation files** — Two rounds covering all 5 agent prompts, all reference files, and program-flow.md. Language-agnostic behavioral knowledge moved from Claude Code implementation into protocol spec so any runtime implementation could be written from the spec alone:
+  - `procedures.md`: test file cascade detection (4a/4b/4c), integration completeness audit (6a), same-package scaffold trigger, text anchor + constraint derivation (step 7), call site discovery before modifying exports, parallel wave compilation isolation + 3 bypass conditions, BUILD STUB vs COMPLETE distinction, incremental commit clarification
+  - `preconditions.md`: P5 parallelization thresholds, time-to-value estimate format
+  - `execution-rules.md`: E11b Scout-time conflict patterns (4 types), E37 check taxonomy scope filters + full-repo search + project-specific slot, E35 scope boundary (same-package only), E28A stale brief check at tier boundaries (Tier 2+)
+  - `program-invariants.md`: P1 failure isolation guarantee (blocked IMPL does not cascade to tier peers)
 - **Protocol spec enrichment — behavioral knowledge extracted from agent prompts** — Five rounds of extraction from scout.md, wave-agent.md, critic-agent.md, and reference files into language-agnostic protocol spec:
   - `procedures.md`: test file cascade detection algorithm (4a/4b/4c), integration completeness audit (6a), same-package scaffold trigger, text anchor + constraint derivation requirement (step 7), call site discovery before modifying exports, parallel wave compilation isolation + 3 bypass conditions, BUILD STUB vs COMPLETE distinction, incremental commit clarification
   - `preconditions.md`: P5 parallelization thresholds (high/low/coordination), time-to-value estimate format with sequential baseline
