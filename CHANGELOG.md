@@ -9,6 +9,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added (2026-04-08)
+- **`get_inlay_hints` for lsp-mcp-go** — `textDocument/inlayHint`; inline type annotations and parameter name labels; capability-guarded; `InlayHint`/`InlayHintKind` types in `internal/types`
+- **`detect_lsp_servers` for lsp-mcp-go** — workspace language detection + PATH scan; returns `suggested_config` entries ready to paste into MCP config; covers all 13 CI-verified languages
+- **`get_workspace_symbols` enrichment** — `detail_level=hover` with paginated enrichment window (`limit`/`offset`); ToC + detail-window pattern matching mcp-lsp-bridge's `symbol_explore`
 - **Type hierarchy MCP tools for lsp-mcp-go** — `type_hierarchy` tool with `direction` param (`supertypes`/`subtypes`/`both`) mirroring the `call_hierarchy` pattern; `TypeHierarchyItem` type (LSP 3.17), `PrepareTypeHierarchy`/`GetSupertypes`/`GetSubtypes` client methods, `HandleTypeHierarchy` handler, server wiring, and Java/TypeScript CI fixtures in `multi_lang_test.go`
 
 ### Changed (2026-04-08)
