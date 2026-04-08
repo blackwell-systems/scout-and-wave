@@ -1490,6 +1490,8 @@ The Planner produces a revised PROGRAM manifest. The orchestrator validates it (
 
 **Trigger:** Scout identifies that an agent will implement an exported symbol (function, type, method) that must be called from an existing aggregation point in a file not created by that agent.
 
+**Scope:** E35 covers **same-package callers only** — files in the same package as the defining file that call the symbol but are not in the defining agent's ownership. Cross-package callers (files in different packages that import and call the symbol) are handled reactively by E25/E26 post-merge integration gap detection. Test files (`*_test.go`) calling changed symbols are handled separately by E46. This scope boundary tells Scout what must be resolved at planning time vs what can be deferred to post-merge integration.
+
 **Rule:** The Scout MUST:
 1. Assign the aggregation file to the implementing agent's `file_ownership` (preferred), OR
 2. Write a `wiring:` entry in the IMPL doc if assigning to the same agent creates a same-wave conflict, and assign the caller to an integration agent in a later wave.

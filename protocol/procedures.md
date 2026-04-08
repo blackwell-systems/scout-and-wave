@@ -398,6 +398,18 @@ The agent runs on the main branch directly. `finalize-wave` auto-detects that no
    expected consequence of parallel isolation, not an error condition. The post-merge
    verification step (E10) catches cross-agent compilation issues after merge.
 
+   **Conditions for bypassing pre-commit build checks in parallel isolation:**
+   An agent may bypass the pre-commit build gate (without affecting correctness) only
+   when ALL THREE of the following hold:
+   1. The failing check concerns a type, import, or symbol that will be satisfied
+      post-merge when a peer agent's branch is merged (not a bug in the agent's own code)
+   2. The agent's own implementation is correct and complete for its owned files
+   3. The agent's worktree branch remains intact and will be included in the wave merge
+
+   Bypassing is not permitted when the agent's own code is incorrect, when the failure
+   indicates a missing interface contract, or when the agent is uncertain which condition
+   is causing the failure.
+
 3. **Verification gate (Field 6):** Agent runs exact scoped commands
    - Build (compile)
    - Lint
