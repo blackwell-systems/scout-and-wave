@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added (2026-04-08)
+- **Type hierarchy MCP tools for lsp-mcp-go** — `type_hierarchy` tool with `direction` param (`supertypes`/`subtypes`/`both`) mirroring the `call_hierarchy` pattern; `TypeHierarchyItem` type (LSP 3.17), `PrepareTypeHierarchy`/`GetSupertypes`/`GetSubtypes` client methods, `HandleTypeHierarchy` handler, server wiring, and Java/TypeScript CI fixtures in `multi_lang_test.go`
+
+### Changed (2026-04-08)
+- **Scout derives `test_command` from CI config** — scout prompt updated to read `.github/workflows/` or equivalent CI config for the exact test command rather than using a language-default catch-all; CI configs encode the correct scope (e.g. excluding integration-only packages that require external services)
+
 ### Added (2026-04-07)
 - **Protocol spec enrichment — full extraction pass across all implementation files** — Two rounds covering all 5 agent prompts, all reference files, and program-flow.md. Language-agnostic behavioral knowledge moved from Claude Code implementation into protocol spec so any runtime implementation could be written from the spec alone:
   - `procedures.md`: test file cascade detection (4a/4b/4c), integration completeness audit (6a), same-package scaffold trigger, text anchor + constraint derivation (step 7), call site discovery before modifying exports, parallel wave compilation isolation + 3 bypass conditions, BUILD STUB vs COMPLETE distinction, incremental commit clarification
