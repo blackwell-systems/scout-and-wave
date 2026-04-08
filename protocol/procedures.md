@@ -51,15 +51,86 @@ SAW procedures are executed by the Orchestrator (synchronous agent in the user's
    - Groups agents into waves based on dependency chains
    - Wave N+1 depends on Wave N's outputs → sequential wave execution
 
+   **4a. Test file cascade detection (mandatory):** After mapping which symbols will change
+   signature or be removed, Scout MUST search the entire repository — not just the
+   package containing the change — for test files that reference those symbols.
+
+   Algorithm:
+   1. For each interface contract that changes an existing signature (parameter types,
+      return types, method removal — not additive-only changes), identify the symbol name
+      and the file where it is defined.
+   2. Search the full repository for all callers of that symbol, including test files
+      in other packages. A package-scoped search is insufficient — callers in sibling
+      packages are the most commonly missed category.
+   3. For each test file found that is NOT already in `file_ownership`:
+      - Assign it to the same agent as the interface change (same wave), OR
+      - Create a dedicated test-update agent in the same wave.
+   4. Document the cascade in the agent task or pre-mortem. Test cascades not assigned
+      to an agent will cause post-merge compilation failures that no individual agent
+      could detect in isolation.
+
+   **Skip condition:** Additive-only changes (new methods added, existing signatures
+   unchanged) do not require cascade detection — existing callers continue to compile.
+
+   **4b. Symbol rename cascade detection:** If any interface contract renames a type,
+   function, or struct (not merely adds fields), Scout must classify all references:
+   - **Syntax cascade (high):** Import statements, type declarations, function signatures,
+     variable declarations — will cause compilation failure. Must be assigned to an agent.
+   - **Semantic cascade (low):** Comments, string literals — does not affect compilation.
+     Document but agent assignment is optional.
+
+   **4c. Cross-wave migration safety:** When a feature consolidates, removes, or renames
+   a module or package, naive wave assignment produces waves where the codebase does not
+   compile between waves. Apply the following rules:
+
+   - **Prefer single-wave consolidation:** If all callers of the old module fit within one
+     wave (≤6 agents), place the signature changes and all caller updates in the same wave.
+     This eliminates intermediate build breaks.
+   - **Re-export bridge pattern (when callers span multiple waves):** Wave N changes the
+     target package AND adds re-export bridges in the old package (type aliases, wrapper
+     functions, or re-exports) that forward to the new signatures. Wave N+1 updates
+     callers to import directly from the new package. Wave N+2 removes the bridges.
+     The bridge keeps every wave buildable by preserving the old import path.
+   - **Detection heuristic:** If file_ownership places files from the same
+     package/directory in different waves, AND any agent changes exported signatures or
+     type definitions in that package, flag as a potential migration boundary and apply
+     one of the above rules.
+
 5. **Interface contract definition:** Scout specifies exact signatures for all cross-agent interfaces
    - Function signatures with parameter types and return types
    - Type definitions (structs, interfaces, enums)
    - Import paths where contracts will be available
+   - Contracts are binding — agents implement against them without seeing each other's code
+   - If a signature cannot be determined before implementation starts, flag as a blocker;
+     do not emit a speculative contract
 
 6. **Scaffold specification:** If shared types needed within a wave, Scout writes Scaffolds section to IMPL doc
    - Four-column table: File | Contents | Import path | Status
    - Status starts as `pending`
    - Solo waves: omit Scaffolds section (one agent cannot conflict with itself)
+   - **Shared same-package types are also scaffold triggers:** When two agents in the same
+     wave work in the same package, each agent's worktree is isolated — Agent B cannot see
+     Agent A's not-yet-merged types. If Agent A defines a type that Agent B references,
+     declare it as a scaffold before worktrees are created. Do not assign a shared type to
+     one agent and instruct the other to stub it — this produces duplicate declarations at
+     merge time.
+
+6a. **Integration completeness audit:** Before writing agent prompts, Scout verifies
+   that every new artifact has its full wiring chain assigned. For each file in
+   file_ownership, check whether it defines something that must be *registered* in
+   another file:
+
+   - New CLI commands → command registration file (e.g., `root.go`, `main.go`) must be
+     in file_ownership, assigned to an agent or integration wave
+   - New API handlers → route registration file must be assigned
+   - New agent types → orchestrator configuration must be updated
+   - New exported functions marked `integration_required` → caller file must be in an
+     integration wave or `integration_connectors`
+
+   If any wiring point is unassigned: add it to an agent's ownership, create an
+   integration wave (`type: integration`), or add to `integration_connectors`.
+   Unassigned wiring points are the leading cause of post-merge runtime failures where
+   the codebase compiles but the feature is silently unreachable.
 
 ## Phase 0: Manual Merge Escape Hatch (E11a)
 
@@ -87,6 +158,30 @@ SAW procedures are executed by the Orchestrator (synchronous agent in the user's
    - Field 6: Verification gate (scoped commands)
    - Field 7: Constraints
    - Field 8: Report instructions
+
+   **Text anchor requirement (mandatory for insertion instructions):** For every
+   instruction in an agent task that describes inserting, adding, or modifying content
+   at a specific location in an existing file (e.g., "insert after X", "add before Y",
+   "modify the block at Z"), Scout MUST:
+   1. Read the actual file before writing the agent brief.
+   2. Extract the 3–5 lines of surrounding context at the insertion point.
+   3. Embed that context verbatim in the task as the insertion anchor.
+
+   **Do not use line numbers as anchors.** Line numbers drift whenever any other change
+   is made to the file. Verbatim text context does not drift. Agents use exact string
+   matching when applying edits — the anchor must be the exact string that will exist
+   in the file at execution time.
+
+   **Constraint derivation from pre-mortem (mandatory):** For each agent task, Scout
+   must include explicit "do not" constraints derived from the pre-mortem scenarios for
+   that agent. These are the top 2–3 most likely wrong actions. Make them visually
+   distinct — buried constraints in prose are not followed. Example:
+   ```
+   Constraints:
+   - Do NOT define FooType — it is owned by Agent B. If your branch fails to
+     compile without it, declare it as a scaffold.
+   - Do NOT modify files outside your ownership list.
+   ```
 
 8. **Completion:** Scout reports completion, Orchestrator reads IMPL doc, transitions to SCOUT_VALIDATING
 

@@ -88,6 +88,19 @@ The parallelization gain must exceed fixed overhead (scout + merge). Evaluated b
 (sequential_time - slowest_agent_time) > (scout_time + merge_time)
 ```
 
+**High parallelization value** (proceed as SUITABLE): Agents are independent AND at least one of:
+- Build/test cycle is long (>30 seconds per agent) — each agent runs it independently, amplifying savings
+- Average files per agent ≥ 3 — more implementation time per agent, more to parallelize
+- Tasks involve non-trivial logic, tests, and edge cases
+
+**Low parallelization value** (consider NOT SUITABLE): Tasks are simple edits, documentation-only,
+or trivially fast to implement sequentially. Protocol overhead (scout, merge, verification)
+dominates. Recommend sequential implementation.
+
+**Coordination value independent of speed:** Even when parallelization savings are marginal,
+the IMPL doc provides value as an audit trail, interface spec, and progress tracker. Emit
+SUITABLE WITH CAVEATS and note that the value is coordination, not speed.
+
 ### Consequences if Violated
 
 - Parallel execution takes longer than sequential execution
@@ -113,6 +126,27 @@ Suggested alternative: [sequential execution | investigate-first then re-scout |
 The `Failed preconditions` field names each precondition that blocked the verdict (by number and name) and states the specific evidence. The `Suggested alternative` field makes the verdict actionable rather than a stop sign.
 
 The IMPL doc contains only this verdict. No agent prompts are written. The protocol terminates.
+
+**Time-to-value estimate (SUITABLE and SUITABLE WITH CAVEATS verdicts):** When the verdict
+is positive, the scout includes an estimated time comparison so the human can make an
+informed decision about whether to proceed:
+
+```
+Estimated times:
+- Scout phase: ~X min
+- Wave execution: ~Y min (N agents × M min avg, accounting for parallelism)
+- Merge & verification: ~Z min
+- Total (SAW): ~T min
+
+Sequential baseline: ~B min (N agents × S min avg sequential time)
+Time savings: ~D min (~P% faster)
+
+Recommendation: [Marginal gains | Clear speedup | Overhead dominates]
+```
+
+The sequential baseline uses the same per-agent time estimate as SAW but multiplied by
+agent count (no parallelism). The recommendation is a plain-language summary of whether
+the time savings justify the coordination overhead.
 
 ---
 
