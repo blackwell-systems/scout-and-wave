@@ -71,6 +71,41 @@ file_ownership:
       wave: 1
       action: modify
       repo: scout-and-wave-go
+    - file: protocol/state-machine.md
+      agent: J
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: protocol/participants.md
+      agent: J
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: protocol/procedures.md
+      agent: J
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: protocol/preconditions.md
+      agent: J
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: implementations/claude-code/prompts/references/failure-routing.md
+      agent: K
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: implementations/claude-code/prompts/references/wave-agent-contracts.md
+      agent: K
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: protocol/observability-events.md
+      agent: K
+      wave: 1
+      action: modify
+      repo: scout-and-wave
     - file: pkg/engine/contract_builder.go
       agent: E
       wave: 2
@@ -85,6 +120,21 @@ file_ownership:
       depends_on:
         - D
       repo: scout-and-wave-go
+    - file: implementations/claude-code/prompts/agents/wave-agent.md
+      agent: L
+      wave: 2
+      action: modify
+      depends_on:
+        - B
+      repo: scout-and-wave
+    - file: implementations/claude-code/prompts/agents/critic-agent.md
+      agent: M
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+        - C
+      repo: scout-and-wave
     - file: implementations/claude-code/prompts/saw-skill.md
       agent: G
       wave: 2
@@ -586,6 +636,373 @@ waves:
             - pkg/protocol/contract_builder_types.go
             - pkg/protocol/contract_builder_types_test.go
             - pkg/protocol/types.go
+        - id: J
+          task: |-
+            ## Wave 1 Agent J: Protocol Spec Docs — state-machine, participants, procedures, preconditions
+
+            Update four core protocol spec files in `/Users/dayna.blackwell/workspace/code/scout-and-wave`
+            to acknowledge the Contract Builder phase (E48). All files are in `protocol/`.
+
+            ### Task 1: state-machine.md — add CONTRACT_BUILDER_PENDING state
+
+            **1a. State Overview table.** Find this exact row:
+
+            ```
+            | **SCAFFOLD_PENDING** | Scaffold Agent creating type scaffold files from approved contracts. | Human approved IMPL doc, Scaffolds section non-empty | Scaffold Agent commits all files, updates IMPL doc |
+            ```
+
+            Insert BEFORE it:
+
+            ```
+            | **CONTRACT_BUILDER_PENDING** | Contract Builder agent producing typed stubs from integration_hints. | REVIEWED, integration_hints non-empty | Contract Builder commits stubs, writes contract_builder_result |
+            ```
+
+            **1b. Transition diagram.** Find this exact sequence:
+
+            ```
+            SCAFFOLD_PENDING (if Scaffolds section non-empty)
+            ```
+
+            Replace with:
+
+            ```
+            CONTRACT_BUILDER_PENDING (if integration_hints non-empty, E48)
+                ↓ (Contract Builder commits stubs)
+            SCAFFOLD_PENDING (if Scaffolds section non-empty)
+            ```
+
+            **1c. REVIEWED → SCAFFOLD_PENDING guard section.** Find:
+
+            ```
+            ### REVIEWED → SCAFFOLD_PENDING
+            ```
+
+            Before it, insert a new guard section:
+
+            ```markdown
+            ### REVIEWED → CONTRACT_BUILDER_PENDING
+
+            **Guard:** Human approval received AND IMPL doc `integration_hints` list is non-empty.
+
+            **Skip condition:** If `integration_hints` is empty or absent, skip directly to SCAFFOLD_PENDING (or WAVE_PENDING if no scaffolds).
+
+            **Exit:** Contract Builder agent writes `contract_builder_result.status: complete` → transition to SCAFFOLD_PENDING (or WAVE_PENDING if no scaffolds). If status `failed` → BLOCKED.
+
+            ### CONTRACT_BUILDER_PENDING → SCAFFOLD_PENDING
+
+            **Guard:** `contract_builder_result.status == "complete"` AND Scaffolds section non-empty.
+
+            **Guard (direct to WAVE_PENDING):** `contract_builder_result.status == "complete"` AND Scaffolds section empty.
+
+            **Failure:** `contract_builder_result.status == "failed"` → BLOCKED. Orchestrator surfaces `failure_reason` to human.
+            ```
+
+            **1d. State Entry Actions table.** Find:
+
+            ```
+            | **SCAFFOLD_PENDING** | Orchestrator launches Scaffold Agent with absolute IMPL doc path |
+            ```
+
+            Before it, insert:
+
+            ```
+            | **CONTRACT_BUILDER_PENDING** | Orchestrator launches Contract Builder agent with absolute IMPL doc path |
+            ```
+
+            **1e. Valid transitions table (bottom of file).** Find:
+
+            ```
+            | **REVIEWED** | SCAFFOLD_PENDING, WAVE_PENDING, WAVE_EXECUTING, BLOCKED, COMPLETE |
+            ```
+
+            Replace with:
+
+            ```
+            | **REVIEWED** | CONTRACT_BUILDER_PENDING, SCAFFOLD_PENDING, WAVE_PENDING, WAVE_EXECUTING, BLOCKED, COMPLETE |
+            | **CONTRACT_BUILDER_PENDING** | SCAFFOLD_PENDING, WAVE_PENDING, BLOCKED |
+            ```
+
+            ### Task 2: participants.md — add Contract Builder Agent
+
+            Find the `## Scaffold Agent` section. Read its structure. After the section ends (blank line before the next `##`), add:
+
+            ```markdown
+            ## Contract Builder Agent
+
+            An asynchronous agent launched by the Orchestrator after E37 (Critic Gate) and before the
+            Scaffold Agent (E22), when the IMPL doc contains a non-empty `integration_hints` list.
+
+            Reads integration hints emitted by Scout — structured descriptions of cross-agent call
+            boundaries (caller agent, callee agent, call site, inferred signature) — and produces
+            typed contract stubs committed to HEAD. Stubs are Go interfaces, TypeScript types, or
+            equivalent language constructs depending on the project. Never implements logic; stubs
+            contain only type declarations and interface definitions.
+
+            On completion, writes `contract_builder_result` to the IMPL doc (status, contracts_emitted,
+            hints_resolved, hints_total, commit_sha). The Orchestrator reads this field to determine
+            whether to proceed to the Scaffold Agent or enter BLOCKED state.
+
+            Runs once, before any worktrees are created. Contract stubs committed to HEAD are available
+            to all Wave agents through their worktrees. Runs only when `integration_hints` is non-empty.
+            ```
+
+            ### Task 3: procedures.md — add Procedure 1.5
+
+            Find this exact heading:
+
+            ```
+            ## Procedure 2: Scaffold Agent (Type Scaffold Materialization)
+            ```
+
+            Before it, insert:
+
+            ```markdown
+            ## Procedure 1.5: Contract Builder Agent (E48, Conditional)
+
+            **Entry state:** REVIEWED (with non-empty integration_hints)
+            **Exit state:** CONTRACT_BUILDER_PENDING → SCAFFOLD_PENDING (or WAVE_PENDING if no scaffolds)
+            **Skip condition:** integration_hints empty or absent — skip entirely.
+
+            ### Steps
+
+            1. **Orchestrator checks IMPL doc** for `integration_hints`. If empty or absent, skip to Procedure 2.
+            2. **Launch Contract Builder agent** with absolute IMPL doc path and repo root path.
+               Agent type: `contract-builder`. Agent reads hints, LSP-verifies inferred signatures,
+               emits typed stubs, runs build verification, commits with `SAW_ALLOW_MAIN_COMMIT=1`.
+            3. **Agent writes result:** `contract_builder_result` field in IMPL doc.
+               - `status: complete` → proceed to Procedure 2 (Scaffold Agent) or Wave execution
+               - `status: partial` or `failed` → BLOCKED; surface `failure_reason` to human
+            4. **Contract stubs are HEAD-committed** before worktrees are created. All Wave agents
+               receive stubs via normal checkout; no special injection needed.
+
+            ### Ordering
+
+            Procedure 1.5 runs AFTER E37 (Critic Gate) and BEFORE Procedure 2 (Scaffold Agent).
+            This ordering ensures contract stubs are available to the Scaffold Agent if it needs
+            to reference them in scaffold type definitions.
+            ```
+
+            ### Task 4: preconditions.md — add wave launch precondition
+
+            Find the section with `## E26: Integration Agent Launch Preconditions` or the final
+            precondition section. After the last existing precondition section (before `## Cross-References`),
+            add:
+
+            ```markdown
+            ## E48: Contract Builder Preconditions
+
+            Before launching Wave agents, verify contract builder completion if hints were present:
+
+            ### E48-P1: Contract Builder Ran When Required
+
+            **Condition:** IMPL doc has non-empty `integration_hints` AND `contract_builder_result` is absent or `status != "complete"`.
+
+            **Consequence:** Wave agents will infer cross-boundary types from prose. Type mismatches
+            surface at merge time as compilation failures requiring manual fixes.
+
+            **Guard:** If `integration_hints` is non-empty and `contract_builder_result.status != "complete"`,
+            block wave launch and instruct Orchestrator to run E48 (Contract Builder phase) first.
+
+            ### E48-P2: Contract Stubs Compile
+
+            **Condition:** `contract_builder_result.status == "complete"` but build gate fails after stubs committed.
+
+            **Consequence:** Wave agents import from stubs that don't compile; worktrees fail at baseline gate.
+
+            **Guard:** Treat as E21A baseline failure. Run `sawtools fix-baseline` or surface to human.
+            ```
+
+            ### Verification gate
+
+            ```bash
+            grep -c "CONTRACT_BUILDER_PENDING" /Users/dayna.blackwell/workspace/code/scout-and-wave/protocol/state-machine.md
+            # Expected: >= 3
+
+            grep -c "Contract Builder Agent" /Users/dayna.blackwell/workspace/code/scout-and-wave/protocol/participants.md
+            # Expected: >= 1
+
+            grep -c "Procedure 1.5" /Users/dayna.blackwell/workspace/code/scout-and-wave/protocol/procedures.md
+            # Expected: >= 1
+
+            grep -c "E48-P1" /Users/dayna.blackwell/workspace/code/scout-and-wave/protocol/preconditions.md
+            # Expected: >= 1
+            ```
+
+            ### Constraints
+            - Do NOT modify `protocol/execution-rules.md` — Agent G's file (Wave 2).
+            - Do NOT modify `protocol/message-formats.md` — Agent A's file (Wave 1).
+            - Do NOT create new files — all tasks are modifications to existing files.
+          files:
+            - protocol/state-machine.md
+            - protocol/participants.md
+            - protocol/procedures.md
+            - protocol/preconditions.md
+        - id: K
+          task: |-
+            ## Wave 1 Agent K: Reference Docs — failure-routing, wave-agent-contracts, observability-events
+
+            Update three reference files in `/Users/dayna.blackwell/workspace/code/scout-and-wave`.
+
+            ### Task 1: failure-routing.md — add E48 failure path
+
+            The file is at `implementations/claude-code/prompts/references/failure-routing.md`.
+            Find this exact text at the end of the file:
+
+            ```
+            ## E8: Same-Wave Interface Failure
+            ```
+
+            After the complete E8 section, append:
+
+            ```markdown
+            ## E48: Contract Builder Failure
+
+            Contract Builder failure (`contract_builder_result.status == "failed"` or `"partial"`)
+            surfaces before Wave agents launch. The Orchestrator reads `failure_reason` from the IMPL doc.
+
+            **Failure types and responses:**
+
+            | failure_reason | Response |
+            |----------------|----------|
+            | `lsp_unavailable` | LSP server not running. Run `sawtools start-lsp <workspace>` and retry `sawtools contract-builder <impl>`. |
+            | `hint_unresolvable: <hint_id>` | The inferred_signature for hint N could not be LSP-verified. Edit the `integration_hints[N].inferred_signature` field in the IMPL doc with the correct signature, then rerun. |
+            | `build_failed` | Generated contract stubs do not compile. Run `sawtools contract-builder <impl> --dry-run` to see stub contents; revise the relevant hint's `inferred_signature`. |
+            | `status: partial` | Some hints resolved, some failed. Check `hints_resolved` vs `hints_total`. Manually resolve remaining hints or remove unresolvable hints from integration_hints. Rerun to complete. |
+            | (other) | Re-run `sawtools contract-builder <impl>` once. If still failing, remove integration_hints for the failing boundary, proceed without stubs, and add an IMPL doc note. Wave agents will fall back to prose-inferred contracts for that boundary. |
+
+            **Retry command:**
+            ```bash
+            sawtools contract-builder "<absolute-impl-path>" [--repo-dir <path>]
+            ```
+
+            **Escalation:** If retries fail and removing the hint is not acceptable, treat as NOT_SUITABLE
+            for the affected boundary — revise the interface contract to be explicit enough that no hint
+            is needed, and re-run Scout for that boundary.
+            ```
+
+            ### Task 2: wave-agent-contracts.md — add E48 contract stub precedence note
+
+            Find this exact text near the bottom of the file:
+
+            ```
+            ## Protocol Reference Notation
+
+            `I{N}` = Invariants (I1-I6) defined in `protocol/invariants.md`
+            `E{N}` = Execution rules (E1-E45) defined in `protocol/execution-rules.md`
+            ```
+
+            Replace with:
+
+            ```markdown
+            ## E48: Contract Builder Stubs (When Present)
+
+            When the Contract Builder phase ran (IMPL doc has `contract_builder_result.status: complete`),
+            your brief Field 10 (Relevant Contracts) lists committed stub files. **These stubs take
+            precedence over prose-inferred types** from the interface contracts in Fields 2–3.
+
+            Import from the paths listed in Field 10. Do not redefine types that are already in the stubs.
+            If Field 10 is absent, infer types from interface contracts as usual — contract builder ran
+            either as a no-op (no hints) or was not triggered.
+
+            ## Protocol Reference Notation
+
+            `I{N}` = Invariants (I1-I6) defined in `protocol/invariants.md`
+            `E{N}` = Execution rules (E1-E48) defined in `protocol/execution-rules.md`
+            ```
+
+            ### Task 3: observability-events.md — document contract builder SSE events
+
+            Find the `## Cross-References` section at the end of the file. Before it, insert:
+
+            ```markdown
+            ## Contract Builder Events (E48)
+
+            Events emitted during the Contract Builder phase. Published to the wave broker by
+            `pkg/engine/contract_builder.go`. Consumed by the web UI `ContractBuilderCard` component.
+
+            ### contract_builder_started
+
+            Emitted when the Contract Builder agent begins processing.
+
+            ```json
+            {
+              "type": "contract_builder_started",
+              "impl_path": "docs/IMPL/IMPL-feature.yaml",
+              "hints_count": 3
+            }
+            ```
+
+            ### contract_builder_progress
+
+            Emitted as the agent streams output. May fire many times.
+
+            ```json
+            {
+              "type": "contract_builder_progress",
+              "chunk": "Resolving hint-001: func Parse(data []byte) (Result, error)..."
+            }
+            ```
+
+            ### contract_builder_complete
+
+            Emitted when all hints are resolved and stubs committed.
+
+            ```json
+            {
+              "type": "contract_builder_complete",
+              "impl_path": "docs/IMPL/IMPL-feature.yaml",
+              "hints_resolved": 3,
+              "hints_total": 3,
+              "commit_sha": "abc1234"
+            }
+            ```
+
+            ### contract_builder_failed
+
+            Emitted when the agent fails to resolve one or more hints.
+
+            ```json
+            {
+              "type": "contract_builder_failed",
+              "impl_path": "docs/IMPL/IMPL-feature.yaml",
+              "error": "hint-002: build_failed — stub did not compile"
+            }
+            ```
+
+            ### contract_builder_cancelled
+
+            Emitted if the run is cancelled (e.g., context timeout or manual stop).
+
+            ```json
+            {
+              "type": "contract_builder_cancelled",
+              "run_id": "cb-abc123",
+              "slug": "feature-slug"
+            }
+            ```
+            ```
+
+            ### Verification gate
+
+            ```bash
+            grep -c "E48" /Users/dayna.blackwell/workspace/code/scout-and-wave/implementations/claude-code/prompts/references/failure-routing.md
+            # Expected: >= 1
+
+            grep -c "E48" /Users/dayna.blackwell/workspace/code/scout-and-wave/implementations/claude-code/prompts/references/wave-agent-contracts.md
+            # Expected: >= 1
+
+            grep -c "contract_builder_started\|contract_builder_complete" /Users/dayna.blackwell/workspace/code/scout-and-wave/protocol/observability-events.md
+            # Expected: >= 2
+            ```
+
+            ### Constraints
+            - Do NOT modify `execution-rules.md` — Agent G's file (Wave 2).
+            - Do NOT modify `pre-wave-validation.md` — Agent G's file (Wave 2).
+            - Do NOT modify any agent prompt files — those are Wave 1 (A, B, C) or Wave 2 (L, M) territory.
+          files:
+            - implementations/claude-code/prompts/references/failure-routing.md
+            - implementations/claude-code/prompts/references/wave-agent-contracts.md
+            - protocol/observability-events.md
     - number: 2
       agents:
         - id: E
@@ -675,6 +1092,136 @@ waves:
             - pkg/engine/contract_builder_test.go
           dependencies:
             - D
+        - id: L
+          task: |-
+            ## Wave 2 Agent L: wave-agent.md — Field 10 consumption guidance
+
+            Update `implementations/claude-code/prompts/agents/wave-agent.md` in
+            `/Users/dayna.blackwell/workspace/code/scout-and-wave`.
+
+            Agent B (Wave 1) added Field 10 (Relevant Contracts) to `agent-template.md`. Wave-agent.md
+            must instruct Wave agents how to use those stubs when present.
+
+            ### What to implement
+
+            **1. Find the Field 9 reference in wave-agent.md.** Read the file and find the section
+            that describes Field 8 (Completion Report) or the checklist near the end. Find this or
+            similar text (look for the agent checklist section):
+
+            ```
+            - [ ] Field 8: Write completion report (sawtools set-completion)
+            ```
+
+            After that line, add:
+
+            ```
+            - [ ] Field 10: If Relevant Contracts section present, confirm all stub imports used (do not redefine)
+            ```
+
+            **2. Find the section in wave-agent.md that discusses interface contracts and types
+            (look for "interface contracts", "Field 2", or "interface" in the agent instructions).
+            Add a note:**
+
+            Find the first paragraph or section that discusses reading the interface contracts from
+            the brief. After it, add:
+
+            ```markdown
+            **Field 10 — Contract Builder Stubs (when present):** If your brief includes a
+            "Relevant Contracts" section (Field 10), the Contract Builder phase ran and produced
+            typed stubs committed to HEAD. Import types from the paths listed — do not redefine
+            them in your own files. If Field 10 is absent, derive types from the interface
+            contracts in Fields 2–3 as usual.
+            ```
+
+            **3. Update the Protocol Reference Notation** at the bottom of wave-agent.md.
+            Find any reference to `E1-E4X` execution rules range and update to include E48,
+            or if the reference is generic ("defined in protocol/execution-rules.md"), leave as-is.
+
+            ### Verification gate
+
+            ```bash
+            grep -c "Field 10\|Relevant Contracts" /Users/dayna.blackwell/workspace/code/scout-and-wave/implementations/claude-code/prompts/agents/wave-agent.md
+            # Expected: >= 2
+            ```
+
+            ### Constraints
+            - Do NOT modify `agent-template.md` — Agent B's file (Wave 1). Read it only.
+            - Do NOT modify `saw-skill.md` — Agent G's file (Wave 2).
+            - Minimal changes only — add the Field 10 guidance where agents will see it during execution.
+          files:
+            - implementations/claude-code/prompts/agents/wave-agent.md
+          dependencies:
+            - B
+        - id: M
+          task: |-
+            ## Wave 2 Agent M: critic-agent.md — Check 11: integration_hint_completeness
+
+            Update `implementations/claude-code/prompts/agents/critic-agent.md` in
+            `/Users/dayna.blackwell/workspace/code/scout-and-wave`.
+
+            The critic runs between Scout validation and Wave preparation. It reviews the IMPL doc
+            for logical correctness. A new check is needed: if cross-agent calls are mentioned in
+            agent task descriptions but no corresponding integration hint exists, flag it.
+
+            ### What to implement
+
+            **1. Add Check 11 after the existing Check 10 section.**
+
+            Find the `### Check 10: result_code_semantics` section. Read its structure. After the
+            complete Check 10 section ends, append:
+
+            ```markdown
+            ### Check 11: integration_hint_completeness
+
+            **Scope filter:** Run Check 11 only when the IMPL doc contains at least one agent task
+            description that mentions a cross-agent call (e.g., "calls `FunctionName()`", "uses type
+            X from Agent B", "invokes Agent B's handler"). If no cross-agent calls are mentioned in
+            any task, skip Check 11 entirely.
+
+            **What to check:**
+            1. Scan all agent task descriptions for language indicating a cross-agent function call
+               or type import: patterns like "calls `Foo()`", "uses `BarType` from agent", "imports
+               from Agent B's files", "invokes", "consumes".
+            2. For each cross-agent call identified, check whether a matching `integration_hints`
+               entry exists with `caller_agent` and `callee_agent` matching the agents involved.
+            3. If a cross-agent call is described in the task but has NO matching integration hint:
+               flag as a **warning** (not error) — the Contract Builder phase will be skipped for
+               this boundary, increasing the risk of type mismatch at merge time.
+            4. If `integration_hints` is non-empty but `contract_builder_result` is already present
+               and `status: complete`, skip this check — stubs already materialized.
+
+            **Tool strategy:** Read all agent task fields from the IMPL doc. Use Grep to find
+            cross-agent call patterns. Cross-reference against integration_hints list.
+
+            **Severity:** WARNING — does not block wave launch, but should be surfaced in the
+            critic verdict as a caveat. Missing hints mean this boundary relies on prose contracts
+            only, which is the pre-E48 baseline (acceptable but suboptimal).
+
+            **CriticResult format:** Include under `check_results` with `check: integration_hint_completeness`,
+            `severity: warning`, and a message listing which agent pairs have undocumented cross-boundary
+            calls.
+            ```
+
+            **2. Update the check count** in the critic-agent.md header or summary if it lists
+            "N checks" anywhere. Search for "10 checks" or similar and update to "11 checks".
+
+            ### Verification gate
+
+            ```bash
+            grep -c "Check 11\|integration_hint_completeness" /Users/dayna.blackwell/workspace/code/scout-and-wave/implementations/claude-code/prompts/agents/critic-agent.md
+            # Expected: >= 2
+            ```
+
+            ### Constraints
+            - Do NOT modify any other agent files.
+            - Severity is WARNING, not ERROR — this check should not block valid waves.
+            - Do NOT add a check for `contract_builder_result` completeness — the Orchestrator
+              handles that gate (E48); the critic runs before contract builder executes.
+          files:
+            - implementations/claude-code/prompts/agents/critic-agent.md
+          dependencies:
+            - A
+            - C
         - id: G
           task: |-
             ## Wave 2 Agent G: Protocol Orchestrator — saw-skill.md + execution-rules.md + pre-wave-validation.md
