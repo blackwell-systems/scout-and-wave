@@ -42,7 +42,7 @@ file_ownership:
       action: modify
       repo: scout-and-wave
     - file: implementations/claude-code/prompts/agent-template.md
-      agent: B
+      agent: A
       wave: 1
       action: modify
       repo: scout-and-wave
@@ -92,17 +92,17 @@ file_ownership:
       action: modify
       repo: scout-and-wave
     - file: implementations/claude-code/prompts/references/failure-routing.md
-      agent: K
+      agent: J
       wave: 1
       action: modify
       repo: scout-and-wave
     - file: implementations/claude-code/prompts/references/wave-agent-contracts.md
-      agent: K
+      agent: J
       wave: 1
       action: modify
       repo: scout-and-wave
     - file: protocol/observability-events.md
-      agent: K
+      agent: J
       wave: 1
       action: modify
       repo: scout-and-wave
@@ -125,10 +125,10 @@ file_ownership:
       wave: 2
       action: modify
       depends_on:
-        - B
+        - A
       repo: scout-and-wave
     - file: implementations/claude-code/prompts/agents/critic-agent.md
-      agent: M
+      agent: L
       wave: 2
       action: modify
       depends_on:
@@ -410,10 +410,6 @@ waves:
             ### Constraints
             - Do NOT modify any other protocol files.
             - Do NOT change existing typed block schemas.
-          files:
-            - protocol/message-formats.md
-        - id: B
-          task: |-
             ## Wave 1 Agent B: Protocol — agent-template.md Field 10
 
             Add Field 10 (relevant_contracts) to
@@ -454,6 +450,7 @@ waves:
             - Do NOT modify any other protocol files.
             - Field numbering: use 10 (9 is reserved for future use).
           files:
+            - protocol/message-formats.md
             - implementations/claude-code/prompts/agent-template.md
         - id: C
           task: |-
@@ -832,13 +829,6 @@ waves:
             - Do NOT modify `protocol/execution-rules.md` — Agent G's file (Wave 2).
             - Do NOT modify `protocol/message-formats.md` — Agent A's file (Wave 1).
             - Do NOT create new files — all tasks are modifications to existing files.
-          files:
-            - protocol/state-machine.md
-            - protocol/participants.md
-            - protocol/procedures.md
-            - protocol/preconditions.md
-        - id: K
-          task: |-
             ## Wave 1 Agent K: Reference Docs — failure-routing, wave-agent-contracts, observability-events
 
             Update three reference files in `/Users/dayna.blackwell/workspace/code/scout-and-wave`.
@@ -1000,6 +990,10 @@ waves:
             - Do NOT modify `pre-wave-validation.md` — Agent G's file (Wave 2).
             - Do NOT modify any agent prompt files — those are Wave 1 (A, B, C) or Wave 2 (L, M) territory.
           files:
+            - protocol/state-machine.md
+            - protocol/participants.md
+            - protocol/procedures.md
+            - protocol/preconditions.md
             - implementations/claude-code/prompts/references/failure-routing.md
             - implementations/claude-code/prompts/references/wave-agent-contracts.md
             - protocol/observability-events.md
@@ -1148,12 +1142,6 @@ waves:
             - Do NOT modify `agent-template.md` — Agent B's file (Wave 1). Read it only.
             - Do NOT modify `saw-skill.md` — Agent G's file (Wave 2).
             - Minimal changes only — add the Field 10 guidance where agents will see it during execution.
-          files:
-            - implementations/claude-code/prompts/agents/wave-agent.md
-          dependencies:
-            - B
-        - id: M
-          task: |-
             ## Wave 2 Agent M: critic-agent.md — Check 11: integration_hint_completeness
 
             Update `implementations/claude-code/prompts/agents/critic-agent.md` in
@@ -1218,8 +1206,10 @@ waves:
             - Do NOT add a check for `contract_builder_result` completeness — the Orchestrator
               handles that gate (E48); the critic runs before contract builder executes.
           files:
+            - implementations/claude-code/prompts/agents/wave-agent.md
             - implementations/claude-code/prompts/agents/critic-agent.md
           dependencies:
+            - A
             - A
             - C
         - id: G
