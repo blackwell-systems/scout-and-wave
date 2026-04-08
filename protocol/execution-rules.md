@@ -276,7 +276,91 @@ The scout must specify exact verification commands in Field 6 of each agent prom
 
 **Merge Order:** Within a valid wave, merge order is arbitrary. Same-wave agents are independent by construction: any agent whose work depends on a file created by another agent belongs in a later wave. If merge order appears to matter, the wave structure is wrong, not the merge sequence.
 
-**Related Invariants:** See I1 (disjoint file ownership). For false positive handling, see E11a.
+**Related Invariants:** See I1 (disjoint file ownership). For false positive handling, see E11a. For Scout-time conflict classification, see E11b.
+
+---
+
+## E11b: Scout-Time Conflict Pattern Classification
+
+**Trigger:** Scout is assigning file ownership and a file appears in more than one agent's work scope.
+
+**Required Action:** Scout classifies the overlap using one of the four patterns below before
+deciding whether to enforce strict disjoint ownership (I1) or permit controlled shared
+ownership (I1 relaxation). The decision determines whether agents can be in the same wave
+or must be sequenced.
+
+### When to enforce strict I1 (disjoint ownership, mandatory):
+- Agents modify existing function signatures or struct fields
+- Agents edit the same lines (both updating the same config value)
+- Agents rename or remove exported symbols
+- Mixed patterns (one agent appends, another edits existing code in same file)
+
+### When I1 relaxation is permitted (append-only shared ownership):
+Only when BOTH conditions hold:
+1. The diff is purely additive — no deletions, no modifications to existing lines
+2. Each agent's additions are self-contained and independent of the other agent's additions
+
+### Pattern 1: Test file append-only (safe — same wave permitted)
+
+**Scenario:** Multiple agents add new test functions to the same test file.
+
+**Safe when:** Each agent adds distinct, named test functions without modifying existing
+tests, shared setup, or teardown. No agent renames or removes existing tests.
+
+**Merge behavior:** Apply agent commits sequentially in any order. Git resolves without
+conflict because additions are to independent, named blocks.
+
+**Example:** Agent A adds `TestAutoMergeAppend`, Agent B adds `TestDiffPatternAnalysis`
+to the same `finalize_test.go`. Neither touches the other's test or the shared `TestMain`.
+
+**Constraint to include in agent prompt:** "Add new test functions only — do not modify,
+rename, or remove existing tests."
+
+### Pattern 2: Registry append-only (safe — same wave permitted)
+
+**Scenario:** Multiple agents register independent entries in a central registry, route
+table, or command list.
+
+**Safe when:** Entries are independent key-value pairs or function calls; insertion order
+does not affect behavior; no agent modifies the initialization logic or existing entries.
+
+**Merge behavior:** Apply agent commits in any order. Entries accumulate without conflict.
+
+**Example:** Agent A adds `router.Handle("/api/v1/contracts", ...)`, Agent B adds
+`router.Handle("/api/v1/patterns", ...)` to the same `routes.go`. Neither touches existing
+routes or shared initialization.
+
+**Constraint to include in agent prompt:** "Append new entries only — do not reorder
+existing entries or modify shared initialization."
+
+### Pattern 3: Line edits (unsafe — must sequence into separate waves)
+
+**Scenario:** Agents modify existing lines, function signatures, or struct fields in
+the same file.
+
+**Never safe:** Two agents editing overlapping line ranges will produce a semantic conflict
+that cannot be auto-resolved. The codebase may build but be logically incorrect.
+
+**Resolution:** Place one agent in Wave N and the other in Wave N+1. Wave N+1 agent
+receives the merged result of Wave N as its baseline.
+
+**Example:** Agent A changes `func Parse(data []byte) (Result, error)` to return
+`Result[Data]`; Agent B changes the same signature to add a parameter. Neither can
+complete correctly while the other's change is pending.
+
+### Pattern 4: Mixed (unsafe — must sequence into separate waves)
+
+**Scenario:** One agent appends new content while another edits existing lines in the
+same file.
+
+**Never safe:** The append may depend semantically on the edit (e.g., a new test calls
+a refactored function). Even if Git merges cleanly, the append may be logically stale.
+
+**Resolution:** Place the editing agent in Wave N, the appending agent in Wave N+1.
+The appending agent writes against the already-edited baseline.
+
+**Example:** Agent A refactors `validateInput()`. Agent B adds `TestValidateInputEdgeCases()`
+that calls it. Agent B must run after Agent A's refactor is merged.
 
 ---
 
