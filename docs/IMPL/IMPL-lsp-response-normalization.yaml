@@ -1,0 +1,979 @@
+title: LSP Union Response Normalization
+feature_slug: lsp-response-normalization
+verdict: SUITABLE
+suitability_assessment: |
+    Work decomposes into two disjoint waves with a clear interface boundary:
+
+    Wave 1 (Agent A) owns the LSP layer: new types in internal/types/types.go,
+    the normalization functions in new file internal/lsp/normalize.go, and the
+    updated method signatures in internal/lsp/client.go. These three files have
+    no dependency on the tool/resource layer.
+
+    Wave 2 (Agent B) owns the consumer layer: internal/tools/analysis.go (three
+    handlers switch from []interface{} to concrete types), internal/resources/resources.go
+    (HandleCompletionsResource uses the new CompletionList return type), and unit
+    tests for the normalization logic in internal/lsp/normalize_test.go.
+
+    Interface contracts are fully specifiable before implementation: the three
+    normalization function signatures are determined by the LSP spec (discriminator
+    fields are well-known), and the three updated client method signatures follow
+    from the feature description.
+
+    Parallelization value: moderate. The two waves run sequentially, but Agent A
+    has ~4 files of non-trivial logic (two-pass tree reconstruction for DocumentSymbol,
+    discriminated union dispatch for CodeAction). Build+test cycles run independently
+    per worktree. Sequential baseline ~25 min; SAW ~15 min (10 min Agent A, 5 min
+    Agent B after merge).
+
+    No investigation-first items. No unknown root causes. All five suitability
+    questions resolve cleanly.
+
+    Estimated times:
+    - Scout phase: ~10 min
+    - Agent execution: Wave 1 ~10 min, Wave 2 ~5 min (post-merge of Wave 1)
+    - Merge and verification: ~3 min
+    Total SAW time: ~18 min
+    Sequential baseline: ~25 min
+    Time savings: ~7 min (28% faster). Clear speedup given non-trivial normalization logic.
+test_command: GOWORK=off go test ./internal/...
+lint_command: GOWORK=off go vet ./...
+file_ownership:
+    - file: internal/types/types.go
+      agent: A
+      wave: 1
+      action: modify
+    - file: internal/lsp/normalize.go
+      agent: A
+      wave: 1
+      action: new
+    - file: internal/lsp/client.go
+      agent: A
+      wave: 1
+      action: modify
+    - file: internal/tools/analysis.go
+      agent: B
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+    - file: internal/resources/resources.go
+      agent: B
+      wave: 2
+      action: modify
+      depends_on:
+        - A
+    - file: internal/lsp/normalize_test.go
+      agent: B
+      wave: 2
+      action: new
+      depends_on:
+        - A
+interface_contracts:
+    - name: DocumentSymbol
+      description: |-
+        Hierarchical document symbol shape (richer of the two LSP variants).
+        New type added to internal/types/types.go. Used as the canonical return
+        type for GetDocumentSymbols after normalization.
+      definition: |
+        // DocumentSymbol is the hierarchical variant of a document symbol.
+        // See LSP 3.17 § DocumentSymbol.
+        type DocumentSymbol struct {
+            Name           string           `json:"name"`
+            Detail         string           `json:"detail,omitempty"`
+            Kind           SymbolKind       `json:"kind"`
+            Tags           []SymbolTag      `json:"tags,omitempty"`
+            Deprecated     bool             `json:"deprecated,omitempty"`
+            Range          Range            `json:"range"`
+            SelectionRange Range            `json:"selectionRange"`
+            Children       []DocumentSymbol `json:"children,omitempty"`
+        }
+      location: internal/types/types.go
+    - name: CompletionItem
+      description: |-
+        Single completion item. New type added to internal/types/types.go.
+        Matches LSP CompletionItem; fields beyond label/kind are kept as
+        interface{} or *string to stay flexible across server implementations.
+      definition: |
+        // CompletionItem represents a single completion suggestion.
+        // See LSP 3.17 § CompletionItem.
+        type CompletionItem struct {
+            Label               string      `json:"label"`
+            Kind                *int        `json:"kind,omitempty"`
+            Tags                []SymbolTag `json:"tags,omitempty"`
+            Detail              *string     `json:"detail,omitempty"`
+            Documentation       interface{} `json:"documentation,omitempty"`
+            Deprecated          bool        `json:"deprecated,omitempty"`
+            Preselect           bool        `json:"preselect,omitempty"`
+            SortText            *string     `json:"sortText,omitempty"`
+            FilterText          *string     `json:"filterText,omitempty"`
+            InsertText          *string     `json:"insertText,omitempty"`
+            InsertTextFormat    *int        `json:"insertTextFormat,omitempty"`
+            TextEdit            interface{} `json:"textEdit,omitempty"`
+            AdditionalTextEdits []TextEdit  `json:"additionalTextEdits,omitempty"`
+            CommitCharacters    []string    `json:"commitCharacters,omitempty"`
+            Command             *Command    `json:"command,omitempty"`
+            Data                interface{} `json:"data,omitempty"`
+        }
+      location: internal/types/types.go
+    - name: CompletionList
+      description: |-
+        Canonical completion response wrapper. New type added to internal/types/types.go.
+        GetCompletion always returns this; bare CompletionItem[] is wrapped with
+        isIncomplete=false. This is the type both analysis.go and resources.go receive.
+      definition: |
+        // CompletionList is the canonical completion response.
+        // See LSP 3.17 § CompletionList.
+        type CompletionList struct {
+            IsIncomplete bool             `json:"isIncomplete"`
+            Items        []CompletionItem `json:"items"`
+        }
+      location: internal/types/types.go
+    - name: Command
+      description: |-
+        LSP Command type. New type in internal/types/types.go. Used as the flat
+        (non-CodeAction) variant that GetCodeActions normalizes away. Also embedded
+        in CompletionItem.Command and CodeAction.Command.
+      definition: |
+        // Command is an LSP workspace command (used both standalone and embedded).
+        // See LSP 3.17 § Command.
+        type Command struct {
+            Title     string        `json:"title"`
+            Command   string        `json:"command"`
+            Arguments []interface{} `json:"arguments,omitempty"`
+        }
+      location: internal/types/types.go
+    - name: CodeAction
+      description: |-
+        Canonical code action shape. New type in internal/types/types.go.
+        GetCodeActions always returns []CodeAction; bare Command items are
+        synthesized into CodeAction{Title: cmd.Title, Command: &cmd}.
+        Discriminator: CodeAction has a "kind" field; Command does not.
+        Note: "kind" is optional in CodeAction per spec, so discrimination uses
+        presence of "title" + absence of "command" (string field) as the primary
+        heuristic, falling back to checking whether "kind" is present.
+      definition: |
+        // CodeAction is the canonical code action shape.
+        // See LSP 3.17 § CodeAction.
+        type CodeAction struct {
+            Title       string        `json:"title"`
+            Kind        *string       `json:"kind,omitempty"`
+            Diagnostics []LSPDiagnostic `json:"diagnostics,omitempty"`
+            IsPreferred *bool         `json:"isPreferred,omitempty"`
+            Disabled    *struct {
+                Reason string `json:"reason"`
+            } `json:"disabled,omitempty"`
+            Edit    interface{} `json:"edit,omitempty"`
+            Command *Command    `json:"command,omitempty"`
+            Data    interface{} `json:"data,omitempty"`
+        }
+      location: internal/types/types.go
+    - name: NormalizeDocumentSymbols
+      description: |-
+        Core normalization function in new file internal/lsp/normalize.go.
+        Accepts raw JSON from the LSP server (DocumentSymbol[] or SymbolInformation[]).
+        Discriminates by presence of "selectionRange" field (DocumentSymbol has it;
+        SymbolInformation does not — SymbolInformation has "location" instead).
+        For SymbolInformation[], two-pass reconstruction:
+          Pass 1: unmarshal each item, synthesize selectionRange=range (from location.range),
+                  build name->*DocumentSymbol map.
+          Pass 2: for each item with containerName, find parent by name in map and append
+                  as child; items with no resolvable parent become root-level nodes.
+      definition: |
+        // NormalizeDocumentSymbols converts a raw LSP documentSymbol response
+        // (DocumentSymbol[] | SymbolInformation[]) into []types.DocumentSymbol.
+        func NormalizeDocumentSymbols(raw json.RawMessage) ([]types.DocumentSymbol, error)
+      location: internal/lsp/normalize.go
+    - name: NormalizeCompletion
+      description: |-
+        Core normalization function in new file internal/lsp/normalize.go.
+        Accepts raw JSON (CompletionList | CompletionItem[]).
+        Discriminates by attempting unmarshal into struct with "items" field
+        (CompletionList). If items field is non-nil, it is a CompletionList.
+        Otherwise unmarshal as []CompletionItem and wrap with IsIncomplete=false.
+      definition: |
+        // NormalizeCompletion converts a raw LSP completion response
+        // (CompletionList | CompletionItem[]) into types.CompletionList.
+        func NormalizeCompletion(raw json.RawMessage) (types.CompletionList, error)
+      location: internal/lsp/normalize.go
+    - name: NormalizeCodeActions
+      description: |-
+        Core normalization function in new file internal/lsp/normalize.go.
+        Accepts raw JSON ((Command | CodeAction)[]).
+        Discriminates per item: if item has a "command" field that is a string
+        (not an object), it is a Command — synthesize CodeAction{Title, Command: &cmd}.
+        If item has a "title" field and no string "command" field, it is a CodeAction —
+        unmarshal directly. Items that fail both paths are dropped with a log warning.
+        Returns []types.CodeAction (never nil; empty slice on empty input).
+      definition: |
+        // NormalizeCodeActions converts a raw LSP codeAction response
+        // ((Command | CodeAction)[]) into []types.CodeAction.
+        func NormalizeCodeActions(raw json.RawMessage) ([]types.CodeAction, error)
+      location: internal/lsp/normalize.go
+    - name: LSPClient.GetDocumentSymbols
+      description: |-
+        Updated signature for client.GetDocumentSymbols. Returns []types.DocumentSymbol
+        instead of []interface{}. Calls NormalizeDocumentSymbols internally.
+        Callers: internal/tools/analysis.go HandleGetDocumentSymbols.
+      definition: |
+        func (c *LSPClient) GetDocumentSymbols(ctx context.Context, uri string) ([]types.DocumentSymbol, error)
+      location: internal/lsp/client.go
+    - name: LSPClient.GetCompletion
+      description: |-
+        Updated signature for client.GetCompletion. Returns types.CompletionList
+        instead of []interface{}. Calls NormalizeCompletion internally.
+        Callers: internal/tools/analysis.go HandleGetCompletions,
+                 internal/resources/resources.go HandleCompletionsResource.
+      definition: |
+        func (c *LSPClient) GetCompletion(ctx context.Context, uri string, pos types.Position) (types.CompletionList, error)
+      location: internal/lsp/client.go
+    - name: LSPClient.GetCodeActions
+      description: |-
+        Updated signature for client.GetCodeActions. Returns []types.CodeAction
+        instead of []interface{}. Calls NormalizeCodeActions internally.
+        Callers: internal/tools/analysis.go HandleGetCodeActions.
+      definition: |
+        func (c *LSPClient) GetCodeActions(ctx context.Context, uri string, rng types.Range) ([]types.CodeAction, error)
+      location: internal/lsp/client.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## Role
+            You are implementing the LSP normalization layer for the lsp-mcp-go project.
+            Your job is to (1) add new concrete types to internal/types/types.go,
+            (2) create internal/lsp/normalize.go with three normalization functions,
+            and (3) update the three client methods in internal/lsp/client.go to return
+            concrete types instead of []interface{}.
+
+            ## Repo root
+            /Users/dayna.blackwell/workspace/code/LSP-MCP-GO
+
+            All commands must be run with GOWORK=off due to a go.work file in the parent workspace.
+
+            ## What to implement
+
+            ### Step 1: Add types to internal/types/types.go
+
+            Append the following five types after the existing SymbolInformation struct
+            (after line 148 — the closing brace of SymbolInformation). Do not modify
+            any existing types.
+
+            The exact text to insert after is:
+            ```go
+            	ContainerName *string     `json:"containerName,omitempty"`
+            }
+            ```
+
+            Insert these types:
+
+            ```go
+            // DocumentSymbol is the hierarchical variant of a document symbol.
+            // See LSP 3.17 § DocumentSymbol.
+            type DocumentSymbol struct {
+            	Name           string           `json:"name"`
+            	Detail         string           `json:"detail,omitempty"`
+            	Kind           SymbolKind       `json:"kind"`
+            	Tags           []SymbolTag      `json:"tags,omitempty"`
+            	Deprecated     bool             `json:"deprecated,omitempty"`
+            	Range          Range            `json:"range"`
+            	SelectionRange Range            `json:"selectionRange"`
+            	Children       []DocumentSymbol `json:"children,omitempty"`
+            }
+
+            // Command is an LSP workspace command (used both standalone and embedded).
+            // See LSP 3.17 § Command.
+            type Command struct {
+            	Title     string        `json:"title"`
+            	Command   string        `json:"command"`
+            	Arguments []interface{} `json:"arguments,omitempty"`
+            }
+
+            // CompletionItem represents a single completion suggestion.
+            // See LSP 3.17 § CompletionItem.
+            type CompletionItem struct {
+            	Label               string      `json:"label"`
+            	Kind                *int        `json:"kind,omitempty"`
+            	Tags                []SymbolTag `json:"tags,omitempty"`
+            	Detail              *string     `json:"detail,omitempty"`
+            	Documentation       interface{} `json:"documentation,omitempty"`
+            	Deprecated          bool        `json:"deprecated,omitempty"`
+            	Preselect           bool        `json:"preselect,omitempty"`
+            	SortText            *string     `json:"sortText,omitempty"`
+            	FilterText          *string     `json:"filterText,omitempty"`
+            	InsertText          *string     `json:"insertText,omitempty"`
+            	InsertTextFormat    *int        `json:"insertTextFormat,omitempty"`
+            	TextEdit            interface{} `json:"textEdit,omitempty"`
+            	AdditionalTextEdits []TextEdit  `json:"additionalTextEdits,omitempty"`
+            	CommitCharacters    []string    `json:"commitCharacters,omitempty"`
+            	Command             *Command    `json:"command,omitempty"`
+            	Data                interface{} `json:"data,omitempty"`
+            }
+
+            // CompletionList is the canonical completion response wrapper.
+            // See LSP 3.17 § CompletionList.
+            type CompletionList struct {
+            	IsIncomplete bool             `json:"isIncomplete"`
+            	Items        []CompletionItem `json:"items"`
+            }
+
+            // CodeAction is the canonical code action shape.
+            // See LSP 3.17 § CodeAction.
+            type CodeAction struct {
+            	Title       string          `json:"title"`
+            	Kind        *string         `json:"kind,omitempty"`
+            	Diagnostics []LSPDiagnostic `json:"diagnostics,omitempty"`
+            	IsPreferred *bool           `json:"isPreferred,omitempty"`
+            	Disabled    *struct {
+            		Reason string `json:"reason"`
+            	} `json:"disabled,omitempty"`
+            	Edit    interface{} `json:"edit,omitempty"`
+            	Command *Command    `json:"command,omitempty"`
+            	Data    interface{} `json:"data,omitempty"`
+            }
+            ```
+
+            ### Step 2: Create internal/lsp/normalize.go
+
+            Create a new file `internal/lsp/normalize.go` in package `lsp`. This file
+            contains three pure functions that take `json.RawMessage` and return concrete types.
+            The functions import `encoding/json` and `github.com/blackwell-systems/lsp-mcp-go/internal/types`.
+
+            #### NormalizeDocumentSymbols
+
+            Logic:
+            1. If raw is nil or "null", return empty slice, nil.
+            2. Attempt to unmarshal the first element (if array is non-empty) as a probe object:
+               ```go
+               var probe []json.RawMessage
+               ```
+               If the array is empty, return empty slice, nil.
+            3. Unmarshal probe[0] into a struct with just `SelectionRange *json.RawMessage json:"selectionRange"`.
+               If SelectionRange is non-nil, the server returned DocumentSymbol[] — unmarshal
+               the whole array directly as []types.DocumentSymbol and return.
+            4. Otherwise (SymbolInformation variant), unmarshal as []types.SymbolInformation.
+               Two-pass tree reconstruction:
+               Pass 1: For each SymbolInformation item, create DocumentSymbol:
+                 - Name = item.Name, Kind = item.Kind, Tags = item.Tags
+                 - Range = item.Location.Range
+                 - SelectionRange = item.Location.Range  (synthesized)
+                 - Children = nil
+                 Build a map[string]*DocumentSymbol keyed by Name (last write wins on duplicates).
+               Pass 2: For each item (same order), if ContainerName is non-nil and non-empty,
+                 look up parent in the name map. If found, append the child's DocumentSymbol
+                 pointer to parent.Children. If not found, append to root slice.
+                 Items with nil or empty ContainerName always go to root slice.
+               Return the root slice (items appended in Pass 2 order), nil.
+
+            #### NormalizeCompletion
+
+            Logic:
+            1. If raw is nil or "null", return CompletionList{Items: []CompletionItem{}}, nil.
+            2. Attempt unmarshal into struct{ Items []json.RawMessage `json:"items"` }.
+               If Items is non-nil (even empty slice), the server returned a CompletionList.
+               Unmarshal raw as:
+               ```go
+               var cl struct {
+                   IsIncomplete bool                    `json:"isIncomplete"`
+                   Items        []types.CompletionItem  `json:"items"`
+               }
+               ```
+               Return types.CompletionList{IsIncomplete: cl.IsIncomplete, Items: cl.Items}, nil.
+            3. Otherwise, attempt unmarshal as []types.CompletionItem.
+               Return types.CompletionList{IsIncomplete: false, Items: items}, nil.
+            4. On all unmarshal errors, return zero value and the error.
+
+            #### NormalizeCodeActions
+
+            Logic:
+            1. If raw is nil or "null", return []types.CodeAction{}, nil.
+            2. Unmarshal as []json.RawMessage. If error, return nil and error.
+            3. For each element:
+               a. Unmarshal into a discriminator struct:
+                  ```go
+                  var disc struct {
+                      Title   string          `json:"title"`
+                      Command json.RawMessage `json:"command"`
+                      Kind    *string         `json:"kind"`
+                  }
+                  ```
+               b. Determine shape:
+                  - If disc.Command is non-nil and NOT a JSON object (i.e., first non-whitespace
+                    byte is `"` or it is a plain string), it is a bare Command.
+                    Unmarshal the element as types.Command and synthesize:
+                    types.CodeAction{Title: cmd.Title, Command: &cmd}
+                  - Otherwise (disc.Kind != nil, or disc.Command is object/absent, or
+                    disc.Title is set with object/nil command), treat as CodeAction.
+                    Unmarshal element directly as types.CodeAction.
+               c. Append result to output slice.
+            4. Return output slice (never nil; use []types.CodeAction{} if empty), nil.
+
+            Note on discriminator: the spec says Command has a string `command` field
+            (the command identifier) while CodeAction has an object `command` field
+            (a nested Command object). Checking whether the raw `command` value starts
+            with `"` (after trimming whitespace) is the reliable discriminator.
+
+            ### Step 3: Update internal/lsp/client.go — three method signatures
+
+            Change these three methods to call the normalize functions and return concrete types:
+
+            **GetDocumentSymbols** (currently lines 1189-1202):
+            Find this exact text:
+            ```go
+            // GetDocumentSymbols returns document symbols.
+            func (c *LSPClient) GetDocumentSymbols(ctx context.Context, uri string) ([]interface{}, error) {
+            	if !c.hasCapability("documentSymbolProvider") {
+            		logging.Log(logging.LevelDebug, "server does not support documentSymbol")
+            		return []interface{}{}, nil
+            	}
+            	result, err := c.sendRequest(ctx, "textDocument/documentSymbol", map[string]interface{}{
+            		"textDocument": map[string]interface{}{"uri": uri},
+            	})
+            	if err != nil {
+            		return nil, err
+            	}
+            	return parseInterfaceArray(result), nil
+            }
+            ```
+            Replace with:
+            ```go
+            // GetDocumentSymbols returns document symbols normalized to []types.DocumentSymbol.
+            // The LSP server may return DocumentSymbol[] or SymbolInformation[]; both are
+            // normalized to the richer DocumentSymbol shape.
+            func (c *LSPClient) GetDocumentSymbols(ctx context.Context, uri string) ([]types.DocumentSymbol, error) {
+            	if !c.hasCapability("documentSymbolProvider") {
+            		logging.Log(logging.LevelDebug, "server does not support documentSymbol")
+            		return []types.DocumentSymbol{}, nil
+            	}
+            	result, err := c.sendRequest(ctx, "textDocument/documentSymbol", map[string]interface{}{
+            		"textDocument": map[string]interface{}{"uri": uri},
+            	})
+            	if err != nil {
+            		return nil, err
+            	}
+            	return NormalizeDocumentSymbols(result)
+            }
+            ```
+
+            **GetCompletion** (currently lines 1051-1065):
+            Find this exact text:
+            ```go
+            // GetCompletion requests completion items at a position.
+            func (c *LSPClient) GetCompletion(ctx context.Context, uri string, pos types.Position) ([]interface{}, error) {
+            	if !c.hasCapability("completionProvider") {
+            		logging.Log(logging.LevelDebug, "server does not support completion")
+            		return []interface{}{}, nil
+            	}
+            	result, err := c.sendRequest(ctx, "textDocument/completion", map[string]interface{}{
+            		"textDocument": map[string]interface{}{"uri": uri},
+            		"position":     pos,
+            	})
+            	if err != nil {
+            		return nil, err
+            	}
+            	return parseInterfaceArray(result), nil
+            }
+            ```
+            Replace with:
+            ```go
+            // GetCompletion requests completion items at a position, normalized to CompletionList.
+            // The LSP server may return CompletionList or CompletionItem[]; both are normalized
+            // to CompletionList (bare array wrapped with isIncomplete=false).
+            func (c *LSPClient) GetCompletion(ctx context.Context, uri string, pos types.Position) (types.CompletionList, error) {
+            	if !c.hasCapability("completionProvider") {
+            		logging.Log(logging.LevelDebug, "server does not support completion")
+            		return types.CompletionList{Items: []types.CompletionItem{}}, nil
+            	}
+            	result, err := c.sendRequest(ctx, "textDocument/completion", map[string]interface{}{
+            		"textDocument": map[string]interface{}{"uri": uri},
+            		"position":     pos,
+            	})
+            	if err != nil {
+            		return types.CompletionList{}, err
+            	}
+            	return NormalizeCompletion(result)
+            }
+            ```
+
+            **GetCodeActions** (currently lines 1067-1103):
+            Find this exact text:
+            ```go
+            // GetCodeActions requests code actions for a range.
+            func (c *LSPClient) GetCodeActions(ctx context.Context, uri string, rng types.Range) ([]interface{}, error) {
+            	if !c.hasCapability("codeActionProvider") {
+            		logging.Log(logging.LevelDebug, "server does not support codeAction")
+            		return []interface{}{}, nil
+            	}
+            ```
+            Replace the function signature and return statements. The body (diagnostic
+            overlap detection logic) stays identical. The new version:
+            ```go
+            // GetCodeActions requests code actions, normalized to []types.CodeAction.
+            // The LSP server may return (Command | CodeAction)[]; bare Commands are
+            // synthesized into CodeAction{Title, Command: &cmd}.
+            func (c *LSPClient) GetCodeActions(ctx context.Context, uri string, rng types.Range) ([]types.CodeAction, error) {
+            	if !c.hasCapability("codeActionProvider") {
+            		logging.Log(logging.LevelDebug, "server does not support codeAction")
+            		return []types.CodeAction{}, nil
+            	}
+            	// Retrieve diagnostics that overlap the requested range.
+            	c.diagMu.RLock()
+            	allDiags := c.diags[uri]
+            	c.diagMu.RUnlock()
+            	var overlapping []types.LSPDiagnostic
+            	for _, d := range allDiags {
+            		diagStart := d.Range.Start
+            		diagEnd := d.Range.End
+            		beforeRange := diagEnd.Line < rng.Start.Line ||
+            			(diagEnd.Line == rng.Start.Line && diagEnd.Character < rng.Start.Character)
+            		afterRange := diagStart.Line > rng.End.Line ||
+            			(diagStart.Line == rng.End.Line && diagStart.Character > rng.End.Character)
+            		if !beforeRange && !afterRange {
+            			overlapping = append(overlapping, d)
+            		}
+            	}
+            	if overlapping == nil {
+            		overlapping = []types.LSPDiagnostic{}
+            	}
+            	result, err := c.sendRequest(ctx, "textDocument/codeAction", map[string]interface{}{
+            		"textDocument": map[string]interface{}{"uri": uri},
+            		"range":        rng,
+            		"context":      map[string]interface{}{"diagnostics": overlapping},
+            	})
+            	if err != nil {
+            		return nil, err
+            	}
+            	return NormalizeCodeActions(result)
+            }
+            ```
+
+            After making these three method changes, `parseInterfaceArray` in client.go will
+            no longer be called by these methods. Check whether any other methods in client.go
+            still call `parseInterfaceArray`. If none do, remove the `parseInterfaceArray`
+            function (lines 1906-1922). If other callers remain, leave it in place.
+
+            ## Verification gate
+
+            Run in order:
+            ```bash
+            cd /Users/dayna.blackwell/workspace/code/LSP-MCP-GO
+            GOWORK=off go build ./...
+            GOWORK=off go vet ./...
+            GOWORK=off go test ./internal/lsp/... ./internal/types/...
+            ```
+
+            Expected build output: no errors.
+            Expected vet output: no warnings.
+            Expected test output: ok for both packages (existing tests must continue to pass;
+            no new tests are in this wave).
+
+            Postcondition checks:
+            ```bash
+            # DocumentSymbol type must exist in types.go
+            grep -c "type DocumentSymbol struct" /Users/dayna.blackwell/workspace/code/LSP-MCP-GO/internal/types/types.go
+            # expected: 1
+
+            # CompletionList type must exist in types.go
+            grep -c "type CompletionList struct" /Users/dayna.blackwell/workspace/code/LSP-MCP-GO/internal/types/types.go
+            # expected: 1
+
+            # CodeAction type must exist in types.go
+            grep -c "type CodeAction struct" /Users/dayna.blackwell/workspace/code/LSP-MCP-GO/internal/types/types.go
+            # expected: 1
+
+            # normalize.go must exist with all three functions
+            grep -c "func Normalize" /Users/dayna.blackwell/workspace/code/LSP-MCP-GO/internal/lsp/normalize.go
+            # expected: 3
+
+            # GetDocumentSymbols must return []types.DocumentSymbol, not []interface{}
+            grep "func (c \*LSPClient) GetDocumentSymbols" /Users/dayna.blackwell/workspace/code/LSP-MCP-GO/internal/lsp/client.go
+            # expected line contains: ([]types.DocumentSymbol, error)
+
+            # GetCompletion must return types.CompletionList
+            grep "func (c \*LSPClient) GetCompletion" /Users/dayna.blackwell/workspace/code/LSP-MCP-GO/internal/lsp/client.go
+            # expected line contains: (types.CompletionList, error)
+
+            # GetCodeActions must return []types.CodeAction
+            grep "func (c \*LSPClient) GetCodeActions" /Users/dayna.blackwell/workspace/code/LSP-MCP-GO/internal/lsp/client.go
+            # expected line contains: ([]types.CodeAction, error)
+            ```
+
+            ## Constraints
+            - Do NOT modify any files in internal/tools/ or internal/resources/ — those are
+              owned by Agent B in Wave 2.
+            - Do NOT add a normalize_test.go file — that is Agent B's responsibility.
+            - Do NOT modify existing types in types.go (Position, Range, Location, SymbolInformation,
+              CallHierarchyItem, etc.) — only append new types.
+            - Do NOT remove parseInterfaceArray unless you have confirmed no other callers remain.
+              Check with: grep -n "parseInterfaceArray" internal/lsp/client.go
+          files:
+            - internal/types/types.go
+            - internal/lsp/normalize.go
+            - internal/lsp/client.go
+          context_source: prepared-brief
+    - number: 2
+      agents:
+        - id: B
+          task: |
+            ## Role
+            You are updating the consumer layer of the lsp-mcp-go project after the
+            normalization layer (Wave 1) has landed. The three LSP client methods now return
+            concrete types instead of []interface{}. Your job is to:
+            1. Update internal/tools/analysis.go — three handlers use the new concrete types.
+            2. Update internal/resources/resources.go — HandleCompletionsResource uses CompletionList.
+            3. Write unit tests in internal/lsp/normalize_test.go for the three Normalize* functions.
+
+            ## Repo root
+            /Users/dayna.blackwell/workspace/code/LSP-MCP-GO
+
+            All commands must be run with GOWORK=off.
+
+            ## New types available (from Wave 1)
+            After Wave 1 merges, the following types exist in internal/types/types.go:
+            - types.DocumentSymbol — hierarchical symbol with selectionRange + children
+            - types.CompletionItem — single completion suggestion
+            - types.CompletionList — {IsIncomplete bool, Items []CompletionItem}
+            - types.Command — {Title, Command string, Arguments []interface{}}
+            - types.CodeAction — {Title, Kind *string, Command *Command, Edit interface{}, ...}
+
+            And in internal/lsp/normalize.go (package lsp):
+            - lsp.NormalizeDocumentSymbols(json.RawMessage) ([]types.DocumentSymbol, error)
+            - lsp.NormalizeCompletion(json.RawMessage) (types.CompletionList, error)
+            - lsp.NormalizeCodeActions(json.RawMessage) ([]types.CodeAction, error)
+
+            ## Step 1: Update internal/tools/analysis.go
+
+            Three handlers need updating. The changes are straightforward: update the
+            WithDocument type parameter and the marshal call.
+
+            **HandleGetCompletions** — change from `[]interface{}` to `types.CompletionList`:
+
+            Find this exact text in analysis.go:
+            ```go
+            	result, wErr := WithDocument[[]interface{}](ctx, client, filePath, languageID, func(fileURI string) ([]interface{}, error) {
+            		pos := types.Position{Line: line - 1, Character: col - 1}
+            		return client.GetCompletion(ctx, fileURI, pos)
+            	})
+            	if wErr != nil {
+            		return types.ErrorResult(fmt.Sprintf("get_completions: %s", wErr)), nil
+            	}
+
+            	data, mErr := json.Marshal(result)
+            ```
+            Replace with:
+            ```go
+            	result, wErr := WithDocument[types.CompletionList](ctx, client, filePath, languageID, func(fileURI string) (types.CompletionList, error) {
+            		pos := types.Position{Line: line - 1, Character: col - 1}
+            		return client.GetCompletion(ctx, fileURI, pos)
+            	})
+            	if wErr != nil {
+            		return types.ErrorResult(fmt.Sprintf("get_completions: %s", wErr)), nil
+            	}
+
+            	data, mErr := json.Marshal(result)
+            ```
+
+            **HandleGetCodeActions** — change from `[]interface{}` to `[]types.CodeAction`:
+
+            Find this exact text in analysis.go:
+            ```go
+            	result, wErr := WithDocument[[]interface{}](ctx, client, filePath, languageID, func(fileURI string) ([]interface{}, error) {
+            		return client.GetCodeActions(ctx, fileURI, rng)
+            	})
+            	if wErr != nil {
+            		return types.ErrorResult(fmt.Sprintf("get_code_actions: %s", wErr)), nil
+            	}
+            ```
+            Replace with:
+            ```go
+            	result, wErr := WithDocument[[]types.CodeAction](ctx, client, filePath, languageID, func(fileURI string) ([]types.CodeAction, error) {
+            		return client.GetCodeActions(ctx, fileURI, rng)
+            	})
+            	if wErr != nil {
+            		return types.ErrorResult(fmt.Sprintf("get_code_actions: %s", wErr)), nil
+            	}
+            ```
+
+            **HandleGetDocumentSymbols** — change from `[]interface{}` to `[]types.DocumentSymbol`:
+
+            Find this exact text in analysis.go:
+            ```go
+            	result, wErr := WithDocument[[]interface{}](ctx, client, filePath, languageID, func(fileURI string) ([]interface{}, error) {
+            		return client.GetDocumentSymbols(ctx, fileURI)
+            	})
+            	if wErr != nil {
+            		return types.ErrorResult(fmt.Sprintf("get_document_symbols: %s", wErr)), nil
+            	}
+            ```
+            Replace with:
+            ```go
+            	result, wErr := WithDocument[[]types.DocumentSymbol](ctx, client, filePath, languageID, func(fileURI string) ([]types.DocumentSymbol, error) {
+            		return client.GetDocumentSymbols(ctx, fileURI)
+            	})
+            	if wErr != nil {
+            		return types.ErrorResult(fmt.Sprintf("get_document_symbols: %s", wErr)), nil
+            	}
+            ```
+
+            ## Step 2: Update internal/resources/resources.go
+
+            The HandleCompletionsResource function calls client.GetCompletion and marshals
+            the result. The return type changes from []interface{} to types.CompletionList,
+            but the marshal call is identical — json.Marshal works on both. The only change
+            needed is that the compiler will now require an import for the types package if
+            it is not already imported, and the variable type changes implicitly.
+
+            Find this exact text in resources.go:
+            ```go
+            	completions, err := client.GetCompletion(ctx, fileURI, pos)
+            	if err != nil {
+            		return ResourceResult{}, fmt.Errorf("get completions: %w", err)
+            	}
+
+            	text, err := json.Marshal(completions)
+            ```
+            The code is correct as-is after Wave 1 (GetCompletion now returns types.CompletionList
+            which marshals to the same JSON the caller already expected). Verify the file compiles:
+            ```bash
+            cd /Users/dayna.blackwell/workspace/code/LSP-MCP-GO
+            GOWORK=off go build ./internal/resources/...
+            ```
+            If there are no compilation errors, no text change is needed in resources.go.
+            If there IS a compilation error (unlikely but possible if the types package import
+            path changed), add the missing import.
+
+            In practice, because resources.go only calls client.GetCompletion and json.Marshal
+            on the result (no type assertion or []interface{} cast), it will compile without
+            changes. Confirm, then move on.
+
+            ## Step 3: Write internal/lsp/normalize_test.go
+
+            Create a new file `internal/lsp/normalize_test.go` in package `lsp_test`
+            (external test package; same directory as normalize.go).
+
+            Import:
+            ```go
+            import (
+                "encoding/json"
+                "testing"
+
+                "github.com/blackwell-systems/lsp-mcp-go/internal/lsp"
+                "github.com/blackwell-systems/lsp-mcp-go/internal/types"
+            )
+            ```
+
+            Write the following tests:
+
+            ### TestNormalizeDocumentSymbols_Null
+            Input: nil RawMessage.
+            Assert: returns empty slice, nil error.
+
+            ### TestNormalizeDocumentSymbols_EmptyArray
+            Input: json.RawMessage(`[]`).
+            Assert: returns empty slice, nil error.
+
+            ### TestNormalizeDocumentSymbols_DocumentSymbolVariant
+            Input: JSON array with one DocumentSymbol object that has a "selectionRange" field:
+            ```json
+            [{"name":"Foo","kind":5,"range":{"start":{"line":0,"character":0},"end":{"line":10,"character":1}},"selectionRange":{"start":{"line":0,"character":5},"end":{"line":0,"character":8}}}]
+            ```
+            Assert:
+            - len(result) == 1
+            - result[0].Name == "Foo"
+            - result[0].SelectionRange.Start.Line == 0 && result[0].SelectionRange.Start.Character == 5
+            - result[0].Children == nil or len(result[0].Children) == 0
+
+            ### TestNormalizeDocumentSymbols_SymbolInformationVariant
+            Input: JSON array with two SymbolInformation objects — one root, one child:
+            ```json
+            [
+              {"name":"MyStruct","kind":5,"location":{"uri":"file:///foo.go","range":{"start":{"line":0,"character":0},"end":{"line":5,"character":1}}}},
+              {"name":"MyField","kind":8,"location":{"uri":"file:///foo.go","range":{"start":{"line":1,"character":1},"end":{"line":1,"character":10}}},"containerName":"MyStruct"}
+            ]
+            ```
+            Assert:
+            - len(result) == 1 (MyStruct is root)
+            - result[0].Name == "MyStruct"
+            - result[0].SelectionRange == result[0].Range (synthesized from location.range)
+            - len(result[0].Children) == 1
+            - result[0].Children[0].Name == "MyField"
+
+            ### TestNormalizeCompletion_Null
+            Input: nil RawMessage.
+            Assert: returns CompletionList{Items non-nil but empty}, nil error.
+
+            ### TestNormalizeCompletion_BareArray
+            Input: JSON array of two completion items:
+            ```json
+            [{"label":"fmt"},{"label":"os"}]
+            ```
+            Assert:
+            - result.IsIncomplete == false
+            - len(result.Items) == 2
+            - result.Items[0].Label == "fmt"
+
+            ### TestNormalizeCompletion_CompletionList
+            Input: CompletionList JSON:
+            ```json
+            {"isIncomplete":true,"items":[{"label":"Printf"},{"label":"Println"}]}
+            ```
+            Assert:
+            - result.IsIncomplete == true
+            - len(result.Items) == 2
+            - result.Items[0].Label == "Printf"
+
+            ### TestNormalizeCodeActions_Null
+            Input: nil RawMessage.
+            Assert: returns non-nil empty slice, nil error.
+
+            ### TestNormalizeCodeActions_BareCommands
+            Input: JSON array of one Command (discriminated by string "command" field):
+            ```json
+            [{"title":"Format Document","command":"editor.action.formatDocument"}]
+            ```
+            Assert:
+            - len(result) == 1
+            - result[0].Title == "Format Document"
+            - result[0].Command != nil
+            - result[0].Command.Command == "editor.action.formatDocument"
+            - result[0].Kind == nil (synthesized CodeAction has no kind)
+
+            ### TestNormalizeCodeActions_CodeActions
+            Input: JSON array of one CodeAction (has "kind" field):
+            ```json
+            [{"title":"Add import","kind":"quickfix","command":{"title":"Add import","command":"go.add.import","arguments":["fmt"]}}]
+            ```
+            Assert:
+            - len(result) == 1
+            - result[0].Title == "Add import"
+            - result[0].Kind != nil && *result[0].Kind == "quickfix"
+            - result[0].Command != nil
+            - result[0].Command.Command == "go.add.import"
+
+            ### TestNormalizeCodeActions_Mixed
+            Input: JSON array with one bare Command followed by one CodeAction:
+            ```json
+            [
+              {"title":"Run","command":"test.run"},
+              {"title":"Fix error","kind":"quickfix"}
+            ]
+            ```
+            Assert:
+            - len(result) == 2
+            - result[0].Title == "Run" && result[0].Kind == nil
+            - result[1].Title == "Fix error" && *result[1].Kind == "quickfix"
+
+            ## Verification gate
+
+            Run in order:
+            ```bash
+            cd /Users/dayna.blackwell/workspace/code/LSP-MCP-GO
+            GOWORK=off go build ./...
+            GOWORK=off go vet ./...
+            GOWORK=off go test ./internal/lsp/... ./internal/tools/... ./internal/resources/...
+            ```
+
+            Expected: all packages build and test pass. Existing tests must not regress.
+
+            Postcondition checks:
+            ```bash
+            # normalize_test.go must exist
+            ls /Users/dayna.blackwell/workspace/code/LSP-MCP-GO/internal/lsp/normalize_test.go
+            # expected: file exists (no error)
+
+            # tools/analysis.go must not contain []interface{} in the three handlers
+            grep -c "WithDocument\[.*interface{}" /Users/dayna.blackwell/workspace/code/LSP-MCP-GO/internal/tools/analysis.go
+            # expected: 0
+
+            # resources.go must still compile (already confirmed above, but verify)
+            GOWORK=off go build ./internal/resources/...
+            # expected: no output (success)
+
+            # normalize_test.go must have 11 test functions
+            grep -c "^func Test" /Users/dayna.blackwell/workspace/code/LSP-MCP-GO/internal/lsp/normalize_test.go
+            # expected: 11
+            ```
+
+            ## Constraints
+            - Do NOT modify internal/lsp/client.go or internal/lsp/normalize.go — those are
+              owned by Agent A (Wave 1, already merged).
+            - Do NOT modify internal/types/types.go.
+            - Do NOT modify cmd/ files — server.go wires tool handlers by name and does not
+              depend on the concrete return types of the tools package; it receives types.ToolResult
+              which is unchanged.
+            - The normalize_test.go file uses package lsp_test (external test package), not
+              package lsp (internal). Do not put it in package lsp.
+          files:
+            - internal/tools/analysis.go
+            - internal/resources/resources.go
+            - internal/lsp/normalize_test.go
+          dependencies:
+            - A
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: GOWORK=off go build ./...
+          required: true
+          repo: LSP-MCP-GO
+        - type: lint
+          command: GOWORK=off go vet ./...
+          required: true
+          repo: LSP-MCP-GO
+        - type: test
+          command: GOWORK=off go test ./internal/...
+          required: true
+          repo: LSP-MCP-GO
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: |-
+            CodeAction discriminator fails for edge-case servers that omit "kind" on CodeActions
+            (kind is optional per spec) and also happen to have a string "command" field.
+            The discriminator in NormalizeCodeActions relies on checking whether the "command"
+            field is a JSON string vs object. A bare Command always has a string "command"
+            field; a CodeAction with an embedded Command object always has an object. This is
+            reliable per spec, but a malformed server could confuse the heuristic.
+          likelihood: low
+          impact: low
+          mitigation: |-
+            Document the discriminator logic clearly in normalize.go. If command field is a
+            JSON string → bare Command. If command field is a JSON object or absent → CodeAction.
+            Log a warning (using the logging package) when an item cannot be classified and
+            skip it rather than returning an error, to avoid breaking the entire response.
+        - scenario: |-
+            Two-pass SymbolInformation reconstruction maps children to wrong parents when
+            two symbols have the same name in different scopes (e.g., two methods both named
+            "String" on different types). The name→node map uses last-write-wins, so the
+            second "String" overwrites the first, and both items' children get parented to
+            the second "String".
+          likelihood: medium
+          impact: low
+          mitigation: |-
+            This is a known limitation of the two-pass approach — containerName is just a
+            string, so collision is unavoidable without more information. The feature spec
+            explicitly calls for this approach ("reconstruct parent-child tree from containerName;
+            anything unresolved becomes root-level with no children"). Document the limitation
+            in a comment in NormalizeDocumentSymbols. The result is still structurally valid;
+            it may just have slightly wrong tree shape for duplicate-name symbols.
+        - scenario: |-
+            Agent B edits WithDocument type parameters incorrectly, causing a compile error.
+            The generic constraint T any is flexible, but mismatching the callback return type
+            with the outer variable declaration produces a type inference error.
+          likelihood: low
+          impact: low
+          mitigation: |-
+            Agent B's task provides exact verbatim before/after text for each WithDocument call.
+            The verification gate runs go build immediately — compile errors surface within
+            seconds of the edit.
+        - scenario: |-
+            resources.go requires an explicit import change or type assertion after
+            GetCompletion return type changes, causing a compile error Agent B misses.
+          likelihood: low
+          impact: low
+          mitigation: |-
+            Agent B's task explicitly instructs running GOWORK=off go build ./internal/resources/...
+            after the Wave 1 merge and before any edits. If there is a compile error, the agent
+            investigates and fixes it. The json.Marshal call is type-agnostic, so in practice
+            no change should be needed.
+state: "REVIEWED"
