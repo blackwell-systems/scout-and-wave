@@ -116,15 +116,6 @@ Add Claude chat panel to `saw serve`. Read-only diagnostic mode first (why did a
 
 **Potential:** High UX value. "Why did agent B fail?" is the most-asked question during wave execution. Read-only mode is a quick win that unblocks the rest.
 
-### IMPL Doc Length Management
-
-Three complementary mitigations for IMPL doc growth:
-
-1. **History Sidecar** — After wave merges, archive verbose completion reports to `IMPL-slug-history.md`, replace with one-line summaries. Main doc stays bounded.
-2. **Structured Doc Splitting** — Split at creation: `IMPL-slug.md` (live state), `IMPL-slug-scaffolds.md` (scaffold contents), `IMPL-slug-log.md` (completion reports). Agents receive only relevant slices.
-3. **Size Gate** — Informational warning at E16 validation if doc exceeds 50 KB threshold, recommending compaction.
-
-**Potential:** Medium-high. History Sidecar (option 1) is the 80% solution with the least structural change — worth doing standalone. Options 2-3 require protocol changes.
 
 ### Constraint-Solving Validator
 
