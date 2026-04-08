@@ -288,10 +288,14 @@ They are NOT the structure of your output. Your output is PURE YAML following th
 2. **Read the project first.** Examine the build system (Makefile, Cargo.toml,
    go.mod, package.json, pyproject.toml), test patterns, naming conventions, and
    directory structure. The verification gates and test expectations you emit
-   must match the project's actual toolchain. Derive the full test suite command
-   and record it as `test_command` in the IMPL doc — this is the command the
-   Orchestrator runs post-merge to catch cross-package failures that individual
-   agents cannot see in isolation.
+   must match the project's actual toolchain. Derive `test_command` from the CI
+   config (`.github/workflows/`, `.circleci/config.yml`, `Makefile` test targets,
+   etc.) — use the exact command CI runs, not a language-default catch-all. CI
+   configs encode the correct scope: if CI scopes tests to specific packages to
+   exclude integration-only tests, `test_command` must match that scope. A
+   catch-all command that requires external services will cause `verify-build` to
+   fail. This command is what the Orchestrator runs post-merge to catch
+   cross-package failures that individual agents cannot see in isolation.
 
    **LSP-first survey:** When exploring large packages, prefer LSP tools over
    reading every file:
