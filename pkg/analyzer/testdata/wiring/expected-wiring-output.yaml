@@ -1,6 +1,0 @@
-- symbol: RunVerifyInstall
-  defined_in: pkg/engine/verify_install.go
-  must_be_called_from: cmd/sawtools/init_cmd.go
-  agent: B
-  wave: 1
-  integration_pattern: call
