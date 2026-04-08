@@ -1609,32 +1609,52 @@ Error: E37: critic found N error(s) in agent briefs — fix before launching wav
 This ensures agents cannot launch with inaccurate briefs, while warning-only results
 do not block execution.
 
-**Verification checks per agent brief (10 checks):**
-- Check 1 (file_existence): Every file marked action=modify must exist in the repo; every file
-  marked action=new must NOT exist (would cause conflict). Files with no action: skip.
-- Check 2 (symbol_accuracy): Function names, type names, method signatures referenced in the
-  brief must exist in the codebase as stated (for modify files) or must not conflict
-  with existing symbols (for new files)
+**Verification checks per agent brief (9 universal checks + 1 project-specific slot):**
+
+- Check 1 (file_existence): Every file marked `action: modify` must exist in the repo;
+  every file marked `action: new` must NOT exist (would cause conflict at agent write time).
+  Files with no action field: skip.
+
+- Check 2 (symbol_accuracy): Symbols (functions, types, methods, constants) referenced in the
+  brief must exist in the codebase at the stated location.
+  **Scope filter:** Skip entirely for agents whose ALL owned files are `action: new` — the
+  symbols do not exist yet and absence is expected. Apply only when the brief references
+  symbols in pre-existing files.
+
 - Check 3 (pattern_accuracy): Implementation patterns described in the brief (e.g. "call X to
   register handler", "add field to struct Y") must match the actual patterns in the
-  source files
+  source files. Verify by reading the referenced files directly.
+
 - Check 4 (interface_consistency): Interface contracts specified in the IMPL must be
   syntactically valid for the target language and consistent with types referenced
-  in source files
-- Check 5 (import_chains): For new files, all packages referenced in interface contracts must
-  be importable from the target module (exist in go.mod or local packages)
+  in source files.
+
+- Check 5 (import_chains): All packages referenced in interface contracts must be importable
+  from the target module (exist in the dependency manifest or as local packages).
+  **Scope filter:** Skip for agents with ONLY `action: new` files — import chains cannot be
+  validated until the packages exist.
+
 - Check 6 (side_effect_completeness): If a brief creates a new exported symbol that must be
-  registered (CLI command in root.go, HTTP route in server.go, React component in
-  a page), verify the registration file is also in the file_ownership table
-- Check 7 (complexity_balance): Warning if any agent owns >8 files or >40% of total IMPL files
+  registered (CLI command, HTTP route, React component, agent type), verify the registration
+  file is also in the file_ownership table or in `integration_connectors`.
+
+- Check 7 (complexity_balance): Warning if any agent owns >8 files or >40% of total IMPL
+  files. Advisory only — does not block PASS verdict.
+
 - Check 8 (caller_exhaustiveness): Verify all callers of symbols being changed are in
-  file_ownership. Use `sawtools check-callers "<symbol>" --repo-dir <repo>` to enumerate all
-  call sites. Non-test callers not in file_ownership = severity: error. Test files
-  (`*_test.go`) not in file_ownership = severity: warning (handled by E46/check-test-cascade).
-- Check 9 (i1_disjoint_ownership): For each (wave, file) with more than 1 agent ID, flag as
-  error — violates I1 disjoint ownership. Catches Scout planning errors before wave launch
-- Check 10 (result_code_semantics): Verify result package usage is semantically correct —
-  `.Code` comparisons must use top-level codes (SUCCESS/PARTIAL/FATAL), not error domain codes
+  file_ownership. **Search the full repository** — callers in sibling packages are the most
+  commonly missed category; package-scoped search is insufficient.
+  - Production callers not in file_ownership = severity: error
+  - Test file callers not in file_ownership = severity: warning (test cascade, see E46)
+
+- Check 9 (i1_disjoint_ownership): For each (wave, file) pair with more than one agent ID,
+  flag as error — violates I1 disjoint ownership. Catches Scout planning errors before
+  agents launch.
+
+**Project-specific checks (implementation-defined):** Implementations may define additional
+checks beyond 1–9 for project-specific correctness constraints (e.g., result package
+semantics, naming conventions, security patterns). These are not part of the universal
+protocol and must be documented in the implementation's critic agent definition.
 
 **Output format:** CriticResult written to IMPL doc critic_report field (see
 interface contracts in IMPL-critic-agent.yaml). Per-agent verdict: PASS or ISSUES.

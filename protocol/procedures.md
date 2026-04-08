@@ -384,6 +384,20 @@ The agent runs on the main branch directly. `finalize-wave` auto-detects that no
    - Field 3: Call interfaces from prior waves or scaffolds
    - Field 5: Write specified tests
 
+   **Call site discovery before modifying exports (mandatory):** Before modifying any
+   exported or public symbol (function, type, method, constant), the agent must discover
+   all call sites across the full repository — not just owned files. This prevents
+   missing callers outside the agent's ownership scope. Any caller found outside owned
+   files must be reported in the completion report as `out_of_scope_deps` for the
+   Integration Agent (E26) to wire after merge.
+
+   **Parallel wave compilation isolation:** Agents in the same wave compile against
+   HEAD plus committed scaffolds — not against each other's unmerged work. If
+   compilation fails solely because a different agent's owned files contain unreleased
+   signature changes, the agent MUST commit the current state anyway. This is an
+   expected consequence of parallel isolation, not an error condition. The post-merge
+   verification step (E10) catches cross-agent compilation issues after merge.
+
 3. **Verification gate (Field 6):** Agent runs exact scoped commands
    - Build (compile)
    - Lint
@@ -391,14 +405,25 @@ The agent runs on the main branch directly. `finalize-wave` auto-detects that no
    - **E10: Scoped verification:** Agents run focused verification. Orchestrator runs unscoped post-merge verification to catch cascade failures.
 
 4. **Commit (I5):** Agent commits changes to worktree branch before reporting
-   - `git add .`
-   - `git commit -m "wave{N}-agent-{ID}: {description}"`
+   - Commit after completing each file, not in a single batch at the end
    - Record commit SHA
+   - Final commit before completion report must include all remaining changes
 
 5. **Completion report (E14):** Agent appends structured completion report to IMPL doc
    - Append under `### Agent {ID} - Completion Report` at end of file
    - Never edit earlier IMPL doc sections (ownership table, interface contracts, wave structure)
    - Write discipline makes IMPL doc conflicts predictably resolvable
+
+   **BUILD STUB vs COMPLETE (mandatory distinction):** An agent must not report
+   `status: complete` for stub implementations. The distinction:
+   - **COMPLETE:** Fully implemented. All specified tests pass. Verification gate passes
+     without bypass.
+   - **BUILD STUB:** Compiles and passes compilation gates, but function bodies
+     panic, return zero values, or are otherwise unimplemented. Tests for stub
+     functionality are expected to fail. Report `status: partial` with a stub inventory
+     listing each stubbed symbol and its file location.
+   Reporting `status: complete` for a stub causes finalize-wave to proceed on a false
+   baseline, silently shipping unimplemented behavior.
 
 ### Phase 5: Completion Collection
 
