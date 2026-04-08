@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added (2026-04-08)
+- **`get_server_capabilities` for lsp-mcp-go** — capability map + classified tool lists (`supported_tools`/`unsupported_tools`); captures `serverInfo` name/version from initialize response; closes axivo-mcp-lsp capability introspection gap
 - **`get_inlay_hints` for lsp-mcp-go** — `textDocument/inlayHint`; inline type annotations and parameter name labels; capability-guarded; `InlayHint`/`InlayHintKind` types in `internal/types`
 - **`detect_lsp_servers` for lsp-mcp-go** — workspace language detection + PATH scan; returns `suggested_config` entries ready to paste into MCP config; covers all 13 CI-verified languages
 - **`get_workspace_symbols` enrichment** — `detail_level=hover` with paginated enrichment window (`limit`/`offset`); ToC + detail-window pattern matching mcp-lsp-bridge's `symbol_explore`
