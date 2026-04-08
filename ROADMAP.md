@@ -55,12 +55,6 @@ Distinguish BUILD STUB (compiles, body panics/returns zero, tests expected to fa
 
 **Potential:** Medium. Addresses a real correctness gap — stubs reported complete are a persistent source of false finalize-wave passes.
 
-### `go.work` for Cross-Repo Worktree LSP
-
-Add note to `saw-worktree.md`: for Go cross-repo waves, a `go.work` file at the workspace root eliminates LSP "module not found" noise in agent worktrees.
-
-**Potential:** Trivial doc note. High value per word — eliminates a class of LSP false negatives in cross-repo Go agents.
-
 ---
 
 ## PROGRAM Execution Hardening
@@ -106,9 +100,11 @@ Two features have complete SDK/CLI but no web layer:
 
 ### Framework Skills Content
 
-Framework-specific best practice documents (500-1000 words each) in `scout-and-wave/skills/`. Auto-detected by project files (e.g., `package.json` with `react` loads `react-best-practices.md`). Protocol provides content; implementations handle detection logic.
+Language/framework-specific best practice documents in `scout-and-wave/skills/` (e.g., `go.md`, `react.md`, `python.md`). Scout detects the project language at step 2 (reads go.mod, package.json, etc.) and conditionally includes the relevant skill reference in agent task fields. Scout-injected rather than globally auto-loaded — Scout already knows the language at planning time, so no separate detection mechanism needed.
 
-**Potential:** High adoption leverage. One skill doc could meaningfully improve output quality for all React/Go/Python users. Low implementation cost once the detection mechanism exists.
+Content examples: Go — `go work use` for cross-module worktrees, `GOWORK=off` for isolated builds; React — hook dependency arrays, component split guidelines; Python — `__init__.py` implications, virtual env isolation.
+
+**Potential:** High adoption leverage per doc. Scout-injection means no global noise — agents only see the skill content relevant to their project. Low implementation cost: skill files are just markdown, injection is a Scout step-2 addition.
 
 ### Claude Orchestrator Chat Panel
 
