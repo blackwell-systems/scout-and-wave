@@ -20,7 +20,7 @@ Enforcement and injection hooks for CLI-based SAW agents. 21 hooks across Subage
 | check_wave_ownership | PreToolUse | Write\|Edit\|NotebookEdit | I1 | Wave agents write only owned files |
 | auto_format_saw_agent_names | PreToolUse | Agent | E44 | Validates/formats SAW agent names (fallback for brief metadata) |
 | validate_agent_launch | PreToolUse | Agent | H5 | Pre-launch validation gate + agent type injection (see below) |
-| validate_impl_on_write | PostToolUse | Write | E16 | Validates IMPL schema after write |
+| validate_impl_on_write | PostToolUse | Write\|Edit | E16 | Validates IMPL schema + brief accuracy (symbols, line refs, wave_reference_invalid) after write |
 | check_git_ownership | PostToolUse | Bash | I1 | Catches git-level ownership violations |
 | warn_stubs | PostToolUse | Write\|Edit | H3 | Warns on stub patterns in written code |
 | check_branch_drift | PostToolUse | Bash | H4 | Detects commits on wrong branch |

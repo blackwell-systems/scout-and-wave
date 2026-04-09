@@ -159,7 +159,8 @@ func ValidateBriefs(ctx context.Context, implPath string) (BriefValidationData, 
 **Checks performed:**
 1. Symbol existence: all symbols in briefs exist in owned files (grep-based)
 2. Line number validity: line references are within file bounds (wc -l)
-3. Suggestions: fuzzy-matched alternatives for missing symbols
+3. Wave reference consistency (`wave_reference_invalid`): "Wave N Agent X" prose references are validated against the actual wave assignment in the IMPL doc — catches cases like a brief saying "Wave 2 Agent G" when Agent G is in Wave 3
+4. Suggestions: fuzzy-matched alternatives for missing symbols
 
 **Integration point:** Scout agent runs this in step 17 after schema validation
 passes. Output is JSON with actionable fix suggestions. Reduces critic gate

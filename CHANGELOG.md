@@ -8,6 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed (2026-04-08)
+- **`validate_impl_on_write` now runs brief validation** — hook previously only ran `sawtools validate` (E16 structural schema). Now runs a second step: `sawtools validate-briefs`, which catches symbol errors, invalid line references, and wave number inconsistencies in agent brief prose. Errors are surfaced immediately after each Write/Edit to an IMPL doc with per-agent detail (e.g. `Agent D: [wave_reference_invalid] brief says 'Wave 2 Agent G' but Agent G is in Wave 3`).
+- **`validate_agent_completion` scout gate now includes brief validation** — the SubagentStop hook for scout agents already ran `sawtools pre-wave-validate --wave 1 --fix` (E16 + E35 + cascade). It now also runs `sawtools validate-briefs`, enforcing the full brief check at scout exit. The scout cannot complete until both structural and brief validation pass — this is the hard gate, since PostToolUse hook errors are advisory.
+- **`saw-skill.md` critic gate re-run made explicit** — step 4 previously said "ISSUES (error) = correct and re-run" (ambiguous — engineers interpreted "re-run" as prepare-wave, not the critic). Now states: after correcting the IMPL doc, call `sawtools run-critic "<impl-path>"` to update `critic_report.verdict`. The pre-wave gate reads this field — it stays ISSUES until the critic is re-run. Do not manually edit the YAML verdict field.
+
 ### Added (2026-04-08)
 - **`get_server_capabilities` for lsp-mcp-go** — capability map + classified tool lists (`supported_tools`/`unsupported_tools`); captures `serverInfo` name/version from initialize response; closes axivo-mcp-lsp capability introspection gap
 - **`get_inlay_hints` for lsp-mcp-go** — `textDocument/inlayHint`; inline type annotations and parameter name labels; capability-guarded; `InlayHint`/`InlayHintKind` types in `internal/types`

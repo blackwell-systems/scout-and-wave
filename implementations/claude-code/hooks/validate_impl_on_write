@@ -46,19 +46,34 @@ if ! command -v sawtools &>/dev/null; then
   exit 0
 fi
 
-# Validate without --fix (Scout's own Step 16 handles --fix;
-# hook should only report errors, not modify files behind Claude Code's back)
+# Step 1: Structural validation (E16 schema/structural checks).
+# Run without --fix: Scout's Step 16 handles auto-fix; hook only reports.
 RESULT=$(sawtools validate "$FILE_PATH" 2>&1) || true
 VALID=$(echo "$RESULT" | jq -r '.valid // empty' 2>/dev/null)
 
-if [[ "$VALID" == "true" ]]; then
-  exit 0
+if [[ "$VALID" != "true" ]]; then
+  ERROR_COUNT=$(echo "$RESULT" | jq -r '.error_count // 0' 2>/dev/null)
+  ERRORS=$(echo "$RESULT" | jq -r '.errors[]?.message // empty' 2>/dev/null)
+  echo "BLOCKED: IMPL structural validation failed ($ERROR_COUNT errors). Fix these before continuing:" >&2
+  echo "$ERRORS" >&2
+  exit 2
 fi
 
-# Validation failed — extract errors and block
-ERROR_COUNT=$(echo "$RESULT" | jq -r '.error_count // 0' 2>/dev/null)
-ERRORS=$(echo "$RESULT" | jq -r '.errors[]?.message // empty' 2>/dev/null)
+# Step 2: Brief validation (symbol existence, line references, wave number consistency).
+# Only run if validate-briefs is available (it ships with sawtools >= v0.93.0).
+BRIEF_RESULT=$(sawtools validate-briefs "$FILE_PATH" 2>&1) || true
+BRIEF_VALID=$(echo "$BRIEF_RESULT" | jq -r '.valid // empty' 2>/dev/null)
 
-echo "BLOCKED: IMPL validation failed ($ERROR_COUNT errors). Fix these before continuing:" >&2
-echo "$ERRORS" >&2
-exit 2
+if [[ "$BRIEF_VALID" == "false" ]]; then
+  echo "BLOCKED: IMPL brief validation failed. Fix these before continuing:" >&2
+  # Print each error-severity issue as "Agent X: [check] description"
+  echo "$BRIEF_RESULT" | jq -r '
+    .agent_results | to_entries[] |
+    .key as $agent |
+    .value.issues[]? |
+    select(.severity == "error") |
+    "  Agent " + $agent + ": [" + .check + "] " + .description
+  ' 2>/dev/null >&2 || \
+    echo "$BRIEF_RESULT" | jq -r '.summary // "unknown brief validation error"' 2>/dev/null >&2
+  exit 2
+fi

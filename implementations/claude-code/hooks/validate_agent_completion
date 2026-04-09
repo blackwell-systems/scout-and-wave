@@ -378,6 +378,22 @@ case "$agent_type" in
         echo "$validate_output" >&2
         exit 2
       }
+
+      # Also run brief validation: catches symbol errors, invalid line references,
+      # and wave_reference_invalid (e.g. "Wave 2 Agent G" when G is in Wave 3).
+      brief_output=$(sawtools validate-briefs "$impl_path" 2>&1) || true
+      brief_valid=$(echo "$brief_output" | jq -r '.valid // empty' 2>/dev/null)
+      if [[ "$brief_valid" == "false" ]]; then
+        echo "E42: Scout IMPL doc failed brief validation: ${impl_path}" >&2
+        echo "$brief_output" | jq -r '
+          .agent_results | to_entries[] |
+          .key as $agent |
+          .value.issues[]? |
+          select(.severity == "error") |
+          "  Agent " + $agent + ": [" + .check + "] " + .description
+        ' 2>/dev/null >&2 || echo "$brief_output" >&2
+        exit 2
+      fi
     fi
     ;;
 

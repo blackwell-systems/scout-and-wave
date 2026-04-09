@@ -116,7 +116,13 @@ See `references/impl-targeting.md` for discovery commands, resolution logic, aut
    Exit 0 = proceed. Exit 1 = send errors to Scout (resume), retry once. Failure = BLOCKED.
    Now includes Step 3: test cascade check — verifies that *_test.go files calling changed
    symbols are assigned to agents. See `references/pre-wave-validation.md`.
-4. **Critic Gate (E37).** Check trigger conditions (3+ agents OR 2+ repos). If triggered, launch critic, read verdict. PASS = proceed. ISSUES (error) = correct and re-run. See `references/pre-wave-validation.md` § E37.
+4. **Critic Gate (E37).** Check trigger conditions (3+ agents OR 2+ repos). If triggered:
+   ```bash
+   sawtools run-critic "<impl-path>"
+   ```
+   - **PASS** → proceed.
+   - **ISSUES (error)** → fix errors in the IMPL doc, then **re-run `sawtools run-critic`**. The pre-wave gate reads `critic_report.verdict` — this field stays ISSUES until the critic is re-run and writes a new verdict. Do NOT manually edit the YAML verdict field.
+   - See `references/pre-wave-validation.md` § E37.
 5. Report suitability verdict, wave structure, file ownership, interface contracts, Scaffolds. Ask user to review.
 6. **Scaffold Agent (conditional):** If Scaffolds has `Status: pending`, launch Scaffold Agent (`[SAW:scaffold:<slug>]`). If `FAILED`, stop. If `committed`, proceed.
 

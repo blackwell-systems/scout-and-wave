@@ -211,7 +211,7 @@ The hook installer registers 20 hooks across five lifecycle events. All hook scr
 
 | Hook | Matcher | Purpose |
 |---|---|---|
-| `validate_impl_on_write` | `Write` | Validates IMPL docs against schema immediately after writing |
+| `validate_impl_on_write` | `Write\|Edit` | Validates IMPL docs: schema (E16) + brief accuracy (symbols, line refs, wave number consistency) |
 | `check_git_ownership` | `Bash` (async) | Warns when git operations modify files outside ownership list |
 | `warn_stubs` | `Write\|Edit` | Warns on stub patterns (TODO, FIXME, panic) in written files |
 | `check_branch_drift` | `Bash` | Blocks commits directly to `main` or `master` |
