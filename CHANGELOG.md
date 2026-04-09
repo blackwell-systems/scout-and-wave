@@ -9,6 +9,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added (2026-04-09)
+- **`--repo <path>` flag for `/saw scout` and `/saw auto`** — when the session cwd differs from the target repo, pass `--repo <path>` to have the Orchestrator derive the IMPL output path as `<path>/docs/IMPL/IMPL-<slug>.yaml` and route all `sawtools` calls to that repo. Closes the cross-repo scouting footgun where scouts ran in the wrong cwd and dropped IMPL docs in the wrong place. Updated: `saw-skill.md` (arg parsing + Scout flow steps 1–2), `agents/scout.md` (respects injected IMPL output path), `docs/architecture.md`, `docs/QUICKSTART-CLI.md`. Engine side: `RunScoutFullOpts.ImplOutputPath` field + `--impl-output-path` CLI flag on `sawtools run-scout`.
+- **`hooks/saw-worktree-boundary.sh` PreToolUse hook** — hard-denies (exit 2) Write/Edit/MultiEdit calls whose target path resolves to the main repo instead of the agent's assigned worktree, when `SAW_WORKTREE_ROOT` is set. No-op in orchestrator, solo-wave, and integration-wave contexts (env var absent). Registered in `~/.claude/settings.json`. Complements the existing `validate_write_paths` hook (which uses `SAW_AGENT_WORKTREE`) as a second defense layer.
+- **`SAW_WORKTREE_ROOT` env injection in `prepare-wave`** — Go engine now writes `.saw-worktree-env` (containing `SAW_WORKTREE_ROOT=<worktree_path>`) into each agent worktree alongside `.saw-agent-brief.md`. `AgentBriefInfo` gains `WorktreeEnvPath` field surfacing the path to callers. The `saw-worktree-boundary.sh` hook reads this variable to enforce write boundaries. E43 and `wave-agent.md` updated to document the two-hook model.
+
+### Added (2026-04-09)
 - **`validate_agent_completion` stub consistency gate (E20)** — wave agents claiming `status: complete` are now checked for stub patterns (`panic("not implemented")`, TODO, FIXME, etc.) in their changed files. If stubs are found, the agent is blocked (exit 2) and must either fix the stubs or change status to `partial`. Uses `sawtools scan-stubs` on the git diff between merge base and HEAD. This closes the gap where agents could self-report "complete" while leaving placeholder implementations.
 
 ### Changed (2026-04-09)

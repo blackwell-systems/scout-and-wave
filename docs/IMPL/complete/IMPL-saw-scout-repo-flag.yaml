@@ -1,3 +1,4 @@
+completion_date: "2026-04-09"
 title: Add --repo flag to /saw scout command
 feature_slug: saw-scout-repo-flag
 verdict: SUITABLE
@@ -858,6 +859,7 @@ waves:
           files:
             - protocol/execution-rules.md
             - implementations/claude-code/prompts/agents/wave-agent.md
+      base_commit: 5a6886c10eb8205da615136be20d2a646fe0d9b9
 quality_gates:
     level: standard
     gates:
@@ -908,6 +910,34 @@ completion_reports:
             - docs/QUICKSTART-CLI.md
         verification: PASS
         notes: 'Documentation-only repo (no Go files). Go quality gates not applicable. Grep verification checks both pass: architecture.md has 19 repo references (including new --repo flag line); QUICKSTART-CLI.md has 1 impl-output-path reference.'
+    E:
+        status: complete
+        branch: saw/saw-scout-repo-flag/wave2-agent-E
+        commit: "92324e3"
+        files_changed:
+            - hooks/saw-worktree-boundary.sh
+        files_created:
+            - hooks/saw-worktree-boundary.sh
+        verification: PASS
+        notes: 'Hook created and registered. All functional tests pass: no-op without env, worktree writes allowed, main repo writes blocked with exit 2. settings.json updated via Python (Edit tool blocked for out-of-worktree files). Go quality gates not applicable (no Go source in this repo).'
+    F:
+        status: complete
+        branch: saw/saw-scout-repo-flag/wave2-agent-F
+        commit: 610c4af
+        files_changed:
+            - pkg/engine/prepare.go
+            - pkg/engine/step_types.go
+        verification: PASS
+        notes: Writes .saw-worktree-env to each agent worktree during prepare-wave. Write is non-fatal (logs warning, sets WorktreeEnvPath to empty string on failure). AgentBriefInfo.WorktreeEnvPath added to surface path to callers. Build, vet, and engine tests all pass.
+    G:
+        status: complete
+        branch: saw/saw-scout-repo-flag/wave2-agent-G
+        commit: 9fb849c
+        files_changed:
+            - protocol/execution-rules.md
+            - implementations/claude-code/prompts/agents/wave-agent.md
+        verification: PASS
+        notes: E43 Hook 3 updated to document both validate_write_paths and saw-worktree-boundary.sh. SAW_WORKTREE_ROOT implementation note added. wave-agent.md updated with hard-deny behavior description.
 pre_mortem:
     overall_risk: medium
     rows:
@@ -957,6 +987,6 @@ critic_report:
     summary: ""
     reviewed_at: ""
     issue_count: 0
-state: REVIEWED
+state: COMPLETE
 original_branch: main
 injection_method: manual-fallback
