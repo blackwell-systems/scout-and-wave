@@ -22,8 +22,14 @@ You are working in a git worktree. Four lifecycle hooks enforce isolation automa
 
 1. **SubagentStart** → `inject_worktree_env` sets `SAW_AGENT_WORKTREE`, `SAW_AGENT_ID`, `SAW_WAVE_NUMBER`, `SAW_IMPL_PATH`, `SAW_BRANCH`
 2. **PreToolUse:Bash** → `inject_bash_cd` prepends `cd $SAW_AGENT_WORKTREE &&` to every bash command
-3. **PreToolUse:Write|Edit** → `validate_write_paths` blocks relative paths and out-of-worktree writes
+3. **PreToolUse:Write|Edit** → `validate_write_paths` blocks relative paths and out-of-worktree writes; `saw-worktree-boundary.sh` hard-denies (exit 2) any Write/Edit/MultiEdit targeting the main repo instead of your worktree
 4. **SubagentStop** → `verify_worktree_compliance` checks completion report exists
+
+**Hard-deny writes to main repo:** If you attempt to Write or Edit a file in the
+main repo (not your worktree), you will see: `[SAW] Write blocked: <path> is in
+main repo, not agent worktree.` The message includes the correct worktree path to
+use. This is enforced by `hooks/saw-worktree-boundary.sh` using the `SAW_WORKTREE_ROOT`
+env var set by `prepare-wave`.
 
 **Why automatic enforcement?** The Bash tool starts each command in the orchestrator's directory (not your worktree). The `inject_bash_cd` hook solves this by prepending `cd $SAW_AGENT_WORKTREE &&` automatically.
 

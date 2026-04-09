@@ -2004,12 +2004,12 @@ The following checklist enumerates ALL lifecycle events that must be emitted. Ev
 - Non-blocking (always exits 0, injection is best-effort)
 - Eliminates manual cd commands and $WORKTREE variable usage
 
-**Hook 3: PreToolUse:Write/Edit path validation (validate_write_paths)**
-- Blocks relative paths in worktree context (exit 2)
-- Blocks paths outside worktree boundaries (exit 2)
-- Fires only when SAW_AGENT_WORKTREE is non-empty (skips solo waves)
-- Error messages reference worktree path and protocol rule (E43)
-- Prevents Agent B leak scenario (files created in main repo)
+**Hook 3: PreToolUse:Write/Edit path validation (validate_write_paths + saw-worktree-boundary.sh)**
+- validate_write_paths: blocks relative paths and out-of-worktree writes using SAW_AGENT_WORKTREE (set by SubagentStart inject_worktree_env hook)
+- saw-worktree-boundary.sh: hard-denies (exit 2) Write/Edit/MultiEdit calls whose target path resolves to the main repo root instead of the agent's worktree; uses SAW_WORKTREE_ROOT (set by prepare-wave, see E43 Implementation Notes)
+- Both hooks fire only when their respective env var is non-empty (skips solo waves, integration waves, orchestrator context)
+- Error message format: "[SAW] Write blocked: <path> is in main repo, not agent worktree. Use: <SAW_WORKTREE_ROOT>/..."
+- Prevents Agent B leak scenario (files created in main repo instead of worktree)
 
 **Hook 4: SubagentStop compliance verification (verify_worktree_compliance)**
 - Checks completion report exists (E42/I4 compliance)
@@ -2028,6 +2028,7 @@ E43 enforces E4 mechanically. E4 (Worktree Isolation) states the requirement: al
 ### Implementation Notes
 
 - **Claude Code-specific:** E43 hooks use Claude Code lifecycle API (SubagentStart, PreToolUse, SubagentStop). Other platforms must implement equivalent enforcement at their tool invocation boundary.
+- **SAW_WORKTREE_ROOT:** prepare-wave writes `.saw-worktree-env` to each agent's worktree root containing `SAW_WORKTREE_ROOT=<absolute_worktree_path>`. The `hooks/saw-worktree-boundary.sh` PreToolUse hook reads this var to enforce write boundaries independently of the SubagentStart hook. This provides defense-in-depth: boundary enforcement works even if the SubagentStart hook is unavailable.
 - **Vendor-neutral fallback:** When hooks are unavailable, fall back to instruction-based isolation (E4 Layer 3: Field 0 self-verification). Agents manually verify working directory at startup.
 - **Defense-in-depth:** E43 hooks complement E4 layers (pre-creation, task tool isolation, merge-time trip wire). All layers remain active.
 
