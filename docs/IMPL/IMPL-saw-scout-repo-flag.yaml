@@ -921,6 +921,6 @@ critic_report:
     summary: ""
     reviewed_at: ""
     issue_count: 0
-state: SCOUT_PENDING
+state: "REVIEWED"
 original_branch: main
 injection_method: manual-fallback
