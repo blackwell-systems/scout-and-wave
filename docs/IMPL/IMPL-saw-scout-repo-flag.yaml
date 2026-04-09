@@ -469,6 +469,7 @@ waves:
           files:
             - docs/architecture.md
             - docs/QUICKSTART-CLI.md
+      base_commit: a7559281a5dbd0d930b0d652fd2efc5eeccd73fd
     - number: 2
       agents:
         - id: E
@@ -872,6 +873,41 @@ quality_gates:
           command: go vet ./...
           required: true
           repo: scout-and-wave-go
+completion_reports:
+    A:
+        status: complete
+        branch: saw/saw-scout-repo-flag/wave1-agent-A
+        commit: ef65fb5
+        files_changed:
+            - implementations/claude-code/prompts/saw-skill.md
+        verification: PASS
+        notes: 'No Go modules in this repo; go build/test/vet gates not applicable. All 5 prompt edits applied: argument-hint updated, Invocation Modes table updated, --repo flag parsing block added to Execution Logic, Scout flow step 1 updated with prompt construction instructions, Scout flow step 2 updated to resolve IMPL path based on --repo presence. grep -c ''--repo'' returns 9 (>= required 6).'
+    B:
+        status: complete
+        branch: saw/saw-scout-repo-flag/wave1-agent-B
+        commit: f3e3acc
+        files_changed:
+            - implementations/claude-code/prompts/agents/scout.md
+        verification: PASS
+        notes: 'Two text replacements applied: (1) ''Your Task'' write instruction now checks for ''## IMPL Output Path'' section before defaulting to relative path. (2) ''Output Format'' section updated to match. No Go files in this repo so build/test/lint gates are not applicable — this is a docs/prompts-only repo.'
+    C:
+        status: complete
+        branch: saw/saw-scout-repo-flag/wave1-agent-C
+        commit: 64b90ff
+        files_changed:
+            - pkg/engine/scout_run.go
+            - cmd/sawtools/run_scout_cmd.go
+        verification: PASS
+        notes: 'Added ImplOutputPath field to RunScoutFullOpts; override applied after implPath derivation. Added implOutputPath var, field assignment, and --impl-output-path flag to run_scout_cmd.go. Build, vet, and engine tests all pass. Postconditions: 3 occurrences of ImplOutputPath in scout_run.go, 2 of impl-output-path in run_scout_cmd.go.'
+    D:
+        status: complete
+        branch: saw/saw-scout-repo-flag/wave1-agent-D
+        commit: e055d59
+        files_changed:
+            - docs/architecture.md
+            - docs/QUICKSTART-CLI.md
+        verification: PASS
+        notes: 'Documentation-only repo (no Go files). Go quality gates not applicable. Grep verification checks both pass: architecture.md has 19 repo references (including new --repo flag line); QUICKSTART-CLI.md has 1 impl-output-path reference.'
 pre_mortem:
     overall_risk: medium
     rows:
@@ -921,6 +957,6 @@ critic_report:
     summary: ""
     reviewed_at: ""
     issue_count: 0
-state: "REVIEWED"
+state: REVIEWED
 original_branch: main
 injection_method: manual-fallback
