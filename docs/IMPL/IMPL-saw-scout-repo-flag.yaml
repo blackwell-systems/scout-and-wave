@@ -1,0 +1,926 @@
+title: Add --repo flag to /saw scout command
+feature_slug: saw-scout-repo-flag
+verdict: SUITABLE
+suitability_assessment: |
+    The feature spans two repos (scout-and-wave protocol repo and scout-and-wave-go engine repo)
+    with clearly independent file ownership. Changes decompose cleanly:
+    - Agent A: Update the skill prompt (saw-skill.md) to parse --repo and propagate derived IMPL
+      path and --repo-dir to all subsequent sawtools calls.
+    - Agent B: Update the scout agent brief (scout.md) to accept an explicit IMPL output path
+      when one is provided in the prompt context.
+    - Agent C: Go engine changes — add ImplOutputPath field to RunScoutFullOpts struct and update
+      run_scout_cmd.go to accept --impl-output-path flag for explicit IMPL path override.
+    - Agent D: Protocol docs (docs/architecture.md, docs/QUICKSTART-CLI.md) — update examples
+      to show the new flag.
+
+    Pre-implementation check: The sawtools run-scout command already has --repo-dir. The gap is
+    purely in the skill's scout flow (arg parsing + prompt construction) and the scout agent
+    brief (which currently hardcodes "write to docs/IMPL/IMPL-<slug>.yaml" without an
+    override path).
+
+    This is a cross-repo IMPL (scout-and-wave protocol repo + scout-and-wave-go engine repo).
+    Quality gates run in scout-and-wave-go only (Go compilation/tests). Protocol/skill files
+    are prose/YAML with no build system.
+
+    Estimated times:
+    - Scout phase: ~20 min
+    - Agent execution: ~4 agents x ~10 min avg = 40 min, with full Wave 1 parallelism ~10 min
+    - Merge and verification: ~5 min
+    Total SAW time: ~35 min
+    Sequential baseline: ~60 min
+    Time savings: ~25 min (40% faster)
+    Recommendation: Clear speedup with 4 independent agents across 2 repos.
+
+    Wave 2 addition (worktree boundary enforcement):
+    - Agent E: New hooks/saw-worktree-boundary.sh shell script + hook registration in global settings.json
+    - Agent F: Go engine prepare-wave env injection of SAW_WORKTREE_ROOT into agent worktree context
+    - Agent G: Protocol doc updates — E43 description update + wave-agent.md note
+    Wave 2 is independent of Wave 1 (disjoint files, different feature area).
+test_command: go test ./... -timeout 120s
+lint_command: go vet ./...
+file_ownership:
+    - file: implementations/claude-code/prompts/saw-skill.md
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: implementations/claude-code/prompts/agents/scout.md
+      agent: B
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: pkg/engine/scout_run.go
+      agent: C
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: cmd/sawtools/run_scout_cmd.go
+      agent: C
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: docs/architecture.md
+      agent: D
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: docs/QUICKSTART-CLI.md
+      agent: D
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: hooks/saw-worktree-boundary.sh
+      agent: E
+      wave: 2
+      action: new
+      repo: scout-and-wave
+    - file: pkg/engine/prepare.go
+      agent: F
+      wave: 2
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/engine/step_types.go
+      agent: F
+      wave: 2
+      action: modify
+      repo: scout-and-wave-go
+    - file: protocol/execution-rules.md
+      agent: G
+      wave: 2
+      action: modify
+      repo: scout-and-wave
+    - file: implementations/claude-code/prompts/agents/wave-agent.md
+      agent: G
+      wave: 2
+      action: modify
+      repo: scout-and-wave
+interface_contracts:
+    - name: RunScoutFullOpts.ImplOutputPath field
+      description: |
+        Optional explicit IMPL output path field added to RunScoutFullOpts.
+        When non-empty, overrides the default path derivation
+        (repoPath + /docs/IMPL/IMPL-slug.yaml). Allows the caller to place
+        the IMPL doc in a different repo than repoPath.
+      definition: |
+        // New field in RunScoutFullOpts (pkg/engine/scout_run.go) between RepoPath and SAWRepoPath:
+        ImplOutputPath string
+        // optional: explicit IMPL output path; overrides default derivation
+      location: pkg/engine/scout_run.go
+    - name: --impl-output-path CLI flag
+      description: |
+        New CLI flag on sawtools run-scout. When set, passes the value as
+        the ImplOutputPath field of RunScoutFullOpts instead of deriving from
+        --repo-dir + slug.
+      definition: |
+        // New flag in cmd/sawtools/run_scout_cmd.go:
+        // cmd.Flags().StringVar(&implOutputPath, "impl-output-path", "", "...")
+      location: cmd/sawtools/run_scout_cmd.go
+    - name: --repo flag on /saw scout skill command
+      description: |
+        New optional flag on /saw scout (and /saw auto) skill invocations. When set,
+        the Orchestrator derives the IMPL output path as repo/docs/IMPL/IMPL-slug.yaml
+        and passes it explicitly in the scout agent launch prompt. All subsequent
+        sawtools calls receive --repo-dir pointing to that repo.
+      definition: |
+        # Parsing rule in saw-skill.md Execution Logic section:
+        # Parse --repo <path> from scout/auto args before --model and feature description.
+        # When present:
+        #   target repo = <path> (absolute)
+        #   implOutputPath = <path>/docs/IMPL/IMPL-<slug>.yaml
+        # When absent:
+        #   behavior unchanged (scout derives from cwd)
+      location: implementations/claude-code/prompts/saw-skill.md
+    - name: Scout agent IMPL output path injection
+      description: |
+        When the Orchestrator knows the explicit IMPL output path (because --repo was provided),
+        it injects an "IMPL Output Path" section into the scout agent launch prompt.
+        The scout agent must write to that exact path when the section is present.
+      definition: |
+        # Scout agent launch prompt fragment (when --repo is provided):
+        ## IMPL Output Path
+        /absolute/path/to/target-repo/docs/IMPL/IMPL-slug.yaml
+      location: implementations/claude-code/prompts/agents/scout.md
+    - name: SAW_WORKTREE_ROOT env var
+      description: |
+        Environment variable injected by prepare-wave (Go engine) into the agent worktree
+        context. Set to the absolute path of the agent's assigned worktree directory.
+        When non-empty, saw-worktree-boundary.sh uses this to hard-deny Write/Edit/MultiEdit
+        calls whose target path resolves to the main repo instead of the worktree.
+        When not set (solo wave, integration wave, orchestrator context): hook is no-op.
+      definition: |
+        # Written to .saw-worktree-env file in each agent worktree during prepare-wave:
+        SAW_WORKTREE_ROOT=/absolute/path/to/.claude/worktrees/saw/<slug>/wave<N>-agent-<ID>
+      location: pkg/engine/prepare.go
+    - name: hooks/saw-worktree-boundary.sh
+      description: |
+        Shell script PreToolUse hook that hard-denies Write/Edit/MultiEdit calls when
+        the target file path resolves to the main repo (any path under the main repo root
+        but NOT under SAW_WORKTREE_ROOT). Fast pure-shell implementation with no subprocess chains.
+        Exit 0 = allow, exit 2 = hard block with actionable error message.
+      definition: |
+        #!/usr/bin/env bash
+        # If SAW_WORKTREE_ROOT not set: exit 0 (no-op)
+        # Read file_path from stdin JSON (.tool_input.file_path)
+        # Resolve relative paths against cwd before comparing
+        # If path is under main repo but not under SAW_WORKTREE_ROOT: exit 2
+        # Error message format: "[SAW] Write blocked: <path> is in main repo, not agent worktree. Use: <SAW_WORKTREE_ROOT>/..."
+      location: hooks/saw-worktree-boundary.sh
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## Role
+            Update the /saw skill prompt (saw-skill.md) to parse the --repo flag from scout and
+            auto command args, derive the explicit IMPL output path, and propagate the target
+            repo directory to all subsequent sawtools calls.
+
+            ## Context
+            File to modify: implementations/claude-code/prompts/saw-skill.md
+            This is the Orchestrator skill prompt that routes /saw subcommands. It already
+            parses --impl, --model, and --auto flags for wave/auto commands.
+
+            ## What to implement
+
+            ### 1. Update argument-hint frontmatter
+            Find this exact text in the YAML frontmatter:
+            ```
+            argument-hint: "[auto [--skip-confirm] <feature> | bootstrap <project-name> | interview <description> | scout [--model <m>] <feature> | wave [--impl <id>] [--auto] [--model <m>] | status [--impl <id>]]"
+            ```
+            Replace with:
+            ```
+            argument-hint: "[auto [--skip-confirm] [--repo <path>] <feature> | bootstrap <project-name> | interview <description> | scout [--model <m>] [--repo <path>] <feature> | wave [--impl <id>] [--auto] [--model <m>] | status [--impl <id>]]"
+            ```
+
+            ### 2. Update the Invocation Modes table
+            Find this exact row in the table under "## Invocation Modes":
+            ```
+            | `/saw scout [--model <m>] <feature>` | Analyze codebase and plan feature |
+            ```
+            Replace with:
+            ```
+            | `/saw scout [--model <m>] [--repo <path>] <feature>` | Analyze codebase and plan feature |
+            ```
+
+            ### 3. Add --repo flag parsing to Execution Logic
+            Find this exact paragraph under "## Execution Logic":
+            ```
+            **IMPL targeting:** Parse `--impl <value>` from arguments (slug / filename / path). When omitted, auto-select if exactly 1 pending IMPL exists. Parse `--impl` before other flags.
+            ```
+            Insert the following block immediately after that paragraph (before the blank line that follows):
+            ```
+            **--repo flag (scout/auto commands):** Parse `--repo <path>` from scout and auto args before --model and the feature description. When present:
+            - Target repo = absolute path of `<path>` (the repo to analyze)
+            - IMPL output path = `<path>/docs/IMPL/IMPL-<slug>.yaml` (slug derived from feature description)
+            - All subsequent sawtools calls use `--repo-dir <path>` instead of session cwd
+            - Include explicit IMPL path in scout agent launch prompt (see Scout flow step 1 below)
+            When absent, behavior is unchanged: target repo = session cwd, scout derives IMPL path itself.
+            ```
+
+            ### 4. Update Scout flow step 1
+            Find this exact text under "Scout flow":
+            ```
+            1. Launch Scout agent (`subagent_type: scout`, `run_in_background: true`, prompt = feature description). Inform user.
+            ```
+            Replace with:
+            ```
+            1. Launch Scout agent (`subagent_type: scout`, `run_in_background: true`). Inform user.
+               **Prompt construction:** When `--repo <path>` was provided, append the explicit IMPL output path:
+               ```
+               <feature description>
+
+               ## IMPL Output Path
+               <path>/docs/IMPL/IMPL-<slug>.yaml
+               ```
+               Without `--repo`, the prompt is the feature description only; scout derives the path from cwd.
+            ```
+
+            ### 5. Update Scout flow step 2
+            Find this exact text:
+            ```
+            2. When Scout completes, read `docs/IMPL/IMPL-<feature-slug>.yaml`. Record injection method: `sawtools set-injection-method "<path>" --method hook`.
+            ```
+            Replace with:
+            ```
+            2. When Scout completes, read the IMPL doc. When `--repo` was provided, the path is
+               `<repo>/docs/IMPL/IMPL-<feature-slug>.yaml`; otherwise `docs/IMPL/IMPL-<feature-slug>.yaml`
+               relative to cwd. Record injection method: `sawtools set-injection-method "<path>" --method hook`.
+            ```
+
+            ## Verification
+            After editing, verify:
+            - The argument-hint line contains "--repo <path>" for both scout and auto entries
+            - The Invocation Modes table shows the updated scout row
+            - "IMPL Output Path" appears in the Scout flow step 1 description
+            - Running: grep -c "\-\-repo" implementations/claude-code/prompts/saw-skill.md
+              returns 6 or more
+
+            ## Constraints
+            - Do NOT modify any Go engine files (Agent C owns those)
+            - Do NOT modify scout.md (Agent B owns it)
+            - Do NOT modify docs/ files (Agent D owns them)
+            - Do NOT change behavior when --repo is absent — default must remain unchanged
+          files:
+            - implementations/claude-code/prompts/saw-skill.md
+        - id: B
+          task: |
+            ## Role
+            Update the scout agent brief (scout.md) so that when an explicit IMPL output path is
+            provided in the prompt context, the scout writes the manifest to that path instead of
+            deriving a default relative path.
+
+            ## Context
+            File to modify: implementations/claude-code/prompts/agents/scout.md
+
+            This file is the scout agent's system prompt. Currently, the "Your Task" section says
+            to write the IMPL manifest to docs/IMPL/IMPL-feature-slug.yaml without considering
+            that the caller might have specified a different path. When the Orchestrator uses the
+            new --repo flag, it injects a section headed "## IMPL Output Path" with an absolute path.
+
+            ## What to implement
+
+            ### 1. Update the "Your Task" write instruction
+            Find this exact text:
+            ```
+            **Write the complete manifest to `docs/IMPL/IMPL-<feature-slug>.yaml` using the Write tool.**
+            This YAML manifest is the single source of truth for all downstream agents and for tracking
+            progress between waves. The sawtools commands (`sawtools validate`, `sawtools extract-context`,
+            `sawtools set-completion`, etc.) operate on this file directly.
+            ```
+            Replace with:
+            ```
+            **Write the complete manifest using the Write tool.** Check your context for an
+            "## IMPL Output Path" section — if present, write to that exact absolute path (the
+            Orchestrator used --repo to target a different repo). If no explicit path is provided,
+            write to `docs/IMPL/IMPL-<feature-slug>.yaml` relative to the repository being analyzed.
+            This YAML manifest is the single source of truth for all downstream agents and for tracking
+            progress between waves. The sawtools commands (`sawtools validate`, `sawtools extract-context`,
+            `sawtools set-completion`, etc.) operate on this file directly.
+            ```
+
+            ### 2. Update the Output Format section
+            Find this exact text near the bottom of the file in the Output Format section:
+            ```
+            Write a YAML manifest to `docs/IMPL/IMPL-<feature-slug>.yaml` following the
+            schema shown above.
+            ```
+            Replace with:
+            ```
+            Write a YAML manifest to the path from the "## IMPL Output Path" section (if provided
+            in context) or `docs/IMPL/IMPL-<feature-slug>.yaml` (default, relative to the repo
+            being analyzed).
+            ```
+
+            ## Verification
+            After editing, verify:
+            - The phrase "IMPL Output Path" appears at least twice in the file (once in "Your Task",
+              once in "Output Format")
+            - The default fallback path docs/IMPL/IMPL-feature-slug.yaml still appears for
+              the case when no explicit path is provided
+
+            ## Constraints
+            - Do NOT modify saw-skill.md (Agent A owns it)
+            - Do NOT modify any Go engine files (Agent C owns those)
+            - Do NOT modify docs/ files (Agent D owns them)
+            - Only modify the IMPL path derivation instruction — do not alter schema, quality gates,
+              or other protocol rules in this file
+          files:
+            - implementations/claude-code/prompts/agents/scout.md
+        - id: C
+          task: |
+            ## Role
+            Add an optional explicit IMPL output path field to the RunScoutFullOpts struct in the
+            Go engine, wire it through RunScoutFull, and add a corresponding --impl-output-path
+            CLI flag to the sawtools run-scout command.
+
+            ## Context
+            Repo: /Users/dayna.blackwell/code/scout-and-wave-go
+            Files:
+            - pkg/engine/scout_run.go — contains RunScoutFullOpts and RunScoutFull
+            - cmd/sawtools/run_scout_cmd.go — CLI adapter for run-scout
+
+            The new field allows callers to specify exactly where the IMPL doc should be written,
+            overriding the default derivation from repoPath + slug. This is needed when the IMPL
+            doc should land in a different location than the analysis target repo.
+
+            ## What to implement
+
+            ### 1. Add ImplOutputPath to RunScoutFullOpts (pkg/engine/scout_run.go)
+
+            Open pkg/engine/scout_run.go and find the RunScoutFullOpts struct.
+            Use this exact context to locate the insertion point:
+            ```
+            	Feature             string
+            	RepoPath            string
+            	SAWRepoPath         string
+            ```
+            Add a new line immediately after the RepoPath line (before the SAWRepoPath line).
+            The new line to insert is:
+                ImplOutputPath      string // optional: explicit IMPL output path; overrides default derivation
+
+            ### 2. Apply the override in RunScoutFull (pkg/engine/scout_run.go)
+
+            Find the slug/implPath derivation block. It looks like:
+            ```
+            	// Generate slug and compute IMPL path.
+            	slug := generateSlug(opts.Feature)
+            	implPath := protocol.IMPLPath(repoPath, slug)
+            ```
+            After those three lines, insert the following block that checks if an explicit path
+            was provided:
+                if opts.ImplOutputPath != "" {
+                    implPath = opts.ImplOutputPath
+                }
+
+            ### 3. Add the variable and flag to run_scout_cmd.go
+
+            Open cmd/sawtools/run_scout_cmd.go. In the var block inside newRunScoutCmd, after
+            the sawRepoPath variable declaration, add a new variable for the explicit IMPL path.
+
+            In the RunScoutFullOpts struct literal (engine.RunScoutFullOpts{...}), add the new
+            field assignment ImplOutputPath: implOutputPath between the RepoPath and SAWRepoPath
+            field assignments.
+
+            At the bottom of newRunScoutCmd where flags are registered, add a new flag for
+            "impl-output-path" that binds to the new implOutputPath variable. Use cmd.Flags().StringVar
+            with description: "Explicit IMPL doc output path (overrides default derivation from
+            --repo-dir + slug)".
+
+            ## Verification gate
+            Run these commands from the repo root at /Users/dayna.blackwell/code/scout-and-wave-go:
+            ```
+            go build ./...
+            go vet ./...
+            go test ./pkg/engine/... -run TestRunScoutFull -timeout 30s
+            ```
+            Postconditions:
+            ```
+            grep "ImplOutputPath" /Users/dayna.blackwell/code/scout-and-wave-go/pkg/engine/scout_run.go | wc -l
+            # expect 3+ (field declaration, if-block check, comment)
+            grep "impl-output-path" /Users/dayna.blackwell/code/scout-and-wave-go/cmd/sawtools/run_scout_cmd.go | wc -l
+            # expect 1+
+            /Users/dayna.blackwell/go/bin/sawtools run-scout --help | grep "impl-output-path"
+            # expect to see --impl-output-path flag described
+            ```
+
+            ## Constraints
+            - Do NOT modify saw-skill.md or scout.md (Agents A and B own those)
+            - Do NOT modify docs/ files (Agent D owns those)
+            - Only add the new field and variable; do not rename or remove any existing fields
+            - The override must happen after implPath is computed from the slug, not before
+            - Do not change any function signatures; only add a field to the opts struct
+          files:
+            - pkg/engine/scout_run.go
+            - cmd/sawtools/run_scout_cmd.go
+        - id: D
+          task: |
+            ## Role
+            Update protocol documentation to describe the new --repo flag for /saw scout
+            and update the sawtools CLI quickstart to show the new --impl-output-path flag.
+
+            ## Context
+            Files:
+            - docs/architecture.md — describes the scout phase flow
+            - docs/QUICKSTART-CLI.md — CLI quickstart, Step 2 shows sawtools run-scout
+
+            ## What to implement
+
+            ### 1. Update docs/architecture.md
+            Find this exact text in the "Phase 1: Scout" subsection:
+            ```
+            1. User invokes `/saw scout <feature-description>`
+            ```
+            Replace with:
+            ```
+            1. User invokes `/saw scout <feature-description>` (optionally with `--repo <path>` to target a different repo than the session cwd)
+            ```
+
+            ### 2. Update docs/QUICKSTART-CLI.md Step 2 code block
+            Find this exact text (the bash code block in Step 2):
+            ```
+            sawtools run-scout "add caching to the API client"
+            ```
+            The full block starts with a line containing three backticks and "bash" and ends with
+            another line of three backticks. Replace the contents of that bash block with:
+            ```
+            # Scout the current project:
+            sawtools run-scout "add caching to the API client"
+
+            # Scout a specific repo (IMPL doc written to that repo's docs/IMPL/):
+            sawtools run-scout "add caching to the API client" --repo-dir /path/to/other-repo
+
+            # Scout one repo, write IMPL doc to a different location:
+            sawtools run-scout "add caching to the API client" \
+              --repo-dir /path/to/target \
+              --impl-output-path /path/to/protocol-docs/docs/IMPL/IMPL-caching.yaml
+            ```
+
+            ## Verification
+            After editing:
+            - Running: grep -c "repo" docs/architecture.md
+              returns a count showing the new --repo flag reference
+            - Running: grep -c "impl-output-path" docs/QUICKSTART-CLI.md
+              returns 1 or more
+
+            ## Constraints
+            - Do NOT modify saw-skill.md or scout.md (Agents A and B own those)
+            - Do NOT modify Go engine files (Agent C owns those)
+            - Only update the documentation — no behavior changes
+          files:
+            - docs/architecture.md
+            - docs/QUICKSTART-CLI.md
+    - number: 2
+      agents:
+        - id: E
+          task: |
+            ## Role
+            Create the `hooks/saw-worktree-boundary.sh` PreToolUse hook script and register it
+            in the project's global Claude Code settings so Write/Edit/MultiEdit calls targeting
+            the main repo are hard-denied when an agent is operating in a worktree context.
+
+            ## Context
+            Repo: /Users/dayna.blackwell/code/scout-and-wave
+            Files:
+            - hooks/saw-worktree-boundary.sh — new file to create (hooks/ directory does not
+              yet exist; create it)
+            - /Users/dayna.blackwell/.claude/settings.json — add hook registration entry
+
+            The existing `validate_write_paths` hook (in ~/.claude/agents/hooks/) uses
+            `SAW_AGENT_WORKTREE` set by the SubagentStart hook. This new hook uses
+            `SAW_WORKTREE_ROOT` set by `prepare-wave` (Go engine, Agent F's work) as a
+            complementary defense — providing enforcement even when the SubagentStart hook
+            is unavailable or the env was set before agent launch.
+
+            ## What to implement
+
+            ### 1. Create hooks/saw-worktree-boundary.sh
+
+            Create the file at:
+            /Users/dayna.blackwell/code/scout-and-wave/hooks/saw-worktree-boundary.sh
+
+            The script must be pure shell (bash), fast (no subprocess chains), and implement
+            exactly this logic:
+
+            ```bash
+            #!/usr/bin/env bash
+            # PreToolUse hook: Enforces worktree write boundaries for SAW wave agents.
+            # Uses SAW_WORKTREE_ROOT (injected by prepare-wave) to hard-deny any
+            # Write/Edit/MultiEdit call whose target path resolves to the main repo
+            # instead of the agent's assigned worktree.
+            #
+            # Exit codes:
+            #   0 — allow (pass-through)
+            #   2 — hard block (Claude Code will not execute the tool call)
+            #
+            # Environment:
+            #   SAW_WORKTREE_ROOT — absolute path to the agent's worktree (set by prepare-wave)
+            #                       When not set, this hook is a no-op (exit 0).
+
+            set -euo pipefail
+
+            # No-op when not in a worktree agent context
+            if [[ -z "${SAW_WORKTREE_ROOT:-}" ]]; then
+              exit 0
+            fi
+
+            # Read JSON input from stdin
+            input=$(cat)
+
+            # Only enforce on Write, Edit, MultiEdit tool calls
+            tool_name=$(printf '%s' "$input" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('tool_name',''))" 2>/dev/null || true)
+            if [[ "$tool_name" != "Write" && "$tool_name" != "Edit" && "$tool_name" != "MultiEdit" ]]; then
+              exit 0
+            fi
+
+            # Extract file_path from tool input
+            file_path=$(printf '%s' "$input" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('tool_input',{}).get('file_path',''))" 2>/dev/null || true)
+            if [[ -z "$file_path" ]]; then
+              exit 0
+            fi
+
+            # Resolve relative paths against cwd
+            if [[ "$file_path" != /* ]]; then
+              file_path="$(pwd)/$file_path"
+            fi
+
+            # Normalize (remove trailing slashes, resolve . and ..)
+            # Use Python since realpath may not handle non-existent paths on macOS
+            file_path=$(python3 -c "import os,sys; print(os.path.normpath(sys.argv[1]))" "$file_path" 2>/dev/null || printf '%s' "$file_path")
+            worktree_root=$(python3 -c "import os,sys; print(os.path.normpath(sys.argv[1]))" "$SAW_WORKTREE_ROOT" 2>/dev/null || printf '%s' "$SAW_WORKTREE_ROOT")
+
+            # Determine main repo root: walk up from worktree_root to find the repo that
+            # contains the .claude/worktrees/ directory (the main repo is 3 levels above
+            # the worktree: main_repo/.claude/worktrees/saw/<slug>/wave<N>-agent-<ID>)
+            # Pattern: worktree is at <main_repo>/.claude/worktrees/saw/*/wave*-agent-*
+            main_repo=""
+            if [[ "$worktree_root" =~ ^(.*)/\.claude/worktrees/ ]]; then
+              main_repo="${BASH_REMATCH[1]}"
+            fi
+
+            # If target path is under the worktree, allow it
+            if [[ "$file_path" == "$worktree_root"/* || "$file_path" == "$worktree_root" ]]; then
+              exit 0
+            fi
+
+            # If target path is under the main repo and we identified one, block it
+            if [[ -n "$main_repo" && ( "$file_path" == "$main_repo"/* || "$file_path" == "$main_repo" ) ]]; then
+              echo "[SAW] Write blocked: $file_path is in main repo, not agent worktree." >&2
+              echo "[SAW] Use: $SAW_WORKTREE_ROOT/$(python3 -c "import os,sys; print(os.path.relpath(sys.argv[1], sys.argv[2]))" "$file_path" "$main_repo" 2>/dev/null || printf '%s' "$file_path")" >&2
+              exit 2
+            fi
+
+            # Path is outside both main repo and worktree — allow (not our concern)
+            exit 0
+            ```
+
+            After creating the file, make it executable:
+            ```
+            chmod +x /Users/dayna.blackwell/code/scout-and-wave/hooks/saw-worktree-boundary.sh
+            ```
+
+            ### 2. Register the hook in ~/.claude/settings.json
+
+            Open /Users/dayna.blackwell/.claude/settings.json and find the `"PreToolUse"` array.
+
+            The existing hook entries include a `"Write|Edit"` entry for `validate_write_paths`.
+            Add a new entry to the `"PreToolUse"` array immediately after the existing
+            `validate_write_paths` entry. The exact text to find (the validate_write_paths block):
+            ```json
+              {
+                "matcher": "Write|Edit",
+                "hooks": [
+                  {
+                    "type": "command",
+                    "command": "/Users/dayna.blackwell/.claude/agents/hooks/validate_write_paths"
+                  }
+                ]
+              },
+            ```
+            Insert the following new entry immediately after the closing `},` of that block:
+            ```json
+              {
+                "matcher": "Write|Edit|MultiEdit",
+                "hooks": [
+                  {
+                    "type": "command",
+                    "command": "/Users/dayna.blackwell/code/scout-and-wave/hooks/saw-worktree-boundary.sh"
+                  }
+                ]
+              },
+            ```
+
+            ## Verification gate
+            Run these checks from /Users/dayna.blackwell/code/scout-and-wave:
+            ```
+            # File exists and is executable
+            test -x hooks/saw-worktree-boundary.sh && echo "PASS: script executable"
+
+            # Shebang is correct
+            head -1 hooks/saw-worktree-boundary.sh | grep -q "#!/usr/bin/env bash" && echo "PASS: shebang"
+
+            # Hook registered in settings.json
+            grep -c "saw-worktree-boundary" /Users/dayna.blackwell/.claude/settings.json
+            # expect: 1
+
+            # No-op when SAW_WORKTREE_ROOT is unset
+            echo '{"tool_name":"Write","tool_input":{"file_path":"/tmp/test.go"}}' \
+              | bash hooks/saw-worktree-boundary.sh && echo "PASS: no-op without env var"
+
+            # Allows write inside worktree
+            SAW_WORKTREE_ROOT=/tmp/test-wt \
+              echo '{"tool_name":"Write","tool_input":{"file_path":"/tmp/test-wt/pkg/file.go"}}' \
+              | bash hooks/saw-worktree-boundary.sh && echo "PASS: allows worktree write" || true
+            ```
+
+            ## Constraints
+            - Do NOT use subprocess chains in the hook (no `awk | sed | xargs`) — keep it simple
+            - Do NOT modify any Go engine files (Agent F owns prepare.go)
+            - Do NOT modify protocol/execution-rules.md or wave-agent.md (Agent G owns those)
+            - Use python3 for JSON parsing (jq may not be available in all agent environments)
+            - The hook MUST be a no-op (exit 0) when SAW_WORKTREE_ROOT is not set
+            - Hard block exit code MUST be 2 (not 1) — exit 1 is advisory in Claude Code hooks
+          files:
+            - hooks/saw-worktree-boundary.sh
+        - id: F
+          task: |
+            ## Role
+            Update the prepare-wave Go engine code to inject SAW_WORKTREE_ROOT into each agent's
+            worktree environment file, so the saw-worktree-boundary.sh PreToolUse hook can enforce
+            write boundaries using that env var.
+
+            ## Context
+            Repo: /Users/dayna.blackwell/code/scout-and-wave-go
+            File: pkg/engine/prepare.go
+
+            The prepare-wave pipeline creates worktrees for each agent in the
+            `extractBriefsAndInitJournals` function (line ~878). After writing the agent brief
+            (.saw-agent-brief.md) and ownership manifest (.saw-ownership.json) into each worktree,
+            it should also write a small env file (.saw-worktree-env) containing
+            SAW_WORKTREE_ROOT=<absolute_worktree_path>.
+
+            The saw-worktree-boundary.sh hook (created by Agent E) reads SAW_WORKTREE_ROOT from
+            its environment. Claude Code hooks receive the agent's environment variables. The
+            environment is populated when Claude Code launches the subagent thread — the
+            SAW_WORKTREE_ROOT value must be available in the worktree context before the agent
+            starts writing files.
+
+            The worktree path is already available as `wtInfo.Path` (an absolute path string)
+            in the loop inside `extractBriefsAndInitJournals`.
+
+            ## What to implement
+
+            ### 1. Write .saw-worktree-env to each agent worktree
+
+            In `pkg/engine/prepare.go`, inside the `extractBriefsAndInitJournals` function,
+            find this exact code block (it immediately follows the brief write):
+            ```go
+            		// Write brief to worktree root
+            		briefPath := filepath.Join(wtInfo.Path, ".saw-agent-brief.md")
+            		if err := os.WriteFile(briefPath, []byte(brief), 0644); err != nil {
+            			return nil, fmt.Errorf("failed to write brief for agent %s: %w", agentID, err)
+            		}
+            ```
+            After the closing `}` of that if-block, insert the following new block:
+            ```go
+            		// Write .saw-worktree-env for PreToolUse hook enforcement (E43 / saw-worktree-boundary.sh).
+            		// SAW_WORKTREE_ROOT is read by hooks/saw-worktree-boundary.sh to hard-deny writes
+            		// targeting the main repo instead of the agent's assigned worktree.
+            		worktreeEnvPath := filepath.Join(wtInfo.Path, ".saw-worktree-env")
+            		worktreeEnvContent := fmt.Sprintf("SAW_WORKTREE_ROOT=%s\n", wtInfo.Path)
+            		if err := os.WriteFile(worktreeEnvPath, []byte(worktreeEnvContent), 0644); err != nil {
+            			// Non-fatal: log warning but don't abort — boundary hook will be no-op without this file
+            			fmt.Fprintf(os.Stderr, "prepare-wave: warning: failed to write .saw-worktree-env for agent %s: %v\n", agentID, err)
+            		}
+            ```
+
+            ### 2. Expose WorktreeEnvPath in AgentBriefInfo (optional, but recommended)
+
+            In `pkg/engine/step_types.go`, add a field to `AgentBriefInfo` so the orchestrator
+            can surface the env file path:
+
+            Find this exact block in step_types.go:
+            ```go
+            	// JournalContextFile is the absolute path to context.md when
+            	// JournalContextAvailable is true; empty otherwise.
+            	JournalContextFile string `json:"journal_context_file,omitempty"`
+            ```
+            After that block, add:
+            ```go
+            	// WorktreeEnvPath is the absolute path to the .saw-worktree-env file written
+            	// by prepare-wave. Empty when the file could not be written.
+            	WorktreeEnvPath string `json:"worktree_env_path,omitempty"`
+            ```
+
+            Then in `pkg/engine/prepare.go`, in the `agentBriefs = append(...)` block, add the
+            new field. Find this exact block:
+            ```go
+            		agentBriefs = append(agentBriefs, AgentBriefInfo{
+            			Agent:                   agentID,
+            			BriefPath:               briefPath,
+            			BriefLength:             len(brief),
+            			JournalDir:              observer.JournalDir,
+            			FilesOwned:              len(agentFiles),
+            			Repo:                    agentRepoName,
+            			MergeTarget:             opts.MergeTarget,
+            			JournalContextAvailable: journalContextAvailable,
+            			JournalContextFile:      journalContextFile,
+            		})
+            ```
+            Add `WorktreeEnvPath: worktreeEnvPath,` as the last field before the closing `})`.
+
+            ## Verification gate
+            Run these commands from /Users/dayna.blackwell/code/scout-and-wave-go:
+            ```
+            go build ./...
+            go vet ./...
+            go test ./pkg/engine/... -timeout 60s
+            ```
+            Postconditions:
+            ```
+            grep -c "saw-worktree-env" /Users/dayna.blackwell/code/scout-and-wave-go/pkg/engine/prepare.go
+            # expect: 2+ (the env file path variable and the WriteFile call)
+
+            grep -c "WorktreeEnvPath" /Users/dayna.blackwell/code/scout-and-wave-go/pkg/engine/step_types.go
+            # expect: 1+ (the new field)
+
+            grep -c "SAW_WORKTREE_ROOT" /Users/dayna.blackwell/code/scout-and-wave-go/pkg/engine/prepare.go
+            # expect: 1+ (the Sprintf format string)
+            ```
+
+            ## Constraints
+            - Do NOT modify hooks/saw-worktree-boundary.sh (Agent E owns it)
+            - Do NOT modify protocol/execution-rules.md or wave-agent.md (Agent G owns those)
+            - The .saw-worktree-env write MUST be non-fatal — use a warning log, not a fatal error
+            - Only add the new env file write; do not change worktree creation, brief generation,
+              or ownership manifest logic
+            - Do not change any function signatures in prepare.go or step_types.go
+          files:
+            - pkg/engine/prepare.go
+            - pkg/engine/step_types.go
+        - id: G
+          task: |
+            ## Role
+            Update the protocol documentation to reflect that Hook 3 of E43 is now also
+            implemented as hooks/saw-worktree-boundary.sh using SAW_WORKTREE_ROOT, and add
+            a note to wave-agent.md informing agents that Write/Edit calls targeting the main
+            repo are hard-denied.
+
+            ## Context
+            Repo: /Users/dayna.blackwell/code/scout-and-wave
+            Files:
+            - protocol/execution-rules.md — update E43 Hook 3 description
+            - implementations/claude-code/prompts/agents/wave-agent.md — add note about
+              hard-deny behavior for main-repo writes
+
+            ## What to implement
+
+            ### 1. Update E43 Hook 3 in protocol/execution-rules.md
+
+            Find this exact block in execution-rules.md (the Hook 3 description under E43):
+            ```
+            **Hook 3: PreToolUse:Write/Edit path validation (validate_write_paths)**
+            - Blocks relative paths in worktree context (exit 2)
+            - Blocks paths outside worktree boundaries (exit 2)
+            - Fires only when SAW_AGENT_WORKTREE is non-empty (skips solo waves)
+            - Error messages reference worktree path and protocol rule (E43)
+            - Prevents Agent B leak scenario (files created in main repo)
+            ```
+            Replace with:
+            ```
+            **Hook 3: PreToolUse:Write/Edit path validation (validate_write_paths + saw-worktree-boundary.sh)**
+            - validate_write_paths: blocks relative paths and out-of-worktree writes using SAW_AGENT_WORKTREE (set by SubagentStart inject_worktree_env hook)
+            - saw-worktree-boundary.sh: hard-denies (exit 2) Write/Edit/MultiEdit calls whose target path resolves to the main repo root instead of the agent's worktree; uses SAW_WORKTREE_ROOT (set by prepare-wave, see E43 Implementation Notes)
+            - Both hooks fire only when their respective env var is non-empty (skips solo waves, integration waves, orchestrator context)
+            - Error message format: "[SAW] Write blocked: <path> is in main repo, not agent worktree. Use: <SAW_WORKTREE_ROOT>/..."
+            - Prevents Agent B leak scenario (files created in main repo instead of worktree)
+            ```
+
+            ### 2. Update E43 Implementation Notes
+
+            Find this exact paragraph in the "### Implementation Notes" block under E43:
+            ```
+            - **Claude Code-specific:** E43 hooks use Claude Code lifecycle API (SubagentStart, PreToolUse, SubagentStop). Other platforms must implement equivalent enforcement at their tool invocation boundary.
+            ```
+            After that line, insert a new bullet:
+            ```
+            - **SAW_WORKTREE_ROOT:** prepare-wave writes `.saw-worktree-env` to each agent's worktree root containing `SAW_WORKTREE_ROOT=<absolute_worktree_path>`. The `hooks/saw-worktree-boundary.sh` PreToolUse hook reads this var to enforce write boundaries independently of the SubagentStart hook. This provides defense-in-depth: boundary enforcement works even if the SubagentStart hook is unavailable.
+            ```
+
+            ### 3. Update wave-agent.md Worktree Isolation Protocol
+
+            Find this exact block in implementations/claude-code/prompts/agents/wave-agent.md:
+            ```
+            1. **SubagentStart** → `inject_worktree_env` sets `SAW_AGENT_WORKTREE`, `SAW_AGENT_ID`, `SAW_WAVE_NUMBER`, `SAW_IMPL_PATH`, `SAW_BRANCH`
+            2. **PreToolUse:Bash** → `inject_bash_cd` prepends `cd $SAW_AGENT_WORKTREE &&` to every bash command
+            3. **PreToolUse:Write|Edit** → `validate_write_paths` blocks relative paths and out-of-worktree writes
+            4. **SubagentStop** → `verify_worktree_compliance` checks completion report exists
+            ```
+            Replace with:
+            ```
+            1. **SubagentStart** → `inject_worktree_env` sets `SAW_AGENT_WORKTREE`, `SAW_AGENT_ID`, `SAW_WAVE_NUMBER`, `SAW_IMPL_PATH`, `SAW_BRANCH`
+            2. **PreToolUse:Bash** → `inject_bash_cd` prepends `cd $SAW_AGENT_WORKTREE &&` to every bash command
+            3. **PreToolUse:Write|Edit** → `validate_write_paths` blocks relative paths and out-of-worktree writes; `saw-worktree-boundary.sh` hard-denies (exit 2) any Write/Edit/MultiEdit targeting the main repo instead of your worktree
+            4. **SubagentStop** → `verify_worktree_compliance` checks completion report exists
+
+            **Hard-deny writes to main repo:** If you attempt to Write or Edit a file in the
+            main repo (not your worktree), you will see: `[SAW] Write blocked: <path> is in
+            main repo, not agent worktree.` The message includes the correct worktree path to
+            use. This is enforced by `hooks/saw-worktree-boundary.sh` using the `SAW_WORKTREE_ROOT`
+            env var set by `prepare-wave`.
+            ```
+
+            ## Verification gate
+            Run these checks from /Users/dayna.blackwell/code/scout-and-wave:
+            ```
+            # E43 updated in execution-rules.md
+            grep -c "saw-worktree-boundary" protocol/execution-rules.md
+            # expect: 2+ (Hook 3 description and Implementation Notes)
+
+            grep -c "SAW_WORKTREE_ROOT" protocol/execution-rules.md
+            # expect: 1+
+
+            # wave-agent.md updated
+            grep -c "saw-worktree-boundary" implementations/claude-code/prompts/agents/wave-agent.md
+            # expect: 1+
+
+            grep -c "hard-den" implementations/claude-code/prompts/agents/wave-agent.md
+            # expect: 1+
+            ```
+
+            ## Constraints
+            - Do NOT modify hooks/saw-worktree-boundary.sh (Agent E owns it)
+            - Do NOT modify any Go engine files (Agent F owns prepare.go and step_types.go)
+            - Do NOT change Wave 1 frozen files (saw-skill.md, scout.md, docs/architecture.md,
+              docs/QUICKSTART-CLI.md)
+            - Only update the two documentation files: execution-rules.md and wave-agent.md
+            - Do NOT add new protocol rules — only update existing E43 descriptions
+          files:
+            - protocol/execution-rules.md
+            - implementations/claude-code/prompts/agents/wave-agent.md
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: go build ./...
+          required: true
+          repo: scout-and-wave-go
+        - type: test
+          command: go test ./... -timeout 120s
+          required: true
+          repo: scout-and-wave-go
+        - type: lint
+          command: go vet ./...
+          required: true
+          repo: scout-and-wave-go
+pre_mortem:
+    overall_risk: medium
+    rows:
+        - scenario: Agent A edits saw-skill.md but omits the auto flow update — the auto command also launches a scout and would not benefit from --repo parsing, causing the flag to be silently ignored when using /saw auto --repo.
+          likelihood: medium
+          impact: medium
+          mitigation: Agent A's task includes updating the argument-hint for auto and states that --repo parsing applies to both scout and auto args. The Invocation Modes table update is explicitly scoped to the scout row; the auto row's --skip-confirm position makes --repo natural to add there too. Agent A should double-check the auto flow section.
+        - scenario: Agent B makes the scout.md change unconditional — the scout always looks for an "IMPL Output Path" section and errors when absent, breaking the default behavior.
+          likelihood: low
+          impact: high
+          mitigation: Agent B's instruction explicitly says "if present, write to that path". The wording "check your context for..." is conditional. The fallback default path remains in the text.
+        - scenario: Agent C adds the new field to RunScoutFullOpts but forgets to wire it into the local implPath variable before scoutOpts is constructed in RunScoutFull. The inner ScoutCorrectionLoop would still use the slug-derived path.
+          likelihood: low
+          impact: high
+          mitigation: The override block is inserted immediately after implPath is computed, before scoutOpts is constructed. Agent C's task shows the exact insertion point. The override sets implPath to the explicit value, which then flows into scoutOpts.IMPLOutPath naturally.
+        - scenario: I6 validation (ValidateScoutWrites) rejects the cross-repo write when --repo points to a different repo than session cwd, because it checks writes within opts.RepoPath.
+          likelihood: low
+          impact: medium
+          mitigation: I6 uses opts.RepoPath (the target repo) as the boundary, not the session cwd. When the caller sets RepoPath to the target repo (via --repo-dir), the write to target-repo/docs/IMPL/ is within bounds. No engine changes needed for I6.
+        - scenario: The slug generated by the Orchestrator in the skill (to construct the IMPL output path) differs from the slug generateSlug() computes in the engine, causing a path mismatch.
+          likelihood: low
+          impact: medium
+          mitigation: When --repo is provided, the Orchestrator passes the explicit path to the scout agent via the prompt. The scout writes to that exact path regardless of its internal slug generation. There is no mismatch because the scout follows the injected path instruction.
+        - scenario: Agent E's hook uses python3 for JSON parsing, but python3 is not in PATH in the Claude Code hook execution environment, causing the hook to silently fail to extract file_path and always exit 0.
+          likelihood: low
+          impact: medium
+          mitigation: The hook falls back gracefully (empty file_path → exit 0, allow). The claude Code environment has python3 available on macOS. If python3 is unavailable the hook becomes a no-op rather than blocking legitimate writes. Agent E can add a fallback using grep/sed if needed, but keep it simple first.
+        - scenario: Agent E modifies ~/.claude/settings.json but inserts the JSON entry with a syntax error (missing comma, extra brace), breaking all hook execution for the user.
+          likelihood: medium
+          impact: high
+          mitigation: Agent E must validate the JSON after editing. The task includes reading the current settings.json first and using Edit tool with exact string match. After editing, run `python3 -m json.tool ~/.claude/settings.json` to verify syntax before committing.
+        - scenario: Agent F's .saw-worktree-env write adds a fatal error path instead of a warning, causing prepare-wave to fail for all subsequent waves when the hooks directory is not writable.
+          likelihood: low
+          impact: high
+          mitigation: The task explicitly specifies non-fatal behavior — use fmt.Fprintf(os.Stderr, "warning:...") and continue without returning an error. The code template in the task shows this pattern.
+        - scenario: Agent G updates wave-agent.md but the exact text it searches for has minor whitespace or punctuation differences from what's actually in the file, causing the Edit to fail and the agent to hallucinate a replacement.
+          likelihood: medium
+          impact: low
+          mitigation: Agent G must Read the exact current text of wave-agent.md before writing the Edit. The task provides verbatim text blocks to match. Agent G should verify matches before applying edits and check postconditions after.
+        - scenario: The settings.json entry Agent E adds uses the repo-local path (scout-and-wave/hooks/saw-worktree-boundary.sh relative) instead of an absolute path, causing the hook to fail silently when Claude Code runs from a different cwd.
+          likelihood: medium
+          impact: medium
+          mitigation: Agent E's task explicitly uses the absolute path /Users/dayna.blackwell/code/scout-and-wave/hooks/saw-worktree-boundary.sh in the settings.json entry. The task shows the exact JSON to insert with the absolute path.
+critic_report:
+    verdict: PASS
+    agent_reviews: {}
+    summary: ""
+    reviewed_at: ""
+    issue_count: 0
+state: SCOUT_PENDING
+original_branch: main
+injection_method: manual-fallback
