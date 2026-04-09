@@ -320,6 +320,57 @@ case "$agent_type" in
       fi
     fi
 
+    # Verify status:complete is consistent with stub scan (E20 enforcement)
+    # If agent claims "complete" but files contain panic("not implemented") or similar,
+    # the agent must either fix the stubs or change status to "partial".
+    if command -v sawtools &>/dev/null && [[ -n "$ownership_file" ]]; then
+      worktree_root=$(dirname "$ownership_file")
+      # Get agent's self-reported status
+      agent_status=""
+      if command -v yq &>/dev/null; then
+        agent_status=$(yq -r ".completion_reports.${agent_id}.status // empty" "$impl_path" 2>/dev/null || true)
+      else
+        agent_status=$(sed -n "/^completion_reports:/,/^[a-z_]*:/p" "$impl_path" 2>/dev/null | \
+                       sed -n "/^\s\+${agent_id}:/,/^\s\+[A-Z]:/p" | \
+                       grep -E '^\s+status:' | head -1 | \
+                       sed 's/^\s*status:\s*//' | \
+                       sed "s/^['\"]//; s/['\"]$//" || true)
+      fi
+
+      if [[ "$agent_status" == "complete" ]]; then
+        # Get changed files in worktree
+        current_branch=$(git -C "$worktree_root" branch --show-current 2>/dev/null || true)
+        if [[ -n "$current_branch" ]]; then
+          merge_base=$(git -C "$worktree_root" merge-base "$current_branch" HEAD 2>/dev/null || true)
+          if [[ -n "$merge_base" ]]; then
+            changed_files=$(git -C "$worktree_root" diff --name-only "$merge_base" HEAD 2>/dev/null || true)
+          fi
+
+          if [[ -n "$changed_files" ]]; then
+            # Build absolute paths for scan-stubs
+            abs_files=()
+            while IFS= read -r f; do
+              [[ -z "$f" ]] && continue
+              abs_files+=("${worktree_root}/${f}")
+            done <<< "$changed_files"
+
+            if [[ ${#abs_files[@]} -gt 0 ]]; then
+              stub_output=$(sawtools scan-stubs "${abs_files[@]}" 2>/dev/null || true)
+              stub_count=$(echo "$stub_output" | jq -r '.hits | length' 2>/dev/null || echo "0")
+
+              if [[ "$stub_count" -gt 0 ]]; then
+                echo "E42/E20: Agent ${agent_id} reports status=complete but ${stub_count} stub(s) remain:" >&2
+                echo "$stub_output" | jq -r '.hits[] | "  \(.file):\(.line): \(.context)"' 2>/dev/null >&2
+                echo "" >&2
+                echo "Either fix the stubs or change your completion report status to 'partial'." >&2
+                exit 2
+              fi
+            fi
+          fi
+        fi
+      fi
+    fi
+
     # Verify verification field format (must be "PASS" or "FAIL (...)")
     verification=""
     if command -v yq &>/dev/null; then

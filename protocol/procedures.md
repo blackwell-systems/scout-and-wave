@@ -450,10 +450,11 @@ The agent runs on the main branch directly. `finalize-wave` auto-detects that no
    - All agents `status: complete` → proceed to steps 4–5
 
 4. **E20: Stub detection.** After all agents complete:
+   - **Note:** Agents claiming `status: complete` have already passed the SubagentStop stub consistency check — any remaining stubs in their files were caught at agent exit time.
    - Collect union of all `files_changed` and `files_created` from completion reports
    - Run `sawtools scan-stubs --append-impl "<manifest-path>" --wave {N}` (exit code is always 0 — informational only)
    - **Note:** `finalize-wave` runs this automatically as step 2; no manual invocation needed when using `finalize-wave`
-   - Surface stubs at the review checkpoint; they do not automatically block merge
+   - Surface stubs at the review checkpoint (includes stubs from `partial` agents that were not required to clear them)
 
 5. **E21: Quality gates.** If IMPL doc contains a `## Quality Gates` section:
    - Run all gates with `required: true`

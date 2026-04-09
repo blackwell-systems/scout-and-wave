@@ -24,7 +24,7 @@ Enforcement and injection hooks for CLI-based SAW agents. 21 hooks across Subage
 | check_git_ownership | PostToolUse | Bash | I1 | Catches git-level ownership violations |
 | warn_stubs | PostToolUse | Write\|Edit | H3 | Warns on stub patterns in written code |
 | check_branch_drift | PostToolUse | Bash | H4 | Detects commits on wrong branch |
-| validate_agent_completion | SubagentStop | — | E42/I1/I4/I5 | Validates protocol compliance at agent completion |
+| validate_agent_completion | SubagentStop | — | E42/I1/I4/I5/E20 | Validates protocol compliance at agent completion (incl. stub consistency) |
 
 ### Injection hooks (prepend reference content)
 

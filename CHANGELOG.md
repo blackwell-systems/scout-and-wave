@@ -8,6 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added (2026-04-09)
+- **`validate_agent_completion` stub consistency gate (E20)** — wave agents claiming `status: complete` are now checked for stub patterns (`panic("not implemented")`, TODO, FIXME, etc.) in their changed files. If stubs are found, the agent is blocked (exit 2) and must either fix the stubs or change status to `partial`. Uses `sawtools scan-stubs` on the git diff between merge base and HEAD. This closes the gap where agents could self-report "complete" while leaving placeholder implementations.
+
+### Changed (2026-04-09)
+- **E20 documented as two-phase enforcement** — protocol spec (`execution-rules.md`, `procedures.md`, `state-machine.md`, `message-formats.md`), agent prompts (`wave-agent.md`, `agent-template.md`), orchestrator skill (`saw-skill.md`), and failure routing reference updated to describe E20 as: (1) agent-level SubagentStop blocking gate for `status: complete` agents, (2) orchestrator-level post-wave informational scan. Previously all docs described E20 as informational only.
+
+### Fixed (2026-04-09)
+- **`finalize-scout` adoption: docs updated** — `CONTEXT.md` and `GETTING_STARTED.md` still referenced "Scout step 17" for `validate-briefs`. Updated to reference `finalize-scout` as the consolidated entry point. All operational paths (scout prompt, hooks, orchestrator) already correctly use `finalize-scout`; these were the last stale doc references.
+
 ### Fixed (2026-04-08)
 - **`validate_impl_on_write` now runs brief validation** — hook previously only ran `sawtools validate` (E16 structural schema). Now runs a second step: `sawtools validate-briefs`, which catches symbol errors, invalid line references, and wave number inconsistencies in agent brief prose. Errors are surfaced immediately after each Write/Edit to an IMPL doc with per-agent detail (e.g. `Agent D: [wave_reference_invalid] brief says 'Wave 2 Agent G' but Agent G is in Wave 3`).
 - **`validate_agent_completion` scout gate now includes brief validation** — the SubagentStop hook for scout agents already ran `sawtools pre-wave-validate --wave 1 --fix` (E16 + E35 + cascade). It now also runs `sawtools validate-briefs`, enforcing the full brief check at scout exit. The scout cannot complete until both structural and brief validation pass — this is the hard gate, since PostToolUse hook errors are advisory.

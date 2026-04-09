@@ -141,8 +141,8 @@
 **Location:** `pkg/protocol/brief_validator.go` (scout-and-wave-go repo)
 
 **Purpose:** Automated validation of agent briefs for symbol and line accuracy.
-Language-agnostic approach using grep and line counting. Runs in Scout step 17
-to catch errors before the critic gate.
+Language-agnostic approach using grep and line counting. Runs as part of
+`sawtools finalize-scout` to catch errors before the critic gate.
 
 **Key types:**
 - `BriefValidationData` — top-level result with per-agent validation results
@@ -162,8 +162,8 @@ func ValidateBriefs(ctx context.Context, implPath string) (BriefValidationData, 
 3. Wave reference consistency (`wave_reference_invalid`): "Wave N Agent X" prose references are validated against the actual wave assignment in the IMPL doc — catches cases like a brief saying "Wave 2 Agent G" when Agent G is in Wave 3
 4. Suggestions: fuzzy-matched alternatives for missing symbols
 
-**Integration point:** Scout agent runs this in step 17 after schema validation
-passes. Output is JSON with actionable fix suggestions. Reduces critic gate
+**Integration point:** Scout agent runs this via `sawtools finalize-scout` after
+schema validation passes. Output is JSON with actionable fix suggestions. Reduces critic gate
 round-trip time by catching errors at source (~5 min saved per critic cycle).
 
 **Cross-repo support:** Handles multi-repo IMPLs via FileOwnership.Repo field.

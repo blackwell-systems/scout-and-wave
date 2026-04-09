@@ -38,7 +38,7 @@ These four commands replace manual grep and guessing during Scout planning:
 | `sawtools list-error-ranges --repo-dir <path>` | List all allocated error code ranges from `pkg/result/codes.go` |
 | `sawtools suggest-wave-structure <manifest> --repo-dir <path>` | Validate that callers of changed interfaces are in correct downstream waves |
 | `sawtools check-test-cascade <manifest> --repo-dir <path>` | Pre-flight gate: verify test files calling changed symbols are assigned to agents |
-| `sawtools validate-briefs <manifest>` | Symbol existence and line reference validation of agent briefs (Scout step 17) |
+| `sawtools validate-briefs <manifest>` | Symbol existence and line reference validation of agent briefs (runs as part of `finalize-scout`) |
 
 `check-test-cascade` runs automatically as Step 3 of `sawtools pre-wave-validate`.
 

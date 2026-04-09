@@ -240,7 +240,7 @@ Transitions are conditional. The following guards determine whether a transition
 
 ### WAVE_EXECUTING → WAVE_MERGING
 
-**Guard:** All agents in the wave have written completion reports to IMPL doc AND E20 stub scan has run and results appended to IMPL doc AND E21 quality gates have run (required gates passing).
+**Guard:** All agents in the wave have written completion reports to IMPL doc (agents claiming `status: complete` passed E20 SubagentStop stub consistency check) AND orchestrator-level E20 stub scan has run and results appended to IMPL doc AND E21 quality gates have run (required gates passing).
 
 **Failure conditions:**
 - Any agent reports `status: partial` → enter BLOCKED (see `failure_type` field and E19 decision tree)

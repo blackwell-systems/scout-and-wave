@@ -862,13 +862,17 @@ default behavior unchanged. Individual missing entries also fall back to default
 2. Runs `sawtools scan-stubs --append-impl "<manifest-path>" --wave {N}` — this writes the report directly into the manifest.
 3. The scan report is available in the manifest's stub detection section for that wave.
 
-Exit code of `sawtools scan-stubs` is always 0 — stub detection is informational only. Stubs found are surfaced at the review checkpoint but do not block merge automatically.
+**Two-phase enforcement:**
 
-**Note:** `finalize-wave` runs stub scanning automatically as step 2 of its pipeline; the orchestrator does not need to invoke this manually when using `finalize-wave`.
+1. **Agent-level (SubagentStop, blocking):** The `validate_agent_completion` hook checks each wave agent at exit. If an agent reports `status: complete` but `sawtools scan-stubs` finds stub patterns in their changed files, the agent is blocked (exit 2). The agent must either fix the stubs or change status to `partial`. This prevents agents from self-reporting "complete" while leaving placeholder implementations.
 
-**Rationale:** An agent can write a syntactically correct function shell with a stub body (`pass`, `...`, `raise NotImplementedError`) and mark `[COMPLETE]`. The human reviewer approving the plan (not the diff) may not catch it. Stub detection surfaces hollow implementations before they ship.
+2. **Orchestrator-level (post-wave, informational):** Exit code of `sawtools scan-stubs` at the orchestrator level is always 0 — the post-wave scan is informational. Stubs found are surfaced at the review checkpoint but do not block merge automatically. By this point, agents claiming `status: complete` have already passed the SubagentStop consistency check.
 
-**Related Rules:** See E21 (post-wave verification gates), `message-formats.md` (## Stub Report Section Format).
+**Note:** `finalize-wave` runs the orchestrator-level stub scanning automatically as step 2 of its pipeline; the orchestrator does not need to invoke this manually when using `finalize-wave`.
+
+**Rationale:** An agent can write a syntactically correct function shell with a stub body (`pass`, `...`, `raise NotImplementedError`) and mark `[COMPLETE]`. The human reviewer approving the plan (not the diff) may not catch it. The SubagentStop gate catches this mechanically; the post-wave scan provides a consolidated view for human review.
+
+**Related Rules:** See E21 (post-wave verification gates), E42 (SubagentStop validation), `message-formats.md` (## Stub Report Section Format).
 
 ---
 

@@ -43,11 +43,13 @@ If any agent reports `status: blocked` due to an interface contract being unimpl
 
 ## E20: Stub Scan
 
-Collect the union of all `files_changed` and `files_created` from agent completion reports. Run:
+**Agent-level (automatic):** Agents reporting `status: complete` are checked at SubagentStop — if stubs remain in their changed files, the agent is blocked (exit 2) and must fix or change to `partial`.
+
+**Orchestrator-level (post-wave):** Collect the union of all `files_changed` and `files_created` from agent completion reports. Run:
 ```bash
 sawtools scan-stubs <file1> <file2> ...
 ```
-Append the output to the IMPL doc under `## Stub Report — Wave {N}` (after the last agent completion report for this wave). Exit code is always 0 — stub detection is informational. Surface stubs at the review checkpoint.
+Append the output to the IMPL doc under `## Stub Report — Wave {N}` (after the last agent completion report for this wave). Exit code is always 0 — the post-wave scan is informational. Surface stubs at the review checkpoint (includes stubs from `partial` agents).
 
 **E21: Quality gate verification.** Quality gates are run automatically by `finalize-wave` in the next step.
 

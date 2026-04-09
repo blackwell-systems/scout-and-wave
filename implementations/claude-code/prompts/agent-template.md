@@ -242,7 +242,7 @@ then add free-form notes beneath it.
 ### Agent {ID} - Completion Report
 
 ```yaml type=impl-completion-report
-status: complete | partial | blocked
+status: complete | partial | blocked  # E20: "complete" triggers SubagentStop stub scan — fix all stubs before claiming complete
 failure_type: transient | fixable | needs_replan | escalate | timeout  # Required when status is partial or blocked. Omit when status is complete.
 repo: /absolute/path/to/repo  # omit for single-repo waves
 worktree: .claude/worktrees/saw/{slug}/wave{N}-agent-{ID}

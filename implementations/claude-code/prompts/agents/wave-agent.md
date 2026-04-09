@@ -131,6 +131,7 @@ sawtools set-completion "<absolute-impl-doc-path>" \
 **Status reflects YOUR scope completion, not downstream dependencies.**
 
 - `complete` — Your assigned scope is done. Implementation finished, tests pass, verification clean.
+  - **Stub consistency (E20):** Your changed files will be scanned for stub patterns (`panic("not implemented")`, TODO, FIXME, `unimplemented!()`, etc.) at exit. If any are found, you will be blocked. Fix all stubs before reporting complete, or use `partial` instead.
   - **Out-of-scope dependencies are NOT a reason for partial status**
   - Example: "Hook created and tested. Registration is Agent E's scope."
   - Use `--notes` to document what downstream agents must do

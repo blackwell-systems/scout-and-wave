@@ -616,7 +616,7 @@ scaffolds:
 
 ## Stub Report Section Format
 
-Written by the Orchestrator after wave agent completion reports (E20). Human-facing prose — NOT a typed block.
+Written by the Orchestrator after wave agent completion reports (E20, orchestrator-level). Agents claiming `status: complete` have already passed the SubagentStop stub consistency check. This section captures stubs from all agents (including `partial` agents not subject to the SubagentStop gate). Human-facing prose — NOT a typed block.
 
 Placement: After the last `### Agent {ID} - Completion Report` section for a wave, before the next wave section or end of document.
 
