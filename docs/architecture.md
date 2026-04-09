@@ -296,7 +296,7 @@ See [tool-journaling.md](./tool-journaling.md) for full documentation.
 
 ### Phase 1: Scout
 
-1. User invokes `/saw scout <feature-description>`
+1. User invokes `/saw scout <feature-description>` (optionally with `--repo <path>` to target a different repo than the session cwd)
 2. Orchestrator launches Scout agent (async, `subagent_type: scout`)
 3. Scout analyzes codebase, identifies interfaces, writes IMPL manifest
 4. Orchestrator validates IMPL manifest (E16: `sawtools validate`)

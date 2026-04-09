@@ -41,7 +41,16 @@ If any check fails, the output includes a plain-English explanation and remediat
 Navigate to your project directory and run:
 
 ```bash
+# Scout the current project:
 sawtools run-scout "add caching to the API client"
+
+# Scout a specific repo (IMPL doc written to that repo's docs/IMPL/):
+sawtools run-scout "add caching to the API client" --repo-dir /path/to/other-repo
+
+# Scout one repo, write IMPL doc to a different location:
+sawtools run-scout "add caching to the API client" \
+  --repo-dir /path/to/target \
+  --impl-output-path /path/to/protocol-docs/docs/IMPL/IMPL-caching.yaml
 ```
 
 **What happens:** Launches a Scout agent that analyzes your codebase, checks suitability for parallel decomposition, designs the wave structure, and writes an IMPL doc.
