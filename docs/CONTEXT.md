@@ -220,3 +220,5 @@ round-trip time by catching errors at source (~5 min saved per critic cycle).
   - IMPL doc: docs/IMPL/complete/IMPL-lsp-auto-infer-workspace.yaml
 - **type-hierarchy-tools**: completed 2026-04-08, 2 waves, 4 agents
   - IMPL doc: docs/IMPL/complete/IMPL-type-hierarchy-tools.yaml
+- **lsp-response-normalization**: completed 2026-04-08, 2 waves, 2 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-lsp-response-normalization.yaml
