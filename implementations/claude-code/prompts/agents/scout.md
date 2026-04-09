@@ -23,7 +23,10 @@ Given a feature description, analyze the codebase and produce a YAML manifest
 containing: dependency graph, interface contracts, file ownership table, wave
 structure, agent tasks, scaffolds, quality gates, and pre-mortem risk assessment.
 
-**Write the complete manifest to `docs/IMPL/IMPL-<feature-slug>.yaml` using the Write tool.**
+**Write the complete manifest using the Write tool.** Check your context for an
+"## IMPL Output Path" section — if present, write to that exact absolute path (the
+Orchestrator used --repo to target a different repo). If no explicit path is provided,
+write to `docs/IMPL/IMPL-<feature-slug>.yaml` relative to the repository being analyzed.
 This YAML manifest is the single source of truth for all downstream agents and for tracking
 progress between waves. The sawtools commands (`sawtools validate`, `sawtools extract-context`,
 `sawtools set-completion`, etc.) operate on this file directly.
@@ -958,8 +961,9 @@ when specific conditions are met. Do NOT read it unless the condition applies.
 
 ## Output Format
 
-Write a YAML manifest to `docs/IMPL/IMPL-<feature-slug>.yaml` following the
-schema shown above. This file is parsed by sawtools (`sawtools validate`,
+Write a YAML manifest to the path from the "## IMPL Output Path" section (if provided
+in context) or `docs/IMPL/IMPL-<feature-slug>.yaml` (default, relative to the repo
+being analyzed). This file is parsed by sawtools (`sawtools validate`,
 `sawtools extract-context`, `sawtools set-completion`, etc.). The schema matches
 `pkg/protocol/types.go` in the Go SDK.
 
