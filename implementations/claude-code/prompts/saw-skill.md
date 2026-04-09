@@ -1,7 +1,7 @@
 ---
 name: saw
 description: "Parallel agent coordination: Scout analyzes the codebase and produces a plan; Wave agents implement in parallel. Use for multi-package features, parallel refactors, coordinated changes."
-argument-hint: "[auto [--skip-confirm] <feature> | bootstrap <project-name> | interview <description> | scout [--model <m>] <feature> | wave [--impl <id>] [--auto] [--model <m>] | status [--impl <id>]]"
+argument-hint: "[auto [--skip-confirm] [--repo <path>] <feature> | bootstrap <project-name> | interview <description> | scout [--model <m>] [--repo <path>] <feature> | wave [--impl <id>] [--auto] [--model <m>] | status [--impl <id>]]"
 user-invocable: true
 allowed-tools: |
   Read, Write, Glob, Grep, Bash(git *), Bash(cd *), Bash(mkdir *),
@@ -40,7 +40,7 @@ Files in `${CLAUDE_SKILL_DIR}/` (defaults to `~/.claude/skills/saw/`). Read `age
 | Command | Purpose |
 |---------|---------|
 | `/saw bootstrap <name>` | Design new project from scratch |
-| `/saw scout [--model <m>] <feature>` | Analyze codebase and plan feature |
+| `/saw scout [--model <m>] [--repo <path>] <feature>` | Analyze codebase and plan feature |
 | `/saw wave [--impl <id>] [--auto] [--model <m>]` | Execute next wave (auto-selects if 1 pending) |
 | `/saw auto [--model <m>] [--skip-confirm] "<feature>"` | Scout + confirm + wave in one command |
 | `/saw status [--impl <id>]` | Show progress (auto-selects if 1 pending) |
@@ -94,6 +94,13 @@ If 1-3 fail, print what's missing (see `docs/INSTALLATION.md`) and stop.
 
 **IMPL targeting:** Parse `--impl <value>` from arguments (slug / filename / path). When omitted, auto-select if exactly 1 pending IMPL exists. Parse `--impl` before other flags.
 
+**--repo flag (scout/auto commands):** Parse `--repo <path>` from scout and auto args before --model and the feature description. When present:
+- Target repo = absolute path of `<path>` (the repo to analyze)
+- IMPL output path = `<path>/docs/IMPL/IMPL-<slug>.yaml` (slug derived from feature description)
+- All subsequent sawtools calls use `--repo-dir <path>` instead of session cwd
+- Include explicit IMPL path in scout agent launch prompt (see Scout flow step 1 below)
+When absent, behavior is unchanged: target repo = session cwd, scout derives IMPL path itself.
+
 **Resume detection:** Run `sawtools resume-detect` before `wave` or `status` execution. For `status`, include resume state in report. For `wave`, report interrupted session and use `sawtools build-retry-context` for failed agents.
 
 **Session stop detection:** The `saw_orchestrator_stop` Stop hook warns automatically when the session ends with an active IMPL in WAVE_PENDING or WAVE_EXECUTING state, or with active worktrees. No action needed — the hook fires passively at session end.
@@ -110,8 +117,18 @@ See `references/impl-targeting.md` for discovery commands, resolution logic, aut
 5. **Wave 1:** Execute standard wave flow (step 2+ of IMPL-exists flow below).
 
 **Scout flow** (no IMPL doc exists):
-1. Launch Scout agent (`subagent_type: scout`, `run_in_background: true`, prompt = feature description). Inform user.
-2. When Scout completes, read `docs/IMPL/IMPL-<feature-slug>.yaml`. Record injection method: `sawtools set-injection-method "<path>" --method hook`.
+1. Launch Scout agent (`subagent_type: scout`, `run_in_background: true`). Inform user.
+   **Prompt construction:** When `--repo <path>` was provided, append the explicit IMPL output path:
+   ```
+   <feature description>
+
+   ## IMPL Output Path
+   <path>/docs/IMPL/IMPL-<slug>.yaml
+   ```
+   Without `--repo`, the prompt is the feature description only; scout derives the path from cwd.
+2. When Scout completes, read the IMPL doc. When `--repo` was provided, the path is
+   `<repo>/docs/IMPL/IMPL-<feature-slug>.yaml`; otherwise `docs/IMPL/IMPL-<feature-slug>.yaml`
+   relative to cwd. Record injection method: `sawtools set-injection-method "<path>" --method hook`.
 3. **E16+E35+TestCascade: Validate IMPL doc.** `sawtools pre-wave-validate "<path>" --wave 1 --fix`.
    Exit 0 = proceed. Exit 1 = send errors to Scout (resume), retry once. Failure = BLOCKED.
    Now includes Step 3: test cascade check — verifies that *_test.go files calling changed
