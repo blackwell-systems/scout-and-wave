@@ -1,3 +1,4 @@
+completion_date: "2026-04-10"
 title: Pre-wave-validate stale constraint lint
 feature_slug: stale-constraint-lint
 repository: /Users/dayna.blackwell/code/scout-and-wave-go
@@ -248,6 +249,7 @@ waves:
           files:
             - pkg/protocol/stale_constraint.go
             - pkg/protocol/stale_constraint_test.go
+      base_commit: 1c213d22e10f4b401ad2f751baf2e40d8e2b2ddd
     - number: 2
       agents:
         - id: B
@@ -483,6 +485,7 @@ waves:
             - cmd/sawtools/pre_wave_validate_cmd_test.go
           dependencies:
             - A
+      base_commit: 51236c36a5d56dbfd6c4fda1ae6ba26eea031814
 quality_gates:
     level: standard
     gates:
@@ -521,6 +524,37 @@ scaffolds:
         }
       import_path: github.com/blackwell-systems/scout-and-wave-go/pkg/protocol
       status: committed (1c213d2)
+completion_reports:
+    A:
+        status: complete
+        branch: saw/stale-constraint-lint/wave1-agent-A
+        commit: c724a75
+        files_changed:
+            - pkg/protocol/stale_constraint.go
+            - pkg/protocol/stale_constraint_test.go
+        files_created:
+            - pkg/protocol/stale_constraint_test.go
+        tests_added:
+            - TestDetectStaleConstraints_StaleDetected
+            - TestDetectStaleConstraints_UnownedFile
+            - TestDetectStaleConstraints_OwnFileReference
+            - TestDetectStaleConstraints_CrossWaveStaleReference
+            - TestDetectStaleConstraints_NilManifest
+            - TestDetectStaleConstraints_FullPathMatch
+        verification: PASS
+        notes: Implemented DetectStaleConstraints with full-path and basename-fallback lookup. Regex updated to include period in trailing boundary to handle sentences ending in .go. All 6 tests pass. Wiring into pre_wave_validate_cmd.go is Agent B Wave 2 scope.
+    B:
+        status: complete
+        branch: saw/stale-constraint-lint/wave2-agent-B
+        commit: 9f31054
+        files_changed:
+            - cmd/sawtools/pre_wave_validate_cmd.go
+            - cmd/sawtools/finalize_scout_cmd.go
+            - cmd/sawtools/pre_wave_validate_cmd_test.go
+        tests_added:
+            - TestPreWaveValidateCmd_StaleConstraintWarning
+        verification: PASS
+        notes: 'Wired DetectStaleConstraints into pre-wave-validate (Step 5) and finalize-scout pipelines. StaleConstraints is warning-only: Passed is always true, never affects exit code. StaleConstraintsResult type defined in pre_wave_validate_cmd.go (same main package, no import needed for finalize_scout_cmd.go). Note: worktree originally inherited Agent C dirty working tree state; corrected in second commit to keep only my scope changes.'
 pre_mortem:
     overall_risk: low
     rows:
@@ -568,6 +602,6 @@ pre_mortem:
             of this kind are visible but harmless. The message says "possible stale constraint
             text" which leaves room for the human to decide. No suppression mechanism is
             planned at this stage.
-state: "REVIEWED"
+state: COMPLETE
 original_branch: main
 injection_method: hook

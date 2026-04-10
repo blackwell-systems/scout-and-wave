@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added (2026-04-10) — Stale constraint lint: detect brief/ownership divergence at scout validation time
+
+- **`DetectStaleConstraints` in `pkg/protocol`** — pure function that parses each agent's task text for file path references (using a regex with recognized extensions and boundary anchors) and flags any file that appears in a different agent's `file_ownership`. Basename fallback handles task text that uses short names (`manager.go`) against full ownership paths (`internal/lsp/manager.go`). Returns warnings only — never blocks execution.
+- **Wired into `pre-wave-validate`** — the check runs as Step 5; warnings appear in `StaleConstraints.Warnings` in the JSON output. Exit code is never affected.
+- **Wired into `finalize-scout`** — the check runs before the pre-wave-validate failure gate so scouts get immediate feedback on constraint/ownership divergence before the IMPL is considered validated.
+- **Test coverage** — `TestPreWaveValidateCmd_StaleConstraintWarning` confirms that Agent B mentioning `manager.go` owned by Agent A produces a warning with `Passed=true` (warning-only, not a failure).
+
 ### Fixed (2026-04-10) — Sawtools validation fixes: close-impl, validate-briefs, pre-wave-validate
 
 - **`close-impl` now stages and commits the original IMPL path deletion** — after archiving, `git rm <original-path>` is called before the commit so the close-impl commit includes the deletion, the archived copy, and CONTEXT.md in one atomic commit. Eliminates the recurring "stale deleted IMPL path in git status" that required a manual `git rm` after every `close-impl`.
