@@ -750,5 +750,28 @@ pre_mortem:
             Agent D must run grep -c "^## E[0-9]" protocol/execution-rules.md before editing.
             Use the actual current count as baseline. The postcondition check verifies the
             count increased by exactly 3.
+critic_report:
+    verdict: ISSUES
+    agent_reviews:
+        A:
+            agent_id: A
+            verdict: PASS
+        B:
+            agent_id: B
+            verdict: PASS
+        C:
+            agent_id: C
+            verdict: ISSUES
+            issues:
+                - check: file_existence
+                  severity: error
+                  description: finalize_wave_test.go is marked action:new but the file already exists at cmd/sawtools/finalize_wave_test.go. The agent brief correctly acknowledges the file exists and instructs append-only behavior, but the IMPL file_ownership entry must use action:modify to be consistent with Check 1 semantics and to avoid confusing wave agents that rely on the action field.
+                  file: cmd/sawtools/finalize_wave_test.go
+        D:
+            agent_id: D
+            verdict: PASS
+    summary: 'One error found: Agent C''s finalize_wave_test.go is marked action:new in file_ownership but the file already exists in the repository (confirmed at cmd/sawtools/finalize_wave_test.go). The brief itself correctly acknowledges the file exists and instructs append-only behavior, but the IMPL metadata is inconsistent — action should be modify, not new. All other checks pass: symbols verified (protocol.Load, BranchName, LegacyBranchName, SetImplState, git.BranchExists, git.IsAncestor, git.CommitCount, git.LogOneline, config.Load, CriticReport field all confirmed with correct signatures), file existence checks pass for all other files, pattern accuracy confirmed (finalize_wave.go RunE block matches exactly, main.go registration anchor verified), interface contracts are syntactically valid, import chains are sound, and no disjoint ownership violations exist across the two waves.'
+    reviewed_at: "2026-04-10T17:44:19Z"
+    issue_count: 1
 state: SCOUT_PENDING
-injection_method: manual-fallback
+injection_method: hook
