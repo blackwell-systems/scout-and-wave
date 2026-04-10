@@ -1,0 +1,634 @@
+title: Fix finalize-wave gate routing for cross-repo quality gates
+feature_slug: finalize-wave-gate-routing
+verdict: SUITABLE
+suitability_assessment: |-
+    All changes are in pkg/protocol/{gates.go,verify_build.go} and their test files.
+    Single agent, 4 Go files plus one markdown update, no cross-agent interfaces needed.
+    The fix is well-scoped: add a manifest path parameter to gate execution functions
+    so they can resolve repo: field entries to absolute paths via saw.config.json.
+
+    The protocol (E21) already documents that gates with repo: set "run only in that
+    repo's directory", but the implementation only filters (skips gates whose repo name
+    doesn't match the current repoDir basename). The fix closes the gap between
+    protocol and implementation.
+
+    Estimated times:
+    - Scout phase: ~10 min
+    - Agent execution: ~15 min (1 agent, targeted changes)
+    - Merge and verification: ~3 min
+    Total SAW time: ~28 min
+
+    Sequential baseline: ~20 min
+    Recommendation: Marginal parallelism gain. Running via SAW for coordination
+    artifact and traceability, not raw speed.
+test_command: GOWORK=off go test ./pkg/protocol/...
+lint_command: GOWORK=off go vet ./pkg/protocol/...
+file_ownership:
+    - file: pkg/protocol/gates.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/protocol/verify_build.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/protocol/gates_test.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/protocol/verify_build_test.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: protocol/execution-rules.md
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+interface_contracts:
+    - name: runGates
+      description: |-
+        Internal function gains a manifestPath string parameter (inserted between
+        repoDir and logger). When manifestPath is non-empty, the function loads
+        saw.config.json from the manifest directory to resolve gate repo: values to
+        absolute paths. When manifestPath is empty, all gates run in repoDir as before.
+      definition: |
+        func runGates(
+            ctx context.Context,
+            manifest *IMPLManifest,
+            waveNumber int,
+            repoDir string,
+            manifestPath string,
+            logger *slog.Logger,
+        ) result.Result[GatesData]
+      location: pkg/protocol/gates.go
+    - name: RunGatesWithCache
+      description: |-
+        Public function gains manifestPath string parameter (inserted between repoDir
+        and cache). Threads through to runGates and gate execution loops.
+      definition: |
+        func RunGatesWithCache(
+            ctx context.Context,
+            manifest *IMPLManifest,
+            waveNumber int,
+            repoDir string,
+            manifestPath string,
+            cache *gatecache.Cache,
+            logger *slog.Logger,
+        ) result.Result[GatesData]
+      location: pkg/protocol/gates.go
+    - name: RunPreMergeGates
+      description: Gains manifestPath string parameter (inserted between repoDir and cache).
+      definition: |
+        func RunPreMergeGates(
+            ctx context.Context,
+            manifest *IMPLManifest,
+            waveNumber int,
+            repoDir string,
+            manifestPath string,
+            cache *gatecache.Cache,
+            logger *slog.Logger,
+        ) result.Result[GatesData]
+      location: pkg/protocol/gates.go
+    - name: RunPostMergeGates
+      description: Gains manifestPath string parameter (inserted between repoDir and logger).
+      definition: |
+        func RunPostMergeGates(
+            ctx context.Context,
+            manifest *IMPLManifest,
+            waveNumber int,
+            repoDir string,
+            manifestPath string,
+            logger *slog.Logger,
+        ) result.Result[GatesData]
+      location: pkg/protocol/gates.go
+    - name: resolveGateRepoDir
+      description: |-
+        New internal helper. Resolves the directory to run a gate command in.
+        Returns (defaultRepoDir, "") when gate.Repo is empty.
+        Looks up gate.Repo in configRepos and returns (path, "") on success.
+        Returns ("", errorMessage) when gate.Repo is set but not found in configRepos.
+      definition: |
+        func resolveGateRepoDir(
+            gate QualityGate,
+            defaultRepoDir string,
+            configRepos map[string]string,
+        ) (string, string)
+      location: pkg/protocol/gates.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |-
+            ## Overview
+
+            Fix quality gates with `repo:` fields so they execute in the correct repo
+            directory instead of being silently skipped when the primary `repoDir` is a
+            docs-only repo.
+
+            **The bug:** In `pkg/protocol/gates.go`, both the internal gate executor and
+            the cached gate executor use `gate.Repo` only to FILTER gates — a gate whose
+            `gate.Repo` does not match `filepath.Base(repoDir)` is silently skipped. For
+            cross-repo IMPLs where the primary repo is `scout-and-wave` (no go.mod), gates
+            scoped to `scout-and-wave-go` are entirely skipped. The protocol (E21) says
+            gates with `repo:` set "run only in that repo's directory" — but the
+            implementation never changes the execution directory.
+
+            **The fix:** Add a `manifestPath string` parameter to the four public/internal
+            gate functions (`runGates`, `RunGatesWithCache`, `RunPreMergeGates`, `RunPostMergeGates`).
+            When a gate has `repo:` set, resolve that repo's absolute path from
+            `saw.config.json` (via the existing loadSAWConfigRepos helper in
+            `brief_validator.go`, same package) and run the command there. When `repo:` is
+            absent or `manifestPath` is empty, run in `repoDir` as before.
+
+            ## Repo Locations
+
+            - Go engine: `/Users/dayna.blackwell/code/scout-and-wave-go/`
+            - Protocol repo: `/Users/dayna.blackwell/code/scout-and-wave/`
+
+            ## Callers That Must Be Updated
+
+            The signature changes cascade to these callers outside the owned files:
+
+            1. `pkg/engine/finalize_steps.go` — the engine step that calls `protocol.RunGatesWithCache`.
+               Find this exact call site:
+               ```
+               gateRes := protocol.RunGatesWithCache(ctx, manifest, opts.WaveNum, opts.RepoPath, cache, opts.Logger)
+               ```
+               Change to pass `opts.IMPLPath` as the new fifth argument (after `opts.RepoPath`):
+               ```
+               gateRes := protocol.RunGatesWithCache(ctx, manifest, opts.WaveNum, opts.RepoPath, opts.IMPLPath, cache, opts.Logger)
+               ```
+
+            2. `cmd/sawtools/run_gates_cmd.go` — two call sites for `protocol.RunGatesWithCache`.
+               The manifest path is already available as `manifestPath` (from `args[0]`).
+               Find and update both occurrences.
+
+            These files are NOT in the ownership list, but updating them is required for
+            compilation. The build gate (`GOWORK=off go build ./...`) will fail if they
+            are missed.
+
+            ## Implementation Steps
+
+            ### Step 1: Add helper functions to `gates.go`
+
+            Add a new helper that resolves a gate's working directory, and a small helper
+            for sorted map keys. Add these before the existing `runGates` function.
+            Also add `"sort"` to the import block:
+
+            Implement two functions with these bodies (see interface contracts for their signatures):
+
+            resolveGateRepoDir body:
+            ```
+                if gate.Repo == "" {
+                    return defaultRepoDir, ""
+                }
+                if p, ok := configRepos[gate.Repo]; ok {
+                    return p, ""
+                }
+                return "", fmt.Sprintf("gate repo %q not found in saw.config.json (known repos: %v)",
+                    gate.Repo, sortedMapKeys(configRepos))
+            ```
+
+            sortedMapKeys body:
+            ```
+                keys := make([]string, 0, len(m))
+                for k := range m {
+                    keys = append(keys, k)
+                }
+                sort.Strings(keys)
+                return keys
+            ```
+
+            ### Step 2: Update `runGates`
+
+            Current signature:
+            ```
+            func runGates(ctx context.Context, manifest *IMPLManifest, waveNumber int, repoDir string, logger *slog.Logger) result.Result[GatesData] {
+            ```
+            New signature (add `manifestPath string` before `logger`):
+            ```
+            func runGates(ctx context.Context, manifest *IMPLManifest, waveNumber int, repoDir string, manifestPath string, logger *slog.Logger) result.Result[GatesData] {
+            ```
+
+            At the top of the function body, after the early-return nil-gates check, add:
+            ```go
+            var configRepos map[string]string
+            if manifestPath != "" {
+                configRepos = loadSAWConfigRepos(filepath.Dir(manifestPath))
+            } else {
+                configRepos = make(map[string]string)
+            }
+            ```
+
+            Remove this existing filter block (it appears once in the per-gate loop):
+            ```
+            // Skip gates scoped to a different repo.
+            if gate.Repo != "" && gate.Repo != repoName {
+                continue
+            }
+            ```
+            Remove `repoName := filepath.Base(repoDir)` since it is no longer used.
+
+            After the removal, add gate-directory resolution at the top of the per-gate loop
+            (before the docs-only and build-system checks):
+            ```go
+            runDir, dirErr := resolveGateRepoDir(gate, repoDir, configRepos)
+            if dirErr != "" {
+                gates = append(gates, GateResult{
+                    Type:     gate.Type,
+                    Command:  gate.Command,
+                    Required: gate.Required,
+                    Passed:   false,
+                    Stderr:   dirErr,
+                })
+                continue
+            }
+            ```
+
+            Then update every repoDir reference in the loop body to runDir (the resolved gate directory):
+            - detectBuildSystems(repoDir) → detectBuildSystems(runDir)
+            - runFormatGate(ctx, gate, repoDir, ...) → runFormatGate(ctx, gate, runDir, ...)
+            - cmd.Dir = repoDir → cmd.Dir = runDir
+
+            ### Step 3: Update `RunGatesWithCache`
+
+            Current signature:
+            ```
+            func RunGatesWithCache(ctx context.Context, manifest *IMPLManifest, waveNumber int, repoDir string, cache *gatecache.Cache, logger *slog.Logger) result.Result[GatesData] {
+            ```
+            New signature:
+            ```
+            func RunGatesWithCache(ctx context.Context, manifest *IMPLManifest, waveNumber int, repoDir string, manifestPath string, cache *gatecache.Cache, logger *slog.Logger) result.Result[GatesData] {
+            ```
+
+            When `cache == nil`, the function delegates to `runGates`. Update that call to
+            pass `manifestPath`:
+            ```
+            return runGates(ctx, manifest, waveNumber, repoDir, manifestPath, logger)
+            ```
+
+            For the cached path, add the same configRepos loading block, then remove the
+            existing repo filter:
+            ```
+            // Skip gates scoped to a different repo
+            if gate.Repo != "" && gate.Repo != repoName {
+                continue
+            }
+            ```
+            Remove `repoName := filepath.Base(repoDir)` if no longer used.
+
+            In the per-group sequential execution loop, resolve the gate directory:
+            ```go
+            for _, gate := range activeGates {
+                runDir, dirErr := resolveGateRepoDir(gate, repoDir, configRepos)
+                if dirErr != "" {
+                    groupResults = append(groupResults, GateResult{
+                        Type: gate.Type, Command: gate.Command,
+                        Required: gate.Required, Passed: false, Stderr: dirErr,
+                    })
+                    continue
+                }
+                gateResult := executeSingleGate(ctx, gate, runDir, cache, logger)
+                groupResults = append(groupResults, gateResult)
+            }
+            ```
+
+            For the concurrent case, resolve all dirs before launching goroutines:
+            ```go
+            resolvedDirs := make([]string, len(activeGates))
+            dirErrors := make([]string, len(activeGates))
+            for i, g := range activeGates {
+                resolvedDirs[i], dirErrors[i] = resolveGateRepoDir(g, repoDir, configRepos)
+            }
+            ```
+            Then inside the goroutine body: use `resolvedDirs[idx]` for `executeSingleGate`.
+            If `dirErrors[idx] != ""`, append a failed GateResult without calling `executeSingleGate`.
+
+            ### Step 4: Update `RunPreMergeGates` and `RunPostMergeGates`
+
+            Both functions need the same parameter added. Update their signatures and thread
+            `manifestPath` through to `RunGatesWithCache` and `runGates` respectively.
+
+            In `RunPreMergeGates`, find:
+            ```
+            return RunGatesWithCache(ctx, &tmp, waveNumber, repoDir, cache, logger)
+            ```
+            Change to:
+            ```
+            return RunGatesWithCache(ctx, &tmp, waveNumber, repoDir, manifestPath, cache, logger)
+            ```
+
+            In `RunPostMergeGates`, find:
+            ```
+            return runGates(ctx, &tmp, waveNumber, repoDir, logger)
+            ```
+            Change to:
+            ```
+            return runGates(ctx, &tmp, waveNumber, repoDir, manifestPath, logger)
+            ```
+
+            ### Step 5: Fix `VerifyBuild` in `verify_build.go`
+
+            `VerifyBuild` has its own gate-selection block that picks test/lint commands
+            from quality gates but discards the `gate.Repo` field. Fix it to capture the
+            repo name and resolve the directory.
+
+            Find this exact block:
+            ```
+            testCmd := manifest.TestCommand
+            lintCmd := manifest.LintCommand
+            if manifest.QualityGates != nil {
+            	for _, gate := range manifest.QualityGates.Gates {
+            		if gate.Type == "test" && gate.Command != "" && testCmd == manifest.TestCommand {
+            			testCmd = gate.Command
+            		}
+            		if gate.Type == "lint" && gate.Command != "" && lintCmd == manifest.LintCommand {
+            			lintCmd = gate.Command
+            		}
+            	}
+            }
+            ```
+
+            Replace with:
+            ```go
+            testCmd := manifest.TestCommand
+            lintCmd := manifest.LintCommand
+            testGateRepo := ""
+            lintGateRepo := ""
+            if manifest.QualityGates != nil {
+                for _, gate := range manifest.QualityGates.Gates {
+                    if gate.Type == "test" && gate.Command != "" && testCmd == manifest.TestCommand {
+                        testCmd = gate.Command
+                        testGateRepo = gate.Repo
+                    }
+                    if gate.Type == "lint" && gate.Command != "" && lintCmd == manifest.LintCommand {
+                        lintCmd = gate.Command
+                        lintGateRepo = gate.Repo
+                    }
+                }
+            }
+            configRepos := loadSAWConfigRepos(filepath.Dir(manifestPath))
+            testDir := repoDir
+            if testGateRepo != "" {
+                if p, ok := configRepos[testGateRepo]; ok {
+                    testDir = p
+                }
+            }
+            lintDir := repoDir
+            if lintGateRepo != "" {
+                if p, ok := configRepos[lintGateRepo]; ok {
+                    lintDir = p
+                }
+            }
+            ```
+
+            Then update the two runCommand call sites to use testDir/lintDir
+            and update commandApplies checks the same way:
+            ```go
+            if isRealCommand(testCmd) && commandApplies(testCmd, testDir) {
+                testPassed, testOutput := runCommand(ctx, testCmd, testDir)
+                ...
+            }
+            if isRealCommand(lintCmd) && commandApplies(lintCmd, lintDir) {
+                lintPassed, lintOutput := runCommand(ctx, lintCmd, lintDir)
+                ...
+            }
+            ```
+
+            Note: loadSAWConfigRepos is already in brief_validator.go in the same
+            `protocol` package. Call it directly — no import needed.
+
+            ### Step 6: Add tests in `gates_test.go`
+
+            Append two new test functions after the existing test functions.
+
+            The first test (name it TestRunGates_CrossRepoRouting) verifies a gate runs in
+            the named repo dir, not the primary repoDir. Use a sentinel file present only
+            in the target repo:
+
+            ```go
+            func TestRunGates_CrossRepoRouting(t *testing.T) {
+                tmpDir := t.TempDir()
+                primaryRepo := filepath.Join(tmpDir, "primary-repo")
+                targetRepo := filepath.Join(tmpDir, "target-repo")
+                os.MkdirAll(primaryRepo, 0755)
+                os.MkdirAll(targetRepo, 0755)
+                os.WriteFile(filepath.Join(targetRepo, "sentinel.txt"), []byte("here"), 0644)
+
+                configJSON := `{"repos":[{"name":"target-repo","path":"` + targetRepo + `"}]}`
+                os.WriteFile(filepath.Join(tmpDir, "saw.config.json"), []byte(configJSON), 0644)
+                manifestPath := filepath.Join(tmpDir, "IMPL.yaml")
+
+                manifest := &IMPLManifest{
+                    QualityGates: &QualityGates{
+                        Level: "quick",
+                        Gates: []QualityGate{
+                            {Type: "test", Command: "test -f sentinel.txt", Required: true, Repo: "target-repo"},
+                        },
+                    },
+                }
+                res := runGates(context.Background(), manifest, 1, primaryRepo, manifestPath, nil)
+                if !res.IsSuccess() {
+                    t.Fatalf("runGates returned error: %v", res.Errors)
+                }
+                data := res.GetData()
+                if len(data.Gates) != 1 {
+                    t.Fatalf("expected 1 gate, got %d", len(data.Gates))
+                }
+                if !data.Gates[0].Passed {
+                    t.Errorf("gate should pass (ran in targetRepo with sentinel), stderr: %s", data.Gates[0].Stderr)
+                }
+            }
+            ```
+
+            The second test (name it TestRunGates_CrossRepoUnknownRepo) verifies an unknown
+            repo name surfaces as a failed gate with a descriptive error:
+
+            ```go
+            func TestRunGates_CrossRepoUnknownRepo(t *testing.T) {
+                tmpDir := t.TempDir()
+                primaryRepo := filepath.Join(tmpDir, "primary-repo")
+                os.MkdirAll(primaryRepo, 0755)
+                manifestPath := filepath.Join(tmpDir, "IMPL.yaml")
+
+                manifest := &IMPLManifest{
+                    QualityGates: &QualityGates{
+                        Level: "quick",
+                        Gates: []QualityGate{
+                            {Type: "test", Command: "echo ok", Required: true, Repo: "unknown-repo"},
+                        },
+                    },
+                }
+                res := runGates(context.Background(), manifest, 1, primaryRepo, manifestPath, nil)
+                if !res.IsSuccess() {
+                    t.Fatalf("runGates should return success (gate failures are in GateResult)")
+                }
+                data := res.GetData()
+                if len(data.Gates) != 1 {
+                    t.Fatalf("expected 1 gate, got %d", len(data.Gates))
+                }
+                if data.Gates[0].Passed {
+                    t.Errorf("gate should fail for unknown repo")
+                }
+                if data.Gates[0].Stderr == "" {
+                    t.Errorf("expected error message in Stderr, got empty string")
+                }
+            }
+            ```
+
+            ### Step 7: Add test in `verify_build_test.go`
+
+            Append a new test function (name it TestVerifyBuild_CrossRepoGateRouting).
+            The test verifies that when a quality gate has `repo:` set, `VerifyBuild`
+            runs the command in the named repo's directory:
+
+            ```go
+            func TestVerifyBuild_CrossRepoGateRouting(t *testing.T) {
+                tmpDir := t.TempDir()
+                primaryRepo := filepath.Join(tmpDir, "primary-repo")
+                targetRepo := filepath.Join(tmpDir, "target-repo")
+                os.MkdirAll(primaryRepo, 0755)
+                os.MkdirAll(targetRepo, 0755)
+                os.WriteFile(filepath.Join(targetRepo, "sentinel.txt"), []byte("here"), 0644)
+
+                configJSON := `{"repos":[{"name":"target-repo","path":"` + targetRepo + `"}]}`
+                os.WriteFile(filepath.Join(tmpDir, "saw.config.json"), []byte(configJSON), 0644)
+                manifestPath := filepath.Join(tmpDir, "IMPL.yaml")
+
+                manifestContent := `
+            title: "Test"
+            feature_slug: "test"
+            verdict: "SUITABLE"
+            test_command: "false"
+            lint_command: "true"
+            file_ownership: []
+            waves: []
+            quality_gates:
+              level: quick
+              gates:
+                - type: test
+                  command: "test -f sentinel.txt"
+                  required: true
+                  repo: target-repo
+            `
+                os.WriteFile(manifestPath, []byte(manifestContent), 0644)
+
+                res := VerifyBuild(context.Background(), manifestPath, primaryRepo)
+                if !res.IsSuccess() {
+                    t.Fatalf("VerifyBuild returned error: %v", res.Errors)
+                }
+                data := res.GetData()
+                if !data.TestPassed {
+                    t.Errorf("TestPassed should be true (gate ran in targetRepo); output: %s", data.TestOutput)
+                }
+            }
+            ```
+
+            ### Step 8: Update execution-rules.md
+
+            File: `/Users/dayna.blackwell/code/scout-and-wave/protocol/execution-rules.md`
+
+            Find this exact paragraph (search for "Cross-repo gate scoping"):
+            ```
+            **Cross-repo gate scoping:** Each `QualityGate` has an optional `repo` field. When set, the gate runs only in that repo's directory. When omitted, the gate runs in every repo the IMPL touches. For cross-repo IMPLs (file_ownership spans 2+ repos), every gate MUST include `repo:` — a docs-only repo has no build system and `go build ./...` will fail. The validator enforces this: `MR02_UNSCOPED_GATE` blocks IMPLs with 2+ repos and un-scoped gates at validation time (E16).
+            ```
+
+            Replace with:
+            ```
+            **Cross-repo gate scoping and routing:** Each `QualityGate` has an optional `repo` field. When `repo:` is set, the engine resolves that repo's absolute path from `saw.config.json` (walking up from the IMPL manifest directory) and executes the gate command in that directory. When `repo:` is omitted, the gate runs in the primary `repoDir` passed to `finalize-wave`. For cross-repo IMPLs (file_ownership spans 2+ repos), every gate MUST include `repo:` — a docs-only repo has no build system and `go build ./...` will fail. The validator enforces this: MR02_UNSCOPED_GATE blocks IMPLs with 2+ repos and un-scoped gates at validation time (E16). If a gate's `repo:` value is not found in `saw.config.json`, the gate fails immediately with an error message listing the known repo names.
+            ```
+
+            ## Constraints
+
+            - Do NOT modify any files outside the ownership list above (the caller updates
+              in finalize_steps.go and run_gates_cmd.go are required for compilation; do
+              those targeted edits and do not claim those files in the completion report).
+            - Do NOT change the `QualityGate` struct in `types.go` — the `Repo` field
+              already exists.
+            - When `gate.Repo == ""`, behavior is unchanged: run in `repoDir`.
+            - When `manifestPath == ""`, skip config lookup: run all gates in `repoDir`.
+            - Preserve all existing passing tests.
+
+            ## Verification Gate
+
+            Run all commands from `/Users/dayna.blackwell/code/scout-and-wave-go/`:
+
+            ```
+            GOWORK=off go build ./...
+            GOWORK=off go vet ./pkg/protocol/...
+            GOWORK=off go test ./pkg/protocol/... -run TestRunGates
+            GOWORK=off go test ./pkg/protocol/... -run TestVerifyBuild
+            ```
+
+            Postconditions:
+            ```bash
+            grep -c "resolveGateRepoDir" /Users/dayna.blackwell/code/scout-and-wave-go/pkg/protocol/gates.go
+            # expected: >= 2 (definition + call site)
+
+            grep "func runGates" /Users/dayna.blackwell/code/scout-and-wave-go/pkg/protocol/gates.go
+            # expected: output contains "manifestPath"
+
+            grep -c "TestRunGates_CrossRepoRouting" /Users/dayna.blackwell/code/scout-and-wave-go/pkg/protocol/gates_test.go
+            # expected: 1
+
+            grep -c "Cross-repo gate scoping and routing" /Users/dayna.blackwell/code/scout-and-wave/protocol/execution-rules.md
+            # expected: 1
+            ```
+          files:
+            - pkg/protocol/gates.go
+            - pkg/protocol/verify_build.go
+            - pkg/protocol/gates_test.go
+            - pkg/protocol/verify_build_test.go
+            - protocol/execution-rules.md
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: GOWORK=off go build ./...
+          required: true
+          repo: scout-and-wave-go
+        - type: test
+          command: GOWORK=off go test ./pkg/protocol/...
+          required: true
+          repo: scout-and-wave-go
+        - type: lint
+          command: GOWORK=off go vet ./pkg/protocol/...
+          required: true
+          repo: scout-and-wave-go
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: |-
+            Signature changes to RunGatesWithCache, RunPreMergeGates, RunPostMergeGates,
+            and runGates break callers in finalize_steps.go and run_gates_cmd.go.
+            Agent may forget to update these files.
+          likelihood: medium
+          impact: high
+          mitigation: |-
+            The task prompt explicitly names both caller files and the exact call sites
+            to update. The build gate (GOWORK=off go build ./...) will fail immediately
+            if any caller is missed, before any tests run.
+        - scenario: |-
+            Agent removes the repo-name filter but omits the routing logic, causing all
+            gates to run in repoDir regardless of the repo: field. Single-repo tests pass
+            but cross-repo behavior is broken.
+          likelihood: low
+          impact: medium
+          mitigation: |-
+            The cross-repo routing test catches this: the sentinel file exists only in
+            the target repo, so if routing is absent the gate fails in primaryRepo.
+        - scenario: |-
+            Agent adds manifestPath to RunGatesWithCache but misses RunPreMergeGates or
+            RunPostMergeGates, causing a compilation error.
+          likelihood: low
+          impact: medium
+          mitigation: |-
+            go build ./... catches this immediately. All four functions are named in the
+            task. The instructions are structured to update all four before moving to callers.
+state: SCOUT_PENDING
+injection_method: manual-fallback
