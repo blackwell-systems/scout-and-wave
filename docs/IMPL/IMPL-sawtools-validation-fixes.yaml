@@ -1,0 +1,1165 @@
+title: 'Sawtools Engine Friction Fixes: close-impl git-rm, validate-briefs repo resolution, pre-wave-validate brief/ownership divergence'
+feature_slug: sawtools-validation-fixes
+verdict: SUITABLE
+suitability_assessment: |
+  Three independent dogfooding friction fixes with fully disjoint file ownership.
+
+  Fix 1 (close-impl git rm): close_impl_cmd.go and its test file are untouched by Fixes 2 and 3.
+  Adds a git.Rm helper in internal/git/commands.go plus a git rm call in close_impl_cmd.go
+  plus a new test in close_impl_cmd_test.go. Fully independent.
+
+  Fix 2 (validate-briefs cross-repo path resolution): brief_validator.go is touched only by Fix 2.
+  The fix adds config.Load() to briefResolveFilePath so that repo: values like "scout-and-wave-go"
+  are looked up in saw.config.json repos list for their absolute path. One new test in
+  pkg/protocol/brief_validator_test.go. Fully independent from Fixes 1 and 3.
+
+  Fix 3 (pre-wave-validate brief/ownership divergence): pre_wave_validate_cmd.go is untouched by
+  Fixes 1 and 2. Adds a new check (DetectBriefOwnershipDivergence) in pkg/protocol/ plus wiring
+  in pre_wave_validate_cmd.go. Fully independent.
+
+  Parallelization value: SUITABLE. Three agents with disjoint file sets. Go build/test cycle
+  is ~30s+. Fixes 1 and 2 each touch pkg/protocol/ but in different files.
+
+  Suitability gate answers:
+  1. File decomposition: 3 agents with disjoint ownership. No two agents touch the same file.
+  2. No investigation required — root causes are fully understood from dogfooding.
+  3. Interface contracts fully discoverable — the function signatures are defined from existing patterns.
+  4. Pre-implementation status: all three fixes are TODO (none implemented yet).
+  5. Parallelization value: 3 independent agents, Go build cycle ~30s+. Clear speedup.
+
+  Estimated times:
+  - Scout phase: ~15 min
+  - Agent execution: ~3 agents x ~15 min avg, parallel = ~15 min
+  - Merge and verification: ~5 min
+  Total SAW time: ~35 min
+
+  Sequential baseline: ~3 x 15 min = ~45 min
+  Time savings: ~10 min (22% faster). Clear speedup; coordination artifact also valuable.
+
+test_command: GOWORK=off go test ./...
+lint_command: GOWORK=off go vet ./...
+state: SCOUT_PENDING
+
+quality_gates:
+  level: standard
+  gates:
+    - type: build
+      command: GOWORK=off go build ./...
+      required: true
+      repo: scout-and-wave-go
+    - type: test
+      command: GOWORK=off go test ./cmd/sawtools/... ./pkg/protocol/... ./internal/git/...
+      required: true
+      repo: scout-and-wave-go
+
+scaffolds: []
+
+file_ownership:
+  # Agent A: close-impl git rm
+  - file: internal/git/commands.go
+    agent: A
+    wave: 1
+    action: modify
+    repo: scout-and-wave-go
+  - file: cmd/sawtools/close_impl_cmd.go
+    agent: A
+    wave: 1
+    action: modify
+    repo: scout-and-wave-go
+  - file: cmd/sawtools/close_impl_cmd_test.go
+    agent: A
+    wave: 1
+    action: modify
+    repo: scout-and-wave-go
+
+  # Agent B: validate-briefs cross-repo path resolution
+  - file: pkg/protocol/brief_validator.go
+    agent: B
+    wave: 1
+    action: modify
+    repo: scout-and-wave-go
+  - file: pkg/protocol/brief_validator_test.go
+    agent: B
+    wave: 1
+    action: modify
+    repo: scout-and-wave-go
+
+  # Agent C: pre-wave-validate brief/ownership divergence check
+  - file: pkg/protocol/brief_ownership_divergence.go
+    agent: C
+    wave: 1
+    action: new
+    repo: scout-and-wave-go
+  - file: pkg/protocol/brief_ownership_divergence_test.go
+    agent: C
+    wave: 1
+    action: new
+    repo: scout-and-wave-go
+  - file: cmd/sawtools/pre_wave_validate_cmd.go
+    agent: C
+    wave: 1
+    action: modify
+    repo: scout-and-wave-go
+
+interface_contracts:
+  - name: git.Rm
+    description: |
+      Stages a file deletion via `git rm` in the repository at repoPath.
+      Used by close-impl after archiving the IMPL doc to stage the deletion of the original path.
+    definition: |
+      // Rm stages the deletion of a file from the repository at repoPath via git rm.
+      // Returns an error if the file does not exist in the index or git fails.
+      func Rm(repoPath string, paths ...string) error
+    location: internal/git/commands.go
+
+  - name: protocol.DetectBriefOwnershipDivergence
+    description: |
+      Scans each agent's task text for file path references and checks whether
+      each mentioned file has a file_ownership entry for that agent.
+      Returns a list of divergence findings: files mentioned in a brief but not
+      owned by that agent (WARNING level), or owned by a different agent (also WARNING).
+    definition: |
+      // BriefOwnershipDivergence describes a file mentioned in a brief that is not
+      // in that agent's file_ownership table.
+      type BriefOwnershipDivergence struct {
+          AgentID     string `json:"agent_id"`
+          FilePath    string `json:"file_path"`
+          OwningAgent string `json:"owning_agent,omitempty"` // non-empty if owned by someone else
+          Message     string `json:"message"`
+      }
+
+      // DetectBriefOwnershipDivergence scans each agent's task text for file path
+      // references and checks them against file_ownership. Returns WARNING-level
+      // divergences: files mentioned in a brief that have no ownership entry for
+      // that agent, or that are owned by a different agent.
+      // This is a WARNING (not error) because "do not touch X" constraints are
+      // legitimate cross-mentions.
+      func DetectBriefOwnershipDivergence(manifest *IMPLManifest) []BriefOwnershipDivergence
+    location: pkg/protocol/brief_ownership_divergence.go
+
+  - name: BriefOwnershipDivergenceResult (in PreWaveValidateResult)
+    description: |
+      New field added to PreWaveValidateResult struct in pre_wave_validate_cmd.go
+      to surface DetectBriefOwnershipDivergence output in the JSON output of
+      pre-wave-validate.
+    definition: |
+      // BriefOwnershipDivergenceResult holds warnings from brief/ownership divergence check.
+      type BriefOwnershipDivergenceResult struct {
+          Passed    bool                               `json:"passed"`
+          Warnings  []protocol.BriefOwnershipDivergence `json:"warnings"`
+      }
+
+      // PreWaveValidateResult — add new field:
+      BriefOwnershipDivergence BriefOwnershipDivergenceResult `json:"brief_ownership_divergence"`
+    location: cmd/sawtools/pre_wave_validate_cmd.go
+
+waves:
+  - number: 1
+    agents:
+      - id: A
+        task: |
+          ## Role
+          Fix close-impl to stage the deletion of the original IMPL path after archiving,
+          so the single close-impl commit includes: deletion of old path + new archived
+          path + CONTEXT.md update.
+
+          ## Repo
+          All your files are in /Users/dayna.blackwell/code/scout-and-wave-go
+
+          ## Context
+
+          `close-impl` archives the IMPL doc from `docs/IMPL/IMPL-<slug>.yaml` to
+          `docs/IMPL/complete/IMPL-<slug>.yaml` using `os.Rename`. After the rename,
+          git sees a deleted file at the original path and a new untracked file at the
+          complete/ path. The current command outputs a JSON summary to stdout but does
+          NOT commit anything. The Orchestrator is supposed to commit, but after archive
+          git shows the original path as a "deleted" file (D in git status) that must be
+          explicitly staged with `git rm` before committing.
+
+          The fix: after the `ArchiveIMPL` call succeeds, call `git rm <originalPath>`
+          to stage the deletion, then call `git add <archivedPath>` to stage the new
+          archived file, then if CONTEXT.md was updated call `git add <contextPath>`,
+          then commit with a standard message. The commit should use --no-verify (the
+          existing `git.Commit` function already does this).
+
+          The entire Step 5 (close-impl creates the commit) replaces the manual sequence.
+          The JSON output should include a new `committed` field with the commit SHA.
+
+          ## What to Change
+
+          ### File 1: internal/git/commands.go
+
+          Read the file fully. Find the `Add` function (it calls `git add` for specific
+          paths). Add a new `Rm` function immediately after `Add`:
+
+          Insert after this exact text:
+          ```
+          // Add stages the given file paths for commit in the repository at repoPath.
+          // Unlike AddAll, this stages only the specified paths (not all changes).
+          func Add(repoPath string, paths ...string) error {
+          	args := append([]string{"add"}, paths...)
+          	_, err := Run(repoPath, args...)
+          	if err != nil {
+          		return fmt.Errorf("git add failed: %w", err)
+          	}
+          	return nil
+          }
+          ```
+
+          Insert this new function after the closing brace:
+          ```go
+          // Rm stages the deletion of the given file paths via `git rm` in the repository
+          // at repoPath. Returns an error if any path is not tracked or git fails.
+          func Rm(repoPath string, paths ...string) error {
+          	args := append([]string{"rm", "--"}, paths...)
+          	_, err := Run(repoPath, args...)
+          	if err != nil {
+          		return fmt.Errorf("git rm failed: %w", err)
+          	}
+          	return nil
+          }
+          ```
+
+          ### File 2: cmd/sawtools/close_impl_cmd.go
+
+          Read the file fully. The current flow ends at Step 6 (branch restore) and then
+          marshals a JSON summary. The JSON output uses `json.Marshal(map[string]interface{}{...})`.
+
+          Add Step 7: commit the archive. Insert the following block BEFORE the final
+          `json.Marshal` call (i.e. between the closing of Step 6 and the `out, _ := json.Marshal(...)` line):
+
+          Insert after this exact text:
+          ```
+          			if _, checkoutErr := git.Run(projectRoot, "checkout", restoreBranch); checkoutErr != nil {
+          				fmt.Fprintf(os.Stderr, "close-impl: warning: could not restore branch %q: %v\n", restoreBranch, checkoutErr)
+          			} else {
+          				fmt.Fprintf(os.Stderr, "close-impl: restored branch %q (was on %s)\n", restoreBranch, currentBranch)
+          				branchRestored = true
+          			}
+          		}
+          	}
+          ```
+
+          Add after that closing brace block:
+          ```go
+          	// Step 7: Stage deletion of original path, add archived file + CONTEXT.md, commit.
+          	commitSHA := ""
+          	// Stage deletion of original IMPL path (it was moved by os.Rename; git sees it deleted).
+          	if rmErr := git.Rm(projectRoot, manifestPath); rmErr != nil {
+          		fmt.Fprintf(os.Stderr, "close-impl: warning: git rm %s failed: %v\n", manifestPath, rmErr)
+          	} else {
+          		// Stage the new archived file.
+          		if addErr := git.Add(projectRoot, archivedPath); addErr != nil {
+          			fmt.Fprintf(os.Stderr, "close-impl: warning: git add %s failed: %v\n", archivedPath, addErr)
+          		}
+          		// Stage CONTEXT.md if it was updated.
+          		if !contextFailed && contextData != nil && contextData.ContextPath != "" {
+          			if addErr := git.Add(projectRoot, contextData.ContextPath); addErr != nil {
+          				fmt.Fprintf(os.Stderr, "close-impl: warning: git add %s failed: %v\n", contextData.ContextPath, addErr)
+          			}
+          		}
+          		// Commit.
+          		commitMsg := fmt.Sprintf("chore: close-impl %s [SAW:complete]", manifest.FeatureSlug)
+          		var commitErr error
+          		commitSHA, commitErr = git.Commit(projectRoot, commitMsg)
+          		if commitErr != nil {
+          			fmt.Fprintf(os.Stderr, "close-impl: warning: commit failed: %v\n", commitErr)
+          		} else {
+          			fmt.Fprintf(os.Stderr, "close-impl: committed %s\n", commitSHA)
+          		}
+          	}
+          ```
+
+          Also update the JSON output map to include the `committed` field. Find:
+          ```
+          			out, _ := json.Marshal(map[string]interface{}{
+          				"marked":            true,
+          				"date":              date,
+          				"archived_path":     archivedPath,
+          				"context_updated":   !contextFailed,
+          				"context_path":      contextData,
+          				"worktrees_cleaned": cleanedCount,
+          				"state_cleaned":     stateCleanedCount,
+          				"branch_restored":   branchRestored,
+          			})
+          ```
+
+          Replace with:
+          ```go
+          		out, _ := json.Marshal(map[string]interface{}{
+          			"marked":            true,
+          			"date":              date,
+          			"archived_path":     archivedPath,
+          			"context_updated":   !contextFailed,
+          			"context_path":      contextData,
+          			"worktrees_cleaned": cleanedCount,
+          			"state_cleaned":     stateCleanedCount,
+          			"branch_restored":   branchRestored,
+          			"committed":         commitSHA,
+          		})
+          ```
+
+          ### File 3: cmd/sawtools/close_impl_cmd_test.go
+
+          Read the file fully. Append the following new test function after the last
+          closing brace in the file:
+
+          ```go
+          // TestCloseImplCmd_GitRm verifies that git.Rm stages a file deletion.
+          // Uses a real git repo (git init) to verify the command works end-to-end.
+          func TestCloseImplCmd_GitRm(t *testing.T) {
+          	// Create a temp directory and init a git repo in it.
+          	dir := t.TempDir()
+          	cmds := [][]string{
+          		{"git", "init", dir},
+          		{"git", "-C", dir, "config", "user.email", "test@example.com"},
+          		{"git", "-C", dir, "config", "user.name", "Test"},
+          	}
+          	for _, c := range cmds {
+          		cmd := exec.Command(c[0], c[1:]...)
+          		if out, err := cmd.CombinedOutput(); err != nil {
+          			t.Fatalf("setup %v: %v\n%s", c, err, out)
+          		}
+          	}
+
+          	// Create a file, add and commit it.
+          	testFile := filepath.Join(dir, "IMPL-test.yaml")
+          	if err := os.WriteFile(testFile, []byte("title: test\n"), 0644); err != nil {
+          		t.Fatalf("WriteFile: %v", err)
+          	}
+          	for _, c := range [][]string{
+          		{"git", "-C", dir, "add", "IMPL-test.yaml"},
+          		{"git", "-C", dir, "commit", "--no-verify", "-m", "add file"},
+          	} {
+          		cmd := exec.Command(c[0], c[1:]...)
+          		if out, err := cmd.CombinedOutput(); err != nil {
+          			t.Fatalf("setup %v: %v\n%s", c, err, out)
+          		}
+          	}
+
+          	// Now call git.Rm to stage the deletion.
+          	if err := git.Rm(dir, testFile); err != nil {
+          		t.Fatalf("git.Rm: %v", err)
+          	}
+
+          	// Verify the file is staged for deletion (git status --porcelain shows "D ").
+          	out, err := exec.Command("git", "-C", dir, "status", "--porcelain").Output()
+          	if err != nil {
+          		t.Fatalf("git status: %v", err)
+          	}
+          	status := strings.TrimSpace(string(out))
+          	if !strings.Contains(status, "D ") && !strings.Contains(status, "D\t") {
+          		t.Errorf("expected staged deletion in git status, got: %q", status)
+          	}
+          }
+          ```
+
+          You will need to add these imports to close_impl_cmd_test.go if not already present:
+          - `"os/exec"` (for exec.Command in the new test)
+          - `"strings"` (for strings.Contains in the new test)
+          - `"github.com/blackwell-systems/scout-and-wave-go/internal/git"` (for git.Rm)
+
+          Check the existing imports in close_impl_cmd_test.go first. It already imports "os",
+          "path/filepath", "testing", "context", "github.com/blackwell-systems/scout-and-wave-go/pkg/protocol",
+          and "gopkg.in/yaml.v3". You need to add "os/exec", "strings", and the git import.
+
+          ## Verification Gate
+
+          ```bash
+          # Build check
+          GOWORK=off go build -C /Users/dayna.blackwell/code/scout-and-wave-go ./...
+
+          # Run targeted tests
+          GOWORK=off go test -C /Users/dayna.blackwell/code/scout-and-wave-go ./cmd/sawtools/ -run "TestCloseImpl" -v -count=1
+          GOWORK=off go test -C /Users/dayna.blackwell/code/scout-and-wave-go ./internal/git/ -v -count=1
+
+          # Postcondition: git.Rm function exists in internal/git/commands.go
+          grep -n "func Rm" /Users/dayna.blackwell/code/scout-and-wave-go/internal/git/commands.go
+          # Expected: one line containing "func Rm(repoPath string"
+
+          # Postcondition: close_impl_cmd.go calls git.Rm
+          grep -n "git\.Rm" /Users/dayna.blackwell/code/scout-and-wave-go/cmd/sawtools/close_impl_cmd.go
+          # Expected: one line
+
+          # Postcondition: committed field in JSON output
+          grep -n '"committed"' /Users/dayna.blackwell/code/scout-and-wave-go/cmd/sawtools/close_impl_cmd.go
+          # Expected: one line
+
+          # Postcondition: new test exists
+          grep -n "TestCloseImplCmd_GitRm" /Users/dayna.blackwell/code/scout-and-wave-go/cmd/sawtools/close_impl_cmd_test.go
+          # Expected: one line
+          ```
+
+          ## Constraints
+          - Do NOT modify any files outside your ownership list.
+          - Do NOT modify pkg/protocol/discovery.go (ArchiveIMPL function).
+          - The git rm call uses the ORIGINAL manifestPath (before archive), not the archivedPath.
+          - The commit uses `git.Commit` (which passes --no-verify) not `git.CommitWithMessage`.
+          - If git rm fails (e.g. file not tracked), log a warning and skip the commit — do not abort.
+        files:
+          - internal/git/commands.go
+          - cmd/sawtools/close_impl_cmd.go
+          - cmd/sawtools/close_impl_cmd_test.go
+
+      - id: B
+        task: |
+          ## Role
+          Fix validate-briefs cross-repo path resolution bug: `briefResolveFilePath`
+          uses `fo.Repo` as a literal path prefix instead of looking it up in
+          saw.config.json to get the absolute path.
+
+          ## Repo
+          All your files are in /Users/dayna.blackwell/code/scout-and-wave-go
+
+          ## Context
+
+          The bug is in `pkg/protocol/brief_validator.go`, function `briefResolveFilePath`. When a `FileOwnership` entry has `repo: scout-and-wave-go`, the
+          current code does:
+
+          ```go
+          func briefResolveFilePath(fo FileOwnership, defaultRepoRoot string) string {
+              repoRoot := defaultRepoRoot
+              if fo.Repo != "" {
+                  repoRoot = fo.Repo   // BUG: "scout-and-wave-go" is a name, not a path
+              }
+              if repoRoot != "" && !strings.HasPrefix(fo.File, "/") {
+                  return repoRoot + "/" + fo.File
+              }
+              return fo.File
+          }
+          ```
+
+          This produces paths like `scout-and-wave-go/cmd/sawtools/foo.go` (relative,
+          incorrect) instead of `/Users/dayna.blackwell/code/scout-and-wave-go/cmd/sawtools/foo.go`
+          (absolute, correct).
+
+          The fix: `briefResolveFilePath` needs access to a repo name→path lookup. The
+          lookup should be built from `saw.config.json` (using `pkg/config.Load`) called
+          from the `ValidateBriefs` function. The lookup is then passed into
+          `briefResolveFilePath`.
+
+          The `pkg/config` package is already available:
+          `github.com/blackwell-systems/scout-and-wave-go/pkg/config`
+          It provides `config.Load(startDir string)` which walks up to find saw.config.json
+          and returns `*config.SAWConfig` with a `Repos []config.RepoEntry` field where
+          each entry has `Name` and `Path` fields.
+
+          ## What to Change
+
+          ### File 1: pkg/protocol/brief_validator.go
+
+          Read the entire file first.
+
+          **Change 1: Update briefResolveFilePath signature and logic.**
+
+          Find the current function:
+          ```go
+          // briefResolveFilePath builds the absolute file path from a FileOwnership entry,
+          // using the repo root when available.
+          func briefResolveFilePath(fo FileOwnership, defaultRepoRoot string) string {
+          	repoRoot := defaultRepoRoot
+          	if fo.Repo != "" {
+          		repoRoot = fo.Repo
+          	}
+          	if repoRoot != "" && !strings.HasPrefix(fo.File, "/") {
+          		return repoRoot + "/" + fo.File
+          	}
+          	return fo.File
+          }
+          ```
+
+          Replace with:
+          ```go
+          // briefResolveFilePath builds the absolute file path from a FileOwnership entry.
+          // If fo.Repo is set, it is looked up in configRepos to get the absolute path.
+          // Falls back to defaultRepoRoot if the repo name is not found in configRepos.
+          func briefResolveFilePath(fo FileOwnership, defaultRepoRoot string, configRepos map[string]string) string {
+          	repoRoot := defaultRepoRoot
+          	if fo.Repo != "" {
+          		if p, ok := configRepos[fo.Repo]; ok {
+          			repoRoot = p
+          		} else {
+          			// repo name not found in config; leave as defaultRepoRoot (fallback)
+          			// This handles tests and single-repo cases where configRepos is empty.
+          		}
+          	}
+          	if repoRoot != "" && !strings.HasPrefix(fo.File, "/") {
+          		return repoRoot + "/" + fo.File
+          	}
+          	return fo.File
+          }
+          ```
+
+          **Change 2: Build configRepos map in ValidateBriefs and pass it to briefResolveFilePath.**
+
+          Read the ValidateBriefs function. Find the section that determines repoRoot:
+
+          ```go
+          	// Determine repo root for resolving file paths.
+          	repoRoot := manifest.Repository
+          	if repoRoot == "" && len(manifest.Repositories) > 0 {
+          		repoRoot = manifest.Repositories[0]
+          	}
+          ```
+
+          Add config lookup after that block. Insert after the closing of that if block:
+          ```go
+          	// Build repo name -> absolute path lookup from saw.config.json.
+          	// Walk up from the IMPL doc location to find saw.config.json.
+          	configRepos := make(map[string]string)
+          	implDir := filepath.Dir(implPath)
+          	if cfgResult := sawconfig.Load(implDir); cfgResult.IsSuccess() {
+          		cfg := cfgResult.GetData()
+          		for _, r := range cfg.Repos {
+          			if r.Name != "" && r.Path != "" {
+          				configRepos[r.Name] = r.Path
+          			}
+          		}
+          	}
+          ```
+
+          **Change 3: Pass configRepos to all calls to briefResolveFilePath.**
+
+          Find the loop that builds agentFiles and agentNewFiles. The call to briefResolveFilePath:
+          ```go
+          		filePath := briefResolveFilePath(fo, repoRoot)
+          ```
+          Change to:
+          ```go
+          		filePath := briefResolveFilePath(fo, repoRoot, configRepos)
+          ```
+
+          **Change 4: Add import for pkg/config.**
+
+          Find the import block at the top of the file:
+          ```go
+          import (
+          	"bytes"
+          	"context"
+          	"fmt"
+          	"os/exec"
+          	"regexp"
+          	"sort"
+          	"strconv"
+          	"strings"
+          )
+          ```
+
+          Replace with:
+          ```go
+          import (
+          	"bytes"
+          	"context"
+          	"fmt"
+          	"os/exec"
+          	"path/filepath"
+          	"regexp"
+          	"sort"
+          	"strconv"
+          	"strings"
+
+          	sawconfig "github.com/blackwell-systems/scout-and-wave-go/pkg/config"
+          )
+          ```
+
+          Note: using the alias `sawconfig` to avoid collision with any local `config` variable names.
+
+          ### File 2: pkg/protocol/brief_validator_test.go
+
+          Read the file fully. Add a new test at the end of the file that verifies
+          cross-repo path resolution. The test creates a temp dir structure with a
+          fake saw.config.json and a Go source file in a "cross-repo" directory,
+          then verifies that validate-briefs resolves the repo name to the absolute path.
+
+          Append this new test function at the end of the file (after the last closing brace):
+
+          ```go
+          // TestValidateBriefs_CrossRepoResolution verifies that when file_ownership entries
+          // have a repo: field, briefResolveFilePath looks up the repo name in configRepos
+          // (loaded from saw.config.json) to get the absolute path, not treating the name
+          // as a relative path prefix.
+          func TestValidateBriefs_CrossRepoResolution(t *testing.T) {
+          	// Create a temp workspace with two repos.
+          	workspace := t.TempDir()
+          	repoA := filepath.Join(workspace, "repo-a") // the IMPL lives here (saw.config.json)
+          	repoB := filepath.Join(workspace, "repo-b") // the file lives here
+          	for _, d := range []string{repoA, filepath.Join(repoA, "docs"), repoB} {
+          		if err := os.MkdirAll(d, 0755); err != nil {
+          			t.Fatal(err)
+          		}
+          	}
+
+          	// Write saw.config.json in repoA mapping "repo-b" -> absolute path of repoB.
+          	sawConfig := fmt.Sprintf(`{"repos":[{"name":"repo-b","path":%q}]}`, repoB)
+          	if err := os.WriteFile(filepath.Join(repoA, "saw.config.json"), []byte(sawConfig), 0644); err != nil {
+          		t.Fatal(err)
+          	}
+
+          	// Create a real Go source file in repoB that contains a known symbol.
+          	goContent := "package bar\n\nfunc CrossRepoFunc() {}\n"
+          	if err := os.WriteFile(filepath.Join(repoB, "bar.go"), []byte(goContent), 0644); err != nil {
+          		t.Fatal(err)
+          	}
+
+          	// Write IMPL doc in repoA referencing a file in repo-b.
+          	implContent := fmt.Sprintf(`title: Cross-Repo Test
+          feature_slug: cross-repo-test
+          verdict: SUITABLE
+          test_command: go test ./...
+          lint_command: go vet ./...
+          file_ownership:
+            - file: bar.go
+              agent: A
+              wave: 1
+              action: modify
+              repo: repo-b
+          waves:
+            - number: 1
+              agents:
+                - id: A
+                  task: "Implement CrossRepoFunc in bar.go"
+                  files:
+                    - bar.go
+          `)
+          	implPath := filepath.Join(repoA, "docs", "IMPL-cross-repo.yaml")
+          	if err := os.WriteFile(implPath, []byte(implContent), 0644); err != nil {
+          		t.Fatal(err)
+          	}
+
+          	ctx := context.Background()
+          	result, err := ValidateBriefs(ctx, implPath)
+          	if err != nil {
+          		t.Fatalf("ValidateBriefs returned error: %v", err)
+          	}
+
+          	// Agent A's file (repo-b/bar.go) should resolve correctly via saw.config.json.
+          	// CrossRepoFunc exists so no symbol_missing error expected.
+          	agentA, ok := result.AgentResults["A"]
+          	if !ok {
+          		t.Fatal("expected result for agent A")
+          	}
+          	for _, issue := range agentA.Issues {
+          		if issue.Check == "symbol_missing" && issue.Symbol == "CrossRepoFunc" {
+          			t.Errorf("unexpected symbol_missing for CrossRepoFunc — cross-repo path resolution failed: file resolved to %q instead of absolute path", issue.File)
+          		}
+          	}
+          }
+          ```
+
+          You will need these imports in brief_validator_test.go if not already present:
+          - `"context"`
+          - `"fmt"`
+          - `"os"`
+          - `"path/filepath"`
+
+          Check the existing imports in brief_validator_test.go before adding. The file already
+          has most of these; add only what is missing.
+
+          ## Verification Gate
+
+          ```bash
+          # Build check
+          GOWORK=off go build -C /Users/dayna.blackwell/code/scout-and-wave-go ./...
+
+          # Run targeted tests
+          GOWORK=off go test -C /Users/dayna.blackwell/code/scout-and-wave-go ./pkg/protocol/ -run "TestValidateBriefs" -v -count=1
+
+          # Postcondition: briefResolveFilePath now takes 3 parameters
+          grep -n "func briefResolveFilePath" /Users/dayna.blackwell/code/scout-and-wave-go/pkg/protocol/brief_validator.go
+          # Expected: one line showing the new 3-parameter signature
+
+          # Postcondition: sawconfig import added
+          grep -n "sawconfig\|pkg/config" /Users/dayna.blackwell/code/scout-and-wave-go/pkg/protocol/brief_validator.go
+          # Expected: one line with the import alias
+
+          # Postcondition: new test exists
+          grep -n "TestValidateBriefs_CrossRepoResolution" /Users/dayna.blackwell/code/scout-and-wave-go/pkg/protocol/brief_validator_test.go
+          # Expected: one line
+          ```
+
+          ## Constraints
+          - Do NOT modify any files outside your ownership list.
+          - Do NOT modify the function signature of ValidateBriefs (public API).
+          - Do NOT use the config.RepoEntry type directly from pkg/protocol — import from pkg/config.
+          - The fix must be backward-compatible: when saw.config.json is absent or repo name
+            is not in the config, fall back to defaultRepoRoot (existing behavior).
+        files:
+          - pkg/protocol/brief_validator.go
+          - pkg/protocol/brief_validator_test.go
+
+      - id: C
+        task: |
+          ## Role
+          Add a new pre-wave-validate check that flags when a file is mentioned in an
+          agent's task brief but has no file_ownership entry for that agent.
+
+          ## Repo
+          All your files are in /Users/dayna.blackwell/code/scout-and-wave-go
+
+          ## Context
+
+          `sawtools pre-wave-validate` currently runs four checks:
+          1. E16 validation (invariants, gates, contracts)
+          2. E35 gap detection (same-package caller validation)
+          3. E46 test cascade detection
+          4. Wave structure check (X004/X005)
+
+          Add a fifth check: brief/file_ownership divergence detection.
+
+          The check scans each agent's task text for file path references (patterns like
+          `internal/lsp/manager.go`, `pkg/protocol/types.go`, paths containing `/` or
+          ending in `.go/.md/.sh/.ts/.yaml`). For each file path found in a brief:
+          - If the file has NO file_ownership entry at all: WARNING (could be a "do not touch X" constraint)
+          - If the file has a file_ownership entry for a DIFFERENT agent: WARNING
+          - If the file has a file_ownership entry for THIS agent: OK (no warning)
+
+          This is WARNING-level, not error-level, because cross-mentions in "do not touch"
+          constraints are legitimate (e.g., "Do NOT modify pkg/engine/finalize.go").
+
+          pre-wave-validate should NOT fail (exit 1) due to warnings from this check alone.
+          The check adds visibility without being blocking. The output includes the warnings
+          in the JSON so Orchestrators can inspect them.
+
+          ## What to Create
+
+          ### File 1: pkg/protocol/brief_ownership_divergence.go (NEW)
+
+          Create this new file:
+
+          ```go
+          package protocol
+
+          import (
+          	"path/filepath"
+          	"regexp"
+          	"strings"
+          )
+
+          // BriefOwnershipDivergence describes a file mentioned in a brief that is not
+          // in that agent's file_ownership table.
+          type BriefOwnershipDivergence struct {
+          	AgentID     string `json:"agent_id"`
+          	FilePath    string `json:"file_path"`
+          	OwningAgent string `json:"owning_agent,omitempty"` // non-empty if owned by another agent
+          	Message     string `json:"message"`
+          }
+
+          // reBriefFilePath matches file paths in task text:
+          //   - paths containing "/" (e.g. pkg/protocol/types.go, internal/lsp/manager.go)
+          //   - paths ending in common source extensions (even without slash)
+          var reBriefFilePath = regexp.MustCompile(
+          	`\b((?:[a-zA-Z0-9_.-]+/)+[a-zA-Z0-9_.-]+\.[a-zA-Z]{1,5}|` +
+          		`[a-zA-Z0-9_.-]+\.(?:go|ts|js|py|rs|md|yaml|yml|sh|json))\b`,
+          )
+
+          // DetectBriefOwnershipDivergence scans each agent's task text for file path
+          // references and checks them against file_ownership. Returns WARNING-level
+          // divergences: files mentioned in a brief that have no ownership entry for
+          // that agent, or that are owned by a different agent.
+          //
+          // Cross-mentions in "do not touch" constraints produce the same WARNING as other
+          // mentions — callers should display these as informational rather than blocking.
+          func DetectBriefOwnershipDivergence(manifest *IMPLManifest) []BriefOwnershipDivergence {
+          	if manifest == nil {
+          		return nil
+          	}
+
+          	// Build ownership index: file -> owning agent ID.
+          	// Use the relative file path (fo.File) as the key since task text uses relative paths.
+          	ownerOf := make(map[string]string) // normalized relative path -> agent ID
+          	for _, fo := range manifest.FileOwnership {
+          		ownerOf[normalizePath(fo.File)] = fo.Agent
+          	}
+
+          	var divergences []BriefOwnershipDivergence
+
+          	for _, wave := range manifest.Waves {
+          		for _, agent := range wave.Agents {
+          			// Extract all file path references from the task text.
+          			paths := extractBriefFilePaths(agent.Task)
+          			seen := make(map[string]bool)
+          			for _, p := range paths {
+          				norm := normalizePath(p)
+          				if seen[norm] {
+          					continue
+          				}
+          				seen[norm] = true
+
+          				owner, exists := ownerOf[norm]
+          				if !exists {
+          					// File mentioned but no ownership entry for anyone.
+          					divergences = append(divergences, BriefOwnershipDivergence{
+          						AgentID:  agent.ID,
+          						FilePath: p,
+          						Message:  "file mentioned in brief but has no file_ownership entry",
+          					})
+          				} else if owner != agent.ID {
+          					// File mentioned but owned by a different agent.
+          					divergences = append(divergences, BriefOwnershipDivergence{
+          						AgentID:     agent.ID,
+          						FilePath:    p,
+          						OwningAgent: owner,
+          						Message:     "file mentioned in brief but owned by agent " + owner,
+          					})
+          				}
+          				// owner == agent.ID: OK, no divergence.
+          			}
+          		}
+          	}
+
+          	return divergences
+          }
+
+          // extractBriefFilePaths returns all file path references found in taskText.
+          // Deduplicates results.
+          func extractBriefFilePaths(taskText string) []string {
+          	matches := reBriefFilePath.FindAllString(taskText, -1)
+          	seen := make(map[string]bool)
+          	var result []string
+          	for _, m := range matches {
+          		if !seen[m] {
+          			seen[m] = true
+          			result = append(result, m)
+          		}
+          	}
+          	return result
+          }
+
+          // normalizePath cleans a file path for consistent map lookup.
+          // Strips leading "./" and cleans double slashes.
+          func normalizePath(p string) string {
+          	p = filepath.Clean(p)
+          	p = strings.TrimPrefix(p, "./")
+          	return p
+          }
+          ```
+
+          ### File 2: pkg/protocol/brief_ownership_divergence_test.go (NEW)
+
+          Create this new file:
+
+          ```go
+          package protocol
+
+          import (
+          	"testing"
+          )
+
+          // TestDetectBriefOwnershipDivergence_NoOwnership verifies that a file mentioned
+          // in a brief with no file_ownership entry generates a WARNING divergence.
+          func TestDetectBriefOwnershipDivergence_NoOwnership(t *testing.T) {
+          	manifest := &IMPLManifest{
+          		FileOwnership: []FileOwnership{
+          			{File: "pkg/foo.go", Agent: "A", Wave: 1},
+          		},
+          		Waves: []Wave{
+          			{
+          				Number: 1,
+          				Agents: []Agent{
+          					{
+          						ID:   "A",
+          						Task: "Implement the handler in pkg/foo.go and call pkg/unowned/bar.go",
+          					},
+          				},
+          			},
+          		},
+          	}
+
+          	divs := DetectBriefOwnershipDivergence(manifest)
+
+          	// pkg/foo.go is owned by A -> no divergence.
+          	// pkg/unowned/bar.go has no ownership -> divergence.
+          	foundUnowned := false
+          	for _, d := range divs {
+          		if d.FilePath == "pkg/unowned/bar.go" && d.AgentID == "A" && d.OwningAgent == "" {
+          			foundUnowned = true
+          		}
+          		if d.FilePath == "pkg/foo.go" {
+          			t.Errorf("unexpected divergence for owned file pkg/foo.go: %+v", d)
+          		}
+          	}
+          	if !foundUnowned {
+          		t.Errorf("expected divergence for pkg/unowned/bar.go, got: %+v", divs)
+          	}
+          }
+
+          // TestDetectBriefOwnershipDivergence_WrongOwner verifies that a file mentioned
+          // in a brief but owned by a different agent generates a WARNING divergence.
+          func TestDetectBriefOwnershipDivergence_WrongOwner(t *testing.T) {
+          	manifest := &IMPLManifest{
+          		FileOwnership: []FileOwnership{
+          			{File: "pkg/a.go", Agent: "A", Wave: 1},
+          			{File: "pkg/b.go", Agent: "B", Wave: 1},
+          		},
+          		Waves: []Wave{
+          			{
+          				Number: 1,
+          				Agents: []Agent{
+          					{
+          						ID:   "A",
+          						Task: "Implement pkg/a.go. Do NOT modify pkg/b.go.",
+          					},
+          				},
+          			},
+          		},
+          	}
+
+          	divs := DetectBriefOwnershipDivergence(manifest)
+
+          	// pkg/a.go is owned by A -> no divergence.
+          	// pkg/b.go is owned by B but mentioned in A's brief -> divergence with OwningAgent=B.
+          	foundWrongOwner := false
+          	for _, d := range divs {
+          		if d.FilePath == "pkg/b.go" && d.AgentID == "A" && d.OwningAgent == "B" {
+          			foundWrongOwner = true
+          		}
+          		if d.FilePath == "pkg/a.go" {
+          			t.Errorf("unexpected divergence for owned file pkg/a.go: %+v", d)
+          		}
+          	}
+          	if !foundWrongOwner {
+          		t.Errorf("expected divergence for pkg/b.go (owned by B, mentioned in A), got: %+v", divs)
+          	}
+          }
+
+          // TestDetectBriefOwnershipDivergence_NilManifest verifies nil safety.
+          func TestDetectBriefOwnershipDivergence_NilManifest(t *testing.T) {
+          	divs := DetectBriefOwnershipDivergence(nil)
+          	if divs != nil {
+          		t.Errorf("expected nil for nil manifest, got: %+v", divs)
+          	}
+          }
+
+          // TestDetectBriefOwnershipDivergence_AllOwned verifies no divergences when all
+          // mentioned files are owned by the mentioning agent.
+          func TestDetectBriefOwnershipDivergence_AllOwned(t *testing.T) {
+          	manifest := &IMPLManifest{
+          		FileOwnership: []FileOwnership{
+          			{File: "pkg/a.go", Agent: "A", Wave: 1},
+          			{File: "pkg/b.go", Agent: "A", Wave: 1},
+          		},
+          		Waves: []Wave{
+          			{
+          				Number: 1,
+          				Agents: []Agent{
+          					{
+          						ID:   "A",
+          						Task: "Implement pkg/a.go and pkg/b.go.",
+          					},
+          				},
+          			},
+          		},
+          	}
+
+          	divs := DetectBriefOwnershipDivergence(manifest)
+          	if len(divs) != 0 {
+          		t.Errorf("expected no divergences when all files are owned by the agent, got: %+v", divs)
+          	}
+          }
+          ```
+
+          ### File 3: cmd/sawtools/pre_wave_validate_cmd.go
+
+          Read the file fully first.
+
+          **Change 1: Add BriefOwnershipDivergenceResult type.**
+
+          Find the WaveStructureCheckResult type definition:
+          ```go
+          // WaveStructureCheckResult holds the result of the suggest-wave-structure pre-flight gate.
+          type WaveStructureCheckResult struct {
+          	Passed   bool                             `json:"passed"`
+          	Problems []protocol.WaveStructureProblem `json:"problems"`
+          }
+          ```
+
+          Insert this new type AFTER WaveStructureCheckResult:
+          ```go
+          // BriefOwnershipDivergenceResult holds warnings from the brief/ownership divergence check.
+          type BriefOwnershipDivergenceResult struct {
+          	Passed   bool                                   `json:"passed"`
+          	Warnings []protocol.BriefOwnershipDivergence    `json:"warnings"`
+          }
+          ```
+
+          **Change 2: Add the new field to PreWaveValidateResult.**
+
+          Find:
+          ```go
+          // PreWaveValidateResult combines E16 validation and E35 gap detection results.
+          type PreWaveValidateResult struct {
+          	Validation    protocol.FullValidateData `json:"validation"`
+          	E35Gaps       E35GapsResult             `json:"e35_gaps"`
+          	TestCascade   TestCascadeCheckResult    `json:"test_cascade"`
+          	WaveStructure WaveStructureCheckResult  `json:"wave_structure"` // Step 4
+          }
+          ```
+
+          Replace with:
+          ```go
+          // PreWaveValidateResult combines E16 validation and E35 gap detection results.
+          type PreWaveValidateResult struct {
+          	Validation               protocol.FullValidateData    `json:"validation"`
+          	E35Gaps                  E35GapsResult                `json:"e35_gaps"`
+          	TestCascade              TestCascadeCheckResult       `json:"test_cascade"`
+          	WaveStructure            WaveStructureCheckResult     `json:"wave_structure"`             // Step 4
+          	BriefOwnershipDivergence BriefOwnershipDivergenceResult `json:"brief_ownership_divergence"` // Step 5
+          }
+          ```
+
+          **Change 3: Run the check in the RunE function and populate the result.**
+
+          Find the block that combines results (look for the `output := PreWaveValidateResult{` assignment):
+          ```go
+          			// Combine results
+          			output := PreWaveValidateResult{
+          				Validation: validateRes.GetData(),
+          				E35Gaps: E35GapsResult{
+          					Passed: len(e35Gaps) == 0,
+          					Gaps:   e35Gaps,
+          				},
+          				TestCascade:   testCascadeResult,
+          				WaveStructure: waveStructureResult, // Step 4
+          			}
+          ```
+
+          Replace with:
+          ```go
+          			// Step 5: Run brief/ownership divergence check.
+          			briefDivergences := protocol.DetectBriefOwnershipDivergence(manifest)
+          			briefOwnershipResult := BriefOwnershipDivergenceResult{
+          				Passed:   true, // warnings only; never fails pre-wave-validate
+          				Warnings: briefDivergences,
+          			}
+
+          			// Combine results
+          			output := PreWaveValidateResult{
+          				Validation: validateRes.GetData(),
+          				E35Gaps: E35GapsResult{
+          					Passed: len(e35Gaps) == 0,
+          					Gaps:   e35Gaps,
+          				},
+          				TestCascade:              testCascadeResult,
+          				WaveStructure:            waveStructureResult,
+          				BriefOwnershipDivergence: briefOwnershipResult,
+          			}
+          ```
+
+          **Change 4: The exit condition must NOT include brief_ownership_divergence.**
+
+          Find:
+          ```go
+          			// Exit 1 if validation, E35, test cascade, or wave structure failed
+          			if !output.Validation.Valid || !output.E35Gaps.Passed || !output.TestCascade.Passed || !output.WaveStructure.Passed {
+          				return fmt.Errorf("pre-wave validation failed")
+          			}
+          ```
+
+          This line must remain UNCHANGED. The BriefOwnershipDivergence result is always
+          Passed=true and never contributes to exit code 1. Do NOT add
+          `|| !output.BriefOwnershipDivergence.Passed` to this condition.
+
+          ## Verification Gate
+
+          ```bash
+          # Build check
+          GOWORK=off go build -C /Users/dayna.blackwell/code/scout-and-wave-go ./...
+
+          # Run targeted tests
+          GOWORK=off go test -C /Users/dayna.blackwell/code/scout-and-wave-go ./pkg/protocol/ -run "TestDetectBriefOwnership" -v -count=1
+          GOWORK=off go test -C /Users/dayna.blackwell/code/scout-and-wave-go ./cmd/sawtools/ -run "TestPreWaveValidate" -v -count=1
+
+          # Postcondition: new type exists in pre_wave_validate_cmd.go
+          grep -n "BriefOwnershipDivergenceResult" /Users/dayna.blackwell/code/scout-and-wave-go/cmd/sawtools/pre_wave_validate_cmd.go
+          # Expected: at least 3 lines (type def, field in struct, result assignment)
+
+          # Postcondition: new files exist
+          test -f /Users/dayna.blackwell/code/scout-and-wave-go/pkg/protocol/brief_ownership_divergence.go && echo "OK"
+          test -f /Users/dayna.blackwell/code/scout-and-wave-go/pkg/protocol/brief_ownership_divergence_test.go && echo "OK"
+
+          # Postcondition: DetectBriefOwnershipDivergence is called in cmd
+          grep -n "DetectBriefOwnershipDivergence" /Users/dayna.blackwell/code/scout-and-wave-go/cmd/sawtools/pre_wave_validate_cmd.go
+          # Expected: one line
+
+          # Postcondition: exit condition unchanged (no brief_ownership_divergence in if)
+          grep -n "pre-wave validation failed" /Users/dayna.blackwell/code/scout-and-wave-go/cmd/sawtools/pre_wave_validate_cmd.go
+          # Expected: one line; the if condition should NOT contain BriefOwnership
+          ```
+
+          ## Constraints
+          - Do NOT modify any files outside your ownership list.
+          - The new check MUST be WARNING-only: pre-wave-validate must NOT exit 1 due
+            to brief/ownership divergences.
+          - The `normalizePath` helper must handle both "pkg/foo.go" and "./pkg/foo.go"
+            as the same path.
+          - Do NOT add normalizePath or extractBriefFilePaths to an existing file —
+            they belong in the new brief_ownership_divergence.go file only.
+        files:
+          - pkg/protocol/brief_ownership_divergence.go
+          - pkg/protocol/brief_ownership_divergence_test.go
+          - cmd/sawtools/pre_wave_validate_cmd.go
+
+pre_mortem:
+  overall_risk: low
+  rows:
+    - scenario: Agent A's git rm call uses archivedPath instead of original manifestPath
+      likelihood: medium
+      impact: medium
+      mitigation: |
+        Task brief emphasizes the original manifestPath is the argument to git.Rm (the file
+        that was moved away). archivedPath is passed to git.Add. Postcondition grep checks
+        for git.Rm in close_impl_cmd.go.
+    - scenario: Agent A's commit fires even when git rm fails
+      likelihood: low
+      impact: low
+      mitigation: |
+        Brief specifies: if rmErr != nil, log warning and skip the commit (do not commit
+        partially staged state). The entire Step 7 is guarded by rmErr == nil.
+    - scenario: Agent B introduces import cycle between pkg/protocol and pkg/config
+      likelihood: low
+      impact: high
+      mitigation: |
+        pkg/config imports pkg/result only. pkg/protocol imports pkg/result. Neither imports
+        the other. Adding pkg/config import to pkg/protocol/brief_validator.go is safe —
+        the dependency direction is: protocol -> config -> result (no cycle). Verify with
+        GOWORK=off go build ./... in verification gate.
+    - scenario: Agent B's briefResolveFilePath change breaks existing tests that pass empty configRepos
+      likelihood: low
+      impact: medium
+      mitigation: |
+        When configRepos is an empty map and fo.Repo is "", the function falls back to
+        defaultRepoRoot (existing behavior). When fo.Repo is set but not in configRepos,
+        also falls back. Existing tests use empty configRepos map and single-repo manifests;
+        they will still pass. New test covers the cross-repo resolution case.
+    - scenario: Agent C's file path regex in extractBriefFilePaths produces too many false positives
+      likelihood: medium
+      impact: low
+      mitigation: |
+        The check is WARNING-only and non-blocking. False positive warnings are noise but
+        do not cause failures. The regex is scoped to paths with "/" or known source extensions.
+        Tests verify the specific patterns expected.
+    - scenario: Agent C's normalizePath shadows existing protocol.normalizePath function
+      likelihood: low
+      impact: medium
+      mitigation: |
+        Search the pkg/protocol package for existing normalizePath before writing. If one
+        exists, reuse it or name the new one differently (e.g., normalizeBriefPath). The
+        test ensures the function compiles correctly in the package context.
+
+known_issues:
+  - title: finalize-scout validate-briefs false positives for cross-repo agents (Fix 2 bug)
+    description: |
+      finalize-scout fails at the validate_briefs step with false-positive symbol_missing
+      errors for Agents A and B. Root cause: briefResolveFilePath in pkg/protocol/brief_validator.go
+      uses fo.Repo ("scout-and-wave-go") as a literal path prefix, constructing relative paths
+      like "scout-and-wave-go/cmd/sawtools/close_impl_cmd_test.go" instead of the absolute path.
+      This is exactly Fix 2 (validate-briefs cross-repo path resolution bug) that this IMPL
+      implements. The errors are false positives — all referenced symbols exist in the actual
+      files. Manually verified:
+      - git.Add exists at internal/git/commands.go:534
+      - briefResolveFilePath exists at pkg/protocol/brief_validator.go:293
+      - ValidateBriefs exists at pkg/protocol/brief_validator.go:65
+      Agent A's Rm and committed are new (action:modify on existing files that will gain
+      these via implementation). Agent C passes cleanly (action:new files skip symbol checks).
+
+injection_method: hook
