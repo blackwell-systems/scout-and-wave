@@ -10,7 +10,7 @@ This document defines the execution rules that govern orchestrator behavior duri
 
 ## Overview
 
-Rules are numbered E1–E48 for cross-referencing and audit; the same convention as invariants (I1–I6). When referenced in implementation files, the E-number serves as an anchor; implementations should embed the canonical definition verbatim alongside the reference.
+Rules are numbered E1–E51 for cross-referencing and audit; the same convention as invariants (I1–I6). When referenced in implementation files, the E-number serves as an anchor; implementations should embed the canonical definition verbatim alongside the reference.
 
 To audit consistency, search implementation files for `E{N}` and verify the embedded definitions match this document.
 
@@ -522,9 +522,9 @@ Three distinct conflict types can arise; each has a different resolution path:
 
 **Required Action:** The orchestrator runs:
 ```bash
-sawtools mark-complete "<manifest-path>" --date "YYYY-MM-DD"
+sawtools close-impl "<manifest-path>" --date "YYYY-MM-DD"
 ```
-This atomically: (1) writes `<!-- SAW:COMPLETE YYYY-MM-DD -->` on the line immediately after the IMPL doc title, (2) archives the manifest to `docs/IMPL/complete/`, and (3) auto-cleans any stale worktrees for the completed IMPL slug. The command does NOT commit — the orchestrator commits the archived file and any E18 CONTEXT.md updates together in a single commit. The marker must be present before reporting completion to the user.
+This atomically: (1) writes `<!-- SAW:COMPLETE YYYY-MM-DD -->` on the line immediately after the IMPL doc title, (2) archives the manifest to `docs/IMPL/complete/`, (3) stages `git rm <original-manifest-path>` so the deletion of the original path is included in the commit, (4) updates `docs/CONTEXT.md` (E18), and (5) auto-cleans any stale worktrees for the completed IMPL slug. All staged changes (archive, deletion, CONTEXT.md) are committed in a single atomic commit. The marker must be present before reporting completion to the user.
 
 **Format:** HTML comment tag. Invisible in rendered markdown. Parseable with a single regex: `<!-- SAW:COMPLETE (\d{4}-\d{2}-\d{2}) -->`. Tooling can grep a directory of IMPL docs without parsing each file.
 
@@ -763,11 +763,7 @@ If manual construction is needed, the fields to update are:
 
 3. Append any new scaffold-file interfaces to `established_interfaces`.
 
-**Constraint:** E18 runs after E15 (`sawtools mark-complete`). Commit both together:
-```bash
-git add docs/IMPL/complete/IMPL-{slug}.yaml docs/CONTEXT.md
-git commit -m "chore: close {feature-slug} IMPL and update project memory"
-```
+**Constraint:** E18 runs as part of E15 (`sawtools close-impl`). The command commits archive, git rm, and CONTEXT.md changes together in a single atomic commit — no separate commit step is required.
 
 **When to omit:** If no new decisions, interfaces, or conventions were established
 during the feature, E18 still appends to `features_completed` but may omit the
@@ -2108,6 +2104,7 @@ time. However, this is a late failure — E45 exists to prevent it proactively.
 2. **Pre-wave validation (E35 extension):** `sawtools pre-wave-validate` runs E35 detection, which includes test cascade detection via `detectTestCascades()`. Reports orphaned test files as E35Gap entries with CalledFrom pointing to test file locations.
    As of E46, pre-wave-validate also runs Step 3: `check-test-cascade`, which performs a whole-repo
    scan for test files calling changed symbols. Exit 1 if any orphaned test callers are found.
+   Also runs Step 4 (wave structure check) and Step 5 (stale constraint lint — warning only).
 
 3. **Post-merge verification (future work):** Documented as third detection layer, but not implemented in this IMPL. Future enhancement: add `VerifyTestCompilation()` to finalize-wave workflow to run `go test -compile-only` and catch missed test cascades before quality gates.
 

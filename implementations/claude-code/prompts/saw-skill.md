@@ -146,7 +146,8 @@ See `references/impl-targeting.md` for discovery commands, resolution logic, aut
    CRITIC_PROMPT=$(sawtools run-critic --backend agent-tool "<impl-path>")
    ```
    Then launch the critic agent using the Agent tool:
-   `Agent(subagent_type=critic-agent, run_in_background=true, description="[SAW:critic:<slug>]", prompt="$CRITIC_PROMPT")`
+   `Agent(subagent_type=critic-agent, run_in_background=true, description="[SAW:critic:<slug>] <absolute-impl-path>", prompt="$CRITIC_PROMPT")`
+   **E48:** The IMPL doc path MUST appear in `description` so the SubagentStop hook can locate it for commit enforcement.
    Wait for it to complete, then read `critic_report.verdict` from the IMPL doc.
    - **PASS** → proceed.
    - **ISSUES (error)** → fix errors in the IMPL doc, then re-run E37 (repeat this step). The pre-wave gate reads the verdict field — this field stays ISSUES until the critic agent rewrites it. Do NOT manually edit the YAML verdict field.
@@ -166,7 +167,9 @@ If a `docs/IMPL/IMPL-*.yaml` file already exists:
    ```
    Combines worktree creation + agent preparation (brief extraction, journal init). Exit 1 = failure (E21A baseline gate, scaffolds, or worktree errors) — do not proceed.
 
-   **--commit-baseline flag:** Auto-commits baseline fixes when working directory is dirty. **Always use with `--auto` flag** for autonomous execution. Without it, dirty working dir causes failure.
+   **--commit-state (default: true):** SAW-owned state files (IMPL doc, gate-cache, `docs/IMPL/`, `docs/CONTEXT.md`) are automatically committed before the dirty-check. No flag needed for normal use; pass `--commit-state=false` to disable.
+
+   **--commit-baseline flag:** Auto-commits baseline fixes (user code changes) when working directory is dirty. **Always use with `--auto` flag** for autonomous execution. Without it, dirty user-code changes cause failure.
 
    **E43:** Hook-based isolation enforces worktree boundaries automatically. Agents don't need manual `cd` commands. See `protocol/execution-rules.md` E43.
 

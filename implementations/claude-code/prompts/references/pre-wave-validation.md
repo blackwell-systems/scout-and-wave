@@ -15,8 +15,10 @@ sawtools pre-wave-validate "<absolute-path-to-impl-doc>" --wave <N> --fix
 - Step 1: Runs E16 (IMPL doc structure validation)
 - Step 2: Runs E35 (same-package caller detection)
 - Step 3: Runs E46 check-test-cascade (orphaned test file caller detection)
+- Step 4: Runs wave structure check (X004/X005 — caller ordering between waves)
+- Step 5: Runs stale constraint lint (`DetectStaleConstraints`) — warns when a file is mentioned in one agent's task text but assigned to a different agent's `file_ownership`. Warning-only; never blocks. Results in `stale_constraints.warnings` JSON field.
 - Returns combined JSON output
-- Exit 0 = all passed, Exit 1 = any failed
+- Exit 0 = all passed (Steps 1–4; Step 5 warnings never affect exit code), Exit 1 = any of Steps 1–4 failed
 
 **Use this instead of separate `validate` calls** — batches synchronous checks for efficiency.
 
@@ -159,19 +161,24 @@ Auto-trigger if **either**:
 
 1. **Model selection:** Read `agent.critic_model` from `saw.config.json` (fall back to parent model).
 
-2. **Launch critic agent:**
+2. **Get critic prompt and launch critic agent (CLI/Claude Code sessions):**
+   ```bash
+   # Get the assembled critic prompt — safe in Claude Code; no subprocess spawned
+   CRITIC_PROMPT=$(sawtools run-critic --backend agent-tool "<absolute-impl-path>")
+   ```
+   Then launch:
    ```
    Agent(
      subagent_type=critic-agent,
      run_in_background=true,
-     description="[SAW:critic:<slug>] pre-wave brief review — <IMPL doc absolute path>",
-     prompt="<IMPL doc path>\n<repo root path>"
+     description="[SAW:critic:<slug>] <absolute-impl-path>",
+     prompt="$CRITIC_PROMPT"
    )
    ```
 
-   **CRITICAL:** The IMPL doc path MUST be in the `description` (not just the `prompt`) so the SubagentStop hook can locate it for E42 validation.
+   **CRITICAL:** The IMPL doc absolute path MUST be in the `description` field so the E48 SubagentStop hook can locate it for commit enforcement (fallback when `.saw-state/active-impl` is absent, which is typical — critics run before `prepare-wave`).
 
-   **CLI restriction:** Do NOT use `sawtools run-critic` in CLI mode (spawns subprocess that fails in Claude Code session).
+   **`--backend agent-tool` is the correct pattern** for CLI orchestration (inside a Claude Code session). The default `--backend cli` spawns a subprocess that fails inside an active Claude Code session. Always use `--backend agent-tool` in CLI orchestration mode.
 
 3. **Wait for completion:** Critic writes `critic_report` section to IMPL doc with structured findings.
 
