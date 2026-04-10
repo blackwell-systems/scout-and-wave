@@ -646,19 +646,19 @@ pre_mortem:
             go build ./... catches this immediately. All four functions are named in the
             task. The instructions are structured to update all four before moving to callers.
 critic_report:
-    verdict: ISSUES
+    verdict: PASS
     agent_reviews:
         A:
             agent_id: A
-            verdict: ISSUES
+            verdict: PASS
             issues:
-                - check: caller_exhaustiveness
-                  severity: error
-                  description: 'Brief names only finalize_steps.go and run_gates_cmd.go as callers to update, but four additional non-test files call the functions being changed: pkg/engine/finalize.go calls RunPreMergeGates at lines 428 and 476 and RunPostMergeGates at line 653; pkg/engine/runner.go calls RunPreMergeGates at line 491; pkg/protocol/baseline_gates.go calls RunPreMergeGates at line 43. None of these are in file_ownership. The build will fail to compile unless all five are also updated.'
+                - check: pattern_accuracy
+                  severity: warning
+                  description: Implementation steps 1-8 describe in detail what to change in gates.go and verify_build.go but do not include an explicit step for updating the call sites in finalize.go (RunPreMergeGates at lines 428/476, RunPostMergeGates at line 653), runner.go (RunPreMergeGates at line 491), and baseline_gates.go (RunPreMergeGates at line 43). The agent owns all three files and the build gate will surface any missed updates, but the brief is silent on the specific changes needed in these files.
                   file: pkg/engine/finalize.go
                   symbol: RunPreMergeGates
-    summary: 'Agent A''s brief accurately describes the existing signatures, existing filter patterns, and the helper loadSAWConfigRepos. However, Check 8 (caller_exhaustiveness) reveals that the brief lists only two non-owned caller files to update (finalize_steps.go and run_gates_cmd.go), while the actual codebase has four additional non-test callers: pkg/engine/finalize.go calls RunPreMergeGates at lines 428 and 476 and RunPostMergeGates at line 653, pkg/engine/runner.go calls RunPreMergeGates at line 491, and pkg/protocol/baseline_gates.go calls RunPreMergeGates at line 43. All five of these files will fail to compile after the signature changes and none are in the file_ownership table. The build gate will catch this but the agent will be unable to complete without also updating these callers.'
-    reviewed_at: "2026-04-10T19:55:35Z"
+    summary: 'All 8 owned files (action:modify) exist in the codebase. The previous caller_exhaustiveness error is resolved: pkg/engine/finalize.go, pkg/engine/runner.go, and pkg/protocol/baseline_gates.go are now in file_ownership. No remaining non-test callers of RunPreMergeGates/RunPostMergeGates/RunGatesWithCache exist outside owned files in the main source tree (worktree copies under .claude/worktrees/ are isolated and not compiled by the build gate). All current function signatures match what the brief describes. loadSAWConfigRepos exists in brief_validator.go in the same package. FinalizeWaveOpts.IMPLPath exists. One advisory warning is noted: the implementation steps (1-8) describe changes to gates.go, verify_build.go, and the test files in detail, but do not include an explicit step for updating the call sites in the three newly-added owned files (finalize.go, runner.go, baseline_gates.go). The agent owns these files and the build gate will catch any missed updates, so this does not block execution.'
+    reviewed_at: "2026-04-10T19:58:37Z"
     issue_count: 1
 state: SCOUT_PENDING
 injection_method: hook
