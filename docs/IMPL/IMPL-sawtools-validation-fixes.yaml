@@ -1157,5 +1157,6 @@ critic_report:
     summary: 'All three agent briefs are accurate against the codebase. Agent A: internal/git/commands.go exists and has the Add function at line 534 (exact match with the text the brief instructs inserting after). close_impl_cmd.go exists and has the git.Run/git.Add/json.Marshal pattern exactly as described. close_impl_cmd_test.go exists with the imports described. Agent B: brief_validator.go exists and has briefResolveFilePath at line 293 with the two-parameter signature (the current buggy form), matching the before/after replacement the brief shows. ValidateBriefs exists at line 65 and the repoRoot block described in the brief exists at lines 72-75. pkg/config package exists with Load function returning result.Result[*SAWConfig] and RepoEntry struct with Name and Path fields — all as described. Agent C: brief_ownership_divergence.go does not exist (action:new — correct). pre_wave_validate_cmd.go exists and has WaveStructureCheckResult type and PreWaveValidateResult struct exactly as the brief describes, making both insertion points accurate. No normalizePath function exists in pkg/protocol, so no naming conflict. One advisory pre-mortem note from the scout is confirmed by the codebase: there is no normalizePath in the protocol package, so Agent C can safely add it.'
     reviewed_at: "2026-04-10T17:24:36Z"
     issue_count: 0
-state: SCOUT_PENDING
+state: "REVIEWED"
+original_branch: main
 injection_method: hook
