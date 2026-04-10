@@ -660,5 +660,6 @@ critic_report:
     summary: 'All 8 owned files (action:modify) exist in the codebase. The previous caller_exhaustiveness error is resolved: pkg/engine/finalize.go, pkg/engine/runner.go, and pkg/protocol/baseline_gates.go are now in file_ownership. No remaining non-test callers of RunPreMergeGates/RunPostMergeGates/RunGatesWithCache exist outside owned files in the main source tree (worktree copies under .claude/worktrees/ are isolated and not compiled by the build gate). All current function signatures match what the brief describes. loadSAWConfigRepos exists in brief_validator.go in the same package. FinalizeWaveOpts.IMPLPath exists. One advisory warning is noted: the implementation steps (1-8) describe changes to gates.go, verify_build.go, and the test files in detail, but do not include an explicit step for updating the call sites in the three newly-added owned files (finalize.go, runner.go, baseline_gates.go). The agent owns these files and the build gate will catch any missed updates, so this does not block execution.'
     reviewed_at: "2026-04-10T19:58:37Z"
     issue_count: 1
-state: SCOUT_PENDING
+state: "REVIEWED"
+original_branch: main
 injection_method: hook
