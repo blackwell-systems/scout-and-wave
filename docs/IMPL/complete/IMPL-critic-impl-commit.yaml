@@ -1,0 +1,751 @@
+completion_date: "2026-04-10"
+title: Critic Agent IMPL Commit Enforcement (E48)
+feature_slug: critic-impl-commit
+verdict: SUITABLE
+suitability_assessment: |
+    File decomposition: Changes span 5 distinct files across two categories — hook
+    infrastructure (saw-critic-impl-commit.sh, validate_agent_completion, install.sh)
+    and documentation (critic-agent.md, execution-rules.md). These are fully
+    independent; hook shell code, existing hook modification, install registration,
+    agent protocol definition, and protocol rules each require different expertise
+    and touch disjoint lines.
+
+    Investigation status: Root cause is clear. The critic's SubagentStop validation
+    (validate_agent_completion, critic case, Step 6) verifies that critic_report
+    content is present but does NOT verify the IMPL doc changes are committed to git.
+    Wave agents have this check (lines 301-321 of validate_agent_completion); critics
+    do not. The fix is well-understood.
+
+    Interface discoverability: All interfaces are existing shell conventions — no new
+    cross-agent types needed. The commit check pattern already exists in the wave
+    agent branch of validate_agent_completion and can be replicated for critics.
+
+    Parallelization: 5 files, 4 agents, mix of new file creation and targeted edits.
+    Build cycles are fast (shell scripts, no compilation). High parallelization value
+    due to full disjoint ownership.
+
+    Estimated times:
+    - Scout phase: ~15 min
+    - Agent execution: ~4 agents x ~8 min = ~32 min, parallelized to ~8 min
+    - Merge and verification: ~5 min
+    Total SAW time: ~28 min
+    Sequential baseline: ~40 min
+    Time savings: ~12 min (30% faster)
+test_command: bash implementations/claude-code/hooks/validate_agent_completion --test 2>/dev/null; echo "hook syntax OK"
+lint_command: shellcheck hooks/saw-critic-impl-commit.sh implementations/claude-code/hooks/validate_agent_completion 2>/dev/null || true
+file_ownership:
+    - file: hooks/saw-critic-impl-commit.sh
+      agent: A
+      wave: 1
+      action: new
+    - file: implementations/claude-code/hooks/validate_agent_completion
+      agent: B
+      wave: 1
+      action: modify
+    - file: implementations/claude-code/prompts/agents/critic-agent.md
+      agent: C
+      wave: 1
+      action: modify
+    - file: protocol/execution-rules.md
+      agent: D
+      wave: 1
+      action: modify
+    - file: install.sh
+      agent: D
+      wave: 1
+      action: modify
+interface_contracts:
+    - name: critic-impl-commit-check
+      description: |
+        Shell logic contract for critic commit verification. Both hooks implement this
+        same logical check. The check must be idempotent (safe to run multiple times).
+      definition: |
+        # Given: impl_path (absolute path to IMPL doc, already verified to exist)
+        # Given: repo_root (directory containing the IMPL doc's git repo)
+        #
+        # 1. Run: git -C <repo_root> status --porcelain <impl_path>
+        #    - Output is empty if clean, non-empty if dirty (modified or staged-not-committed)
+        # 2. If dirty:
+        #    - Print to stderr: "E48: Critic agent must commit IMPL doc changes before stopping."
+        #    - Print to stderr: "     Run: git -C <repo_root> add <impl_path> && git -C <repo_root> commit -m 'chore: critic report for <slug> [SAW:critic:<slug>]'"
+        #    - Exit 2
+        # 3. If clean: exit 0 (allow)
+        #
+        # Repo root derivation from impl_path:
+        #   Use git -C <dir-of-impl_path> rev-parse --show-toplevel
+      location: hooks/saw-critic-impl-commit.sh
+    - name: critic-commit-message-format
+      description: Canonical git commit message format for critic agents committing the IMPL doc.
+      definition: |
+        "chore: critic report for <slug> [SAW:critic:<slug>]"
+        # Where <slug> is the feature slug extracted from the IMPL doc filename:
+        #   basename "$impl_path" .yaml | sed 's/^IMPL-//'
+      location: implementations/claude-code/prompts/agents/critic-agent.md
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## Role
+            Create the new `hooks/saw-critic-impl-commit.sh` SubagentStop hook file.
+
+            ## Context
+            The `hooks/` directory at repo root contains one existing hook: `saw-worktree-boundary.sh`
+            (a PreToolUse hook, E43). The new file is a SubagentStop hook that enforces E48:
+            critic agents must commit IMPL doc changes before stopping.
+
+            The `implementations/claude-code/hooks/validate_agent_completion` hook (Agent B's file)
+            already handles critic validation (checking critic_report content). This new hook
+            is a companion enforcement that checks the commit state — parallel to how
+            `saw-worktree-boundary.sh` is a separate PreToolUse enforcement alongside the
+            main hook infrastructure.
+
+            Critic agents run on the MAIN BRANCH (not a worktree). The IMPL doc path comes
+            from `.saw-state/active-impl` or from the agent description string.
+
+            ## What to implement
+
+            Create `/Users/dayna.blackwell/code/scout-and-wave/hooks/saw-critic-impl-commit.sh`
+            with this exact logic:
+
+            1. Read JSON from stdin (SubagentStop payload).
+            2. Parse `agent_description` from JSON using python3 (same pattern as `saw-worktree-boundary.sh`).
+            3. If description does NOT match `[SAW:critic:*]` pattern → exit 0 immediately.
+            4. If it IS a critic agent:
+               a. Find IMPL doc path:
+                  - First check `.saw-state/active-impl` in cwd, then walk up to repo root.
+                  - Then try extracting from `agent_description` via grep for `docs/IMPL/IMPL-*.yaml`.
+                  - If still not found, exit 2 with error "E48: Cannot locate IMPL doc for critic agent".
+               b. Derive repo root: `git -C "$(dirname "$impl_path")" rev-parse --show-toplevel`
+               c. Check if IMPL doc is dirty:
+                  `git -C "$repo_root" status --porcelain "$impl_path"`
+                  - Also check staged but not committed:
+                    `git -C "$repo_root" diff --cached --name-only`
+               d. If dirty (unstaged OR staged-but-not-committed):
+                  - Print error to stderr including the exact commit command to run
+                  - Exit 2
+               e. If clean → exit 0
+
+            ## File header and exit codes
+            Follow the exact style of `hooks/saw-worktree-boundary.sh`:
+            ```bash
+            #!/usr/bin/env bash
+            # SubagentStop hook: Enforces IMPL doc commit for SAW critic agents (E48).
+            # Critic agents must commit the critic_report changes to git before stopping.
+            # Non-critic agents pass through immediately (exit 0).
+            #
+            # Exit codes:
+            #   0 — allow (pass-through or critic committed clean)
+            #   2 — hard block (critic has uncommitted IMPL doc changes)
+            #
+            # Environment: reads JSON from stdin (SubagentStop payload)
+            ```
+
+            Use `set -euo pipefail`. Use python3 for JSON parsing (same as saw-worktree-boundary.sh).
+
+            ## IMPL doc dirty check
+            The check must cover BOTH cases:
+            - Unstaged changes: `git -C "$repo_root" status --porcelain "$impl_path"` returns non-empty
+            - Staged but not committed: `git -C "$repo_root" diff --cached --name-only` contains the impl basename
+
+            The error message must include the exact remediation command:
+            ```
+            E48: Critic agent must commit IMPL doc changes before stopping.
+                 Run: git -C <repo_root> add <impl_path> && git -C <repo_root> commit -m "chore: critic report for <slug> [SAW:critic:<slug>]"
+            ```
+            Where `<slug>` is derived as: `basename "$impl_path" .yaml | sed 's/^IMPL-//'`
+
+            ## Verification gate
+            ```bash
+            # Syntax check
+            bash -n /Users/dayna.blackwell/code/scout-and-wave/hooks/saw-critic-impl-commit.sh
+            echo "Syntax: $?"  # must be 0
+
+            # Non-critic agent passes through
+            echo '{"agent_description":"[SAW:wave1:agent-A] implement feature","exit_reason":"completed"}' \
+              | bash /Users/dayna.blackwell/code/scout-and-wave/hooks/saw-critic-impl-commit.sh
+            echo "Non-critic exit: $?"  # must be 0
+
+            # Critic agent with no IMPL doc found
+            echo '{"agent_description":"[SAW:critic:test-feature] review agents","exit_reason":"completed"}' \
+              | bash /Users/dayna.blackwell/code/scout-and-wave/hooks/saw-critic-impl-commit.sh 2>&1
+            echo "No IMPL exit: $?"  # must be 2
+
+            # Shellcheck (advisory)
+            shellcheck /Users/dayna.blackwell/code/scout-and-wave/hooks/saw-critic-impl-commit.sh 2>/dev/null || true
+            ```
+
+            ## Constraints
+            - Do NOT modify any other file. Agent B owns validate_agent_completion.
+            - Do NOT register the hook in install.sh — that is Agent D's responsibility.
+            - The hook must exit 0 for ALL non-critic SAW agent types (wave, scout, scaffold).
+            - Critic agents that run with no active IMPL (edge case): exit 2 with clear message.
+            - Match the coding style of hooks/saw-worktree-boundary.sh exactly (python3 JSON parsing, set -euo pipefail, no bash-isms beyond basic arrays).
+          files:
+            - hooks/saw-critic-impl-commit.sh
+        - id: B
+          task: |
+            ## Role
+            Extend the `critic` case in `implementations/claude-code/hooks/validate_agent_completion`
+            to add a commit verification check (parallel to the wave agent commit check
+            already present in Step 6).
+
+            ## Context
+            The file is the E42 SubagentStop validation hook. It already handles critics in
+            the `critic` case of Step 6 — checking that `critic_report` content is present.
+            It does NOT check that the IMPL doc changes are committed to git.
+
+            Wave agents DO have this commit check already in the `wave` case. Look for this
+            block in the file (it checks unstaged and staged-but-not-committed changes):
+            ```bash
+            # Verify IMPL doc completion report is committed (not just present in working tree)
+            if [[ -n "$ownership_file" ]]; then
+              worktree_root=$(dirname "$ownership_file")
+              impl_basename=$(basename "$impl_path")
+            ```
+            This is the pattern to replicate in the critic case.
+
+            ## What to implement
+
+            In the `critic` case of Step 6 (the `critic)` branch in the case statement),
+            AFTER the `critic_valid` check (after the block that sets `critic_valid` and
+            exits 2 if not true), add a NEW section that checks whether the IMPL doc has
+            uncommitted changes.
+
+            The critic runs on the MAIN BRANCH. Use `git` from the repo root, not from a
+            worktree. The repo root can be derived from `impl_path`:
+            ```bash
+            impl_dir=$(dirname "$impl_path")
+            repo_root=$(git -C "$impl_dir" rev-parse --show-toplevel 2>/dev/null || echo "$impl_dir")
+            impl_basename=$(basename "$impl_path")
+            ```
+
+            Add this block after the `critic_valid != "true"` exit:
+            ```bash
+            # --- E48: Verify critic committed IMPL doc changes ---
+            impl_dir=$(dirname "$impl_path")
+            repo_root=$(git -C "$impl_dir" rev-parse --show-toplevel 2>/dev/null || echo "$impl_dir")
+            impl_basename=$(basename "$impl_path")
+
+            # Derive feature slug for remediation message
+            feature_slug=$(echo "$impl_basename" | sed 's/^IMPL-//; s/\.yaml$//')
+
+            # Check unstaged changes
+            if git -C "$repo_root" diff --name-only 2>/dev/null | grep -qF "$impl_basename"; then
+              echo "E48: Critic agent must commit IMPL doc changes before stopping." >&2
+              echo "     Run: git -C ${repo_root} add ${impl_path} && git -C ${repo_root} commit -m \"chore: critic report for ${feature_slug} [SAW:critic:${saw_label}]\"" >&2
+              exit 2
+            fi
+
+            # Check staged but not committed
+            if git -C "$repo_root" diff --cached --name-only 2>/dev/null | grep -qF "$impl_basename"; then
+              echo "E48: Critic agent IMPL doc is staged but not committed." >&2
+              echo "     Run: git -C ${repo_root} commit -m \"chore: critic report for ${feature_slug} [SAW:critic:${saw_label}]\"" >&2
+              exit 2
+            fi
+            ```
+
+            Note: `saw_label` is already set earlier in the file when the critic branch
+            is matched. Look for this line:
+            ```bash
+            saw_label="${BASH_REMATCH[1]}"
+            ```
+            Use it in the commit message.
+
+            ## Finding the exact insertion point
+
+            Read the file. The critic case ends at the `;;` after this exact block:
+            ```bash
+            if [[ "$critic_valid" != "true" ]]; then
+              echo "E42: Critic agent has no valid critic_report in IMPL doc. Must include verdict, agents_reviewed, and issues." >&2
+              exit 2
+            fi
+            ;;
+            ```
+
+            Insert the new E48 block BEFORE the `;;` that closes the critic case.
+
+            Also update the comment block at the top of the file to mention E48:
+            Find this line:
+            ```bash
+            #   # SAW critic agent — should validate critic_report field
+            ```
+            And update the comment below it to note that it also now checks commit state.
+
+            ## Verification gate
+            ```bash
+            # Syntax check
+            bash -n /Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/hooks/validate_agent_completion
+            echo "Syntax OK: $?"
+
+            # Verify E48 block is present (must print a number >= 1)
+            grep -c "E48" /Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/hooks/validate_agent_completion
+
+            # Verify critic case still contains critic_valid check (must print >= 1)
+            grep -c "critic_valid" /Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/hooks/validate_agent_completion
+
+            # Shellcheck (advisory)
+            shellcheck /Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/hooks/validate_agent_completion 2>/dev/null || true
+            ```
+
+            ## Constraints
+            - Modify ONLY the critic case. Do NOT touch the wave, scout, or scaffold cases.
+            - The new block must be placed AFTER the critic_valid check (not before it) so
+              that a missing critic_report is caught first (clearer error).
+            - Do NOT create any new files. Agent A owns hooks/saw-critic-impl-commit.sh.
+            - Do NOT add E48 to the protocol/execution-rules.md — that is Agent D's responsibility.
+          files:
+            - implementations/claude-code/hooks/validate_agent_completion
+        - id: C
+          task: |
+            ## Role
+            Update `implementations/claude-code/prompts/agents/critic-agent.md` to document
+            the mandatory commit requirement as the final protocol step before the
+            completion report.
+
+            ## Context
+            The file currently ends with a `## Rules` section. The critic flow is:
+            1. Verify each agent brief (Checks 1-10)
+            2. Write critic_report via `sawtools set-critic-review`
+            3. Output human-readable summary
+            4. (Currently stops here — MISSING COMMIT STEP)
+            5. Write completion report (currently undocumented)
+
+            The critic does NOT currently have a completion report step — it exits after
+            writing the human-readable summary. We need to add:
+            (a) A mandatory git commit step after writing the critic_report
+            (b) Note that the SubagentStop hook (E48) will block if this is skipped
+
+            ## What to implement
+
+            Find this exact text in the file (the `## Rules` section header):
+            ```
+            ## Rules
+
+            - Read every file in file_ownership before reporting on any agent
+            - Never modify source files
+            - Never modify IMPL doc fields other than critic_report (via set-critic-review)
+            - Report what you find, not what you think should be there
+            - If a file cannot be read (permission error, repo not available), report as
+              severity: warning with check: file_existence and note the read failure
+            - Do not speculate about runtime behavior; only verify static accuracy
+            ```
+
+            Add a new section BEFORE `## Rules`, after the `## Verdict Thresholds` section.
+            The new section should be titled `## Commit Requirement (Mandatory — E48)` and
+            contain:
+
+            ```markdown
+            ## Commit Requirement (Mandatory — E48)
+
+            After writing the critic_report field via `sawtools set-critic-review`, you MUST
+            commit the IMPL doc before writing your completion report or stopping:
+
+            ```bash
+            # Derive repo root from IMPL path
+            REPO_ROOT=$(git -C "$(dirname "$IMPL_PATH")" rev-parse --show-toplevel)
+            SLUG=$(basename "$IMPL_PATH" .yaml | sed 's/^IMPL-//')
+
+            git -C "$REPO_ROOT" add "$IMPL_PATH"
+            git -C "$REPO_ROOT" commit -m "chore: critic report for ${SLUG} [SAW:critic:${SLUG}]"
+            ```
+
+            **Why this matters:** The Orchestrator calls `sawtools prepare-wave` after the
+            critic completes. If the IMPL doc has uncommitted changes, prepare-wave fails
+            with "working directory is dirty". The E48 SubagentStop hook will block your
+            session from closing until the commit is made.
+
+            **Do NOT write your completion report until this commit succeeds.**
+
+            If `sawtools set-critic-review` writes the critic_report and the commit succeeds,
+            you may then stop (there is no separate completion report for critic agents —
+            the critic_report IS the output).
+            ```
+
+            IMPORTANT: The critic does not use `sawtools set-completion`. The critic's
+            output is the `critic_report` field itself. Do NOT add a set-completion step.
+
+            ## Finding the insertion point
+
+            The file ends with:
+            ```
+            - Do not speculate about runtime behavior; only verify static accuracy
+            ```
+
+            Insert the new `## Commit Requirement (Mandatory — E48)` section AFTER the
+            last line of `## Verdict Thresholds` and BEFORE `## Rules`.
+
+            The `## Verdict Thresholds` section ends with this exact text:
+            ```
+            A "warning" severity issue is advisory — it should be fixed but does not prevent
+            wave execution. An "error" severity issue must be resolved before the orchestrator
+            can enter REVIEWED state.
+            ```
+
+            Insert after that block, before `## Rules`.
+
+            ## Verification gate
+            ```bash
+            # Check the section exists
+            grep -c "E48" /Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/prompts/agents/critic-agent.md
+            # must be >= 1
+
+            grep -c "Commit Requirement" /Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/prompts/agents/critic-agent.md
+            # must be >= 1
+
+            grep -c "prepare-wave" /Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/prompts/agents/critic-agent.md
+            # must be >= 1
+
+            # Verify Rules section still intact
+            grep -c "Never modify source files" /Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/prompts/agents/critic-agent.md
+            # must be 1
+            ```
+
+            ## Constraints
+            - Do NOT change any verification checks (Checks 1-10).
+            - Do NOT add a `sawtools set-completion` call — critics do not use completion reports.
+            - Do NOT modify the `## Rules` section content.
+            - Do NOT modify any other file.
+          files:
+            - implementations/claude-code/prompts/agents/critic-agent.md
+        - id: D
+          task: |
+            ## Role
+            (a) Add execution rule E48 to `protocol/execution-rules.md`
+            (b) Register `hooks/saw-critic-impl-commit.sh` in `install.sh`
+
+            ## Part 1: Add E48 to execution-rules.md
+
+            ### Finding the insertion point
+
+            The file currently ends at E47 (Between-Wave Caller Cascade Hotfix). E47's
+            last line (before the `---` separator and `## Supplemental Rule Identifiers`)
+            is:
+            ```
+            **Related Rules:** E26 (Integration Agent), E25 (integration gap detection),
+            E7 (completion verification), E8 (interface change recovery).
+            ```
+            Followed by:
+            ```
+
+            ---
+
+            ## Supplemental Rule Identifiers
+            ```
+
+            Insert the new E48 rule between E47 and `## Supplemental Rule Identifiers`.
+            That means after the `---` separator following E47, before `## Supplemental Rule Identifiers`.
+
+            ### E48 rule text to insert
+
+            ```markdown
+            ## E48: Critic Agent IMPL Commit Enforcement
+
+            **Trigger:** SubagentStop lifecycle event fires for a critic agent (tag `[SAW:critic:*]`).
+
+            **Required Action:** Before the critic agent session closes, the critic MUST commit
+            the IMPL doc changes produced by `sawtools set-critic-review`. Two enforcement
+            mechanisms apply:
+
+            1. **E42 SubagentStop hook (`validate_agent_completion`):** Extended to include a
+               commit check in the critic validation path. After verifying `critic_report`
+               content is present, the hook runs `git status --porcelain` on the IMPL doc.
+               If dirty (uncommitted changes or staged-but-not-committed), exits 2 with:
+               `"E48: Critic agent must commit IMPL doc changes before stopping."`
+
+            2. **Standalone SubagentStop hook (`hooks/saw-critic-impl-commit.sh`):** A
+               dedicated hook file for critic commit enforcement, parallel to
+               `hooks/saw-worktree-boundary.sh` for wave agent write boundaries. Exits 2
+               if the critic agent's IMPL doc has uncommitted changes.
+
+            **IMPL doc location:** Both hooks locate the IMPL doc via `.saw-state/active-impl`
+            (written by `prepare-wave`), with fallback to extracting the path from the
+            agent_description field. The IMPL doc path MUST appear in the critic's
+            `description` (the `[SAW:critic:<slug>]` string passed to the Agent tool) to
+            enable fallback detection.
+
+            **Commit message format:**
+            ```
+            chore: critic report for <slug> [SAW:critic:<slug>]
+            ```
+
+            **Rationale:** Without E48, critic agents write critic_report to the IMPL doc
+            (via `sawtools set-critic-review`) but do not commit the file. The next step
+            in the flow is `sawtools prepare-wave`, which fails if the working directory is
+            dirty. This creates manual overhead: the orchestrator must commit the IMPL doc
+            before proceeding. E48 automates this by enforcing the commit at the agent
+            boundary, the same pattern E42 uses for wave agents (I5).
+
+            **Critic branch execution context:** Critics run on the main branch, not in a
+            worktree. The commit check must use `git -C <repo-root>` (derived from the
+            IMPL path), not from a worktree-relative path. This is distinct from wave
+            agents, which run in worktrees and use `.saw-ownership.json` to locate the
+            worktree root.
+
+            **Skip condition:** If the critic runs `sawtools set-critic-review` and the
+            command writes the critic_report without modifying the IMPL doc on disk (edge
+            case: no-op write), `git status --porcelain` returns empty and E48 passes
+            silently. This is correct behavior.
+
+            **Related Invariants:** See I4 (IMPL doc as single source of truth — completed
+            critic work must be committed), I5 (commit before reporting), E37 (critic gate
+            trigger and validation), E42 (SubagentStop validation matrix)
+
+            ---
+            ```
+
+            ### Cross-reference update
+
+            Also find the `## Cross-References` section at the end of the file and add
+            an E48 entry. Find this existing line:
+            ```
+            - E22: Scaffold Agent runs build verification before committing scaffold files — see also `procedures.md` (Procedure 2: Scaffold Agent), `message-formats.md` (Scaffolds Section Format), `implementations/claude-code/prompts/agents/scaffold-agent.md`
+            ```
+
+            After the last cross-reference entry (scan to the end of the Cross-References
+            section), add:
+            ```
+            - E48: Critic agent must commit IMPL doc before stopping — see also E37 (critic gate), E42 (SubagentStop validation), `implementations/claude-code/prompts/agents/critic-agent.md`, `hooks/saw-critic-impl-commit.sh`
+            ```
+
+            Also update the Overview section. Find this exact line:
+            ```
+            Rules are numbered E1–E47 for cross-referencing and audit; the same convention as invariants (I1–I6). When referenced in implementation files, the E-number serves as an anchor; implementations should embed the canonical definition verbatim alongside the reference.
+            ```
+            Change `E1–E47` to `E1–E48`.
+
+            ## Part 2: Register hook in install.sh
+
+            The hook scripts array (HOOK_SCRIPTS) in install.sh currently lists 21 hooks.
+            Add a new entry for the critic hook to the array.
+
+            Find this exact block:
+            ```bash
+            HOOK_SCRIPTS=(
+              "check_scout_boundaries"
+              ...
+              "saw_orchestrator_stop"
+            )
+            ```
+
+            The `saw-critic-impl-commit.sh` file is in `hooks/` (repo root), not in
+            `implementations/claude-code/hooks/`. The install.sh copies hooks from
+            `${HOOKS_DIR}` which is `${REPO_DIR}/implementations/claude-code/hooks`.
+            The new hook is at `${REPO_DIR}/hooks/saw-critic-impl-commit.sh`.
+
+            This means the new hook requires SEPARATE installation logic, not just adding
+            to the HOOK_SCRIPTS array. Add a new section to the `install_hook_scripts()` function:
+
+            Find this exact text in install_hook_scripts():
+            ```bash
+              local ok=0 warn=0
+              for hook in "${HOOK_SCRIPTS[@]}"; do
+                local src="${HOOKS_DIR}/${hook}"
+                local dst="${BIN_DIR}/${hook}"
+                if [ ! -f "$src" ]; then
+                  echo "   WARN: Hook not found: ${src}" >&2
+                  warn=$((warn + 1))
+                  continue
+                fi
+                chmod +x "$src"
+                ln -sf "$src" "$dst"
+                ok=$((ok + 1))
+              done
+              echo "   ${ok} hooks installed${warn:+, ${warn} warnings}"
+            ```
+
+            After that block (after `echo "   ${ok} hooks installed${warn:+, ${warn} warnings}"`),
+            add:
+            ```bash
+              # Install repo-root hooks (saw-critic-impl-commit.sh, etc.)
+              local root_hook_src="${REPO_DIR}/hooks/saw-critic-impl-commit.sh"
+              local root_hook_dst="${BIN_DIR}/saw_critic_impl_commit"
+              if [ -f "$root_hook_src" ]; then
+                chmod +x "$root_hook_src"
+                ln -sf "$root_hook_src" "$root_hook_dst"
+                echo "   + saw_critic_impl_commit (E48 critic commit enforcement)"
+                ok=$((ok + 1))
+              else
+                echo "   WARN: Hook not found: ${root_hook_src}" >&2
+              fi
+            ```
+
+            Then register the hook in settings.json. In the `install_claude_code()` function,
+            find the SubagentStop section:
+            ```bash
+            # SubagentStop
+            add_hook "SubagentStop" "" "${BIN_DIR}/verify_worktree_compliance" "E42/I5 compliance check"
+            ```
+
+            After that line, add:
+            ```bash
+            add_hook "SubagentStop" "" "${BIN_DIR}/saw_critic_impl_commit" "E48 critic IMPL commit enforcement"
+            ```
+
+            Also update the completion summary echo at the end of `install_claude_code()`.
+            Find:
+            ```bash
+            echo "Installation complete (Claude Code). 21 hooks active:"
+            ```
+            Change to:
+            ```bash
+            echo "Installation complete (Claude Code). 22 hooks active:"
+            ```
+
+            And add to the hook list output:
+            Find:
+            ```bash
+              echo "  SubagentStop:      verify_worktree_compliance (E42/I5 compliance check)"
+            ```
+            After it, add:
+            ```bash
+              echo "  SubagentStop:      saw_critic_impl_commit     (E48 critic commit enforcement)"
+            ```
+
+            ## Verification gate
+            ```bash
+            # Verify E48 is in execution-rules.md
+            grep -c "E48" /Users/dayna.blackwell/code/scout-and-wave/protocol/execution-rules.md
+            # must be >= 3 (rule header, cross-reference, overview update)
+
+            # Verify E1-E48 in overview
+            grep -c "E1–E48" /Users/dayna.blackwell/code/scout-and-wave/protocol/execution-rules.md
+            # must be 1
+
+            # Verify install.sh has the critic hook registration (must print >= 2)
+            grep -c 'critic_impl_commit' /Users/dayna.blackwell/code/scout-and-wave/install.sh
+
+            # Verify hook count updated
+            grep -c "22 hooks active" /Users/dayna.blackwell/code/scout-and-wave/install.sh
+            # must be 1
+
+            # Syntax check install.sh
+            bash -n /Users/dayna.blackwell/code/scout-and-wave/install.sh
+            echo "install.sh syntax: $?"  # must be 0
+            ```
+
+            ## Constraints
+            - Do NOT update invariants.md — the I4 and I5 entries already cover critics
+              through their general language. Adding critic-specific mentions would be redundant.
+            - Do NOT update wave-agent.md — that file covers wave agents only.
+            - Do NOT add E48 to SKILL.md cross-references — SKILL.md uses prose, not E-numbers.
+            - Do NOT modify execution-rules.md beyond inserting E48 and updating the overview
+              and cross-references sections.
+          files:
+            - protocol/execution-rules.md
+            - install.sh
+      base_commit: d7b8ed1981fd7dddb997a8fad810a476ab7de380
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: bash -n implementations/claude-code/hooks/validate_agent_completion
+          required: true
+        - type: build
+          command: bash -n hooks/saw-critic-impl-commit.sh
+          required: false
+        - type: custom
+          command: shellcheck hooks/saw-critic-impl-commit.sh implementations/claude-code/hooks/validate_agent_completion || true
+          required: false
+completion_reports:
+    A:
+        status: complete
+        branch: saw/critic-impl-commit/wave1-agent-A
+        commit: d6ff669
+        files_changed:
+            - hooks/saw-critic-impl-commit.sh
+        files_created:
+            - hooks/saw-critic-impl-commit.sh
+        verification: PASS
+        notes: Hook created and tested. Syntax clean (bash -n). Shellcheck clean. Non-critic agents exit 0 immediately. Critic agents with active IMPL check git dirty state. Registration in install.sh is Agent D's scope.
+    B:
+        status: complete
+        branch: saw/critic-impl-commit/wave1-agent-B
+        commit: ae47438
+        files_changed:
+            - implementations/claude-code/hooks/validate_agent_completion
+        verification: PASS
+        notes: E48 block added to critic case in validate_agent_completion, after the critic_valid check as required. Checks both unstaged and staged-but-not-committed changes to IMPL doc. Updated header comment to mention E48. Shellcheck advisory SC2034 is pre-existing (unused 'issues' var in yq branch); not introduced by this change.
+    C:
+        status: complete
+        branch: saw/critic-impl-commit/wave1-agent-C
+        commit: 83c1895
+        files_changed:
+            - implementations/claude-code/prompts/agents/critic-agent.md
+        verification: PASS
+        notes: Added Commit Requirement (Mandatory — E48) section to critic-agent.md between Verdict Thresholds and Rules sections. All 4 verification checks pass. Rules section intact.
+    D:
+        status: complete
+        branch: saw/critic-impl-commit/wave1-agent-D
+        commit: 59fbf2f
+        files_changed:
+            - protocol/execution-rules.md
+            - install.sh
+        verification: PASS
+        notes: E48 rule added to execution-rules.md (overview updated to E1-E48, rule body inserted between E47 and Supplemental Rule Identifiers, cross-reference entry appended). install.sh updated with repo-root hook installation logic, SubagentStop registration, hook count 21->22, and hook list entry. All 5 verification gates pass.
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: |
+            Agent B modifies lines outside the critic case (e.g., accidentally edits the wave
+            case or the global IMPL path detection).
+          likelihood: low
+          impact: high
+          mitigation: |
+            Agent B's constraints explicitly say to modify ONLY the critic case. The verification
+            gate greps for wave-specific identifiers to confirm they're unchanged.
+        - scenario: |
+            The git dirty check in validate_agent_completion uses the wrong path relative to
+            critic's working directory (critics run on main branch, not in a worktree).
+          likelihood: medium
+          impact: medium
+          mitigation: |
+            The interface contract specifies using `git -C "$repo_root"` derived from
+            `dirname "$impl_path"` + `git rev-parse --show-toplevel`. This handles both
+            absolute and relative IMPL paths correctly regardless of working directory.
+        - scenario: |
+            Agent D's install.sh edit breaks the existing hook registration logic (e.g., misplaced
+            `add_hook` call for saw_critic_impl_commit lands outside the SubagentStop block).
+          likelihood: low
+          impact: medium
+          mitigation: |
+            Agent D's task uses verbatim text anchors. The verification gate checks install.sh
+            syntax with `bash -n` and counts `saw_critic_impl_commit` occurrences.
+        - scenario: |
+            The new E48 section in execution-rules.md is inserted in the wrong location
+            (inside the E47 rule body rather than after the E47 separator).
+          likelihood: low
+          impact: low
+          mitigation: |
+            The task specifies inserting after the `---` separator that follows E47, before
+            `## Supplemental Rule Identifiers`. The verification gate checks for `E48` count >= 3.
+        - scenario: |
+            hooks/saw-critic-impl-commit.sh (Agent A) and validate_agent_completion (Agent B)
+            both implement the same check, causing double-block on a legitimate critic exit.
+          likelihood: low
+          impact: low
+          mitigation: |
+            Both hooks perform the same commit check, so a committed IMPL doc passes both.
+            Double-block only occurs if uncommitted — which is exactly the desired behavior.
+            Two independent enforcement layers is defense-in-depth, not a conflict.
+critic_report:
+    verdict: PASS
+    agent_reviews:
+        A:
+            agent_id: A
+            verdict: PASS
+        B:
+            agent_id: B
+            verdict: PASS
+        C:
+            agent_id: C
+            verdict: PASS
+        D:
+            agent_id: D
+            verdict: PASS
+    summary: 'All four agent briefs are accurate against the codebase. File existence checks pass: hooks/saw-critic-impl-commit.sh does not yet exist (correct for action:new), and all three action:modify files exist. Symbol accuracy checks pass: the saw_label variable is set at line 70 of validate_agent_completion via BASH_REMATCH[1] in the critic branch, exactly as Agent B''s brief states. The wave agent commit check referenced as lines 301-321 exists at lines 300-321 (the comment anchor is line 300, code body is 301-321 — within acceptable range). Pattern accuracy checks pass: the install_hook_scripts() loop ending with the exact echo text Agent D uses as an anchor is confirmed at line 126, and the SubagentStop add_hook call for verify_worktree_compliance is confirmed at line 308. The hook count summary echo ''21 hooks active'' is confirmed at line 397. Agent D''s two-part task (execution-rules.md + install.sh) has correct structural anchors: E47 ends at line 2160, followed by ''---'' at line 2162 and ''## Supplemental Rule Identifiers'' at line 2164 — the insertion point is accurate. The critic-agent.md file exists at the correct path with the ## Verdict Thresholds section ending text exactly as Agent C describes. No ownership conflicts exist in wave 1. No missed callers. No result.Result semantics issues.'
+    reviewed_at: "2026-04-10T16:49:57Z"
+    issue_count: 0
+state: COMPLETE
+original_branch: main
+injection_method: hook

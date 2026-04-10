@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added (2026-04-10) — E48: Critic agent IMPL commit enforcement
+
+Critic agents now must commit their `critic_report` changes to the IMPL doc before stopping. Two independent enforcement layers prevent dirty-IMPL fallout that previously caused `sawtools prepare-wave` to fail with "working directory is dirty" after every critic run.
+
+- **`hooks/saw-critic-impl-commit.sh`** — New standalone SubagentStop hook. Reads the SubagentStop payload, exits 0 immediately for non-critic agents (wave, scout, scaffold), and for critic agents checks both unstaged and staged-but-not-committed changes to the IMPL doc via `git status --porcelain`. Exits 2 with an E48 error and the exact remediation command if the IMPL is dirty; exits 0 if clean.
+- **`validate_agent_completion` (critic case)** — Extended the existing E42 SubagentStop validation to add the same commit check for critic agents. Placed after the `critic_valid` check so a missing critic report is caught first; uses `saw_label` (already captured by the tag parser) in the remediation message. Defense-in-depth: both hooks must pass.
+- **`protocol/execution-rules.md`** — Added E48 rule documenting the critic commit requirement, the two-hook enforcement model, and the canonical commit message format (`chore: critic report for <slug> [SAW:critic:<slug>]`). Overview updated from E1–E47 to E1–E48; cross-reference table updated.
+- **`implementations/claude-code/prompts/agents/critic-agent.md`** — Added `## Commit Requirement (Mandatory — E48)` section with the exact git commands to run after `sawtools set-critic-review`. Clarifies that the critic report IS the output and must be committed before the completion report.
+- **`install.sh`** — Registers `hooks/saw-critic-impl-commit.sh` as a SubagentStop hook (`saw_critic_impl_commit`). Hook count updated from 21 to 22.
+
 ### Added (2026-04-09)
 - **`--repo <path>` flag for `/saw scout` and `/saw auto`** — when the session cwd differs from the target repo, pass `--repo <path>` to have the Orchestrator derive the IMPL output path as `<path>/docs/IMPL/IMPL-<slug>.yaml` and route all `sawtools` calls to that repo. Closes the cross-repo scouting footgun where scouts ran in the wrong cwd and dropped IMPL docs in the wrong place. Updated: `saw-skill.md` (arg parsing + Scout flow steps 1–2), `agents/scout.md` (respects injected IMPL output path), `docs/architecture.md`, `docs/QUICKSTART-CLI.md`. Engine side: `RunScoutFullOpts.ImplOutputPath` field + `--impl-output-path` CLI flag on `sawtools run-scout`.
 - **`hooks/saw-worktree-boundary.sh` PreToolUse hook** — hard-denies (exit 2) Write/Edit/MultiEdit calls whose target path resolves to the main repo instead of the agent's assigned worktree, when `SAW_WORKTREE_ROOT` is set. No-op in orchestrator, solo-wave, and integration-wave contexts (env var absent). Registered in `~/.claude/settings.json`. Complements the existing `validate_write_paths` hook (which uses `SAW_AGENT_WORKTREE`) as a second defense layer.

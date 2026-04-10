@@ -225,3 +225,5 @@ round-trip time by catching errors at source (~5 min saved per critic cycle).
   - IMPL doc: docs/IMPL/complete/IMPL-lsp-response-normalization.yaml
 - **saw-scout-repo-flag**: completed 2026-04-09, 2 waves, 7 agents
   - IMPL doc: docs/IMPL/complete/IMPL-saw-scout-repo-flag.yaml
+- **critic-impl-commit**: completed 2026-04-10, 1 waves, 4 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-critic-impl-commit.yaml
