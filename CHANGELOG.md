@@ -8,6 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added (2026-04-10) — Recovery improvements: reconcile-state, agent-status, finalize-wave auto-detect (E49/E50/E51)
+
+Three new tools for recovering from rate limits, crashes, and cross-repo finalize failures:
+
+- **`sawtools reconcile-state <impl-path>`** — derives the correct IMPL state from observable git evidence (branch existence, commit reachability, completion reports). Idempotent, cross-repo aware. Run this after any interruption before resuming wave execution to ensure the IMPL doc reflects reality. Prints a human-readable summary of what was found and what state was set.
+- **`sawtools agent-status <impl-path>`** — prints a table of agent/role/branch/commits/report/status for every agent in the manifest including critics. `--json` flag for structured output. Surfaces exactly "what landed" across all agents and repos in one command.
+- **`finalize-wave` cross-repo auto-detect** — when `--repo-dir` is omitted for a cross-repo IMPL, the primary repo is auto-detected from `saw.config.json` with a log message. Pre-flight error fires when `--repo-dir` is explicitly provided but owns 0 files for the wave, naming the correct path. Eliminates the "silently misroutes" failure mode.
+- **E49/E50/E51** added to `protocol/execution-rules.md`; `saw-skill.md` updated with recovery sequence and cross-repo finalize guidance.
+
 ### Added (2026-04-10) — Stale constraint lint: detect brief/ownership divergence at scout validation time
 
 - **`DetectStaleConstraints` in `pkg/protocol`** — pure function that parses each agent's task text for file path references (using a regex with recognized extensions and boundary anchors) and flags any file that appears in a different agent's `file_ownership`. Basename fallback handles task text that uses short names (`manager.go`) against full ownership paths (`internal/lsp/manager.go`). Returns warnings only — never blocks execution.

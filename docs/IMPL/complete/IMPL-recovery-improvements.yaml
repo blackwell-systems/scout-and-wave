@@ -1,3 +1,4 @@
+completion_date: "2026-04-10"
 title: 'sawtools Recovery Improvements: reconcile-state, agent-status, finalize-wave cross-repo pre-flight'
 feature_slug: recovery-improvements
 verdict: SUITABLE
@@ -839,6 +840,6 @@ critic_report:
     summary: 'Re-review after I1 fix: all checks pass with two advisory warnings for Agent D. Check 1: all file existence checks pass — action:modify files (finalize_wave.go, finalize_wave_test.go, main.go, protocol/execution-rules.md, saw-skill.md) all confirmed present; action:new files (reconcile_state_cmd.go, reconcile_state_cmd_test.go, agent_status_cmd.go, agent_status_cmd_test.go) confirmed absent. Check 2: all referenced symbols confirmed — protocol.Load, BranchName, LegacyBranchName, SetImplState (Commit bool field in SetImplStateOpts confirmed), git.BranchExists, git.IsAncestor, git.CommitCount, git.LogOneline, config.Load (returns result.Result[*SAWConfig]), manifest.CriticReport field (type *CriticData). Check 3: two pattern warnings for Agent D — UPDATE 1 anchor text strips backticks present in actual saw-skill.md line; UPDATE 2 anchor text ends at ''catches cross-repo breakage early).'' but actual line continues with ''Combines 6 steps...'' meaning a verbatim old_string match would either fail or truncate existing content. Agent D must read the file and use the full actual line as anchor. Check 4: interface contracts syntactically valid, all referenced types confirmed. Check 5: all import paths for new files confirmed in go.mod and local packages. Check 6: new commands registered by Agent D in wave 2 main.go — file in scope. Check 9: no disjoint ownership violations. The previous error (action:new vs action:modify on finalize_wave_test.go) is resolved.'
     reviewed_at: "2026-04-10T17:48:37Z"
     issue_count: 2
-state: REVIEWED
+state: COMPLETE
 original_branch: main
 injection_method: hook
