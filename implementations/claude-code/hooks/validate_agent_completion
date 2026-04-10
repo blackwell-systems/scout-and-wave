@@ -26,7 +26,7 @@
 #     | bash implementations/claude-code/hooks/validate_agent_completion
 #   echo $?  # 2
 #
-#   # SAW critic agent — should validate critic_report field
+#   # SAW critic agent — should validate critic_report field and check IMPL doc is committed (E48)
 #   echo '{"session_id":"abc","agent_name":"critic","agent_description":"[SAW:critic:wave1] review agents","exit_reason":"completed"}' \
 #     | bash implementations/claude-code/hooks/validate_agent_completion
 #   echo $?  # depends on IMPL doc state
@@ -416,6 +416,28 @@ case "$agent_type" in
 
     if [[ "$critic_valid" != "true" ]]; then
       echo "E42: Critic agent has no valid critic_report in IMPL doc. Must include verdict, agents_reviewed, and issues." >&2
+      exit 2
+    fi
+
+    # --- E48: Verify critic committed IMPL doc changes ---
+    impl_dir=$(dirname "$impl_path")
+    repo_root=$(git -C "$impl_dir" rev-parse --show-toplevel 2>/dev/null || echo "$impl_dir")
+    impl_basename=$(basename "$impl_path")
+
+    # Derive feature slug for remediation message
+    feature_slug=$(echo "$impl_basename" | sed 's/^IMPL-//; s/\.yaml$//')
+
+    # Check unstaged changes
+    if git -C "$repo_root" diff --name-only 2>/dev/null | grep -qF "$impl_basename"; then
+      echo "E48: Critic agent must commit IMPL doc changes before stopping." >&2
+      echo "     Run: git -C ${repo_root} add ${impl_path} && git -C ${repo_root} commit -m \"chore: critic report for ${feature_slug} [SAW:critic:${saw_label}]\"" >&2
+      exit 2
+    fi
+
+    # Check staged but not committed
+    if git -C "$repo_root" diff --cached --name-only 2>/dev/null | grep -qF "$impl_basename"; then
+      echo "E48: Critic agent IMPL doc is staged but not committed." >&2
+      echo "     Run: git -C ${repo_root} commit -m \"chore: critic report for ${feature_slug} [SAW:critic:${saw_label}]\"" >&2
       exit 2
     fi
     ;;
