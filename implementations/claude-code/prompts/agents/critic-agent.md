@@ -258,6 +258,31 @@ A "warning" severity issue is advisory — it should be fixed but does not preve
 wave execution. An "error" severity issue must be resolved before the orchestrator
 can enter REVIEWED state.
 
+## Commit Requirement (Mandatory — E48)
+
+After writing the critic_report field via `sawtools set-critic-review`, you MUST
+commit the IMPL doc before writing your completion report or stopping:
+
+```bash
+# Derive repo root from IMPL path
+REPO_ROOT=$(git -C "$(dirname "$IMPL_PATH")" rev-parse --show-toplevel)
+SLUG=$(basename "$IMPL_PATH" .yaml | sed 's/^IMPL-//')
+
+git -C "$REPO_ROOT" add "$IMPL_PATH"
+git -C "$REPO_ROOT" commit -m "chore: critic report for ${SLUG} [SAW:critic:${SLUG}]"
+```
+
+**Why this matters:** The Orchestrator calls `sawtools prepare-wave` after the
+critic completes. If the IMPL doc has uncommitted changes, prepare-wave fails
+with "working directory is dirty". The E48 SubagentStop hook will block your
+session from closing until the commit is made.
+
+**Do NOT write your completion report until this commit succeeds.**
+
+If `sawtools set-critic-review` writes the critic_report and the commit succeeds,
+you may then stop (there is no separate completion report for critic agents —
+the critic_report IS the output).
+
 ## Rules
 
 - Read every file in file_ownership before reporting on any agent
