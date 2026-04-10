@@ -229,3 +229,5 @@ round-trip time by catching errors at source (~5 min saved per critic cycle).
   - IMPL doc: docs/IMPL/complete/IMPL-critic-impl-commit.yaml
 - **friction-fixes-phase2**: completed 2026-04-10, 1 waves, 2 agents
   - IMPL doc: docs/IMPL/complete/IMPL-friction-fixes-phase2.yaml
+- **sawtools-validation-fixes**: completed 2026-04-10, 1 waves, 3 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-sawtools-validation-fixes.yaml

@@ -1,3 +1,4 @@
+completion_date: "2026-04-10"
 title: 'Sawtools Engine Friction Fixes: close-impl git-rm, validate-briefs repo resolution, pre-wave-validate brief/ownership divergence'
 feature_slug: sawtools-validation-fixes
 verdict: SUITABLE
@@ -1070,6 +1071,7 @@ waves:
             - pkg/protocol/brief_ownership_divergence.go
             - pkg/protocol/brief_ownership_divergence_test.go
             - cmd/sawtools/pre_wave_validate_cmd.go
+      base_commit: 1c213d22e10f4b401ad2f751baf2e40d8e2b2ddd
 quality_gates:
     level: standard
     gates:
@@ -1081,6 +1083,48 @@ quality_gates:
           command: GOWORK=off go test ./cmd/sawtools/... ./pkg/protocol/... ./internal/git/...
           required: true
           repo: scout-and-wave-go
+completion_reports:
+    A:
+        status: complete
+        branch: saw/sawtools-validation-fixes/wave1-agent-A
+        commit: 1f090c9
+        files_changed:
+            - internal/git/commands.go
+            - cmd/sawtools/close_impl_cmd.go
+            - cmd/sawtools/close_impl_cmd_test.go
+        tests_added:
+            - TestCloseImplCmd_GitRm
+        verification: PASS
+        notes: git.Rm added to internal/git/commands.go. close-impl Step 7 stages deletion of original IMPL path, adds archived file and CONTEXT.md, then commits with --no-verify. committed field added to JSON output. All 3 CloseImpl tests pass, all internal/git tests pass.
+    B:
+        status: complete
+        branch: saw/sawtools-validation-fixes/wave1-agent-B
+        commit: bb8bf13
+        files_changed:
+            - pkg/protocol/brief_validator.go
+            - pkg/protocol/brief_validator_test.go
+        tests_added:
+            - TestValidateBriefs_CrossRepoResolution
+        verification: PASS
+        notes: Fixed briefResolveFilePath to use saw.config.json repo name->path lookup. Avoided circular import (pkg/config imports pkg/protocol) by implementing a minimal inline loadSAWConfigRepos helper that walks up to find saw.config.json and parses only the repos field. All 7 TestValidateBriefs tests pass. Full quality gate suite passes.
+    C:
+        status: complete
+        branch: saw/sawtools-validation-fixes/wave1-agent-C
+        commit: 8834ac7
+        files_changed:
+            - pkg/protocol/brief_ownership_divergence.go
+            - pkg/protocol/brief_ownership_divergence_test.go
+            - cmd/sawtools/pre_wave_validate_cmd.go
+        files_created:
+            - pkg/protocol/brief_ownership_divergence.go
+            - pkg/protocol/brief_ownership_divergence_test.go
+        tests_added:
+            - TestDetectBriefOwnershipDivergence_NoOwnership
+            - TestDetectBriefOwnershipDivergence_WrongOwner
+            - TestDetectBriefOwnershipDivergence_NilManifest
+            - TestDetectBriefOwnershipDivergence_AllOwned
+        verification: PASS
+        notes: All 4 protocol tests pass. All 3 pre-wave-validate cmd tests pass. Build clean. Exit condition unchanged — brief_ownership_divergence is warnings-only and never contributes to exit 1.
 pre_mortem:
     overall_risk: low
     rows:
@@ -1157,6 +1201,6 @@ critic_report:
     summary: 'All three agent briefs are accurate against the codebase. Agent A: internal/git/commands.go exists and has the Add function at line 534 (exact match with the text the brief instructs inserting after). close_impl_cmd.go exists and has the git.Run/git.Add/json.Marshal pattern exactly as described. close_impl_cmd_test.go exists with the imports described. Agent B: brief_validator.go exists and has briefResolveFilePath at line 293 with the two-parameter signature (the current buggy form), matching the before/after replacement the brief shows. ValidateBriefs exists at line 65 and the repoRoot block described in the brief exists at lines 72-75. pkg/config package exists with Load function returning result.Result[*SAWConfig] and RepoEntry struct with Name and Path fields — all as described. Agent C: brief_ownership_divergence.go does not exist (action:new — correct). pre_wave_validate_cmd.go exists and has WaveStructureCheckResult type and PreWaveValidateResult struct exactly as the brief describes, making both insertion points accurate. No normalizePath function exists in pkg/protocol, so no naming conflict. One advisory pre-mortem note from the scout is confirmed by the codebase: there is no normalizePath in the protocol package, so Agent C can safely add it.'
     reviewed_at: "2026-04-10T17:24:36Z"
     issue_count: 0
-state: "REVIEWED"
+state: COMPLETE
 original_branch: main
 injection_method: hook

@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed (2026-04-10) — Sawtools validation fixes: close-impl, validate-briefs, pre-wave-validate
+
+- **`close-impl` now stages and commits the original IMPL path deletion** — after archiving, `git rm <original-path>` is called before the commit so the close-impl commit includes the deletion, the archived copy, and CONTEXT.md in one atomic commit. Eliminates the recurring "stale deleted IMPL path in git status" that required a manual `git rm` after every `close-impl`.
+- **`validate-briefs` cross-repo path resolution fixed** — `briefResolveFilePath` previously treated `repo: scout-and-wave-go` as a literal path prefix, producing nonexistent relative paths and reporting every symbol check as "not found". Now walks up from the IMPL doc directory to load `saw.config.json` and resolves repo names to absolute paths. Added `TestValidateBriefs_CrossRepoResolution`.
+- **`pre-wave-validate` now detects brief/ownership divergence** — new `DetectBriefOwnershipDivergence` check parses each agent's task text for file path references and flags (as a warning, not error) any file that appears in a different agent's `file_ownership`. Catches the class of scout error where a file is mentioned in a brief but not in the file_ownership table for that agent. Warning-only: never blocks wave execution.
+
 ### Fixed (2026-04-10) — Friction fixes phase 2: prepare-wave default + run-critic backend
 
 - **`prepare-wave --commit-state` now defaults to `true`** — SAW-owned state files (IMPL doc, gate-cache) are always committed before the dirty-check without requiring an explicit flag. The flag remains for explicit control. Fixes recurring "working directory is dirty" failures caused by `pre-wave-validate --fix` and `set-injection-method` writing to the IMPL between the critic commit and prepare-wave.
