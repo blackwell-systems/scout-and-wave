@@ -520,7 +520,7 @@ scaffolds:
             return nil
         }
       import_path: github.com/blackwell-systems/scout-and-wave-go/pkg/protocol
-      status: pending
+      status: committed (1c213d2)
 pre_mortem:
     overall_risk: low
     rows:
@@ -569,4 +569,5 @@ pre_mortem:
             text" which leaves room for the human to decide. No suppression mechanism is
             planned at this stage.
 state: SCOUT_PENDING
+original_branch: main
 injection_method: hook
