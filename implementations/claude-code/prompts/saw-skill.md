@@ -23,7 +23,7 @@ You launch Scout and Wave agents; you do not do their work yourself.
 
 **I6: Role Separation.** The Orchestrator does not perform Scout, Scaffold Agent, Wave Agent, or Integration Agent duties. Delegate codebase analysis, IMPL doc production, scaffold creation, and implementation to async agents. If doing their work yourself, you've violated I6 — stop and launch the correct agent. Scout agents create IMPL docs only (`docs/IMPL/IMPL-*.yaml`), not source code or other docs.
 
-*`I{N}` = invariants (I1–I6), `E{N}` = execution rules (E1–E47) from `protocol/invariants.md` and `protocol/execution-rules.md`. Numbers are anchors for cross-referencing.*
+*`I{N}` = invariants (I1–I6), `E{N}` = execution rules (E1–E51) from `protocol/invariants.md` and `protocol/execution-rules.md`. Numbers are anchors for cross-referencing.*
 
 **Agent type preference:** Use custom `subagent_type` values (`scout`, `scaffold-agent`, `wave-agent`, `integration-agent`, `critic-agent`, `planner`). These provide tool-level enforcement and behavioral instructions.
 
@@ -102,6 +102,13 @@ If 1-3 fail, print what's missing (see `docs/INSTALLATION.md`) and stop.
 When absent, behavior is unchanged: target repo = session cwd, scout derives IMPL path itself.
 
 **Resume detection:** Run `sawtools resume-detect` before `wave` or `status` execution. For `status`, include resume state in report. For `wave`, report interrupted session and use `sawtools build-retry-context` for failed agents.
+
+**After any rate limit, crash, or interrupted finalize-wave (E49, E50):** Run these commands before resuming:
+```bash
+sawtools agent-status "<absolute-impl-path>"     # see what landed per agent
+sawtools reconcile-state "<absolute-impl-path>"  # fix IMPL state to match git reality
+```
+If reconcile-state reports state_changed: true, review the recommended_action field before proceeding.
 
 **Session stop detection:** The `saw_orchestrator_stop` Stop hook warns automatically when the session ends with an active IMPL in WAVE_PENDING or WAVE_EXECUTING state, or with active worktrees. No action needed — the hook fires passively at session end.
 
@@ -190,7 +197,7 @@ Read .saw-agent-brief.md and follow exactly.
    ```bash
    sawtools finalize-wave "<absolute-manifest-path>" --wave <N> --repo-dir "<repo-path>"
    ```
-   **Always use absolute path for `<manifest-path>`.** Cross-repo IMPLs fail with relative paths. For cross-repo IMPLs, add `--cross-repo-verify` to run baseline gates on all repos after primary merge (catches cross-repo breakage early). Combines 6 steps: (1) verify-commits (E7), (2) scan-stubs (E20, orchestrator-level — agents already passed SubagentStop stub check), (3) run-gates (E21), (4) merge-agents, (5) verify-build, (6) cleanup. Exit 1 = failure. For solo agents, run `verify-build` manually. For integration waves, skip merge-agents (no worktree branches).
+   **Always use absolute path for `<manifest-path>`.** Cross-repo IMPLs fail with relative paths. For cross-repo IMPLs, add `--cross-repo-verify` to run baseline gates on all repos after primary merge (catches cross-repo breakage early). **Cross-repo auto-detect (E51):** When `--repo-dir` is omitted on a cross-repo IMPL, `finalize-wave` auto-detects the primary repo from saw.config.json and logs the selection to stderr. You may still provide `--repo-dir` explicitly; if it points to a repo that owns 0 files for the wave, finalize-wave exits with a pre-flight error naming the correct path. Combines 6 steps: (1) verify-commits (E7), (2) scan-stubs (E20, orchestrator-level — agents already passed SubagentStop stub check), (3) run-gates (E21), (4) merge-agents, (5) verify-build, (6) cleanup. Exit 1 = failure. For solo agents, run `verify-build` manually. For integration waves, skip merge-agents (no worktree branches).
 8a. **E25/E26/E35: Integration gap detection.** After finalization succeeds, read `references/integration-gap-detection.md` for the 7-step integration gap detection workflow.
 8b. **E47: Caller cascade hotfix.** `finalize-wave` automatically runs
    `apply-cascade-hotfix` (step 6a) when `CallerCascadeOnly=true`.
