@@ -1,0 +1,572 @@
+title: Pre-wave-validate stale constraint lint
+feature_slug: stale-constraint-lint
+repository: /Users/dayna.blackwell/code/scout-and-wave-go
+verdict: SUITABLE
+suitability_assessment: |
+    Single-concern change with disjoint file ownership across two files
+    (new detection function + cmd wiring). File decomposition is clean:
+    Agent A owns the new protocol-layer detection function and its test;
+    Agent B owns the cmd-layer wiring in pre_wave_validate_cmd.go and
+    finalize_scout_cmd.go. No shared types cross the boundary — both cmd
+    files consume the new type via import.
+
+    Pre-implementation status: Nothing exists. Both TODO.
+
+    Parallelization value: SUITABLE WITH CAVEATS. Only two agents, but
+    the check is a new feature with non-trivial regex design. The detection
+    logic (Agent A) can be written and tested independently of the cmd
+    wiring (Agent B). However, Agent B depends on the type exported by
+    Agent A, so a scaffold stub is needed. Given the dependency, waves
+    are structured as Wave 1 (Agent A: detection logic) → Wave 2 (Agent B:
+    cmd wiring). The main value here is clean interface definition and a
+    correct test before wiring happens.
+
+    Suitability: SUITABLE_WITH_CAVEATS — sequential waves reduce speed
+    savings, but the interface contract and test provide coordination value.
+
+    Estimated times:
+    - Scout phase: ~10 min
+    - Agent execution: Wave 1 ~10 min, Wave 2 ~8 min (sequential)
+    - Merge & verification: ~3 min
+    Total SAW time: ~31 min
+
+    Sequential baseline: ~15 min (single developer, no coordination overhead)
+    Recommendation: Marginal speed gain; IMPL doc provides interface contract
+    and test specification that reduces risk of false-positive regex.
+test_command: GOWORK=off go test ./...
+lint_command: GOWORK=off go vet ./...
+file_ownership:
+    - file: pkg/protocol/stale_constraint.go
+      agent: A
+      wave: 1
+      action: new
+    - file: pkg/protocol/stale_constraint_test.go
+      agent: A
+      wave: 1
+      action: new
+    - file: cmd/sawtools/pre_wave_validate_cmd.go
+      agent: B
+      wave: 2
+      action: modify
+    - file: cmd/sawtools/finalize_scout_cmd.go
+      agent: B
+      wave: 2
+      action: modify
+    - file: cmd/sawtools/pre_wave_validate_cmd_test.go
+      agent: B
+      wave: 2
+      action: modify
+interface_contracts:
+    - name: StaleConstraintWarning
+      description: |-
+        Struct representing a single stale-constraint detection result.
+        Emitted when an agent's task text mentions a file path that belongs
+        to a different agent's file_ownership entry.
+      definition: |
+        type StaleConstraintWarning struct {
+            AgentID       string `json:"agent_id"`
+            MentionedFile string `json:"mentioned_file"`
+            OwnedByAgent  string `json:"owned_by_agent"`
+            Message       string `json:"message"`
+        }
+      location: pkg/protocol/stale_constraint.go
+    - name: DetectStaleConstraints
+      description: |-
+        Scans all agent task texts in the manifest for file path references
+        that are owned by a different agent. Returns one warning per match.
+        Files not in any agent's ownership produce no warning (by design).
+        This is a pure in-memory check — no filesystem access required.
+      definition: |
+        func DetectStaleConstraints(m *IMPLManifest) []StaleConstraintWarning
+      location: pkg/protocol/stale_constraint.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## Context
+
+            You are implementing a stale-constraint lint check for the pre-wave-validate
+            pipeline. When a Scout moves a file from one agent to another mid-IMPL, the
+            old agent's Constraints section can still reference the file. This check
+            detects that pattern at pre-wave-validate time.
+
+            ## What to implement
+
+            Create two new files in `pkg/protocol/`:
+
+            ### File 1: `pkg/protocol/stale_constraint.go`
+
+            Package: `protocol`
+
+            Implement the following exported type and function:
+
+            ```go
+            // StaleConstraintWarning is emitted when an agent's task text references a
+            // file path that is owned by a different agent in the manifest.
+            type StaleConstraintWarning struct {
+                AgentID       string `json:"agent_id"`
+                MentionedFile string `json:"mentioned_file"`
+                OwnedByAgent  string `json:"owned_by_agent"`
+                Message       string `json:"message"`
+            }
+
+            // DetectStaleConstraints scans each agent's task text for file path references
+            // that appear in another agent's file_ownership, emitting a warning for each match.
+            // Returns nil if no stale references are found.
+            func DetectStaleConstraints(m *IMPLManifest) []StaleConstraintWarning
+            ```
+
+            **Detection algorithm:**
+
+            1. Build a map from file path → agent ID using `m.FileOwnership`.
+               Each file path appears at most once (I1 enforces disjoint ownership).
+
+            2. For each agent in `m.Waves`, extract the agent's `Task` text and scan
+               it for file path references using the regex below.
+
+            3. For each extracted path, check whether it appears in the ownership map
+               AND is owned by a different agent. If so, emit a `StaleConstraintWarning`.
+
+            4. A file not in any agent's ownership produces NO warning — this avoids
+               false positives for files mentioned as context (e.g. "see also README.md").
+
+            **File path extraction regex** (design for low false-positive rate):
+
+            The regex must match paths that look like file references, not version strings
+            or URLs. Use this pattern as the starting point:
+
+            ```
+            (?:^|[\s`'"(])([a-zA-Z0-9_\-./]+\.(?:go|md|sh|yaml|yml|ts|js|py|rs|toml|json|txt))(?:$|[\s`'")\]:,])
+            ```
+
+            Constraints on the regex:
+            - MUST require a recognized extension from the list above
+            - MUST NOT match `v1.0.go` style version strings — exclude paths where the
+              base filename looks like a semver component (starts with a digit followed
+              by only dots and digits, e.g. `1.2.3`)
+            - MUST NOT match URLs (paths containing `://`)
+            - Paths may include `/` separators (e.g. `pkg/engine/manager.go`)
+            - Single-component names without `/` are acceptable IF they have a recognized
+              extension (e.g. `manager.go`)
+            - Deduplicate extracted paths per agent before checking ownership
+
+            After extracting candidate paths from task text, normalize them:
+            - Strip leading `./` if present
+            - Keep as-is otherwise (do not try to resolve relative paths)
+
+            **False-positive avoidance:**
+            - The regex uses boundary anchors (whitespace/punctuation) on both sides
+            - Version strings like `v0.13.0` are not matched because `.0` is not in the
+              extension list
+            - Import paths like `github.com/foo/bar` are not matched because `com`, `foo`,
+              `bar` have no recognized extension (unless someone names a file `bar.go`,
+              which IS valid and should be matched)
+
+            **Message format** for each warning:
+            ```
+            Agent <AgentID> task mentions `<MentionedFile>` which is owned by Agent <OwnedByAgent> — possible stale constraint text
+            ```
+
+            ### File 2: `pkg/protocol/stale_constraint_test.go`
+
+            Package: `protocol`
+
+            Write tests covering:
+
+            1. **Stale constraint detected**: Two agents A and B. Agent A owns `pkg/engine/manager.go`.
+               Agent B's task text says "In manager.go, ONLY edit the LanguageIDFromPath switch."
+               Expect one warning: AgentID=B, MentionedFile=`manager.go`,
+               OwnedByAgent=A.
+
+            2. **Path not owned by anyone — no warning**: Agent A owns `pkg/engine/manager.go`.
+               Agent B's task text mentions `README.md`. `README.md` is not in any agent's
+               file_ownership. Expect no warnings.
+
+            3. **Agent mentions its own file — no warning**: Agent A owns `pkg/engine/manager.go`
+               and its task text mentions `manager.go`. Expect no warnings (own file reference
+               is not stale).
+
+            4. **Cross-wave stale reference detected**: Agent A (wave 1) owns `cmd/sawtools/main.go`.
+               Agent B (wave 2) task text mentions `cmd/sawtools/main.go`. Expect one warning.
+               (Wave number does not exempt a reference — ownership is ownership.)
+
+            5. **Nil manifest — no panic**: Call `DetectStaleConstraints(nil)` and expect
+               it to return nil without panicking.
+
+            6. **Full path match**: Agent A owns `pkg/engine/manager.go`. Agent B's task
+               mentions the full path `pkg/engine/manager.go`. Expect one warning
+               (full path lookup works, not just basename).
+
+            Each test should use a minimal `&IMPLManifest{}` literal — no YAML files needed.
+
+            ## Imports required
+
+            ```go
+            import (
+                "regexp"
+                "strings"
+            )
+            ```
+
+            No filesystem access, no exec calls. Pure in-memory.
+
+            ## Verification gate
+
+            ```
+            GOWORK=off go build ./pkg/protocol/...
+            GOWORK=off go vet ./pkg/protocol/...
+            GOWORK=off go test ./pkg/protocol/ -run TestDetectStaleConstraints -v
+            ```
+
+            Expected: all 6 test cases pass. Zero build errors.
+
+            Postcondition checks:
+            ```
+            # StaleConstraintWarning type exists in the new file
+            grep -c "StaleConstraintWarning" /Users/dayna.blackwell/code/scout-and-wave-go/pkg/protocol/stale_constraint.go
+            # expected: 2 (type declaration + field usage or return type)
+
+            # DetectStaleConstraints function exists
+            grep -c "func DetectStaleConstraints" /Users/dayna.blackwell/code/scout-and-wave-go/pkg/protocol/stale_constraint.go
+            # expected: 1
+
+            # Test file has 6 test cases (or at least 5)
+            grep -c "func Test" /Users/dayna.blackwell/code/scout-and-wave-go/pkg/protocol/stale_constraint_test.go
+            # expected: >= 5
+            ```
+
+            ## Constraints
+
+            - Do NOT modify any existing files. Create only the two new files listed above.
+            - Do NOT add filesystem access or exec calls — this is a pure in-memory scan.
+            - Do NOT worry about wiring into pre_wave_validate_cmd.go — that is Agent B's job
+              in Wave 2. Your deliverable is the function and its tests only.
+            - If the stale_constraint.go scaffold file already exists (created by the
+              Scaffold Agent), overwrite it with the complete implementation — the scaffold
+              is just a type stub.
+          files:
+            - pkg/protocol/stale_constraint.go
+            - pkg/protocol/stale_constraint_test.go
+    - number: 2
+      agents:
+        - id: B
+          task: |
+            ## Context
+
+            Agent A (Wave 1) implemented `DetectStaleConstraints` in
+            `pkg/protocol/stale_constraint.go`. It returns `[]StaleConstraintWarning`.
+            Your job is to wire this check into the pre-wave-validate pipeline and the
+            finalize-scout pipeline as a WARNING-only output (does NOT fail exit code).
+
+            The type signature you will use:
+            ```go
+            // From pkg/protocol/stale_constraint.go (Agent A's output)
+            type StaleConstraintWarning struct {
+                AgentID       string `json:"agent_id"`
+                MentionedFile string `json:"mentioned_file"`
+                OwnedByAgent  string `json:"owned_by_agent"`
+                Message       string `json:"message"`
+            }
+
+            func DetectStaleConstraints(m *IMPLManifest) []StaleConstraintWarning
+            ```
+
+            ## Files to modify
+
+            ### 1. `cmd/sawtools/pre_wave_validate_cmd.go`
+
+            **Step A: Add a new result field to `PreWaveValidateResult`.**
+
+            Current struct (read the file before editing to confirm exact text):
+            ```go
+            type PreWaveValidateResult struct {
+                Validation    protocol.FullValidateData `json:"validation"`
+                E35Gaps       E35GapsResult             `json:"e35_gaps"`
+                TestCascade   TestCascadeCheckResult    `json:"test_cascade"`
+                WaveStructure WaveStructureCheckResult  `json:"wave_structure"` // Step 4
+            }
+            ```
+
+            Add a new field after `WaveStructure`:
+            ```go
+            StaleConstraints StaleConstraintsResult `json:"stale_constraints"` // Step 5
+            ```
+
+            **Step B: Define the new result type** (add near the other result types in the file):
+            ```go
+            // StaleConstraintsResult holds the result of the stale-constraint lint check.
+            type StaleConstraintsResult struct {
+                // Passed is always true — this check emits warnings only, never errors.
+                Passed   bool                             `json:"passed"`
+                Warnings []protocol.StaleConstraintWarning `json:"warnings"`
+            }
+            ```
+
+            **Step C: Call `DetectStaleConstraints` in the RunE function.**
+
+            Find this block in the RunE function (the "Step 4" comment block):
+            ```go
+            			// Step 4: Run wave structure check
+            			waveStructureRes := protocol.SuggestWaveStructure(ctx context.Context, manifest, repoRoot)
+            ```
+
+            Wait — read the actual file before editing. The exact text to find for the
+            insertion point (after the wave structure result assembly):
+
+            ```go
+            			waveStructureResult = WaveStructureCheckResult{
+            				Passed:   len(problems) == 0,
+            				Problems: problems,
+            			}
+            		}
+
+            		// Combine results
+            		output := PreWaveValidateResult{
+            ```
+
+            Insert the stale constraint check between the closing brace of the wave structure
+            block and the "Combine results" comment:
+
+            ```go
+            		// Step 5: Run stale constraint lint check
+            		staleWarnings := protocol.DetectStaleConstraints(manifest)
+            		staleConstraintsResult := StaleConstraintsResult{
+            			Passed:   true, // always passes — warnings only
+            			Warnings: staleWarnings,
+            		}
+            ```
+
+            **Step D: Add `StaleConstraints` to the output struct literal.**
+
+            Find the `output := PreWaveValidateResult{` block and add:
+            ```go
+            			StaleConstraints: staleConstraintsResult,
+            ```
+
+            **Step E: Do NOT change the exit-code logic.** The existing final check is:
+            ```go
+            if !output.Validation.Valid || !output.E35Gaps.Passed || !output.TestCascade.Passed || !output.WaveStructure.Passed {
+            ```
+            Do NOT add `|| !output.StaleConstraints.Passed` — stale constraints are warnings only.
+
+            ### 2. `cmd/sawtools/finalize_scout_cmd.go`
+
+            **Step A: Add `StaleConstraints` field to `FinalizeScoutResult`.**
+
+            Current struct fields (read the file to confirm):
+            ```go
+            	// Step 2: Pre-wave validation (E35 + test cascade + wave structure)
+            	E35Gaps       E35GapsResult            `json:"e35_gaps"`
+            	TestCascade   TestCascadeCheckResult   `json:"test_cascade"`
+            	WaveStructure WaveStructureCheckResult `json:"wave_structure"`
+            ```
+
+            Add after `WaveStructure`:
+            ```go
+            	StaleConstraints StaleConstraintsResult `json:"stale_constraints"`
+            ```
+
+            Note: `StaleConstraintsResult` is defined in `pre_wave_validate_cmd.go` in
+            the same `main` package — no import needed.
+
+            **Step B: Call `DetectStaleConstraints` after the wave structure check.**
+
+            Find this exact text in `finalize_scout_cmd.go`:
+            ```go
+            			if !res.E35Gaps.Passed || !res.TestCascade.Passed || !res.WaveStructure.Passed {
+            				res.FailedStep = "pre_wave_validate"
+            				return outputResult(cmd, res)
+            			}
+            ```
+
+            Insert the stale constraint call BEFORE the `if !res.E35Gaps.Passed` check:
+            ```go
+            			// Stale constraint lint (warning-only, never blocks)
+            			staleWarnings := protocol.DetectStaleConstraints(manifest)
+            			res.StaleConstraints = StaleConstraintsResult{
+            				Passed:   true,
+            				Warnings: staleWarnings,
+            			}
+            ```
+
+            **Step C: Do NOT change the failure condition.** The `if !res.E35Gaps.Passed ||`
+            block must remain unchanged — stale constraints never block finalize-scout.
+
+            ### 3. `cmd/sawtools/pre_wave_validate_cmd_test.go`
+
+            Add one new test function: `TestPreWaveValidateCmd_StaleConstraintWarning`.
+
+            The test should:
+            1. Write a temp IMPL YAML where Agent A owns `pkg/engine/manager.go` and
+               Agent B's task mentions `manager.go`.
+            2. Run `newPreWaveValidateCmd()` with `--wave 1` on the temp file.
+            3. Parse JSON output.
+            4. Assert `result.StaleConstraints.Passed == true` (always passes).
+            5. Assert `len(result.StaleConstraints.Warnings) >= 1`.
+            6. Assert `result.StaleConstraints.Warnings[0].AgentID == "B"`.
+
+            Use the same capture-stdout pattern as existing tests in this file:
+            ```go
+            oldStdout := os.Stdout
+            r, w, _ := os.Pipe()
+            os.Stdout = w
+            err := cmd.Execute()
+            w.Close()
+            os.Stdout = oldStdout
+            var buf bytes.Buffer
+            buf.ReadFrom(r)
+            ```
+
+            IMPL YAML fixture for this test (write as a Go string constant):
+            ```yaml
+            title: Stale Constraint Test
+            feature_slug: stale-constraint-test
+            verdict: SUITABLE
+            waves:
+              - number: 1
+                agents:
+                  - id: A
+                    task: implement manager
+                  - id: B
+                    task: "In manager.go, ONLY edit the LanguageIDFromPath switch."
+            file_ownership:
+              - file: pkg/engine/manager.go
+                agent: A
+                wave: 1
+                action: modify
+              - file: pkg/engine/other.go
+                agent: B
+                wave: 1
+                action: new
+            ```
+
+            ## Verification gate
+
+            ```
+            GOWORK=off go build ./cmd/sawtools/...
+            GOWORK=off go vet ./cmd/sawtools/...
+            GOWORK=off go test ./cmd/sawtools/ -run TestPreWaveValidateCmd -v
+            ```
+
+            Expected: all TestPreWaveValidateCmd* tests pass including the new one.
+
+            Postcondition checks:
+            ```
+            # StaleConstraintsResult type exists in pre_wave_validate_cmd.go
+            grep -c "StaleConstraintsResult" /Users/dayna.blackwell/code/scout-and-wave-go/cmd/sawtools/pre_wave_validate_cmd.go
+            # expected: >= 2 (type definition + field usage)
+
+            # FinalizeScoutResult has StaleConstraints field
+            grep -c "StaleConstraints" /Users/dayna.blackwell/code/scout-and-wave-go/cmd/sawtools/finalize_scout_cmd.go
+            # expected: >= 2 (field declaration + assignment)
+
+            # New test exists
+            grep -c "TestPreWaveValidateCmd_StaleConstraintWarning" /Users/dayna.blackwell/code/scout-and-wave-go/cmd/sawtools/pre_wave_validate_cmd_test.go
+            # expected: 1
+            ```
+
+            ## Constraints
+
+            - Do NOT modify files outside your ownership list.
+            - Do NOT make stale constraint failures affect the exit code — this is a
+              WARNING-only check. The `Passed` field on `StaleConstraintsResult` is
+              always `true`; it exists for JSON output symmetry with other result fields.
+            - Do NOT stub or re-define `StaleConstraintWarning` or `DetectStaleConstraints`
+              — those are owned by Agent A in `pkg/protocol/stale_constraint.go`.
+            - Do NOT add `|| !output.StaleConstraints.Passed` to either failure condition.
+            - Read `pre_wave_validate_cmd.go` and `finalize_scout_cmd.go` with the Read
+              tool before editing — exact line context is required for safe edits.
+          files:
+            - cmd/sawtools/pre_wave_validate_cmd.go
+            - cmd/sawtools/finalize_scout_cmd.go
+            - cmd/sawtools/pre_wave_validate_cmd_test.go
+          dependencies:
+            - A
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: GOWORK=off go build ./...
+          required: false
+          repo: scout-and-wave-go
+        - type: test
+          command: GOWORK=off go test ./pkg/protocol/... ./cmd/sawtools/...
+          required: false
+          repo: scout-and-wave-go
+        - type: lint
+          command: GOWORK=off go vet ./...
+          required: false
+          repo: scout-and-wave-go
+scaffolds:
+    - file_path: pkg/protocol/stale_constraint.go
+      contents: |
+        package protocol
+
+        // StaleConstraintWarning is emitted when an agent's task text references a
+        // file path that is owned by a different agent in the manifest.
+        type StaleConstraintWarning struct {
+            AgentID     string `json:"agent_id"`
+            MentionedFile string `json:"mentioned_file"`
+            OwnedByAgent  string `json:"owned_by_agent"`
+            Message       string `json:"message"`
+        }
+
+        // DetectStaleConstraints scans each agent's task text for file path references
+        // that appear in another agent's file_ownership, emitting a warning for each match.
+        // Returns nil if no stale references are found.
+        func DetectStaleConstraints(m *IMPLManifest) []StaleConstraintWarning {
+            // stub — Agent A implements
+            return nil
+        }
+      import_path: github.com/blackwell-systems/scout-and-wave-go/pkg/protocol
+      status: pending
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: |-
+            Agent A's file path regex is too broad and matches version strings like
+            `v0.13.0` or Go import paths like `result.go`, producing false-positive
+            warnings that annoy users.
+          likelihood: medium
+          impact: medium
+          mitigation: |-
+            The regex requires a recognized extension from a fixed list (go, md, sh, yaml,
+            yml, ts, js, py, rs, toml, json, txt). Version strings like `v0.13.0` end in `.0`
+            which is not in the list. The boundary anchors (whitespace/punctuation on both
+            sides) prevent mid-word matches. Test case 2 (unowned file reference) explicitly
+            verifies no false positive for README.md. If false positives emerge post-ship,
+            the check is WARNING-only so users can ignore them without breaking.
+        - scenario: |-
+            Agent B uses `StaleConstraintsResult` before Agent A's work is merged,
+            causing a compile error in the worktree.
+          likelihood: low
+          impact: high
+          mitigation: |-
+            Agent B is in Wave 2, which only runs after Agent A's Wave 1 has been merged.
+            The scaffold stub in stale_constraint.go ensures the type compiles even before
+            Agent A's full implementation is merged. Wave sequencing enforces the dependency.
+        - scenario: |-
+            Agent B accidentally adds stale-constraint failures to the exit-code condition,
+            making the check an error instead of a warning.
+          likelihood: low
+          impact: medium
+          mitigation: |-
+            The agent brief explicitly states "Do NOT add || !output.StaleConstraints.Passed"
+            in bold constraints. The test verifies the exit code is zero even when warnings
+            are present (cmd.Execute() returns nil). Post-merge build+test gate will catch
+            any exit-code regression.
+        - scenario: |-
+            The stale-constraint check matches a file mentioned in the task as documentation
+            context (e.g. "see pkg/engine/runner.go for the pattern to follow"), not as a
+            constraint. This is a false positive of a different kind — the file IS owned by
+            another agent, but the reference is informational.
+          likelihood: medium
+          impact: low
+          mitigation: |-
+            This is an accepted limitation. The check is WARNING-only, so false positives
+            of this kind are visible but harmless. The message says "possible stale constraint
+            text" which leaves room for the human to decide. No suppression mechanism is
+            planned at this stage.
+state: SCOUT_PENDING
+injection_method: hook
