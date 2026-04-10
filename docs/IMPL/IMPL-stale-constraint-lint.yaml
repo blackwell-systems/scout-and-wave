@@ -568,6 +568,6 @@ pre_mortem:
             of this kind are visible but harmless. The message says "possible stale constraint
             text" which leaves room for the human to decide. No suppression mechanism is
             planned at this stage.
-state: SCOUT_PENDING
+state: "REVIEWED"
 original_branch: main
 injection_method: hook
