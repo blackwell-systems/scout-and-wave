@@ -124,6 +124,18 @@ install_hook_scripts() {
     ok=$((ok + 1))
   done
   echo "   ${ok} hooks installed${warn:+, ${warn} warnings}"
+
+  # Install repo-root hooks (saw-critic-impl-commit.sh, etc.)
+  local root_hook_src="${REPO_DIR}/hooks/saw-critic-impl-commit.sh"
+  local root_hook_dst="${BIN_DIR}/saw_critic_impl_commit"
+  if [ -f "$root_hook_src" ]; then
+    chmod +x "$root_hook_src"
+    ln -sf "$root_hook_src" "$root_hook_dst"
+    echo "   + saw_critic_impl_commit (E48 critic commit enforcement)"
+    ok=$((ok + 1))
+  else
+    echo "   WARN: Hook not found: ${root_hook_src}" >&2
+  fi
   echo ""
 }
 
@@ -306,6 +318,7 @@ install_claude_code() {
 
   # SubagentStop
   add_hook "SubagentStop" "" "${BIN_DIR}/verify_worktree_compliance" "E42/I5 compliance check"
+  add_hook "SubagentStop" "" "${BIN_DIR}/saw_critic_impl_commit" "E48 critic IMPL commit enforcement"
   local comp_existing
   comp_existing=$(jq -r '.hooks.SubagentStop // [] | map(select(.hooks[]?.command | contains("validate_agent_completion"))) | length' "$settings_file")
   if [ "$comp_existing" -eq 0 ]; then
@@ -394,7 +407,7 @@ install_claude_code() {
     exit 1
   }
 
-  echo "Installation complete (Claude Code). 21 hooks active:"
+  echo "Installation complete (Claude Code). 22 hooks active:"
   echo ""
   echo "  SubagentStart:     inject_worktree_env        (E43 env var injection)"
   echo "  SubagentStart:     validate_agent_isolation   (E12 isolation verification)"
@@ -412,6 +425,7 @@ install_claude_code() {
   echo "  PostToolUse:       check_branch_drift         (H4 branch drift detection)"
   echo "  PostToolUse:       auto_commit_on_write       (P6 incremental auto-save) [async]"
   echo "  SubagentStop:      verify_worktree_compliance (E42/I5 compliance check)"
+  echo "  SubagentStop:      saw_critic_impl_commit     (E48 critic commit enforcement)"
   echo "  SubagentStop:      validate_agent_completion  (E42 protocol compliance)"
   echo "  SubagentStop:      emit_agent_completion      (E42 observability) [async]"
   echo "  UserPromptSubmit:  inject_skill_context       (Tier 3 context injection)"
