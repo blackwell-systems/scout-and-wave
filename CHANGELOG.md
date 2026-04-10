@@ -8,6 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed (2026-04-10) — Friction fixes phase 2: prepare-wave default + run-critic backend
+
+- **`prepare-wave --commit-state` now defaults to `true`** — SAW-owned state files (IMPL doc, gate-cache) are always committed before the dirty-check without requiring an explicit flag. The flag remains for explicit control. Fixes recurring "working directory is dirty" failures caused by `pre-wave-validate --fix` and `set-injection-method` writing to the IMPL between the critic commit and prepare-wave.
+- **`sawtools run-critic --backend agent-tool` tests + docs** — The `agent-tool` backend was already implemented (`BuildCriticPrompt` in `pkg/engine/critic.go`) but untested and undocumented. Added two tests (`TestRunCriticCmd_BackendAgentToolRequiresAbsolutePath`, `TestRunCriticCmd_BackendAgentToolNonExistentIMPL`). Updated `saw-skill.md` E37 section and `protocol/execution-rules.md` to document `--backend agent-tool` as the correct pattern inside Claude Code sessions.
+
 ### Added (2026-04-10) — E48: Critic agent IMPL commit enforcement
 
 Critic agents now must commit their `critic_report` changes to the IMPL doc before stopping. Two independent enforcement layers prevent dirty-IMPL fallout that previously caused `sawtools prepare-wave` to fail with "working directory is dirty" after every critic run.

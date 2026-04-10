@@ -227,3 +227,5 @@ round-trip time by catching errors at source (~5 min saved per critic cycle).
   - IMPL doc: docs/IMPL/complete/IMPL-saw-scout-repo-flag.yaml
 - **critic-impl-commit**: completed 2026-04-10, 1 waves, 4 agents
   - IMPL doc: docs/IMPL/complete/IMPL-critic-impl-commit.yaml
+- **friction-fixes-phase2**: completed 2026-04-10, 1 waves, 2 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-friction-fixes-phase2.yaml
