@@ -751,7 +751,7 @@ pre_mortem:
             Use the actual current count as baseline. The postcondition check verifies the
             count increased by exactly 3.
 critic_report:
-    verdict: ISSUES
+    verdict: PASS
     agent_reviews:
         A:
             agent_id: A
@@ -761,17 +761,21 @@ critic_report:
             verdict: PASS
         C:
             agent_id: C
-            verdict: ISSUES
-            issues:
-                - check: file_existence
-                  severity: error
-                  description: finalize_wave_test.go is marked action:new but the file already exists at cmd/sawtools/finalize_wave_test.go. The agent brief correctly acknowledges the file exists and instructs append-only behavior, but the IMPL file_ownership entry must use action:modify to be consistent with Check 1 semantics and to avoid confusing wave agents that rely on the action field.
-                  file: cmd/sawtools/finalize_wave_test.go
+            verdict: PASS
         D:
             agent_id: D
             verdict: PASS
-    summary: 'One error found: Agent C''s finalize_wave_test.go is marked action:new in file_ownership but the file already exists in the repository (confirmed at cmd/sawtools/finalize_wave_test.go). The brief itself correctly acknowledges the file exists and instructs append-only behavior, but the IMPL metadata is inconsistent — action should be modify, not new. All other checks pass: symbols verified (protocol.Load, BranchName, LegacyBranchName, SetImplState, git.BranchExists, git.IsAncestor, git.CommitCount, git.LogOneline, config.Load, CriticReport field all confirmed with correct signatures), file existence checks pass for all other files, pattern accuracy confirmed (finalize_wave.go RunE block matches exactly, main.go registration anchor verified), interface contracts are syntactically valid, import chains are sound, and no disjoint ownership violations exist across the two waves.'
-    reviewed_at: "2026-04-10T17:44:19Z"
-    issue_count: 1
+            issues:
+                - check: pattern_accuracy
+                  severity: warning
+                  description: 'UPDATE 1 anchor text in brief strips backticks: the brief says "Run sawtools resume-detect before wave or status execution" but the actual saw-skill.md line uses backtick-wrapped tokens: "Run `sawtools resume-detect` before `wave` or `status` execution". A verbatim Edit tool call using the brief text as old_string will fail to match. Agent D must read the file and use the exact text including backticks as the anchor.'
+                  file: implementations/claude-code/prompts/saw-skill.md
+                - check: pattern_accuracy
+                  severity: warning
+                  description: 'UPDATE 2 anchor text ends prematurely: brief says to find the sentence ending at "catches cross-repo breakage early)." and replace it, but the actual paragraph continues on the same line with "Combines 6 steps: (1) verify-commits (E7)...Exit 1 = failure. For solo agents...". Using the brief anchor as old_string either fails (no exact match) or — if the Edit tool does a prefix match — truncates the rest of the paragraph. Agent D must use the full line text as old_string and include the tail content in new_string.'
+                  file: implementations/claude-code/prompts/saw-skill.md
+    summary: 'Re-review after I1 fix: all checks pass with two advisory warnings for Agent D. Check 1: all file existence checks pass — action:modify files (finalize_wave.go, finalize_wave_test.go, main.go, protocol/execution-rules.md, saw-skill.md) all confirmed present; action:new files (reconcile_state_cmd.go, reconcile_state_cmd_test.go, agent_status_cmd.go, agent_status_cmd_test.go) confirmed absent. Check 2: all referenced symbols confirmed — protocol.Load, BranchName, LegacyBranchName, SetImplState (Commit bool field in SetImplStateOpts confirmed), git.BranchExists, git.IsAncestor, git.CommitCount, git.LogOneline, config.Load (returns result.Result[*SAWConfig]), manifest.CriticReport field (type *CriticData). Check 3: two pattern warnings for Agent D — UPDATE 1 anchor text strips backticks present in actual saw-skill.md line; UPDATE 2 anchor text ends at ''catches cross-repo breakage early).'' but actual line continues with ''Combines 6 steps...'' meaning a verbatim old_string match would either fail or truncate existing content. Agent D must read the file and use the full actual line as anchor. Check 4: interface contracts syntactically valid, all referenced types confirmed. Check 5: all import paths for new files confirmed in go.mod and local packages. Check 6: new commands registered by Agent D in wave 2 main.go — file in scope. Check 9: no disjoint ownership violations. The previous error (action:new vs action:modify on finalize_wave_test.go) is resolved.'
+    reviewed_at: "2026-04-10T17:48:37Z"
+    issue_count: 2
 state: SCOUT_PENDING
 injection_method: hook
