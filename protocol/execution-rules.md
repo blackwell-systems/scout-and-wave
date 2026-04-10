@@ -2217,6 +2217,93 @@ trigger and validation), E42 (SubagentStop validation matrix)
 
 ---
 
+## E49: State Reconciliation After Interruption
+
+**Trigger:** After any rate limit, crash, or interrupted finalize-wave, before
+resuming wave execution or running finalize-wave again.
+
+**Required Action:** Run sawtools reconcile-state to derive the correct IMPL state
+from observable git evidence.
+
+**What it checks:**
+- Agent branch existence (slug-scoped and legacy formats)
+- Completion report presence in the IMPL doc
+- Commit SHA reachability from HEAD for all reported commits
+- Critic report presence
+
+**State derivation rules:**
+| Evidence | Derived State |
+|----------|--------------|
+| All agents have reports AND all commits reachable from HEAD | WAVE_VERIFIED |
+| Some agents have reports OR branches exist | WAVE_EXECUTING |
+| Critic report present, current state SCOUT_PENDING or SCOUT_VALIDATING | REVIEWED |
+| No branches, no reports, no critic report | SCOUT_PENDING (unchanged) |
+| Already COMPLETE | no-op |
+
+**Output:** JSON to stdout with previous_state, derived_state, state_changed,
+evidence array, recommended_action, and per-agent observations.
+
+**Idempotency:** Safe to run at any time. Does NOT commit the state change.
+The Orchestrator decides whether to commit after reconcile-state reports a change.
+
+**Cross-repo:** Checks all repos listed in saw.config.json when file_ownership
+has repo fields.
+
+**Related:** E7 (completion verification), E38 (gate caching), resume-detect.
+
+---
+
+## E50: Agent Status Inspection
+
+**Trigger:** After any interruption, or when the Orchestrator needs to verify
+what has landed before proceeding.
+
+**Required Action:** Run sawtools agent-status to see a table of all agents
+with their branch state, commit count, and report status.
+
+**Table columns:** Agent ID, Role (wave1/wave2/critic), Branch name (or "main"
+for critics), Commits on branch since base, Report presence (yes/no),
+Status (not_started / in_progress / complete / blocked).
+
+The --json flag outputs structured JSON for programmatic use.
+
+**Cross-repo:** Checks all repos from saw.config.json when file_ownership has
+repo fields.
+
+**Recommended sequence after interruption:**
+1. sawtools agent-status to see what landed
+2. sawtools reconcile-state to fix IMPL state to match reality
+3. sawtools finalize-wave or skip-merge if already merged
+
+**Related:** E49 (state reconciliation), E7 (completion verification).
+
+---
+
+## E51: finalize-wave Cross-Repo Auto-Detection and Pre-Flight Check
+
+**Auto-detect:** When finalize-wave is run on a cross-repo IMPL without an
+explicit --repo-dir flag, the CLI automatically:
+1. Loads saw.config.json from the directory containing the IMPL doc.
+2. Counts file_ownership entries per repo name for the given wave.
+3. Selects the repo with the most owned files as the primary repo.
+4. Sets --repo-dir to the resolved absolute path.
+5. Logs the selection to stderr.
+
+**Pre-flight warning:** When --repo-dir IS explicitly provided and points to a
+repo that owns 0 files for the given wave, finalize-wave exits with:
+"finalize-wave: IMPL is cross-repo but --repo-dir PATH owns 0 files for wave N
+-- did you mean --repo-dir CORRECT_PATH?"
+
+This is a fatal error (exit 1) — proceeding with the wrong repo-dir silently
+misroutes the merge.
+
+**Scope:** CLI layer only (cmd/sawtools/finalize_wave.go). The engine
+pkg/engine/finalize.go already handles multi-repo via ExtractReposFromManifest.
+
+**Related:** E7 (verify-commits), E21 (quality gates), MR02_UNSCOPED_GATE (E16).
+
+---
+
 ## Supplemental Rule Identifiers
 
 The following identifiers appear in implementation code and comments as
@@ -2287,3 +2374,6 @@ subsection for the full specification.
   diagnosis; distinct from E26 (compile errors vs missing wiring) — see
   also E26, E25, E7, E8
 - E48: Critic agent must commit IMPL doc before stopping — see also E37 (critic gate), E42 (SubagentStop validation), `implementations/claude-code/prompts/agents/critic-agent.md`, `hooks/saw-critic-impl-commit.sh`
+- E49: State Reconciliation After Interruption -- sawtools reconcile-state reads IMPL + git state and derives correct ProtocolState; idempotent; does not commit; cross-repo aware -- see also E7, E38, resume-detect
+- E50: Agent Status Inspection -- sawtools agent-status prints branch/commit/report table per agent; --json flag; cross-repo aware -- see also E49, E7
+- E51: finalize-wave Cross-Repo Auto-Detection -- auto-selects primary repo-dir from saw.config.json when not explicitly set; pre-flight error when wrong repo-dir provided -- see also E7, E38, MR02_UNSCOPED_GATE
