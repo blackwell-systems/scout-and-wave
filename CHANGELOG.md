@@ -24,6 +24,16 @@ Three new tools for recovering from rate limits, crashes, and cross-repo finaliz
 - **Wired into `finalize-scout`** — the check runs before the pre-wave-validate failure gate so scouts get immediate feedback on constraint/ownership divergence before the IMPL is considered validated.
 - **Test coverage** — `TestPreWaveValidateCmd_StaleConstraintWarning` confirms that Agent B mentioning `manager.go` owned by Agent A produces a warning with `Passed=true` (warning-only, not a failure).
 
+### Fixed (2026-04-10) — finalize-wave quality_gates cross-repo routing
+
+`finalize-wave` was silently skipping quality gates with a `repo:` field when running in the primary (protocol) repo. Gates scoped to `scout-and-wave-go` were filtered out instead of routed to the correct directory. This caused every cross-repo IMPL to require manual close after confirming tests passed directly.
+
+- `runGates`, `RunGatesWithCache`, `RunPreMergeGates`, `RunPostMergeGates` in `pkg/protocol/gates.go` — gain a `manifestPath string` parameter; when set, loads `saw.config.json` via `loadSAWConfigRepos` and routes each gate to its named repo's absolute path. Backward compatible: empty `manifestPath` preserves existing single-repo behavior.
+- `pkg/protocol/verify_build.go` — `VerifyBuild` similarly resolves `gate.Repo` to the correct directory for test and lint commands.
+- New helper `resolveGateRepoDir` centralizes repo name → path lookup; unknown repo names surface as a failed gate with a clear error.
+- All 5 caller sites updated: `pkg/engine/finalize.go`, `pkg/engine/finalize_steps.go`, `pkg/engine/runner.go`, `pkg/protocol/baseline_gates.go`, `cmd/sawtools/run_gates_cmd.go`.
+- `protocol/execution-rules.md` E21 updated to document routing behavior.
+
 ### Fixed (2026-04-10) — Sawtools validation fixes: close-impl, validate-briefs, pre-wave-validate
 
 - **`close-impl` now stages and commits the original IMPL path deletion** — after archiving, `git rm <original-path>` is called before the commit so the close-impl commit includes the deletion, the archived copy, and CONTEXT.md in one atomic commit. Eliminates the recurring "stale deleted IMPL path in git status" that required a manual `git rm` after every `close-impl`.
