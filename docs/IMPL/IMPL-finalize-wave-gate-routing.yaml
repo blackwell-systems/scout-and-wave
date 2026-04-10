@@ -44,6 +44,21 @@ file_ownership:
       wave: 1
       action: modify
       repo: scout-and-wave-go
+    - file: pkg/engine/finalize.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/engine/runner.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/protocol/baseline_gates.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
     - file: protocol/execution-rules.md
       agent: A
       wave: 1
