@@ -135,17 +135,21 @@ See `references/impl-targeting.md` for discovery commands, resolution logic, aut
    symbols are assigned to agents. See `references/pre-wave-validation.md`.
 4. **Critic Gate (E37).** Check trigger conditions (3+ agents OR 2+ repos). If triggered:
    ```bash
-   sawtools run-critic "<impl-path>"
+   # Get the critic prompt (safe in Claude Code sessions — no subprocess spawning)
+   CRITIC_PROMPT=$(sawtools run-critic --backend agent-tool "<impl-path>")
    ```
+   Then launch the critic agent using the Agent tool:
+   `Agent(subagent_type=critic-agent, run_in_background=true, description="[SAW:critic:<slug>]", prompt="$CRITIC_PROMPT")`
+   Wait for it to complete, then read `critic_report.verdict` from the IMPL doc.
    - **PASS** → proceed.
-   - **ISSUES (error)** → fix errors in the IMPL doc, then **re-run `sawtools run-critic`**. The pre-wave gate reads `critic_report.verdict` — this field stays ISSUES until the critic is re-run and writes a new verdict. Do NOT manually edit the YAML verdict field.
+   - **ISSUES (error)** → fix errors in the IMPL doc, then re-run E37 (repeat this step). The pre-wave gate reads the verdict field — this field stays ISSUES until the critic agent rewrites it. Do NOT manually edit the YAML verdict field.
    - See `references/pre-wave-validation.md` § E37.
 5. Report suitability verdict, wave structure, file ownership, interface contracts, Scaffolds. Ask user to review.
 6. **Scaffold Agent (conditional):** If Scaffolds has `Status: pending`, launch Scaffold Agent (`[SAW:scaffold:<slug>]`). If `FAILED`, stop. If `committed`, proceed.
 
 If a `docs/IMPL/IMPL-*.yaml` file already exists:
 1. Read it and identify the current wave. Check Scaffolds section: if any file has `Status: pending` or `Status: FAILED`, spawn/fix Scaffold Agent before creating worktrees.
-2. **Critic gate (E37):** Check for non-empty `critic_report` field. If missing and E37 triggered (see `references/pre-wave-validation.md`), run E37. Otherwise skip.
+2. **Critic gate (E37):** Check for non-empty `critic_report` field. If missing and E37 triggered (see `references/pre-wave-validation.md`), run E37 using the --backend agent-tool pattern above. Otherwise skip.
 
 3. **Integration wave (E27):** If `type: integration`, skip worktrees. For each agent: `sawtools prepare-agent --no-worktree`, launch `integration-agent` on main branch with `[SAW:wave{N}:agent-{ID}] wire integration`. Read `agent.integration_model` from config. Agent's `files` list constrains modifications. After all complete, proceed to step 7.
 4. **Solo agent:** If exactly 1 agent (not integration type), skip worktrees. Run `sawtools prepare-agent --no-worktree`, launch `wave-agent` on main branch. After completes, proceed to step 7. Solo agents still operate in Wave Agent role (I6).

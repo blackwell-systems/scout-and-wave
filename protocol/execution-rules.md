@@ -1602,11 +1602,13 @@ entries from 2 or more repos. Optional for smaller IMPLs; can be suppressed with
 `--no-critic` flag on `sawtools run-scout`.
 
 **CLI orchestration note:** In CLI orchestration mode (inside a Claude Code session),
-do NOT use `sawtools run-critic` — that command spawns a `claude` subprocess which
-fails inside an active session. Use the Agent tool instead:
+use `sawtools run-critic --backend agent-tool "<impl-path>"` to get the assembled
+critic prompt without spawning a subprocess. Capture the stdout output and pass it
+as the `prompt` parameter when launching the critic via the Agent tool:
 `Agent(subagent_type=critic-agent, run_in_background=true, description="[SAW:critic:<slug>]",
-prompt="<absolute-impl-path>\n<repo-root>")`. The `sawtools run-critic` command is
-only valid for programmatic/API orchestration outside of a Claude Code session.
+prompt="$(sawtools run-critic --backend agent-tool '<impl-path>')")`.
+The --backend cli mode (default) spawns a subprocess and fails inside
+an active Claude Code session; always use --backend agent-tool in CLI orchestration.
 
 **Required Action:** The orchestrator launches a critic agent with the IMPL doc and
 all source files listed in file_ownership. The critic:
@@ -1693,7 +1695,7 @@ state. Instead:
    - Wrong file: update file_ownership, re-validate (E16), re-run critic
    - Wrong symbol: update interface contract or agent brief, re-validate, re-run critic
    - Missing registration: add registration file to file_ownership, re-validate, re-run critic
-3. After corrections applied, orchestrator re-runs critic (via Agent tool in CLI orchestration; via `sawtools run-critic` in programmatic/API orchestration)
+3. After corrections applied, orchestrator re-runs critic (via `sawtools run-critic --backend agent-tool` + Agent tool launch in CLI mode; via `sawtools run-critic` in programmatic/API orchestration)
 4. Repeat until verdict is PASS, then enter REVIEWED state normally
 
 **Skip condition:** Pass `--no-critic` to `sawtools run-scout` to disable
