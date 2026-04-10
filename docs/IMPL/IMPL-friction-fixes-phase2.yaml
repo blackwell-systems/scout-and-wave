@@ -1,0 +1,461 @@
+title: 'Friction Fixes Phase 2: prepare-wave commit-state default + run-critic agent-tool backend'
+feature_slug: friction-fixes-phase2
+verdict: SUITABLE
+suitability_assessment: |
+    Two independent dogfooding friction points with disjoint file ownership:
+
+    Fix 1 (prepare-wave --commit-state default): Changes default value of one flag in
+    cmd/sawtools/prepare_wave.go plus docstring update in pkg/engine/step_types.go plus
+    test addition. File set is fully independent from Fix 2.
+
+    Fix 2 (run-critic --backend agent-tool): Updates saw-skill.md (protocol repo) and
+    run_critic_cmd_test.go (Go engine repo). The engine-side BuildCriticPrompt function
+    is already implemented and working. The gap is missing test coverage and the
+    Orchestrator skill still uses the subprocess pattern that fails in Claude Code.
+
+    Parallelization value: SUITABLE. Two agents with disjoint file sets. Build cycle
+    for Go is ~30s+. Protocol docs changes are markdown-only and fast.
+
+    Estimated times:
+    - Scout phase: ~10 min
+    - Agent execution: ~2 agents x ~10 min avg, parallel = ~10 min
+    - Merge & verification: ~3 min
+    Total SAW time: ~23 min
+
+    Sequential baseline: ~2 x 10 min = ~20 min
+    Recommendation: Marginal parallel gain; clean coordination artifact justifies SAW.
+test_command: GOWORK=off go test ./...
+lint_command: GOWORK=off go vet ./...
+file_ownership:
+    - file: cmd/sawtools/prepare_wave.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: pkg/engine/step_types.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: cmd/sawtools/prepare_wave_test.go
+      agent: A
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: cmd/sawtools/run_critic_cmd_test.go
+      agent: B
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: implementations/claude-code/prompts/saw-skill.md
+      agent: B
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+    - file: protocol/execution-rules.md
+      agent: B
+      wave: 1
+      action: modify
+      repo: scout-and-wave
+interface_contracts:
+    - name: prepare-wave --commit-state default behavior
+      description: |
+        The --commit-state flag in cmd/sawtools/prepare_wave.go changes default from
+        false to true. Engine behavior in pkg/engine/prepare.go is unchanged. The
+        CommitState field in PrepareWaveOpts remains bool; only the CLI flag default changes.
+      definition: |
+        // Flag registration before (false default):
+        // cmd.Flags().BoolVar(&commitState, "commit-state", false, "...")
+        //
+        // Flag registration after (true default):
+        // cmd.Flags().BoolVar(&commitState, "commit-state", true, "Auto-commit SAW-owned
+        // state changes (IMPL yaml, gate-cache, docs/IMPL/, docs/CONTEXT.md) before
+        // working-dir check. Does not commit user code. Use --commit-state=false to disable.")
+      location: cmd/sawtools/prepare_wave.go
+    - name: run-critic --backend agent-tool output contract
+      description: |
+        When --backend agent-tool is passed, sawtools run-critic prints the full
+        critic-agent.md prompt (with IMPL path and repo roots appended) to stdout
+        and exits 0. The Orchestrator captures stdout and passes it as the prompt
+        parameter for Agent(subagent_type=critic-agent, ...).
+      definition: |
+        // Output format (already implemented):
+        // stdout: <critic-agent.md content> + "\n\n## IMPL Doc Path\n<path>\n\n## Repository Root(s)\n<root>\n"
+        // exit code: 0 on success, non-zero on error (errors go to stderr)
+      location: pkg/engine/critic.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## Role
+            Fix prepare-wave --commit-state to default to true, update the docstring
+            in step_types.go, and add a test verifying the new default.
+
+            ## Repo
+            All your files are in /Users/dayna.blackwell/code/scout-and-wave-go
+
+            ## Context
+            The --commit-state flag auto-commits SAW-owned state changes (IMPL yaml,
+            gate-cache, docs/IMPL/, docs/CONTEXT.md) before the working-directory dirty
+            check. Without it, tools that write to the IMPL doc between the critic commit
+            and prepare-wave (pre-wave-validate --fix, set-injection-method) leave the
+            working dir dirty and prepare-wave fails. This auto-commit behavior is safe
+            and should be on by default. The user-code guard already exists and is not
+            touched by this task.
+
+            ## What to Change
+
+            ### File 1: cmd/sawtools/prepare_wave.go
+
+            Read the file. Find the BoolVar call for the commit-state flag. The exact
+            text to find and replace:
+
+            Find:
+            ```
+            cmd.Flags().BoolVar(&commitState, "commit-state", false, "Auto-commit SAW-owned state changes (IMPL yaml + gate-cache) before working-dir check. Does not commit user code.")
+            ```
+
+            Replace with:
+            ```
+            cmd.Flags().BoolVar(&commitState, "commit-state", true, "Auto-commit SAW-owned state changes (IMPL yaml, gate-cache, docs/IMPL/, docs/CONTEXT.md) before working-dir check. Does not commit user code. Use --commit-state=false to disable.")
+            ```
+
+            Also in the same file, find the Long description paragraph. The exact text to find:
+
+            ```
+            Use --commit-state in PROGRAM context when calling prepare-wave for
+            multiple IMPLs in a tier. SAW-owned state changes (IMPL yaml state
+            advances, gate-cache updates) are auto-committed so the second
+            prepare-wave call does not fail with "working directory is dirty".
+            User code changes are NOT auto-committed; they still cause the command
+            to fail with a descriptive error.
+            ```
+
+            Replace that paragraph with:
+
+            ```
+            SAW-owned state changes (IMPL yaml, gate-cache, docs/IMPL/, docs/CONTEXT.md)
+            are auto-committed before the working-directory check by default, so tools
+            that write to the IMPL doc between the critic commit and prepare-wave
+            (e.g., pre-wave-validate --fix, set-injection-method) do not cause false
+            dirty-dir failures. User code changes are NOT auto-committed; they still
+            cause the command to fail with a descriptive error. Use --commit-state=false
+            to disable auto-commit of SAW state files.
+            ```
+
+            ### File 2: pkg/engine/step_types.go
+
+            Read the file. Find the CommitState field docstring in PrepareWaveOpts.
+            The exact text to find:
+
+            ```
+            	// CommitState auto-commits SAW-owned state changes (IMPL yaml, gate-cache,
+            	// docs/IMPL/, docs/CONTEXT.md) before the working-directory check. It does
+            	// NOT commit user code changes. Intended for program-context prepare-wave
+            	// calls where the orchestrator manages SAW state between waves.
+            	CommitState bool
+            ```
+
+            Replace with:
+
+            ```
+            	// CommitState auto-commits SAW-owned state changes (IMPL yaml, gate-cache,
+            	// docs/IMPL/, docs/CONTEXT.md) before the working-directory check. It does
+            	// NOT commit user code changes. Enabled by default via the --commit-state
+            	// flag (default: true) in cmd/sawtools/prepare_wave.go.
+            	CommitState bool
+            ```
+
+            ### File 3: cmd/sawtools/prepare_wave_test.go
+
+            Read the file. Append the following test function at the end of the file,
+            after the last closing brace:
+
+            ```go
+            // TestPrepareWaveCmd_CommitStateFlagDefaultsToTrue verifies that the
+            // --commit-state flag defaults to true (auto-commit SAW state before
+            // working-dir check is on by default).
+            func TestPrepareWaveCmd_CommitStateFlagDefaultsToTrue(t *testing.T) {
+            	cmd := newPrepareWaveCmd()
+            	flag := cmd.Flags().Lookup("commit-state")
+            	if flag == nil {
+            		t.Fatal("expected --commit-state flag to be registered")
+            	}
+            	if flag.DefValue != "true" {
+            		t.Errorf("expected --commit-state default to be %q, got %q", "true", flag.DefValue)
+            	}
+            }
+            ```
+
+            ## Verification Gate
+
+            ```bash
+            # Build check
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && GOWORK=off go build ./...
+
+            # Run targeted tests
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && GOWORK=off go test ./cmd/sawtools/... -run "TestPrepareWave" -v -count=1
+
+            # Postcondition: verify flag default changed
+            grep 'commit-state.*true' /Users/dayna.blackwell/code/scout-and-wave-go/cmd/sawtools/prepare_wave.go
+            # Expected: one line containing BoolVar with true default
+
+            # Postcondition: verify docstring updated
+            grep 'Enabled by default' /Users/dayna.blackwell/code/scout-and-wave-go/pkg/engine/step_types.go
+            # Expected: one line
+
+            # Postcondition: new test exists
+            grep 'TestPrepareWaveCmd_CommitStateFlagDefaultsToTrue' /Users/dayna.blackwell/code/scout-and-wave-go/cmd/sawtools/prepare_wave_test.go
+            # Expected: one line
+            ```
+
+            ## Constraints
+            - Do NOT modify pkg/engine/prepare.go.
+            - Do NOT change the var declaration for commitState; only the BoolVar call changes.
+            - Do NOT modify any files outside your ownership list.
+          files:
+            - cmd/sawtools/prepare_wave.go
+            - pkg/engine/step_types.go
+            - cmd/sawtools/prepare_wave_test.go
+        - id: B
+          task: |
+            ## Role
+            Add test coverage for --backend agent-tool in run_critic_cmd_test.go,
+            update saw-skill.md to use the agent-tool backend, and update E37 in
+            execution-rules.md to document the corrected pattern.
+
+            ## Repos
+            - Go engine files: /Users/dayna.blackwell/code/scout-and-wave-go
+            - Protocol files: /Users/dayna.blackwell/code/scout-and-wave
+
+            ## Context
+
+            The engine function that assembles the critic prompt is already fully
+            implemented in pkg/engine/critic.go. When
+            "sawtools run-critic --backend agent-tool IMPL-path" is called, it:
+            1. Loads the IMPL doc
+            2. Loads critic-agent.md with reference injection
+            3. Appends IMPL Doc Path and Repository Root(s) sections to the prompt
+            4. Prints the assembled prompt to stdout
+            5. Exits 0 (no subprocess spawning)
+
+            The problem: saw-skill.md tells the Orchestrator to run
+            "sawtools run-critic IMPL-path" directly (no --backend flag). That mode
+            spawns a claude subprocess, which fails inside a Claude Code session.
+            E37 in execution-rules.md says "do NOT use sawtools run-critic" but
+            saw-skill.md contradicts this. The fix aligns both documents to use
+            --backend agent-tool, which does not spawn a subprocess.
+
+            ## What to Change
+
+            ### File 1: cmd/sawtools/run_critic_cmd_test.go
+
+            Read the file. After the closing brace of the last test function in the
+            file, append two new test functions:
+
+            ```go
+            // TestRunCriticCmd_BackendAgentToolRequiresAbsolutePath verifies that
+            // --backend agent-tool rejects relative IMPL paths before attempting
+            // to build the critic prompt.
+            func TestRunCriticCmd_BackendAgentToolRequiresAbsolutePath(t *testing.T) {
+            	cmd := newRunCriticCmd()
+            	cmd.SetArgs([]string{"relative/path/IMPL-foo.yaml", "--backend", "agent-tool"})
+            	err := cmd.Execute()
+            	if err == nil {
+            		t.Fatal("expected error for relative impl-path with --backend agent-tool")
+            	}
+            	if !strings.Contains(err.Error(), "absolute") {
+            		t.Errorf("expected 'absolute' in error, got: %v", err)
+            	}
+            }
+
+            // TestRunCriticCmd_BackendAgentToolNonExistentIMPL verifies that
+            // --backend agent-tool rejects a non-existent IMPL path.
+            func TestRunCriticCmd_BackendAgentToolNonExistentIMPL(t *testing.T) {
+            	cmd := newRunCriticCmd()
+            	cmd.SetArgs([]string{"/nonexistent/path/IMPL-missing.yaml", "--backend", "agent-tool"})
+            	err := cmd.Execute()
+            	if err == nil {
+            		t.Fatal("expected error for non-existent IMPL path with --backend agent-tool")
+            	}
+            	if !strings.Contains(err.Error(), "does not exist") {
+            		t.Errorf("expected 'does not exist' in error, got: %v", err)
+            	}
+            }
+            ```
+
+            ### File 2: implementations/claude-code/prompts/saw-skill.md
+
+            Read the file. Find the E37 critic gate step in the scout flow. The exact
+            text to find:
+
+            ```
+            4. **Critic Gate (E37).** Check trigger conditions (3+ agents OR 2+ repos). If triggered:
+               ```bash
+               sawtools run-critic "<impl-path>"
+               ```
+               - **PASS** → proceed.
+               - **ISSUES (error)** → fix errors in the IMPL doc, then **re-run `sawtools run-critic`**. The pre-wave gate reads `critic_report.verdict` — this field stays ISSUES until the critic is re-run and writes a new verdict. Do NOT manually edit the YAML verdict field.
+               - See `references/pre-wave-validation.md` § E37.
+            ```
+
+            Replace with:
+
+            ```
+            4. **Critic Gate (E37).** Check trigger conditions (3+ agents OR 2+ repos). If triggered:
+               ```bash
+               # Get the critic prompt (safe in Claude Code sessions — no subprocess spawning)
+               CRITIC_PROMPT=$(sawtools run-critic --backend agent-tool "<impl-path>")
+               ```
+               Then launch the critic agent using the Agent tool:
+               `Agent(subagent_type=critic-agent, run_in_background=true, description="[SAW:critic:<slug>]", prompt="$CRITIC_PROMPT")`
+               Wait for it to complete, then read `critic_report.verdict` from the IMPL doc.
+               - **PASS** → proceed.
+               - **ISSUES (error)** → fix errors in the IMPL doc, then re-run E37 (repeat this step). The pre-wave gate reads the verdict field — this field stays ISSUES until the critic agent rewrites it. Do NOT manually edit the YAML verdict field.
+               - See `references/pre-wave-validation.md` § E37.
+            ```
+
+            Also in saw-skill.md, find the "If a docs/IMPL/IMPL-*.yaml file already exists"
+            section. Find this text:
+
+            ```
+            2. **Critic gate (E37):** Check for non-empty `critic_report` field. If missing and E37 triggered (see `references/pre-wave-validation.md`), run E37. Otherwise skip.
+            ```
+
+            Replace with:
+
+            ```
+            2. **Critic gate (E37):** Check for non-empty `critic_report` field. If missing and E37 triggered (see `references/pre-wave-validation.md`), run E37 using the --backend agent-tool pattern above. Otherwise skip.
+            ```
+
+            ### File 3: protocol/execution-rules.md
+
+            Read the file. Find the E37 CLI orchestration note. The exact text to find:
+
+            ```
+            **CLI orchestration note:** In CLI orchestration mode (inside a Claude Code session),
+            do NOT use `sawtools run-critic` — that command spawns a `claude` subprocess which
+            fails inside an active session. Use the Agent tool instead:
+            `Agent(subagent_type=critic-agent, run_in_background=true, description="[SAW:critic:<slug>]",
+            prompt="<absolute-impl-path>\n<repo-root>")`. The `sawtools run-critic` command is
+            only valid for programmatic/API orchestration outside of a Claude Code session.
+            ```
+
+            Replace with:
+
+            ```
+            **CLI orchestration note:** In CLI orchestration mode (inside a Claude Code session),
+            use `sawtools run-critic --backend agent-tool "<impl-path>"` to get the assembled
+            critic prompt without spawning a subprocess. Capture the stdout output and pass it
+            as the `prompt` parameter when launching the critic via the Agent tool:
+            `Agent(subagent_type=critic-agent, run_in_background=true, description="[SAW:critic:<slug>]",
+            prompt="$(sawtools run-critic --backend agent-tool '<impl-path>')")`.
+            The --backend cli mode (default) spawns a subprocess and fails inside
+            an active Claude Code session; always use --backend agent-tool in CLI orchestration.
+            ```
+
+            Also find this E37 text:
+
+            ```
+            3. After corrections applied, orchestrator re-runs critic (via Agent tool in CLI orchestration; via `sawtools run-critic` in programmatic/API orchestration)
+            ```
+
+            Replace with:
+
+            ```
+            3. After corrections applied, orchestrator re-runs critic (via `sawtools run-critic --backend agent-tool` + Agent tool launch in CLI mode; via `sawtools run-critic` in programmatic/API orchestration)
+            ```
+
+            ## Verification Gate
+
+            ```bash
+            # Run targeted Go tests
+            cd /Users/dayna.blackwell/code/scout-and-wave-go && GOWORK=off go test ./cmd/sawtools/... -run "TestRunCritic" -v -count=1
+
+            # Postcondition: new tests exist
+            grep 'TestRunCriticCmd_BackendAgentTool' /Users/dayna.blackwell/code/scout-and-wave-go/cmd/sawtools/run_critic_cmd_test.go
+            # Expected: two lines (two function names)
+
+            # Postcondition: saw-skill.md updated to use agent-tool
+            grep 'agent-tool' /Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/prompts/saw-skill.md
+            # Expected: at least one line
+
+            # Postcondition: bare sawtools run-critic call removed from saw-skill.md
+            grep 'sawtools run-critic "' /Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/prompts/saw-skill.md
+            # Expected: empty output
+
+            # Postcondition: execution-rules.md updated
+            grep 'backend agent-tool' /Users/dayna.blackwell/code/scout-and-wave/protocol/execution-rules.md
+            # Expected: at least one line
+            ```
+
+            ## Constraints
+            - Do NOT modify pkg/engine/critic.go or pkg/engine/scout_run.go.
+            - Do NOT modify any Go source files other than cmd/sawtools/run_critic_cmd_test.go.
+            - The two new tests are error-path tests; they do not need real IMPL files.
+            - Do NOT modify any files outside your ownership list.
+          files:
+            - cmd/sawtools/run_critic_cmd_test.go
+            - implementations/claude-code/prompts/saw-skill.md
+            - protocol/execution-rules.md
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: GOWORK=off go build ./...
+          required: true
+          repo: scout-and-wave-go
+        - type: test
+          command: GOWORK=off go test ./cmd/sawtools/... ./pkg/engine/...
+          required: true
+          repo: scout-and-wave-go
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: Agent A changes commitBaseline instead of commitState BoolVar call
+          likelihood: low
+          impact: medium
+          mitigation: |
+            Task provides exact verbatim text anchor including variable name &commitState.
+            Postcondition grep confirms the change landed correctly.
+        - scenario: Agent B test fails because error message string is wrong
+          likelihood: low
+          impact: low
+          mitigation: |
+            Both tests mirror the existing TestRunCriticCmd_MissingImplPath pattern.
+            The "absolute" and "does not exist" error strings come from existing validation
+            code in run_critic_cmd.go that runs before --backend is checked.
+        - scenario: Agent B breaks nested backtick fencing in saw-skill.md
+          likelihood: medium
+          impact: low
+          mitigation: |
+            Task provides exact replacement text verbatim. Agent must use the Edit tool
+            with exact string matching. The CRITIC_PROMPT bash variable pattern is standard.
+        - scenario: Agent A introduces a compile error
+          likelihood: low
+          impact: medium
+          mitigation: |
+            Change is a single-line flag default change. Verification gate includes go build.
+            Postcondition grep catches if the wrong value was written.
+known_issues:
+    - title: validate-briefs false positives for cross-repo Agent B symbols
+      description: |
+        The validate-briefs tool reports 3 false-positive symbol_missing errors for
+        Agent B: the words claude, critic_report, and prompt in protocol/execution-rules.md.
+        These words DO exist in that file. Root cause: briefResolveFilePath uses repo name
+        (scout-and-wave) as a path prefix, constructing relative paths instead of absolute
+        ones. The agent briefs are accurate. Manually verify with grep before proceeding.
+critic_report:
+    verdict: PASS
+    agent_reviews:
+        A:
+            agent_id: A
+            verdict: PASS
+        B:
+            agent_id: B
+            verdict: PASS
+    summary: 'All agent briefs verified against codebase. Agent A: commit-state flag exists with false default (correct anchor text confirmed), CommitState docstring exists with expected text, test file exists for new test. Agent B: run_critic_cmd_test.go exists, BuildCriticPrompt implemented in pkg/engine/critic.go, --backend agent-tool mode implemented in run_critic_cmd.go (lines 70-80), error messages ''absolute'' and ''does not exist'' confirmed in source, saw-skill.md exists with E37 section to replace, execution-rules.md contains both E37 text anchors to replace.'
+    reviewed_at: "2026-04-10T17:09:35Z"
+    issue_count: 0
+state: SCOUT_PENDING
