@@ -1,0 +1,754 @@
+title: 'sawtools Recovery Improvements: reconcile-state, agent-status, finalize-wave cross-repo pre-flight'
+feature_slug: recovery-improvements
+verdict: SUITABLE
+suitability_assessment: |
+    Five distinct file zones: (1) cmd/sawtools/reconcile_state_cmd.go (new),
+    (2) cmd/sawtools/reconcile_state_cmd_test.go (new), (3) cmd/sawtools/agent_status_cmd.go
+    (new), (4) cmd/sawtools/agent_status_cmd_test.go (new), (5) cmd/sawtools/finalize_wave.go
+    (modify — auto-detect + pre-flight), (6) cmd/sawtools/finalize_wave_test.go (new test
+    functions, append-only), (7) protocol doc updates, (8) saw-skill.md update,
+    (9) main.go registration.
+    All agent boundaries are clean: new commands (A, B) do not touch each other's files.
+    The finalize-wave changes (C) are isolated to that file pair.
+    Protocol docs and saw-skill.md (D) are in the scout-and-wave repo.
+
+    Suitability gate:
+    1. File decomposition: 5+ disjoint zones across two repos. Suitable.
+    2. No root-cause investigation needed — requirements are fully specified. Suitable.
+    3. Interface contracts: all three features use existing protocol.Load, git.BranchExists,
+       config.Load patterns. Cross-agent interface is the engine ExtractReposFromManifest
+       function (already exported). Suitable.
+    4. Pre-implementation check: all three commands are new (not already implemented).
+       finalize-wave auto-detect is not present in current code. Suitable.
+    5. Parallelization value: Go test cycle is ~10s per package; 4 independent agents
+       (2 new commands + 1 finalize-wave changes + 1 protocol docs). Clear speedup.
+
+    Estimated times:
+    - Scout phase: ~15 min (this analysis)
+    - Agent execution: ~4 agents x ~15 min avg = 60 min wall time, ~30 min parallelized
+    - Merge and verification: ~5 min
+    Total SAW time: ~50 min
+
+    Sequential baseline: ~60 min
+    Time savings: ~10 min (17% faster). Recommendation: Proceed.
+test_command: GOWORK=off go test ./cmd/sawtools/... ./pkg/protocol/... ./internal/git/...
+lint_command: GOWORK=off go vet ./...
+file_ownership:
+    - file: cmd/sawtools/reconcile_state_cmd.go
+      agent: A
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: cmd/sawtools/reconcile_state_cmd_test.go
+      agent: A
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: cmd/sawtools/agent_status_cmd.go
+      agent: B
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: cmd/sawtools/agent_status_cmd_test.go
+      agent: B
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: cmd/sawtools/finalize_wave.go
+      agent: C
+      wave: 1
+      action: modify
+      repo: scout-and-wave-go
+    - file: cmd/sawtools/finalize_wave_test.go
+      agent: C
+      wave: 1
+      action: new
+      repo: scout-and-wave-go
+    - file: cmd/sawtools/main.go
+      agent: D
+      wave: 2
+      action: modify
+      repo: scout-and-wave-go
+    - file: protocol/execution-rules.md
+      agent: D
+      wave: 2
+      action: modify
+      repo: scout-and-wave
+    - file: implementations/claude-code/prompts/saw-skill.md
+      agent: D
+      wave: 2
+      action: modify
+      repo: scout-and-wave
+interface_contracts:
+    - name: ReconcileStateResult
+      description: Output type for the reconcile-state command. Returned as JSON on stdout.
+      definition: |
+        type ReconcileStateResult struct {
+            PreviousState     string             `json:"previous_state"`
+            DerivedState      string             `json:"derived_state"`
+            StateChanged      bool               `json:"state_changed"`
+            Evidence          []string           `json:"evidence"`
+            RecommendedAction string             `json:"recommended_action"`
+            AgentSummary      []AgentObservation `json:"agent_summary"`
+        }
+
+        type AgentObservation struct {
+            ID              string `json:"id"`
+            Wave            int    `json:"wave"`
+            BranchExists    bool   `json:"branch_exists"`
+            BranchMerged    bool   `json:"branch_merged"`
+            HasReport       bool   `json:"has_report"`
+            CommitReachable bool   `json:"commit_reachable"`
+        }
+      location: cmd/sawtools/reconcile_state_cmd.go
+    - name: AgentStatusRow
+      description: One row in the agent-status table output. Combines IMPL doc data with git state.
+      definition: |
+        type AgentStatusRow struct {
+            ID          string `json:"id"`
+            Role        string `json:"role"`
+            Branch      string `json:"branch"`
+            CommitCount int    `json:"commit_count"`
+            HasReport   bool   `json:"has_report"`
+            Status      string `json:"status"`
+        }
+
+        type AgentStatusResult struct {
+            IMPLSlug string           `json:"impl_slug"`
+            State    string           `json:"state"`
+            Agents   []AgentStatusRow `json:"agents"`
+        }
+      location: cmd/sawtools/agent_status_cmd.go
+    - name: autoDetectRepoDir
+      description: |-
+        Helper added to finalize_wave.go CLI layer. Finds the primary repo for
+        a wave by counting file_ownership entries per repo name and resolving
+        via saw.config.json.
+      definition: |
+        // autoDetectRepoDir finds the primary repo for a given wave by counting
+        // file_ownership entries per repo name, then resolving the name to a path
+        // via saw.config.json.
+        // Returns ("", false, "", nil) when auto-detect is not applicable.
+        func autoDetectRepoDir(manifestPath string, waveNum int) (string, bool, string, error)
+
+        // crossRepoOwnsFiles returns true if repoDir owns at least one file
+        // in file_ownership for the given wave.
+        func crossRepoOwnsFiles(manifest *protocol.IMPLManifest, waveNum int, repoDir string) bool
+      location: cmd/sawtools/finalize_wave.go
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## Role
+            Implement the sawtools reconcile-state command.
+
+            ## What to implement
+
+            ### File: cmd/sawtools/reconcile_state_cmd.go
+
+            New cobra command with Use: "reconcile-state <manifest-path>" that:
+
+            1. Loads the IMPL manifest from the given path using protocol.Load.
+            2. Iterates over ALL waves and agents in the manifest.
+            3. For each agent, checks git state in each repo. Use config.Load to
+               resolve repo names from file_ownership.Repo to absolute paths, the same
+               pattern as engine.ExtractReposFromManifest in pkg/engine/finalize.go.
+               Check: does protocol.BranchName(slug, wave, agentID) exist via git.BranchExists?
+               Check: is the branch merged into HEAD using git.IsAncestor with the SHA from
+               the completion report?
+               Check: does a completion report exist in manifest.CompletionReports[agentID]?
+               Check: is the completion report's commit SHA reachable from HEAD?
+               Also check legacy branch via protocol.LegacyBranchName(wave, agentID).
+            4. Additional checks:
+               - Is manifest.CriticReport non-nil and non-empty? If so, critic has run.
+               - Is the current state already COMPLETE? If yes: no-op, print message, exit 0.
+            5. Derive the correct ProtocolState from observations:
+               - WAVE_VERIFIED: all agents in highest-numbered wave have reports AND all
+                 completion report commits are reachable from HEAD.
+               - WAVE_EXECUTING: any agent has a branch OR any agent has a completion
+                 report (but not all do, or branches still exist).
+               - REVIEWED: CriticReport is non-nil with non-empty Verdict AND current state
+                 is SCOUT_PENDING or SCOUT_VALIDATING.
+               - SCOUT_PENDING: no completion reports, no branches, no critic report.
+               - Otherwise: keep current state (no change, emit warning).
+            6. If derived state differs from current state:
+               - Write it using protocol.SetImplState with Commit set to false.
+               - Print to stderr: "reconcile-state: state changed: OLD -> NEW"
+            7. Marshal ReconcileStateResult as JSON and print to stdout.
+            8. Print a human-readable summary to stderr with per-agent status,
+               what state was derived and why, and what action to take next.
+
+            The command must be idempotent and safe to run at any time.
+
+            For cross-repo IMPLs: use config.Load(filepath.Dir(manifestPath)) to resolve
+            repo names to absolute paths. Check git state in all repos.
+
+            ### File: cmd/sawtools/reconcile_state_cmd_test.go
+
+            Tests in package main (same pattern as close_impl_cmd_test.go):
+
+            TestReconcileState_AllComplete: IMPL with 2 agents both having completion reports,
+            commits reachable from HEAD, branches deleted. Expected derived state: WAVE_VERIFIED.
+
+            TestReconcileState_NoProgress: IMPL in SCOUT_PENDING, no branches, no reports.
+            Expected: state unchanged (SCOUT_PENDING, state_changed: false).
+
+            TestReconcileState_PartialProgress: IMPL with 2 agents, only 1 has a completion
+            report. Expected derived state: WAVE_EXECUTING.
+
+            TestReconcileState_CriticReportPresent: IMPL in SCOUT_PENDING with CriticReport
+            set and a non-empty Verdict. Expected derived state: REVIEWED.
+
+            TestReconcileState_AlreadyComplete: IMPL in COMPLETE state. Should return early
+            with no state change, state_changed: false.
+
+            Use git.Run to create real temp git repos with commits so git.IsAncestor works.
+            Pattern: git -C dir init, git -C dir add, git -C dir commit in t.TempDir().
+
+            ## Imports needed
+            ```
+            "github.com/blackwell-systems/scout-and-wave-go/internal/git"
+            "github.com/blackwell-systems/scout-and-wave-go/pkg/config"
+            "github.com/blackwell-systems/scout-and-wave-go/pkg/protocol"
+            "github.com/spf13/cobra"
+            ```
+
+            ## Verification gate
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go
+            GOWORK=off go build ./cmd/sawtools/... 2>&1
+            GOWORK=off go vet ./cmd/sawtools/... 2>&1
+            GOWORK=off go test ./cmd/sawtools/ -run TestReconcileState -v 2>&1
+            # Postconditions:
+            grep -c "reconcile-state" cmd/sawtools/reconcile_state_cmd.go
+            # Expected: 1 or more (Use field)
+            grep -c "ReconcileStateResult" cmd/sawtools/reconcile_state_cmd.go
+            # Expected: 1 or more (type definition and usage)
+            ```
+
+            ## Constraints
+            - Do NOT modify cmd/sawtools/main.go — that is owned by Agent D in Wave 2.
+            - Do NOT modify finalize_wave.go or agent_status_cmd.go.
+            - Do NOT call protocol.SetImplState with Commit: true — reconcile-state does
+              not commit; the orchestrator decides whether to commit afterward.
+            - Do NOT define AgentStatusRow or AgentStatusResult — those belong to Agent B.
+          files:
+            - cmd/sawtools/reconcile_state_cmd.go
+            - cmd/sawtools/reconcile_state_cmd_test.go
+        - id: B
+          task: |
+            ## Role
+            Implement the sawtools agent-status command.
+
+            ## What to implement
+
+            ### File: cmd/sawtools/agent_status_cmd.go
+
+            New cobra command with Use: "agent-status <manifest-path>" that reads the
+            IMPL doc and git state, then prints a table or JSON.
+
+            Default table output format:
+            ```
+            IMPL: fix-inspector-findings  State: WAVE_EXECUTING
+
+            Agent  Role    Branch                       Commits  Report  Status
+            A      wave1   saw/slug/wave1-agent-A       1        yes     complete
+            B      wave1   saw/slug/wave1-agent-B       0        no      in_progress
+            critic critic  (main)                       1        yes     complete
+            ```
+
+            Table fields:
+            - Agent: ID from manifest (e.g., "A", "B")
+            - Role: "wave1", "wave2", etc. for wave agents; "critic" for the critic row
+            - Branch: protocol.BranchName result, or "(main)" for critic row
+            - Commits: count via git.CommitCount(repoPath, "HEAD", branch); 0 if branch absent
+            - Report: "yes" if manifest.CompletionReports[agentID] exists, else "no"
+            - Status: "complete" if HasReport AND commits > 0 AND branch merged or absent with
+              reachable SHA; "in_progress" if branch exists AND commits > 0 AND no report;
+              "blocked" if report status is "blocked" or "partial"; "not_started" otherwise
+
+            Critic row: if manifest.CriticReport is non-nil and non-empty, add a row with:
+            ID "critic", Role "critic", Branch "(main)". For Commits, use git.LogOneline to
+            count commits matching [SAW:critic:<slug>] since the wave's base commit
+            (manifest.Waves[0].BaseCommit if set, else skip commit counting and set to -1).
+            Report "yes" if CriticReport.Verdict is non-empty.
+
+            Cross-repo: use config.Load to resolve repo names to absolute paths when
+            file_ownership entries have non-empty Repo fields.
+
+            Add flag --json to output AgentStatusResult as JSON instead of table.
+
+            Use text/tabwriter for table alignment. See observability_query.go for pattern.
+
+            ### File: cmd/sawtools/agent_status_cmd_test.go
+
+            Tests in package main:
+
+            TestAgentStatus_JSONOutput: IMPL with 2 agents, one with completion report.
+            Run with --json flag. Verify JSON output contains the expected impl_slug and
+            agent IDs.
+
+            TestAgentStatus_TableOutput: same IMPL, default output. Verify table header
+            contains "Agent", "Role", "Branch", "Commits", "Report", "Status", and
+            that agent rows appear.
+
+            TestAgentStatus_CriticRow: IMPL with CriticReport set (Verdict non-empty).
+            Verify the output contains "critic" row.
+
+            TestAgentStatus_NoAgents: IMPL with no waves. Should output the IMPL header
+            line without crashing.
+
+            These tests can use protocol.IMPLManifest directly and write it to a temp file.
+            Git branch checks will return false gracefully on temp dirs — that is OK.
+
+            ## Imports needed
+            ```
+            "text/tabwriter"
+            "github.com/blackwell-systems/scout-and-wave-go/internal/git"
+            "github.com/blackwell-systems/scout-and-wave-go/pkg/config"
+            "github.com/blackwell-systems/scout-and-wave-go/pkg/protocol"
+            "github.com/spf13/cobra"
+            ```
+
+            ## Verification gate
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go
+            GOWORK=off go build ./cmd/sawtools/... 2>&1
+            GOWORK=off go vet ./cmd/sawtools/... 2>&1
+            GOWORK=off go test ./cmd/sawtools/ -run TestAgentStatus -v 2>&1
+            # Postconditions:
+            grep -c "agent-status" cmd/sawtools/agent_status_cmd.go
+            # Expected: 1 or more (Use field)
+            grep -c "tabwriter" cmd/sawtools/agent_status_cmd.go
+            # Expected: at least 1
+            grep -c "AgentStatusRow" cmd/sawtools/agent_status_cmd.go
+            # Expected: at least 1 (type definition)
+            ```
+
+            ## Constraints
+            - Do NOT modify cmd/sawtools/main.go — owned by Agent D in Wave 2.
+            - Do NOT modify finalize_wave.go or reconcile_state_cmd.go.
+            - Do NOT define ReconcileStateResult — that belongs to Agent A.
+            - If git operations fail (temp dir, no config), degrade gracefully:
+              set commit_count to 0, branch_exists to false. Do NOT crash or return error.
+          files:
+            - cmd/sawtools/agent_status_cmd.go
+            - cmd/sawtools/agent_status_cmd_test.go
+        - id: C
+          task: |
+            ## Role
+            Add cross-repo auto-detect and pre-flight warning to the finalize-wave CLI command.
+
+            ## What to implement
+
+            ### File: cmd/sawtools/finalize_wave.go
+
+            Read the entire file before making changes. It is ~165 lines.
+
+            Two changes to the RunE function of newFinalizeWaveCmd():
+
+            CHANGE 1: Auto-detect repo-dir for cross-repo IMPLs.
+
+            Find this exact block near the start of RunE:
+            ```
+            			defaultRepoPath := repoDir
+            			if defaultRepoPath == "" {
+            				defaultRepoPath, _ = os.Getwd()
+            			}
+            ```
+
+            After that block, add: if repoDir equals "" or ".", attempt auto-detect:
+            a) Load the manifest using protocol.Load(cmd.Context(), manifestPath).
+               If loading fails, skip auto-detect and continue.
+            b) Check if any file_ownership entry for waveNum has a non-empty Repo field.
+               If none: skip auto-detect (single-repo IMPL).
+            c) Call autoDetectRepoDir(manifestPath, waveNum). If it returns detected=true,
+               set defaultRepoPath to the returned path. Print to stderr:
+               "finalize-wave: auto-detected repo-dir: PATH (from saw.config.json -- primary repo for wave N: REPONAME)"
+
+            CHANGE 2: Pre-flight warning when --repo-dir is explicitly set.
+
+            After the auto-detect block, when repoDir was explicitly provided by the user
+            (repoDir != "" and repoDir != "."), check:
+            a) If manifest was not loaded in step 1, load it now.
+            b) Determine if the IMPL is cross-repo (any file_ownership for waveNum has Repo != "").
+            c) If cross-repo AND crossRepoOwnsFiles(manifest, waveNum, defaultRepoPath) returns false:
+               Call autoDetectRepoDir to get the suggested correct path.
+               Return fmt.Errorf with message:
+               "finalize-wave: IMPL is cross-repo but --repo-dir PATH owns 0 files for wave N -- did you mean --repo-dir CORRECT_PATH?"
+
+            Add two helper functions at the bottom of finalize_wave.go (after the uniqueFiles function):
+
+            Function autoDetectRepoDir(manifestPath string, waveNum int) (repoPath string, detected bool, repoName string, err error):
+            - Load saw.config.json using config.Load(filepath.Dir(manifestPath)).
+              If config load fails, return ("", false, "", nil).
+            - Count file_ownership entries per repo name for the given waveNum.
+            - If no entries have a Repo field, return ("", false, "", nil).
+            - Find the repo name with the most entries.
+            - Look up that name in cfg.Repos to get the absolute path.
+            - If not found, return ("", false, "", nil).
+            - Return (resolvedPath, true, repoName, nil).
+
+            Function crossRepoOwnsFiles(manifest *protocol.IMPLManifest, waveNum int, repoDir string) bool:
+            - Resolve repoDir to an absolute path using filepath.Abs.
+            - Build a set of absolute paths for all repos in file_ownership for waveNum.
+            - Use config.Load(filepath.Dir of the manifest... wait, we don't have manifestPath here).
+              Instead: accept the resolved repo paths as a parameter, or do a simple name comparison.
+              Simpler approach: compare the base name of repoDir against the Repo field values in
+              file_ownership. Return true if any file_ownership entry for waveNum has
+              filepath.Base(repoDir) == entry.Repo.
+            - If no entries have Repo set (single-repo IMPL), return true (no mismatch possible).
+
+            IMPORTANT: Do NOT modify pkg/engine/finalize.go. All changes are in the CLI layer.
+            The engine FinalizeWave already handles multi-repo via ExtractReposFromManifest.
+
+            ### File: cmd/sawtools/finalize_wave_test.go
+
+            This file already exists. Read it to understand the existing test patterns.
+            You own this file with action:new which means your job is to APPEND new tests
+            to the end of the existing file without modifying any existing tests.
+
+            Append these 4 new test functions:
+
+            TestAutoDetectRepoDir_CrossRepo: Create a temp dir. Write a minimal IMPL manifest
+            with file_ownership entries having Repo "scout-and-wave-go". Write a saw.config.json
+            in the same dir with repos: [{name: "scout-and-wave-go", path: "/tmp/fake-repo"}].
+            Call autoDetectRepoDir. Verify it returns detected=true and the path from config.
+
+            TestAutoDetectRepoDir_SingleRepo: IMPL with no Repo fields in file_ownership.
+            Call autoDetectRepoDir. Verify it returns detected=false.
+
+            TestCrossRepoOwnsFiles_Match: IMPL with file_ownership Repo "scout-and-wave-go".
+            Call crossRepoOwnsFiles with a repoDir whose base name is "scout-and-wave-go".
+            Verify returns true.
+
+            TestCrossRepoOwnsFiles_NoMatch: Same IMPL, but repoDir base name is "wrong-repo".
+            Verify returns false.
+
+            ## Imports to add to finalize_wave.go if not already present:
+            - "path/filepath"
+            - "github.com/blackwell-systems/scout-and-wave-go/pkg/config"
+
+            filepath is already in finalize_wave.go. Check whether config is already imported
+            before adding it.
+
+            ## Verification gate
+            ```bash
+            cd /Users/dayna.blackwell/code/scout-and-wave-go
+            GOWORK=off go build ./cmd/sawtools/... 2>&1
+            GOWORK=off go vet ./cmd/sawtools/... 2>&1
+            GOWORK=off go test ./cmd/sawtools/ -run "TestAutoDetect|TestCrossRepo" -v 2>&1
+            # Postconditions:
+            grep -c "autoDetectRepoDir" cmd/sawtools/finalize_wave.go
+            # Expected: at least 2 (definition + call)
+            grep -c "crossRepoOwnsFiles" cmd/sawtools/finalize_wave.go
+            # Expected: at least 2 (definition + call)
+            grep -c "auto-detected repo-dir" cmd/sawtools/finalize_wave.go
+            # Expected: 1
+            ```
+
+            ## Constraints
+            - Do NOT modify cmd/sawtools/main.go — owned by Agent D in Wave 2.
+            - Do NOT modify pkg/engine/finalize.go — the engine already handles multi-repo correctly.
+            - Do NOT change existing flag definitions or the existing function signature of
+              newFinalizeWaveCmd. Only add new helper functions and modify RunE internals.
+            - Do NOT touch reconcile_state_cmd.go or agent_status_cmd.go.
+            - When appending to finalize_wave_test.go: do NOT modify existing test functions.
+              Only append new functions after the last existing function.
+          files:
+            - cmd/sawtools/finalize_wave.go
+            - cmd/sawtools/finalize_wave_test.go
+    - number: 2
+      agents:
+        - id: D
+          task: |
+            ## Role
+            Wire new commands into main.go and update protocol documentation.
+
+            ## What to implement
+
+            ### File: cmd/sawtools/main.go (in scout-and-wave-go repo)
+
+            Read the file first. Find the registration block in main(). The last two
+            registered commands before the closing parenthesis of AddCommand are:
+            ```
+            		newCheckTestCascadeCmd(),
+            		newValidateBriefsCmd(),
+            	)
+            ```
+
+            Insert after newValidateBriefsCmd(), (before the closing parenthesis):
+            ```
+            		newReconcileStateCmd(),
+            		newAgentStatusCmd(),
+            ```
+
+            Verify no duplicate registration: grep for "reconcile-state" and "agent-status"
+            in main.go first. If they already appear, skip this step.
+
+            ### File: protocol/execution-rules.md (in scout-and-wave repo)
+
+            The current last numbered rule section is E48 (55 total rule sections).
+            Add 3 new rule sections: E49, E50, E51.
+
+            Find the line "## Supplemental Rule Identifiers" and insert the new rules
+            immediately before it (with a blank line separator).
+
+            Rule E49 content to insert:
+            ```
+            ## E49: State Reconciliation After Interruption
+
+            **Trigger:** After any rate limit, crash, or interrupted finalize-wave, before
+            resuming wave execution or running finalize-wave again.
+
+            **Required Action:** Run sawtools reconcile-state to derive the correct IMPL state
+            from observable git evidence.
+
+            **What it checks:**
+            - Agent branch existence (slug-scoped and legacy formats)
+            - Completion report presence in the IMPL doc
+            - Commit SHA reachability from HEAD for all reported commits
+            - Critic report presence
+
+            **State derivation rules:**
+            | Evidence | Derived State |
+            |----------|--------------|
+            | All agents have reports AND all commits reachable from HEAD | WAVE_VERIFIED |
+            | Some agents have reports OR branches exist | WAVE_EXECUTING |
+            | Critic report present, current state SCOUT_PENDING or SCOUT_VALIDATING | REVIEWED |
+            | No branches, no reports, no critic report | SCOUT_PENDING (unchanged) |
+            | Already COMPLETE | no-op |
+
+            **Output:** JSON to stdout with previous_state, derived_state, state_changed,
+            evidence array, recommended_action, and per-agent observations.
+
+            **Idempotency:** Safe to run at any time. Does NOT commit the state change.
+            The Orchestrator decides whether to commit after reconcile-state reports a change.
+
+            **Cross-repo:** Checks all repos listed in saw.config.json when file_ownership
+            has repo fields.
+
+            **Related:** E7 (completion verification), E38 (gate caching), resume-detect.
+
+            ---
+            ```
+
+            Rule E50 content to insert:
+            ```
+            ## E50: Agent Status Inspection
+
+            **Trigger:** After any interruption, or when the Orchestrator needs to verify
+            what has landed before proceeding.
+
+            **Required Action:** Run sawtools agent-status to see a table of all agents
+            with their branch state, commit count, and report status.
+
+            **Table columns:** Agent ID, Role (wave1/wave2/critic), Branch name (or "main"
+            for critics), Commits on branch since base, Report presence (yes/no),
+            Status (not_started / in_progress / complete / blocked).
+
+            The --json flag outputs structured JSON for programmatic use.
+
+            **Cross-repo:** Checks all repos from saw.config.json when file_ownership has
+            repo fields.
+
+            **Recommended sequence after interruption:**
+            1. sawtools agent-status to see what landed
+            2. sawtools reconcile-state to fix IMPL state to match reality
+            3. sawtools finalize-wave or skip-merge if already merged
+
+            **Related:** E49 (state reconciliation), E7 (completion verification).
+
+            ---
+            ```
+
+            Rule E51 content to insert:
+            ```
+            ## E51: finalize-wave Cross-Repo Auto-Detection and Pre-Flight Check
+
+            **Auto-detect:** When finalize-wave is run on a cross-repo IMPL without an
+            explicit --repo-dir flag, the CLI automatically:
+            1. Loads saw.config.json from the directory containing the IMPL doc.
+            2. Counts file_ownership entries per repo name for the given wave.
+            3. Selects the repo with the most owned files as the primary repo.
+            4. Sets --repo-dir to the resolved absolute path.
+            5. Logs the selection to stderr.
+
+            **Pre-flight warning:** When --repo-dir IS explicitly provided and points to a
+            repo that owns 0 files for the given wave, finalize-wave exits with:
+            "finalize-wave: IMPL is cross-repo but --repo-dir PATH owns 0 files for wave N
+            -- did you mean --repo-dir CORRECT_PATH?"
+
+            This is a fatal error (exit 1) — proceeding with the wrong repo-dir silently
+            misroutes the merge.
+
+            **Scope:** CLI layer only (cmd/sawtools/finalize_wave.go). The engine
+            pkg/engine/finalize.go already handles multi-repo via ExtractReposFromManifest.
+
+            **Related:** E7 (verify-commits), E21 (quality gates), MR02_UNSCOPED_GATE (E16).
+
+            ---
+            ```
+
+            Also update the Cross-References section near the end of the file.
+            Find the line that starts with "- E48:" and add after it:
+            ```
+            - E49: State Reconciliation After Interruption -- sawtools reconcile-state reads IMPL + git state and derives correct ProtocolState; idempotent; does not commit; cross-repo aware -- see also E7, E38, resume-detect
+            - E50: Agent Status Inspection -- sawtools agent-status prints branch/commit/report table per agent; --json flag; cross-repo aware -- see also E49, E7
+            - E51: finalize-wave Cross-Repo Auto-Detection -- auto-selects primary repo-dir from saw.config.json when not explicitly set; pre-flight error when wrong repo-dir provided -- see also E7, E38, MR02_UNSCOPED_GATE
+            ```
+
+            ### File: implementations/claude-code/prompts/saw-skill.md (in scout-and-wave repo)
+
+            Read the entire file (211 lines) before editing.
+
+            Three updates:
+
+            UPDATE 1: Add recovery commands to the Resume detection section.
+            Find the exact line:
+            ```
+            **Resume detection:** Run sawtools resume-detect before wave or status execution. For status, include resume state in report. For wave, report interrupted session and use sawtools build-retry-context for failed agents.
+            ```
+            Replace it with this new text (two paragraphs):
+            ```
+            **Resume detection:** Run sawtools resume-detect before wave or status execution. For status, include resume state in report. For wave, report interrupted session and use sawtools build-retry-context for failed agents.
+
+            **After any rate limit, crash, or interrupted finalize-wave (E49, E50):** Run these commands before resuming:
+            ```bash
+            sawtools agent-status "<absolute-impl-path>"     # see what landed per agent
+            sawtools reconcile-state "<absolute-impl-path>"  # fix IMPL state to match git reality
+            ```
+            If reconcile-state reports state_changed: true, review the recommended_action field before proceeding.
+            ```
+
+            UPDATE 2: Add cross-repo auto-detect note to the finalize-wave step.
+            Find the exact sentence:
+            ```
+            **Always use absolute path for `<manifest-path>`.** Cross-repo IMPLs fail with relative paths. For cross-repo IMPLs, add `--cross-repo-verify` to run baseline gates on all repos after primary merge (catches cross-repo breakage early).
+            ```
+            Replace it with:
+            ```
+            **Always use absolute path for `<manifest-path>`.** Cross-repo IMPLs fail with relative paths. For cross-repo IMPLs, add `--cross-repo-verify` to run baseline gates on all repos after primary merge (catches cross-repo breakage early). **Cross-repo auto-detect (E51):** When `--repo-dir` is omitted on a cross-repo IMPL, `finalize-wave` auto-detects the primary repo from saw.config.json and logs the selection to stderr. You may still provide `--repo-dir` explicitly; if it points to a repo that owns 0 files for the wave, finalize-wave exits with a pre-flight error naming the correct path.
+            ```
+
+            UPDATE 3: Update the E-rule count in the cross-reference note.
+            Find the exact line:
+            ```
+            *`I{N}` = invariants (I1–I6), `E{N}` = execution rules (E1–E47) from `protocol/invariants.md` and `protocol/execution-rules.md`. Numbers are anchors for cross-referencing.*
+            ```
+            Replace it with:
+            ```
+            *`I{N}` = invariants (I1–I6), `E{N}` = execution rules (E1–E51) from `protocol/invariants.md` and `protocol/execution-rules.md`. Numbers are anchors for cross-referencing.*
+            ```
+
+            ## Verification gate
+            ```bash
+            # Check main.go wiring (scout-and-wave-go repo)
+            cd /Users/dayna.blackwell/code/scout-and-wave-go
+            GOWORK=off go build ./cmd/sawtools/... 2>&1
+            grep -c "newReconcileStateCmd" cmd/sawtools/main.go
+            # Expected: 1
+            grep -c "newAgentStatusCmd" cmd/sawtools/main.go
+            # Expected: 1
+
+            # Check protocol docs (scout-and-wave repo)
+            cd /Users/dayna.blackwell/code/scout-and-wave
+            grep -c "^## E[0-9]" protocol/execution-rules.md
+            # Expected: 58 (was 55, added E49 + E50 + E51)
+            grep "E49\|E50\|E51" protocol/execution-rules.md | head -6
+            # Expected: section headers and cross-reference entries
+
+            # Check saw-skill.md
+            grep -c "reconcile-state" implementations/claude-code/prompts/saw-skill.md
+            # Expected: at least 1
+            grep -c "agent-status" implementations/claude-code/prompts/saw-skill.md
+            # Expected: at least 1
+            grep "E1.E51" implementations/claude-code/prompts/saw-skill.md
+            # Expected: the updated range line
+            ```
+
+            ## Constraints
+            - Do NOT modify any .go files other than cmd/sawtools/main.go.
+            - Do NOT modify protocol/invariants.md. Only execution-rules.md.
+            - Insert new E49/E50/E51 rules BEFORE the "## Supplemental Rule Identifiers"
+              section, not at the very end of the file.
+            - Use exact verbatim text matching for all Edit tool calls on saw-skill.md.
+              Do NOT rely on line numbers as anchors — they shift.
+            - Do NOT reformat or reorder existing content in either doc file.
+          files:
+            - cmd/sawtools/main.go
+            - protocol/execution-rules.md
+            - implementations/claude-code/prompts/saw-skill.md
+          dependencies:
+            - A
+            - B
+            - C
+quality_gates:
+    level: standard
+    gates:
+        - type: build
+          command: GOWORK=off go build ./...
+          required: true
+          repo: scout-and-wave-go
+        - type: test
+          command: GOWORK=off go test ./cmd/sawtools/... ./pkg/protocol/... ./internal/git/...
+          required: true
+          repo: scout-and-wave-go
+        - type: lint
+          command: GOWORK=off go vet ./...
+          required: true
+          repo: scout-and-wave-go
+pre_mortem:
+    overall_risk: medium
+    rows:
+        - scenario: |-
+            Agent A or B defines a new type (ReconcileStateResult or AgentStatusRow) but Agent C
+            also defines a type with a similar name in finalize_wave.go, causing a duplicate
+            declaration at merge time.
+          likelihood: low
+          impact: high
+          mitigation: |-
+            Each type is defined in a separate file. ReconcileStateResult is in reconcile_state_cmd.go,
+            AgentStatusRow/AgentStatusResult are in agent_status_cmd.go. Agent C adds only
+            autoDetectRepoDir and crossRepoOwnsFiles to finalize_wave.go — no new types.
+            No overlap is possible given the file ownership split.
+        - scenario: |-
+            Agent C adds autoDetectRepoDir and crossRepoOwnsFiles helper functions but a
+            function with a similar or identical name already exists somewhere in the package.
+          likelihood: medium
+          impact: medium
+          mitigation: |-
+            Agent C MUST read finalize_wave.go in full before implementing. Both function names
+            are uniquely scoped to this new feature and do not exist anywhere in the codebase.
+            Agent C should grep for both names before writing them.
+        - scenario: |-
+            Agent D's edits to saw-skill.md use stale line numbers or slightly wrong text
+            as insertion anchors, causing the Edit tool to fail or insert at wrong location.
+          likelihood: medium
+          impact: medium
+          mitigation: |-
+            Agent D must use exact verbatim text from the file as the search string.
+            The interface_contracts section above provides the exact strings to match.
+            Agent D must read the file first, then confirm the exact text before editing.
+        - scenario: |-
+            Agent C appends test functions to finalize_wave_test.go but accidentally modifies
+            an existing test in the process (e.g., by using the wrong Edit tool range).
+          likelihood: low
+          impact: medium
+          mitigation: |-
+            Agent C must read the existing test file first. Append new test functions after
+            the last existing function. Use Write-at-end or append pattern with exact anchoring.
+            Do not use line numbers. Find the last closing brace of the last test function
+            and insert after it.
+        - scenario: |-
+            Agent D increments the E-rule count to 58 but the current count is not 55 (another
+            rule may have been added between scout and wave execution).
+          likelihood: low
+          impact: low
+          mitigation: |-
+            Agent D must run grep -c "^## E[0-9]" protocol/execution-rules.md before editing.
+            Use the actual current count as baseline. The postcondition check verifies the
+            count increased by exactly 3.
+state: SCOUT_PENDING
+injection_method: manual-fallback
