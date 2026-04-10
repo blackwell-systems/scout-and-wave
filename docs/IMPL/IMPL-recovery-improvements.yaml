@@ -62,7 +62,7 @@ file_ownership:
     - file: cmd/sawtools/finalize_wave_test.go
       agent: C
       wave: 1
-      action: new
+      action: modify
       repo: scout-and-wave-go
     - file: cmd/sawtools/main.go
       agent: D
