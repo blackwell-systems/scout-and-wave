@@ -10,7 +10,7 @@ This document defines the execution rules that govern orchestrator behavior duri
 
 ## Overview
 
-Rules are numbered E1–E47 for cross-referencing and audit; the same convention as invariants (I1–I6). When referenced in implementation files, the E-number serves as an anchor; implementations should embed the canonical definition verbatim alongside the reference.
+Rules are numbered E1–E48 for cross-referencing and audit; the same convention as invariants (I1–I6). When referenced in implementation files, the E-number serves as an anchor; implementations should embed the canonical definition verbatim alongside the reference.
 
 To audit consistency, search implementation files for `E{N}` and verify the embedded definitions match this document.
 
@@ -2161,6 +2161,60 @@ E7 (completion verification), E8 (interface change recovery).
 
 ---
 
+## E48: Critic Agent IMPL Commit Enforcement
+
+**Trigger:** SubagentStop lifecycle event fires for a critic agent (tag `[SAW:critic:*]`).
+
+**Required Action:** Before the critic agent session closes, the critic MUST commit
+the IMPL doc changes produced by `sawtools set-critic-review`. Two enforcement
+mechanisms apply:
+
+1. **E42 SubagentStop hook (`validate_agent_completion`):** Extended to include a
+   commit check in the critic validation path. After verifying `critic_report`
+   content is present, the hook runs `git status --porcelain` on the IMPL doc.
+   If dirty (uncommitted changes or staged-but-not-committed), exits 2 with:
+   `"E48: Critic agent must commit IMPL doc changes before stopping."`
+
+2. **Standalone SubagentStop hook (`hooks/saw-critic-impl-commit.sh`):** A
+   dedicated hook file for critic commit enforcement, parallel to
+   `hooks/saw-worktree-boundary.sh` for wave agent write boundaries. Exits 2
+   if the critic agent's IMPL doc has uncommitted changes.
+
+**IMPL doc location:** Both hooks locate the IMPL doc via `.saw-state/active-impl`
+(written by `prepare-wave`), with fallback to extracting the path from the
+agent_description field. The IMPL doc path MUST appear in the critic's
+`description` (the `[SAW:critic:<slug>]` string passed to the Agent tool) to
+enable fallback detection.
+
+**Commit message format:**
+```
+chore: critic report for <slug> [SAW:critic:<slug>]
+```
+
+**Rationale:** Without E48, critic agents write critic_report to the IMPL doc
+(via `sawtools set-critic-review`) but do not commit the file. The next step
+in the flow is `sawtools prepare-wave`, which fails if the working directory is
+dirty. This creates manual overhead: the orchestrator must commit the IMPL doc
+before proceeding. E48 automates this by enforcing the commit at the agent
+boundary, the same pattern E42 uses for wave agents (I5).
+
+**Critic branch execution context:** Critics run on the main branch, not in a
+worktree. The commit check must use `git -C <repo-root>` (derived from the
+IMPL path), not from a worktree-relative path. This is distinct from wave
+agents, which run in worktrees and use `.saw-ownership.json` to locate the
+worktree root.
+
+**Skip condition:** If the critic runs `sawtools set-critic-review` and the
+command writes the critic_report without modifying the IMPL doc on disk (edge
+case: no-op write), `git status --porcelain` returns empty and E48 passes
+silently. This is correct behavior.
+
+**Related Invariants:** See I4 (IMPL doc as single source of truth — completed
+critic work must be committed), I5 (commit before reporting), E37 (critic gate
+trigger and validation), E42 (SubagentStop validation matrix)
+
+---
+
 ## Supplemental Rule Identifiers
 
 The following identifiers appear in implementation code and comments as
@@ -2230,3 +2284,4 @@ subsection for the full specification.
   auto-applies hotfix when CallerCascadeOnly=true; --dry-run flag for
   diagnosis; distinct from E26 (compile errors vs missing wiring) — see
   also E26, E25, E7, E8
+- E48: Critic agent must commit IMPL doc before stopping — see also E37 (critic gate), E42 (SubagentStop validation), `implementations/claude-code/prompts/agents/critic-agent.md`, `hooks/saw-critic-impl-commit.sh`
