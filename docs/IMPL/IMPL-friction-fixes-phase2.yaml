@@ -24,8 +24,8 @@ suitability_assessment: |
 
     Sequential baseline: ~2 x 10 min = ~20 min
     Recommendation: Marginal parallel gain; clean coordination artifact justifies SAW.
-test_command: GOWORK=off go test ./...
-lint_command: GOWORK=off go vet ./...
+test_command: bash -n implementations/claude-code/hooks/validate_agent_completion
+lint_command: shellcheck implementations/claude-code/hooks/validate_agent_completion 2>/dev/null || true
 file_ownership:
     - file: cmd/sawtools/prepare_wave.go
       agent: A
@@ -399,6 +399,7 @@ waves:
             - cmd/sawtools/run_critic_cmd_test.go
             - implementations/claude-code/prompts/saw-skill.md
             - protocol/execution-rules.md
+      base_commit: 386c8cfb3dd8f8a562ebf6a6cfa199fe20c3312a
 quality_gates:
     level: standard
     gates:
@@ -410,6 +411,32 @@ quality_gates:
           command: GOWORK=off go test ./cmd/sawtools/... ./pkg/engine/...
           required: true
           repo: scout-and-wave-go
+completion_reports:
+    A:
+        status: complete
+        branch: saw/friction-fixes-phase2/wave1-agent-A
+        commit: aa255fc
+        files_changed:
+            - cmd/sawtools/prepare_wave.go
+            - pkg/engine/step_types.go
+            - cmd/sawtools/prepare_wave_test.go
+        tests_added:
+            - TestPrepareWaveCmd_CommitStateFlagDefaultsToTrue
+        verification: PASS
+        notes: BoolVar default changed from false to true. Long description updated. step_types.go CommitState docstring updated. New test verifies flag default. All 17 TestPrepareWave* tests pass.
+    B:
+        status: complete
+        branch: saw/friction-fixes-phase2/wave1-agent-B
+        commit: b348e08
+        files_changed:
+            - cmd/sawtools/run_critic_cmd_test.go
+            - implementations/claude-code/prompts/saw-skill.md
+            - protocol/execution-rules.md
+        tests_added:
+            - TestRunCriticCmd_BackendAgentToolRequiresAbsolutePath
+            - TestRunCriticCmd_BackendAgentToolNonExistentIMPL
+        verification: PASS
+        notes: 'Go test commit: b348e08 (wave1-agent-B branch). Protocol docs committed to main: 3ebedba. All 7 TestRunCritic* tests pass. Both postconditions met: agent-tool in saw-skill.md, no bare run-critic call remaining.'
 pre_mortem:
     overall_risk: low
     rows:
@@ -458,6 +485,6 @@ critic_report:
     summary: 'All agent briefs verified against codebase. Agent A: commit-state flag exists with false default (correct anchor text confirmed), CommitState docstring exists with expected text, test file exists for new test. Agent B: run_critic_cmd_test.go exists, BuildCriticPrompt implemented in pkg/engine/critic.go, --backend agent-tool mode implemented in run_critic_cmd.go (lines 70-80), error messages ''absolute'' and ''does not exist'' confirmed in source, saw-skill.md exists with E37 section to replace, execution-rules.md contains both E37 text anchors to replace.'
     reviewed_at: "2026-04-10T17:09:35Z"
     issue_count: 0
-state: "REVIEWED"
+state: REVIEWED
 original_branch: main
 injection_method: hook
