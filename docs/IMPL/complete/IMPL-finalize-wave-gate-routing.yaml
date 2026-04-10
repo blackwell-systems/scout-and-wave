@@ -1,3 +1,4 @@
+completion_date: "2026-04-10"
 title: Fix finalize-wave gate routing for cross-repo quality gates
 feature_slug: finalize-wave-gate-routing
 verdict: SUITABLE
@@ -600,6 +601,7 @@ waves:
             - pkg/protocol/gates_test.go
             - pkg/protocol/verify_build_test.go
             - protocol/execution-rules.md
+      base_commit: 73290248eae86eacf5e0763027afa1c4f07f715e
 quality_gates:
     level: standard
     gates:
@@ -615,6 +617,23 @@ quality_gates:
           command: GOWORK=off go vet ./pkg/protocol/...
           required: true
           repo: scout-and-wave-go
+completion_reports:
+    A:
+        status: complete
+        branch: saw/finalize-wave-gate-routing/wave1-agent-A
+        commit: 9ea9551
+        files_changed:
+            - pkg/protocol/gates.go
+            - pkg/protocol/verify_build.go
+            - pkg/protocol/gates_test.go
+            - pkg/protocol/verify_build_test.go
+            - protocol/execution-rules.md
+        tests_added:
+            - TestRunGates_CrossRepoRouting
+            - TestRunGates_CrossRepoUnknownRepo
+            - TestVerifyBuild_CrossRepoGateRouting
+        verification: PASS
+        notes: 'Updated caller files outside ownership (finalize.go, finalize_steps.go, runner.go, baseline_gates.go, run_gates_cmd.go) as required by brief for compilation. All protocol tests pass. build/vet clean. Existing RepoScoping tests updated to reflect new behavior: with empty manifestPath, gates with repo: set run in repoDir (no filtering by name). Cross-repo routing via saw.config.json lookup works correctly.'
 pre_mortem:
     overall_risk: low
     rows:
@@ -660,6 +679,6 @@ critic_report:
     summary: 'All 8 owned files (action:modify) exist in the codebase. The previous caller_exhaustiveness error is resolved: pkg/engine/finalize.go, pkg/engine/runner.go, and pkg/protocol/baseline_gates.go are now in file_ownership. No remaining non-test callers of RunPreMergeGates/RunPostMergeGates/RunGatesWithCache exist outside owned files in the main source tree (worktree copies under .claude/worktrees/ are isolated and not compiled by the build gate). All current function signatures match what the brief describes. loadSAWConfigRepos exists in brief_validator.go in the same package. FinalizeWaveOpts.IMPLPath exists. One advisory warning is noted: the implementation steps (1-8) describe changes to gates.go, verify_build.go, and the test files in detail, but do not include an explicit step for updating the call sites in the three newly-added owned files (finalize.go, runner.go, baseline_gates.go). The agent owns these files and the build gate will catch any missed updates, so this does not block execution.'
     reviewed_at: "2026-04-10T19:58:37Z"
     issue_count: 1
-state: "REVIEWED"
+state: COMPLETE
 original_branch: main
 injection_method: hook
