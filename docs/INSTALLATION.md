@@ -32,7 +32,7 @@ polywave-tools verify-install
 
 The installer auto-detects Claude Code and handles everything: skill files, enforcement hooks, settings.json registration, and Agent permission. No manual configuration needed.
 
-For non-Claude-Code platforms, use `./install.sh --generic` to install to `~/.agents/skills/saw/` instead (see [Platform Support](#platform-support) below).
+For non-Claude-Code platforms, use `./install.sh --generic` to install to `~/.agents/skills/polywave/` instead (see [Platform Support](#platform-support) below).
 
 That's it for most users. The Web UI is optional -- see [Step 3](#step-3-web-ui-optional) below if you want the browser interface.
 
@@ -74,19 +74,19 @@ cd polywave
 
 The installer auto-detects Claude Code (checks for `~/.claude`) and does four things:
 
-1. **Symlinks skill files** to `~/.claude/skills/saw/` (SKILL.md, agent definitions, references, scripts).
+1. **Symlinks skill files** to `~/.claude/skills/polywave/` (SKILL.md, agent definitions, references, scripts).
 2. **Symlinks hook scripts** to `~/.local/bin/` (18 enforcement hooks, see [Hooks](#hooks-18-total) below).
 3. **Registers hooks** in `~/.claude/settings.json` under `PreToolUse`, `PostToolUse`, `SubagentStart`, `SubagentStop`, and `UserPromptSubmit` lifecycle events.
 4. **Adds `Agent` permission** to `~/.claude/settings.json` so Polywave can launch agents without manual approval.
 
-The installer is idempotent — safe to run multiple times. It backs up `settings.json` before modifying it. Run `./install.sh --generic` to install to `~/.agents/skills/saw/` without Claude Code-specific configuration.
+The installer is idempotent — safe to run multiple times. It backs up `settings.json` before modifying it. Run `./install.sh --generic` to install to `~/.agents/skills/polywave/` without Claude Code-specific configuration.
 
 #### Skill Files
 
 After installation, the skill directory structure looks like this:
 
 ```
-~/.claude/skills/saw/
+~/.claude/skills/polywave/
 ├── SKILL.md              -> prompts/polywave-skill.md
 ├── agent-template.md     -> prompts/agent-template.md
 ├── polywave-bootstrap.md -> prompts/polywave-bootstrap.md
@@ -393,9 +393,9 @@ Verify with: `which polywave-tools`
 The skill files are not installed. Verify the symlinks exist:
 
 ```bash
-ls -la ~/.claude/skills/saw/SKILL.md
-ls ~/.claude/skills/saw/agents/
-ls ~/.claude/skills/saw/references/
+ls -la ~/.claude/skills/polywave/SKILL.md
+ls ~/.claude/skills/polywave/agents/
+ls ~/.claude/skills/polywave/references/
 ```
 
 If any are missing, re-run the installer: `./install.sh`
@@ -470,9 +470,9 @@ The installer supports multiple platforms via flags:
 
 | Flag | Skill directory | Hooks | Settings |
 |------|----------------|-------|----------|
-| `./install.sh` (auto-detect) | `~/.claude/skills/saw/` if Claude Code detected, else `~/.agents/skills/saw/` | `~/.local/bin/` | `settings.json` if Claude Code |
-| `./install.sh --claude-code` | `~/.claude/skills/saw/` | `~/.local/bin/` | Registers in `settings.json` + Agent permission |
-| `./install.sh --generic` | `~/.agents/skills/saw/` | `~/.local/bin/` | None (manual registration) |
+| `./install.sh` (auto-detect) | `~/.claude/skills/polywave/` if Claude Code detected, else `~/.agents/skills/polywave/` | `~/.local/bin/` | `settings.json` if Claude Code |
+| `./install.sh --claude-code` | `~/.claude/skills/polywave/` | `~/.local/bin/` | Registers in `settings.json` + Agent permission |
+| `./install.sh --generic` | `~/.agents/skills/polywave/` | `~/.local/bin/` | None (manual registration) |
 
 **`polywave-tools` works on any platform** -- it's a standalone Go binary that manages git worktrees, validates IMPL docs, merges branches, and runs quality gates. No LLM API calls. Key capabilities include:
 
