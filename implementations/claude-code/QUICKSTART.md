@@ -12,7 +12,7 @@ Before starting, ensure you've completed the [installation steps](README.md#inst
 - [x] Permissions configured (`"Agent"` in allow list)
 - [x] Repository cloned (polywave for protocol/skills)
 - [x] `polywave-tools` binary installed (`~/.local/bin/polywave-tools` from polywave-go)
-- [x] Skill installed (`~/.claude/skills/saw/polywave-skill.md` symlinked)
+- [x] Skill installed (`~/.claude/skills/polywave/polywave-skill.md` symlinked)
 - [x] Installation verified (`/polywave status` works)
 
 ## Your First Polywave Run
@@ -596,9 +596,9 @@ Not directly. Each IMPL doc is specific to one feature. But you can copy the fil
 
 ## Troubleshooting
 
-**Problem: `/saw` not recognized**
+**Problem: `/polywave` not recognized**
 
-Solution: Check `~/.claude/skills/saw/SKILL.md` exists and restart Claude Code.
+Solution: Check `~/.claude/skills/polywave/SKILL.md` exists and restart Claude Code.
 
 **Problem: "Agent tool not allowed"**
 
