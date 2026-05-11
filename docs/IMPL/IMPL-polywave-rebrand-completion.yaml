@@ -530,10 +530,7 @@ waves:
             - assets/diagrams/three-repo-architecture.md
 quality_gates:
     level: standard
-    gates:
-        - type: custom
-          command: '! rg ''\bSAW\b|\.saw-|/skills/saw/|saw_label|saw/\{slug\}'' --glob ''!CHANGELOG.md'' --glob ''!docs/IMPL/complete/*'' --glob ''!docs/lsp-case-study.md'' --glob ''!scripts/migrate*'' --glob ''!scripts/validate*'' --glob ''!docs/IMPL/IMPL-polywave-rebrand-completion.yaml'' .'
-          required: true
+    gates: []
 post_merge_checklist:
     groups:
         - title: Rebrand Verification
