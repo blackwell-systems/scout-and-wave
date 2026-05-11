@@ -200,12 +200,12 @@ if [[ "$agent_found" != "true" ]]; then
   exit 2
 fi
 
-# --- Check 6: .saw-ownership.json check ---
+# --- Check 6: .polywave-ownership.json check ---
 ownership_file=""
 search_dir="$PWD"
 for _ in 1 2 3 4 5; do
-  if [[ -f "$search_dir/.saw-ownership.json" ]]; then
-    ownership_file="$search_dir/.saw-ownership.json"
+  if [[ -f "$search_dir/.polywave-ownership.json" ]]; then
+    ownership_file="$search_dir/.polywave-ownership.json"
     break
   fi
   parent=$(dirname "$search_dir")
@@ -220,12 +220,12 @@ if [[ -n "$ownership_file" ]]; then
   own_wave=$(jq -r '.wave // empty' "$ownership_file")
 
   if [[ -n "$own_agent" && "$own_agent" != "$agent_id" ]]; then
-    echo "H5: Ownership file mismatch. Polywave tag says agent ${agent_id} but .saw-ownership.json says agent ${own_agent}." >&2
+    echo "H5: Ownership file mismatch. Polywave tag says agent ${agent_id} but .polywave-ownership.json says agent ${own_agent}." >&2
     exit 2
   fi
 
   if [[ -n "$own_wave" && "$own_wave" != "$wave_num" ]]; then
-    echo "H5: Ownership file mismatch. Polywave tag says wave ${wave_num} but .saw-ownership.json says wave ${own_wave}." >&2
+    echo "H5: Ownership file mismatch. Polywave tag says wave ${wave_num} but .polywave-ownership.json says wave ${own_wave}." >&2
     exit 2
   fi
 
@@ -234,7 +234,7 @@ if [[ -n "$ownership_file" ]]; then
   current_branch=$(git -C "$worktree_root" branch --show-current 2>/dev/null || true)
 
   if [[ -n "$current_branch" ]]; then
-    # Accept saw/{slug}/wave{N}-agent-{ID} or legacy wave{N}-agent-{ID}
+    # Accept polywave/{slug}/wave{N}-agent-{ID} or legacy wave{N}-agent-{ID}
     if [[ ! "$current_branch" =~ wave${wave_num}-agent-${agent_id}$ ]]; then
       echo "H5: Worktree branch mismatch. Expected branch ending in wave${wave_num}-agent-${agent_id} but found ${current_branch}." >&2
       exit 2

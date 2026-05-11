@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # I1 enforcement for Wave agents: block writes to files not in owned_files[]
-# PreToolUse hook that reads .saw-ownership.json from the worktree root and
+# PreToolUse hook that reads .polywave-ownership.json from the worktree root and
 # blocks Write/Edit operations on files the agent does not own.
 
 set -euo pipefail
@@ -32,13 +32,13 @@ if [[ -z "$file_path" ]]; then
   exit 0
 fi
 
-# Find .saw-ownership.json by walking up from CWD
+# Find .polywave-ownership.json by walking up from CWD
 # Wave agents cd to worktree root at startup, so it's usually in CWD.
 ownership_file=""
 search_dir="$PWD"
 for _ in 1 2 3 4 5; do
-  if [[ -f "$search_dir/.saw-ownership.json" ]]; then
-    ownership_file="$search_dir/.saw-ownership.json"
+  if [[ -f "$search_dir/.polywave-ownership.json" ]]; then
+    ownership_file="$search_dir/.polywave-ownership.json"
     break
   fi
   parent=$(dirname "$search_dir")
@@ -53,7 +53,7 @@ if [[ -z "$ownership_file" ]]; then
   exit 0
 fi
 
-# The directory containing .saw-ownership.json is the worktree/repo root
+# The directory containing .polywave-ownership.json is the worktree/repo root
 worktree_root=$(dirname "$ownership_file")
 
 # Read owned files list and repo root from manifest

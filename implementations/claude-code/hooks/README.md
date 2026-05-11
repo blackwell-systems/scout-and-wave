@@ -557,8 +557,8 @@ echo $?  # 0 (if on expected branch)
 3. **IMPL file exists** — Verify the IMPL doc exists on disk
 4. **IMPL validation** — Run `polywave-tools validate` (if polywave-tools on PATH)
 5. **Agent in wave** — Verify agent ID exists in the specified wave
-6. **Ownership file match** — Cross-reference `.saw-ownership.json` agent ID and wave
-7. **Branch verification** — Verify worktree branch matches `saw/{slug}/wave{N}-agent-{ID}`
+6. **Ownership file match** — Cross-reference `.polywave-ownership.json` agent ID and wave
+7. **Branch verification** — Verify worktree branch matches `polywave/{slug}/wave{N}-agent-{ID}`
 8. **Scaffold check** — Verify all scaffolds are committed (if any in IMPL doc)
 9. **Scout conditional injection** — Conditionally injects `scout-program-contracts.md` when `--program` appears in the prompt. Suitability gate and implementation process are now inlined in `scout.md`. Detection: fires if `[polywave:scout` appears in description, `subagent_type: scout` appears in prompt, or `# Scout Agent: Pre-Flight Dependency Mapping` appears in prompt. Dedup: uses HTML comment markers `<!-- injected: references/scout-X.md -->` to skip files already present in the prompt.
 10. **Wave-agent conditional injection** — Conditionally injects `wave-agent-build-diagnosis.md` (when baseline verification failed) and `wave-agent-program-contracts.md` (when frozen contracts present). Worktree isolation and completion report are now inlined in `wave-agent.md`. Detection: fires if `[polywave:wave` appears in description or `subagent_type: wave-agent` appears in tool input. Dedup: uses HTML comment markers `<!-- injected: references/wave-agent-X.md -->` to skip files already present in the prompt.
@@ -639,7 +639,7 @@ echo $?  # 1 (blocked: no IMPL path found)
    - `POLYWAVE_AGENT_ID`: Agent ID (e.g., "A", "B2")
    - `POLYWAVE_WAVE_NUMBER`: Wave number (e.g., "1")
    - `POLYWAVE_IMPL_PATH`: Absolute IMPL doc path
-   - `POLYWAVE_BRANCH`: Expected branch name (e.g., "saw/feature/wave1-agent-A")
+   - `POLYWAVE_BRANCH`: Expected branch name (e.g., "polywave/feature/wave1-agent-A")
 
 These variables are consumed by other E43 hooks (`inject_bash_cd`, `validate_write_paths`) and can be read by agents for debugging.
 
@@ -853,7 +853,7 @@ echo $?  # 0
 # Test with Polywave context but no completion report (should warn)
 export POLYWAVE_AGENT_ID="A"
 export POLYWAVE_IMPL_PATH="/path/to/IMPL-feature.yaml"
-export POLYWAVE_BRANCH="saw/feature/wave1-agent-A"
+export POLYWAVE_BRANCH="polywave/feature/wave1-agent-A"
 echo '{}' | verify_worktree_compliance 2>&1
 # Should output warning to stderr but exit 0
 echo $?  # 0
@@ -930,7 +930,7 @@ echo $?  # 0 (no output)
 1. Claude Code calls the script when the session is about to stop
 2. Script checks `stop_hook_active` field — if true, exits 0 immediately (loop prevention)
 3. Scans `docs/IMPL/IMPL-*.yaml` for any IMPL with `state: WAVE_PENDING` or `state: WAVE_EXECUTING`
-4. Checks if `.claude/worktrees/saw/` contains any active worktree directories
+4. Checks if `.claude/worktrees/polywave/` contains any active worktree directories
 5. If either check finds active work -> emit `systemMessage` warning (non-blocking, exit 0)
 6. If no active work -> exit 0 silently
 
