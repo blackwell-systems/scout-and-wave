@@ -1,0 +1,613 @@
+title: Complete SAW-to-Polywave Rebrand
+feature_slug: polywave-rebrand-completion
+verdict: SUITABLE
+suitability_assessment: |
+    Suitability: SUITABLE
+
+    1. File decomposition: 37 files need changes across 4 distinct agent scopes
+       (protocol docs, hook scripts, prompt/impl files, general docs/config).
+       No two agents share files, enabling clean parallel execution.
+
+    2. Investigation-first items: None. All changes are mechanical find-and-replace
+       with well-defined substitution rules. No root cause analysis needed.
+
+    3. Interface discoverability: The substitution rules are fully defined in the
+       feature description. Cross-agent interface is trivial: each agent applies
+       the same renaming rules to different files.
+
+    4. Pre-implementation status: The prior rebrand commit (8f9ed09) handled the
+       bulk rename of the repo name and saw_name field. ~130 stale references
+       remain across ~37 files. This IMPL handles the completion.
+
+    5. Parallelization value: High. All agents are independent (single wave).
+       Each agent touches 5-10 files with mechanical but careful text substitution.
+       Coordination value is high: ensuring consistent substitution across all
+       files without missing any references.
+
+    IMPORTANT: These are cross-repo changes with the Go engine. The runtime
+    artifact filenames (.saw-ownership.json, .saw-journal.jsonl, .saw-worktree-env)
+    are referenced in hook scripts here but created/consumed by the Go engine
+    (polywave-go repo). The Go engine must be updated in a separate IMPL to
+    match. This IMPL updates the protocol-side references only.
+
+    Estimated times:
+    - Scout phase: ~5 min
+    - Agent execution: ~5 min (4 agents x 3 min avg, single wave parallel)
+    - Merge and verification: ~2 min
+    Total Polywave time: ~12 min
+
+    Sequential baseline: ~12 min (4 agents x 3 min avg sequential)
+    Time savings: ~3 min (25% faster)
+
+    Recommendation: Clear coordination value. The rebrand has many files and
+    consistent rules; parallel agents reduce risk of missed references.
+test_command: echo 'no compiled code; verify with grep'
+lint_command: none
+file_ownership:
+    - file: protocol/execution-rules.md
+      agent: A
+      wave: 1
+      action: modify
+    - file: protocol/message-formats.md
+      agent: A
+      wave: 1
+      action: modify
+    - file: protocol/procedures.md
+      agent: A
+      wave: 1
+      action: modify
+    - file: protocol/invariants.md
+      agent: A
+      wave: 1
+      action: modify
+    - file: protocol/impl-manifest.schema.json
+      agent: A
+      wave: 1
+      action: modify
+    - file: implementations/claude-code/hooks/check_git_ownership
+      agent: B
+      wave: 1
+      action: modify
+    - file: implementations/claude-code/hooks/check_wave_ownership
+      agent: B
+      wave: 1
+      action: modify
+    - file: implementations/claude-code/hooks/emit_agent_completion
+      agent: B
+      wave: 1
+      action: modify
+    - file: implementations/claude-code/hooks/inject_worktree_env
+      agent: B
+      wave: 1
+      action: modify
+    - file: implementations/claude-code/hooks/validate_agent_completion
+      agent: B
+      wave: 1
+      action: modify
+    - file: implementations/claude-code/hooks/validate_agent_launch
+      agent: B
+      wave: 1
+      action: modify
+    - file: implementations/claude-code/hooks/README.md
+      agent: B
+      wave: 1
+      action: modify
+    - file: implementations/claude-code/prompts/agent-template.md
+      agent: C
+      wave: 1
+      action: modify
+    - file: implementations/claude-code/prompts/agents/scout.md
+      agent: C
+      wave: 1
+      action: modify
+    - file: implementations/claude-code/prompts/agents/wave-agent.md
+      agent: C
+      wave: 1
+      action: modify
+    - file: implementations/claude-code/prompts/polywave-skill.md
+      agent: C
+      wave: 1
+      action: modify
+    - file: implementations/claude-code/prompts/scripts/inject-context
+      agent: C
+      wave: 1
+      action: modify
+    - file: implementations/claude-code/prompts/scripts/README.md
+      agent: C
+      wave: 1
+      action: modify
+    - file: implementations/claude-code/QUICKSTART.md
+      agent: C
+      wave: 1
+      action: modify
+    - file: implementations/claude-code/README.md
+      agent: C
+      wave: 1
+      action: modify
+    - file: README.md
+      agent: D
+      wave: 1
+      action: modify
+    - file: .gitignore
+      agent: D
+      wave: 1
+      action: modify
+    - file: .claude/settings.local.json
+      agent: D
+      wave: 1
+      action: modify
+    - file: docs/INSTALLATION.md
+      agent: D
+      wave: 1
+      action: modify
+    - file: docs/QUICKSTART-CLI.md
+      agent: D
+      wave: 1
+      action: modify
+    - file: docs/skills-progressive-disclosure.md
+      agent: D
+      wave: 1
+      action: modify
+    - file: docs/proposals/polywave-teams/polywave-teams-skill.md
+      agent: D
+      wave: 1
+      action: modify
+    - file: docs/proposals/polywave-teams/polywave-teams-worktree.md
+      agent: D
+      wave: 1
+      action: modify
+    - file: docs/IMPL/IMPL-agentskills-progressive-disclosure.yaml
+      agent: D
+      wave: 1
+      action: modify
+    - file: assets/diagrams/three-repo-architecture.md
+      agent: D
+      wave: 1
+      action: modify
+interface_contracts:
+    - name: Renaming Rules
+      description: |
+        All agents apply the same substitution rules consistently.
+        These are the binding rules for all agents.
+      definition: |
+        Runtime artifact filenames:
+          .saw-ownership.json    -> .polywave-ownership.json
+          .saw-journal.jsonl     -> .polywave-journal.jsonl
+          .saw-worktree-env      -> .polywave-worktree-env
+          .saw-state/            -> .polywave-state/
+          .saw-agent-brief.md    -> .polywave-agent-brief.md
+
+        Branch naming:
+          saw/{slug}/            -> polywave/{slug}/
+
+        Skill paths:
+          ~/.claude/skills/saw/  -> ~/.claude/skills/polywave/
+          ~/.agents/skills/saw/  -> ~/.agents/skills/polywave/
+
+        Commands:
+          /saw                   -> /polywave (skill command)
+
+        Variable names:
+          saw_label              -> polywave_label
+
+        Schema:
+          "SAW IMPL Manifest"   -> "Polywave IMPL Manifest"
+
+        Prose:
+          "SAW" (system name)    -> "Polywave"
+
+        Hook filenames in docs:
+          saw-worktree-boundary.sh  -> polywave-worktree-boundary.sh
+          saw-critic-impl-commit.sh -> polywave-critic-impl-commit.sh
+
+        SVG paths in README.md:
+          saw-scout-wave-dark.svg   -> polywave-scout-wave-dark.svg
+          saw-scout-wave-light.svg  -> polywave-scout-wave-light.svg
+
+        Repo example names in prose:
+          saw-engine  -> polywave-engine (or polywave-go)
+          saw-web     -> polywave-web
+
+        EXCLUSIONS (do NOT change):
+          - CHANGELOG.md
+          - docs/IMPL/complete/ directory
+          - docs/lsp-case-study.md
+          - scripts/migrate-*.sh, scripts/validate-rebrand.sh
+          - git history
+          - SVG/drawio binary content
+      location: docs/IMPL/IMPL-polywave-rebrand-completion.yaml
+waves:
+    - number: 1
+      agents:
+        - id: A
+          task: |
+            ## Task: Rebrand stale SAW references in protocol docs
+
+            Apply the Polywave rebrand substitutions to all protocol documentation files.
+
+            ### Files to modify
+
+            1. **protocol/execution-rules.md** (8 occurrences)
+               - `.saw-ownership.json` -> `.polywave-ownership.json`
+               - `.saw-worktree-env` -> `.polywave-worktree-env`
+               - `saw-worktree-boundary.sh` -> `polywave-worktree-boundary.sh`
+
+            2. **protocol/message-formats.md** (12 occurrences)
+               - `saw/{slug}/wave{N}-agent-{ID}` -> `polywave/{slug}/wave{N}-agent-{ID}`
+               - `.claude/worktrees/saw/{slug}/` -> `.claude/worktrees/polywave/{slug}/`
+               - `saw-engine` -> `polywave-engine` (repo name examples)
+               - `saw-web` -> `polywave-web` (repo name examples)
+               - `cmd/saw/main.go` -> `cmd/polywave/main.go` (example path)
+
+            3. **protocol/procedures.md** (5 occurrences)
+               - `saw-engine` -> `polywave-engine`
+               - `saw-web` -> `polywave-web`
+               - `saw/{slug}/` -> `polywave/{slug}/`
+
+            4. **protocol/invariants.md** (1 occurrence)
+               - Find and replace the SAW reference with Polywave
+
+            5. **protocol/impl-manifest.schema.json** (1 occurrence)
+               - `"SAW IMPL Manifest"` -> `"Polywave IMPL Manifest"` (schema title)
+
+            ### Substitution rules
+
+            - `.saw-ownership.json` -> `.polywave-ownership.json`
+            - `.saw-worktree-env` -> `.polywave-worktree-env`
+            - `saw-worktree-boundary.sh` -> `polywave-worktree-boundary.sh`
+            - `saw/{slug}/` -> `polywave/{slug}/`
+            - `.claude/worktrees/saw/` -> `.claude/worktrees/polywave/`
+            - `saw-engine` -> `polywave-engine`
+            - `saw-web` -> `polywave-web`
+            - `cmd/saw/` -> `cmd/polywave/`
+            - `"SAW IMPL Manifest"` -> `"Polywave IMPL Manifest"`
+            - Prose "SAW" (the system name) -> "Polywave"
+
+            ### Constraints
+            - Do NOT modify any files outside the protocol/ directory
+            - Do NOT change `saw_name` field references (already rebranded)
+            - Preserve all markdown formatting and code fence syntax exactly
+
+            ### Verification
+            After changes, run:
+            ```bash
+            rg '\bSAW\b|\.saw-|saw/\{slug\}|/skills/saw' protocol/
+            ```
+            Expected: zero matches.
+          files:
+            - protocol/execution-rules.md
+            - protocol/message-formats.md
+            - protocol/procedures.md
+            - protocol/invariants.md
+            - protocol/impl-manifest.schema.json
+        - id: B
+          task: |
+            ## Task: Rebrand stale SAW references in hook scripts
+
+            Apply the Polywave rebrand substitutions to all hook scripts in
+            implementations/claude-code/hooks/.
+
+            ### Files to modify
+
+            1. **hooks/check_git_ownership** (3 occurrences)
+               - `.saw-ownership.json` -> `.polywave-ownership.json`
+
+            2. **hooks/check_wave_ownership** (5 occurrences)
+               - `.saw-ownership.json` -> `.polywave-ownership.json`
+               - Comment text referencing `.saw-ownership.json`
+
+            3. **hooks/emit_agent_completion** (9 occurrences)
+               - `saw_label` variable -> `polywave_label`
+               - `.saw-journal.jsonl` -> `.polywave-journal.jsonl`
+               - All uses of `${saw_label}` -> `${polywave_label}`
+
+            4. **hooks/inject_worktree_env** (3 occurrences)
+               - `.saw-ownership.json` -> `.polywave-ownership.json`
+               - Comment referencing `.saw-worktree-env` if present
+
+            5. **hooks/validate_agent_completion** (12 occurrences)
+               - `saw_label` variable -> `polywave_label`
+               - `.saw-ownership.json` -> `.polywave-ownership.json`
+               - All uses of `${saw_label}` -> `${polywave_label}`
+
+            6. **hooks/validate_agent_launch** (6 occurrences)
+               - `.saw-ownership.json` -> `.polywave-ownership.json`
+               - `saw/{slug}/wave` -> `polywave/{slug}/wave` (branch pattern)
+
+            7. **hooks/README.md** (2 occurrences)
+               - `.saw-ownership.json` -> `.polywave-ownership.json`
+               - Any other SAW prose references
+
+            ### Critical: Variable renaming in bash scripts
+
+            The variable `saw_label` appears in emit_agent_completion and
+            validate_agent_completion. You must rename ALL of these consistently:
+            - Declaration: `saw_label=""` -> `polywave_label=""`
+            - Assignments: `saw_label="${BASH_REMATCH[1]}"` -> `polywave_label="${BASH_REMATCH[1]}"`
+            - All usages: `${saw_label}` -> `${polywave_label}` (including inside strings)
+            - Fallback: `${saw_label:-unknown}` -> `${polywave_label:-unknown}`
+
+            ### Constraints
+            - Do NOT modify any files outside implementations/claude-code/hooks/
+            - Do NOT change the `[polywave:` tag format (already correct)
+            - Preserve exact bash syntax, quoting, shebang lines, and set flags
+            - Do NOT change `POLYWAVE_` environment variable prefix (already correct)
+
+            ### Verification
+            After changes, run:
+            ```bash
+            rg '\.saw-|saw_label|saw/\{slug\}' implementations/claude-code/hooks/
+            ```
+            Expected: zero matches.
+          files:
+            - implementations/claude-code/hooks/check_git_ownership
+            - implementations/claude-code/hooks/check_wave_ownership
+            - implementations/claude-code/hooks/emit_agent_completion
+            - implementations/claude-code/hooks/inject_worktree_env
+            - implementations/claude-code/hooks/validate_agent_completion
+            - implementations/claude-code/hooks/validate_agent_launch
+            - implementations/claude-code/hooks/README.md
+        - id: C
+          task: |
+            ## Task: Rebrand stale SAW references in prompts and implementation docs
+
+            Apply the Polywave rebrand substitutions to all prompt files and
+            implementation documentation.
+
+            ### Files to modify
+
+            1. **implementations/claude-code/README.md** (20 occurrences)
+               - `~/.claude/skills/saw/` -> `~/.claude/skills/polywave/`
+               - `~/.agents/skills/saw/` -> `~/.agents/skills/polywave/`
+               - `/saw` skill references -> `/polywave`
+               - All symlink paths referencing `skills/saw/`
+
+            2. **implementations/claude-code/QUICKSTART.md** (2 occurrences)
+               - `~/.claude/skills/saw/` -> `~/.claude/skills/polywave/`
+
+            3. **implementations/claude-code/prompts/agent-template.md** (3 occurrences)
+               - `.saw-ownership.json` -> `.polywave-ownership.json`
+
+            4. **implementations/claude-code/prompts/agents/wave-agent.md** (2 occurrences)
+               - `.saw-ownership.json` -> `.polywave-ownership.json`
+               - `saw-worktree-boundary.sh` -> `polywave-worktree-boundary.sh`
+
+            5. **implementations/claude-code/prompts/agents/scout.md** (1 occurrence)
+               - Fix the SAW reference
+
+            6. **implementations/claude-code/prompts/polywave-skill.md** (2 occurrences)
+               - `/saw` -> `/polywave` (skill command)
+               - Any other SAW references
+
+            7. **implementations/claude-code/prompts/scripts/inject-context** (1 occurrence)
+               - Fix the SAW reference
+
+            8. **implementations/claude-code/prompts/scripts/README.md** (2 occurrences)
+               - Fix SAW references
+
+            ### Substitution rules
+
+            - `~/.claude/skills/saw/` -> `~/.claude/skills/polywave/`
+            - `~/.agents/skills/saw/` -> `~/.agents/skills/polywave/`
+            - `.saw-ownership.json` -> `.polywave-ownership.json`
+            - `saw-worktree-boundary.sh` -> `polywave-worktree-boundary.sh`
+            - `/saw` (skill command) -> `/polywave`
+            - `Skill(saw)` -> `Skill(polywave)` if present
+            - Prose "SAW" -> "Polywave" (system name)
+
+            ### Constraints
+            - Do NOT modify files in implementations/claude-code/hooks/ (owned by Agent B)
+            - Do NOT change `polywave-skill.md` filename (already rebranded)
+            - Preserve markdown formatting exactly
+
+            ### Verification
+            After changes, run:
+            ```bash
+            rg '\.saw-|/skills/saw/|\bSAW\b' implementations/claude-code/prompts/ implementations/claude-code/README.md implementations/claude-code/QUICKSTART.md
+            ```
+            Expected: zero matches.
+          files:
+            - implementations/claude-code/prompts/agent-template.md
+            - implementations/claude-code/prompts/agents/scout.md
+            - implementations/claude-code/prompts/agents/wave-agent.md
+            - implementations/claude-code/prompts/polywave-skill.md
+            - implementations/claude-code/prompts/scripts/inject-context
+            - implementations/claude-code/prompts/scripts/README.md
+            - implementations/claude-code/QUICKSTART.md
+            - implementations/claude-code/README.md
+        - id: D
+          task: |
+            ## Task: Rebrand stale SAW references in general docs, config, and README
+
+            Apply the Polywave rebrand substitutions to the root README, .gitignore,
+            settings.local.json, and all general documentation files.
+
+            ### Files to modify
+
+            1. **README.md** (5 occurrences)
+               CRITICAL FIX: broken SVG paths on lines 68-69:
+               Change this exact text:
+               ```html
+                 <source media="(prefers-color-scheme: dark)" srcset="assets/diagrams/saw-scout-wave-dark.svg">
+                 <img src="assets/diagrams/saw-scout-wave-light.svg" alt="Polywave scout + wave execution flow">
+               ```
+               To:
+               ```html
+                 <source media="(prefers-color-scheme: dark)" srcset="assets/diagrams/polywave-scout-wave-dark.svg">
+                 <img src="assets/diagrams/polywave-scout-wave-light.svg" alt="Polywave scout + wave execution flow">
+               ```
+               Also fix skill path references:
+               - `~/.claude/skills/saw/` -> `~/.claude/skills/polywave/`
+
+            2. **.gitignore** (4 occurrences)
+               Change this exact text:
+               ```
+               # SAW ephemeral state (machine-specific, per-session)
+               .claude/worktrees/
+               .saw-state/
+               .saw-agent-brief.md
+               docs/IMPL/.saw-state/
+               ```
+               To:
+               ```
+               # Polywave ephemeral state (machine-specific, per-session)
+               .claude/worktrees/
+               .polywave-state/
+               .polywave-agent-brief.md
+               docs/IMPL/.polywave-state/
+               ```
+
+            3. **.claude/settings.local.json** (2 stale entries)
+               - Change `"Bash(rm -rf ~/.claude/skills/saw)"` to `"Bash(rm -rf ~/.claude/skills/polywave)"`
+               - Remove the line `"Skill(saw)",` entirely (line 15) since `"Skill(polywave)"` already exists on line 39
+               Note: The `scout-and-wave-web` paths on lines 10 and 12 are actual disk paths; do NOT change those.
+
+            4. **docs/INSTALLATION.md** (10 occurrences)
+               - `~/.claude/skills/saw/` -> `~/.claude/skills/polywave/`
+               - `~/.agents/skills/saw/` -> `~/.agents/skills/polywave/`
+
+            5. **docs/QUICKSTART-CLI.md** (1 occurrence)
+               - Fix the SAW reference
+
+            6. **docs/skills-progressive-disclosure.md** (2 occurrences)
+               - Fix SAW references
+
+            7. **docs/proposals/polywave-teams/polywave-teams-skill.md** (1 occurrence)
+               - Fix SAW reference
+
+            8. **docs/proposals/polywave-teams/polywave-teams-worktree.md** (3 occurrences)
+               - `.saw-worktree-env` -> `.polywave-worktree-env`
+               - `.saw-ownership.json` -> `.polywave-ownership.json`
+
+            9. **docs/IMPL/IMPL-agentskills-progressive-disclosure.yaml** (14 occurrences)
+               - `/saw ` -> `/polywave ` (skill command references in task prompts)
+               - `Skill(saw)` -> `Skill(polywave)`
+               - `skills/saw/` -> `skills/polywave/`
+               - Any other SAW prose references
+
+            10. **assets/diagrams/three-repo-architecture.md** (2 occurrences)
+                - Fix SAW references in the architecture description
+
+            ### Substitution rules
+
+            - `saw-scout-wave-dark.svg` -> `polywave-scout-wave-dark.svg`
+            - `saw-scout-wave-light.svg` -> `polywave-scout-wave-light.svg`
+            - `.saw-state/` -> `.polywave-state/`
+            - `.saw-agent-brief.md` -> `.polywave-agent-brief.md`
+            - `.saw-ownership.json` -> `.polywave-ownership.json`
+            - `.saw-worktree-env` -> `.polywave-worktree-env`
+            - `~/.claude/skills/saw/` -> `~/.claude/skills/polywave/`
+            - `~/.agents/skills/saw/` -> `~/.agents/skills/polywave/`
+            - `# SAW ephemeral` -> `# Polywave ephemeral`
+            - `Skill(saw)` -> `Skill(polywave)` (or remove if duplicate)
+            - Prose "SAW" -> "Polywave"
+
+            ### Constraints
+            - Do NOT modify CHANGELOG.md, docs/IMPL/complete/*, or docs/lsp-case-study.md
+            - Do NOT change `scout-and-wave-web` in settings.local.json (actual disk path)
+            - Do NOT change `scout-and-wave` when it refers to the actual repo directory path
+            - In settings.local.json, remove the `"Skill(saw)"` line entirely since
+              `"Skill(polywave)"` already exists on line 39
+            - The IMPL yaml file (IMPL-agentskills-progressive-disclosure.yaml) is active,
+              not in complete/; update its SAW references
+
+            ### Verification
+            After changes, run:
+            ```bash
+            rg '\bSAW\b|\.saw-|/skills/saw/' README.md .gitignore docs/INSTALLATION.md docs/QUICKSTART-CLI.md docs/skills-progressive-disclosure.md docs/proposals/polywave-teams/ docs/IMPL/IMPL-agentskills-progressive-disclosure.yaml assets/diagrams/three-repo-architecture.md
+            ```
+            Expected: zero matches.
+          files:
+            - README.md
+            - .gitignore
+            - .claude/settings.local.json
+            - docs/INSTALLATION.md
+            - docs/QUICKSTART-CLI.md
+            - docs/skills-progressive-disclosure.md
+            - docs/proposals/polywave-teams/polywave-teams-skill.md
+            - docs/proposals/polywave-teams/polywave-teams-worktree.md
+            - docs/IMPL/IMPL-agentskills-progressive-disclosure.yaml
+            - assets/diagrams/three-repo-architecture.md
+quality_gates:
+    level: standard
+    gates:
+        - type: custom
+          command: '! rg ''\bSAW\b|\.saw-|/skills/saw/|saw_label|saw/\{slug\}'' --glob ''!CHANGELOG.md'' --glob ''!docs/IMPL/complete/*'' --glob ''!docs/lsp-case-study.md'' --glob ''!scripts/migrate*'' --glob ''!scripts/validate*'' --glob ''!docs/IMPL/IMPL-polywave-rebrand-completion.yaml'' .'
+          required: true
+post_merge_checklist:
+    groups:
+        - title: Rebrand Verification
+          items:
+            - description: Run comprehensive stale reference check across entire repo
+              command: rg '\bSAW\b|\.saw-|/skills/saw/' --glob '!CHANGELOG.md' --glob '!docs/IMPL/complete/*' --glob '!docs/lsp-case-study.md' --glob '!scripts/*' --glob '!docs/IMPL/IMPL-polywave-rebrand-completion.yaml' .
+            - description: Verify README SVG images reference correct filenames
+              command: grep -n scout-wave README.md
+            - description: Verify .gitignore has correct entries
+              command: grep polywave .gitignore
+pre_mortem:
+    overall_risk: low
+    rows:
+        - scenario: Agent changes a path that refers to an actual disk location rather than a branding reference
+          likelihood: medium
+          impact: medium
+          mitigation: Agent D task explicitly calls out which paths are actual disk paths vs branding references.
+        - scenario: Go engine still creates .saw-ownership.json but hooks now look for .polywave-ownership.json
+          likelihood: high
+          impact: high
+          mitigation: This IMPL updates protocol-side references only. A separate IMPL must update the Go engine.
+        - scenario: Agent misses a reference due to case or context variation
+          likelihood: low
+          impact: low
+          mitigation: Post-merge quality gate runs comprehensive grep to catch remaining references.
+        - scenario: Removing Skill(saw) from settings.local.json breaks JSON syntax
+          likelihood: medium
+          impact: medium
+          mitigation: Agent D instructed to handle JSON array formatting carefully when removing the line.
+known_issues:
+    - title: Cross-repo engine dependency
+      description: |
+        The Go engine (polywave-go repo) creates runtime artifacts with .saw- prefix
+        (.saw-ownership.json, .saw-journal.jsonl, .saw-worktree-env). This IMPL updates
+        the protocol-side references in hook scripts and docs. The engine must be updated
+        separately to create files with .polywave- prefix.
+      workaround: Update engine repo in parallel or accept temporary mismatch.
+critic_report:
+    verdict: PASS
+    agent_reviews:
+        A:
+            agent_id: A
+            verdict: PASS
+        B:
+            agent_id: B
+            verdict: PASS
+        C:
+            agent_id: C
+            verdict: PASS
+            issues:
+                - check: pattern_accuracy
+                  severity: warning
+                  description: Brief claims agent-template.md has 3 occurrences of .saw-ownership.json but grep finds zero matches in that file. The agent will find nothing to change for this file.
+                  file: implementations/claude-code/prompts/agent-template.md
+                  symbol: .saw-ownership.json
+                - check: pattern_accuracy
+                  severity: warning
+                  description: Brief claims wave-agent.md has .saw-ownership.json references but none exist. Actual SAW references are saw-worktree-boundary.sh (2 occurrences). The brief correctly lists saw-worktree-boundary.sh but incorrectly also claims .saw-ownership.json.
+                  file: implementations/claude-code/prompts/agents/wave-agent.md
+                  symbol: .saw-ownership.json
+        D:
+            agent_id: D
+            verdict: PASS
+            issues:
+                - check: pattern_accuracy
+                  severity: warning
+                  description: Brief claims polywave-teams-worktree.md has 3 occurrences of .saw-worktree-env and .saw-ownership.json but neither pattern exists. Actual SAW references are saw-worktree.md (line 5) and pre-commit.saw-backup (lines 139, 272, 273) totaling 4 occurrences with different patterns than described.
+                  file: docs/proposals/polywave-teams/polywave-teams-worktree.md
+                  symbol: .saw-worktree-env
+                - check: complexity_balance
+                  severity: warning
+                  description: Agent D owns 10 files, exceeding the 8-file threshold. Consider splitting if agent struggles with scope.
+    summary: 'All 30 files confirmed to exist as expected (Check 1 pass). No symbol_accuracy or import_chain issues (all files are action:modify with mechanical text substitution, no new symbols). Disjoint ownership verified (Check 9 pass). Four advisory warnings found: Agent C brief inaccurately describes .saw-ownership.json references in agent-template.md (zero actual matches) and wave-agent.md (actual SAW references are saw-worktree-boundary.sh, not .saw-ownership.json). Agent D brief inaccurately describes .saw-worktree-env and .saw-ownership.json in polywave-teams-worktree.md (actual SAW references are saw-worktree.md and pre-commit.saw-backup). Agent D also exceeds the 8-file complexity threshold with 10 files. None of these warnings block execution since agents will grep for SAW patterns and fix what they find.'
+    reviewed_at: "2026-05-11T22:24:34Z"
+    issue_count: 4
+state: REVIEWED
+injection_method: hook
