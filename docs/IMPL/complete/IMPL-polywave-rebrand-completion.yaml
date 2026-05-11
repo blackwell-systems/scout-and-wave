@@ -1,3 +1,4 @@
+completion_date: "2026-05-11"
 title: Complete SAW-to-Polywave Rebrand
 feature_slug: polywave-rebrand-completion
 verdict: SUITABLE
@@ -542,6 +543,64 @@ post_merge_checklist:
               command: grep -n scout-wave README.md
             - description: Verify .gitignore has correct entries
               command: grep polywave .gitignore
+completion_reports:
+    A:
+        status: complete
+        branch: polywave/polywave-rebrand-completion/wave1-agent-A
+        commit: 172209a
+        files_changed:
+            - protocol/execution-rules.md
+            - protocol/message-formats.md
+            - protocol/procedures.md
+            - protocol/invariants.md
+            - protocol/impl-manifest.schema.json
+        verification: PASS
+        notes: All stale SAW references replaced in 5 protocol files. Verification grep returns zero matches.
+    B:
+        status: complete
+        branch: polywave/polywave-rebrand-completion/wave1-agent-B
+        commit: 5e7f6a9
+        files_changed:
+            - implementations/claude-code/hooks/check_git_ownership
+            - implementations/claude-code/hooks/check_wave_ownership
+            - implementations/claude-code/hooks/emit_agent_completion
+            - implementations/claude-code/hooks/inject_worktree_env
+            - implementations/claude-code/hooks/validate_agent_completion
+            - implementations/claude-code/hooks/validate_agent_launch
+            - implementations/claude-code/hooks/README.md
+        verification: PASS
+        notes: All 7 hook files rebranded. Verification gate (rg for .saw-, saw_label, saw/{slug}) returns zero matches.
+    C:
+        status: complete
+        branch: polywave/polywave-rebrand-completion/wave1-agent-C
+        commit: b7d6c8e
+        files_changed:
+            - implementations/claude-code/README.md
+            - implementations/claude-code/QUICKSTART.md
+            - implementations/claude-code/prompts/agent-template.md
+            - implementations/claude-code/prompts/agents/wave-agent.md
+            - implementations/claude-code/prompts/agents/scout.md
+            - implementations/claude-code/prompts/polywave-skill.md
+            - implementations/claude-code/prompts/scripts/inject-context
+            - implementations/claude-code/prompts/scripts/README.md
+        verification: PASS
+        notes: All 8 owned files rebranded. Verification gate (rg for .saw-|/skills/saw/|SAW) returns zero matches. Remaining saw references in prompts/ are in files owned by other agents (polywave-bootstrap.md, integration-agent.md, program-flow.md).
+    D:
+        status: complete
+        branch: polywave/polywave-rebrand-completion/wave1-agent-D
+        commit: e6ef756
+        files_changed:
+            - README.md
+            - .gitignore
+            - docs/INSTALLATION.md
+            - docs/QUICKSTART-CLI.md
+            - docs/skills-progressive-disclosure.md
+            - docs/proposals/polywave-teams/polywave-teams-skill.md
+            - docs/proposals/polywave-teams/polywave-teams-worktree.md
+            - docs/IMPL/IMPL-agentskills-progressive-disclosure.yaml
+            - assets/diagrams/three-repo-architecture.md
+        verification: PASS
+        notes: All SAW references updated in 9 tracked files. .claude/settings.local.json is untracked in git so cannot be modified in worktree; SAW references there need manual update outside git.
 pre_mortem:
     overall_risk: low
     rows:
@@ -607,5 +666,5 @@ critic_report:
     summary: 'All 30 files confirmed to exist as expected (Check 1 pass). No symbol_accuracy or import_chain issues (all files are action:modify with mechanical text substitution, no new symbols). Disjoint ownership verified (Check 9 pass). Four advisory warnings found: Agent C brief inaccurately describes .saw-ownership.json references in agent-template.md (zero actual matches) and wave-agent.md (actual SAW references are saw-worktree-boundary.sh, not .saw-ownership.json). Agent D brief inaccurately describes .saw-worktree-env and .saw-ownership.json in polywave-teams-worktree.md (actual SAW references are saw-worktree.md and pre-commit.saw-backup). Agent D also exceeds the 8-file complexity threshold with 10 files. None of these warnings block execution since agents will grep for SAW patterns and fix what they find.'
     reviewed_at: "2026-05-11T22:24:34Z"
     issue_count: 4
-state: REVIEWED
+state: COMPLETE
 injection_method: hook
