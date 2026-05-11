@@ -623,7 +623,7 @@ C001 was occupied, causing a string mismatch with Agent A's hardcoded "CACHE_MIS
    - More than 26 agents are needed in a wave (exhausting single letters), OR
    - Agents share a logical sub-domain and the Scout wants to express that grouping explicitly (e.g., `A`, `A2`, `A3` for three closely related data-layer agents).
 
-   Note: `A` and `A1` are NOT both valid — only the bare letter represents generation 1. Worktree branches follow the same ID: `saw/{slug}/wave1-agent-A2`, `saw/{slug}/wave2-agent-B3`. Branches created before v0.39.0 use the legacy format `wave1-agent-A2` without slug prefix; tools accept both formats.
+   Note: `A` and `A1` are NOT both valid — only the bare letter represents generation 1. Worktree branches follow the same ID: `polywave/{slug}/wave1-agent-A2`, `polywave/{slug}/wave2-agent-B3`. Branches created before v0.39.0 use the legacy format `wave1-agent-A2` without slug prefix; tools accept both formats.
 
 7b. **I1 self-check (mandatory).** After assigning file ownership, verify disjoint ownership within each wave:
     - For each wave, list all files in file_ownership for that wave

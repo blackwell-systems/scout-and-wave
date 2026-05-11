@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# inject-context -- orchestrator-level context injection for SAW skill
+# inject-context -- orchestrator-level context injection for Polywave skill
 #
 # Matches user prompt against orchestrator trigger patterns and outputs
 # reference file contents. Called by inject_skill_context hook.
@@ -24,16 +24,16 @@ inject_file() {
 
 injected=""
 
-if echo "$PROMPT" | grep -qE "^/saw program"; then
+if echo "$PROMPT" | grep -qE "^/polywave program"; then
   injected+="$(inject_file "references/program-flow.md")"
 fi
 
-if echo "$PROMPT" | grep -qE "^/saw amend"; then
+if echo "$PROMPT" | grep -qE "^/polywave amend"; then
   injected+="$(inject_file "references/amend-flow.md")"
 fi
 
-if echo "$PROMPT" | grep -qE "^/saw auto"; then
-  # /saw auto runs the full scout -> review -> wave flow inline.
+if echo "$PROMPT" | grep -qE "^/polywave auto"; then
+  # /polywave auto runs the full scout -> review -> wave flow inline.
   # The auto flow is defined in polywave-skill.md core (Tier 2), not a reference file.
   # No injection needed; this block documents the pattern for maintainability.
   :

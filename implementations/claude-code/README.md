@@ -101,21 +101,21 @@ Create the skill directory and symlink all required files:
 
 ```bash
 # Create skill directory structure
-mkdir -p ~/.claude/skills/saw/agents
+mkdir -p ~/.claude/skills/polywave/agents
 
 # Symlink main skill file
 ln -sf ~/code/polywave/implementations/claude-code/prompts/polywave-skill.md \
-       ~/.claude/skills/saw/SKILL.md
+       ~/.claude/skills/polywave/SKILL.md
 
 # Symlink supporting files
 ln -sf ~/code/polywave/implementations/claude-code/prompts/polywave-bootstrap.md \
-       ~/.claude/skills/saw/polywave-bootstrap.md
+       ~/.claude/skills/polywave/polywave-bootstrap.md
 ln -sf ~/code/polywave/implementations/claude-code/prompts/agent-template.md \
-       ~/.claude/skills/saw/agent-template.md
+       ~/.claude/skills/polywave/agent-template.md
 
 # If you cloned elsewhere, adjust all paths:
-# mkdir -p ~/.claude/skills/saw/agents
-# ln -sf /your/path/polywave/implementations/claude-code/prompts/polywave-skill.md ~/.claude/skills/saw/SKILL.md
+# mkdir -p ~/.claude/skills/polywave/agents
+# ln -sf /your/path/polywave/implementations/claude-code/prompts/polywave-skill.md ~/.claude/skills/polywave/SKILL.md
 # ... (repeat for all supporting files)
 ```
 
@@ -129,26 +129,26 @@ Polywave uses custom Claude Code agent types that provide structural tool restri
 
 ```bash
 ln -sf ~/code/polywave/implementations/claude-code/prompts/agents/scout.md \
-       ~/.claude/skills/saw/agents/scout.md
+       ~/.claude/skills/polywave/agents/scout.md
 ln -sf ~/code/polywave/implementations/claude-code/prompts/agents/wave-agent.md \
-       ~/.claude/skills/saw/agents/wave-agent.md
+       ~/.claude/skills/polywave/agents/wave-agent.md
 ln -sf ~/code/polywave/implementations/claude-code/prompts/agents/scaffold-agent.md \
-       ~/.claude/skills/saw/agents/scaffold-agent.md
+       ~/.claude/skills/polywave/agents/scaffold-agent.md
 ln -sf ~/code/polywave/implementations/claude-code/prompts/agents/integration-agent.md \
-       ~/.claude/skills/saw/agents/integration-agent.md
+       ~/.claude/skills/polywave/agents/integration-agent.md
 ln -sf ~/code/polywave/implementations/claude-code/prompts/agents/critic-agent.md \
-       ~/.claude/skills/saw/agents/critic-agent.md
+       ~/.claude/skills/polywave/agents/critic-agent.md
 ln -sf ~/code/polywave/implementations/claude-code/prompts/agents/planner.md \
-       ~/.claude/skills/saw/agents/planner.md
+       ~/.claude/skills/polywave/agents/planner.md
 ```
 
 **Install on-demand reference files (progressive disclosure):**
 
 ```bash
-mkdir -p ~/.claude/skills/saw/references
+mkdir -p ~/.claude/skills/polywave/references
 cd ~/code/polywave/implementations/claude-code/prompts/references
 for file in *.md; do
-  ln -sf "$(pwd)/$file" ~/.claude/skills/saw/references/"$file"
+  ln -sf "$(pwd)/$file" ~/.claude/skills/polywave/references/"$file"
 done
 ```
 
@@ -191,14 +191,14 @@ Restart Claude Code (if it was already running), then in any session:
 
 **Expected output:** `"No IMPL doc found in this project"` or similar. This confirms the skill loaded successfully.
 
-**If you see an error about `/saw` not being recognized:**
-- Check that `SKILL.md` exists in `~/.claude/skills/saw/`
-- Verify all supporting files are symlinked correctly: `ls -la ~/.claude/skills/saw/`
+**If you see an error about `/polywave` not being recognized:**
+- Check that `SKILL.md` exists in `~/.claude/skills/polywave/`
+- Verify all supporting files are symlinked correctly: `ls -la ~/.claude/skills/polywave/`
 - Restart Claude Code
 
 **To check symlinks:**
 ```bash
-ls -la ~/.claude/skills/saw/
+ls -la ~/.claude/skills/polywave/
 # Should show symlinks pointing to implementations/claude-code/prompts/
 ```
 
@@ -270,7 +270,7 @@ This implementation uses Claude Code's tool suite:
 
 ## Skill Architecture
 
-The `/saw` skill consists of several specialized prompts, all installed to `~/.claude/skills/saw/`:
+The `/polywave` skill consists of several specialized prompts, all installed to `~/.claude/skills/polywave/`:
 
 - **`SKILL.md`** (from `implementations/claude-code/prompts/polywave-skill.md`) - Main orchestrator with YAML frontmatter
 - **`polywave-bootstrap.md`** - Bootstrap mode for new projects
@@ -397,9 +397,9 @@ If the work doesn't decompose cleanly, the Scout says so. It runs a suitability 
 - Check that `"Agent"` is in your `~/.claude/settings.json` allow list
 - Restart Claude Code after modifying settings
 
-**Skill not found (`/saw` not recognized):**
-- Verify `SKILL.md` is in `~/.claude/skills/saw/`
-- Check all supporting files are symlinked: `ls -la ~/.claude/skills/saw/`
+**Skill not found (`/polywave` not recognized):**
+- Verify `SKILL.md` is in `~/.claude/skills/polywave/`
+- Check all supporting files are symlinked: `ls -la ~/.claude/skills/polywave/`
 - Restart Claude Code
 
 **Worktree isolation failures:**

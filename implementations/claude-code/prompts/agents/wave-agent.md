@@ -22,13 +22,13 @@ You are working in a git worktree. Four lifecycle hooks enforce isolation automa
 
 1. **SubagentStart** → `inject_worktree_env` sets `POLYWAVE_AGENT_WORKTREE`, `POLYWAVE_AGENT_ID`, `POLYWAVE_WAVE_NUMBER`, `POLYWAVE_IMPL_PATH`, `POLYWAVE_BRANCH`
 2. **PreToolUse:Bash** → `inject_bash_cd` prepends `cd $POLYWAVE_AGENT_WORKTREE &&` to every bash command
-3. **PreToolUse:Write|Edit** → `validate_write_paths` blocks relative paths and out-of-worktree writes; `saw-worktree-boundary.sh` hard-denies (exit 2) any Write/Edit/MultiEdit targeting the main repo instead of your worktree
+3. **PreToolUse:Write|Edit** → `validate_write_paths` blocks relative paths and out-of-worktree writes; `polywave-worktree-boundary.sh` hard-denies (exit 2) any Write/Edit/MultiEdit targeting the main repo instead of your worktree
 4. **SubagentStop** → `verify_worktree_compliance` checks completion report exists
 
 **Hard-deny writes to main repo:** If you attempt to Write or Edit a file in the
 main repo (not your worktree), you will see: `[Polywave] Write blocked: <path> is in
 main repo, not agent worktree.` The message includes the correct worktree path to
-use. This is enforced by `hooks/saw-worktree-boundary.sh` using the `POLYWAVE_WORKTREE_ROOT`
+use. This is enforced by `hooks/polywave-worktree-boundary.sh` using the `POLYWAVE_WORKTREE_ROOT`
 env var set by `prepare-wave`.
 
 **Why automatic enforcement?** The Bash tool starts each command in the orchestrator's directory (not your worktree). The `inject_bash_cd` hook solves this by prepending `cd $POLYWAVE_AGENT_WORKTREE &&` automatically.
@@ -86,7 +86,7 @@ cd $POLYWAVE_AGENT_WORKTREE && go test ./pkg/module
 ### Special Cases
 
 #### go.mod replace directives (Go projects)
-**Do NOT modify `replace` directives.** Relative paths (e.g. `../sibling-module`) are correct relative to the repo root, not your worktree. Your worktree is nested inside `.claude/worktrees/saw/{slug}/wave{N}-agent-{ID}/`, so paths look wrong from your perspective — but they resolve correctly after merge. If you rewrite them to match your worktree depth (e.g. `../../../../sibling-module`), they will break after merge.
+**Do NOT modify `replace` directives.** Relative paths (e.g. `../sibling-module`) are correct relative to the repo root, not your worktree. Your worktree is nested inside `.claude/worktrees/polywave/{slug}/wave{N}-agent-{ID}/`, so paths look wrong from your perspective — but they resolve correctly after merge. If you rewrite them to match your worktree depth (e.g. `../../../../sibling-module`), they will break after merge.
 
 ### Troubleshooting
 
@@ -127,7 +127,7 @@ polywave-tools set-completion "<absolute-impl-doc-path>" \
   --agent "<your-agent-id>" \
   --status complete \
   --commit "<commit-sha>" \
-  --branch "saw/{slug}/wave{N}-agent-{ID}" \
+  --branch "polywave/{slug}/wave{N}-agent-{ID}" \
   --files-changed "file1.go,file2.go,file3.go" \
   --verification "PASS"
 ```
@@ -179,7 +179,7 @@ polywave-tools set-completion "/Users/user/repo/docs/IMPL/IMPL-feature.yaml" \
   --agent "A" \
   --status complete \
   --commit "3dbd5bb" \
-  --branch "saw/tool-journaling/wave1-agent-A" \
+  --branch "polywave/tool-journaling/wave1-agent-A" \
   --files-changed "pkg/journal/observer.go,pkg/journal/observer_test.go,pkg/journal/doc.go" \
   --files-created "pkg/journal/observer.go,pkg/journal/observer_test.go,pkg/journal/doc.go" \
   --tests-added "TestNewObserver_CreatesDirectories,TestSync_FirstRun,TestSync_Incremental" \
@@ -193,7 +193,7 @@ polywave-tools set-completion "/Users/user/repo/docs/IMPL/IMPL-hooks.yaml" \
   --agent "D" \
   --status complete \
   --commit "d3dd9a4" \
-  --branch "saw/hook-worktree-isolation/wave1-agent-D" \
+  --branch "polywave/hook-worktree-isolation/wave1-agent-D" \
   --files-created "implementations/claude-code/hooks/verify_worktree_compliance" \
   --verification "PASS - Hook implementation complete. Shellcheck clean. Manual tests pass. Registration is Wave 2 scope (Agent E)." \
   --notes "Hook implementation complete and ready for integration. Out-of-scope: Hook registration in install.sh (Agent E's responsibility in Wave 2)."
@@ -206,7 +206,7 @@ polywave-tools set-completion "/Users/user/repo/docs/IMPL/IMPL-feature.yaml" \
   --status blocked \
   --failure-type needs_replan \
   --commit "abc123" \
-  --branch "saw/tool-journaling/wave1-agent-B" \
+  --branch "polywave/tool-journaling/wave1-agent-B" \
   --verification "FAIL (interface contract unimplementable)" \
   --notes "Interface contract specifies sync API but requires async for external service calls. Recommend revising contract to return Future<T>."
 ```

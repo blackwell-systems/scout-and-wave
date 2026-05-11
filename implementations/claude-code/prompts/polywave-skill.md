@@ -33,7 +33,7 @@ You launch Polywave agents; you do not do their work yourself.
 
 ## Supporting Files & References
 
-Files in `${CLAUDE_SKILL_DIR}/` (defaults to `~/.claude/skills/saw/`). Read `agent-template.md` for 9-field format. Load `polywave-bootstrap.md` for bootstrap. On-demand: `/polywave program *` → `program-flow.md`, `/polywave amend *` → `amend-flow.md`, agent failure → `failure-routing.md`. Orchestrator triggers (`/polywave program` -> `program-flow.md`, `/polywave amend` -> `amend-flow.md`) auto-injected by `inject_skill_context` hook via `scripts/inject-context`. Agent always-needed references inlined in agent definitions (`agents/*.md`). Conditional agent references (3 files) injected by `validate_agent_launch` hook via `scripts/inject-agent-context`.
+Files in `${CLAUDE_SKILL_DIR}/` (defaults to `~/.claude/skills/polywave/`). Read `agent-template.md` for 9-field format. Load `polywave-bootstrap.md` for bootstrap. On-demand: `/polywave program *` → `program-flow.md`, `/polywave amend *` → `amend-flow.md`, agent failure → `failure-routing.md`. Orchestrator triggers (`/polywave program` -> `program-flow.md`, `/polywave amend` -> `amend-flow.md`) auto-injected by `inject_skill_context` hook via `scripts/inject-context`. Agent always-needed references inlined in agent definitions (`agents/*.md`). Conditional agent references (3 files) injected by `validate_agent_launch` hook via `scripts/inject-agent-context`.
 
 ## Invocation Modes
 
@@ -77,7 +77,7 @@ checkpoint entirely. NOT recommended for regular use.
 
 ## Pre-flight Validation
 
-Run once per session on first `/saw` invocation. Skip on subsequent.
+Run once per session on first `/polywave` invocation. Skip on subsequent.
 
 1. **polywave-tools on PATH**: `command -v polywave-tools` — blocker
 2. **Skill files**: Check `${CLAUDE_SKILL_DIR}/agent-template.md` exists — blocker
@@ -186,7 +186,7 @@ If a `docs/IMPL/IMPL-*.yaml` file already exists:
 **YAML manifest prompt template:**
 ```
 <!-- IMPL doc: /abs/path/to/IMPL-feature.yaml | Wave N | Agent X -->
-<!-- Worktree: /abs/path/to/.claude/worktrees/saw/{slug}/wave{N}-agent-{X} -->
+<!-- Worktree: /abs/path/to/.claude/worktrees/polywave/{slug}/wave{N}-agent-{X} -->
 
 Read .polywave-agent-brief.md and follow exactly.
 ```
