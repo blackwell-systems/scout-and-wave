@@ -9,7 +9,7 @@ do their work yourself.
 the environment. If it is not set, abort with:
 
 > Agent Teams is not enabled. Set `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` in
-> your environment and restart Claude Code. Alternatively, use `/saw` (standard
+> your environment and restart Claude Code. Alternatively, use `/polywave` (standard
 > execution) which does not require Agent Teams.
 
 **I6: Role Separation.** The Orchestrator does not perform Scout, Scaffold
@@ -30,7 +30,7 @@ enforcement; the number is the anchor for cross-referencing and audit. E20–E23
 Read the scout prompt at `${CLAUDE_SKILL_DIR}/scout.md` and the teammate template at
 `${CLAUDE_SKILL_DIR}/teammate-template.md` from the skill directory. The skill directory
 is set in the `CLAUDE_SKILL_DIR` environment variable; if unset, fall back to
-`~/.claude/skills/saw/`.
+`~/.claude/skills/polywave/`.
 
 If the argument is `bootstrap <project-description>`:
 1. Read `${CLAUDE_SKILL_DIR}/polywave-bootstrap.md` for the bootstrap procedure.
