@@ -8,9 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
-### Planned — Polywave Rebrand Migration
+### Completed — Polywave Rebrand (v0.10.0 phases + rebrand-completion IMPL)
 
-Complete rebrand from `scout-and-wave` to `polywave` across all three repos. This document is the authoritative migration plan. Execute phases in order; each phase must build and pass tests before proceeding.
+Complete rebrand from `scout-and-wave` to `polywave` across all three repos. Migration plan below executed across 5 phases (v0.10.0) plus a 4-agent Polywave IMPL for the long-tail references.
+
+| [0.11.0] | 2026-05-11 | Rebrand completion (4-agent Polywave IMPL) — 30 files across protocol docs, hook scripts, prompts, and general docs; `.saw-ownership.json` renamed to `.polywave-ownership.json` in hooks; `saw/{slug}/` branch naming replaced with `polywave/{slug}/`; `~/.claude/skills/saw/` replaced with `~/.claude/skills/polywave/`; broken README SVG paths fixed; `.gitignore` entries updated; schema title updated; variable names (`saw_label` to `polywave_label`) renamed in bash hooks; logo updated to Polywave neon |
+
+The migration plan below is now complete and retained for reference.
 
 **Rename mapping:**
 
