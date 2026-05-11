@@ -35,7 +35,7 @@ I1 is protected by multiple enforcement layers that work together to prevent, de
 - **Layer 2 (Critic gate E37):** Pre-wave brief review. The Critic Agent runs Check 9 (i1_disjoint_ownership) on the file_ownership table before the IMPL doc enters REVIEWED state. Any duplicate file ownership within a wave is flagged as an error and blocks wave execution.
 - **Layer 3 (PrepareWave runtime):** Fast-fail check at start of prepare-wave. The engine runs `ValidateI1DisjointOwnership()` immediately after loading the manifest, catching validation gaps before creating worktrees.
 - **Layer 4 (E11 conflict prediction):** Pre-merge `files_changed` intersection check. Before any merge proceeds, the orchestrator cross-references all agents' `files_changed` and `files_created` lists to detect runtime deviations where an agent touched files outside its declared scope.
-- **Layer 5 (E42 SubagentStop):** Post-completion ownership audit. The SubagentStop hook runs `git diff --name-only` in the worktree and compares changed files against the agent's ownership list from `.saw-ownership.json`. Any unowned modified file triggers exit 2 with an I1 violation message.
+- **Layer 5 (E42 SubagentStop):** Post-completion ownership audit. The SubagentStop hook runs `git diff --name-only` in the worktree and compares changed files against the agent's ownership list from `.polywave-ownership.json`. Any unowned modified file triggers exit 2 with an I1 violation message.
 
 **Result:** I1 violations are structurally prevented (Layer 0), validated at planning time (Layers 1-2), detected at runtime (Layer 3), caught at merge time (Layer 4), and audited at completion time (Layer 5). All layers remain active; E43 does not replace the others.
 

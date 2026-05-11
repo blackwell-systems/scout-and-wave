@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/blackwell-systems/polywave/protocol/impl-manifest.schema.json",
-  "title": "SAW IMPL Manifest",
+  "title": "Polywave IMPL Manifest",
   "description": "Schema for the Polywave IMPL manifest document. Describes the full structure of a parallel implementation plan including waves, agents, file ownership, and completion reports.",
   "type": "object",
   "required": ["title", "feature_slug", "verdict"],

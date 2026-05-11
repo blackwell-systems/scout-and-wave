@@ -280,7 +280,7 @@ Scaffold files are committed to HEAD before worktrees are created. Once worktree
 
    **Single-repo wave:** Orchestrator and all agents work in the same repository. Use all five isolation layers (E4). Layer 2 (`isolation: "worktree"`) is available.
 
-   **Cross-repo wave:** Agents work in two or more repositories simultaneously (e.g., engine extraction where Agent A works in `saw-engine/` and Agent B works in `saw-web/`). Cross-repo waves are supported with modified isolation procedure:
+   **Cross-repo wave:** Agents work in two or more repositories simultaneously (e.g., engine extraction where Agent A works in `polywave-engine/` and Agent B works in `polywave-web/`). Cross-repo waves are supported with modified isolation procedure:
    - **Omit Layer 2** (`isolation: "worktree"` on the Agent tool) — it creates worktrees in the Orchestrator's repo, not the target repo. Omitting it is intentional, not a failure.
    - **Apply Layer 1 in each repo** — Orchestrator manually creates worktrees in every repo that agents touch before launching any agents (see Cross-Repo Mode details below).
    - **Layer 0 in each repo** — Install pre-commit guard in each repo's `.git/hooks/pre-commit`.
@@ -299,37 +299,37 @@ Scaffold files are committed to HEAD before worktrees are created. Once worktree
        agent: "A"
        wave: 1
        action: "new"
-       repo: "saw-engine"
+       repo: "polywave-engine"
      - file: "pkg/api/adapter.go"
        agent: "B"
        wave: 1
        action: "modify"
-       repo: "saw-web"
+       repo: "polywave-web"
    ```
 
    **polywave-tools cross-repo support:** All polywave-tools commands accept `--repo-dir` parameter. Run once per repository:
    ```bash
-   polywave-tools create-worktrees "<manifest-path>" --wave <N> --repo-dir "~/code/saw-engine"
-   polywave-tools create-worktrees "<manifest-path>" --wave <N> --repo-dir "~/code/saw-web"
+   polywave-tools create-worktrees "<manifest-path>" --wave <N> --repo-dir "~/code/polywave-engine"
+   polywave-tools create-worktrees "<manifest-path>" --wave <N> --repo-dir "~/code/polywave-web"
    ```
 
    **Merge step:** Run merge procedure separately in each repo:
    ```bash
-   polywave-tools merge-agents "<manifest-path>" --wave <N> --repo-dir "~/code/saw-engine"
-   polywave-tools merge-agents "<manifest-path>" --wave <N> --repo-dir "~/code/saw-web"
+   polywave-tools merge-agents "<manifest-path>" --wave <N> --repo-dir "~/code/polywave-engine"
+   polywave-tools merge-agents "<manifest-path>" --wave <N> --repo-dir "~/code/polywave-web"
    ```
 
    Each repo's agent branches merge into that repo's main branch independently. There is no cross-repo merge operation.
 
    **Cleanup:** Run cleanup per repository:
    ```bash
-   polywave-tools cleanup "<manifest-path>" --wave <N> --repo-dir "~/code/saw-engine"
-   polywave-tools cleanup "<manifest-path>" --wave <N> --repo-dir "~/code/saw-web"
+   polywave-tools cleanup "<manifest-path>" --wave <N> --repo-dir "~/code/polywave-engine"
+   polywave-tools cleanup "<manifest-path>" --wave <N> --repo-dir "~/code/polywave-web"
    ```
 
    **Key constraint:** Prefer agents that own files in exactly one repo. If an agent must own files in multiple repos, provide explicit absolute paths for each repo's worktree in Field 0. Keep cross-repo agent ownership minimal — single-repo agents have cleaner isolation boundaries.
 
-3. **Repo match validation:** `prepare-wave` calls `ValidateRepoMatch` to verify the IMPL doc's declared repo (via `repo:` fields in `file_ownership` and `polywave.config.json`) matches the working directory passed as `--repo-dir`. A mismatch (e.g., running prepare-wave for a saw-web IMPL while in the saw-engine directory) produces a blocking error with a message referencing `polywave.config.json`.
+3. **Repo match validation:** `prepare-wave` calls `ValidateRepoMatch` to verify the IMPL doc's declared repo (via `repo:` fields in `file_ownership` and `polywave.config.json`) matches the working directory passed as `--repo-dir`. A mismatch (e.g., running prepare-wave for a polywave-web IMPL while in the polywave-engine directory) produces a blocking error with a message referencing `polywave.config.json`.
 
 4. **File existence validation:** `prepare-wave` calls `ValidateFileExistenceMultiRepo` to check that all `action: modify` files exist in their resolved repos. Missing files produce non-blocking warnings, with one exception: if ALL `action: modify` files are absent, `prepare-wave` emits `E16_REPO_MISMATCH_SUSPECTED` and exits with a blocking error — this pattern indicates the IMPL targets a different repository than the one being used.
 
@@ -343,10 +343,10 @@ The agent runs on the main branch directly. `finalize-wave` auto-detects that no
 
 1. **Create worktrees:** For each agent in multi-agent waves (2+ agents):
    ```
-   git worktree add .claude/worktrees/saw/{slug}/wave{N}-agent-{ID} -b saw/{slug}/wave{N}-agent-{ID}
+   git worktree add .claude/worktrees/polywave/{slug}/wave{N}-agent-{ID} -b polywave/{slug}/wave{N}-agent-{ID}
    ```
-   - **E5: Naming convention:** `.claude/worktrees/saw/{slug}/wave{N}-agent-{ID}` is mandatory (observability requirement)
-   - Branch name: `saw/{slug}/wave{N}-agent-{ID}` (matches worktree name)
+   - **E5: Naming convention:** `.claude/worktrees/polywave/{slug}/wave{N}-agent-{ID}` is mandatory (observability requirement)
+   - Branch name: `polywave/{slug}/wave{N}-agent-{ID}` (matches worktree name)
    - All worktrees branch from current HEAD (includes committed scaffolds from Scaffold Agent)
 
 2. **Install pre-commit hooks:** Two hooks are installed during wave setup:
@@ -508,7 +508,7 @@ The agent runs on the main branch directly. `finalize-wave` auto-detects that no
    - Resolution: Correct IMPL doc ownership table, recreate worktrees, re-run wave
 
 3. **Verify commits exist:** For each agent branch, verify it has commits beyond base
-   - `git log main..saw/{slug}/wave{N}-agent-{ID} --oneline`
+   - `git log main..polywave/{slug}/wave{N}-agent-{ID} --oneline`
    - Empty branch = isolation failure (agent committed to main instead of worktree)
    - Layer 4 trip wire: catches isolation failures regardless of cause
 
@@ -522,7 +522,7 @@ For each agent (in any order):
 
 1. **Switch to main:** `git checkout main`
 
-2. **Merge agent branch:** `git merge --no-ff saw/{slug}/wave{N}-agent-{ID} -m "Merge saw/{slug}/wave{N}-agent-{ID}: {description}"`
+2. **Merge agent branch:** `git merge --no-ff polywave/{slug}/wave{N}-agent-{ID} -m "Merge polywave/{slug}/wave{N}-agent-{ID}: {description}"`
    - `--no-ff` preserves branch history for observability
 
 3. **Handle conflicts:**
