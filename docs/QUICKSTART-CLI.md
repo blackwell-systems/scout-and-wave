@@ -111,12 +111,12 @@ polywave-tools prepare-wave docs/IMPL/IMPL-add-caching.yaml --wave 1
   "worktrees": [
     {
       "agent": "A",
-      "path": ".claude/worktrees/saw/add-caching/wave1-agent-A",
+      "path": ".claude/worktrees/polywave/add-caching/wave1-agent-A",
       "branch": "saw/add-caching/wave1-agent-A"
     },
     {
       "agent": "B",
-      "path": ".claude/worktrees/saw/add-caching/wave1-agent-B",
+      "path": ".claude/worktrees/polywave/add-caching/wave1-agent-B",
       "branch": "saw/add-caching/wave1-agent-B"
     }
   ],
@@ -128,9 +128,9 @@ polywave-tools prepare-wave docs/IMPL/IMPL-add-caching.yaml --wave 1
 
 Agent execution requires Claude Code or the Claude API. Each agent receives a brief extracted from the IMPL doc and works in its own worktree.
 
-**Hook-based enforcement (Claude Code only):** If using the `/saw` skill in Claude Code, worktree isolation is enforced automatically via 4 hooks (environment injection, bash cd injection, path validation, compliance verification). API-based execution uses Layer 1 (manual pre-creation) and Layer 4 (merge-time trip wire) for isolation.
+**Hook-based enforcement (Claude Code only):** If using the `/polywave` skill in Claude Code, worktree isolation is enforced automatically via 4 hooks (environment injection, bash cd injection, path validation, compliance verification). API-based execution uses Layer 1 (manual pre-creation) and Layer 4 (merge-time trip wire) for isolation.
 
-If you are using the `/saw` skill in Claude Code, run `/polywave wave` to launch agents automatically. For API-based execution, pass each agent's brief file (`.polywave-agent-brief.md` in the worktree root) to your Claude API client.
+If you are using the `/polywave` skill in Claude Code, run `/polywave wave` to launch agents automatically. For API-based execution, pass each agent's brief file (`.polywave-agent-brief.md` in the worktree root) to your Claude API client.
 
 Agents run in parallel, implement their assigned files, run tests, and write completion reports back to the IMPL doc.
 
@@ -181,7 +181,7 @@ Install: `brew install blackwell-systems/tap/polywave-tools` or `go install gith
 
 ### "verify-install: skill_symlinks: FAIL"
 
-Run the skill installer from the protocol repo root: `./install.sh`. This creates `~/.claude/skills/saw/` and symlinks all required prompt files. See the [Installation Guide](INSTALLATION.md) for the full skill directory structure.
+Run the skill installer from the protocol repo root: `./install.sh`. This creates `~/.claude/skills/polywave/` and symlinks all required prompt files. See the [Installation Guide](INSTALLATION.md) for the full skill directory structure.
 
 ### "prepare-wave: config_file: not found"
 
@@ -203,7 +203,7 @@ Each code maps to a protocol rule. See the [protocol documentation](../protocol/
 
 - [Getting Started Guide](GETTING_STARTED.md) -- Overview of all three Polywave interfaces
 - [Installation Guide](INSTALLATION.md) -- Full installation walkthrough for all components
-- [Claude Code Quickstart](../implementations/claude-code/QUICKSTART.md) -- Using Polywave via the `/saw` skill
+- [Claude Code Quickstart](../implementations/claude-code/QUICKSTART.md) -- Using Polywave via the `/polywave` skill
 
 ---
 
