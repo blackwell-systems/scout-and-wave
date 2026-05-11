@@ -1,6 +1,6 @@
-# SAW Glossary
+# Polywave Glossary
 
-Quick reference for SAW-specific terms. Each definition is one line.
+Quick reference for Polywave-specific terms. Each definition is one line.
 
 | Term | Definition |
 |------|-----------|
@@ -12,7 +12,7 @@ Quick reference for SAW-specific terms. Each definition is one line.
 | **File ownership** | The rule that every file is assigned to exactly one agent per wave. No two agents can edit the same file. This makes merge conflicts structurally impossible. (Invariant I1) |
 | **Interface contract** | A type signature, function signature, or struct definition that is agreed upon before agents start. Agents implement against the contract, not against each other's code. (Invariant I2) |
 | **Scaffold** | A stub file containing shared type definitions that multiple agents need. Created by the Scaffold Agent before Wave 1 launches so all agents compile against the same types. |
-| **Orchestrator** | Your Claude Code session. It launches agents, manages state transitions, runs merge and verification, and coordinates the overall flow. You interact with SAW through the Orchestrator. |
+| **Orchestrator** | Your Claude Code session. It launches agents, manages state transitions, runs merge and verification, and coordinates the overall flow. You interact with Polywave through the Orchestrator. |
 | **Suitability gate** | A 5-question assessment the Scout runs before producing an IMPL doc. If the work doesn't decompose cleanly, the Scout says NOT SUITABLE and stops — preventing bad decompositions. |
 | **`polywave-tools`** | The CLI companion binary (Go). Provides 75+ commands for validation, worktree management, agent preparation, wave finalization, and diagnostics. Installed via `brew install blackwell-systems/tap/polywave-tools` or `go install`. |
 | **Finalize-wave** | The merge and verification step after all agents in a wave complete. Verifies commits, scans for stubs, merges branches, runs build/test/lint, and cleans up worktrees. |

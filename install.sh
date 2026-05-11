@@ -347,7 +347,7 @@ install_claude_code() {
     jq '.permissions.allow = ((.permissions.allow // []) + ["Agent"] | unique)' \
       "$settings_file" > "$settings_file.tmp"
     mv "$settings_file.tmp" "$settings_file"
-    echo "   + permissions.allow: Agent (required for SAW agent launches)"
+    echo "   + permissions.allow: Agent (required for Polywave agent launches)"
   else
     echo "   Agent permission already configured"
   fi
@@ -521,7 +521,7 @@ do_uninstall() {
 
   echo ""
   echo "Hook registrations in ~/.claude/settings.json were NOT removed."
-  echo "Edit that file manually to remove SAW hook entries if desired."
+  echo "Edit that file manually to remove Polywave hook entries if desired."
   exit 0
 }
 

@@ -42,7 +42,7 @@
 
 ## Data Flow
 
-IMPL docs live in the **target project** (not in any SAW repo). Here is how
+IMPL docs live in the **target project** (not in any Polywave repo). Here is how
 data moves between repos at runtime:
 
 ```

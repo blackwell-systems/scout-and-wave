@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# PostToolUse hook: Auto-commit after Write/Edit in SAW worktree context
+# PostToolUse hook: Auto-commit after Write/Edit in Polywave worktree context
 # Ensures incremental work preservation against rate-limit interruptions.
 # async: true — never blocks agent execution
 set -uo pipefail
 
-# Only activate in SAW worktree context
+# Only activate in Polywave worktree context
 [[ -z "${POLYWAVE_AGENT_WORKTREE:-}" ]] && exit 0
 
 # Read JSON from stdin

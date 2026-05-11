@@ -126,7 +126,7 @@ A FAILED status is a protocol stop — the Orchestrator reads this and will not 
 ```
 scaffold: add [TypeName] for [purpose]
 
-Created by Scaffold Agent for SAW Wave [N].
+Created by Scaffold Agent for Polywave Wave [N].
 Shared by agents: [A, B, C]
 ```
 

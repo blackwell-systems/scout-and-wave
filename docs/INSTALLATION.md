@@ -77,7 +77,7 @@ The installer auto-detects Claude Code (checks for `~/.claude`) and does four th
 1. **Symlinks skill files** to `~/.claude/skills/saw/` (SKILL.md, agent definitions, references, scripts).
 2. **Symlinks hook scripts** to `~/.local/bin/` (18 enforcement hooks, see [Hooks](#hooks-18-total) below).
 3. **Registers hooks** in `~/.claude/settings.json` under `PreToolUse`, `PostToolUse`, `SubagentStart`, `SubagentStop`, and `UserPromptSubmit` lifecycle events.
-4. **Adds `Agent` permission** to `~/.claude/settings.json` so SAW can launch agents without manual approval.
+4. **Adds `Agent` permission** to `~/.claude/settings.json` so Polywave can launch agents without manual approval.
 
 The installer is idempotent — safe to run multiple times. It backs up `settings.json` before modifying it. Run `./install.sh --generic` to install to `~/.agents/skills/saw/` without Claude Code-specific configuration.
 
@@ -292,11 +292,11 @@ polywave-tools verify-install --human
 
 ### What it is
 
-`polywave.config.json` is a per-project configuration file that lives in your project root. It tells SAW how to build, test, and manage your project -- which repos are involved, which models to use for each agent role, and what quality gates to run.
+`polywave.config.json` is a per-project configuration file that lives in your project root. It tells Polywave how to build, test, and manage your project -- which repos are involved, which models to use for each agent role, and what quality gates to run.
 
 ### What happens without it
 
-SAW works without `polywave.config.json`, but with reduced capabilities:
+Polywave works without `polywave.config.json`, but with reduced capabilities:
 
 | Feature | With config | Without config |
 |---------|-------------|----------------|
@@ -363,7 +363,7 @@ This scans for language markers (go.mod, Cargo.toml, package.json, pyproject.tom
 
 ### Config file lookup
 
-SAW checks two locations (first match wins):
+Polywave checks two locations (first match wins):
 
 1. `<project-root>/polywave.config.json` -- per-project config
 2. `~/.claude/polywave.config.json` -- global default for all projects
@@ -422,7 +422,7 @@ See [hooks/README.md](../implementations/claude-code/hooks/README.md) for detail
 
 ### "Git worktree error" or worktree creation fails
 
-Your Git version is too old. SAW requires Git 2.20+ for worktree support.
+Your Git version is too old. Polywave requires Git 2.20+ for worktree support.
 
 Check with: `git --version`
 
@@ -496,7 +496,7 @@ This removes skill file symlinks and hook script symlinks. Hook registrations in
 
 - [Getting Started](GETTING_STARTED.md) -- decide which interface to use
 - [First Run Walkthrough](../implementations/claude-code/QUICKSTART.md) -- step-by-step example
-- [Protocol Specification](../protocol/) -- deep dive into how SAW works
+- [Protocol Specification](../protocol/) -- deep dive into how Polywave works
 - [Hook System](../implementations/claude-code/hooks/README.md) -- detailed documentation for all enforcement hooks
 
 ---

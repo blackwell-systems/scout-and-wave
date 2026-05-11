@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# verify_worktree_compliance - SubagentStop hook for SAW protocol compliance
+# verify_worktree_compliance - SubagentStop hook for Polywave protocol compliance
 #
 # Verifies that wave agents:
 # - Wrote completion reports (E42/I4)
@@ -14,7 +14,7 @@
 # Test 1: Agent with completion report + commits — should pass silently
 # Test 2: Agent without completion report — should warn (exit 0)
 # Test 3: Agent without commits — should warn (exit 0)
-# Test 4: Non-SAW agent — should passthrough (no checks)
+# Test 4: Non-Polywave agent — should passthrough (no checks)
 
 set -euo pipefail
 
@@ -26,7 +26,7 @@ agent_description=$(echo "$input" | jq -r '.agent_description // ""')
 _session_id=$(echo "$input" | jq -r '.session_id // ""')
 _exit_reason=$(echo "$input" | jq -r '.exit_reason // ""')
 
-# Passthrough condition 1: Not a SAW wave agent
+# Passthrough condition 1: Not a Polywave wave agent
 if ! [[ "$agent_description" =~ \[polywave:wave ]]; then
   exit 0
 fi

@@ -21,7 +21,7 @@ IDLE → INTERVIEWING (on /polywave interview command)
 INTERVIEWING → SCOUT_PENDING (manual: user invokes /polywave scout or /polywave bootstrap after interview completes)
 ```
 
-The INTERVIEWING state is terminal for the interview process — it either completes (writes REQUIREMENTS.md) or the user pauses/abandons it. The transition to SCOUT_PENDING is manual: after the interview completes, the user explicitly invokes `/polywave scout "<feature>" --requirements docs/REQUIREMENTS.md` (or `/polywave bootstrap`). There is no automatic state signal from the interview tool to the SAW orchestrator. There is no automatic retry or failure recovery; if the user exits, they must explicitly resume.
+The INTERVIEWING state is terminal for the interview process — it either completes (writes REQUIREMENTS.md) or the user pauses/abandons it. The transition to SCOUT_PENDING is manual: after the interview completes, the user explicitly invokes `/polywave scout "<feature>" --requirements docs/REQUIREMENTS.md` (or `/polywave bootstrap`). There is no automatic state signal from the interview tool to the Polywave orchestrator. There is no automatic retry or failure recovery; if the user exits, they must explicitly resume.
 
 ### Interview Structure
 

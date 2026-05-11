@@ -133,7 +133,7 @@ Rebrand all three repos and their artifacts from "polywave" to "polywave".
 
 The two binaries are independent — `polywave` imports `polywave-go/pkg/` as a Go library and never execs `polywave-tools`. See `polywave-go/docs/reference/binaries.md` for the authoritative split rationale ("Do Not Merge These Binaries").
 
-**Protocol markers in git history** (`[SAW:complete]`, `[SAW:critic:X]`) stay as-is in past commits. Future commits use the equivalent polywave marker.
+**Protocol markers in git history** (`[Polywave:complete]`, `[Polywave:critic:X]`) stay as-is in past commits. Future commits use the equivalent polywave marker.
 
 **Change inventory:**
 
@@ -143,7 +143,7 @@ The two binaries are independent — `polywave` imports `polywave-go/pkg/` as a 
 | Go module path (`polywave-web`) | Same — `polywave-go` import path replaced everywhere | Medium, mechanical |
 | Binary name: `polywave` → `polywave` | `.goreleaser.yaml` (none present), `Makefile` line 4, `cmd/saw/` directory rename | Trivial |
 | Binary name: `polywave-tools` → `polywave-tools` | `.goreleaser.yaml` `binary` field, `cmd/polywave-tools/` directory rename | Trivial |
-| Web UI strings | `<title>SAW - Polywave</title>`, welcome text, theme comments | ~5 files |
+| Web UI strings | `<title>Polywave - Polywave</title>`, welcome text, theme comments | ~5 files |
 | Protocol repo docs | README, ROADMAP, CHANGELOG, GLOSSARY prose | Prose edits |
 | `polywave.config.json` | Rename to `polywave.config.json`; any internal `name` field | Trivial |
 | GitHub repo names | 3 renames: `polywave` → `polywave`, `polywave-go` → `polywave-go`, `polywave-web` → `polywave-web` | GitHub UI |

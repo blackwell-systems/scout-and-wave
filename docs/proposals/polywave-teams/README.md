@@ -1,6 +1,6 @@
-# SAW-Teams
+# Polywave-Teams
 
-Alternate execution layer for the Polywave (SAW) protocol using Claude
+Alternate execution layer for the Polywave (Polywave) protocol using Claude
 Code Agent Teams. Same invariants, same IMPL doc, same Scout. Different wave
 plumbing: teammates replace background Agent tool calls, and you get
 inter-agent messaging, a shared task list, and real-time protocol enforcement
@@ -44,9 +44,9 @@ Set in your project's `.claude/settings.json` or `~/.claude/settings.json`:
 | Mode | How | Best for |
 |---|---|---|
 | `in-process` (default) | All teammates in main terminal; Shift+Down cycles | Any terminal |
-| `split-pane` | Each teammate in its own pane | tmux or iTerm2; SAW wave work |
+| `split-pane` | Each teammate in its own pane | tmux or iTerm2; Polywave wave work |
 
-For SAW, split-pane mode is recommended so you can watch all agents
+For Polywave, split-pane mode is recommended so you can watch all agents
 simultaneously. Set in settings:
 
 ```json
@@ -68,7 +68,7 @@ Copy the hook scripts to your project:
 ```bash
 mkdir -p .claude/hooks
 
-# Or symlink from the polywave-teams directory if you keep SAW as a submodule
+# Or symlink from the polywave-teams directory if you keep Polywave as a submodule
 cp /path/to/polywave/polywave-teams/hooks/teammate-idle-saw.sh .claude/hooks/
 cp /path/to/polywave/polywave-teams/hooks/task-completed-saw.sh .claude/hooks/
 chmod +x .claude/hooks/*.sh
@@ -112,7 +112,7 @@ Copy it to `.claude/settings.json` in your project and adjust as needed.
 | Field | Value | Why |
 |---|---|---|
 | `env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` | `"1"` | Enables Agent Teams; required |
-| `teammateMode` | `"tmux"` | Split-pane display; recommended for SAW |
+| `teammateMode` | `"tmux"` | Split-pane display; recommended for Polywave |
 | `permissions.allow` — `"Agent"` | required | Lead spawns teammates without prompts |
 | `permissions.allow` — `"Bash"` | required | Teammates run build/test/git |
 | `permissions.allow` — `"Read"`, `"Write"`, `"Edit"` | required | Teammates read and write source files |
@@ -151,15 +151,15 @@ any team exists. The IMPL doc it produces is consumed by every wave team.
 | `hooks.md` | `TeammateIdle` and `TaskCompleted` hook documentation and scripts |
 | `DESIGN.md` | Architecture, design decisions, limitations, migration path |
 
-## Key differences from standard SAW
+## Key differences from standard Polywave
 
 **What Agent Teams adds:**
 - Teammates message lead in real time when they find interface deviations
 - Lead can see all teammates' progress live, not just at completion
 - `TeammateIdle` and `TaskCompleted` hooks enforce protocol compliance as it happens
-- Shared task list provides structured work assignment (SAW uses it read-only: tasks are pre-assigned, not self-claimed)
+- Shared task list provides structured work assignment (Polywave uses it read-only: tasks are pre-assigned, not self-claimed)
 
-**What SAW adds to Agent Teams:**
+**What Polywave adds to Agent Teams:**
 - Suitability gate (Scout asks: is this work parallelizable? do interfaces exist? are files decomposable?)
 - Scout defines interface contracts in the IMPL doc; Scaffold Agent materializes them as scaffold files committed to HEAD after human review, before any Wave Agent launches (I2)
 - Disjoint file ownership enforced before worktrees created (I1)
@@ -171,7 +171,7 @@ any team exists. The IMPL doc it produces is consumed by every wave team.
 
 ## Limitations
 
-Agent Teams is experimental. Known limitations affecting SAW:
+Agent Teams is experimental. Known limitations affecting Polywave:
 
 1. **No session resumption**: if the lead crashes mid-wave, teammates are lost. Use standard `/saw` when crash recovery is critical.
 2. **One team per session**: multi-wave runs create and destroy a team per wave. Expected overhead.

@@ -1,8 +1,8 @@
 # Polywave Protocol Documentation
 
-This directory contains the implementation-agnostic specification of the Polywave (SAW) protocol. These documents define the coordination rules, correctness guarantees, and behavioral contracts that any SAW implementation must satisfy, independent of the runtime or tooling used.
+This directory contains the implementation-agnostic specification of the Polywave (Polywave) protocol. These documents define the coordination rules, correctness guarantees, and behavioral contracts that any Polywave implementation must satisfy, independent of the runtime or tooling used.
 
-**Intended audience:** Developers implementing SAW in new runtimes (Python, Rust, TypeScript, etc.), humans orchestrating SAW workflows manually, and maintainers of existing implementations verifying protocol compliance.
+**Intended audience:** Developers implementing Polywave in new runtimes (Python, Rust, TypeScript, etc.), humans orchestrating Polywave workflows manually, and maintainers of existing implementations verifying protocol compliance.
 
 ## Navigation
 
@@ -25,7 +25,7 @@ Read these documents in order to understand the complete protocol:
 
 ## Adoption Guide
 
-**To implement SAW in a new runtime:**
+**To implement Polywave in a new runtime:**
 
 1. Read the protocol docs in the order listed in the Navigation table above
 2. Identify which participant roles your runtime will support (minimum: Orchestrator + Wave Agent)

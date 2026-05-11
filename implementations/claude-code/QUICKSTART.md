@@ -2,9 +2,9 @@
 
 **Protocol Version:** 0.9.3
 
-This guide walks you through your first SAW session step-by-step, showing exactly what to expect at each stage.
+This guide walks you through your first Polywave session step-by-step, showing exactly what to expect at each stage.
 
-**New to the terminology?** See [GLOSSARY.md](../../GLOSSARY.md) for quick definitions of SAW-specific terms (IMPL doc, wave, scaffold, etc.).
+**New to the terminology?** See [GLOSSARY.md](../../GLOSSARY.md) for quick definitions of Polywave-specific terms (IMPL doc, wave, scaffold, etc.).
 
 ## Prerequisites
 
@@ -15,11 +15,11 @@ Before starting, ensure you've completed the [installation steps](README.md#inst
 - [x] Skill installed (`~/.claude/skills/saw/polywave-skill.md` symlinked)
 - [x] Installation verified (`/polywave status` works)
 
-## Your First SAW Run
+## Your First Polywave Run
 
 ### Step 1: Navigate to a project with existing code
 
-Open Claude Code in any project directory. SAW works best with existing codebases (not empty repos).
+Open Claude Code in any project directory. Polywave works best with existing codebases (not empty repos).
 
 **Example:** A Go API client library, a Python web app, a TypeScript React project, etc.
 
@@ -50,7 +50,7 @@ Scout is analyzing your codebase:
 **Scout completes and reports:**
 
 ```
-OK Suitability: SUITABLE for SAW parallelization
+OK Suitability: SUITABLE for Polywave parallelization
 
 Wave Structure:
   Wave 1: 2 agents (parallel)
@@ -230,8 +230,8 @@ Each agent gets its own isolated working directory (git worktree). They share gi
 
 ```
 Launching Wave 1 agents in parallel:
-  -> [SAW:wave1:agent-A] implement cache layer
-  -> [SAW:wave1:agent-B] integrate cache into client
+  -> [Polywave:wave1:agent-A] implement cache layer
+  -> [Polywave:wave1:agent-B] integrate cache into client
 
 Agents running in background...
 
@@ -445,7 +445,7 @@ Reason: Investigation-first blocker detected
 
 The work requires prototyping the cache eviction strategy before
 interface design is possible. Recommend implementing manually first,
-then using SAW for the next feature once the approach is validated.
+then using Polywave for the next feature once the approach is validated.
 ```
 
 This is **expected and useful**. Not all work parallelizes well. The suitability gate prevents bad decompositions.
@@ -565,9 +565,9 @@ Disjoint file ownership means merges are deterministic. If both agents report `S
 
 ## Common Questions
 
-**Q: Can I use SAW on a feature branch?**
+**Q: Can I use Polywave on a feature branch?**
 
-Yes! SAW works on any branch. Just ensure your working tree is clean before starting.
+Yes! Polywave works on any branch. Just ensure your working tree is clean before starting.
 
 **Q: What if I need to stop mid-wave?**
 
@@ -634,7 +634,7 @@ Solution: Two agents defined the same type (e.g., both created a struct with the
 
 ## Further Reading
 
-- [GLOSSARY.md](../../GLOSSARY.md) - Quick definitions of SAW-specific terms
+- [GLOSSARY.md](../../GLOSSARY.md) - Quick definitions of Polywave-specific terms
 - [README](../README.md) - Main documentation
 - [Protocol specification](../../protocol/) - Formal specification
 - [Blog series](https://blog.blackwell-systems.com/posts/polywave/) - Pattern evolution and lessons learned

@@ -120,7 +120,7 @@ See `references/impl-targeting.md` for discovery commands, resolution logic, aut
 1. **Requirements intake (Orchestrator duty).** Gather requirements, write `docs/REQUIREMENTS.md`. Cover: language, project type, deployment, key concerns, storage, integrations, source codebase. Confirm with user. Template in `polywave-bootstrap.md`.
 2. Launch Scout agent (`subagent_type: scout`, `run_in_background: true`) with `docs/REQUIREMENTS.md` and `polywave-bootstrap.md` path. Inform user.
 3. When Scout completes, read `docs/IMPL/IMPL-bootstrap.yaml`. Report architecture and wave structure. Ask user to review.
-4. **Scaffold Agent (conditional):** If Scaffolds section has `Status: pending`, launch Scaffold Agent (`[SAW:scaffold:bootstrap]`). If any `Status: FAILED`, stop. If all `committed`, proceed.
+4. **Scaffold Agent (conditional):** If Scaffolds section has `Status: pending`, launch Scaffold Agent (`[Polywave:scaffold:bootstrap]`). If any `Status: FAILED`, stop. If all `committed`, proceed.
 5. **Wave 1:** Execute standard wave flow (step 2+ of IMPL-exists flow below).
 
 **Scout flow** (no IMPL doc exists):
@@ -153,13 +153,13 @@ See `references/impl-targeting.md` for discovery commands, resolution logic, aut
    - **ISSUES (error)** → fix errors in the IMPL doc, then re-run E37 (repeat this step). The pre-wave gate reads the verdict field — this field stays ISSUES until the critic agent rewrites it. Do NOT manually edit the YAML verdict field.
    - See `references/pre-wave-validation.md` § E37.
 5. Report suitability verdict, wave structure, file ownership, interface contracts, Scaffolds. Ask user to review.
-6. **Scaffold Agent (conditional):** If Scaffolds has `Status: pending`, launch Scaffold Agent (`[SAW:scaffold:<slug>]`). If `FAILED`, stop. If `committed`, proceed.
+6. **Scaffold Agent (conditional):** If Scaffolds has `Status: pending`, launch Scaffold Agent (`[Polywave:scaffold:<slug>]`). If `FAILED`, stop. If `committed`, proceed.
 
 If a `docs/IMPL/IMPL-*.yaml` file already exists:
 1. Read it and identify the current wave. Check Scaffolds section: if any file has `Status: pending` or `Status: FAILED`, spawn/fix Scaffold Agent before creating worktrees.
 2. **Critic gate (E37):** Check for non-empty `critic_report` field. If missing and E37 triggered (see `references/pre-wave-validation.md`), run E37 using the --backend agent-tool pattern above. Otherwise skip.
 
-3. **Integration wave (E27):** If `type: integration`, skip worktrees. For each agent: `polywave-tools prepare-agent --no-worktree`, launch `integration-agent` on main branch with `[SAW:wave{N}:agent-{ID}] wire integration`. Read `agent.integration_model` from config. Agent's `files` list constrains modifications. After all complete, proceed to step 7.
+3. **Integration wave (E27):** If `type: integration`, skip worktrees. For each agent: `polywave-tools prepare-agent --no-worktree`, launch `integration-agent` on main branch with `[Polywave:wave{N}:agent-{ID}] wire integration`. Read `agent.integration_model` from config. Agent's `files` list constrains modifications. After all complete, proceed to step 7.
 4. **Solo agent:** If exactly 1 agent (not integration type), skip worktrees. Run `polywave-tools prepare-agent --no-worktree`, launch `wave-agent` on main branch. After completes, proceed to step 7. Solo agents still operate in Wave Agent role (I6).
 5. **Wave preparation (multi-agent):** For waves with 2+ agents:
    ```bash
@@ -167,7 +167,7 @@ If a `docs/IMPL/IMPL-*.yaml` file already exists:
    ```
    Combines worktree creation + agent preparation (brief extraction, journal init). Exit 1 = failure (E21A baseline gate, scaffolds, or worktree errors) — do not proceed.
 
-   **--commit-state (default: true):** SAW-owned state files (IMPL doc, gate-cache, `docs/IMPL/`, `docs/CONTEXT.md`) are automatically committed before the dirty-check. No flag needed for normal use; pass `--commit-state=false` to disable.
+   **--commit-state (default: true):** Polywave-owned state files (IMPL doc, gate-cache, `docs/IMPL/`, `docs/CONTEXT.md`) are automatically committed before the dirty-check. No flag needed for normal use; pass `--commit-state=false` to disable.
 
    **--commit-baseline flag:** Auto-commits baseline fixes (user code changes) when working directory is dirty. **Always use with `--auto` flag** for autonomous execution. Without it, dirty user-code changes cause failure.
 
@@ -181,7 +181,7 @@ If a `docs/IMPL/IMPL-*.yaml` file already exists:
 
    **Journal context recovery (resumed agents):** The `prepare-wave` and `prepare-agent` JSON output includes `"journal_context_available"` per agent. If `true`, read the file at `"journal_context_file"` and prepend its contents to the agent's launch prompt (before the IMPL doc comment block). This restores working memory for agents resuming after context compaction or interruption. If `journal_context_available` is `false` (first launch or no prior history), omit this step.
 
-**E44: Agent naming from brief metadata.** Read `.polywave-agent-brief.md` frontmatter and extract `saw_name` field. Use this as the `name` parameter for the Agent tool call. The brief metadata contains the SAW-formatted name `[SAW:wave{N}:agent-{ID}] {task_summary}`. If frontmatter is missing or `saw_name` field is absent (old briefs), the `auto_format_polywave_agent_names` PreToolUse hook provides fallback formatting.
+**E44: Agent naming from brief metadata.** Read `.polywave-agent-brief.md` frontmatter and extract `polywave_name` field. Use this as the `name` parameter for the Agent tool call. The brief metadata contains the Polywave-formatted name `[Polywave:wave{N}:agent-{ID}] {task_summary}`. If frontmatter is missing or `polywave_name` field is absent (old briefs), the `auto_format_polywave_agent_names` PreToolUse hook provides fallback formatting.
 
 **YAML manifest prompt template:**
 ```
@@ -191,7 +191,7 @@ If a `docs/IMPL/IMPL-*.yaml` file already exists:
 Read .polywave-agent-brief.md and follow exactly.
 ```
 
-**Protocol contracts:** See `references/wave-agent-contracts.md` for I1 (disjoint ownership), I2 (interface-first), I5 (commit before report), E35 (own the caller), E42 (SubagentStop validation), SAW tag format, and async execution requirements.
+**Protocol contracts:** See `references/wave-agent-contracts.md` for I1 (disjoint ownership), I2 (interface-first), I5 (commit before report), E35 (own the caller), E42 (SubagentStop validation), Polywave tag format, and async execution requirements.
 
 **Status tracking:** After agent completes, run `polywave-tools update-status` with `--status complete/partial/blocked`.
 7. **After all agents complete:** Read completion reports from IMPL doc (`### Agent {ID} - Completion Report`). **I4:** IMPL doc is single source of truth, not chat output. **I5:** Agents commit before reporting (see `references/wave-agent-contracts.md`). **E7:** If any agent reports `partial` or `blocked`, wave goes to BLOCKED. Resolve failing agent before merge. No partial merges. If non-complete status, read `references/failure-routing.md` for E7a retry, E19 routing, E8 interface failures, E20 stub scanning.

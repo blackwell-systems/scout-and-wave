@@ -10,7 +10,7 @@
 
 ### 1.1 CLI Path: What a New User Does Today
 
-A new user who discovers SAW and wants to try it goes through these steps:
+A new user who discovers Polywave and wants to try it goes through these steps:
 
 1. **Read the README** (206 lines). Encounters seven participant roles, six invariants, five preconditions, 47 execution rules, worktree isolation layers, scaffold agents, interface contracts, and wave sequencing — before seeing `Quick Start`.
 2. **Follow Quick Start** — clone the protocol repo, run `install.sh` (handles skill symlinks, hook registration, settings.json merge, Agent permission), `brew install blackwell-systems/tap/polywave-tools`, optionally run `polywave-tools verify-install`.
@@ -99,7 +99,7 @@ One command. AO:
 
 **Trade-off they accept:** No correctness guarantees. Two agents can silently edit the same file. Merge conflicts surface at PR time. This is the price of zero-config: no planning phase means no ownership verification.
 
-**What SAW can borrow without sacrificing correctness:** The single-command entry point. SAW's Scout phase is the value prop — it should not be hidden. But everything *before* the Scout (install, config, permissions, verify) can be collapsed into one command.
+**What Polywave can borrow without sacrificing correctness:** The single-command entry point. Polywave's Scout phase is the value prop — it should not be hidden. But everything *before* the Scout (install, config, permissions, verify) can be collapsed into one command.
 
 ### 2.2 Paperclip: Corporate Metaphor as Onboarding
 
@@ -126,11 +126,11 @@ One command that:
 - Governance rules (defaults to "board approves everything")
 - Cost tracking details (visible but not required)
 
-**Key lesson:** A strong metaphor reduces cognitive load. "Company with employees" is immediately graspable. "Protocol with invariants" is not — even though SAW's invariants are what make it correct.
+**Key lesson:** A strong metaphor reduces cognitive load. "Company with employees" is immediately graspable. "Protocol with invariants" is not — even though Polywave's invariants are what make it correct.
 
 ### 2.3 What Competitors Defer vs Front-Load
 
-| Concept | AO | Paperclip | SAW (current) |
+| Concept | AO | Paperclip | Polywave (current) |
 |---|---|---|---|
 | Project setup | Auto-detect | One command | ~4 steps (was 9, now: clone, install.sh, brew install, /polywave scout) |
 | Planning phase | None (skip to execution) | CEO delegates tasks | Scout (required, must understand) |
@@ -152,7 +152,7 @@ One command that:
 - User sees: "Ready. Run `polywave plan 'your feature'` to get started."
 
 **What they need to understand:**
-- SAW plans features before building them
+- Polywave plans features before building them
 - You review the plan before agents start
 
 **What the system hides:**
@@ -173,7 +173,7 @@ Detected: Go project (go.mod found)
   Build: go build ./...
   Test:  go test ./...
 
-SAW is ready. Next steps:
+Polywave is ready. Next steps:
   saw plan "describe your feature"     Plan a feature (Scout analyzes your code)
   polywave serve                            Open the web dashboard
 ```
@@ -306,7 +306,7 @@ saw init [--repo <path>] [--force]
 
 5. **Print next steps:**
    ```
-   SAW initialized for my-project (Go).
+   Polywave initialized for my-project (Go).
 
    Quick start:
      saw plan "describe your feature"     Create an implementation plan
@@ -338,9 +338,9 @@ saw init [--repo <path>] [--force]
 **Proposed behavior:** If pre-flight detects this is the first run (no `polywave.config.json`, no `docs/IMPL/` directory), switch to guided mode:
 
 ```
-This looks like your first time using SAW in this project.
+This looks like your first time using Polywave in this project.
 
-SAW works in two steps:
+Polywave works in two steps:
   1. Plan — A Scout agent analyzes your codebase and creates an implementation plan
   2. Build — Parallel agents implement the plan in isolated git branches
 
@@ -420,7 +420,7 @@ Review the plan above. If it looks right:
 **Current state:** When repos are configured but no IMPL is selected, the user sees "No plan selected — Select a plan from the sidebar or create a new one with New Plan."
 
 **Problems:**
-- "Plan" is SAW-specific jargon (it means IMPL doc, but that is also jargon)
+- "Plan" is Polywave-specific jargon (it means IMPL doc, but that is also jargon)
 - The call-to-action ("New Plan") does not explain what will happen
 - The sidebar may be empty if no IMPL docs exist yet
 - The header shows "New Program" which is a Level 2+ concept
@@ -430,7 +430,7 @@ Review the plan above. If it looks right:
 ```
 No implementation plans yet.
 
-A plan describes how SAW will split a feature into parallel work units.
+A plan describes how Polywave will split a feature into parallel work units.
 Each agent gets its own files and works independently.
 
 Create your first plan:
@@ -466,13 +466,13 @@ Recent activity:
 |---|---|---|---|
 | **Scout** | Unclear to newcomers. "Scout" suggests reconnaissance, which is roughly correct, but provides no hint about output. | Keep "Scout" but always pair with explanation: "Scout (analyzes your code and creates a plan)". In UI, use "Plan" as the verb: "New Plan" not "New Scout". | The Scout metaphor works once explained. It is the first-run explanation that is missing, not the name. |
 | **IMPL doc** | Terrible. "IMPL" is an internal abbreviation. "Implementation Document" is better but still opaque. | Rename to **"plan"** in all user-facing contexts. Keep "IMPL doc" in protocol docs and developer-facing code. File path stays `docs/IMPL/IMPL-*.yaml`. | Users understand "plan." The file format is an implementation detail. |
-| **Wave** | Acceptable but needs context. Users may think "wave" is a metaphor for something else. | **Keep "wave."** It's distinctive, memorable, and actually describes parallel execution. "Phase" is too generic and has waterfall connotations. Add contextual explanation on first encounter: "Wave 1 — a group of agents working in parallel." | "Wave" becomes intuitive after one use. Renaming to "phase" loses the distinctive SAW identity for no clarity gain. |
+| **Wave** | Acceptable but needs context. Users may think "wave" is a metaphor for something else. | **Keep "wave."** It's distinctive, memorable, and actually describes parallel execution. "Phase" is too generic and has waterfall connotations. Add contextual explanation on first encounter: "Wave 1 — a group of agents working in parallel." | "Wave" becomes intuitive after one use. Renaming to "phase" loses the distinctive Polywave identity for no clarity gain. |
 | **File ownership** | Good. Self-explanatory. | Keep as-is. | No change needed. |
 | **Interface contracts** | Good for developers. Slightly formal. | Keep as-is but add a one-line explanation on first encounter: "Interface contracts — the function signatures agents agree to implement." | Developers understand interfaces. The word "contract" adds precision. |
 | **Scaffold files** | Opaque. "Scaffold" is overloaded (Rails scaffolding, construction scaffolding). | **Keep "scaffold"** — developers understand the metaphor. Add contextual tooltip: "Scaffold: shared code files created before agents start, so they agree on interfaces." "Shared types" is too narrow (scaffolds can be interfaces, stubs, configs). | The word is fine; the missing explanation is the problem. |
-| **Orchestrator** | Fine for power users. Overwhelming for newcomers (it is one of seven roles). | Do not expose to Level 0/1 users. The orchestrator is invisible — it is just "SAW." | Users do not need to know that their Claude Code session is technically an "Orchestrator." |
-| **Suitability gate** | Good concept, jargon name. | Rename to **"compatibility check"** in user-facing contexts. | "SAW checked if this feature can be parallelized" vs "the suitability gate evaluated five preconditions." |
-| **Invariant** | Protocol jargon. Users should never see this word. | Never use in user-facing text. Use "rule" or "guarantee" instead. | "SAW guarantees no two agents edit the same file" vs "Invariant I1: disjoint file ownership." |
+| **Orchestrator** | Fine for power users. Overwhelming for newcomers (it is one of seven roles). | Do not expose to Level 0/1 users. The orchestrator is invisible — it is just "Polywave." | Users do not need to know that their Claude Code session is technically an "Orchestrator." |
+| **Suitability gate** | Good concept, jargon name. | Rename to **"compatibility check"** in user-facing contexts. | "Polywave checked if this feature can be parallelized" vs "the suitability gate evaluated five preconditions." |
+| **Invariant** | Protocol jargon. Users should never see this word. | Never use in user-facing text. Use "rule" or "guarantee" instead. | "Polywave guarantees no two agents edit the same file" vs "Invariant I1: disjoint file ownership." |
 | **Critic Agent** | Clear enough. | Keep but do not surface until Level 2. | Users do not need to know about the critic on first use. |
 | **Integration Agent** | Clear enough. | Keep but do not surface until Level 2. Label in UI as "post-merge wiring." | |
 | **Planner** | Clear. | Keep. Surface only in program context. | |
@@ -506,7 +506,7 @@ The skill prompt tells the orchestrator to "print what's missing and how to inst
 
 **Proposed standard error:**
 ```
-SAW needs the 'polywave-tools' command-line tool, but it's not installed.
+Polywave needs the 'polywave-tools' command-line tool, but it's not installed.
 
 Install it (choose one):
   brew install blackwell-systems/tap/polywave-tools
@@ -527,7 +527,7 @@ After installing, try your command again.
 ```
 No implementation plans found in this project.
 
-Before running agents, you need a plan. A plan tells SAW which files each
+Before running agents, you need a plan. A plan tells Polywave which files each
 agent should work on so they don't conflict.
 
 Create a plan:
@@ -569,7 +569,7 @@ Plan validation found 2 issues:
 
 **Proposed standard error (in skill prompt pre-flight):**
 ```
-SAW needs permission to launch background agents, but it's not allowed yet.
+Polywave needs permission to launch background agents, but it's not allowed yet.
 
 Add this to ~/.claude/settings.json:
   {
@@ -580,7 +580,7 @@ Add this to ~/.claude/settings.json:
 
 Then restart Claude Code and try again.
 
-Why: SAW runs Polywave agents in the background. Without this
+Why: Polywave runs Polywave agents in the background. Without this
 permission, it cannot launch any agents and cannot function.
 ```
 
@@ -588,9 +588,9 @@ permission, it cannot launch any agents and cannot function.
 
 **Proposed standard error:**
 ```
-SAW needs Git 2.20 or newer, but you have Git <version>.
+Polywave needs Git 2.20 or newer, but you have Git <version>.
 
-Why: SAW creates isolated git worktrees for each agent. Worktree support
+Why: Polywave creates isolated git worktrees for each agent. Worktree support
 was added in Git 2.20.
 
 Update Git:
@@ -658,7 +658,7 @@ In the web app, the "New Plan" button already uses "Plan" language. This makes C
 
 **Current state:** `/polywave wave` launches the next wave. "Wave" is protocol jargon.
 
-**Original proposal:** Add `polywave build` as an alias. This was **rejected** — "build" conflicts with the compile/build step that SAW already runs as part of verification gates, creating ambiguity ("build the plan" vs "build the code").
+**Original proposal:** Add `polywave build` as an alias. This was **rejected** — "build" conflicts with the compile/build step that Polywave already runs as part of verification gates, creating ambiguity ("build the plan" vs "build the code").
 
 **If an alias is needed:** `polywave run` is the preferred alternative ("run the next wave"). However, `polywave wave` is acceptable as-is — per the concept renaming audit (Section 4.4), "wave" is distinctive, memorable, and becomes intuitive after one use. Adding an alias is lower priority than the `polywave plan` alias (Section 4.7) since users encounter `plan`/`scout` first.
 
@@ -783,7 +783,7 @@ Independent review verdict: **APPROVE WITH CHANGES**. Status of each condition:
 
 ### 6.1 Do Not Hide the Protocol Entirely
 
-The protocol is the value proposition. AO has zero correctness guarantees and users hit merge conflicts constantly. SAW's planning phase is why it works. The goal is not "make SAW as simple as AO" — it is "make users productive before they understand the protocol, then teach the protocol as they need it."
+The protocol is the value proposition. AO has zero correctness guarantees and users hit merge conflicts constantly. Polywave's planning phase is why it works. The goal is not "make Polywave as simple as AO" — it is "make users productive before they understand the protocol, then teach the protocol as they need it."
 
 **Concrete rule:** Every feature that hides protocol complexity must have a natural path to revealing it. The "plan" alias leads to discovering "scout." The "build" alias leads to discovering "wave." The simplified ReviewScreen leads to the full YAML.
 
@@ -813,10 +813,10 @@ Every onboarding simplification must be additive, not reductive:
 
 ### 6.5 Do Not Optimize Onboarding for the Wrong Persona
 
-SAW's target users are developers who have already experienced the pain of parallel agent conflicts. They do not need to be sold on the problem — they need to see that SAW solves it. Onboarding should demonstrate the solution (file ownership, plan review, clean merge) not explain the problem (merge conflicts, race conditions, divergent assumptions).
+Polywave's target users are developers who have already experienced the pain of parallel agent conflicts. They do not need to be sold on the problem — they need to see that Polywave solves it. Onboarding should demonstrate the solution (file ownership, plan review, clean merge) not explain the problem (merge conflicts, race conditions, divergent assumptions).
 
-**Wrong:** "Have you ever had two AI agents edit the same file? SAW prevents that."
-**Right:** "SAW assigns every file to one agent. Here's the plan — review it before agents start."
+**Wrong:** "Have you ever had two AI agents edit the same file? Polywave prevents that."
+**Right:** "Polywave assigns every file to one agent. Here's the plan — review it before agents start."
 
 ---
 

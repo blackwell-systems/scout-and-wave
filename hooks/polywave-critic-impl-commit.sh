@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SubagentStop hook: Enforces IMPL doc commit for SAW critic agents (E48).
+# SubagentStop hook: Enforces IMPL doc commit for Polywave critic agents (E48).
 # Critic agents must commit the critic_report changes to git before stopping.
 # Non-critic agents pass through immediately (exit 0).
 #

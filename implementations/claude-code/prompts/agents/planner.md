@@ -13,7 +13,7 @@ You are the Planner agent for Polywave. Your job is to analyze a project (from R
 
 **Important:** You do NOT write IMPL docs (Scout does that), you do NOT write source code (Wave Agents do that), and you do NOT launch other agents. You produce exactly one artifact: the PROGRAM manifest at `docs/PROGRAM-<slug>.yaml`.
 
-## Your Role in the SAW Hierarchy
+## Your Role in the Polywave Hierarchy
 
 ```
 Program (YOU)          — coordinates multiple IMPLs
@@ -66,7 +66,7 @@ Below this threshold, a single IMPL doc handles the work fine. Program Layer ove
 
 - **SINGLE_IMPL_SUFFICIENT** — Project is small enough or cohesive enough for a single IMPL doc. Write a minimal YAML manifest to `docs/PROGRAM-<slug>.yaml` with `state: "NOT_SUITABLE"` and a brief explanation. Recommend `/polywave bootstrap` or `/polywave scout` instead.
 
-- **NOT_DECOMPOSABLE** — Features are too entangled for safe parallel execution at any level. Write a minimal YAML manifest with `state: "NOT_SUITABLE"` and explain why. Recommend sequential implementation or architectural refactoring before SAW execution.
+- **NOT_DECOMPOSABLE** — Features are too entangled for safe parallel execution at any level. Write a minimal YAML manifest with `state: "NOT_SUITABLE"` and explain why. Recommend sequential implementation or architectural refactoring before Polywave execution.
 
 **Time-to-value estimate format:**
 
@@ -78,7 +78,7 @@ Estimated times:
 - Scout phase: ~Y min (N features × M min avg)
 - Total agent execution: ~Z min (estimated agents across all features)
 - Merge & verification: ~W min
-Total SAW time: ~T min
+Total Polywave time: ~T min
 
 Sequential baseline: ~B min
 Time savings: ~D min (P% faster)
@@ -527,7 +527,7 @@ IMPL docs reference the PROGRAM manifest but do not duplicate its information.
 - **The project is too small:** Write minimal manifest with `state: "NOT_SUITABLE"` and recommend `/polywave bootstrap`
 - **Features are too entangled:** Write minimal manifest with `state: "NOT_SUITABLE"` and explain why
 - **No clear feature boundaries:** Write minimal manifest with `state: "NOT_SUITABLE"` and suggest refactoring
-- **Cross-repo coordination needed:** Note it in the manifest. Each IMPL can target a different repo (existing SAW cross-repo support applies).
+- **Cross-repo coordination needed:** Note it in the manifest. Each IMPL can target a different repo (existing Polywave cross-repo support applies).
 
 ## Completion
 
@@ -554,4 +554,4 @@ You will not see these steps. You produce the manifest and exit.
 - Freeze program contracts at the tier boundary where their providers complete
 
 **Agent Type Identification:**
-This agent type is used for project-level planning in SAW protocol. The orchestrator identifies these as SAW Planner agents for observability metrics (planning time, program complexity, tier structure).
+This agent type is used for project-level planning in Polywave protocol. The orchestrator identifies these as Polywave Planner agents for observability metrics (planning time, program complexity, tier structure).

@@ -136,7 +136,7 @@ Estimated times:
 - Scout phase: ~X min
 - Wave execution: ~Y min (N agents × M min avg, accounting for parallelism)
 - Merge & verification: ~Z min
-- Total (SAW): ~T min
+- Total (Polywave): ~T min
 
 Sequential baseline: ~B min (N agents × S min avg sequential time)
 Time savings: ~D min (~P% faster)
@@ -144,7 +144,7 @@ Time savings: ~D min (~P% faster)
 Recommendation: [Marginal gains | Clear speedup | Overhead dominates]
 ```
 
-The sequential baseline uses the same per-agent time estimate as SAW but multiplied by
+The sequential baseline uses the same per-agent time estimate as Polywave but multiplied by
 agent count (no parallelism). The recommendation is a plain-language summary of whether
 the time savings justify the coordination overhead.
 

@@ -41,7 +41,7 @@ for _ in 1 2 3 4 5; do
 done
 
 if [[ -z "$ownership_file" ]]; then
-  exit 0  # Not in a SAW context
+  exit 0  # Not in a Polywave context
 fi
 
 worktree_root=$(dirname "$ownership_file")

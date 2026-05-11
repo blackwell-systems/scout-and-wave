@@ -1,6 +1,6 @@
 #!/bin/bash
 # teammate-idle-polywave.sh
-# SAW TeammateIdle enforcement hook.
+# Polywave TeammateIdle enforcement hook.
 #
 # Fires when a teammate is about to go idle. Checks whether the teammate
 # has written a structured completion report to the IMPL doc. If not,
@@ -19,7 +19,7 @@
 #   }
 #
 # Exit codes:
-#   0  — allow idle (report present or not a SAW session)
+#   0  — allow idle (report present or not a Polywave session)
 #   2  — block idle; stdout sent to teammate as feedback
 
 set -euo pipefail
@@ -30,7 +30,7 @@ IMPL_DOC=$(find docs/IMPL -name "IMPL-*.md" 2>/dev/null \
   | head -1)
 
 if [ -z "$IMPL_DOC" ]; then
-  # No IMPL doc — not a SAW session. Allow idle.
+  # No IMPL doc — not a Polywave session. Allow idle.
   exit 0
 fi
 
@@ -47,7 +47,7 @@ fi
 
 # No completion report or no status line found. Block idle and redirect.
 cat <<'EOF'
-Your SAW task is not complete. Before going idle you must complete all of
+Your Polywave task is not complete. Before going idle you must complete all of
 these steps in order:
 
   1. Run your verification gate (build + lint + tests). All must pass.

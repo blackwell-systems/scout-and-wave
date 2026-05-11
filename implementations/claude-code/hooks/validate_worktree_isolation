@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # validate_worktree_isolation — SubagentStart hook for wave agent isolation
 # Event: SubagentStart
-# Purpose: Block wave agents that are not running in a SAW worktree branch
+# Purpose: Block wave agents that are not running in a Polywave worktree branch
 # Phase 1: pwd pattern + git branch pattern checks
 # Phase 2: exact branch check via .polywave-agent-brief.md frontmatter
 # Exit 2 = block agent from starting
@@ -45,7 +45,7 @@ fi
 actual_branch=$(git branch --show-current 2>/dev/null || echo "")
 
 if [[ ! "$actual_branch" =~ ^saw/ ]]; then
-  echo "ISOLATION VIOLATION: Not on a SAW branch" >&2
+  echo "ISOLATION VIOLATION: Not on a Polywave branch" >&2
   echo "  Agent: $agent_name" >&2
   echo "  Expected branch pattern: saw/*" >&2
   if [[ -z "$actual_branch" ]]; then

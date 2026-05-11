@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SAW Agent Naming Helper (E44)
+# Polywave Agent Naming Helper (E44)
 # Generates standardized [polywave:{phase}:{identifier}] names for agent launches
 #
 # Usage:

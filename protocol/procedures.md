@@ -10,7 +10,7 @@ This document defines the operational procedures executed by the Orchestrator an
 
 ## Overview
 
-SAW procedures are executed by the Orchestrator (synchronous agent in the user's session) with cooperation from asynchronous agents (Scout, Scaffold Agent, Wave Agents, Integration Agent). The Orchestrator serializes all state transitions while asynchronous agents execute work in parallel.
+Polywave procedures are executed by the Orchestrator (synchronous agent in the user's session) with cooperation from asynchronous agents (Scout, Scaffold Agent, Wave Agents, Integration Agent). The Orchestrator serializes all state transitions while asynchronous agents execute work in parallel.
 
 **Participant roles:**
 - **Orchestrator:** Drives all state transitions, launches agents, reads completion reports, executes merge procedure
@@ -264,7 +264,7 @@ Scaffold files are committed to HEAD before worktrees are created. Once worktree
 
 ### Phase 1: Pre-Launch Verification
 
-0a. **Resume detection (pre-flight):** Before all other pre-flight steps, `prepare-wave` runs `resume.Detect` to identify orphaned worktrees from crashed or interrupted previous runs of any SAW session in this repo. If orphaned worktrees are found, a warning is emitted (step `resume_detection: warning`) but execution continues — this is distinct from the stale worktree cleanup in E4a, which removes worktrees for the current IMPL slug.
+0a. **Resume detection (pre-flight):** Before all other pre-flight steps, `prepare-wave` runs `resume.Detect` to identify orphaned worktrees from crashed or interrupted previous runs of any Polywave session in this repo. If orphaned worktrees are found, a warning is emitted (step `resume_detection: warning`) but execution continues — this is distinct from the stale worktree cleanup in E4a, which removes worktrees for the current IMPL slug.
 
 0. **Baseline verification (E21A):** For multi-agent waves with quality gates defined in the IMPL doc:
    - `prepare-wave` runs baseline gate verification automatically as part of its pre-flight checks. There is no standalone `--baseline` flag on `run-gates`; this step is internal to `prepare-wave`.

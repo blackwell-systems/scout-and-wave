@@ -16,7 +16,7 @@ Program (this document)   — coordinates multiple IMPLs
         └── Agent         — implements files within a wave
 ```
 
-The PROGRAM manifest extends SAW's parallel execution capabilities from the **feature level** (one IMPL coordinating agents) to the **project level** (one PROGRAM coordinating IMPLs).
+The PROGRAM manifest extends Polywave's parallel execution capabilities from the **feature level** (one IMPL coordinating agents) to the **project level** (one PROGRAM coordinating IMPLs).
 
 **Key Concepts:**
 
@@ -850,7 +850,7 @@ The orchestrator validates PROGRAM manifests before proceeding with execution. V
 ### 16.2 Hierarchy
 
 ```
-protocol/preconditions.md          (prerequisites for SAW execution)
+protocol/preconditions.md          (prerequisites for Polywave execution)
     ↓
 protocol/program-manifest.md       (this document — project-level schema)
     ↓
@@ -859,7 +859,7 @@ protocol/message-formats.md        (IMPL manifest schema — feature-level)
 protocol/invariants.md             (agent-level invariants I1-I6)
 ```
 
-The PROGRAM manifest extends SAW's protocol from feature-level coordination (IMPL docs) to project-level coordination (multi-IMPL orchestration).
+The PROGRAM manifest extends Polywave's protocol from feature-level coordination (IMPL docs) to project-level coordination (multi-IMPL orchestration).
 
 ---
 

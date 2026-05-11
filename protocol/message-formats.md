@@ -8,7 +8,7 @@ This document defines the structured data formats exchanged between participants
 
 ## Overview
 
-SAW uses the IMPL doc (Implementation Document) as the single source of truth (I4). All structured messages are written to the IMPL doc, not chat output. The IMPL doc evolves through the protocol lifecycle:
+Polywave uses the IMPL doc (Implementation Document) as the single source of truth (I4). All structured messages are written to the IMPL doc, not chat output. The IMPL doc evolves through the protocol lifecycle:
 
 1. **Scout phase:** Scout writes suitability verdict and agent prompts
 2. **Scaffold phase:** Scaffold Agent updates Scaffolds section with commit status
@@ -271,14 +271,14 @@ Emitted by the Scout at the end of the suitability gate. Written to the IMPL doc
 ```markdown
 **Verdict:** SUITABLE
 
-{One paragraph rationale explaining why work is suitable for SAW}
+{One paragraph rationale explaining why work is suitable for Polywave}
 
 **Estimated times:**
 - Scout phase: ~X min
 - Wave 1 execution: ~Y min (N agents in parallel)
 - Wave 2 execution: ~Z min (M agents in parallel)
 - Merge & verify: ~W min
-- Total (SAW): ~T min
+- Total (Polywave): ~T min
 - Sequential baseline: ~B min
 - Time savings: ~D min (P% faster | slower)
 
@@ -316,7 +316,7 @@ Emitted by the Scout at the end of the suitability gate. Written to the IMPL doc
 **Suggested alternative:** {sequential execution | investigate-first then re-scout | other: describe}
 
 **Estimated times:**
-{Same structure, but highlights that SAW would be slower or riskier than alternative}
+{Same structure, but highlights that Polywave would be slower or riskier than alternative}
 
 **Recommendation:** Do not proceed
 ```
@@ -405,9 +405,9 @@ Agent identifiers follow the `[Letter][Generation]` scheme:
 - **Format:** An uppercase letter (A–Z) optionally followed by a single digit 2–9. Regex: `[A-Z][2-9]?`
 - **Generation 1:** The bare letter, e.g., `A`, `B`, `C`. The digit is omitted for generation 1. `A` and `A1` are NOT both valid — only `A` represents generation 1.
 - **Multi-generation:** `A2`, `B3`, `C4`, etc. Used when >26 agents are needed, or when the Scout wants to express that agents share a logical sub-domain (e.g., `A`, `A2`, `A3` for closely related work).
-- **Appears in:** file ownership tables (`Agent` column), dep graph blocks (`[A2]`), wave structure blocks, SAW tags, worktree branch names, and completion report sections.
+- **Appears in:** file ownership tables (`Agent` column), dep graph blocks (`[A2]`), wave structure blocks, Polywave tags, worktree branch names, and completion report sections.
 - **Worktree naming:** `saw/{slug}/wave{N}-agent-{ID}` — e.g., `saw/my-feature/wave1-agent-A2`, `saw/my-feature/wave2-agent-B3`. Branches created before v0.39.0 use the legacy format `wave{N}-agent-{ID}` without slug prefix; tools accept both formats.
-- **SAW tag format:** `[SAW:wave{N}:agent-{ID}]` — e.g., `[SAW:wave1:agent-A2]`.
+- **Polywave tag format:** `[Polywave:wave{N}:agent-{ID}]` — e.g., `[Polywave:wave1:agent-A2]`.
 
 Generation-1 IDs (`A`, `B`, `C`, …) are valid wherever an agent ID appears. Multi-generation IDs are assigned by the Scout when needed; agents receive their full ID (e.g., `A2`) in Field 0 of their prompt.
 
@@ -793,14 +793,14 @@ features_completed:
 **Field definitions:**
 
 - **created:** ISO date when this file was first created by the Orchestrator.
-- **protocol_version:** SAW protocol version in use when the file was created or last updated.
+- **protocol_version:** Polywave protocol version in use when the file was created or last updated.
 - **architecture:** High-level description of the project's structure and its constituent modules. The `language` and `stack` fields identify the project toolchain. `description` is the protocol-canonical field name; `summary` is a backward-compatibility alias — both may appear in older CONTEXT.md files and are treated as equivalent. `modules` lists named subsystems with their filesystem paths and responsibilities.
-- **decisions:** Log of architectural decisions made during SAW feature work, linked to the IMPL doc that introduced them.
-- **conventions:** Project-wide conventions established through SAW waves (naming, error handling, testing patterns).
+- **decisions:** Log of architectural decisions made during Polywave feature work, linked to the IMPL doc that introduced them.
+- **conventions:** Project-wide conventions established through Polywave waves (naming, error handling, testing patterns).
 - **established_interfaces:** Interfaces introduced by prior waves that downstream agents may depend on.
-- **features_completed:** Ordered record of all features delivered via SAW, for Scout context and project health tracking.
+- **features_completed:** Ordered record of all features delivered via Polywave, for Scout context and project health tracking.
 
-**Usage note:** The file is optional. Projects that have not completed a SAW feature will not have one. Scout handles absence gracefully (E17). Orchestrator creates it on first completion (E18).
+**Usage note:** The file is optional. Projects that have not completed a Polywave feature will not have one. Scout handles absence gracefully (E17). Orchestrator creates it on first completion (E18).
 
 ---
 
@@ -825,7 +825,7 @@ The Pre-Mortem section uses a markdown table in free-form prose. It is human-fac
 | {description of what could go wrong} | medium | high | {concrete action to prevent or recover} |
 ```
 
-**Example with realistic SAW failure modes:**
+**Example with realistic Polywave failure modes:**
 
 ```markdown
 ## Pre-Mortem

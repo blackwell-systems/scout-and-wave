@@ -4,11 +4,11 @@
 ![Version](https://img.shields.io/badge/version-0.9.3-blue)
 [![Agent Skills](assets/badge-agentskills.svg)](https://agentskills.io)
 
-SAW is published as an [Agent Skill](https://agentskills.io) — a portable, tool-agnostic package for adding capabilities to AI coding agents.
+Polywave is published as an [Agent Skill](https://agentskills.io) — a portable, tool-agnostic package for adding capabilities to AI coding agents.
 
 **Parallel AI agents that don't break each other's code.**
 
-Other multi-agent frameworks run fast and merge chaos. SAW gives every agent its own worktree, assigns every file to exactly one agent, and shows you the full plan before any agent touches your code. Conflicts are resolved at planning time - not at merge time, after two agents have already built divergent solutions.
+Other multi-agent frameworks run fast and merge chaos. Polywave gives every agent its own worktree, assigns every file to exactly one agent, and shows you the full plan before any agent touches your code. Conflicts are resolved at planning time - not at merge time, after two agents have already built divergent solutions.
 
 > Follows the [Agent Skills](https://agentskills.io) open standard - compatible with Claude Code, Cursor, GitHub Copilot, and other Agent Skills-compatible tools. See [`implementations/`](implementations/) for reference implementations.
 
@@ -22,18 +22,18 @@ Other multi-agent frameworks run fast and merge chaos. SAW gives every agent its
 
 You've run parallel agents before. You know what happens: two agents edit the same file, the merge produces garbage, and you spend longer fixing it than if you'd done the work sequentially. Or worse - the merge succeeds silently because both agents touched different functions in the same file, but they made contradictory assumptions about shared state. You find out at runtime.
 
-Most frameworks try to solve this with better prompts. SAW solves it with structure:
+Most frameworks try to solve this with better prompts. Polywave solves it with structure:
 
 - **Disjoint file ownership.** The Scout assigns every file to exactly one agent before any code is written. Two agents in the same wave cannot produce edits to the same file. Merge conflicts become structurally impossible.
 - **Per-agent worktree isolation.** Each agent works in its own git worktree - a separate directory with an independent file tree. Concurrent builds, tests, and tool-cache writes don't race on shared state.
 - **Human review before execution.** You see the full plan - file assignments, interface contracts, wave structure - and approve it before any agent launches. This is the last point where changing the architecture is cheap.
-- **Suitability gate.** SAW says "no" when the work doesn't decompose cleanly. A poor-fit assessment prevents bad decompositions from producing expensive failures.
+- **Suitability gate.** Polywave says "no" when the work doesn't decompose cleanly. A poor-fit assessment prevents bad decompositions from producing expensive failures.
 
 The system has seven participant roles, but you interact with two: the **Orchestrator** (your Claude Code session — coordinates everything) and the **Scout** (analyzes codebase, assigns files, writes the plan). The other five — Scaffold Agent, Wave Agents, Integration Agent, Critic Agent, Planner — run automatically when needed. See [protocol/participants.md](protocol/participants.md) for the full role breakdown.
 
 ## How
 
-**What happens when you run SAW:**
+**What happens when you run Polywave:**
 
 1. You run `/polywave scout "feature"` → Scout analyzes codebase, assigns files to agents
 2. Scout writes IMPL doc (implementation document — a YAML coordination artifact that defines file ownership, interface contracts, and wave structure for the feature) → You review the wave structure (waves are groups of agents that execute in parallel)
@@ -53,7 +53,7 @@ The system has seven participant roles, but you interact with two: the **Orchest
 
 - **Integration Agent:** Asynchronous agent running after wave merge. Wires new exports from wave agents into caller code. Restricted to `integration_connectors` files. Non-fatal — gaps are reported to the human if wiring fails.
 
-The protocol has a built-in **suitability gate** that answers five questions before producing any agent prompts. If preconditions don't hold, the scout emits NOT SUITABLE and stops. **SAW isn't for everything.** A poor-fit assessment prevents bad decompositions.
+The protocol has a built-in **suitability gate** that answers five questions before producing any agent prompts. If preconditions don't hold, the scout emits NOT SUITABLE and stops. **Polywave isn't for everything.** A poor-fit assessment prevents bad decompositions.
 
 The five questions assess whether the work:
 1. Decomposes into independent files
@@ -66,7 +66,7 @@ See [protocol/preconditions.md](protocol/preconditions.md) for details.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/diagrams/saw-scout-wave-dark.svg">
-  <img src="assets/diagrams/saw-scout-wave-light.svg" alt="SAW scout + wave execution flow">
+  <img src="assets/diagrams/saw-scout-wave-light.svg" alt="Polywave scout + wave execution flow">
 </picture>
 
 ## Quick Start
@@ -140,11 +140,11 @@ polywave-tools init
 
 The scout produces an **Implementation Document (IMPL doc)** (`docs/IMPL/IMPL-<feature>.yaml`): a structured YAML coordination document that defines which files each agent will modify, what interfaces they'll implement, and how they'll work in parallel. You review it before any agent writes code. This is the human checkpoint that makes parallel execution safe.
 
-**First time using SAW?** See [implementations/claude-code/QUICKSTART.md](implementations/claude-code/QUICKSTART.md) for step-by-step guidance with example output.
+**First time using Polywave?** See [implementations/claude-code/QUICKSTART.md](implementations/claude-code/QUICKSTART.md) for step-by-step guidance with example output.
 
-## Ways to Use SAW
+## Ways to Use Polywave
 
-SAW has three interfaces backed by separate repositories, all implementing the same protocol.
+Polywave has three interfaces backed by separate repositories, all implementing the same protocol.
 
 | Interface | Repository | Description |
 |-----------|------------|-------------|
@@ -152,26 +152,26 @@ SAW has three interfaces backed by separate repositories, all implementing the s
 | Go engine + `polywave-tools` CLI | [polywave-go](https://github.com/blackwell-systems/polywave-go) | Protocol SDK, 75+ CLI commands, and LLM-agnostic engine. Supports Anthropic, OpenAI, and local (Ollama) backends. |
 | Web UI (`polywave serve`) | [polywave-web](https://github.com/blackwell-systems/polywave-web) | Browser-based dashboard with real-time SSE updates. Imports polywave-go as dependency. |
 
-All implement the same SAW protocol and produce identical IMPL docs. Use the Claude Code skill to start quickly. Use `polywave-tools` for programmatic orchestration, or the Web UI for a browser-based dashboard with real-time monitoring.
+All implement the same Polywave protocol and produce identical IMPL docs. Use the Claude Code skill to start quickly. Use `polywave-tools` for programmatic orchestration, or the Web UI for a browser-based dashboard with real-time monitoring.
 
 ## Documentation
 
 ### Protocol Specification
 
-The protocol is defined independent of any implementation. Read these to understand how SAW works:
+The protocol is defined independent of any implementation. Read these to understand how Polywave works:
 
 - **[protocol/README.md](protocol/README.md)** - Protocol overview and navigation guide
 - **[protocol/participants.md](protocol/participants.md)** - Seven participant roles and their responsibilities
 - **[protocol/preconditions.md](protocol/preconditions.md)** - Five preconditions for suitability gate
 - **[protocol/invariants.md](protocol/invariants.md)** - Six invariants (I1–I6) — formal correctness rules that every implementation must satisfy (e.g., I1: disjoint file ownership, I2: interface contracts precede parallel implementation)
-- **[protocol/execution-rules.md](protocol/execution-rules.md)** - 47 execution rules (E1–E47) governing the full lifecycle: state transitions, agent launches, merge procedures, verification gates, failure recovery, integration, and hook-based enforcement. You don't need to read these to use SAW — the tooling enforces them automatically.
+- **[protocol/execution-rules.md](protocol/execution-rules.md)** - 47 execution rules (E1–E47) governing the full lifecycle: state transitions, agent launches, merge procedures, verification gates, failure recovery, integration, and hook-based enforcement. You don't need to read these to use Polywave — the tooling enforces them automatically.
 - **[protocol/state-machine.md](protocol/state-machine.md)** - Protocol states and transitions
 - **[protocol/message-formats.md](protocol/message-formats.md)** - IMPL doc and completion report schemas
 - **[protocol/procedures.md](protocol/procedures.md)** - Step-by-step merge and verification procedures
 
 ### Implementations
 
-SAW can be executed in different ways:
+Polywave can be executed in different ways:
 
 - **[implementations/claude-code/](implementations/claude-code/)** - Fully automated implementation using Claude Code
 
@@ -179,13 +179,13 @@ See **[implementations/README.md](implementations/README.md)** for details.
 
 ## When to Use It
 
-SAW pays for itself when the work has clear file seams, interfaces can be defined before implementation starts, and each agent owns enough work to justify running in parallel. The build/test cycle being >30 seconds amplifies the savings further.
+Polywave pays for itself when the work has clear file seams, interfaces can be defined before implementation starts, and each agent owns enough work to justify running in parallel. The build/test cycle being >30 seconds amplifies the savings further.
 
 If the work doesn't decompose cleanly, the Scout says so. It runs a suitability gate first and emits NOT SUITABLE rather than forcing a bad decomposition.
 
 ## How Parallel Safety Works
 
-SAW enforces two independent constraints that together make parallel execution correct:
+Polywave enforces two independent constraints that together make parallel execution correct:
 
 **Disjoint file ownership** prevents merge conflicts. Every file that will change is assigned to exactly one agent in the IMPL doc. No two agents in the same wave can produce edits to the same file, so the merge step is always conflict-free regardless of what agents do during execution.
 
@@ -197,7 +197,7 @@ Neither constraint substitutes for the other. Disjoint ownership without worktre
 
 ### Worktree Isolation Defense (6 layers)
 
-Agents don't always respect isolation instructions. SAW treats worktree isolation as an infrastructure problem, not a cooperation problem, with hook-based enforcement (E43) as the primary mechanism.
+Agents don't always respect isolation instructions. Polywave treats worktree isolation as an infrastructure problem, not a cooperation problem, with hook-based enforcement (E43) as the primary mechanism.
 
 (Layers numbered 0-4, plus E43 hook-based enforcement. Layer 0 is the foundational prevention layer; higher layers add defense-in-depth.)
 
@@ -214,7 +214,7 @@ E43 (hook-based enforcement) and Layers 0 and 4 are the structural guarantees: E
 
 ## Building a New Implementation
 
-To implement SAW in a different runtime (Python, Rust, TypeScript, etc.):
+To implement Polywave in a different runtime (Python, Rust, TypeScript, etc.):
 
 1. Read protocol docs in order: [participants](protocol/participants.md) → [preconditions](protocol/preconditions.md) → [invariants](protocol/invariants.md) → [execution-rules](protocol/execution-rules.md) → [state-machine](protocol/state-machine.md) → [message-formats](protocol/message-formats.md) → [procedures](protocol/procedures.md)
 2. Identify which participant roles your runtime will support (minimum: Orchestrator + Wave Agent)
@@ -225,7 +225,7 @@ To implement SAW in a different runtime (Python, Rust, TypeScript, etc.):
 
 See [protocol/README.md](protocol/README.md) for the full adoption guide.
 
-## SAW-Teams (Experimental)
+## Polywave-Teams (Experimental)
 
 [`docs/proposals/polywave-teams/`](docs/proposals/polywave-teams/) is an alternate execution layer using Claude Code Agent Teams. Same protocol, same IMPL doc, same Scout. Different wave plumbing: teammates replace background Agent tool calls, providing inter-agent messaging and real-time deviation alerts. Trade-off: better visibility during execution, worse crash recovery. See [`docs/proposals/polywave-teams/README.md`](docs/proposals/polywave-teams/README.md) for setup and usage.
 

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# PreToolUse hook: Auto-format SAW agent names (E44)
-# Fallback validator and formatter for SAW agent names
+# PreToolUse hook: Auto-format Polywave agent names (E44)
+# Fallback validator and formatter for Polywave agent names
 #
-# Primary naming path: polywave-tools prepare-agent writes saw_name to brief frontmatter,
+# Primary naming path: polywave-tools prepare-agent writes polywave_name to brief frontmatter,
 # orchestrator reads it and uses as Agent tool name parameter.
 #
 # This hook provides:
-# 1. Validation: Pass through names already in SAW format (orchestrator used brief correctly)
+# 1. Validation: Pass through names already in Polywave format (orchestrator used brief correctly)
 # 2. Fallback formatting: If orchestrator missed the frontmatter or brief is old format,
 #    extract wave/agent/slug from IMPL doc path in prompt and reformat
 # 3. Backwards compatibility: Works with old briefs lacking frontmatter
@@ -38,7 +38,7 @@ if [[ "$name" =~ ^\[polywave:(wave[0-9]+:agent-[A-Za-z0-9]+|scout:[a-z0-9-]+|cri
   exit 0
 fi
 
-# Detect SAW agent from subagent_type
+# Detect Polywave agent from subagent_type
 phase=""
 case "$subagent_type" in
   wave-agent) phase="wave" ;;
@@ -46,7 +46,7 @@ case "$subagent_type" in
   critic-agent) phase="critic" ;;
   scaffold-agent) phase="scaffold" ;;
   integration-agent) phase="integration" ;;
-  *) exit 0 ;; # Not a SAW agent, allow as-is
+  *) exit 0 ;; # Not a Polywave agent, allow as-is
 esac
 
 # Extract wave/agent/slug from prompt or description

@@ -67,7 +67,7 @@ The observability pipeline has a working storage layer and query surface, but th
 
 ### Storage Format
 
-**SQLite with a single `events` table and a JSON data column.** SQLite is the right choice because SAW runs locally per-repo. WAL mode handles concurrent reads (CLI queries) during writes (Emitter goroutines). No external database dependency.
+**SQLite with a single `events` table and a JSON data column.** SQLite is the right choice because Polywave runs locally per-repo. WAL mode handles concurrent reads (CLI queries) during writes (Emitter goroutines). No external database dependency.
 
 The shipped schema (`pkg/observability/sqlite/`) is minimal:
 
@@ -94,7 +94,7 @@ Events are append-only. No automatic deletion in Tier 1. Tier 3 introduces confi
 
 ### Multi-Instance Considerations
 
-Each repo has its own `.saw/observability.db` file. If multiple SAW instances (CLI + web app) operate on the same repo concurrently, SQLite WAL mode handles read/write concurrency. The Emitter's fire-and-forget goroutine pattern tolerates transient write conflicts (errors go to stderr, not the caller). Program-level rollups that span multiple repos require explicit aggregation across database files -- this is a Tier 4 concern.
+Each repo has its own `.saw/observability.db` file. If multiple Polywave instances (CLI + web app) operate on the same repo concurrently, SQLite WAL mode handles read/write concurrency. The Emitter's fire-and-forget goroutine pattern tolerates transient write conflicts (errors go to stderr, not the caller). Program-level rollups that span multiple repos require explicit aggregation across database files -- this is a Tier 4 concern.
 
 ### Cost Representation
 
@@ -104,10 +104,10 @@ Each repo has its own `.saw/observability.db` file. If multiple SAW instances (C
 
 ## Non-Goals
 
-- **Not a replacement for claudewatch.** Claudewatch tracks session-level developer productivity (drift, friction, context pressure). SAW observability tracks protocol-level correctness and agent performance. They are complementary systems at different abstraction levels.
+- **Not a replacement for claudewatch.** Claudewatch tracks session-level developer productivity (drift, friction, context pressure). Polywave observability tracks protocol-level correctness and agent performance. They are complementary systems at different abstraction levels.
 - **Not real-time alerting in Tier 1.** Tier 1 focuses on data capture and basic querying. Real-time threshold monitoring and notifications arrive in Tier 3.
-- **Not a general-purpose APM.** SAW observability answers protocol-specific questions ("did the invariants hold?", "what did this IMPL cost?"), not generic application performance questions.
-- **Not multi-tenant.** SAW operates per-repo. There is no user isolation, access control, or tenant scoping in the observability system.
+- **Not a general-purpose APM.** Polywave observability answers protocol-specific questions ("did the invariants hold?", "what did this IMPL cost?"), not generic application performance questions.
+- **Not multi-tenant.** Polywave operates per-repo. There is no user isolation, access control, or tenant scoping in the observability system.
 - **Not a log aggregation system.** Agent journals remain text files. Structured run logs (NDJSON) are a Tier 3 enhancement, not a replacement for the existing journal system.
 
 ---
@@ -168,15 +168,15 @@ The goal of Tier 1 is to make the existing observability pipeline produce and st
 
 ---
 
-## Tier 2: Protocol-Level Intelligence (What Makes SAW Unique)
+## Tier 2: Protocol-Level Intelligence (What Makes Polywave Unique)
 
-The goal of Tier 2 is to track things no competitor tracks: whether the protocol's correctness guarantees actually held. Paperclip tracks cost. AO tracks session health. SAW should track invariant compliance -- the thing that justifies the protocol's existence.
+The goal of Tier 2 is to track things no competitor tracks: whether the protocol's correctness guarantees actually held. Paperclip tracks cost. AO tracks session health. Polywave should track invariant compliance -- the thing that justifies the protocol's existence.
 
 ### T2.1: Invariant Violation Tracking
 
 **What it is:** A new event type `InvariantCheckEvent` with fields: `invariant` (I1-I6), `passed` (bool), `details` (string), `impl_slug`, `wave_number`. Emit from every mechanical check point: E3 (I1 pre-launch verification), E2 (I2 interface freeze verification), wave sequencing checks (I3), completion report validation (I4, I5), role separation checks (I6).
 
-**Why it matters:** Answers the question "did the protocol hold?" This is SAW's unique value proposition. Over time, the invariant pass/fail history reveals which invariants are most frequently stressed, which IMPL patterns produce violations, and where the protocol needs strengthening.
+**Why it matters:** Answers the question "did the protocol hold?" This is Polywave's unique value proposition. Over time, the invariant pass/fail history reveals which invariants are most frequently stressed, which IMPL patterns produce violations, and where the protocol needs strengthening.
 
 **Dependencies:** T1.3 (engine must write events to the store).
 
@@ -242,7 +242,7 @@ The goal of Tier 3 is to close the loop -- use observability data to automatical
 
 **What it is:** Configurable spend limits scoped to IMPL slugs, program slugs, or globally. Two thresholds per policy: soft warn (default 80%) emits a notification, hard stop (100%) blocks the next wave launch. Policies stored as YAML config (`.saw/budget-policies.yaml`) or in the SQLite store. Enforcement at wave boundaries: `prepare-wave` checks all applicable policies before creating worktrees.
 
-**Why it matters:** Answers "how do I prevent runaway costs?" Cost tracking without enforcement is just reporting. Budget policies make cost observability actionable. The wave-boundary enforcement model is natural for SAW -- unlike Paperclip's per-invocation checking, SAW can enforce at the coarser (and less disruptive) wave boundary.
+**Why it matters:** Answers "how do I prevent runaway costs?" Cost tracking without enforcement is just reporting. Budget policies make cost observability actionable. The wave-boundary enforcement model is natural for Polywave -- unlike Paperclip's per-invocation checking, Polywave can enforce at the coarser (and less disruptive) wave boundary.
 
 **Dependencies:** T1.3 (need working cost event recording).
 
@@ -252,7 +252,7 @@ The goal of Tier 3 is to close the loop -- use observability data to automatical
 
 ### T3.2: Real-Time CI Feedback During Wave Execution
 
-**What it is:** Optional polling loop that monitors CI status for agent branches during wave execution. If CI fails on an agent's branch, emit an event and optionally notify the agent (via a marker file in the worktree) before the wave boundary gate. Inspired by AO's reaction engine but constrained to SAW's model: feedback is informational during execution, gates remain the formal checkpoint.
+**What it is:** Optional polling loop that monitors CI status for agent branches during wave execution. If CI fails on an agent's branch, emit an event and optionally notify the agent (via a marker file in the worktree) before the wave boundary gate. Inspired by AO's reaction engine but constrained to Polywave's model: feedback is informational during execution, gates remain the formal checkpoint.
 
 **Why it matters:** Answers "can agents fix CI failures before the wave gate runs?" Currently, agents discover CI failures only at wave finalization. Earlier feedback reduces wasted agent time on doomed approaches.
 
@@ -308,7 +308,7 @@ The goal of Tier 4 is to make observability data visible and exportable. The API
 
 **What it is:** A new page in the web app displaying: cost trends over time (line chart), wave success rates (bar chart), invariant health summary (pass/fail counts per invariant), top failure patterns, and per-IMPL cost breakdown. Uses the existing `/api/observability/*` endpoints.
 
-**Why it matters:** Answers "what is the overall health of my SAW usage?" at a glance. The API layer is already built; this is purely frontend work.
+**Why it matters:** Answers "what is the overall health of my Polywave usage?" at a glance. The API layer is already built; this is purely frontend work.
 
 **Dependencies:** T1.3 (API endpoints need a working store behind them).
 
@@ -356,7 +356,7 @@ The goal of Tier 4 is to make observability data visible and exportable. The API
 
 **What it is:** Export observability events via OTLP (OpenTelemetry Protocol) or webhook for ingestion into external systems (Grafana, Datadog, custom dashboards). Configurable export filters (e.g., only cost events, only for specific programs). Batch export with retry logic.
 
-**Why it matters:** Answers "how do I integrate SAW metrics into my existing monitoring stack?" Teams with established observability infrastructure should not need to use SAW's built-in dashboard exclusively.
+**Why it matters:** Answers "how do I integrate Polywave metrics into my existing monitoring stack?" Teams with established observability infrastructure should not need to use Polywave's built-in dashboard exclusively.
 
 **Dependencies:** T1.3, T1.4 (need reliable event stream to export).
 
@@ -373,7 +373,7 @@ The tiers are sequential in priority but not strictly blocking. Recommended exec
 1. **T1.2** first (integer cents -- must land before real cost data accumulates)
 2. **T1.3** immediately after (wire the store into the engine pipeline)
 3. **T1.4 + T1.5** to validate the pipeline works end-to-end
-4. **T2.1** next (invariant tracking is SAW's differentiator)
+4. **T2.1** next (invariant tracking is Polywave's differentiator)
 5. **T4.1** can start as soon as T1.3 is done (frontend work is independent)
 6. **T2.2 through T2.5** as data accumulates
 7. **T3.x and T4.x** based on user demand and data volume

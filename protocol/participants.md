@@ -1,6 +1,6 @@
 # Protocol Participants
 
-SAW has seven participant roles. All seven are agents (AI model instances running with tool access). They differ only in execution mode and responsibility.
+Polywave has seven participant roles. All seven are agents (AI model instances running with tool access). They differ only in execution mode and responsibility.
 
 ## Orchestrator
 
@@ -208,7 +208,7 @@ with existing types, and missing registration wiring.
 
 An asynchronous agent launched by the orchestrator at program scope. Analyzes REQUIREMENTS.md and the existing codebase, identifies feature boundaries, defines cross-feature dependencies and program contracts, produces the PROGRAM manifest. Functions as a "super-Scout" at project scope rather than feature scope — where the Scout analyzes a single feature and produces an IMPL doc, the Planner analyzes the entire project and produces a PROGRAM manifest that coordinates multiple IMPL docs into tiered execution.
 
-The Planner identifies which features can execute in parallel (same tier) and which must execute sequentially (dependencies across tiers). It defines program-level interface contracts that span multiple features, ensuring that IMPLs can depend on each other's outputs without circular dependencies. The Planner runs a program-level suitability assessment to determine if the requirements can be decomposed into parallelizable features under SAW constraints.
+The Planner identifies which features can execute in parallel (same tier) and which must execute sequentially (dependencies across tiers). It defines program-level interface contracts that span multiple features, ensuring that IMPLs can depend on each other's outputs without circular dependencies. The Planner runs a program-level suitability assessment to determine if the requirements can be decomposed into parallelizable features under Polywave constraints.
 
 **Required capabilities:**
 
@@ -217,7 +217,7 @@ The Planner identifies which features can execute in parallel (same tier) and wh
 - Identify cross-feature dependencies and execution order constraints
 - Define program contracts (cross-IMPL interface contracts)
 - Produce PROGRAM manifest with tier structure, IMPL listings, and contracts
-- Run program-level suitability assessment (determine if requirements fit SAW execution model)
+- Run program-level suitability assessment (determine if requirements fit Polywave execution model)
 
 **Forbidden actions:**
 

@@ -11,12 +11,12 @@
 #
 # Manual test commands:
 #
-#   # Non-SAW agent — should exit 0, no output
+#   # Non-Polywave agent — should exit 0, no output
 #   echo '{"session_id":"abc","agent_name":"helper","agent_description":"general task","exit_reason":"completed"}' \
 #     | bash implementations/claude-code/hooks/emit_agent_completion
 #   echo $?  # 0
 #
-#   # SAW wave agent — should emit observability JSON to stdout
+#   # Polywave wave agent — should emit observability JSON to stdout
 #   echo '{"session_id":"abc","agent_name":"wave-A","agent_description":"[polywave:wave1:agent-A] implement feature","exit_reason":"completed"}' \
 #     | bash implementations/claude-code/hooks/emit_agent_completion
 #   echo $?  # 0 (always)
@@ -31,12 +31,12 @@ input=$(cat)
 description=$(echo "$input" | jq -r '.agent_description // empty' 2>/dev/null || true)
 session_id=$(echo "$input" | jq -r '.session_id // empty' 2>/dev/null || true)
 
-# Fast path: no description means not a SAW agent
+# Fast path: no description means not a Polywave agent
 if [[ -z "$description" ]]; then
   exit 0
 fi
 
-# --- Parse SAW tag ---
+# --- Parse Polywave tag ---
 agent_type=""
 wave_num=""
 agent_id=""
@@ -56,7 +56,7 @@ elif [[ "$description" =~ \[polywave:scaffold:([A-Za-z0-9_-]+)\] ]]; then
   agent_type="scaffold"
   saw_label="${BASH_REMATCH[1]}"
 else
-  # Not a SAW agent
+  # Not a Polywave agent
   exit 0
 fi
 

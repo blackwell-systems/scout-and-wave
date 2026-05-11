@@ -15,7 +15,7 @@ Polywave implemented as a Claude Code skill for fully automated parallel agent e
 
 ### Step 1: Configure Permissions (Required)
 
-SAW requires `"Agent"` in your Claude Code permissions allow list. **Without this, every agent launch will pause for manual approval.**
+Polywave requires `"Agent"` in your Claude Code permissions allow list. **Without this, every agent launch will pause for manual approval.**
 
 **If `~/.claude/settings.json` doesn't exist yet**, create it:
 
@@ -119,11 +119,11 @@ ln -sf ~/code/polywave/implementations/claude-code/prompts/agent-template.md \
 # ... (repeat for all supporting files)
 ```
 
-**Why symlinks?** The SAW repo is the single source of truth. Symlinks mean `git pull` on the repo automatically updates the skill — no reinstall step needed.
+**Why symlinks?** The Polywave repo is the single source of truth. Symlinks mean `git pull` on the repo automatically updates the skill — no reinstall step needed.
 
 ### Step 5: Install Custom Agent Types (Required)
 
-SAW uses custom Claude Code agent types that provide structural tool restrictions (e.g., scout cannot edit source files, wave agents cannot spawn sub-agents) and behavioral instructions. These must be installed for the skill to function.
+Polywave uses custom Claude Code agent types that provide structural tool restrictions (e.g., scout cannot edit source files, wave agents cannot spawn sub-agents) and behavioral instructions. These must be installed for the skill to function.
 
 **Install agent types into the skill directory:**
 
@@ -213,7 +213,7 @@ Navigate to a project with existing code and run:
 /polywave wave                              # Agents execute in parallel (2-5min)
 ```
 
-**New to SAW?** See **[QUICKSTART.md](QUICKSTART.md)** for a detailed step-by-step guide with example output, error handling, and tips for success.
+**New to Polywave?** See **[QUICKSTART.md](QUICKSTART.md)** for a detailed step-by-step guide with example output, error handling, and tips for success.
 
 ### Commands
 
@@ -349,7 +349,7 @@ If the file doesn't exist, all values fall back to defaults. The CLI skill reads
 
 ### Agent Architecture
 
-SAW uses custom Claude Code agent types for all Scout, Scaffold Agent, Wave Agent, and Integration Agent launches:
+Polywave uses custom Claude Code agent types for all Scout, Scaffold Agent, Wave Agent, and Integration Agent launches:
 
 **Directory structure:**
 ```
@@ -381,7 +381,7 @@ Wave agents never read `agent-template.md` directly — they receive the Scout-g
 
 ## When to Use It
 
-SAW pays for itself when the work has clear file seams, interfaces can be defined before implementation starts, and each agent owns enough work to justify running in parallel. The build/test cycle being >30 seconds amplifies the savings further.
+Polywave pays for itself when the work has clear file seams, interfaces can be defined before implementation starts, and each agent owns enough work to justify running in parallel. The build/test cycle being >30 seconds amplifies the savings further.
 
 If the work doesn't decompose cleanly, the Scout says so. It runs a suitability gate first and emits NOT SUITABLE rather than forcing a bad decomposition.
 

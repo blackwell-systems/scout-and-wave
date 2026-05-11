@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# H5 pre-launch validation gate for SAW agents
+# H5 pre-launch validation gate for Polywave agents
 # PreToolUse hook with matcher "Agent"
 #
 # Fires before every Agent tool call. Two dispatch paths:
@@ -18,17 +18,17 @@
 #
 # Manual test commands:
 #
-#   # Non-SAW agent — should exit 0 (allow)
+#   # Non-Polywave agent — should exit 0 (allow)
 #   echo '{"tool_name":"Agent","tool_input":{"prompt":"hello","description":"general task"}}' \
 #     | bash implementations/claude-code/hooks/validate_agent_launch
 #   echo $?  # 0
 #
-#   # SAW agent missing IMPL path — should exit 2 (block)
+#   # Polywave agent missing IMPL path — should exit 2 (block)
 #   echo '{"tool_name":"Agent","tool_input":{"prompt":"do stuff","description":"[polywave:wave1:agent-A] implement feature"}}' \
 #     | bash implementations/claude-code/hooks/validate_agent_launch
 #   echo $?  # 2
 #
-#   # SAW agent with IMPL path but missing file — should exit 2 (block)
+#   # Polywave agent with IMPL path but missing file — should exit 2 (block)
 #   echo '{"tool_name":"Agent","tool_input":{"prompt":"IMPL doc: docs/IMPL/IMPL-nonexistent.yaml","description":"[polywave:wave1:agent-A] implement feature"}}' \
 #     | bash implementations/claude-code/hooks/validate_agent_launch
 #   echo $?  # 2
@@ -66,7 +66,7 @@ skill_dir="${CLAUDE_SKILL_DIR:-${HOME}/.claude/skills/polywave}"
 #
 # Detection: reliable via subagent_type=="scout" field in tool_input.
 # The [polywave:scout:slug] description tag is also checked and warned-on if absent —
-# the tag is the SAW session fingerprint used by monitoring and E42 validation.
+# the tag is the Polywave session fingerprint used by monitoring and E42 validation.
 is_scout=false
 if [[ "$subagent_type" == "scout" ]] || [[ "$description" =~ \[polywave:scout ]]; then
   is_scout=true
@@ -76,7 +76,7 @@ if [[ "$is_scout" == "true" ]]; then
   # Auto-fix description tag if missing.
   # If subagent_type=scout but description lacks [polywave:scout:slug], extract slug
   # from prompt (IMPL doc path or feature description) and inject it via updatedInput.
-  # This enforces the SAW session fingerprint without requiring orchestrator discipline.
+  # This enforces the Polywave session fingerprint without requiring orchestrator discipline.
   fixed_description="$description"
   if ! [[ "$description" =~ \[polywave:scout ]]; then
     # Try to extract slug from IMPL doc path in prompt: IMPL-<slug>.yaml
@@ -118,13 +118,13 @@ if [[ "$subagent_type" == "integration-agent" ]] || [[ "$description" =~ \[polyw
   exit 0
 fi
 
-# --- Check 1: SAW tag extraction ---
+# --- Check 1: Polywave tag extraction ---
 # Parse [polywave:wave{N}:agent-{ID}] from description
 if [[ "$description" =~ \[polywave:wave([0-9]+):agent-([A-Za-z0-9]+)\] ]]; then
   wave_num="${BASH_REMATCH[1]}"
   agent_id="${BASH_REMATCH[2]}"
 else
-  # Not a SAW agent — allow through
+  # Not a Polywave agent — allow through
   exit 0
 fi
 
@@ -220,12 +220,12 @@ if [[ -n "$ownership_file" ]]; then
   own_wave=$(jq -r '.wave // empty' "$ownership_file")
 
   if [[ -n "$own_agent" && "$own_agent" != "$agent_id" ]]; then
-    echo "H5: Ownership file mismatch. SAW tag says agent ${agent_id} but .saw-ownership.json says agent ${own_agent}." >&2
+    echo "H5: Ownership file mismatch. Polywave tag says agent ${agent_id} but .saw-ownership.json says agent ${own_agent}." >&2
     exit 2
   fi
 
   if [[ -n "$own_wave" && "$own_wave" != "$wave_num" ]]; then
-    echo "H5: Ownership file mismatch. SAW tag says wave ${wave_num} but .saw-ownership.json says wave ${own_wave}." >&2
+    echo "H5: Ownership file mismatch. Polywave tag says wave ${wave_num} but .saw-ownership.json says wave ${own_wave}." >&2
     exit 2
   fi
 

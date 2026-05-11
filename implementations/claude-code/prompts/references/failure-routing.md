@@ -64,7 +64,7 @@ This scans the merged codebase for exported symbols flagged as `integration_requ
 If gaps are found, launch an **Integration Agent** to wire them:
 
 1. Read `agent.integration_model` from `polywave.config.json` (same two-level lookup as other models). If empty or missing, inherit the parent model.
-2. Launch the integration agent via the Agent tool with `subagent_type: integration-agent` and `run_in_background: true`. Pass the IMPL doc path, wave number, and the integration report JSON as the prompt. Use `[SAW:wave{N}:integrator] wire integration gaps` as the description.
+2. Launch the integration agent via the Agent tool with `subagent_type: integration-agent` and `run_in_background: true`. Pass the IMPL doc path, wave number, and the integration report JSON as the prompt. Use `[Polywave:wave{N}:integrator] wire integration gaps` as the description.
 3. After the integration agent completes, verify the build: `go build ./...`. If it fails, surface the error to the user.
 4. Read the integration agent's completion report from the IMPL doc (agent ID: `integrator`).
 

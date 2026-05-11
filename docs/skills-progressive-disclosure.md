@@ -1,10 +1,10 @@
-# Progressive Disclosure in SAW Skills
+# Progressive Disclosure in Polywave Skills
 
-The SAW `/saw` skill implements an **advanced progressive disclosure architecture** that extends the [Agent Skills specification](https://agentskills.io/specification#progressive-disclosure) with hook-based deterministic injection. This document explains the four-tier structure, the three-layer injection architecture, and the frontmatter-driven dispatch mechanism that makes context loading automatic rather than convention-based.
+The Polywave `/saw` skill implements an **advanced progressive disclosure architecture** that extends the [Agent Skills specification](https://agentskills.io/specification#progressive-disclosure) with hook-based deterministic injection. This document explains the four-tier structure, the three-layer injection architecture, and the frontmatter-driven dispatch mechanism that makes context loading automatic rather than convention-based.
 
 ## Executive Summary: The Advanced Pattern
 
-SAW's progressive disclosure goes beyond the Agent Skills spec's convention-based model (where references are loaded "as needed" based on model decisions) to implement **deterministic hook-based injection**:
+Polywave's progressive disclosure goes beyond the Agent Skills spec's convention-based model (where references are loaded "as needed" based on model decisions) to implement **deterministic hook-based injection**:
 
 **What makes it advanced:**
 
@@ -47,7 +47,7 @@ Scout subagent receives: [scout-program-contracts.md] + [scout.md with inlined c
 
 No routing tables. No "read this file if you need it" instructions. Always-needed content is inlined in agent definitions; conditional content is injected deterministically before the model starts.
 
-## The Agent Skills Spec and SAW Extensions
+## The Agent Skills Spec and Polywave Extensions
 
 The [Agent Skills specification](https://agentskills.io/specification) defines a three-tier progressive disclosure model for agentic skills:
 
@@ -55,7 +55,7 @@ The [Agent Skills specification](https://agentskills.io/specification) defines a
 2. **Instructions** (<5000 tokens recommended) — the full `SKILL.md` body, loaded on skill activation
 3. **Resources** (as needed) — files in `scripts/`, `references/`, `assets/`, loaded only when required
 
-**SAW's extensions to the spec:**
+**Polywave's extensions to the spec:**
 
 1. **Tier 0 discovery layer** — `CLAUDE.md` sits outside the skill, providing project-level routing before any skill is activated
 2. **Hook-based injection architecture** — Deterministic loading via `UserPromptSubmit` and `PreToolUse/Agent` hooks (Claude Code) + vendor-neutral script fallbacks
@@ -75,15 +75,15 @@ Every token loaded into the Orchestrator's context window is a token that cannot
 
 Loading all of this unconditionally would consume ~765 lines on every `/saw` invocation. A `/polywave wave` call has no need for the program execution tier graph or the amend flow. Loading them wastes roughly 40% of the skill's effective context budget on content that will never be referenced.
 
-**The advanced pattern:** Rather than relying on the model to read references on-demand (convention-based), SAW uses **hook-based deterministic injection**. Scripts with direct conditional logic determine "when prompt matches X, inject file Y" -- the `UserPromptSubmit` hook enforces this before the model runs. The model receives the context it needs automatically, with zero routing decisions required.
+**The advanced pattern:** Rather than relying on the model to read references on-demand (convention-based), Polywave uses **hook-based deterministic injection**. Scripts with direct conditional logic determine "when prompt matches X, inject file Y" -- the `UserPromptSubmit` hook enforces this before the model runs. The model receives the context it needs automatically, with zero routing decisions required.
 
 ## The Four Tiers
 
-> **Spec alignment:** The Agent Skills spec defines three tiers (Metadata, Instructions, Resources). SAW adds Tier 0 as a discovery layer that sits outside the spec's scope — it is not part of the skill itself, but part of the project environment.
+> **Spec alignment:** The Agent Skills spec defines three tiers (Metadata, Instructions, Resources). Polywave adds Tier 0 as a discovery layer that sits outside the spec's scope — it is not part of the skill itself, but part of the project environment.
 
 ### Tier 0 — CLAUDE.md Index (always in context, zero invocation cost)
 
-*Not part of the Agent Skills spec — SAW extension for project-level discovery.*
+*Not part of the Agent Skills spec — Polywave extension for project-level discovery.*
 
 `CLAUDE.md` files — global (`~/.claude/CLAUDE.md`) or project-level (`.claude/CLAUDE.md`) — are loaded into every Claude Code session before any user message is processed. They are not loaded *by* a skill; they are always present. This makes them the ideal entry point for the entire progressive disclosure system.
 
@@ -186,7 +186,7 @@ Three on-demand references live in `implementations/claude-code/prompts/referenc
 
 ## The Advanced Pattern: Hook-Based Deterministic Injection
 
-SAW's implementation goes beyond the Agent Skills spec's convention-based loading model. Instead of relying on the model to follow routing instructions, SAW uses **script-based conditional injection** to load references deterministically.
+Polywave's implementation goes beyond the Agent Skills spec's convention-based loading model. Instead of relying on the model to follow routing instructions, Polywave uses **script-based conditional injection** to load references deterministically.
 
 ### Script-Based Conditional Dispatch
 
@@ -502,11 +502,11 @@ The `validate_agent_launch` hook serves dual roles: **enforcement** (H5 pre-laun
 
 **Execution order:**
 
-1. **Scout path** (before Check 1): Detects `subagent_type: scout` or `[SAW:scout:*]` description. Conditionally injects `scout-program-contracts.md` when `--program` in prompt. Suitability gate and implementation process are inlined in `scout.md`. Returns `updatedInput`. Exits 0.
+1. **Scout path** (before Check 1): Detects `subagent_type: scout` or `[Polywave:scout:*]` description. Conditionally injects `scout-program-contracts.md` when `--program` in prompt. Suitability gate and implementation process are inlined in `scout.md`. Returns `updatedInput`. Exits 0.
 2. **Check 11** (before Check 1): Detects `subagent_type: critic-agent`. No injection -- all content inlined in `critic-agent.md`. Exits 0.
 3. **Check 12** (before Check 1): Detects `subagent_type: planner`. No injection -- all content inlined in `planner.md`. Exits 0.
 4. **Check 13** (before Check 1): Detects `subagent_type: integration-agent`. No injection -- all content inlined in `integration-agent.md`. Exits 0.
-5. **Check 1**: Extracts `[SAW:wave{N}:agent-{ID}]` tag from description. Non-wave-agent calls exit here (pass through).
+5. **Check 1**: Extracts `[Polywave:wave{N}:agent-{ID}]` tag from description. Non-wave-agent calls exit here (pass through).
 6. **Checks 2-8**: IMPL existence, IMPL validation, agent in wave, ownership file match, worktree branch, scaffolds committed. Exit 2 if any fail (blocks launch).
 7. **Check 10**: Wave agent conditional injection. Conditionally injects `wave-agent-build-diagnosis.md` (when baseline failed) and `wave-agent-program-contracts.md` (when frozen contracts present). Worktree isolation and completion report are inlined in `wave-agent.md`. Returns `updatedInput`. Exits 0.
 
@@ -518,12 +518,12 @@ The hook checks both `subagent_type` field (reliable when present) and descripti
 
 ```bash
 is_scout=false
-if [[ "$subagent_type" == "scout" ]] || [[ "$description" =~ \[SAW:scout ]]; then
+if [[ "$subagent_type" == "scout" ]] || [[ "$description" =~ \[Polywave:scout ]]; then
   is_scout=true
 fi
 ```
 
-Description tags (`[SAW:scout:slug]`, `[SAW:critic:impl-slug]`) are the SAW session fingerprint used by monitoring (E40) and SubagentStop validation (E42). The hook auto-fixes missing tags when `subagent_type` is present but description lacks the tag.
+Description tags (`[Polywave:scout:slug]`, `[Polywave:critic:impl-slug]`) are the Polywave session fingerprint used by monitoring (E40) and SubagentStop validation (E42). The hook auto-fixes missing tags when `subagent_type` is present but description lacks the tag.
 
 **updatedInput preservation:**
 
@@ -620,7 +620,7 @@ For always-needed content, skip all of this — just inline it in the agent defi
 
 ## Summary: The Complete Advanced Pattern
 
-SAW's progressive disclosure architecture combines **four tiers**, **three layers**, and **two surfaces** to deliver deterministic context loading:
+Polywave's progressive disclosure architecture combines **four tiers**, **three layers**, and **two surfaces** to deliver deterministic context loading:
 
 ### Four Tiers
 

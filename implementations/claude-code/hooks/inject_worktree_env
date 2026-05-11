@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# inject_worktree_env - SubagentStart hook for SAW worktree environment injection
+# inject_worktree_env - SubagentStart hook for Polywave worktree environment injection
 #
 # Lifecycle: SubagentStart (fires when wave agent threads are created)
 # Purpose: Set POLYWAVE_AGENT_WORKTREE, POLYWAVE_AGENT_ID, POLYWAVE_WAVE_NUMBER, POLYWAVE_IMPL_PATH, POLYWAVE_BRANCH
@@ -8,17 +8,17 @@
 # Convention: Hooks receive JSON on stdin, must return JSON on stdout, exit 0 always
 #
 # Test Cases:
-# Test 1: Non-SAW agent (no [polywave:wave tag)
+# Test 1: Non-Polywave agent (no [polywave:wave tag)
 #   - Should exit 0 immediately, no env file created
 #   - echo '{}' | CLAUDE_AGENT_DESCRIPTION="Generic agent" ./inject_worktree_env
 #
-# Test 2: SAW wave agent with worktree
+# Test 2: Polywave wave agent with worktree
 #   - Should detect [polywave:wave1:agent-A] tag
 #   - Should find .saw-ownership.json and set POLYWAVE_AGENT_WORKTREE
 #   - Should set all 5 environment variables
 #   - cd /path/to/worktree && echo '{}' | CLAUDE_AGENT_DESCRIPTION="[polywave:wave1:agent-A] Implement feature" ./inject_worktree_env
 #
-# Test 3: SAW solo agent (no worktree)
+# Test 3: Polywave solo agent (no worktree)
 #   - Should detect [polywave:wave tag but no worktree
 #   - Should set 4 vars (POLYWAVE_AGENT_WORKTREE empty)
 #   - echo '{}' | CLAUDE_AGENT_DESCRIPTION="[polywave:wave1:agent-A] Solo task" ./inject_worktree_env
@@ -31,9 +31,9 @@ read -r _ || true  # Consume stdin, ignore content
 # Extract agent description from environment (set by Claude Code)
 agent_desc="${CLAUDE_AGENT_DESCRIPTION:-}"
 
-# Check if this is a SAW wave agent
+# Check if this is a Polywave wave agent
 if ! [[ "$agent_desc" =~ \[polywave:wave ]]; then
-  # Not a SAW agent, exit cleanly (no side effects)
+  # Not a Polywave agent, exit cleanly (no side effects)
   echo '{"hookSpecificOutput": {"hookEventName": "SubagentStart", "sawAgent": false}}'
   exit 0
 fi
@@ -44,7 +44,7 @@ if [[ "$agent_desc" =~ \[polywave:wave([0-9]+):agent-([A-Z0-9]+)\] ]]; then
   agent_id="${BASH_REMATCH[2]}"
 else
   # Malformed tag, exit cleanly
-  echo '{"hookSpecificOutput": {"hookEventName": "SubagentStart", "sawAgent": true, "error": "malformed SAW tag"}}'
+  echo '{"hookSpecificOutput": {"hookEventName": "SubagentStart", "sawAgent": true, "error": "malformed Polywave tag"}}'
   exit 0
 fi
 

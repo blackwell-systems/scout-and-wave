@@ -158,7 +158,7 @@ E42 performs post-hoc I5 commit verification at SubagentStop time, checking that
 **Why This Is Not a Style Preference:**
 - An Orchestrator performing Scout work bypasses async execution
 - Pollutes the orchestrator's context window
-- Breaks observability (no Scout agent means no SAW session is detectable by monitoring tools)
+- Breaks observability (no Scout agent means no Polywave session is detectable by monitoring tools)
 - Violates the architectural separation between synchronous coordination and asynchronous work
 
 **Scope:** The solo wave agent must still operate in the Wave Agent role: launched by the Orchestrator as an asynchronous agent, not executed directly by the Orchestrator. Executing solo wave work inline violates I6 regardless of wave size. The absence of worktrees changes the isolation mechanism; it does not change the participant roles.

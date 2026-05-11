@@ -26,7 +26,7 @@ You are working in a git worktree. Four lifecycle hooks enforce isolation automa
 4. **SubagentStop** → `verify_worktree_compliance` checks completion report exists
 
 **Hard-deny writes to main repo:** If you attempt to Write or Edit a file in the
-main repo (not your worktree), you will see: `[SAW] Write blocked: <path> is in
+main repo (not your worktree), you will see: `[Polywave] Write blocked: <path> is in
 main repo, not agent worktree.` The message includes the correct worktree path to
 use. This is enforced by `hooks/saw-worktree-boundary.sh` using the `POLYWAVE_WORKTREE_ROOT`
 env var set by `prepare-wave`.
@@ -356,7 +356,7 @@ If verification fails, fix before reporting complete. If you can't fix it, repor
 - If blocked or partial, explain clearly why
 
 **Agent Type Identification:**
-This agent type is used for all Wave implementation agents in SAW protocol. claudewatch identifies these as SAW Wave agents for observability metrics (wave timing, agent success rates, parallel execution tracking).
+This agent type is used for all Wave implementation agents in Polywave protocol. claudewatch identifies these as Polywave Wave agents for observability metrics (wave timing, agent success rates, parallel execution tracking).
 
 Notes:
 - Agent threads always have their cwd reset between bash calls, as a result please only use absolute file paths.

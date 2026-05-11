@@ -1,37 +1,37 @@
 #!/usr/bin/env bash
-# E42 SubagentStop validation hook for SAW agents
+# E42 SubagentStop validation hook for Polywave agents
 # SubagentStop lifecycle hook — validates protocol compliance before agent session closes
 #
-# Fires when any agent session ends. Validates SAW agent protocol obligations.
+# Fires when any agent session ends. Validates Polywave agent protocol obligations.
 # Non-polywave agents (no [polywave:...] tag in agent_description) pass through immediately.
 #
 # Exit codes:
-#   0 — Pass (agent fulfilled obligations or is not a SAW agent)
+#   0 — Pass (agent fulfilled obligations or is not a Polywave agent)
 #   2 — Block (agent has unfulfilled protocol obligations)
 #
 # Manual test commands:
 #
-#   # Non-SAW agent — should exit 0 (allow)
+#   # Non-Polywave agent — should exit 0 (allow)
 #   echo '{"session_id":"abc","agent_name":"helper","agent_description":"general task","exit_reason":"completed"}' \
 #     | bash implementations/claude-code/hooks/validate_agent_completion
 #   echo $?  # 0
 #
-#   # SAW wave agent with completion report present — should exit 0
+#   # Polywave wave agent with completion report present — should exit 0
 #   echo '{"session_id":"abc","agent_name":"wave-A","agent_description":"[polywave:wave1:agent-A] implement feature","exit_reason":"completed"}' \
 #     | bash implementations/claude-code/hooks/validate_agent_completion
 #   echo $?  # depends on IMPL doc state
 #
-#   # SAW wave agent missing completion report — should exit 2 (block)
+#   # Polywave wave agent missing completion report — should exit 2 (block)
 #   echo '{"session_id":"abc","agent_name":"wave-A","agent_description":"[polywave:wave1:agent-A] implement feature","exit_reason":"completed"}' \
 #     | bash implementations/claude-code/hooks/validate_agent_completion
 #   echo $?  # 2
 #
-#   # SAW critic agent — should validate critic_report field and check IMPL doc is committed (E48)
+#   # Polywave critic agent — should validate critic_report field and check IMPL doc is committed (E48)
 #   echo '{"session_id":"abc","agent_name":"critic","agent_description":"[polywave:critic:wave1] review agents","exit_reason":"completed"}' \
 #     | bash implementations/claude-code/hooks/validate_agent_completion
 #   echo $?  # depends on IMPL doc state
 #
-#   # SAW scaffold agent — should validate scaffold statuses
+#   # Polywave scaffold agent — should validate scaffold statuses
 #   echo '{"session_id":"abc","agent_name":"scaffold","agent_description":"[polywave:scaffold:types] create types","exit_reason":"completed"}' \
 #     | bash implementations/claude-code/hooks/validate_agent_completion
 #   echo $?  # depends on IMPL doc state
@@ -44,12 +44,12 @@ input=$(cat)
 # --- Parse fields ---
 description=$(echo "$input" | jq -r '.agent_description // empty' 2>/dev/null || true)
 
-# Fast path: no description means not a SAW agent
+# Fast path: no description means not a Polywave agent
 if [[ -z "$description" ]]; then
   exit 0
 fi
 
-# --- Step 1: Parse SAW tag ---
+# --- Step 1: Parse Polywave tag ---
 # Supported formats:
 #   [polywave:wave{N}:agent-{ID}] — wave agent
 #   [polywave:critic:{label}]     — critic agent
@@ -75,7 +75,7 @@ elif [[ "$description" =~ \[polywave:scaffold:([A-Za-z0-9_-]+)\] ]]; then
   agent_type="scaffold"
   saw_label="${BASH_REMATCH[1]}"
 else
-  # No SAW tag found — not a SAW agent, pass through
+  # No Polywave tag found — not a Polywave agent, pass through
   exit 0
 fi
 
@@ -130,7 +130,7 @@ if [[ -z "$impl_path" || ! -f "$impl_path" ]]; then
 fi
 
 if [[ -z "$impl_path" || ! -f "$impl_path" ]]; then
-  echo "E42: Cannot locate IMPL doc for SAW ${agent_type} agent. Checked .polywave-state/active-impl and agent_description." >&2
+  echo "E42: Cannot locate IMPL doc for Polywave ${agent_type} agent. Checked .polywave-state/active-impl and agent_description." >&2
   exit 2
 fi
 
@@ -500,7 +500,7 @@ case "$agent_type" in
     ;;
 
   *)
-    # Unknown SAW tag type — pass through
+    # Unknown Polywave tag type — pass through
     exit 0
     ;;
 esac

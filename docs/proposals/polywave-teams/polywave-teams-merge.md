@@ -1,5 +1,5 @@
 <!-- polywave-teams-merge v0.1.4 -->
-# SAW-Teams Merge Procedure
+# Polywave-Teams Merge Procedure
 
 Merge teammate worktrees back into the main branch after a wave completes.
 Adapted from `prompts/saw-merge.md` (v0.4.6): same merge mechanics, same
@@ -179,7 +179,7 @@ Do not skip this step; downstream agents read the IMPL doc, not worktrees.
 
 **Teammate clarification (best-effort).** If a deviation is ambiguous, the
 lead can message the responsible teammate to clarify before merging. In
-standard SAW, the Orchestrator must guess from the report. In polywave-teams, the
+standard Polywave, the Orchestrator must guess from the report. In polywave-teams, the
 teammate may still be alive (Agent Teams shutdown can be slow) and can
 respond. However, this is best-effort; teammates may already be shut down by
 the time the lead reviews. The merge procedure must work without teammate
@@ -397,13 +397,13 @@ Recovery procedure:
 4. If no commits: the teammate made no progress. Discard the worktree and
    re-run.
 
-**This is worse than standard SAW's crash recovery.** In standard SAW, Agent
+**This is worse than standard Polywave's crash recovery.** In standard Polywave, Agent
 tool background agents may survive an orchestrator crash if the session is
 resumed. In polywave-teams, teammates are tied to the team's lifecycle; no team,
 no teammates. The worktree branches and IMPL doc are the only surviving state.
 This is a known limitation (DESIGN.md blocking issue 1).
 
 **Mitigation:** If crash recovery is critical for your use case, use standard
-SAW (`prompts/polywave-skill.md`) instead of polywave-teams. The IMPL doc is
+Polywave (`prompts/polywave-skill.md`) instead of polywave-teams. The IMPL doc is
 execution-layer-agnostic; the same IMPL doc works with either execution
 layer.

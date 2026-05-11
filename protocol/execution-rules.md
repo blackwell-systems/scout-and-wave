@@ -87,7 +87,7 @@ When an interface change is required after worktrees exist and some agents have 
 
 **Required Action:** All Wave agents MUST use worktree isolation. There are no exceptions for work type (documentation-only, simple refactors, file moves, etc.).
 
-**Failure Handling:** If work is too small to justify worktrees, it is too small for SAW; use sequential implementation instead.
+**Failure Handling:** If work is too small to justify worktrees, it is too small for Polywave; use sequential implementation instead.
 
 ### Rationale for Mandatory Isolation
 
@@ -161,9 +161,9 @@ This prevents prepare-wave failures caused by leftover git worktrees from crashe
 
 **Backward compatibility:** Branches created in the legacy format `wave{N}-agent-{ID}` (without slug prefix) are still accepted. The slug-prefix convention was introduced in the polywave-go engine after protocol v0.20.0. Tools accept both formats.
 
-**Why This Is Not a Style Choice:** This is a canonical requirement. The naming scheme is the mechanism by which external tooling identifies SAW sessions and correlates agents to waves. Deviating from it breaks observability silently. Any tooling that consumes SAW session data must treat this naming scheme as the stable interface.
+**Why This Is Not a Style Choice:** This is a canonical requirement. The naming scheme is the mechanism by which external tooling identifies Polywave sessions and correlates agents to waves. Deviating from it breaks observability silently. Any tooling that consumes Polywave session data must treat this naming scheme as the stable interface.
 
-**Failure Handling:** Non-conforming worktree names prevent monitoring tools from detecting SAW sessions.
+**Failure Handling:** Non-conforming worktree names prevent monitoring tools from detecting Polywave sessions.
 
 ---
 
@@ -725,7 +725,7 @@ full and uses its contents to inform the suitability assessment:
 - `features_completed` — understands project history and prior wave structure
 
 **If absent:** Scout proceeds normally without it. `docs/CONTEXT.md` is optional;
-projects that have never completed a SAW feature will not have one.
+projects that have never completed a Polywave feature will not have one.
 
 **Rationale:** Without project memory, each Scout run starts cold. After several
 features, the project accumulates naming conventions, module boundaries, and
@@ -1601,7 +1601,7 @@ entries from 2 or more repos. Optional for smaller IMPLs; can be suppressed with
 use `polywave-tools run-critic --backend agent-tool "<impl-path>"` to get the assembled
 critic prompt without spawning a subprocess. Capture the stdout output and pass it
 as the `prompt` parameter when launching the critic via the Agent tool:
-`Agent(subagent_type=critic-agent, run_in_background=true, description="[SAW:critic:<slug>]",
+`Agent(subagent_type=critic-agent, run_in_background=true, description="[Polywave:critic:<slug>]",
 prompt="$(polywave-tools run-critic --backend agent-tool '<impl-path>')")`.
 The --backend cli mode (default) spawns a subprocess and fails inside
 an active Claude Code session; always use --backend agent-tool in CLI orchestration.
@@ -1937,32 +1937,32 @@ The following checklist enumerates ALL lifecycle events that must be emitted. Ev
 
 ## E42: SubagentStop Validation
 
-**Trigger:** SubagentStop lifecycle event fires for any SAW agent (wave, critic, scout, or scaffold).
+**Trigger:** SubagentStop lifecycle event fires for any Polywave agent (wave, critic, scout, or scaffold).
 
-**Required Action:** A SubagentStop lifecycle hook validates that the completing agent has fulfilled its protocol obligations before the agent session closes. The hook reads the SubagentStop JSON payload from stdin, identifies SAW agents by parsing the `[SAW:...]` tag from `agent_description`, and runs agent-type-specific validation checks. Non-SAW agents pass through immediately (exit 0).
+**Required Action:** A SubagentStop lifecycle hook validates that the completing agent has fulfilled its protocol obligations before the agent session closes. The hook reads the SubagentStop JSON payload from stdin, identifies Polywave agents by parsing the `[Polywave:...]` tag from `agent_description`, and runs agent-type-specific validation checks. Non-Polywave agents pass through immediately (exit 0).
 
 **Validation matrix:**
 
 | Agent Type | Required Checks |
 |-----------|----------------|
-| Wave (`[SAW:wave*:agent-*]`) | I1 ownership verification, I5 commit verification, completion report in IMPL doc |
-| Critic (`[SAW:critic:*]`) | `critic_report:` field present with `verdict`, `agents_reviewed`, and `issues` keys |
-| Scout (`[SAW:scout]` or `[SAW:scout:*]`) | IMPL doc exists at expected path and passes `polywave-tools validate` |
-| Scaffold (`[SAW:scaffold:*]`) | All scaffold entries have `status: committed (...)` |
-| Other SAW tags | Pass through (exit 0) |
+| Wave (`[Polywave:wave*:agent-*]`) | I1 ownership verification, I5 commit verification, completion report in IMPL doc |
+| Critic (`[Polywave:critic:*]`) | `critic_report:` field present with `verdict`, `agents_reviewed`, and `issues` keys |
+| Scout (`[Polywave:scout]` or `[Polywave:scout:*]`) | IMPL doc exists at expected path and passes `polywave-tools validate` |
+| Scaffold (`[Polywave:scaffold:*]`) | All scaffold entries have `status: committed (...)` |
+| Other Polywave tags | Pass through (exit 0) |
 
 **Active IMPL marker:** Before creating worktrees, `prepare-wave` writes the absolute IMPL doc path to `.polywave-state/active-impl` (creating the directory if needed). The E42 SubagentStop hook uses this file to locate the IMPL doc without requiring it as a command-line argument. If this file is absent when a wave agent exits, the hook falls back to extracting the path from `agent_description`.
 
 **Validation sequence (wave agents):**
 
-1. **Parse SAW tag** from `agent_description`. If no `[SAW:...]` tag, exit 0 (not a SAW agent).
+1. **Parse Polywave tag** from `agent_description`. If no `[Polywave:...]` tag, exit 0 (not a Polywave agent).
 2. **Find IMPL doc** via `.polywave-state/active-impl` or extraction from `agent_description`.
 3. **I1 ownership verification:** Run `git diff --name-only` in the worktree. Compare changed files against the agent's file ownership from `.saw-ownership.json`. Any unowned modified file triggers exit 2 with "I1 violation: agent modified unowned file(s): \<list\>".
 4. **I5 commit verification:** Check that the worktree branch has at least 1 commit ahead of the merge base. If zero commits but a completion report exists, exit 2 with "I5 violation: completion report written but no commits found".
 5. **Protocol report validation:** Verify the agent's completion report exists in the IMPL doc's `completion_reports:` section. Uses `polywave-tools check-completion` if available, otherwise falls back to grep-based detection.
 
 **Exit code convention:**
-- Exit 0: Pass (agent fulfilled obligations, or is not a SAW agent)
+- Exit 0: Pass (agent fulfilled obligations, or is not a Polywave agent)
 - Exit 2: Block (agent has unfulfilled protocol obligations)
 - Stderr: Human-readable error message explaining what is missing
 - Stdout: JSON observability event on success (non-blocking, emitted by separate async hook)
@@ -1971,7 +1971,7 @@ The following checklist enumerates ALL lifecycle events that must be emitted. Ev
 
 **Rationale:** Without E42, agents can "complete" without fulfilling their protocol obligations. I1 ownership violations and I5 commit violations are only detected at wave finalization time (E21), creating a delayed feedback loop. E42 catches these violations at the agent boundary — the earliest possible point — enabling faster feedback and reducing wasted orchestrator time on agents that failed to comply.
 
-**Failure Handling:** If the hook cannot locate the IMPL doc for a SAW-tagged agent, it exits 2 with an actionable error message. If `polywave-tools` is not on PATH, the hook degrades gracefully to grep-based validation. Performance is critical: non-SAW agents must exit 0 within milliseconds, and SAW agent validation should complete in under 2 seconds.
+**Failure Handling:** If the hook cannot locate the IMPL doc for a Polywave-tagged agent, it exits 2 with an actionable error message. If `polywave-tools` is not on PATH, the hook degrades gracefully to grep-based validation. Performance is critical: non-Polywave agents must exit 0 within milliseconds, and Polywave agent validation should complete in under 2 seconds.
 
 **Related Rules:** See I1 (disjoint file ownership — verified at agent completion), I4 (IMPL doc as single source of truth — completion reports verified), I5 (agents commit before reporting — commit existence verified), E3 (pre-launch ownership verification — E42 is the post-completion counterpart), E21 (post-wave verification gates — E42 provides earlier feedback), E40 (observability event emission — E42 emits agent_complete events)
 
@@ -2006,7 +2006,7 @@ The following checklist enumerates ALL lifecycle events that must be emitted. Ev
 - validate_write_paths: blocks relative paths and out-of-worktree writes using POLYWAVE_AGENT_WORKTREE (set by SubagentStart inject_worktree_env hook)
 - saw-worktree-boundary.sh: hard-denies (exit 2) Write/Edit/MultiEdit calls whose target path resolves to the main repo root instead of the agent's worktree; uses POLYWAVE_WORKTREE_ROOT (set by prepare-wave, see E43 Implementation Notes)
 - Both hooks fire only when their respective env var is non-empty (skips solo waves, integration waves, orchestrator context)
-- Error message format: "[SAW] Write blocked: <path> is in main repo, not agent worktree. Use: <POLYWAVE_WORKTREE_ROOT>/..."
+- Error message format: "[Polywave] Write blocked: <path> is in main repo, not agent worktree. Use: <POLYWAVE_WORKTREE_ROOT>/..."
 - Prevents Agent B leak scenario (files created in main repo instead of worktree)
 
 **Hook 4: SubagentStop compliance verification (verify_worktree_compliance)**
@@ -2132,7 +2132,7 @@ step inline (step 6a, after VerifyBuild). The hotfix agent is restricted
 to the files listed in `CallerCascadeErrors` and applies minimal caller
 fixes: result.Result[T] unwrapping, ctx param additions, deleted symbol
 replacements. It commits as:
-  `[SAW:wave{N}:integration-hotfix] fix caller cascade after wave N signature changes`
+  `[Polywave:wave{N}:integration-hotfix] fix caller cascade after wave N signature changes`
 
 **Debugging / dry run:** Pass `--dry-run` to `finalize-wave` to see what
 cascade errors would be hotfixed without running the agent. Output is a JSON
@@ -2162,7 +2162,7 @@ E7 (completion verification), E8 (interface change recovery).
 
 ## E48: Critic Agent IMPL Commit Enforcement
 
-**Trigger:** SubagentStop lifecycle event fires for a critic agent (tag `[SAW:critic:*]`).
+**Trigger:** SubagentStop lifecycle event fires for a critic agent (tag `[Polywave:critic:*]`).
 
 **Required Action:** Before the critic agent session closes, the critic MUST commit
 the IMPL doc changes produced by `polywave-tools set-critic-review`. Two enforcement
@@ -2182,12 +2182,12 @@ mechanisms apply:
 **IMPL doc location:** Both hooks locate the IMPL doc via `.polywave-state/active-impl`
 (written by `prepare-wave`), with fallback to extracting the path from the
 agent_description field. The IMPL doc path MUST appear in the critic's
-`description` (the `[SAW:critic:<slug>]` string passed to the Agent tool) to
+`description` (the `[Polywave:critic:<slug>]` string passed to the Agent tool) to
 enable fallback detection.
 
 **Commit message format:**
 ```
-chore: critic report for <slug> [SAW:critic:<slug>]
+chore: critic report for <slug> [Polywave:critic:<slug>]
 ```
 
 **Rationale:** Without E48, critic agents write critic_report to the IMPL doc

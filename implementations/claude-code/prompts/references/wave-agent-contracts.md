@@ -89,35 +89,35 @@ This creates an integration wave where agent B wires agent A's work into the app
 - Failure routing (partial/blocked agents)
 - Integration planning (E25/E26 gap detection)
 
-## SAW Tag Format (E44)
+## Polywave Tag Format (E44)
 
 **Rule:** Agent names must use the standardized tag format for observability.
 
 **Format:**
 ```
-[SAW:wave{N}:agent-{ID}] {short description}
+[Polywave:wave{N}:agent-{ID}] {short description}
 ```
 
 **Examples:**
-- `[SAW:wave1:agent-A] implement cache layer`
-- `[SAW:wave2:agent-C] add HTTP endpoints`
-- `[SAW:scaffold:user-auth] create interface files`
-- `[SAW:critic:user-auth] pre-wave brief review`
+- `[Polywave:wave1:agent-A] implement cache layer`
+- `[Polywave:wave2:agent-C] add HTTP endpoints`
+- `[Polywave:scaffold:user-auth] create interface files`
+- `[Polywave:critic:user-auth] pre-wave brief review`
 
 **Implementation (automatic):**
-1. `polywave-tools prepare-wave/prepare-agent` writes `saw_name` field to brief frontmatter
-2. Orchestrator reads `saw_name` from `.polywave-agent-brief.md` and uses as Agent tool name parameter
+1. `polywave-tools prepare-wave/prepare-agent` writes `polywave_name` field to brief frontmatter
+2. Orchestrator reads `polywave_name` from `.polywave-agent-brief.md` and uses as Agent tool name parameter
 3. `auto_format_polywave_agent_names` PreToolUse hook validates format and provides fallback
 
-**Why:** Enables monitoring tools (claudewatch, SAW dashboard) to detect and track agent runs.
+**Why:** Enables monitoring tools (claudewatch, Polywave dashboard) to detect and track agent runs.
 
 **Components:**
-- `SAW:` — Protocol identifier
+- `Polywave:` — Protocol identifier
 - `wave{N}:` or `scaffold:` or `critic:` — Phase identifier
 - `agent-{ID}` or feature slug — Agent/task identifier
 - Short description — Human-readable summary
 
-**Orchestrators:** Read the `saw_name` field from brief frontmatter—do not manually construct names.
+**Orchestrators:** Read the `polywave_name` field from brief frontmatter—do not manually construct names.
 
 ## Commit with --no-verify (Parallel Type Dependency Exception)
 

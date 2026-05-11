@@ -171,7 +171,7 @@ Auto-trigger if **either**:
    Agent(
      subagent_type=critic-agent,
      run_in_background=true,
-     description="[SAW:critic:<slug>] <absolute-impl-path>",
+     description="[Polywave:critic:<slug>] <absolute-impl-path>",
      prompt="$CRITIC_PROMPT"
    )
    ```

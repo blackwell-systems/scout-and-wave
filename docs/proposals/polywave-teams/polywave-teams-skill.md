@@ -21,7 +21,7 @@ teammate. If asked to perform Scout, Scaffold Agent, Wave Agent, or Integration 
 directly, refuse and delegate. This invariant is not a style preference: an
 Orchestrator performing Scout work bypasses async execution, pollutes the
 orchestrator's context window, and breaks observability (no Scout agent means
-no SAW session is detectable by monitoring tools).
+no Polywave session is detectable by monitoring tools).
 
 *`I{N}` notation refers to invariants (I1–I6) and `E{N}` to execution rules
 (E1–E26) defined in `protocol/invariants.md` and `protocol/execution-rules.md`. Each is embedded verbatim at its point of
@@ -46,14 +46,14 @@ If the argument is `bootstrap <project-description>`:
    **E16A note:** The validator enforces required block presence — an IMPL doc missing `impl-file-ownership`, `impl-dep-graph`, or `impl-wave-structure` typed blocks will fail even if all present blocks are internally valid. E16C warnings (out-of-band dep graph content) appear in stdout but do not cause exit 1; include them in the correction prompt anyway so Scout moves the content into a typed block.
 
 5. When the Scout completes, read `docs/IMPL/IMPL-bootstrap.md`. Report the architecture design and wave structure. Ask the user to review before proceeding.
-6. **Scaffold Agent (conditional):** If the IMPL doc Scaffolds section is non-empty and any scaffold file has `Status: pending`, launch a **Scaffold Agent** using the Agent tool with `run_in_background: true` and the contents of `${CLAUDE_SKILL_DIR}/scaffold-agent.md` as its prompt. Use `[SAW:scaffold:bootstrap]` as the description prefix. The Scaffold Agent is NOT a teammate; it runs before any team exists. Wait for it to complete, then read the Scaffolds section: if any file shows `Status: FAILED`, stop immediately — report the failure reason to the user and do not create worktrees or teams. If all files show `Status: committed`, proceed.
+6. **Scaffold Agent (conditional):** If the IMPL doc Scaffolds section is non-empty and any scaffold file has `Status: pending`, launch a **Scaffold Agent** using the Agent tool with `run_in_background: true` and the contents of `${CLAUDE_SKILL_DIR}/scaffold-agent.md` as its prompt. Use `[Polywave:scaffold:bootstrap]` as the description prefix. The Scaffold Agent is NOT a teammate; it runs before any team exists. Wait for it to complete, then read the Scaffolds section: if any file shows `Status: FAILED`, stop immediately — report the failure reason to the user and do not create worktrees or teams. If all files show `Status: committed`, proceed.
 
 If no `docs/IMPL/IMPL-*.md` file exists for the current feature:
 1. Launch a **Scout agent** using the Agent tool with `run_in_background: true` and the contents of `${CLAUDE_SKILL_DIR}/scout.md` as its prompt and the feature description as context. The Scout is NOT a teammate; it runs before any team exists and does not need inter-agent messaging. The Scout analyzes the codebase, runs the suitability gate, and writes the IMPL doc; the Orchestrator does not perform this analysis itself. Inform the user that the Scout is running.
 2. When the Scout completes, read the resulting `docs/IMPL/IMPL-<feature-slug>.md`.
 3. **E16: Validate IMPL doc before review.** Run the validator: `bash "${CLAUDE_SKILL_DIR}/scripts/validate-impl.sh" "<absolute-path-to-impl-doc>"`. If exit code is 0, proceed. If exit code is 1, send the error list to Scout as a correction prompt: "Your IMPL doc failed validation. Fix only these sections:\n{errors}". Retry up to 3 attempts. On retry limit exhaustion, enter BLOCKED and surface to the human. Do not present the doc for human review until validation passes.
 4. Report the suitability verdict to the user, and if suitable: the wave structure, file ownership table, interface contracts, and Scaffolds section. Ask the user to review before proceeding.
-6. **Scaffold Agent (conditional):** If the IMPL doc Scaffolds section is non-empty and any scaffold file has `Status: pending`, launch a **Scaffold Agent** using the Agent tool with `run_in_background: true` and the contents of `${CLAUDE_SKILL_DIR}/scaffold-agent.md` as its prompt. Use `[SAW:scaffold:<feature-slug>]` as the description prefix so claudewatch can identify the run. The Scaffold Agent is NOT a teammate; it runs before any team exists. Wait for it to complete, then read the Scaffolds section: if any file shows `Status: FAILED`, stop immediately — report the failure reason to the user and do not create worktrees or teams. The user must revise the interface contracts in the IMPL doc and re-run the Scaffold Agent. If all files show `Status: committed`, proceed.
+6. **Scaffold Agent (conditional):** If the IMPL doc Scaffolds section is non-empty and any scaffold file has `Status: pending`, launch a **Scaffold Agent** using the Agent tool with `run_in_background: true` and the contents of `${CLAUDE_SKILL_DIR}/scaffold-agent.md` as its prompt. Use `[Polywave:scaffold:<feature-slug>]` as the description prefix so claudewatch can identify the run. The Scaffold Agent is NOT a teammate; it runs before any team exists. Wait for it to complete, then read the Scaffolds section: if any file shows `Status: FAILED`, stop immediately — report the failure reason to the user and do not create worktrees or teams. The user must revise the interface contracts in the IMPL doc and re-run the Scaffold Agent. If all files show `Status: committed`, proceed.
 
 If a `docs/IMPL/IMPL-*.md` file already exists:
 1. Read it and identify the current wave (the first wave with unchecked status items). Also check the Scaffolds section: if any scaffold file has `Status: pending`, spawn the Scaffold Agent now (see step 5 of the Scout flow above) before creating any worktrees or teams. If any file shows `Status: FAILED`, stop and report the failure to the user before proceeding.
@@ -96,8 +96,8 @@ If a `docs/IMPL/IMPL-*.md` file already exists:
 
    d. **Create Agent Team and spawn teammates.** Spawn all teammates for the
       current wave in a single instruction to Claude. Use teammate names in
-      `wave{N}-agent-{ID}` format (e.g., `wave1-agent-A`). Include the SAW
-      observability tag in the spawn description: `[SAW:wave{N}:agent-{ID}]
+      `wave{N}-agent-{ID}` format (e.g., `wave1-agent-A`). Include the Polywave
+      observability tag in the spawn description: `[Polywave:wave{N}:agent-{ID}]
       {short description}`. Teammate names in this format enable claudewatch
       to parse wave timing and per-agent status from session transcripts.
 
@@ -107,7 +107,7 @@ If a `docs/IMPL/IMPL-*.md` file already exists:
       explicit inclusion in the spawn context.
 
       **Note on display mode:** split-pane mode (`"teammateMode": "tmux"`)
-      is recommended for SAW wave work so all agents are visible
+      is recommended for Polywave wave work so all agents are visible
       simultaneously. In-process mode works in any terminal. See `README.md`.
 
    e. **Create tasks in the shared task list.** For each teammate:
@@ -120,7 +120,7 @@ If a `docs/IMPL/IMPL-*.md` file already exists:
       lead's control flow, not task dependencies.
 
       **Note on task self-claiming:** Agent Teams' default behavior is for
-      teammates to self-claim unassigned tasks. SAW prohibits this (I1:
+      teammates to self-claim unassigned tasks. Polywave prohibits this (I1:
       file ownership is fixed at IMPL doc time). The no-self-claim
       constraint is in the spawn context (teammate-template preamble).
       After a teammate marks its task complete, it should message the lead
@@ -142,7 +142,7 @@ If a `docs/IMPL/IMPL-*.md` file already exists:
    **E7a: Automatic failure remediation in --auto mode.** When `--auto` is active and a teammate fails with a correctable issue, re-launch with corrections (up to 2 retries). Non-correctable failures always surface to the user. After 2 failed attempts, escalate regardless of `--auto`.
 6. **Merge and verify:** Read `${CLAUDE_SKILL_DIR}/polywave-teams-merge.md` from the skill directory and follow the merge procedure (team cleanup → conflict detection → merge each agent → worktree cleanup → post-merge verification → update IMPL doc).
 7. **E15: IMPL doc completion marker.** If this was the final wave and post-merge verification passed, write `<!-- polywave:complete YYYY-MM-DD -->` (with today's date) on the line immediately after the IMPL doc title (`# IMPL: ...`), then commit the IMPL doc update. Do not write the marker if more waves remain.
-8. **E18: Update project memory.** After writing the polywave:complete marker, create or update `docs/CONTEXT.md` in the project root to reflect completed features, established interfaces, and architectural decisions introduced by this SAW run. Use the schema in `protocol/message-formats.md`.
+8. **E18: Update project memory.** After writing the polywave:complete marker, create or update `docs/CONTEXT.md` in the project root to reflect completed features, established interfaces, and architectural decisions introduced by this Polywave run. Use the schema in `protocol/message-formats.md`.
 9. **I3: Wave sequencing.** Wave N+1 does not launch until Wave N has been merged and post-merge verification has passed. If `--auto` was passed and verification passed, immediately proceed to the next wave (create a new team). Otherwise, report the wave result and ask the user if they want to continue.
 10. If verification fails, report the failures and ask the user how to proceed.
 

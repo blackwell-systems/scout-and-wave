@@ -161,7 +161,7 @@ Filter to IMPLs where `state` field does NOT contain "COMPLETE".
 polywave-tools resume-detect --repo-dir "<repo-path>"
 ```
 
-**Returns:** JSON array of `SessionState` objects for interrupted SAW sessions:
+**Returns:** JSON array of `SessionState` objects for interrupted Polywave sessions:
 ```json
 [
   {

@@ -1,6 +1,6 @@
-# SAW Claude Code Hooks
+# Polywave Claude Code Hooks
 
-Enforcement and injection hooks for CLI-based SAW agents. 21 hooks across SubagentStart, PreToolUse, PostToolUse, SubagentStop, UserPromptSubmit, and Stop events.
+Enforcement and injection hooks for CLI-based Polywave agents. 21 hooks across SubagentStart, PreToolUse, PostToolUse, SubagentStop, UserPromptSubmit, and Stop events.
 
 ## Hook Summary
 
@@ -552,7 +552,7 @@ echo $?  # 0 (if on expected branch)
 
 ### Checks 1–8: Enforcement
 
-1. **SAW tag detection** — Parse `[polywave:wave{N}:agent-{ID}]` from description; non-SAW agents pass through
+1. **Polywave tag detection** — Parse `[polywave:wave{N}:agent-{ID}]` from description; non-Polywave agents pass through
 2. **IMPL path extraction** — Extract `docs/IMPL/IMPL-*.yaml` from agent prompt
 3. **IMPL file exists** — Verify the IMPL doc exists on disk
 4. **IMPL validation** — Run `polywave-tools validate` (if polywave-tools on PATH)
@@ -609,15 +609,15 @@ After enforcement passes, dispatch on `subagent_type` and conditionally inject m
 ### Testing
 
 ```bash
-# Non-SAW agent launch — should exit 0 (allowed through)
+# Non-Polywave agent launch — should exit 0 (allowed through)
 echo '{"tool_name":"Agent","tool_input":{"prompt":"Do some work","description":"helper agent"}}' | validate_agent_launch
 echo $?  # 0
 
-# SAW agent launch with valid context — should exit 0
+# Polywave agent launch with valid context — should exit 0
 echo '{"tool_name":"Agent","agent_type":"wave-agent","tool_input":{"prompt":"IMPL doc: docs/IMPL/IMPL-feature.yaml","description":"[polywave:wave1:agent-A] implement feature"}}' | validate_agent_launch
 echo $?  # 0 (if all preconditions met)
 
-# SAW agent launch with missing IMPL — should exit 1
+# Polywave agent launch with missing IMPL — should exit 1
 echo '{"tool_name":"Agent","agent_type":"wave-agent","tool_input":{"prompt":"no impl path here","description":"[polywave:wave1:agent-A] implement feature"}}' | validate_agent_launch 2>&1
 echo $?  # 1 (blocked: no IMPL path found)
 ```
@@ -671,11 +671,11 @@ These variables are consumed by other E43 hooks (`inject_bash_cd`, `validate_wri
 ### Testing
 
 ```bash
-# Test with SAW agent description
+# Test with Polywave agent description
 echo '{"description":"[polywave:wave1:agent-A] implement feature","prompt":"IMPL doc: /path/to/IMPL-feature.yaml"}' | inject_worktree_env
 # Should return JSON with updatedEnvironment containing 5 variables
 
-# Test with non-SAW agent (should pass through)
+# Test with non-Polywave agent (should pass through)
 echo '{"description":"helper agent","prompt":"Do some work"}' | inject_worktree_env
 echo $?  # 0 (no environment changes)
 ```
@@ -809,7 +809,7 @@ echo $?  # 0
 
 1. Claude Code calls the script when a subagent stops (after last tool execution)
 2. Script checks if `POLYWAVE_AGENT_ID` and `POLYWAVE_IMPL_PATH` environment variables are set
-3. If unset -> pass through (non-SAW agent)
+3. If unset -> pass through (non-Polywave agent)
 4. Reads IMPL doc and extracts completion report for the agent
 5. If completion report missing -> warn to stderr (exit 0, non-blocking)
 6. If `POLYWAVE_BRANCH` is set, checks that the branch has at least one commit
@@ -846,11 +846,11 @@ This hook is warn-only because SubagentStop fires after the agent completes — 
 ### Testing
 
 ```bash
-# Test without SAW context (should pass through)
+# Test without Polywave context (should pass through)
 echo '{}' | verify_worktree_compliance
 echo $?  # 0
 
-# Test with SAW context but no completion report (should warn)
+# Test with Polywave context but no completion report (should warn)
 export POLYWAVE_AGENT_ID="A"
 export POLYWAVE_IMPL_PATH="/path/to/IMPL-feature.yaml"
 export POLYWAVE_BRANCH="saw/feature/wave1-agent-A"
@@ -905,14 +905,14 @@ This hook provides structured data for external observability systems to track a
 ### Testing
 
 ```bash
-# Test with SAW agent context (should emit JSON event)
+# Test with Polywave agent context (should emit JSON event)
 export POLYWAVE_AGENT_ID="A"
 export POLYWAVE_WAVE_NUMBER="1"
 export POLYWAVE_IMPL_PATH="/path/to/IMPL-feature.yaml"
 echo '{"description":"[polywave:wave1:agent-A] implement feature"}' | emit_agent_completion
 # Should output JSON event to stdout
 
-# Test with non-SAW agent (should exit silently)
+# Test with non-Polywave agent (should exit silently)
 echo '{"description":"helper agent"}' | emit_agent_completion
 echo $?  # 0 (no output)
 ```
@@ -923,7 +923,7 @@ echo $?  # 0 (no output)
 
 ## Hook 15: Orchestrator Stop Warning
 
-**Stop** — Warns when the session ends with an active SAW orchestration in progress.
+**Stop** — Warns when the session ends with an active Polywave orchestration in progress.
 
 ### How It Works
 

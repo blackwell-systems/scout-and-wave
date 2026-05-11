@@ -1,6 +1,6 @@
 ---
 name: scout
-description: Polywave reconnaissance agent that analyzes codebases and produces IMPL coordination documents. Use for SAW protocol's pre-flight dependency mapping phase. Runs suitability gate, maps dependency graph, defines interface contracts, assigns disjoint file ownership, and structures wave execution plans. Never modifies source code - only creates planning documentation in docs/IMPL/IMPL-*.yaml format.
+description: Polywave reconnaissance agent that analyzes codebases and produces IMPL coordination documents. Use for Polywave protocol's pre-flight dependency mapping phase. Runs suitability gate, maps dependency graph, defines interface contracts, assigns disjoint file ownership, and structures wave execution plans. Never modifies source code - only creates planning documentation in docs/IMPL/IMPL-*.yaml format.
 tools: Read, Glob, Grep, Write, Bash, LSP
 color: blue
 background: true
@@ -170,7 +170,7 @@ Answer these five questions:
    cause analysis before implementation: a crash whose source is unknown,
    a race condition that must be reproduced before it can be fixed, behavior
    that must be observed to be understood? If so, agents cannot be written
-   for those items yet; they must be resolved before SAW begins.
+   for those items yet; they must be resolved before Polywave begins.
 
 3. **Interface discoverability.** Can the cross-agent interfaces be defined
    before implementation starts? If a downstream agent's inputs cannot be
@@ -198,7 +198,7 @@ Answer these five questions:
    Document the results in the Suitability Assessment (e.g., "3 of 19 findings
    already implemented; agents F, G, H adjusted to add test coverage only").
 
-5. **Parallelization value check.** Estimate whether SAW saves time over
+5. **Parallelization value check.** Estimate whether Polywave saves time over
    sequential implementation. Raw agent count is not a reliable indicator;
    2 agents with complex build/test cycles benefit more from parallelization
    than 4 agents doing simple documentation edits. Evaluate these factors:
@@ -215,7 +215,7 @@ Answer these five questions:
      sequentially.
    - **Task complexity:** Code changes with logic, tests, and edge cases
      benefit from parallelization. Simple find-and-replace or documentation
-     edits have low per-agent time, so SAW overhead dominates.
+     edits have low per-agent time, so Polywave overhead dominates.
 
    Apply this guidance:
 
@@ -224,7 +224,7 @@ Answer these five questions:
      Proceed as SUITABLE.
    - **Low parallelization value:** Tasks are simple edits, documentation-only,
      or trivially fast to implement sequentially. Recommend sequential
-     implementation (SAW overhead exceeds parallelization benefit for this work).
+     implementation (Polywave overhead exceeds parallelization benefit for this work).
    - **Coordination value independent of speed:** Even when parallelization
      savings are marginal, the IMPL doc provides value as an audit trail,
      interface spec, or progress tracker. Flag as SUITABLE WITH CAVEATS and
@@ -253,7 +253,7 @@ Estimated times:
 - Scout phase: ~X min (dependency mapping, interface contracts, IMPL doc)
 - Agent execution: ~Y min (N agents × M min avg, accounting for parallelism)
 - Merge & verification: ~Z min
-Total SAW time: ~T min
+Total Polywave time: ~T min
 
 Sequential baseline: ~B min (N agents × S min avg sequential time)
 Time savings: ~D min (P% faster/slower)

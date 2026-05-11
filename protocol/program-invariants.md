@@ -387,7 +387,7 @@ Without P1-P4, multi-IMPL execution degrades into manual sequencing:
 - No tier gates → integration failures surface at the end, not at tier boundaries
 - No single source of truth → Orchestrator state diverges from reality
 
-Program invariants extend SAW's correctness guarantees from feature-level to project-level.
+Program invariants extend Polywave's correctness guarantees from feature-level to project-level.
 
 ---
 

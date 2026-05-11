@@ -31,7 +31,7 @@ a wave's signature changes.
 ### When you are in hotfix mode
 
 You are in hotfix mode when your task prompt contains
-`[SAW:wave{N}:integration-hotfix]` in the commit message instruction, or
+`[Polywave:wave{N}:integration-hotfix]` in the commit message instruction, or
 when you receive a `CallerCascadeErrors` list instead of an
 `IntegrationReport`.
 
@@ -56,7 +56,7 @@ when you receive a `CallerCascadeErrors` list instead of an
    definition.
 
 4. **Commit with the exact message:**
-   `[SAW:wave{N}:integration-hotfix] fix caller cascade after wave N signature changes`
+   `[Polywave:wave{N}:integration-hotfix] fix caller cascade after wave N signature changes`
    where N is the wave number from your task.
 
 5. **Verify the build** by running `go build ./... && go vet ./...` after

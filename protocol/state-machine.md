@@ -8,7 +8,7 @@ This document defines the lifecycle states, transitions, and terminal conditions
 
 ## State Overview
 
-SAW execution progresses through a series of states orchestrated by the synchronous Orchestrator. Each state represents a checkpoint where specific conditions must be satisfied before advancing.
+Polywave execution progresses through a series of states orchestrated by the synchronous Orchestrator. Each state represents a checkpoint where specific conditions must be satisfied before advancing.
 
 ### State Catalog
 
@@ -25,7 +25,7 @@ SAW execution progresses through a series of states orchestrated by the synchron
 | **WAVE_VERIFIED** | Merge complete, post-merge verification passed. | Merge complete, verification passed | Next wave launches OR protocol complete |
 | **BLOCKED** | Wave failed verification or agent reported failure. | Any agent status: partial/blocked, OR verification failure | Issue resolved, verification re-run |
 | **COMPLETE** | All waves verified, feature complete. | Final wave verified, no more waves | Terminal state |
-| **NOT_SUITABLE** | Scout determined work not suitable for SAW. | Scout suitability gate failed | Terminal state |
+| **NOT_SUITABLE** | Scout determined work not suitable for Polywave. | Scout suitability gate failed | Terminal state |
 
 ---
 
@@ -42,7 +42,7 @@ INTERVIEWING
 The INTERVIEWING → SCOUT_PENDING transition is manual: after the interview
 completes, the user invokes `/polywave scout "<feature>" --requirements docs/REQUIREMENTS.md`
 (or `/polywave bootstrap`) to enter SCOUT_PENDING. There is no automatic state signal
-from the interview tool to the SAW orchestrator.
+from the interview tool to the Polywave orchestrator.
 
 ### Primary Flow (Success Path)
 
@@ -388,7 +388,7 @@ The PROGRAM layer adds an outer state machine that coordinates multiple IMPL exe
 | **TIER_VERIFIED** | Current tier complete, all IMPLs verified |
 | **PROGRAM_COMPLETE** | All tiers complete, all IMPLs complete |
 | **PROGRAM_BLOCKED** | Program execution blocked (IMPL failure, dependency failure, etc.) |
-| **PROGRAM_NOT_SUITABLE** | Requirements not suitable for SAW program execution |
+| **PROGRAM_NOT_SUITABLE** | Requirements not suitable for Polywave program execution |
 
 ### Program State Flow
 

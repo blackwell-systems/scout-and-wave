@@ -1,6 +1,6 @@
 #!/bin/bash
 # task-completed-polywave.sh
-# SAW TaskCompleted enforcement hook.
+# Polywave TaskCompleted enforcement hook.
 #
 # Fires when a task is being marked complete in the shared task list.
 # Checks whether the teammate has written a structured completion report
@@ -30,7 +30,7 @@ IMPL_DOC=$(find docs/IMPL -name "IMPL-*.md" 2>/dev/null \
   | head -1)
 
 if [ -z "$IMPL_DOC" ]; then
-  # Not a SAW session. Allow.
+  # Not a Polywave session. Allow.
   exit 0
 fi
 

@@ -1,5 +1,5 @@
 <!-- polywave-bootstrap v0.4.0 -->
-# SAW Bootstrap: Design-First Project Architecture
+# Polywave Bootstrap: Design-First Project Architecture
 
 Use this mode when starting a new project from scratch with no existing codebase.
 The bootstrap scout acts as **architect**, not analyst: designing disjoint file
@@ -9,7 +9,7 @@ ownership before any code is written.
 
 - Starting a new project from an empty or near-empty repo
 - No existing codebase for the scout to analyze
-- Want SAW-compatible structure from day one
+- Want Polywave-compatible structure from day one
 
 ## When NOT to Use
 

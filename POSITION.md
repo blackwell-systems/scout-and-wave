@@ -11,13 +11,13 @@ Most approaches to parallel agent coordination fall into one of four failure mod
 3. **Human orchestration.** A person manually partitions work, reviews each agent's output, resolves conflicts, and sequences merges. Correct, but the person is now the bottleneck the agents were supposed to remove.
 4. **Coarse serialization.** Run agents one at a time. No conflicts, but no parallelism either.
 
-Polywave (SAW) treats parallel agent work as a distributed systems problem and solves it structurally: disjoint ownership eliminates conflicts by construction, interface contracts eliminate coordination drift, and wave sequencing eliminates cascade failures.
+Polywave (Polywave) treats parallel agent work as a distributed systems problem and solves it structurally: disjoint ownership eliminates conflicts by construction, interface contracts eliminate coordination drift, and wave sequencing eliminates cascade failures.
 
-Systems in categories 1-3 rely on probabilistic outcomes -- files might not conflict, merges might succeed, humans might catch issues. SAW eliminates the probability: I1 makes conflicts impossible by construction, I2 makes API drift impossible by construction, and I3 makes cascade failures detectable at wave boundaries rather than at the end. The protocol's correctness properties are enforced by tool-level hooks, not by agent cooperation -- a model prompted to violate ownership will be blocked before the tool executes.
+Systems in categories 1-3 rely on probabilistic outcomes -- files might not conflict, merges might succeed, humans might catch issues. Polywave eliminates the probability: I1 makes conflicts impossible by construction, I2 makes API drift impossible by construction, and I3 makes cascade failures detectable at wave boundaries rather than at the end. The protocol's correctness properties are enforced by tool-level hooks, not by agent cooperation -- a model prompted to violate ownership will be blocked before the tool executes.
 
-## What SAW Is
+## What Polywave Is
 
-SAW is a coordination protocol for safely parallelizing LLM agent work on shared codebases. It is language-agnostic, provider-agnostic, and enforces correctness through six invariants (I1-I6) and 47 execution rules (E1-E47) that govern every phase from planning through post-merge verification.
+Polywave is a coordination protocol for safely parallelizing LLM agent work on shared codebases. It is language-agnostic, provider-agnostic, and enforces correctness through six invariants (I1-I6) and 47 execution rules (E1-E47) that govern every phase from planning through post-merge verification.
 
 The protocol has three layers:
 
@@ -37,7 +37,7 @@ CLI commands and web API routes are thin I/O wrappers over the same SDK function
 
 ### Provider Independence
 
-SAW does not assume a specific LLM provider. The protocol specifies *what* agents must do, not which model does it. The Go SDK's `Backend` interface abstracts all LLM interaction behind three methods (`Run`, `RunStreaming`, `RunStreamingWithTools`), and the engine ships four implementations:
+Polywave does not assume a specific LLM provider. The protocol specifies *what* agents must do, not which model does it. The Go SDK's `Backend` interface abstracts all LLM interaction behind three methods (`Run`, `RunStreaming`, `RunStreamingWithTools`), and the engine ships four implementations:
 
 | Backend | Module | Use Case |
 |---|---|---|
@@ -46,7 +46,7 @@ SAW does not assume a specific LLM provider. The protocol specifies *what* agent
 | **OpenAI-compatible** | `pkg/agent/backend/openai` | Any OpenAI-compatible endpoint: OpenAI, Groq, Ollama (local models), or custom deployments |
 | **CLI** | `pkg/agent/backend/cli` | Wraps any CLI binary (`claude`, or any compatible CLI via `BinaryPath` config) |
 
-Model selection is configurable at three levels: per-invocation (`--model`), per-role in `polywave.config.json` (separate `scout_model`, `wave_model`, `critic_model`, `integration_model`, `scaffold_model`, `planner_model`), or inherited from the parent session. A single SAW execution can use different models for different roles -- Opus for Scout planning, Sonnet for Wave agents, Haiku for critic review. The web app's ModelPicker UI surfaces this as per-role provider selection: each role (Scout, Wave, Critic, Scaffold, Integration, Planner, Chat) has its own model dropdown, and different roles can use different providers in the same session.
+Model selection is configurable at three levels: per-invocation (`--model`), per-role in `polywave.config.json` (separate `scout_model`, `wave_model`, `critic_model`, `integration_model`, `scaffold_model`, `planner_model`), or inherited from the parent session. A single Polywave execution can use different models for different roles -- Opus for Scout planning, Sonnet for Wave agents, Haiku for critic review. The web app's ModelPicker UI surfaces this as per-role provider selection: each role (Scout, Wave, Critic, Scaffold, Integration, Planner, Chat) has its own model dropdown, and different roles can use different providers in the same session.
 
 The `Backend` config accepts `BaseURL` for endpoint override, meaning any API-compatible service works without code changes: `http://localhost:11434/v1` for local Ollama, `https://api.groq.com/openai/v1` for Groq, or a corporate proxy endpoint.
 
@@ -56,11 +56,11 @@ For AWS environments, the web application includes a Bedrock SSO device auth flo
 
 ## Execution Modes
 
-SAW has three distinct execution modes, each serving different use cases. All three execute the same protocol with the same invariants.
+Polywave has three distinct execution modes, each serving different use cases. All three execute the same protocol with the same invariants.
 
 ### Agent Skill (`/saw` in Claude Code)
 
-The primary interactive experience. The `/saw` skill is a YAML-frontmatter + markdown file that conforms to the **agent skills open standard** -- the same format adopted by most frontier model agent frameworks. The skill turns a Claude Code session into a SAW Orchestrator.
+The primary interactive experience. The `/saw` skill is a YAML-frontmatter + markdown file that conforms to the **agent skills open standard** -- the same format adopted by most frontier model agent frameworks. The skill turns a Claude Code session into a Polywave Orchestrator.
 
 ```
 /polywave scout "add caching layer"                 # Scout analyzes codebase, produces IMPL plan
@@ -82,7 +82,7 @@ The primary interactive experience. The `/saw` skill is a YAML-frontmatter + mar
 
 ### Context Window Architecture
 
-SAW implements a **hook-based deterministic injection architecture** that extends the Agent Skills specification's three-tier model with automatic context loading. Rather than relying on models to follow routing instructions ("read this file when needed"), SAW uses lifecycle hooks and script-based conditional logic to inject references before the model runs. Always-needed content is inlined directly in agent definitions; conditional references (3 total) are injected by scripts when specific scenarios are detected. This section documents the complete architecture.
+Polywave implements a **hook-based deterministic injection architecture** that extends the Agent Skills specification's three-tier model with automatic context loading. Rather than relying on models to follow routing instructions ("read this file when needed"), Polywave uses lifecycle hooks and script-based conditional logic to inject references before the model runs. Always-needed content is inlined directly in agent definitions; conditional references (3 total) are injected by scripts when specific scenarios are detected. This section documents the complete architecture.
 
 #### Four-Tier Structure
 
@@ -254,11 +254,11 @@ The web application (`polywave-web`) is built on this SDK. Every CLI command is 
 - Agent ID generation (`pkg/idgen`) -- generates agent IDs matching `^[A-Z][2-9]?$`; sequential mode (A-Z then A2-Z2, max 234) or category-grouped mode (agents with shared category tags get same-letter multi-generation IDs, e.g., `["data","data","api"]` → `["A","A2","B"]`)
 - Unified error code catalog (`pkg/result`) -- 20 code domains (V/W/B/G/A/N/O/P/T/S/C/K/I/D/E/X/Q/R/J/Z), 90+ named constants; all engine errors carry a structured `SAWError` with Code, Message, and Cause for programmatic error handling
 
-## What Makes SAW Different
+## What Makes Polywave Different
 
 ### Seven Participants, One Pipeline
 
-SAW coordinates seven participant roles through a single Orchestrator:
+Polywave coordinates seven participant roles through a single Orchestrator:
 
 1. **Orchestrator** -- synchronous coordinator in the user's session; drives all state transitions
 2. **Scout** -- analyzes codebase, produces IMPL doc with disjoint file ownership and interface contracts
@@ -272,7 +272,7 @@ The Planner role coordinates at program scope when multiple features execute as 
 
 ### Scout Before You Parallelize
 
-Most systems skip planning entirely -- they decompose work at launch time or let agents self-organize. SAW runs a dedicated Scout phase that analyzes the codebase, evaluates suitability for parallelization (some features should not be parallelized), builds a dependency graph, assigns disjoint file ownership, and specifies interface contracts. The planning artifact (the IMPL doc) becomes the execution artifact -- there is no divergence between plan and reality (I4).
+Most systems skip planning entirely -- they decompose work at launch time or let agents self-organize. Polywave runs a dedicated Scout phase that analyzes the codebase, evaluates suitability for parallelization (some features should not be parallelized), builds a dependency graph, assigns disjoint file ownership, and specifies interface contracts. The planning artifact (the IMPL doc) becomes the execution artifact -- there is no divergence between plan and reality (I4).
 
 Scout receives **pre-execution automation analysis** before launch via `runScoutAutomation()` in the engine or explicit tool calls in the CLI skill:
 - **H2: extract-commands** -- detects build/test/lint commands from CI configs (GitHub Actions, GitLab CI, Makefile, package.json, Cargo.toml)
@@ -290,13 +290,13 @@ If the Scout determines a feature is not suitable for parallel execution, it say
 
 This extends to multi-feature coordination: the PROGRAM layer's P1+ conflict check validates that no two IMPLs in the same tier share file ownership before any agent in the tier launches.
 
-**E11: Pre-Merge Conflict Prediction.** Before merging agent branches, SAW performs hunk-level diff analysis: `git diff --unified=0 mergeBase..branch -- file` for each agent, parsing `@@ -a,b @@` ranges and checking whether any two agents' modified line ranges overlap. Cascade patch patterns — where multiple agents modify callers in the same file at different functions — produce non-overlapping hunks and are identified as safe to merge. Only true overlapping edits (two agents modifying the same lines) or same-position insertions are flagged. This eliminates a class of false positives that would otherwise force manual merge steps on every multi-wave cascade refactor.
+**E11: Pre-Merge Conflict Prediction.** Before merging agent branches, Polywave performs hunk-level diff analysis: `git diff --unified=0 mergeBase..branch -- file` for each agent, parsing `@@ -a,b @@` ranges and checking whether any two agents' modified line ranges overlap. Cascade patch patterns — where multiple agents modify callers in the same file at different functions — produce non-overlapping hunks and are identified as safe to merge. Only true overlapping edits (two agents modifying the same lines) or same-position insertions are flagged. This eliminates a class of false positives that would otherwise force manual merge steps on every multi-wave cascade refactor.
 
 Append-only conflicts (the common case when multiple agents add test cases at different positions in the same file) are automatically resolved by `finalize-wave --auto-merge-append`: `AnalyzeDiffPattern()` classifies the change pattern and `StepAutoMergeAppendConflicts()` merges in file-sorted order without human intervention.
 
-**E12: Merge Conflict Taxonomy.** SAW classifies merge conflicts by root cause with distinct resolution paths for each class: (1) git conflicts on agent-owned files — I1 violation, never merge, correct the plan; (2) git conflicts on orchestrator-owned shared files — expected, resolve by accepting all appended sections in deterministic order; (3) semantic conflicts with no git conflict but incompatible implementations — surface in completion report fields, require orchestrator review. This taxonomy makes merge conflict handling deterministic rather than ad-hoc.
+**E12: Merge Conflict Taxonomy.** Polywave classifies merge conflicts by root cause with distinct resolution paths for each class: (1) git conflicts on agent-owned files — I1 violation, never merge, correct the plan; (2) git conflicts on orchestrator-owned shared files — expected, resolve by accepting all appended sections in deterministic order; (3) semantic conflicts with no git conflict but incompatible implementations — surface in completion report fields, require orchestrator review. This taxonomy makes merge conflict handling deterministic rather than ad-hoc.
 
-**E11b: Scout-Time Shared-File Decision.** When a file appears in multiple agents' work scopes, Scout applies a four-pattern taxonomy: (1) test file append-only — safe to assign to multiple agents in the same wave; (2) registry append-only — safe, same wave; (3) line edits — unsafe, must sequence into separate waves; (4) mixed append+edit — unsafe, must sequence. This is not a blanket I1 violation — SAW permits shared files in the same wave when the access pattern is provably safe. The four patterns give Scout a structured framework for making this determination rather than defaulting to strict disjoint ownership in all cases.
+**E11b: Scout-Time Shared-File Decision.** When a file appears in multiple agents' work scopes, Scout applies a four-pattern taxonomy: (1) test file append-only — safe to assign to multiple agents in the same wave; (2) registry append-only — safe, same wave; (3) line edits — unsafe, must sequence into separate waves; (4) mixed append+edit — unsafe, must sequence. This is not a blanket I1 violation — Polywave permits shared files in the same wave when the access pattern is provably safe. The four patterns give Scout a structured framework for making this determination rather than defaulting to strict disjoint ownership in all cases.
 
 ### Interface Contracts Before Implementation
 
@@ -310,7 +310,7 @@ This is the mechanism that eliminates "agent A expected function signature X, ag
 
 This is dependency-aware execution. The Scout's dependency graph determines which work can safely parallelize (same wave) and which must sequence (later wave). The wave solver (`pkg/solver`) automates this: given agent dependency declarations, it computes optimal wave assignments via topological sort with level assignment -- minimizing total waves while respecting all ordering constraints.
 
-Solo wave optimization: when a wave contains a single agent, SAW skips worktree creation entirely and executes directly on the branch. This avoids the overhead of worktree setup/teardown for waves where isolation provides no benefit.
+Solo wave optimization: when a wave contains a single agent, Polywave skips worktree creation entirely and executes directly on the branch. This avoids the overhead of worktree setup/teardown for waves where isolation provides no benefit.
 
 ### Tool-Level Enforcement
 
@@ -318,17 +318,17 @@ Protocol compliance is not advisory. Lifecycle hooks enforce invariants mechanic
 
 - **PreToolUse (`check_wave_ownership`)**: Blocks Write/Edit operations on files the agent does not own. I1 violations are rejected before the tool executes.
 - **PreToolUse (`check_scout_boundaries`)**: Prevents Scout agents from writing source code. I6 role separation enforced at the tool boundary.
-- **PreToolUse (`validate_agent_launch`)**: H5 pre-launch gate -- 8 enforcement checks (SAW tag, IMPL exists, IMPL valid, agent in wave, ownership file match, worktree branch, scaffolds committed, scaffold correctness) before any agent starts; plus conditional reference injection (3 references for scout/wave-agent scenarios) that prepends on-demand reference files into the subagent's initial prompt via `updatedInput` before the subagent launches. Always-needed content is inlined in agent definitions.
+- **PreToolUse (`validate_agent_launch`)**: H5 pre-launch gate -- 8 enforcement checks (Polywave tag, IMPL exists, IMPL valid, agent in wave, ownership file match, worktree branch, scaffolds committed, scaffold correctness) before any agent starts; plus conditional reference injection (3 references for scout/wave-agent scenarios) that prepends on-demand reference files into the subagent's initial prompt via `updatedInput` before the subagent launches. Always-needed content is inlined in agent definitions.
 - **SubagentStop (`validate_agent_completion`)**: E42 validation -- blocks agent completion if I5 (commit before reporting), I4 (completion report exists), or I1 (ownership audit) obligations are unmet. Agent-type-specific validation matrix.
 - **PostToolUse (`check_branch_drift`)**: Detects when an agent has drifted off its assigned worktree branch.
 - **PostToolUse (`check_git_ownership`)**: Catches git operations that modify files outside the ownership list -- the layer-2 defense that catches merge conflict resolutions bypassing Write/Edit hooks.
 - **PostToolUse (`warn_stubs`)**: E20 stub detection -- non-blocking warnings when Write/Edit creates files containing stub patterns (TODO, FIXME, NotImplementedError, panic("not implemented"), etc.) across 8 languages.
 - **PreToolUse (`block_git_stash`)**: Blocks `git stash` in wave-agent worktrees. Stashing hides uncommitted work from `finalize-wave`'s commit verification (I5) and risks data loss on worktree cleanup. Agents redirect to `git commit --no-verify` when parallel agents have unmerged type dependencies.
-- **SubagentStart (`validate_agent_isolation`)**: E43 startup gate -- fires when any wave agent starts, extracts wave/agent ID from the `[SAW:wave{N}:agent-{ID}]` tag, and calls `polywave-tools verify-isolation` to confirm the agent is running in the correct worktree before it takes its first step. Exit code 2 blocks the agent from starting. This is enforcement at agent startup, distinct from the write-time `check_wave_ownership` hook.
-- **PostToolUse (`auto_commit_on_write`)**: Async hook that fires after every Write/Edit in a SAW worktree context. Immediately runs `git add` + `git commit --no-verify` with an "auto-save: filename" message. Never blocks agent execution (async: true). Purpose: preserve partial work against API rate-limit interruptions or context window exhaustion while the wave is in flight.
+- **SubagentStart (`validate_agent_isolation`)**: E43 startup gate -- fires when any wave agent starts, extracts wave/agent ID from the `[Polywave:wave{N}:agent-{ID}]` tag, and calls `polywave-tools verify-isolation` to confirm the agent is running in the correct worktree before it takes its first step. Exit code 2 blocks the agent from starting. This is enforcement at agent startup, distinct from the write-time `check_wave_ownership` hook.
+- **PostToolUse (`auto_commit_on_write`)**: Async hook that fires after every Write/Edit in a Polywave worktree context. Immediately runs `git add` + `git commit --no-verify` with an "auto-save: filename" message. Never blocks agent execution (async: true). Purpose: preserve partial work against API rate-limit interruptions or context window exhaustion while the wave is in flight.
 - **PostToolUse (`validate_impl_on_write`)**: Fires after any Write/Edit to an active IMPL doc (`docs/IMPL/IMPL-*.yaml`, skips `complete/`). Runs two checks: (1) `polywave-tools validate` for E16 structural validation, (2) `polywave-tools validate-briefs` for symbol existence and wave reference accuracy. Blocks with exit code 2 if either fails. Errors are surfaced at write time -- the Scout or Orchestrator sees them immediately, not when the next agent tries to start.
-- **PreToolUse (`auto_format_polywave_agent_names`)**: Validates that subagent names follow the `[polywave:{phase}:{identifier}]` format before launch. When the orchestrator's brief uses an old format or missed the `saw_name` frontmatter field, the hook extracts wave/agent/slug from the prompt via regex and reformats the name. The naming convention is what the entire observability infrastructure (cost events, web dashboard agent cards, `emit_agent_completion`) parses to track per-agent work.
-- **SubagentStop (`emit_agent_completion`)**: Async hook that emits a structured JSON `agent_complete` event for every SAW agent after completion. Fields include: agent ID, wave number, agent type, completion status, files changed, three validation check results (I1 ownership, I5 commit, completion report), journal archive status, and timestamp. Also handles journal archival to `.polywave-state/journals/`. Always exits 0 -- observability infrastructure cannot block agent completion.
+- **PreToolUse (`auto_format_polywave_agent_names`)**: Validates that subagent names follow the `[polywave:{phase}:{identifier}]` format before launch. When the orchestrator's brief uses an old format or missed the `polywave_name` frontmatter field, the hook extracts wave/agent/slug from the prompt via regex and reformats the name. The naming convention is what the entire observability infrastructure (cost events, web dashboard agent cards, `emit_agent_completion`) parses to track per-agent work.
+- **SubagentStop (`emit_agent_completion`)**: Async hook that emits a structured JSON `agent_complete` event for every Polywave agent after completion. Fields include: agent ID, wave number, agent type, completion status, files changed, three validation check results (I1 ownership, I5 commit, completion report), journal archive status, and timestamp. Also handles journal archival to `.polywave-state/journals/`. Always exits 0 -- observability infrastructure cannot block agent completion.
 - **PreToolUse (`block_claire_paths`)**: Blocks writes to paths containing `.claire` -- the token prediction failure mode where `.cla` completes to `ire` instead of `ude`. Represents a category of hook not present in other coordination systems: hardened defenses against known model failure modes rather than protocol enforcement.
 
 **E43: Hook-Based Worktree Isolation.** Four hooks enforce worktree isolation mechanically rather than through agent instructions:
@@ -357,7 +357,7 @@ Chat output is ephemeral. The IMPL doc is the record. Downstream agents, the orc
 
 ### Automated Cascade Repair Between Waves
 
-**E47: Between-Wave Caller Cascade Hotfix.** When a post-merge build fails because callers in *future-wave* files reference the updated signatures from the wave that just merged, `finalize-wave` detects this automatically via `ClassifyCallerCascadeErrors()`. If every failing file belongs to a future wave (`AllAreCascades=true`), the engine launches a hotfix agent (`[SAW:wave{N}:integration-hotfix]`) inline -- without surfacing the failure to the user. The hotfix agent fixes the compiler errors, the build is re-verified, and the wave completes.
+**E47: Between-Wave Caller Cascade Hotfix.** When a post-merge build fails because callers in *future-wave* files reference the updated signatures from the wave that just merged, `finalize-wave` detects this automatically via `ClassifyCallerCascadeErrors()`. If every failing file belongs to a future wave (`AllAreCascades=true`), the engine launches a hotfix agent (`[Polywave:wave{N}:integration-hotfix]`) inline -- without surfacing the failure to the user. The hotfix agent fixes the compiler errors, the build is re-verified, and the wave completes.
 
 This is the mechanism that makes large multi-wave cascade refactors work unattended. A 31-agent `context.Context` threading refactor touches callers across many packages in sequence. Without E47, every wave that modifies a function signature forces a manual human intervention before the next wave can start. With E47, the cascades repair automatically at each wave boundary.
 
@@ -391,7 +391,7 @@ The hotfix only fires when `AllAreCascades=true` -- when even one failing file b
 
 ### Resume and Retry Intelligence
 
-SAW does not just detect interrupted sessions -- it provides structured failure context for recovery. `resume-detect` identifies interrupted sessions with progress percentage and suggested actions. `build-retry-context` produces error classification and fix suggestions rather than raw error dumps. Failed agents get prior-work context injected via tool journals (E23A), so retries build on previous progress instead of starting from scratch.
+Polywave does not just detect interrupted sessions -- it provides structured failure context for recovery. `resume-detect` identifies interrupted sessions with progress percentage and suggested actions. `build-retry-context` produces error classification and fix suggestions rather than raw error dumps. Failed agents get prior-work context injected via tool journals (E23A), so retries build on previous progress instead of starting from scratch.
 
 Three distinct automated repair paths fire at different stages:
 
@@ -411,7 +411,7 @@ The autonomy system (`pkg/autonomy`) supports graduated levels: supervised (huma
 
 ### PROGRAM Layer for Multi-Feature Coordination
 
-For projects spanning multiple features, the PROGRAM layer provides tier-gated execution of multiple IMPLs. Tiers execute sequentially; IMPLs within a tier execute in parallel. This is structural coordination with the same correctness guarantees SAW provides within a single feature.
+For projects spanning multiple features, the PROGRAM layer provides tier-gated execution of multiple IMPLs. Tiers execute sequentially; IMPLs within a tier execute in parallel. This is structural coordination with the same correctness guarantees Polywave provides within a single feature.
 
 **PROGRAM invariants:**
 - **P1: IMPL Independence Within a Tier** -- no two IMPLs in the same tier share file ownership (greedy graph coloring for disjoint tier assignment)
@@ -434,7 +434,7 @@ A program with 5 IMPLs across 3 tiers executes with the same confidence as a sin
 
 ### Batching Commands
 
-SAW uses **atomic batching commands** to combine multi-step workflows into single operations with transactional semantics. Each batching command succeeds or fails as a unit with structured JSON output. This pattern eliminates the most common source of silent protocol violations: forgotten steps in manual orchestration.
+Polywave uses **atomic batching commands** to combine multi-step workflows into single operations with transactional semantics. Each batching command succeeds or fails as a unit with structured JSON output. This pattern eliminates the most common source of silent protocol violations: forgotten steps in manual orchestration.
 
 **Core batching commands:**
 - **`run-scout`**: Resolve paths → ScoutCorrectionLoop (3 retries) → Validate (E16) → Auto-fix → Finalize gates → Detect shared types (E45) → RunCritic (E37, if threshold met) → Return validated IMPL
@@ -491,9 +491,9 @@ The observability event schema (E40) defines three event types -- `cost` (token 
 
 ## Evidence
 
-The protocol is self-hosting. The polywave protocol repository, Go SDK, and web application were built using SAW. CONTEXT.md records 130+ completed features executed through the protocol, ranging from 1-wave/2-agent documentation fixes to 6-wave/31-agent cross-cutting refactors. The PROGRAM layer's first real execution (a 3-tier, 5-IMPL unification project) drove the discovery and resolution of 13 integration gaps (P1-P13) -- gaps that would not have been found without running the protocol at scale on its own codebase.
+The protocol is self-hosting. The polywave protocol repository, Go SDK, and web application were built using Polywave. CONTEXT.md records 130+ completed features executed through the protocol, ranging from 1-wave/2-agent documentation fixes to 6-wave/31-agent cross-cutting refactors. The PROGRAM layer's first real execution (a 3-tier, 5-IMPL unification project) drove the discovery and resolution of 13 integration gaps (P1-P13) -- gaps that would not have been found without running the protocol at scale on its own codebase.
 
-A full canonicalization review of all 40 `pkg/` packages was completed via the SAW PROGRAM layer: every package was reviewed for result.Result[T] adoption, error code migration, API hygiene, and test coverage. Packages where the review found issues had dedicated fix IMPLs executed immediately. The `AnalyzeDeps` function was deleted and replaced by `BuildGraph(ctx, repoRoot, files)` + `ToOutput(graph)`. The `CascadeFile` type was unified into `CascadeCandidate`. All 40 packages are now reviewed and closed.
+A full canonicalization review of all 40 `pkg/` packages was completed via the Polywave PROGRAM layer: every package was reviewed for result.Result[T] adoption, error code migration, API hygiene, and test coverage. Packages where the review found issues had dedicated fix IMPLs executed immediately. The `AnalyzeDeps` function was deleted and replaced by `BuildGraph(ctx, repoRoot, files)` + `ToOutput(graph)`. The `CascadeFile` type was unified into `CascadeCandidate`. All 40 packages are now reviewed and closed.
 
 Dogfooding surfaces real issues. A Scout analyzing the Go engine's agent prompt loading discovered two pre-existing silent path bugs: `RunScout` was loading from `implementations/claude-code/prompts/scout.md` (does not exist) and `RunPlanner` from `agents/planner.md` (relative to repo root, also does not exist). `RunPlanner` had a fallback string that masked the failure; `RunScout` would have errored on any web/API execution path. Both were caught before execution, fixed in the same IMPL that added reference injection. This is the expected property of a system that analyzes itself before acting.
 

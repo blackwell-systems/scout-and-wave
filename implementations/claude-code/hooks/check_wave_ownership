@@ -48,7 +48,7 @@ for _ in 1 2 3 4 5; do
   search_dir="$parent"
 done
 
-# If no ownership manifest found, not in a SAW wave context — allow
+# If no ownership manifest found, not in a Polywave wave context — allow
 if [[ -z "$ownership_file" ]]; then
   exit 0
 fi

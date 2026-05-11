@@ -17,7 +17,7 @@ You also need `polywave-tools` built and on your PATH. See the [Installation Gui
 polywave-tools verify-install
 ```
 
-**What happens:** Checks that all SAW prerequisites are met -- polywave-tools on PATH, skill files symlinked, Git version sufficient, configured repos exist on disk.
+**What happens:** Checks that all Polywave prerequisites are met -- polywave-tools on PATH, skill files symlinked, Git version sufficient, configured repos exist on disk.
 
 **Expected output:**
 
@@ -201,9 +201,9 @@ Each code maps to a protocol rule. See the [protocol documentation](../protocol/
 
 ## What Next?
 
-- [Getting Started Guide](GETTING_STARTED.md) -- Overview of all three SAW interfaces
+- [Getting Started Guide](GETTING_STARTED.md) -- Overview of all three Polywave interfaces
 - [Installation Guide](INSTALLATION.md) -- Full installation walkthrough for all components
-- [Claude Code Quickstart](../implementations/claude-code/QUICKSTART.md) -- Using SAW via the `/saw` skill
+- [Claude Code Quickstart](../implementations/claude-code/QUICKSTART.md) -- Using Polywave via the `/saw` skill
 
 ---
 

@@ -25,14 +25,14 @@ make build
 **Expected output:**
 
 ```
-SAW server listening on http://localhost:7432
+Polywave server listening on http://localhost:7432
 ```
 
 ## Step 2: Open the Web UI
 
 Navigate to [http://localhost:7432](http://localhost:7432) in your browser.
 
-[Screenshot: SAW Web UI landing page with navigation sidebar]
+[Screenshot: Polywave Web UI landing page with navigation sidebar]
 
 You should see the main dashboard with a sidebar for navigation.
 
@@ -83,7 +83,7 @@ Agents work in parallel in isolated git worktrees. When all agents report comple
 
 ## Step 5: Using Chat
 
-Click **Chat** in the sidebar to open the conversational interface. You can ask questions about the current IMPL doc, wave progress, or general SAW concepts.
+Click **Chat** in the sidebar to open the conversational interface. You can ask questions about the current IMPL doc, wave progress, or general Polywave concepts.
 
 Example prompts:
 - "What files does Agent A own?"
@@ -124,9 +124,9 @@ The web UI reads IMPL docs from disk. Refresh the browser page after saving chan
 
 ## What Next?
 
-- [Getting Started Guide](GETTING_STARTED.md) -- Overview of all three SAW interfaces
+- [Getting Started Guide](GETTING_STARTED.md) -- Overview of all three Polywave interfaces
 - [Installation Guide](INSTALLATION.md) -- Full installation walkthrough for all components
-- [Claude Code Quickstart](../implementations/claude-code/QUICKSTART.md) -- Using SAW via the `/saw` skill in Claude Code
+- [Claude Code Quickstart](../implementations/claude-code/QUICKSTART.md) -- Using Polywave via the `/saw` skill in Claude Code
 
 ---
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PreToolUse hook: Enforces worktree write boundaries for SAW wave agents.
+# PreToolUse hook: Enforces worktree write boundaries for Polywave wave agents.
 # Uses POLYWAVE_WORKTREE_ROOT (injected by prepare-wave) to hard-deny any
 # Write/Edit/MultiEdit call whose target path resolves to the main repo
 # instead of the agent's assigned worktree.

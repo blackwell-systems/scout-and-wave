@@ -1,6 +1,6 @@
 # Prompts
 
-Reference implementations of the SAW protocol. Each file maps to a specific
+Reference implementations of the Polywave protocol. Each file maps to a specific
 participant role or procedure defined in the [protocol/](../protocol/) specification.
 
 ## Directory Structure

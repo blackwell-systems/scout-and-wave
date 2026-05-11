@@ -1,11 +1,11 @@
 <!-- polywave-teams-worktree v0.1.4 -->
-# SAW-Teams Worktree Lifecycle
+# Polywave-Teams Worktree Lifecycle
 
 Manage git worktree creation, verification, and cleanup for Agent Teams wave
 execution. Adapted from `prompts/saw-worktree.md` (v0.4.2): same invariants,
 same defense-in-depth model, different execution plumbing.
 
-**Key difference from standard SAW:** Agent Teams does not create worktrees
+**Key difference from standard Polywave:** Agent Teams does not create worktrees
 automatically. The lead (Orchestrator) creates worktrees before spawning
 teammates and passes the worktree path in each teammate's spawn context.
 
@@ -38,7 +38,7 @@ merge results. Resolve before proceeding.
    committed, stash with a descriptive message so recovery is unambiguous:
 
    ```bash
-   git stash push -u -m "SAW pre-wave stash: <brief description>"
+   git stash push -u -m "Polywave pre-wave stash: <brief description>"
    ```
 
    After the wave completes and the merge is done, restore:
@@ -139,7 +139,7 @@ if [ -f .git/hooks/pre-commit ]; then
   cp .git/hooks/pre-commit .git/hooks/pre-commit.saw-backup
 fi
 
-# Install the SAW isolation guard (handled automatically by polywave-tools)
+# Install the Polywave isolation guard (handled automatically by polywave-tools)
 # polywave-tools create-worktrees writes the hook programmatically
 # Hook embedded in polywave-go/pkg/worktree/manager.go
 ```
@@ -152,7 +152,7 @@ commits).
 
 ### Why Manual Pre-Creation Is Required
 
-Unlike standard SAW where the Agent tool's `isolation: "worktree"` parameter
+Unlike standard Polywave where the Agent tool's `isolation: "worktree"` parameter
 provides a secondary isolation mechanism, Agent Teams does not support
 `isolation: "worktree"` on teammate spawn. Manual pre-creation is the only
 worktree creation mechanism. If it fails, worktrees do not exist.
@@ -214,7 +214,7 @@ If worktrees cannot be created:
    ownership is truly disjoint)
 3. **Run agents sequentially:** abandon parallelism, run one agent at a time
    on the main branch
-4. **Fall back to standard SAW execution:** use `prompts/polywave-skill.md` with
+4. **Fall back to standard Polywave execution:** use `prompts/polywave-skill.md` with
    the raw Agent tool instead of Agent Teams. The IMPL doc state machine is
    execution-layer-agnostic; the same IMPL doc works with either execution
    layer. This is always a valid fallback.
@@ -241,7 +241,7 @@ This is defense-in-depth:
   failure only when reading completion reports after all teammates finish)
 - **Layer 3:** Lead checks completion reports for isolation failures
 
-Layer 2.5 is the key addition over standard SAW. In standard SAW, the
+Layer 2.5 is the key addition over standard Polywave. In standard Polywave, the
 Orchestrator only discovers isolation failures when reading completion reports
 after all agents complete. With Agent Teams messaging, the lead can intervene
 immediately, e.g., spawn a replacement teammate with the correct path.

@@ -1,16 +1,16 @@
 # Getting Started with Polywave
 
-## What is SAW?
+## What is Polywave?
 
-Polywave (SAW) runs parallel AI coding agents that don't break each other's code. A Scout analyzes your codebase and assigns every file to exactly one agent, making merge conflicts structurally impossible. You review the full plan before any agent touches your code.
+Polywave (Polywave) runs parallel AI coding agents that don't break each other's code. A Scout analyzes your codebase and assigns every file to exactly one agent, making merge conflicts structurally impossible. You review the full plan before any agent touches your code.
 
-## Three Ways to Use SAW
+## Three Ways to Use Polywave
 
 Choose the path that fits your workflow:
 
 ### Claude Code Skill (`/saw`)
 
-The most common way to use SAW. Install the skill, then run `/polywave scout "feature"` directly in Claude Code. The orchestrator handles everything: launching agents, creating worktrees, merging results, running tests.
+The most common way to use Polywave. Install the skill, then run `/polywave scout "feature"` directly in Claude Code. The orchestrator handles everything: launching agents, creating worktrees, merging results, running tests.
 
 **Best for:** Day-to-day feature development, teams already using Claude Code.
 
@@ -24,7 +24,7 @@ A browser-based interface for reviewing IMPL docs, monitoring wave progress, and
 
 ### CLI (`polywave-tools`)
 
-Direct command-line access to every SAW operation. Build automation pipelines, script wave execution, integrate with CI/CD.
+Direct command-line access to every Polywave operation. Build automation pipelines, script wave execution, integrate with CI/CD.
 
 **Best for:** CI/CD pipelines, scripting, power users who want fine-grained control.
 
@@ -75,7 +75,7 @@ See [INSTALLATION.md](INSTALLATION.md) for the full installation guide, includin
 
 ## Three Repos, One System
 
-SAW is split across three repositories, each with a distinct role:
+Polywave is split across three repositories, each with a distinct role:
 
 | Repository | What It Contains | When You Need It |
 |---|---|---|
