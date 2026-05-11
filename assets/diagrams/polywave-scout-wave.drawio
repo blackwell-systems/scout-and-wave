@@ -16,7 +16,7 @@
 <mxCell id="writes_impl" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=18;align=left;spacingLeft=10;" value="&lt;b&gt;Writes IMPL doc&lt;/b&gt;&lt;br&gt;• suitability verdict&lt;br&gt;• interface contracts + scaffold contents&lt;br&gt;• file ownership table (I1)&lt;br&gt;• wave structure + per-agent briefs" vertex="1"><mxGeometry height="130" width="380" x="650" y="524" as="geometry"/></mxCell>
 <mxCell id="e4" edge="1" parent="1" source="scout_reads" target="writes_impl" style="edgeStyle=orthogonalEdgeStyle;fontSize=18;" vertex="1"><mxGeometry relative="1" as="geometry"/></mxCell>
 
-<mxCell id="validate_impl" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=18;align=left;spacingLeft=10;" value="&lt;b&gt;Validate IMPL doc&lt;/b&gt;&lt;br&gt;• sawtools finalize-scout&lt;br&gt;• E16 schema + E35 wiring + test cascade&lt;br&gt;• validate-briefs symbol accuracy&lt;br&gt;• self-corrects up to 3 retries" vertex="1"><mxGeometry height="130" width="380" x="650" y="704" as="geometry"/></mxCell>
+<mxCell id="validate_impl" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=18;align=left;spacingLeft=10;" value="&lt;b&gt;Validate IMPL doc&lt;/b&gt;&lt;br&gt;• polywave-tools finalize-scout&lt;br&gt;• E16 schema + E35 wiring + test cascade&lt;br&gt;• validate-briefs symbol accuracy&lt;br&gt;• self-corrects up to 3 retries" vertex="1"><mxGeometry height="130" width="380" x="650" y="704" as="geometry"/></mxCell>
 <mxCell id="e5" edge="1" parent="1" source="writes_impl" target="validate_impl" style="edgeStyle=orthogonalEdgeStyle;fontSize=18;" vertex="1"><mxGeometry relative="1" as="geometry"/></mxCell>
 
 <mxCell id="human_review" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=18;" value="Human review&#xa;interface freeze checkpoint" vertex="1"><mxGeometry height="64" width="380" x="650" y="884" as="geometry"/></mxCell>
@@ -57,7 +57,7 @@
 <mxCell id="e18" edge="1" parent="wave_swim" source="run_main" target="agents_exec" style="edgeStyle=orthogonalEdgeStyle;fontSize=18;" vertex="1"><mxGeometry relative="1" as="geometry"/></mxCell>
 <mxCell id="e19" edge="1" parent="wave_swim" source="worktrees" target="agents_exec" style="edgeStyle=orthogonalEdgeStyle;fontSize=18;" vertex="1"><mxGeometry relative="1" as="geometry"/></mxCell>
 
-<mxCell id="comp_reports" parent="wave_swim" style="rounded=1;whiteSpace=wrap;html=1;fontSize=18;align=left;spacingLeft=10;" value="&lt;b&gt;Completion reports → IMPL doc (I4)&lt;/b&gt;&lt;br&gt;• sawtools set-completion&lt;br&gt;• status: complete / partial / blocked&lt;br&gt;• files changed, commit hash (I5)" vertex="1"><mxGeometry height="120" width="460" x="270" y="604" as="geometry"/></mxCell>
+<mxCell id="comp_reports" parent="wave_swim" style="rounded=1;whiteSpace=wrap;html=1;fontSize=18;align=left;spacingLeft=10;" value="&lt;b&gt;Completion reports → IMPL doc (I4)&lt;/b&gt;&lt;br&gt;• polywave-tools set-completion&lt;br&gt;• status: complete / partial / blocked&lt;br&gt;• files changed, commit hash (I5)" vertex="1"><mxGeometry height="120" width="460" x="270" y="604" as="geometry"/></mxCell>
 <mxCell id="e20" edge="1" parent="wave_swim" source="agents_exec" target="comp_reports" style="edgeStyle=orthogonalEdgeStyle;fontSize=18;" vertex="1"><mxGeometry relative="1" as="geometry"/></mxCell>
 
 <mxCell id="agent_blocked_d" parent="wave_swim" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=16;" value="Any agent&#xa;partial/blocked?" vertex="1"><mxGeometry height="100" width="210" x="790" y="614" as="geometry"/></mxCell>
@@ -79,7 +79,7 @@
 
 <mxCell id="e28" edge="1" parent="wave_swim" source="more_waves" target="solo_d" style="edgeStyle=orthogonalEdgeStyle;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;fontSize=18;" value="next wave" vertex="1"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="30" y="1215"/><mxPoint x="30" y="125"/></Array></mxGeometry></mxCell>
 
-<mxCell id="close_impl" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;fontSize=18;" value="sawtools close-impl&#xa;SAW:COMPLETE · archive · CONTEXT.md update" vertex="1"><mxGeometry height="70" width="420" x="630" y="2950" as="geometry"/></mxCell>
+<mxCell id="close_impl" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;fontSize=18;" value="polywave-tools close-impl&#xa;SAW:COMPLETE · archive · CONTEXT.md update" vertex="1"><mxGeometry height="70" width="420" x="630" y="2950" as="geometry"/></mxCell>
 <mxCell id="e29" edge="1" parent="1" source="more_waves" target="close_impl" style="edgeStyle=orthogonalEdgeStyle;fontSize=18;" value="no more waves" vertex="1"><mxGeometry relative="1" as="geometry"/></mxCell>
 
 </root></mxGraphModel>

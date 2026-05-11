@@ -121,8 +121,8 @@ i5_result="skip"
 report_result="skip"
 
 if [[ "$agent_type" == "wave" && -n "$impl_path" && -f "$impl_path" ]]; then
-  if command -v sawtools &>/dev/null; then
-    check_output=$(sawtools check-completion "$impl_path" --agent "$agent_id" 2>/dev/null || true)
+  if command -v polywave-tools &>/dev/null; then
+    check_output=$(polywave-tools check-completion "$impl_path" --agent "$agent_id" 2>/dev/null || true)
     if [[ -n "$check_output" ]]; then
       status=$(echo "$check_output" | jq -r '.status // "unknown"' 2>/dev/null || echo "unknown")
       files_changed=$(echo "$check_output" | jq -c '.files_changed // []' 2>/dev/null || echo "[]")

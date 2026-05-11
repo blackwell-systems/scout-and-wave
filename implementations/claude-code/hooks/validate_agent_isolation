@@ -46,7 +46,7 @@ feature_slug=$(basename "$impl_path" .yaml | sed 's/^IMPL-//')
 expected_branch="saw/${feature_slug}/wave${wave_num}-agent-${agent_id}"
 
 # Run isolation verification with explicit cwd
-if ! sawtools verify-isolation --cwd "$(pwd)" --branch "$expected_branch" >/dev/null 2>&1; then
+if ! polywave-tools verify-isolation --cwd "$(pwd)" --branch "$expected_branch" >/dev/null 2>&1; then
   echo "E12 violation: Agent isolation verification failed" >&2
   echo "  Agent: $agent_name" >&2
   echo "  Expected branch: $expected_branch" >&2
@@ -54,7 +54,7 @@ if ! sawtools verify-isolation --cwd "$(pwd)" --branch "$expected_branch" >/dev/
   echo "  Current branch: $(git branch --show-current 2>/dev/null || echo 'unknown')" >&2
   echo "" >&2
   echo "Run manually to see details:" >&2
-  echo "  sawtools verify-isolation --cwd \"\$(pwd)\" --branch $expected_branch" >&2
+  echo "  polywave-tools verify-isolation --cwd \"\$(pwd)\" --branch $expected_branch" >&2
   exit 2
 fi
 

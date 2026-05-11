@@ -9,7 +9,7 @@
 │                                             │
 │  +-- Invariants (I1-I6)                     │
 │  +-- Execution rules (E1-E38)               │
-│  +-- Skill files (saw-skill.md, etc.)       │
+│  +-- Skill files (polywave-skill.md, etc.)  │
 │  +-- Agent prompts (scout.md, wave-agent.md)│
 │  +-- Install script (install.sh)            │
 └──────────────────┬──────────────────────────┘
@@ -60,8 +60,8 @@ Target Project (your codebase)
                               └────────────────────────┘
 
 ~/.claude/skills/saw/
-  saw-skill.md  ──symlink──>  polywave/implementations/
-                              claude-code/prompts/saw-skill.md
+  polywave-skill.md  ──symlink──>  polywave/implementations/
+                                   claude-code/prompts/polywave-skill.md
 ```
 
 - **polywave-tools** reads and writes IMPL docs directly in your project

@@ -107,7 +107,7 @@ This creates an integration wave where agent B wires agent A's work into the app
 **Implementation (automatic):**
 1. `polywave-tools prepare-wave/prepare-agent` writes `saw_name` field to brief frontmatter
 2. Orchestrator reads `saw_name` from `.polywave-agent-brief.md` and uses as Agent tool name parameter
-3. `auto_format_saw_agent_names` PreToolUse hook validates format and provides fallback
+3. `auto_format_polywave_agent_names` PreToolUse hook validates format and provides fallback
 
 **Why:** Enables monitoring tools (claudewatch, SAW dashboard) to detect and track agent runs.
 

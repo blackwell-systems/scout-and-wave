@@ -7,7 +7,7 @@
 #
 # This is a warn-only hook — SubagentStop fires AFTER agent completion, so
 # returning exit 2 would not prevent completion. The real enforcement happens at:
-# - Wave finalization (I5 verification via sawtools finalize-wave)
+# - Wave finalization (I5 verification via polywave-tools finalize-wave)
 # - E42 hook in validate_agent_completion (completion report check)
 #
 # Test cases:
@@ -50,9 +50,9 @@ impl_path="${POLYWAVE_IMPL_PATH:-}"
 branch_name="${POLYWAVE_BRANCH:-}"
 
 # Verification Check 1: Completion report exists (E42/I4)
-if command -v sawtools &>/dev/null; then
+if command -v polywave-tools &>/dev/null; then
   if [[ -n "$impl_path" ]]; then
-    if ! sawtools check-completion "$impl_path" --agent "$agent_id" &>/dev/null; then
+    if ! polywave-tools check-completion "$impl_path" --agent "$agent_id" &>/dev/null; then
       echo "WARNING: No completion report found for agent $agent_id" >&2
       echo "  Protocol violation (E42/I4): Agents must write completion reports." >&2
       echo "  IMPL doc: $impl_path" >&2

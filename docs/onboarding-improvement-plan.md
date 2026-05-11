@@ -32,7 +32,7 @@ That is seven protocol-specific concepts, all required upfront. A user who skips
 
 ### 1.2 Web App Path: What a New User Does Today
 
-1. Clone three repos, build the web app (`make build`), run `./saw serve`.
+1. Clone three repos, build the web app (`make build`), run `./polywave serve`.
 2. Open `http://localhost:7432`.
 3. See the **WelcomeCard** component: "Polywave uses AI agents to plan and implement features in parallel." Then: "First, add a repository in Settings so Scout knows which codebase to analyze."
 4. Click "Open Settings," navigate to the repo configuration form, add a repo path, validate it.
@@ -379,7 +379,7 @@ Review the plan above. If it looks right:
 - Gives explicit next-step commands
 
 **Implementation:**
-- **Repo:** polywave (skill prompt modifications in `implementations/claude-code/prompts/saw-skill.md`)
+- **Repo:** polywave (skill prompt modifications in `implementations/claude-code/prompts/polywave-skill.md`)
 - **Effort:** Small (conditional prompt section for first-run detection)
 - **Dependencies:** None
 
@@ -499,7 +499,7 @@ Recent activity:
 
 #### Error: polywave-tools not installed
 
-**Current message (from pre-flight in saw-skill.md):**
+**Current message (from pre-flight in polywave-skill.md):**
 > "polywave-tools on PATH: blocker if missing"
 
 The skill prompt tells the orchestrator to "print what's missing and how to install it (see `docs/INSTALLATION.md`)" but the actual error is LLM-generated and varies.
@@ -650,7 +650,7 @@ In the web app, the "New Plan" button already uses "Plan" language. This makes C
 
 **Implementation:**
 - **Repo:** polywave-go (alias in command routing)
-- **Repo:** polywave (update skill prompt to accept `/saw plan` as equivalent to `/polywave scout`)
+- **Repo:** polywave (update skill prompt to accept `/polywave plan` as equivalent to `/polywave scout`)
 - **Effort:** Small
 - **Dependencies:** None
 
@@ -697,7 +697,7 @@ In the web app, the "New Plan" button already uses "Plan" language. This makes C
 
 | # | Proposal | Impact | Effort | Repos | Dependencies | Status |
 |---|---|---|---|---|---|---|
-| 1 | **4.5 Error messages as teaching moments** (skill prompt templates) | High — every new user hits at least one error | Small | polywave | None | **INCOMPLETE** — No verbatim templates in saw-skill.md |
+| 1 | **4.5 Error messages as teaching moments** (skill prompt templates) | High — every new user hits at least one error | Small | polywave | None | **INCOMPLETE** — No verbatim templates in polywave-skill.md |
 | 2 | **4.7 `polywave plan` alias** | ~~High~~ Low — removes first jargon barrier | Small | polywave-go, polywave | None | **DEFERRED** — Overloads "plan", no standalone CLI (see line 730) |
 | 3 | **4.8 `polywave run` alias** (if needed; `polywave wave` is acceptable) | Low — "wave" is distinctive and learnable | Small | polywave-go, polywave | None | **NOT STARTED** — `/polywave auto` partially addresses this by collapsing the multi-command flow |
 | 4 | **4.4 Concept renaming** (UI labels only) | High — reduces cognitive load on every page | Small-Medium | polywave-web | None | **PARTIAL** — Tooltips done (IMPL-webapp-ux-onboarding, 2026-03-20), model selectors kept visible (REJECTED) |
@@ -744,7 +744,7 @@ Independent review verdict: **APPROVE WITH CHANGES**. Status of each condition:
 
 1. **4.7 `polywave plan` alias — DEFERRED.** The CLI is invoked via `/polywave scout` inside Claude Code — there is no standalone `polywave` binary for CLI users. The alias would need to live in the skill prompt as routing logic, not in polywave-tools. Additionally, "plan" is already overloaded: it is a noun (the IMPL doc), a verb in `/polywave program plan`, and would become a second verb meaning "run the scout." This creates ambiguity. Revisit only if a standalone CLI entry point is built.
 
-2. **4.1 `polywave-tools init` — COMPLETE (2026-03-25).** Implemented as `polywave-tools init` (not `polywave init`). Auto-detects language (Go, Rust, Node, Python, Ruby, Makefile), build and test commands, and generates `polywave.config.json`. Flags: `--repo <path>` (default: cwd), `--force` (overwrite existing config). Documentation updated in INSTALLATION.md, README.md, and saw-skill.md.
+2. **4.1 `polywave-tools init` — COMPLETE (2026-03-25).** Implemented as `polywave-tools init` (not `polywave init`). Auto-detects language (Go, Rust, Node, Python, Ruby, Makefile), build and test commands, and generates `polywave.config.json`. Flags: `--repo <path>` (default: cwd), `--force` (overwrite existing config). Documentation updated in INSTALLATION.md, README.md, and polywave-skill.md.
 
 3. **4.2 Guided first-run — RESTRUCTURE.** Adding ~50 lines to the skill prompt for a path that fires once per project is expensive context for every subsequent invocation. Move the guided first-run content into a reference file (e.g., `references/first-run.md`) loaded on first-run detection, same pattern as `program-flow.md` and `amend-flow.md`. The routing table in the core skill adds one line; the content loads on demand.
 
@@ -825,7 +825,7 @@ SAW's target users are developers who have already experienced the pain of paral
 Key files that would be modified by these proposals:
 
 **polywave (protocol repo):**
-- `/Users/dayna.blackwell/code/polywave/implementations/claude-code/prompts/saw-skill.md` — skill prompt (guided first run, error templates, plan/build aliases)
+- `/Users/dayna.blackwell/code/polywave/implementations/claude-code/prompts/polywave-skill.md` — skill prompt (guided first run, error templates, plan/build aliases)
 - `/Users/dayna.blackwell/code/polywave/docs/INSTALLATION.md` — simplify to reference `polywave init`
 - `/Users/dayna.blackwell/code/polywave/docs/GETTING_STARTED.md` — rewrite around progressive disclosure levels
 - `/Users/dayna.blackwell/code/polywave/README.md` — simplify Quick Start to `polywave init` + `polywave plan`

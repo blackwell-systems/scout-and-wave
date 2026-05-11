@@ -1,4 +1,4 @@
-<!-- saw-bootstrap v0.4.0 -->
+<!-- polywave-bootstrap v0.4.0 -->
 # SAW Bootstrap: Design-First Project Architecture
 
 Use this mode when starting a new project from scratch with no existing codebase.

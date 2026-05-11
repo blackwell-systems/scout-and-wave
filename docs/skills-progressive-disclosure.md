@@ -30,7 +30,7 @@ inject_skill_context calls inject-context script with direct conditional matchin
   ↓
 Hook returns additionalContext with program-flow.md content
   ↓
-Model receives: [saw-skill.md core] + [program-flow.md] before first step
+Model receives: [polywave-skill.md core] + [program-flow.md] before first step
   ↓
 Model launches Scout with --program flag (subagent_type: scout)
   ↓
@@ -157,11 +157,11 @@ Orchestrator trigger injection (`inject-context` script) and conditional agent i
 
 *Maps to Agent Skills spec: **Instructions** tier (<5000 tokens recommended).*
 
-The main body of `saw-skill.md` is loaded on every `/saw` invocation. It contains everything the Orchestrator needs for the most common subcommands:
+The main body of `polywave-skill.md` is loaded on every `/saw` invocation. It contains everything the Orchestrator needs for the most common subcommands:
 
 - Role separation invariants (I6)
 - Agent model selection (config lookup, `--model` override, fallback rule)
-- Supporting files table (`agent-template.md`, `saw-bootstrap.md`, `agents/`)
+- Supporting files table (`agent-template.md`, `polywave-bootstrap.md`, `agents/`)
 - The on-demand routing table (lines 76–88)
 - Invocation mode table
 - Pre-flight validation checklist
@@ -198,7 +198,7 @@ The `inject-context` script matches prompt patterns with direct conditional logi
 
 - `^/polywave program` in prompt → inject `references/program-flow.md`
 - `^/polywave amend` in prompt → inject `references/amend-flow.md`
-- `^/polywave auto` in prompt → no-op (no file to inject; auto flow is Tier 2 core, inlined in `saw-skill.md`)
+- `^/polywave auto` in prompt → no-op (no file to inject; auto flow is Tier 2 core, inlined in `polywave-skill.md`)
 
 Multiple matches result in all matching references injected (concatenated). No match results in no injection, zero overhead.
 
@@ -272,7 +272,7 @@ Before injecting, each layer checks if the marker is already present in the prom
 
 ## The Routing Table Pattern (Layer 3 Fallback)
 
-The routing table lives in the "On-Demand References" section of `saw-skill.md`. It has two parts: a display table and imperative dispatch logic.
+The routing table lives in the "On-Demand References" section of `polywave-skill.md`. It has two parts: a display table and imperative dispatch logic.
 
 **Display table** (documentation, not execution):
 
@@ -358,7 +358,7 @@ A new subcommand family that adds 50+ lines of flow logic and is not needed for 
 
 Create `implementations/claude-code/prompts/references/<name>-flow.md`.
 
-**One-level-deep rule:** Reference files must link directly from `saw-skill.md` — never from another on-demand reference. Claude may preview long files with partial reads (`head -100`); a reference that itself points to sub-references risks the leaf content being read incompletely or not at all. If an on-demand reference needs to point to additional content, either inline it or add a separate top-level entry to the routing table.
+**One-level-deep rule:** Reference files must link directly from `polywave-skill.md` — never from another on-demand reference. Claude may preview long files with partial reads (`head -100`); a reference that itself points to sub-references risks the leaf content being read incompletely or not at all. If an on-demand reference needs to point to additional content, either inline it or add a separate top-level entry to the routing table.
 
 **Table of contents (required if file > 100 lines):** Place a contents list immediately after the header comment, before any prose. List all `##` sections. This ensures Claude sees the full scope of available information even when previewing. Files under 100 lines do not need one.
 
@@ -368,7 +368,7 @@ Structure:
 
 **<Any shared logic>:** Use the <X> from core SKILL.md. Do not duplicate.
 
-## /saw <subcommand> --<flag>
+## /polywave <subcommand> --<flag>
 
 **Orchestrator steps:**
 1. ...
@@ -401,11 +401,11 @@ Note: Always-needed references should be inlined in the agent definition rather 
 
 ### Step 4: Add routing table fallback (Layer 3)
 
-In the "On-Demand References" section of `saw-skill.md`, add a row to the display table and a corresponding dispatch block:
+In the "On-Demand References" section of `polywave-skill.md`, add a row to the display table and a corresponding dispatch block:
 
 **Table row:**
 ```
-| `/saw <subcommand> *` | Read `${CLAUDE_SKILL_DIR}/references/<name>-flow.md` |
+| `/polywave <subcommand> *` | Read `${CLAUDE_SKILL_DIR}/references/<name>-flow.md` |
 ```
 
 **Dispatch block** (add after the existing `amend` block):
@@ -429,11 +429,11 @@ The `install.sh` script uses wildcard patterns (`prompts/references/*.md`) to au
 Verify all three layers:
 
 **Layer 1 (Hooks):**
-- A `/saw <new-subcommand>` invocation on Claude Code receives the reference content before the model runs (check via hook logs or model behavior)
+- A `/polywave <new-subcommand>` invocation on Claude Code receives the reference content before the model runs (check via hook logs or model behavior)
 - A `/polywave wave` invocation does not receive the reference
 
 **Layer 2 (Scripts):**
-- `bash scripts/inject-context "/saw <new-subcommand>"` outputs the reference content
+- `bash scripts/inject-context "/polywave <new-subcommand>"` outputs the reference content
 - `bash scripts/inject-context "/polywave wave"` outputs empty string (no match)
 
 **Layer 3 (Routing table):**
@@ -469,13 +469,13 @@ The decision heuristic (for content already past the CLAUDE.md entry stage):
 - IMPL discovery and targeting — used by wave, status, and amend
 - The full wave loop (steps 1–11) — the core value of the skill; invoked by every `/polywave wave` call
 - E37 Critic Gate logic — triggered during scout and wave flows, both common paths
-- `/polywave auto` flow — invoked on a significant fraction of sessions; its logic directly chains the existing scout and wave flows (11 steps), making it short and tightly coupled to the core wave loop; it belongs inline in `saw-skill.md`, not in a separate reference file
+- `/polywave auto` flow — invoked on a significant fraction of sessions; its logic directly chains the existing scout and wave flows (11 steps), making it short and tightly coupled to the core wave loop; it belongs inline in `polywave-skill.md`, not in a separate reference file
 
 **Always in Tier 3 (on-demand references):**
 - Subcommand families that represent a distinct execution tier (program, amend)
 - Failure routing logic beyond the basic "read failure-routing.md" trigger point — agents succeed on the majority of runs, so detailed remediation logic is pay-per-use
 
-**Note on `/polywave auto` and Tier 3:** `/polywave auto` does NOT require a new on-demand reference file. The auto flow (11 steps) is short and tightly coupled to the existing scout and wave flows — it lives inline in `saw-skill.md` as Tier 2 core content. A separate reference file would be overhead without benefit.
+**Note on `/polywave auto` and Tier 3:** `/polywave auto` does NOT require a new on-demand reference file. The auto flow (11 steps) is short and tightly coupled to the existing scout and wave flows — it lives inline in `polywave-skill.md` as Tier 2 core content. A separate reference file would be overhead without benefit.
 
 ---
 
@@ -489,7 +489,7 @@ The same principle applies: content needed on <25% of launches belongs in a refe
 
 | Surface | Loaded when | Injection mechanism |
 |---------|-------------|---------------------|
-| SKILL.md (Tier 2) | User invokes `/saw *` | Always loaded |
+| SKILL.md (Tier 2) | User invokes `/polywave *` | Always loaded |
 | Skill references (Tier 3) | Matching subcommand triggered | `UserPromptSubmit` → `additionalContext` into orchestrator |
 | Agent type prompt core | Any agent of that type launches | Always loaded |
 | Agent type references | Agent of that type launches | `PreToolUse/Agent` → `updatedInput` into subagent |
@@ -597,7 +597,7 @@ The injection system has three layers, each targeting a different deployment con
 | Script | `scripts/inject-agent-context` | Any platform with Bash | Model-initiated |
 | Fallback | Routing table in SKILL.md | Any platform | Convention-based |
 
-`inject-agent-context` is the authoritative source for the 3 conditional reference mappings and dedup markers, called by the hook for Layer 1. Output from either layer is idempotent when combined. Platforms that register the hook get Layer 1 automatically. Platforms without Claude Code hooks but with Bash can call the script directly as Layer 2. The routing table in `saw-skill.md` remains the always-available Layer 3 fallback. Always-needed content requires no injection -- it is inlined in agent definitions.
+`inject-agent-context` is the authoritative source for the 3 conditional reference mappings and dedup markers, called by the hook for Layer 1. Output from either layer is idempotent when combined. Platforms that register the hook get Layer 1 automatically. Platforms without Claude Code hooks but with Bash can call the script directly as Layer 2. The routing table in `polywave-skill.md` remains the always-available Layer 3 fallback. Always-needed content requires no injection -- it is inlined in agent definitions.
 
 The `updatedInput` mechanism is required because `additionalContext` only reaches the orchestrator, not the subagent.
 

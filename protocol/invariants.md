@@ -163,7 +163,7 @@ E42 performs post-hoc I5 commit verification at SubagentStop time, checking that
 
 **Scope:** The solo wave agent must still operate in the Wave Agent role: launched by the Orchestrator as an asynchronous agent, not executed directly by the Orchestrator. Executing solo wave work inline violates I6 regardless of wave size. The absence of worktrees changes the isolation mechanism; it does not change the participant roles.
 
-**Enforcement limitation:** I6 is enforced via orchestrator prompt instructions (saw-skill.md line 66) and agent type restrictions (custom `subagent_type` values like `scout`, `wave-agent`, `integration-agent`), not via SDK validators or lifecycle hooks. The orchestrator must self-detect I6 violations by recognizing when it's performing work that should be delegated to an async agent. Unlike I1-I5, which have mechanical enforcement through validators (I1, I2, I3), hooks (I1, I5), and commit checks (I5), I6 relies on orchestrator discipline.
+**Enforcement limitation:** I6 is enforced via orchestrator prompt instructions (polywave-skill.md line 66) and agent type restrictions (custom `subagent_type` values like `scout`, `wave-agent`, `integration-agent`), not via SDK validators or lifecycle hooks. The orchestrator must self-detect I6 violations by recognizing when it's performing work that should be delegated to an async agent. Unlike I1-I5, which have mechanical enforcement through validators (I1, I2, I3), hooks (I1, I5), and commit checks (I5), I6 relies on orchestrator discipline.
 
 **Future enforcement:** A PreToolUse hook could block the orchestrator's agent session from using Write/Edit tools on files listed in any IMPL doc's `file_ownership` table, providing mechanical I6 enforcement equivalent to I1's E43 hooks.
 

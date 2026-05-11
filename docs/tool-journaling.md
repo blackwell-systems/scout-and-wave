@@ -401,5 +401,5 @@ When disabled, agents run without context recovery. This is not recommended for 
 ## See Also
 
 - [Architecture](./architecture.md) — Full system architecture with journal subsystem diagram
-- [Orchestrator Skill](../implementations/claude-code/prompts/saw-skill.md) — How orchestrator loads journals before agent launch
+- [Orchestrator Skill](../implementations/claude-code/prompts/polywave-skill.md) — How orchestrator loads journals before agent launch
 - [Protocol Execution Rules](../protocol/execution-rules.md) — E19 agent failure handling

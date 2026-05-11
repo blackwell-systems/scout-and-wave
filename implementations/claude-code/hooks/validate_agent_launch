@@ -171,9 +171,9 @@ if [[ -z "$impl_full_path" || ! -f "$impl_full_path" ]]; then
 fi
 
 # --- Check 4: IMPL validation ---
-if command -v sawtools &>/dev/null; then
-  if ! sawtools validate "$impl_full_path" &>/dev/null; then
-    echo "H5: IMPL doc validation failed. The IMPL doc at ${impl_path} did not pass sawtools validate." >&2
+if command -v polywave-tools &>/dev/null; then
+  if ! polywave-tools validate "$impl_full_path" &>/dev/null; then
+    echo "H5: IMPL doc validation failed. The IMPL doc at ${impl_path} did not pass polywave-tools validate." >&2
     exit 2
   fi
 fi

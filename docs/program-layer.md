@@ -485,7 +485,7 @@ Within a program tier, each IMPL's wave merges target the IMPL's dedicated branc
 
 ## 6. CLI Commands — `/polywave program`
 
-These commands are defined in `implementations/claude-code/prompts/saw-skill.md`. They are invoked via the `/saw` skill in Claude Code.
+These commands are defined in `implementations/claude-code/prompts/polywave-skill.md`. They are invoked via the `/saw` skill in Claude Code.
 
 ### `/polywave program plan "<project-description>"`
 
@@ -791,7 +791,7 @@ Re-engages the Planner agent to revise a PROGRAM manifest. Implemented in `cmd/p
 
 ### `polywave-tools run-scout "<impl-title>" --program "<manifest>"`
 
-Launches a Scout agent for a specific IMPL with access to the PROGRAM manifest's frozen contracts. Referenced in E31 and `saw-skill.md`. Implementation details in the Go SDK.
+Launches a Scout agent for a specific IMPL with access to the PROGRAM manifest's frozen contracts. Referenced in E31 and `polywave-skill.md`. Implementation details in the Go SDK.
 
 ---
 

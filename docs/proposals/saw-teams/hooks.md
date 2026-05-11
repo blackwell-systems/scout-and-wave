@@ -228,7 +228,7 @@ chmod +x .claude/hooks/task-completed-saw.sh
 
 ## Relationship to Standard SAW
 
-Standard SAW (`prompts/saw-skill.md`) has no equivalent hooks; the `Agent`
+Standard SAW (`prompts/polywave-skill.md`) has no equivalent hooks; the `Agent`
 tool does not fire `TeammateIdle` or `TaskCompleted` events. Those background
 agents complete (or fail silently), and the Orchestrator reads reports after
 all agents finish.

@@ -87,9 +87,9 @@ After installation, the skill directory structure looks like this:
 
 ```
 ~/.claude/skills/saw/
-├── SKILL.md              -> prompts/saw-skill.md
+├── SKILL.md              -> prompts/polywave-skill.md
 ├── agent-template.md     -> prompts/agent-template.md
-├── saw-bootstrap.md      -> prompts/saw-bootstrap.md
+├── polywave-bootstrap.md -> prompts/polywave-bootstrap.md
 ├── agents/
 │   ├── critic-agent.md   -> prompts/agents/critic-agent.md
 │   ├── integration-agent.md -> prompts/agents/integration-agent.md
@@ -180,7 +180,7 @@ The React frontend is embedded into the Go binary via `//go:embed`, so **both** 
 Start the server with:
 
 ```bash
-./saw serve
+./polywave serve
 ```
 
 ## Hooks (20 total)
@@ -201,7 +201,7 @@ The hook installer registers 20 hooks across five lifecycle events. All hook scr
 | `check_scout_boundaries` | `Write\|Edit` | Blocks Scout agents from writing outside `docs/IMPL/IMPL-*.yaml` |
 | `block_claire_paths` | `Write\|Edit\|Bash` | Blocks operations targeting `.claire` paths (common typo for `.claude`) |
 | `check_wave_ownership` | `Write\|Edit\|NotebookEdit` | Blocks Wave agents from writing files outside their ownership manifest |
-| `auto_format_saw_agent_names` | `Agent` | Validates/formats SAW agent names from brief metadata (fallback for E44) |
+| `auto_format_polywave_agent_names` | `Agent` | Validates/formats polywave agent names from brief metadata (fallback for E44) |
 | `validate_agent_launch` | `Agent` | Full pre-launch validation gate: checks IMPL doc, agent existence, scaffolds, branch |
 | `inject_bash_cd` | `Bash` | Auto-prepends `cd $POLYWAVE_AGENT_WORKTREE &&` to every bash command when agent is in worktree |
 | `validate_write_paths` | `Write\|Edit` | Blocks relative paths and paths outside worktree boundaries |
@@ -255,7 +255,7 @@ The installer creates these symlinks in `~/.local/bin/`:
 ~/.local/bin/check_scout_boundaries
 ~/.local/bin/block_claire_paths
 ~/.local/bin/check_wave_ownership
-~/.local/bin/auto_format_saw_agent_names
+~/.local/bin/auto_format_polywave_agent_names
 ~/.local/bin/validate_agent_launch
 ~/.local/bin/inject_bash_cd
 ~/.local/bin/validate_write_paths
@@ -388,7 +388,7 @@ export PATH="$(go env GOPATH)/bin:$PATH"
 
 Verify with: `which polywave-tools`
 
-### "/saw not recognized"
+### "/polywave not recognized"
 
 The skill files are not installed. Verify the symlinks exist:
 

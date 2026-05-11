@@ -174,7 +174,7 @@ Before injecting a reference file, the script checks if the marker already exist
 **Skill directory structure:**
 ```
 ~/.claude/skills/saw/
-├── saw-skill.md              # Orchestrator skill definition
+├── polywave-skill.md              # Orchestrator skill definition
 ├── scripts/
 │   ├── inject-context        # Orchestrator reference injection
 │   └── inject-agent-context  # Conditional agent reference injection
@@ -204,7 +204,7 @@ User types: /polywave program plan
 
 Model must call script before launching agent.
 
-**Orchestrator prompt instructions (saw-skill.md line 78):**
+**Orchestrator prompt instructions (polywave-skill.md line 78):**
 ```
 Vendor-neutral fallback: `scripts/inject-agent-context --type <agent-type>`.
 ```
@@ -233,7 +233,7 @@ Scripts can be called from CI/CD pipelines without Claude Code.
 ```yaml
 - name: Launch Scout agent
   run: |
-    SKILL_DIR=/opt/saw-skill
+    SKILL_DIR=/opt/polywave-skill
     inject=$(bash $SKILL_DIR/scripts/inject-agent-context \
       --type scout \
       --prompt "$(cat agent-prompt.txt)")
@@ -247,7 +247,7 @@ Scripts can be called from CI/CD pipelines without Claude Code.
 
 ### Script exits with code 1
 
-**Cause:** `saw-skill.md` not found or parse error.
+**Cause:** `polywave-skill.md` not found or parse error.
 
 **Solution:**
 - Verify `CLAUDE_SKILL_DIR` points to correct directory
@@ -345,4 +345,4 @@ bash scripts/inject-agent-context --type wave-agent \
 - [validate_agent_launch](/Users/dayna.blackwell/code/polywave/implementations/claude-code/hooks/validate_agent_launch) - PreToolUse(Agent) hook
 
 **Skill configuration:**
-- [saw-skill.md](/Users/dayna.blackwell/code/polywave/implementations/claude-code/prompts/saw-skill.md) - Orchestrator skill definition
+- [polywave-skill.md](/Users/dayna.blackwell/code/polywave/implementations/claude-code/prompts/polywave-skill.md) - Orchestrator skill definition

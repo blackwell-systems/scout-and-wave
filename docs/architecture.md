@@ -6,7 +6,7 @@ Polywave is a protocol for parallel agent coordination in software development. 
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│ Orchestrator (synchronous, /saw skill in Claude Code)          │
+│ Orchestrator (synchronous, /polywave skill in Claude Code)     │
 │ • Launches Scout/Scaffold/Wave/Integration/Critic agents       │
 │ • Enforces invariants (I1-I6)                                  │
 │ • Manages wave lifecycle                                       │
@@ -135,7 +135,7 @@ In Claude Code implementations, worktree isolation is enforced mechanically via 
 3. **PreToolUse:Bash: CD auto-injection** — Prepends `cd $POLYWAVE_AGENT_WORKTREE &&` to every bash command, ensuring commands run in the correct working directory automatically
 4. **PreToolUse:Write/Edit: Path validation** — Blocks relative paths and paths outside worktree boundaries at the tool boundary (exit 2), preventing the "Agent B leak" scenario where files are created in the main repo instead of the worktree
 5. **SubagentStop: Compliance verification** — Checks completion report exists and commits exist on branch, creating an audit trail for post-hoc violation analysis
-6. **Stop: Orchestrator stop warning** (`saw_orchestrator_stop`) — Warns when the session ends with an active IMPL in WAVE_PENDING or WAVE_EXECUTING state, or with active worktrees present. Non-blocking (exit 0 always); uses `stop_hook_active` to prevent re-trigger loops.
+6. **Stop: Orchestrator stop warning** (`polywave_orchestrator_stop`) — Warns when the session ends with an active IMPL in WAVE_PENDING or WAVE_EXECUTING state, or with active worktrees present. Non-blocking (exit 0 always); uses `stop_hook_active` to prevent re-trigger loops.
 
 This defense-in-depth approach makes isolation violations impossible at the tool boundary rather than merely detected after merge. Other implementations must provide equivalent enforcement at their tool invocation boundary or fall back to instruction-based isolation (Field 0 self-verification).
 
@@ -632,4 +632,4 @@ The web application (`polywave-web`) provides an HTTP/SSE interface for the prot
 - [Protocol Invariants](../protocol/invariants.md) — I1-I6 formal specification
 - [Protocol Execution Rules](../protocol/execution-rules.md) — E1-E47 orchestrator rules
 - [Tool Journaling](./tool-journaling.md) — Compaction safety system
-- [Orchestrator Skill](../implementations/claude-code/prompts/saw-skill.md) — /saw command implementation
+- [Orchestrator Skill](../implementations/claude-code/prompts/polywave-skill.md) — /polywave command implementation

@@ -34,7 +34,7 @@ fi
 
 if echo "$PROMPT" | grep -qE "^/saw auto"; then
   # /saw auto runs the full scout -> review -> wave flow inline.
-  # The auto flow is defined in saw-skill.md core (Tier 2), not a reference file.
+  # The auto flow is defined in polywave-skill.md core (Tier 2), not a reference file.
   # No injection needed; this block documents the pattern for maintainability.
   :
 fi

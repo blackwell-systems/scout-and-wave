@@ -33,7 +33,7 @@ You launch Polywave agents; you do not do their work yourself.
 
 ## Supporting Files & References
 
-Files in `${CLAUDE_SKILL_DIR}/` (defaults to `~/.claude/skills/saw/`). Read `agent-template.md` for 9-field format. Load `saw-bootstrap.md` for bootstrap. On-demand: `/polywave program *` → `program-flow.md`, `/polywave amend *` → `amend-flow.md`, agent failure → `failure-routing.md`. Orchestrator triggers (`/polywave program` -> `program-flow.md`, `/polywave amend` -> `amend-flow.md`) auto-injected by `inject_skill_context` hook via `scripts/inject-context`. Agent always-needed references inlined in agent definitions (`agents/*.md`). Conditional agent references (3 files) injected by `validate_agent_launch` hook via `scripts/inject-agent-context`.
+Files in `${CLAUDE_SKILL_DIR}/` (defaults to `~/.claude/skills/saw/`). Read `agent-template.md` for 9-field format. Load `polywave-bootstrap.md` for bootstrap. On-demand: `/polywave program *` → `program-flow.md`, `/polywave amend *` → `amend-flow.md`, agent failure → `failure-routing.md`. Orchestrator triggers (`/polywave program` -> `program-flow.md`, `/polywave amend` -> `amend-flow.md`) auto-injected by `inject_skill_context` hook via `scripts/inject-context`. Agent always-needed references inlined in agent definitions (`agents/*.md`). Conditional agent references (3 files) injected by `validate_agent_launch` hook via `scripts/inject-agent-context`.
 
 ## Invocation Modes
 
@@ -110,15 +110,15 @@ polywave-tools reconcile-state "<absolute-impl-path>"  # fix IMPL state to match
 ```
 If reconcile-state reports state_changed: true, review the recommended_action field before proceeding.
 
-**Session stop detection:** The `saw_orchestrator_stop` Stop hook warns automatically when the session ends with an active IMPL in WAVE_PENDING or WAVE_EXECUTING state, or with active worktrees. No action needed — the hook fires passively at session end.
+**Session stop detection:** The `polywave_orchestrator_stop` Stop hook warns automatically when the session ends with an active IMPL in WAVE_PENDING or WAVE_EXECUTING state, or with active worktrees. No action needed — the hook fires passively at session end.
 
 See `references/impl-targeting.md` for discovery commands, resolution logic, auto-selection rules, and cross-repo handling.
 
 **On-demand reference routing:** If args start with `program `, read `references/program-flow.md` and stop. If args start with `amend `, read `references/amend-flow.md` and stop. Otherwise, continue below.
 
 **Bootstrap flow** (`bootstrap <project-description>`):
-1. **Requirements intake (Orchestrator duty).** Gather requirements, write `docs/REQUIREMENTS.md`. Cover: language, project type, deployment, key concerns, storage, integrations, source codebase. Confirm with user. Template in `saw-bootstrap.md`.
-2. Launch Scout agent (`subagent_type: scout`, `run_in_background: true`) with `docs/REQUIREMENTS.md` and `saw-bootstrap.md` path. Inform user.
+1. **Requirements intake (Orchestrator duty).** Gather requirements, write `docs/REQUIREMENTS.md`. Cover: language, project type, deployment, key concerns, storage, integrations, source codebase. Confirm with user. Template in `polywave-bootstrap.md`.
+2. Launch Scout agent (`subagent_type: scout`, `run_in_background: true`) with `docs/REQUIREMENTS.md` and `polywave-bootstrap.md` path. Inform user.
 3. When Scout completes, read `docs/IMPL/IMPL-bootstrap.yaml`. Report architecture and wave structure. Ask user to review.
 4. **Scaffold Agent (conditional):** If Scaffolds section has `Status: pending`, launch Scaffold Agent (`[SAW:scaffold:bootstrap]`). If any `Status: FAILED`, stop. If all `committed`, proceed.
 5. **Wave 1:** Execute standard wave flow (step 2+ of IMPL-exists flow below).
@@ -181,7 +181,7 @@ If a `docs/IMPL/IMPL-*.yaml` file already exists:
 
    **Journal context recovery (resumed agents):** The `prepare-wave` and `prepare-agent` JSON output includes `"journal_context_available"` per agent. If `true`, read the file at `"journal_context_file"` and prepend its contents to the agent's launch prompt (before the IMPL doc comment block). This restores working memory for agents resuming after context compaction or interruption. If `journal_context_available` is `false` (first launch or no prior history), omit this step.
 
-**E44: Agent naming from brief metadata.** Read `.polywave-agent-brief.md` frontmatter and extract `saw_name` field. Use this as the `name` parameter for the Agent tool call. The brief metadata contains the SAW-formatted name `[SAW:wave{N}:agent-{ID}] {task_summary}`. If frontmatter is missing or `saw_name` field is absent (old briefs), the `auto_format_saw_agent_names` PreToolUse hook provides fallback formatting.
+**E44: Agent naming from brief metadata.** Read `.polywave-agent-brief.md` frontmatter and extract `saw_name` field. Use this as the `name` parameter for the Agent tool call. The brief metadata contains the SAW-formatted name `[SAW:wave{N}:agent-{ID}] {task_summary}`. If frontmatter is missing or `saw_name` field is absent (old briefs), the `auto_format_polywave_agent_names` PreToolUse hook provides fallback formatting.
 
 **YAML manifest prompt template:**
 ```

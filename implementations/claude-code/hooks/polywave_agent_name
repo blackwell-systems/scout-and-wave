@@ -3,9 +3,9 @@
 # Generates standardized [polywave:{phase}:{identifier}] names for agent launches
 #
 # Usage:
-#   saw_agent_name wave 1 A logging-injection "inject logger"
-#   saw_agent_name scout - - user-auth "analyze codebase"
-#   saw_agent_name critic - - logging-injection "review briefs"
+#   polywave_agent_name wave 1 A logging-injection "inject logger"
+#   polywave_agent_name scout - - user-auth "analyze codebase"
+#   polywave_agent_name critic - - logging-injection "review briefs"
 #
 # Output: [polywave:wave1:agent-A] inject logger
 

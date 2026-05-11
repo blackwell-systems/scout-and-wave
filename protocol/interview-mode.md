@@ -120,7 +120,7 @@ The orchestrator:
 
 On completion (when the final question is answered and `status: complete` is set), the orchestrator calls the interview compiler, which generates `docs/REQUIREMENTS.md`.
 
-**Note:** The compiled format is tailored to the `saw-bootstrap.md` intake format (bootstrap-oriented sections) rather than mirroring the 6 interview phases. This maximizes compatibility with `/polywave bootstrap` which parses these specific section headings.
+**Note:** The compiled format is tailored to the `polywave-bootstrap.md` intake format (bootstrap-oriented sections) rather than mirroring the 6 interview phases. This maximizes compatibility with `/polywave bootstrap` which parses these specific section headings.
 
 **Note:** Sections with no data are emitted with a placeholder comment `<!-- placeholder — fill in before running /polywave bootstrap -->` so the file is always complete and can be manually edited before running bootstrap.
 
@@ -198,7 +198,7 @@ are written normally regardless of this flag.
 
 **Claude Code Integration:**
 - Skill command: `/polywave interview "<description>"`
-- Located in: `implementations/claude-code/prompts/saw-skill.md`
+- Located in: `implementations/claude-code/prompts/polywave-skill.md`
 - The orchestrator executes the CLI command via Bash tool and manages the question-answer loop interactively
 
 **Question Generation:**
@@ -305,5 +305,5 @@ The deterministic question flow (vs LLM-generated questions) ensures:
 
 - See `state-machine.md` for the INTERVIEWING state definition
 - See `message-formats.md` for INTERVIEW-<slug>.yaml schema details
-- See `implementations/claude-code/prompts/saw-skill.md` for `/polywave interview` command usage
+- See `implementations/claude-code/prompts/polywave-skill.md` for `/polywave interview` command usage
 - See `participants.md` (Scout Agent) for the alternative requirements gathering pathway

@@ -214,7 +214,7 @@ If worktrees cannot be created:
    ownership is truly disjoint)
 3. **Run agents sequentially:** abandon parallelism, run one agent at a time
    on the main branch
-4. **Fall back to standard SAW execution:** use `prompts/saw-skill.md` with
+4. **Fall back to standard SAW execution:** use `prompts/polywave-skill.md` with
    the raw Agent tool instead of Agent Teams. The IMPL doc state machine is
    execution-layer-agnostic; the same IMPL doc works with either execution
    layer. This is always a valid fallback.

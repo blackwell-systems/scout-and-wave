@@ -404,6 +404,6 @@ no teammates. The worktree branches and IMPL doc are the only surviving state.
 This is a known limitation (DESIGN.md blocking issue 1).
 
 **Mitigation:** If crash recovery is critical for your use case, use standard
-SAW (`prompts/saw-skill.md`) instead of saw-teams. The IMPL doc is
+SAW (`prompts/polywave-skill.md`) instead of saw-teams. The IMPL doc is
 execution-layer-agnostic; the same IMPL doc works with either execution
 layer.

@@ -59,7 +59,7 @@ Implementation: Custom `subagent_type` values (`scout`, `wave-agent`, etc.) inhe
 
 **Solution:** Custom `subagent_type` definitions inherit the parent session's model. When an explicit override is requested (via `--model` argument) and the custom subagent_type would inherit a different model:
 
-1. Apply the Fallback Rule (see saw-skill.md lines 84-85)
+1. Apply the Fallback Rule (see polywave-skill.md lines 84-85)
 2. Use `subagent_type: general-purpose` with the full agent prompt from `${CLAUDE_SKILL_DIR}/agents/<type>.md`
 3. Pass the same context payload (IMPL doc path, feature description, repo root, etc.)
 

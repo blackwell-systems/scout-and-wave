@@ -12,7 +12,7 @@ Before starting, ensure you've completed the [installation steps](README.md#inst
 - [x] Permissions configured (`"Agent"` in allow list)
 - [x] Repository cloned (polywave for protocol/skills)
 - [x] `polywave-tools` binary installed (`~/.local/bin/polywave-tools` from polywave-go)
-- [x] Skill installed (`~/.claude/skills/saw/saw-skill.md` symlinked)
+- [x] Skill installed (`~/.claude/skills/saw/polywave-skill.md` symlinked)
 - [x] Installation verified (`/polywave status` works)
 
 ## Your First SAW Run

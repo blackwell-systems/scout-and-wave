@@ -769,7 +769,7 @@ C001 was occupied, causing a string mismatch with Agent A's hardcoded "CACHE_MIS
    Checklist:
    - New CLI commands → registration file (`root.go`, `main.go`) assigned?
    - New API handlers → route registration file assigned?
-   - New agent prompts → orchestrator config updated (e.g., `saw-skill.md`)?
+   - New agent prompts → orchestrator config updated (e.g., `polywave-skill.md`)?
    - Scaffold files → listed in BOTH `scaffolds:` AND `file_ownership:` (wave 0)?
    - `integration_required` contracts → caller file in an integration wave or connectors?
 

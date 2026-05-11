@@ -7,8 +7,8 @@ participant role or procedure defined in the [protocol/](../protocol/) specifica
 
 ```
 prompts/
-├── saw-skill.md          ← Orchestrator skill (entry point)
-├── saw-bootstrap.md      ← Bootstrap Scout procedure
+├── polywave-skill.md     ← Orchestrator skill (entry point)
+├── polywave-bootstrap.md ← Bootstrap Scout procedure
 ├── agent-template.md     ← Wave agent brief specification (Scout reference)
 ├── agents/               ← Agent type definitions (tool restrictions + behavior)
 │   ├── scout.md
@@ -35,7 +35,7 @@ prompts/
 
 | File | Purpose |
 |------|---------|
-| [`saw-skill.md`](saw-skill.md) | The `/saw` skill body. Loaded on every `/saw` invocation. Drives all protocol state transitions as the Orchestrator. Uses `polywave-tools prepare-wave`, `polywave-tools finalize-wave`, `polywave-tools close-impl` for orchestration operations. Routes: `scout`, `wave`, `wave --auto`, `status`, `bootstrap`, `interview`. On-demand routing to `references/` for `program`, `amend`, and failure handling. |
+| [`polywave-skill.md`](polywave-skill.md) | The `/polywave` skill body. Loaded on every `/polywave` invocation. Drives all protocol state transitions as the Orchestrator. Uses `polywave-tools prepare-wave`, `polywave-tools finalize-wave`, `polywave-tools close-impl` for orchestration operations. Routes: `scout`, `wave`, `wave --auto`, `status`, `bootstrap`, `interview`. On-demand routing to `references/` for `program`, `amend`, and failure handling. |
 
 ## Agent Type Definitions (`agents/`)
 
@@ -60,7 +60,7 @@ does not read them directly; it includes the path in the Scout's prompt.
 | File | When used | Purpose |
 |------|-----------|---------|
 | [`agent-template.md`](agent-template.md) | Every Scout launch | INSTANCE LAYER reference. Defines the 9-field agent brief structure, isolation verification protocol, YAML completion schema, and protocol constraints. Scout reads this → writes filled briefs into the IMPL doc. Wave agents never read this file directly. |
-| [`saw-bootstrap.md`](saw-bootstrap.md) | `/polywave bootstrap` only | Bootstrap Scout procedure. Architecture design principles, disjoint ownership patterns, Rust workspace rules, types scaffold specification, and IMPL-bootstrap.yaml output format. |
+| [`polywave-bootstrap.md`](polywave-bootstrap.md) | `/polywave bootstrap` only | Bootstrap Scout procedure. Architecture design principles, disjoint ownership patterns, Rust workspace rules, types scaffold specification, and IMPL-bootstrap.yaml output format. |
 
 ## On-Demand References (`references/`)
 

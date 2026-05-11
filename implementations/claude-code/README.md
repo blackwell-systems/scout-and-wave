@@ -104,18 +104,18 @@ Create the skill directory and symlink all required files:
 mkdir -p ~/.claude/skills/saw/agents
 
 # Symlink main skill file
-ln -sf ~/code/polywave/implementations/claude-code/prompts/saw-skill.md \
+ln -sf ~/code/polywave/implementations/claude-code/prompts/polywave-skill.md \
        ~/.claude/skills/saw/SKILL.md
 
 # Symlink supporting files
-ln -sf ~/code/polywave/implementations/claude-code/prompts/saw-bootstrap.md \
-       ~/.claude/skills/saw/saw-bootstrap.md
+ln -sf ~/code/polywave/implementations/claude-code/prompts/polywave-bootstrap.md \
+       ~/.claude/skills/saw/polywave-bootstrap.md
 ln -sf ~/code/polywave/implementations/claude-code/prompts/agent-template.md \
        ~/.claude/skills/saw/agent-template.md
 
 # If you cloned elsewhere, adjust all paths:
 # mkdir -p ~/.claude/skills/saw/agents
-# ln -sf /your/path/polywave/implementations/claude-code/prompts/saw-skill.md ~/.claude/skills/saw/SKILL.md
+# ln -sf /your/path/polywave/implementations/claude-code/prompts/polywave-skill.md ~/.claude/skills/saw/SKILL.md
 # ... (repeat for all supporting files)
 ```
 
@@ -272,8 +272,8 @@ This implementation uses Claude Code's tool suite:
 
 The `/saw` skill consists of several specialized prompts, all installed to `~/.claude/skills/saw/`:
 
-- **`SKILL.md`** (from `implementations/claude-code/prompts/saw-skill.md`) - Main orchestrator with YAML frontmatter
-- **`saw-bootstrap.md`** - Bootstrap mode for new projects
+- **`SKILL.md`** (from `implementations/claude-code/prompts/polywave-skill.md`) - Main orchestrator with YAML frontmatter
+- **`polywave-bootstrap.md`** - Bootstrap mode for new projects
 - **`agent-template.md`** - Wave Agent template (Scout fills this to generate per-agent prompts)
 - **`agents/`** - Custom agent type definitions (scout, wave-agent, scaffold-agent, integration-agent, critic-agent, planner)
 
@@ -355,7 +355,7 @@ SAW uses custom Claude Code agent types for all Scout, Scaffold Agent, Wave Agen
 ```
 prompts/
 ├── agent-template.md     # Scout's reference doc for writing agent briefs into IMPL doc
-├── saw-bootstrap.md      # Bootstrap Scout procedure
+├── polywave-bootstrap.md # Bootstrap Scout procedure
 └── agents/
     ├── scout.md              # Custom agent type (with YAML frontmatter)
     ├── wave-agent.md         # Custom agent type (with YAML frontmatter)

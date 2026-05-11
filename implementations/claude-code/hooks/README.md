@@ -18,7 +18,7 @@ Enforcement and injection hooks for CLI-based SAW agents. 21 hooks across Subage
 | check_scout_boundaries | PreToolUse | Write\|Edit | I6 | Scouts can only write IMPL docs |
 | block_claire_paths | PreToolUse | Write\|Edit\|Bash | — | Blocks `.claire` typo paths |
 | check_wave_ownership | PreToolUse | Write\|Edit\|NotebookEdit | I1 | Wave agents write only owned files |
-| auto_format_saw_agent_names | PreToolUse | Agent | E44 | Validates/formats SAW agent names (fallback for brief metadata) |
+| auto_format_polywave_agent_names | PreToolUse | Agent | E44 | Validates/formats polywave agent names (fallback for brief metadata) |
 | validate_agent_launch | PreToolUse | Agent | H5 | Pre-launch validation gate + agent type injection (see below) |
 | validate_impl_on_write | PostToolUse | Write\|Edit | E16 | Validates IMPL schema + brief accuracy (symbols, line refs, wave_reference_invalid) after write |
 | check_git_ownership | PostToolUse | Bash | I1 | Catches git-level ownership violations |
@@ -38,7 +38,7 @@ Enforcement and injection hooks for CLI-based SAW agents. 21 hooks across Subage
 | Hook | Event | Matcher | Description |
 |------|-------|---------|-------------|
 | emit_agent_completion | SubagentStop | — | Emits structured completion event for claudewatch/SSE (async, non-blocking) |
-| saw_orchestrator_stop | Stop | — | Warns when session ends with active IMPL in WAVE_PENDING/EXECUTING state (non-blocking) |
+| polywave_orchestrator_stop | Stop | — | Warns when session ends with active IMPL in WAVE_PENDING/EXECUTING state (non-blocking) |
 
 ## Injection Patterns
 
@@ -941,7 +941,7 @@ field prevents infinite re-trigger loops (Claude Code sets this to `true` on re-
 
 1. Symlink:
    ```bash
-   ln -sf ~/code/polywave/implementations/claude-code/hooks/saw_orchestrator_stop ~/.local/bin/saw_orchestrator_stop
+   ln -sf ~/code/polywave/implementations/claude-code/hooks/polywave_orchestrator_stop ~/.local/bin/polywave_orchestrator_stop
    ```
 
 2. Add to `~/.claude/settings.json`:
@@ -953,7 +953,7 @@ field prevents infinite re-trigger loops (Claude Code sets this to `true` on re-
            "hooks": [
              {
                "type": "command",
-               "command": "$HOME/.local/bin/saw_orchestrator_stop"
+               "command": "$HOME/.local/bin/polywave_orchestrator_stop"
              }
            ]
          }
@@ -966,11 +966,11 @@ field prevents infinite re-trigger loops (Claude Code sets this to `true` on re-
 
 ```bash
 # Test: stop_hook_active=true should produce no output and exit 0
-echo '{"stop_hook_active":true,"session_id":"test"}' | saw_orchestrator_stop
+echo '{"stop_hook_active":true,"session_id":"test"}' | polywave_orchestrator_stop
 echo $?  # 0, no output
 
 # Test: no active IMPLs — should exit 0 silently
-echo '{"stop_hook_active":false,"session_id":"test"}' | saw_orchestrator_stop
+echo '{"stop_hook_active":false,"session_id":"test"}' | polywave_orchestrator_stop
 echo $?  # 0
 ```
 

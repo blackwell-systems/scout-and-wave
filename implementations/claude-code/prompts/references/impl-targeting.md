@@ -83,7 +83,7 @@ polywave-tools resolve-impl --impl <value> --repo-dir <path>
 - Filename not found → "filename not found in docs/IMPL/"
 - Path does not exist → "path does not exist: X"
 
-**Orchestrator integration note:** Orchestrator calls this command instead of manual parsing logic. This eliminates ~5 lines of parsing code from saw-skill.md and ensures consistent resolution across CLI/web/API.
+**Orchestrator integration note:** Orchestrator calls this command instead of manual parsing logic. This eliminates ~5 lines of parsing code from polywave-skill.md and ensures consistent resolution across CLI/web/API.
 
 ## IMPL Targeting (--impl Flag)
 

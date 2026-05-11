@@ -33,7 +33,7 @@ is set in the `CLAUDE_SKILL_DIR` environment variable; if unset, fall back to
 `~/.claude/skills/saw/`.
 
 If the argument is `bootstrap <project-description>`:
-1. Read `${CLAUDE_SKILL_DIR}/saw-bootstrap.md` for the bootstrap procedure.
+1. Read `${CLAUDE_SKILL_DIR}/polywave-bootstrap.md` for the bootstrap procedure.
 2. Gather requirements (language, project type, key concerns) before designing anything.
 3. Launch a **Scout agent** using the Agent tool with `run_in_background: true` and the bootstrap procedure as its prompt. The Scout designs the package structure and interface contracts and writes `docs/IMPL/IMPL-bootstrap.md`. Do NOT do this work yourself — performing Scout duties violates I6 (Role Separation).
 4. **E16: Validate IMPL doc before review.** After Scout writes the IMPL doc, run the validator:

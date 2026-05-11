@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# saw_orchestrator_stop - Stop hook: warn when session ends with active SAW orchestration
+# polywave_orchestrator_stop - Stop hook: warn when session ends with active polywave orchestration
 # Stop lifecycle hook — runs synchronously, exit 0 always (warn-only)
 #
 # Checks:

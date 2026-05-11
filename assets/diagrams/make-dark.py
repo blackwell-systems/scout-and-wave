@@ -105,7 +105,7 @@ def transform_file(input_path: Path, output_path: Path) -> None:
 
 
 if __name__ == '__main__':
-    diagrams = ['saw-scout-wave', 'saw-bootstrap', 'saw-check', 'saw-status']
+    diagrams = ['polywave-scout-wave', 'polywave-bootstrap', 'polywave-state-machine', 'polywave-status']
     base = Path(__file__).parent
 
     for name in diagrams:

@@ -50,7 +50,7 @@ Allowed: docs/IMPL/IMPL-<feature-slug>.yaml
 Scout's role is reconnaissance (analyze, plan, document).
 - Orchestrator writes docs/REQUIREMENTS.md (bootstrap)
 - Wave agents write source code
-- Tools (sawtools) manage CONTEXT.md and archiving
+- Tools (polywave-tools) manage CONTEXT.md and archiving
 
 If you need to create source code, write agent prompts in the IMPL doc
 that instruct Wave agents to create those files." >&2

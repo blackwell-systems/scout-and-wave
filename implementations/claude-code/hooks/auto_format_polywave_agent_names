@@ -2,7 +2,7 @@
 # PreToolUse hook: Auto-format SAW agent names (E44)
 # Fallback validator and formatter for SAW agent names
 #
-# Primary naming path: sawtools prepare-agent writes saw_name to brief frontmatter,
+# Primary naming path: polywave-tools prepare-agent writes saw_name to brief frontmatter,
 # orchestrator reads it and uses as Agent tool name parameter.
 #
 # This hook provides:

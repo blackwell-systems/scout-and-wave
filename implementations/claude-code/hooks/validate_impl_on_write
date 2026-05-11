@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # PostToolUse hook: auto-validate IMPL docs after Write/Edit
 # Reads tool input JSON from stdin, checks if file is an IMPL doc,
-# runs sawtools validate, blocks on failure.
+# runs polywave-tools validate, blocks on failure.
 #
 # Install: symlink to ~/.local/bin/validate_impl_on_write
 # Config:  PostToolUse hook with matcher "Write|Edit" in ~/.claude/settings.json
@@ -41,14 +41,14 @@ if [[ ! -f "$FILE_PATH" ]]; then
   exit 0
 fi
 
-# Require sawtools for validation
-if ! command -v sawtools &>/dev/null; then
+# Require polywave-tools for validation
+if ! command -v polywave-tools &>/dev/null; then
   exit 0
 fi
 
 # Step 1: Structural validation (E16 schema/structural checks).
 # Run without --fix: Scout's Step 16 handles auto-fix; hook only reports.
-RESULT=$(sawtools validate "$FILE_PATH" 2>&1) || true
+RESULT=$(polywave-tools validate "$FILE_PATH" 2>&1) || true
 VALID=$(echo "$RESULT" | jq -r '.valid // empty' 2>/dev/null)
 
 if [[ "$VALID" != "true" ]]; then
@@ -60,8 +60,8 @@ if [[ "$VALID" != "true" ]]; then
 fi
 
 # Step 2: Brief validation (symbol existence, line references, wave number consistency).
-# Only run if validate-briefs is available (it ships with sawtools >= v0.93.0).
-BRIEF_RESULT=$(sawtools validate-briefs "$FILE_PATH" 2>&1) || true
+# Only run if validate-briefs is available (it ships with polywave-tools >= v0.93.0).
+BRIEF_RESULT=$(polywave-tools validate-briefs "$FILE_PATH" 2>&1) || true
 BRIEF_VALID=$(echo "$BRIEF_RESULT" | jq -r '.valid // empty' 2>/dev/null)
 
 if [[ "$BRIEF_VALID" == "false" ]]; then

@@ -84,8 +84,8 @@ git clone https://github.com/blackwell-systems/polywave.git ~/code/polywave
 
 # Or manually (see implementations/claude-code/README.md for full install):
 mkdir -p ~/.claude/skills/saw/agents
-ln -sf ~/code/polywave/implementations/claude-code/prompts/saw-skill.md ~/.claude/skills/saw/SKILL.md
-ln -sf ~/code/polywave/implementations/claude-code/prompts/saw-bootstrap.md ~/.claude/skills/saw/saw-bootstrap.md
+ln -sf ~/code/polywave/implementations/claude-code/prompts/polywave-skill.md ~/.claude/skills/saw/SKILL.md
+ln -sf ~/code/polywave/implementations/claude-code/prompts/polywave-bootstrap.md ~/.claude/skills/saw/polywave-bootstrap.md
 ln -sf ~/code/polywave/implementations/claude-code/prompts/agent-template.md ~/.claude/skills/saw/agent-template.md
 ln -sf ~/code/polywave/implementations/claude-code/prompts/agents ~/.claude/skills/saw/agents
 

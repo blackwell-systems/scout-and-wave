@@ -252,8 +252,8 @@ if [[ "$agent_type" == "wave" ]]; then
       if [[ "$commit_count" -eq 0 ]]; then
         # Check if completion report exists despite no commits
         report_found=false
-        if command -v sawtools &>/dev/null; then
-          if sawtools check-completion "$impl_path" --agent "$agent_id" &>/dev/null; then
+        if command -v polywave-tools &>/dev/null; then
+          if polywave-tools check-completion "$impl_path" --agent "$agent_id" &>/dev/null; then
             report_found=true
           fi
         else
@@ -280,8 +280,8 @@ case "$agent_type" in
   wave)
     # Verify agent ID appears in completion_reports section
     report_valid=false
-    if command -v sawtools &>/dev/null; then
-      if sawtools check-completion "$impl_path" --agent "$agent_id" &>/dev/null; then
+    if command -v polywave-tools &>/dev/null; then
+      if polywave-tools check-completion "$impl_path" --agent "$agent_id" &>/dev/null; then
         report_valid=true
       fi
     else
@@ -293,7 +293,7 @@ case "$agent_type" in
     fi
 
     if [[ "$report_valid" != "true" ]]; then
-      echo "E42: Agent ${agent_id} (wave ${wave_num}) has no completion report in IMPL doc. Use 'sawtools set-completion' before completing." >&2
+      echo "E42: Agent ${agent_id} (wave ${wave_num}) has no completion report in IMPL doc. Use 'polywave-tools set-completion' before completing." >&2
       exit 2
     fi
 
@@ -323,7 +323,7 @@ case "$agent_type" in
     # Verify status:complete is consistent with stub scan (E20 enforcement)
     # If agent claims "complete" but files contain panic("not implemented") or similar,
     # the agent must either fix the stubs or change status to "partial".
-    if command -v sawtools &>/dev/null && [[ -n "$ownership_file" ]]; then
+    if command -v polywave-tools &>/dev/null && [[ -n "$ownership_file" ]]; then
       worktree_root=$(dirname "$ownership_file")
       # Get agent's self-reported status
       agent_status=""
@@ -355,7 +355,7 @@ case "$agent_type" in
             done <<< "$changed_files"
 
             if [[ ${#abs_files[@]} -gt 0 ]]; then
-              stub_output=$(sawtools scan-stubs "${abs_files[@]}" 2>/dev/null || true)
+              stub_output=$(polywave-tools scan-stubs "${abs_files[@]}" 2>/dev/null || true)
               stub_count=$(echo "$stub_output" | jq -r '.hits | length' 2>/dev/null || echo "0")
 
               if [[ "$stub_count" -gt 0 ]]; then
@@ -444,9 +444,9 @@ case "$agent_type" in
 
   scout)
     # Verify IMPL doc passes full pre-wave validation (schema + E35 gaps + wave structure).
-    # sawtools validate only checks schema; pre-wave-validate is the complete gate.
-    if command -v sawtools &>/dev/null; then
-      validate_output=$(sawtools pre-wave-validate "$impl_path" --wave 1 --fix 2>&1) || {
+    # polywave-tools validate only checks schema; pre-wave-validate is the complete gate.
+    if command -v polywave-tools &>/dev/null; then
+      validate_output=$(polywave-tools pre-wave-validate "$impl_path" --wave 1 --fix 2>&1) || {
         echo "E42: Scout IMPL doc failed pre-wave validation: ${impl_path}" >&2
         echo "$validate_output" >&2
         exit 2
@@ -454,7 +454,7 @@ case "$agent_type" in
 
       # Also run brief validation: catches symbol errors, invalid line references,
       # and wave_reference_invalid (e.g. "Wave 2 Agent G" when G is in Wave 3).
-      brief_output=$(sawtools validate-briefs "$impl_path" 2>&1) || true
+      brief_output=$(polywave-tools validate-briefs "$impl_path" 2>&1) || true
       brief_valid=$(echo "$brief_output" | jq -r '.valid // empty' 2>/dev/null)
       if [[ "$brief_valid" == "false" ]]; then
         echo "E42: Scout IMPL doc failed brief validation: ${impl_path}" >&2

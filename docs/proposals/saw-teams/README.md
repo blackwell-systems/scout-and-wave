@@ -144,7 +144,7 @@ any team exists. The IMPL doc it produces is consumed by every wave team.
 
 | File | Purpose |
 |---|---|
-| `saw-teams-skill.md` | Orchestrator/lead skill prompt (replaces `prompts/saw-skill.md`) |
+| `saw-teams-skill.md` | Orchestrator/lead skill prompt (replaces `prompts/polywave-skill.md`) |
 | `teammate-template.md` | 9-field teammate prompt template (replaces `prompts/agent-template.md`) |
 | `saw-teams-merge.md` | Merge procedure with teammate messaging supplement |
 | `saw-teams-worktree.md` | Worktree lifecycle for Agent Teams execution |
