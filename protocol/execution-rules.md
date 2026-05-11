@@ -157,7 +157,7 @@ This prevents prepare-wave failures caused by leftover git worktrees from crashe
 
 **Trigger:** Creating worktrees
 
-**Required Action:** Worktrees must be named `.claude/worktrees/saw/{slug}/wave{N}-agent-{ID}` where `{slug}` is the IMPL doc's `feature_slug` field, `{N}` is the 1-based wave number, and `{ID}` is the agent identifier. Branch names follow the same pattern: `saw/{slug}/wave{N}-agent-{ID}`. Agent identifiers follow the `[A-Z][2-9]?` pattern: a single uppercase letter (generation 1, e.g., `A`, `B`, `C`) or a letter followed by a digit 2–9 (multi-generation, e.g., `A2`, `B3`). Examples: `saw/my-feature/wave1-agent-A`, `saw/my-feature/wave1-agent-A2`, `saw/my-feature/wave2-agent-B3`.
+**Required Action:** Worktrees must be named `.claude/worktrees/polywave/{slug}/wave{N}-agent-{ID}` where `{slug}` is the IMPL doc's `feature_slug` field, `{N}` is the 1-based wave number, and `{ID}` is the agent identifier. Branch names follow the same pattern: `polywave/{slug}/wave{N}-agent-{ID}`. Agent identifiers follow the `[A-Z][2-9]?` pattern: a single uppercase letter (generation 1, e.g., `A`, `B`, `C`) or a letter followed by a digit 2–9 (multi-generation, e.g., `A2`, `B3`). Examples: `polywave/my-feature/wave1-agent-A`, `polywave/my-feature/wave1-agent-A2`, `polywave/my-feature/wave2-agent-B3`.
 
 **Backward compatibility:** Branches created in the legacy format `wave{N}-agent-{ID}` (without slug prefix) are still accepted. The slug-prefix convention was introduced in the polywave-go engine after protocol v0.20.0. Tools accept both formats.
 
@@ -387,8 +387,8 @@ Do NOT use when:
 1. Verify E11 block is false positive:
    ```bash
    # Compare file content between agent branches
-   git show saw/{slug}/wave{N}-agent-A:path/to/file.go > /tmp/agent-A.txt
-   git show saw/{slug}/wave{N}-agent-B:path/to/file.go > /tmp/agent-B.txt
+   git show polywave/{slug}/wave{N}-agent-A:path/to/file.go > /tmp/agent-A.txt
+   git show polywave/{slug}/wave{N}-agent-B:path/to/file.go > /tmp/agent-B.txt
    diff /tmp/agent-A.txt /tmp/agent-B.txt
    # If diff is empty: identical edits, safe to merge
    ```
@@ -396,7 +396,7 @@ Do NOT use when:
 2. Perform manual octopus merge:
    ```bash
    git checkout main
-   git merge --no-ff saw/{slug}/wave{N}-agent-A saw/{slug}/wave{N}-agent-B ... \
+   git merge --no-ff polywave/{slug}/wave{N}-agent-A polywave/{slug}/wave{N}-agent-B ... \
        -m "Merge wave {N}: {description}"
    # Git auto-resolves identical edits
    ```
@@ -1957,7 +1957,7 @@ The following checklist enumerates ALL lifecycle events that must be emitted. Ev
 
 1. **Parse Polywave tag** from `agent_description`. If no `[Polywave:...]` tag, exit 0 (not a Polywave agent).
 2. **Find IMPL doc** via `.polywave-state/active-impl` or extraction from `agent_description`.
-3. **I1 ownership verification:** Run `git diff --name-only` in the worktree. Compare changed files against the agent's file ownership from `.saw-ownership.json`. Any unowned modified file triggers exit 2 with "I1 violation: agent modified unowned file(s): \<list\>".
+3. **I1 ownership verification:** Run `git diff --name-only` in the worktree. Compare changed files against the agent's file ownership from `.polywave-ownership.json`. Any unowned modified file triggers exit 2 with "I1 violation: agent modified unowned file(s): \<list\>".
 4. **I5 commit verification:** Check that the worktree branch has at least 1 commit ahead of the merge base. If zero commits but a completion report exists, exit 2 with "I5 violation: completion report written but no commits found".
 5. **Protocol report validation:** Verify the agent's completion report exists in the IMPL doc's `completion_reports:` section. Uses `polywave-tools check-completion` if available, otherwise falls back to grep-based detection.
 
@@ -1991,7 +1991,7 @@ The following checklist enumerates ALL lifecycle events that must be emitted. Ev
   - POLYWAVE_AGENT_ID (agent identifier, e.g., "A", "B2")
   - POLYWAVE_WAVE_NUMBER (1-based wave number)
   - POLYWAVE_IMPL_PATH (absolute path to IMPL doc)
-  - POLYWAVE_BRANCH (agent's branch name, e.g., "saw/{slug}/wave1-agent-A")
+  - POLYWAVE_BRANCH (agent's branch name, e.g., "polywave/{slug}/wave1-agent-A")
 - Non-blocking (always exits 0)
 - Solo waves and integration waves: POLYWAVE_AGENT_WORKTREE is empty string
 
@@ -2002,9 +2002,9 @@ The following checklist enumerates ALL lifecycle events that must be emitted. Ev
 - Non-blocking (always exits 0, injection is best-effort)
 - Eliminates manual cd commands and $WORKTREE variable usage
 
-**Hook 3: PreToolUse:Write/Edit path validation (validate_write_paths + saw-worktree-boundary.sh)**
+**Hook 3: PreToolUse:Write/Edit path validation (validate_write_paths + polywave-worktree-boundary.sh)**
 - validate_write_paths: blocks relative paths and out-of-worktree writes using POLYWAVE_AGENT_WORKTREE (set by SubagentStart inject_worktree_env hook)
-- saw-worktree-boundary.sh: hard-denies (exit 2) Write/Edit/MultiEdit calls whose target path resolves to the main repo root instead of the agent's worktree; uses POLYWAVE_WORKTREE_ROOT (set by prepare-wave, see E43 Implementation Notes)
+- polywave-worktree-boundary.sh: hard-denies (exit 2) Write/Edit/MultiEdit calls whose target path resolves to the main repo root instead of the agent's worktree; uses POLYWAVE_WORKTREE_ROOT (set by prepare-wave, see E43 Implementation Notes)
 - Both hooks fire only when their respective env var is non-empty (skips solo waves, integration waves, orchestrator context)
 - Error message format: "[Polywave] Write blocked: <path> is in main repo, not agent worktree. Use: <POLYWAVE_WORKTREE_ROOT>/..."
 - Prevents Agent B leak scenario (files created in main repo instead of worktree)
@@ -2026,7 +2026,7 @@ E43 enforces E4 mechanically. E4 (Worktree Isolation) states the requirement: al
 ### Implementation Notes
 
 - **Claude Code-specific:** E43 hooks use Claude Code lifecycle API (SubagentStart, PreToolUse, SubagentStop). Other platforms must implement equivalent enforcement at their tool invocation boundary.
-- **POLYWAVE_WORKTREE_ROOT:** prepare-wave writes `.saw-worktree-env` to each agent's worktree root containing `POLYWAVE_WORKTREE_ROOT=<absolute_worktree_path>`. The `hooks/saw-worktree-boundary.sh` PreToolUse hook reads this var to enforce write boundaries independently of the SubagentStart hook. This provides defense-in-depth: boundary enforcement works even if the SubagentStart hook is unavailable.
+- **POLYWAVE_WORKTREE_ROOT:** prepare-wave writes `.polywave-worktree-env` to each agent's worktree root containing `POLYWAVE_WORKTREE_ROOT=<absolute_worktree_path>`. The `hooks/polywave-worktree-boundary.sh` PreToolUse hook reads this var to enforce write boundaries independently of the SubagentStart hook. This provides defense-in-depth: boundary enforcement works even if the SubagentStart hook is unavailable.
 - **Vendor-neutral fallback:** When hooks are unavailable, fall back to instruction-based isolation (E4 Layer 3: Field 0 self-verification). Agents manually verify working directory at startup.
 - **Defense-in-depth:** E43 hooks complement E4 layers (pre-creation, task tool isolation, merge-time trip wire). All layers remain active.
 
@@ -2174,9 +2174,9 @@ mechanisms apply:
    If dirty (uncommitted changes or staged-but-not-committed), exits 2 with:
    `"E48: Critic agent must commit IMPL doc changes before stopping."`
 
-2. **Standalone SubagentStop hook (`hooks/saw-critic-impl-commit.sh`):** A
+2. **Standalone SubagentStop hook (`hooks/polywave-critic-impl-commit.sh`):** A
    dedicated hook file for critic commit enforcement, parallel to
-   `hooks/saw-worktree-boundary.sh` for wave agent write boundaries. Exits 2
+   `hooks/polywave-worktree-boundary.sh` for wave agent write boundaries. Exits 2
    if the critic agent's IMPL doc has uncommitted changes.
 
 **IMPL doc location:** Both hooks locate the IMPL doc via `.polywave-state/active-impl`
@@ -2200,7 +2200,7 @@ boundary, the same pattern E42 uses for wave agents (I5).
 **Critic branch execution context:** Critics run on the main branch, not in a
 worktree. The commit check must use `git -C <repo-root>` (derived from the
 IMPL path), not from a worktree-relative path. This is distinct from wave
-agents, which run in worktrees and use `.saw-ownership.json` to locate the
+agents, which run in worktrees and use `.polywave-ownership.json` to locate the
 worktree root.
 
 **Skip condition:** If the critic runs `polywave-tools set-critic-review` and the
@@ -2370,7 +2370,7 @@ subsection for the full specification.
   auto-applies hotfix when CallerCascadeOnly=true; --dry-run flag for
   diagnosis; distinct from E26 (compile errors vs missing wiring) — see
   also E26, E25, E7, E8
-- E48: Critic agent must commit IMPL doc before stopping — see also E37 (critic gate), E42 (SubagentStop validation), `implementations/claude-code/prompts/agents/critic-agent.md`, `hooks/saw-critic-impl-commit.sh`
+- E48: Critic agent must commit IMPL doc before stopping — see also E37 (critic gate), E42 (SubagentStop validation), `implementations/claude-code/prompts/agents/critic-agent.md`, `hooks/polywave-critic-impl-commit.sh`
 - E49: State Reconciliation After Interruption -- polywave-tools reconcile-state reads IMPL + git state and derives correct ProtocolState; idempotent; does not commit; cross-repo aware -- see also E7, E38, resume-detect
 - E50: Agent Status Inspection -- polywave-tools agent-status prints branch/commit/report table per agent; --json flag; cross-repo aware -- see also E49, E7
 - E51: finalize-wave Cross-Repo Auto-Detection -- auto-selects primary repo-dir from polywave.config.json when not explicitly set; pre-flight error when wrong repo-dir provided -- see also E7, E38, MR02_UNSCOPED_GATE
