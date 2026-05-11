@@ -610,4 +610,5 @@ critic_report:
     reviewed_at: "2026-05-11T22:24:34Z"
     issue_count: 4
 state: REVIEWED
+original_branch: main
 injection_method: hook
