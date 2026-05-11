@@ -421,9 +421,9 @@ The tier gate fires only when **all** IMPLs in the tier reach `complete`. An ind
 When `polywave-tools mark-program-complete` runs successfully, it writes to the manifest:
 - `state: COMPLETE`
 - `completion_date: "YYYY-MM-DD"` (inserted after `state:`)
-- `SAW:PROGRAM:COMPLETE` on its own line at the end of the file
+- `polywave:program:complete` on its own line at the end of the file
 
-This is analogous to `<!-- SAW:COMPLETE -->` for IMPL docs (E15).
+This is analogous to `<!-- polywave:complete -->` for IMPL docs (E15).
 
 ---
 
@@ -756,7 +756,7 @@ Marks a PROGRAM manifest as complete and updates `CONTEXT.md`.
 **Steps:**
 1. Parse manifest. Exit code 2 on parse error.
 2. Verify all IMPLs in all tiers have `status: "complete"`. Exit code 1 if incomplete, listing incomplete IMPLs.
-3. Update manifest file: set `state: COMPLETE`, insert `completion_date: "<date>"` after state line, append `SAW:PROGRAM:COMPLETE` marker at end.
+3. Update manifest file: set `state: COMPLETE`, insert `completion_date: "<date>"` after state line, append `polywave:program:complete` marker at end.
 4. Update `docs/CONTEXT.md` (creates if absent). Appends entry: `- Program: <title> (<slug>) — <N> tiers, <M> IMPLs, <date>` under `## Features Completed`. Non-fatal if CONTEXT.md update fails.
 5. `git add` both files and `git commit -m "chore: mark PROGRAM <slug> complete"`. Returns commit SHA. Non-fatal if commit fails.
 
@@ -1418,7 +1418,7 @@ The Orchestrator runs:
 polywave-tools mark-program-complete docs/PROGRAM-simple-rest-api.yaml
 ```
 
-Verifies all 3 IMPLs have status `complete`. Updates manifest to `state: COMPLETE` with `completion_date`. Appends `SAW:PROGRAM:COMPLETE` marker. Updates `docs/CONTEXT.md`. Commits both files with message `chore: mark PROGRAM simple-rest-api complete`.
+Verifies all 3 IMPLs have status `complete`. Updates manifest to `state: COMPLETE` with `completion_date`. Appends `polywave:program:complete` marker. Updates `docs/CONTEXT.md`. Commits both files with message `chore: mark PROGRAM simple-rest-api complete`.
 
 SSE: `program_complete {program_slug: "simple-rest-api"}`.
 
@@ -1434,5 +1434,5 @@ completion:
   total_agents: 8
   total_waves: 4
 
-SAW:PROGRAM:COMPLETE
+polywave:program:complete
 ```

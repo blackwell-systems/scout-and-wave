@@ -8,7 +8,7 @@ via hooks.
 
 ## When to use this vs standard `/saw`
 
-| | `/saw` (standard) | `/saw-teams` |
+| | `/saw` (standard) | `/polywave-teams` |
 |---|---|---|
 | **Stability** | Stable | Experimental (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` required) |
 | **Crash recovery** | Good (session resumable, agents survive) | Poor (teammates lost on crash) |
@@ -16,7 +16,7 @@ via hooks.
 | **Progress visibility** | None until completion | Live, per-teammate |
 | **Token cost** | Lower | Higher (each teammate = full context window) |
 
-**Default recommendation:** use `/saw`. Use `/saw-teams` when the wave has
+**Default recommendation:** use `/saw`. Use `/polywave-teams` when the wave has
 complex interfaces and real-time deviation handling is worth the experimental
 risk.
 
@@ -68,9 +68,9 @@ Copy the hook scripts to your project:
 ```bash
 mkdir -p .claude/hooks
 
-# Or symlink from the saw-teams directory if you keep SAW as a submodule
-cp /path/to/polywave/saw-teams/hooks/teammate-idle-saw.sh .claude/hooks/
-cp /path/to/polywave/saw-teams/hooks/task-completed-saw.sh .claude/hooks/
+# Or symlink from the polywave-teams directory if you keep SAW as a submodule
+cp /path/to/polywave/polywave-teams/hooks/teammate-idle-saw.sh .claude/hooks/
+cp /path/to/polywave/polywave-teams/hooks/task-completed-saw.sh .claude/hooks/
 chmod +x .claude/hooks/*.sh
 ```
 
@@ -106,7 +106,7 @@ spawning prompts for approval on every wave:
 
 ### `example-settings.json` field reference
 
-`saw-teams/example-settings.json` contains all required settings in one block.
+`polywave-teams/example-settings.json` contains all required settings in one block.
 Copy it to `.claude/settings.json` in your project and adjust as needed.
 
 | Field | Value | Why |
@@ -127,14 +127,14 @@ list applies to all teammates automatically.
 
 ## Usage
 
-Same commands as `/saw`, but invoke `/saw-teams`:
+Same commands as `/saw`, but invoke `/polywave-teams`:
 
 ```
-/saw-teams scout <feature-description>   — run Scout, produce IMPL doc
-/saw-teams wave                          — execute next pending wave, pause after
-/saw-teams wave --auto                   — execute all waves, pause only on failure
-/saw-teams status                        — show progress from IMPL doc
-/saw-teams bootstrap <project>           — design-first for new projects
+/polywave-teams scout <feature-description>   — run Scout, produce IMPL doc
+/polywave-teams wave                          — execute next pending wave, pause after
+/polywave-teams wave --auto                   — execute all waves, pause only on failure
+/polywave-teams status                        — show progress from IMPL doc
+/polywave-teams bootstrap <project>           — design-first for new projects
 ```
 
 The Scout is NOT a teammate. It runs as a background Agent tool call before
@@ -144,10 +144,10 @@ any team exists. The IMPL doc it produces is consumed by every wave team.
 
 | File | Purpose |
 |---|---|
-| `saw-teams-skill.md` | Orchestrator/lead skill prompt (replaces `prompts/polywave-skill.md`) |
+| `polywave-teams-skill.md` | Orchestrator/lead skill prompt (replaces `prompts/polywave-skill.md`) |
 | `teammate-template.md` | 9-field teammate prompt template (replaces `prompts/agent-template.md`) |
-| `saw-teams-merge.md` | Merge procedure with teammate messaging supplement |
-| `saw-teams-worktree.md` | Worktree lifecycle for Agent Teams execution |
+| `polywave-teams-merge.md` | Merge procedure with teammate messaging supplement |
+| `polywave-teams-worktree.md` | Worktree lifecycle for Agent Teams execution |
 | `hooks.md` | `TeammateIdle` and `TaskCompleted` hook documentation and scripts |
 | `DESIGN.md` | Architecture, design decisions, limitations, migration path |
 

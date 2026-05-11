@@ -3,7 +3,7 @@
 ## /polywave amend
 
 Extends or adjusts an in-progress IMPL doc without starting over.
-Invalid after SAW:COMPLETE (E36).
+Invalid after polywave:complete (E36).
 
 ### /polywave amend --add-wave
 Appends an empty wave skeleton to the IMPL doc. Use when you need additional

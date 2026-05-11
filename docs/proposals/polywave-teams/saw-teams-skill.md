@@ -1,4 +1,4 @@
-<!-- saw-teams-skill v0.1.6 -->
+<!-- polywave-teams-skill v0.1.6 -->
 Polywave Teams: Parallel Agent Coordination via Agent Teams
 
 You are the **Orchestrator** (team lead), the synchronous agent that drives all
@@ -60,7 +60,7 @@ If a `docs/IMPL/IMPL-*.md` file already exists:
 2. **Solo agent check:** If the wave has exactly 1 agent, skip team creation and worktree creation. Launch the agent directly via the Agent tool with `run_in_background: true` on the main branch. After the agent completes, proceed to Step 5. (The solo wave agent must still operate in the Wave Agent role — not executed inline by the lead. Executing solo wave work inline violates I6 regardless of wave size.)
 3. **Multi-agent wave: Agent Teams execution:**
 
-   a. **Worktree setup:** Read `${CLAUDE_SKILL_DIR}/saw-teams-worktree.md` and follow the pre-creation procedure. Create a worktree for each teammate before spawning any teammates. **Interface freeze checkpoint:** interface contracts become immutable when worktrees are created. This is the last moment to revise type signatures, add fields, or restructure APIs. After this point, any interface change requires removing and recreating all worktrees for the wave. Verify that all scaffold files listed in the IMPL doc Scaffolds section show `Status: committed` before creating worktrees. **I2: Interface contracts precede parallel implementation.** The Scout defines all interfaces that cross agent boundaries in the IMPL doc. The Scaffold Agent implements them as type scaffold files committed to HEAD after human review, before any Wave Agent launches. Teammates implement against the spec; they never coordinate directly. Verify scaffold files are committed (Scaffolds section status) before creating worktrees; they are frozen at worktree creation (step 3a), not at teammate spawn.
+   a. **Worktree setup:** Read `${CLAUDE_SKILL_DIR}/polywave-teams-worktree.md` and follow the pre-creation procedure. Create a worktree for each teammate before spawning any teammates. **Interface freeze checkpoint:** interface contracts become immutable when worktrees are created. This is the last moment to revise type signatures, add fields, or restructure APIs. After this point, any interface change requires removing and recreating all worktrees for the wave. Verify that all scaffold files listed in the IMPL doc Scaffolds section show `Status: committed` before creating worktrees. **I2: Interface contracts precede parallel implementation.** The Scout defines all interfaces that cross agent boundaries in the IMPL doc. The Scaffold Agent implements them as type scaffold files committed to HEAD after human review, before any Wave Agent launches. Teammates implement against the spec; they never coordinate directly. Verify scaffold files are committed (Scaffolds section status) before creating worktrees; they are frozen at worktree creation (step 3a), not at teammate spawn.
 
    b. **Pre-launch ownership verification:** Scan the wave's file ownership table. **I1: Disjoint File Ownership:** no two agents in the same wave own the same file; this is a hard constraint, not a preference, and is the mechanism that makes parallel execution safe. Worktree isolation does not substitute for it; the IMPL doc's file ownership table is the enforcement mechanism.
 
@@ -69,7 +69,7 @@ If a `docs/IMPL/IMPL-*.md` file already exists:
       self-contained: the teammate does not inherit the lead's conversation
       history. Construct it by combining:
 
-      1. The **teammate-template preamble** (from `saw-teams/teammate-template.md`):
+      1. The **teammate-template preamble** (from `polywave-teams/teammate-template.md`):
          the task assignment block, I{N}/E{N} notation explanation, and the
          instruction that tasks are pre-assigned and self-claiming is prohibited.
          Do NOT omit this. The no-self-claim constraint, the messaging protocol
@@ -140,9 +140,9 @@ If a `docs/IMPL/IMPL-*.md` file already exists:
    **E20: Stub scan.** After all teammates complete, collect the union of all `files_changed` and `files_created` from completion reports. Run `bash "${CLAUDE_SKILL_DIR}/scripts/scan-stubs.sh" {file1} {file2} ...`. Append output to the IMPL doc under `## Stub Report — Wave {N}`. Exit code is always 0 — informational only. Surface stubs at the review checkpoint.
    **E21: Quality gate verification.** If the IMPL doc contains a `## Quality Gates` section, run each configured gate. Required-gate failure blocks merge. Optional-gate failure is a warning only.
    **E7a: Automatic failure remediation in --auto mode.** When `--auto` is active and a teammate fails with a correctable issue, re-launch with corrections (up to 2 retries). Non-correctable failures always surface to the user. After 2 failed attempts, escalate regardless of `--auto`.
-6. **Merge and verify:** Read `${CLAUDE_SKILL_DIR}/saw-teams-merge.md` from the skill directory and follow the merge procedure (team cleanup → conflict detection → merge each agent → worktree cleanup → post-merge verification → update IMPL doc).
-7. **E15: IMPL doc completion marker.** If this was the final wave and post-merge verification passed, write `<!-- SAW:COMPLETE YYYY-MM-DD -->` (with today's date) on the line immediately after the IMPL doc title (`# IMPL: ...`), then commit the IMPL doc update. Do not write the marker if more waves remain.
-8. **E18: Update project memory.** After writing the SAW:COMPLETE marker, create or update `docs/CONTEXT.md` in the project root to reflect completed features, established interfaces, and architectural decisions introduced by this SAW run. Use the schema in `protocol/message-formats.md`.
+6. **Merge and verify:** Read `${CLAUDE_SKILL_DIR}/polywave-teams-merge.md` from the skill directory and follow the merge procedure (team cleanup → conflict detection → merge each agent → worktree cleanup → post-merge verification → update IMPL doc).
+7. **E15: IMPL doc completion marker.** If this was the final wave and post-merge verification passed, write `<!-- polywave:complete YYYY-MM-DD -->` (with today's date) on the line immediately after the IMPL doc title (`# IMPL: ...`), then commit the IMPL doc update. Do not write the marker if more waves remain.
+8. **E18: Update project memory.** After writing the polywave:complete marker, create or update `docs/CONTEXT.md` in the project root to reflect completed features, established interfaces, and architectural decisions introduced by this SAW run. Use the schema in `protocol/message-formats.md`.
 9. **I3: Wave sequencing.** Wave N+1 does not launch until Wave N has been merged and post-merge verification has passed. If `--auto` was passed and verification passed, immediately proceed to the next wave (create a new team). Otherwise, report the wave result and ask the user if they want to continue.
 10. If verification fails, report the failures and ask the user how to proceed.
 

@@ -1,4 +1,4 @@
-<!-- saw-teams-worktree v0.1.4 -->
+<!-- polywave-teams-worktree v0.1.4 -->
 # SAW-Teams Worktree Lifecycle
 
 Manage git worktree creation, verification, and cleanup for Agent Teams wave
@@ -64,7 +64,7 @@ reassigning scope. This catches scout planning errors before agents spend
 time on conflicting work.
 
 This is distinct from post-execution conflict prediction (Step 2 of
-saw-teams-merge.md), which catches runtime deviations where a teammate touched
+polywave-teams-merge.md), which catches runtime deviations where a teammate touched
 files outside its declared scope. Both checks are required; they catch
 different failure modes.
 
@@ -100,7 +100,7 @@ to untangle.
 
 ## Pre-Create Worktrees
 
-Re-running `/saw-teams wave` at this point is safe; WAVE_PENDING is
+Re-running `/polywave-teams wave` at this point is safe; WAVE_PENDING is
 re-entrant. Before creating worktrees, check whether they already exist from
 a previous run:
 
@@ -157,7 +157,7 @@ provides a secondary isolation mechanism, Agent Teams does not support
 `isolation: "worktree"` on teammate spawn. Manual pre-creation is the only
 worktree creation mechanism. If it fails, worktrees do not exist.
 
-The merge procedure's trip wire (Step 1.5 in saw-teams-merge.md) catches
+The merge procedure's trip wire (Step 1.5 in polywave-teams-merge.md) catches
 isolation failures before any incorrect merge occurs — this is the safety net
 when both manual pre-creation and Field 0 self-verification fail.
 
@@ -249,7 +249,7 @@ immediately, e.g., spawn a replacement teammate with the correct path.
 ## Cleanup
 
 After merging a wave, remove all worktrees and branches. Note: team cleanup
-(dismissing teammates) is handled by `saw-teams-merge.md` Step 5; this
+(dismissing teammates) is handled by `polywave-teams-merge.md` Step 5; this
 section handles only git worktree lifecycle.
 
 **Important:** Dismiss the team BEFORE removing worktrees. If a teammate is

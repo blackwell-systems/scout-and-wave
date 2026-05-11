@@ -1,4 +1,4 @@
-<!-- saw-teams-hooks v0.1.0 -->
+<!-- polywave-teams-hooks v0.1.0 -->
 # SAW-Teams Protocol Enforcement Hooks
 
 Claude Code hooks for enforcing SAW protocol compliance during Agent Teams
@@ -235,8 +235,8 @@ all agents finish.
 
 Agent Teams hooks close the real-time gap: the lead can intervene the moment
 a teammate tries to idle without a report. This is Layer 2.5 of the
-defense-in-depth model (see `saw-teams-worktree.md`), and it is the primary
-protocol-enforcement advantage of the saw-teams execution layer over standard
+defense-in-depth model (see `polywave-teams-worktree.md`), and it is the primary
+protocol-enforcement advantage of the polywave-teams execution layer over standard
 SAW.
 
 ## Protocol Compliance Without Hooks

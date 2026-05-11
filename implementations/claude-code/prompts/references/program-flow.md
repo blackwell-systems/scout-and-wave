@@ -261,7 +261,7 @@ This merges all IMPL branches (created in Step 3a.5) for the tier to main in ord
 After final tier gate passes:
 1. Run: `polywave-tools mark-program-complete "<manifest>"`
    - Verifies all tiers complete (all IMPLs have status "complete")
-   - Updates manifest (state: PROGRAM_COMPLETE, completion_date, SAW:PROGRAM:COMPLETE marker)
+   - Updates manifest (state: PROGRAM_COMPLETE, completion_date, polywave:program:complete marker)
    - Archives manifest to `docs/PROGRAM/complete/`
    - Updates CONTEXT.md with program-level completion entry
    - Commits manifest + CONTEXT.md atomically

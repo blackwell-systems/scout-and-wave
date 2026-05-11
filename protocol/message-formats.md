@@ -115,7 +115,7 @@ waves:  # optional - omit if not using per-agent model overrides or launch order
 When all waves are merged and post-merge verification passes, the orchestrator writes:
 
 ```html
-<!-- SAW:COMPLETE YYYY-MM-DD -->
+<!-- polywave:complete YYYY-MM-DD -->
 ```
 
 **Placement:** At the top of the IMPL doc, immediately after the title.

@@ -341,7 +341,7 @@ The PROGRAM manifest is updated at specific lifecycle events:
 - After each IMPL state transition: update `impls[i].status`
 - After `FinalizeTier` merges all IMPL branches: auto-sets merged IMPLs to `complete` status and persists via `SaveProgramManifest()`
 - After tier gate passes: increment `completion.tiers_complete`
-- After program completes: set `state: COMPLETE`, write `completion_date`, append `SAW:PROGRAM:COMPLETE` marker, archive to `docs/PROGRAM/complete/`, and update `CONTEXT.md`
+- After program completes: set `state: COMPLETE`, write `completion_date`, append `polywave:program:complete` marker, archive to `docs/PROGRAM/complete/`, and update `CONTEXT.md`
 - After replan (E34): Planner agent rewrites the manifest in place with revised tier structure
 
 These updates are atomic file writes (read-modify-write), not concurrent edits. The Orchestrator is the sole writer.

@@ -373,7 +373,7 @@ If this was the last wave (no Wave 2 pending), the orchestrator closes the IMPL:
 ```
 Running: polywave-tools close-impl docs/IMPL/IMPL-simple-cache.yaml --date "2026-03-28"
 
-[1/4] Writing SAW:COMPLETE marker...
+[1/4] Writing polywave:complete marker...
   OK Updated docs/IMPL/IMPL-simple-cache.yaml
 
 [2/4] Archiving to complete/ directory...
@@ -390,7 +390,7 @@ OK IMPL closed successfully
 
 **What close-impl does:**
 
-Another **atomic batching command** that combines 4 operations: (1) write SAW:COMPLETE marker, (2) archive to complete/ directory, (3) update CONTEXT.md, (4) clean stale worktrees. This finalizes the entire feature, not just a single wave.
+Another **atomic batching command** that combines 4 operations: (1) write polywave:complete marker, (2) archive to complete/ directory, (3) update CONTEXT.md, (4) clean stale worktrees. This finalizes the entire feature, not just a single wave.
 
 **If more waves remain:** Skip this step. Run `/polywave wave` again for Wave 2, and only close the IMPL after all waves complete.
 

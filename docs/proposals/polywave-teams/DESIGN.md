@@ -41,7 +41,7 @@ unchanged. Only the wave execution step differs.
 
 ## What Changes
 
-### Skill router (`saw-teams-skill.md`)
+### Skill router (`polywave-teams-skill.md`)
 
 Replaces `polywave-skill.md` for users who have Agent Teams enabled. The key
 difference is in wave execution:
@@ -162,8 +162,8 @@ protocol compliance in real time:
 - **`TaskCompleted`**: blocks task closure if the IMPL doc write hasn't
   happened yet. Enforces the I4 write-before-close ordering.
 
-This is the primary protocol-enforcement advantage of saw-teams over standard
-SAW. Hook scripts live in `saw-teams/hooks/` and documentation in `hooks.md`.
+This is the primary protocol-enforcement advantage of polywave-teams over standard
+SAW. Hook scripts live in `polywave-teams/hooks/` and documentation in `hooks.md`.
 
 Without hooks the protocol still works via lead-reads-reports, but timing
 degrades from real-time to post-hoc discovery.
@@ -203,30 +203,30 @@ Agent Teams is experimental with limitations that affect SAW-Teams:
 1. **Phase 0 (now):** Track Agent Teams stabilization. Watch for session
    resumption and multi-team support.
 
-2. **Phase 1:** Prototype `saw-teams-skill.md` with the current Agent Teams
+2. **Phase 1:** Prototype `polywave-teams-skill.md` with the current Agent Teams
    API. Test on a real SAW-suitable feature. Measure: does inter-agent
    messaging reduce post-merge interface deviations?
 
 3. **Phase 2:** If Phase 1 validates, develop the full prompt set
-   (`saw-teams-skill.md`, adapted agent template, teammate-aware merge
+   (`polywave-teams-skill.md`, adapted agent template, teammate-aware merge
    procedure).
 
-4. **Phase 3:** Document when to use `polywave` vs `saw-teams`. The default
+4. **Phase 3:** Document when to use `polywave` vs `polywave-teams`. The default
    recommendation: `polywave` for maximum portability and crash recovery,
-   `saw-teams` when inter-agent communication is worth the experimental
+   `polywave-teams` when inter-agent communication is worth the experimental
    risk.
 
 ## File Plan
 
 ```
-saw-teams/
+polywave-teams/
   DESIGN.md                    ← this file
   README.md                    ← setup guide (enable flag, display modes, hooks)
   example-settings.json        ← copy to .claude/settings.json; all required fields
-  saw-teams-skill.md    v0.1.6 ← alternate skill router (adapts polywave-skill v0.3.9)
+  polywave-teams-skill.md    v0.1.6 ← alternate skill router (adapts polywave-skill v0.3.9)
   teammate-template.md  v0.1.3 ← adapted agent template (adapts agent-template v0.3.8)
-  saw-teams-merge.md    v0.1.4 ← teammate-aware merge (adapts saw-merge v0.4.4)
-  saw-teams-worktree.md v0.1.4 ← worktree lifecycle (adapts saw-worktree v0.4.3)
+  polywave-teams-merge.md    v0.1.4 ← teammate-aware merge (adapts saw-merge v0.4.4)
+  polywave-teams-worktree.md v0.1.4 ← worktree lifecycle (adapts saw-worktree v0.4.3)
   hooks.md              v0.1.0 ← TeammateIdle + TaskCompleted hook documentation
   hooks/
     teammate-idle-saw.sh       ← TeammateIdle enforcement script

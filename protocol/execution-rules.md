@@ -524,17 +524,17 @@ Three distinct conflict types can arise; each has a different resolution path:
 ```bash
 polywave-tools close-impl "<manifest-path>" --date "YYYY-MM-DD"
 ```
-This atomically: (1) writes `<!-- SAW:COMPLETE YYYY-MM-DD -->` on the line immediately after the IMPL doc title, (2) archives the manifest to `docs/IMPL/complete/`, (3) stages `git rm <original-manifest-path>` so the deletion of the original path is included in the commit, (4) updates `docs/CONTEXT.md` (E18), and (5) auto-cleans any stale worktrees for the completed IMPL slug. All staged changes (archive, deletion, CONTEXT.md) are committed in a single atomic commit. The marker must be present before reporting completion to the user.
+This atomically: (1) writes `<!-- polywave:complete YYYY-MM-DD -->` on the line immediately after the IMPL doc title, (2) archives the manifest to `docs/IMPL/complete/`, (3) stages `git rm <original-manifest-path>` so the deletion of the original path is included in the commit, (4) updates `docs/CONTEXT.md` (E18), and (5) auto-cleans any stale worktrees for the completed IMPL slug. All staged changes (archive, deletion, CONTEXT.md) are committed in a single atomic commit. The marker must be present before reporting completion to the user.
 
-**Format:** HTML comment tag. Invisible in rendered markdown. Parseable with a single regex: `<!-- SAW:COMPLETE (\d{4}-\d{2}-\d{2}) -->`. Tooling can grep a directory of IMPL docs without parsing each file.
+**Format:** HTML comment tag. Invisible in rendered markdown. Parseable with a single regex: `<!-- polywave:complete (\d{4}-\d{2}-\d{2}) -->`. Tooling can grep a directory of IMPL docs without parsing each file.
 
 **Constraint:** Only the orchestrator writes this marker. Agents never add or modify it (E14 already prohibits agents from editing earlier sections). If the marker is already present, do not overwrite.
 
-**Backward Compatibility:** IMPL docs without the `<!-- SAW:COMPLETE -->` tag are treated as active. No migration is required.
+**Backward Compatibility:** IMPL docs without the `<!-- polywave:complete -->` tag are treated as active. No migration is required.
 
 **Related Rules:** See E14 (IMPL doc write discipline). See state-machine.md for the WAVE_VERIFIED → COMPLETE transition guard.
 
-**Amend constraint:** Once the `<!-- SAW:COMPLETE -->` marker is written, `polywave amend`
+**Amend constraint:** Once the `<!-- polywave:complete -->` marker is written, `polywave amend`
 is invalid. The orchestrator must reject any amend attempt against a completed IMPL.
 To extend completed work, start a new IMPL doc (E36).
 
@@ -1545,7 +1545,7 @@ wiring:
 ## E36: IMPL Amendment (Living IMPL Docs)
 
 **Trigger:** Orchestrator receives `/polywave amend` subcommand on an active IMPL doc
-(state is not COMPLETE; no SAW:COMPLETE marker present).
+(state is not COMPLETE; no polywave:complete marker present).
 
 **Three operations:**
 
@@ -1577,7 +1577,7 @@ wiring:
 
 **Common preconditions for all E36 operations:**
 1. IMPL doc must not have completion_date set (state != COMPLETE)
-2. SAW:COMPLETE marker must not be present in the file
+2. polywave:complete marker must not be present in the file
 3. Resulting manifest must pass `polywave-tools validate` after mutation
 4. File ownership for agents in completed waves is frozen (cannot be changed)
 5. Interface contracts listed in frozen_contracts_hash are immutable
@@ -1586,7 +1586,7 @@ wiring:
 with `ErrAmendBlocked` as the sentinel. The IMPL doc is not modified.
 
 **Related Rules:** See E2 (interface freeze), E14 (IMPL doc write discipline),
-E15 (completion marker — amend invalid after SAW:COMPLETE)
+E15 (completion marker — amend invalid after polywave:complete)
 
 ---
 

@@ -625,7 +625,7 @@ Add `--force` to skip safety checks for uncommitted changes. `finalize-wave` run
    ```bash
    polywave-tools mark-complete "<manifest-path>" --date "YYYY-MM-DD"
    ```
-   This writes the `<!-- SAW:COMPLETE YYYY-MM-DD -->` marker, archives the manifest to `docs/IMPL/complete/`, and auto-cleans stale worktrees. It does NOT commit. If the marker is already present, do not re-run. Commit the archived file together with the E18 CONTEXT.md update in the next step.
+   This writes the `<!-- polywave:complete YYYY-MM-DD -->` marker, archives the manifest to `docs/IMPL/complete/`, and auto-cleans stale worktrees. It does NOT commit. If the marker is already present, do not re-run. Commit the archived file together with the E18 CONTEXT.md update in the next step.
 
 4. **E18: Update project memory.** Read `docs/CONTEXT.md` in the project root (create it if absent). Update the `features_completed` list with this feature slug and summary. Update `established_interfaces` if any new cross-cutting interfaces were defined. Update `architecture.description` and `architecture.modules` list if the feature introduced structural changes (see schema in `message-formats.md`). Update `decisions` with any key architectural choices made during this wave. Commit the updated `docs/CONTEXT.md`. See E18 in `execution-rules.md` and the schema in `message-formats.md` (## docs/CONTEXT.md — Project Memory section).
 

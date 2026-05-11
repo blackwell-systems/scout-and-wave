@@ -1,5 +1,5 @@
 ---
-name: saw
+name: polywave
 description: "Parallel agent coordination: Scout analyzes the codebase and produces a plan; Wave agents implement in parallel. Use for multi-package features, parallel refactors, coordinated changes."
 argument-hint: "[auto [--skip-confirm] [--repo <path>] <feature> | bootstrap <project-name> | interview <description> | scout [--model <m>] [--repo <path>] <feature> | wave [--impl <id>] [--auto] [--model <m>] | status [--impl <id>]]"
 user-invocable: true
@@ -215,6 +215,6 @@ Read .polywave-agent-brief.md and follow exactly.
    ```bash
    polywave-tools close-impl "<impl-doc-path>" --date "YYYY-MM-DD"
    ```
-   Atomically: writes SAW:COMPLETE, archives to `docs/IMPL/complete/`, updates `docs/CONTEXT.md` (E18), cleans worktrees. Commit in single commit. Don't run if more waves remain.
+   Atomically: writes polywave:complete, archives to `docs/IMPL/complete/`, updates `docs/CONTEXT.md` (E18), cleans worktrees. Commit in single commit. Don't run if more waves remain.
 10. **I3: Wave sequencing.** Wave N+1 launches only after Wave N merges and post-merge verification passes. If `--auto` and verification passed, proceed to next wave. Otherwise, report result and ask user.
 11. If verification fails, report failures and ask user how to proceed.

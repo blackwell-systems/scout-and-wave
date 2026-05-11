@@ -120,11 +120,11 @@ proceed with work.
 pre-creates worktrees. Layer 1.5: teammate attempts self-correction via cd.
 Layer 2: teammate verifies isolation and fails fast if incorrect. Layer 2.5:
 teammate messages lead about failure (real-time awareness). Layer 3: lead
-checks completion reports for failures. (Note: saw-teams layer numbering differs
+checks completion reports for failures. (Note: polywave-teams layer numbering differs
 from E4's 5-layer model because Layer 2 `isolation: "worktree"` is intentionally
 omitted; remaining layers renumbered accordingly.)
 teammate messages lead about failure (real-time awareness). Layer 3: lead
-checks completion reports for failures. (Note: saw-teams layer numbering differs
+checks completion reports for failures. (Note: polywave-teams layer numbering differs
 from E4's 5-layer model because Layer 2 `isolation: "worktree"` is intentionally
 omitted; remaining layers renumbered accordingly.)
 

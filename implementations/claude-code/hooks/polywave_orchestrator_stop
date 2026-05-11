@@ -4,7 +4,7 @@
 #
 # Checks:
 #   1. Active IMPL docs (state: WAVE_PENDING or WAVE_EXECUTING)
-#   2. Active worktrees under .claude/worktrees/saw/
+#   2. Active worktrees under .claude/worktrees/polywave/
 # If either check fires, emits systemMessage warning to stdout.
 # Uses stop_hook_active field to prevent re-trigger loops.
 
@@ -53,7 +53,7 @@ fi
 
 # --- Check 2: Active worktrees ---
 worktree_slugs=()
-worktree_dir="$repo_root/.claude/worktrees/saw"
+worktree_dir="$repo_root/.claude/worktrees/polywave"
 if [[ -d "$worktree_dir" ]]; then
   while IFS= read -r -d '' entry; do
     slug="$(basename "$entry")"
@@ -83,7 +83,7 @@ fi
 printf '{
   "hookSpecificOutput": {
     "hookEventName": "Stop",
-    "systemMessage": "SAW WARNING: Active orchestration detected. Run /saw status or /saw wave to resume.\n\nActive IMPL docs: %s\nActive worktrees: %s"
+    "systemMessage": "Polywave WARNING: Active orchestration detected. Run /polywave status or /polywave wave to resume.\n\nActive IMPL docs: %s\nActive worktrees: %s"
   }
 }\n' "$impl_list" "$worktree_list"
 

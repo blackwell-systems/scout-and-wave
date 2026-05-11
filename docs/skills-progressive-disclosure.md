@@ -132,7 +132,7 @@ The skill frontmatter is parsed by the Claude Code Skills API before the Orchest
 
 ```yaml
 ---
-name: saw
+name: polywave
 description: "Parallel agent coordination: Scout analyzes your code..."
 argument-hint: "[bootstrap <project-name> | interview <description> | ...]"
 user-invocable: true

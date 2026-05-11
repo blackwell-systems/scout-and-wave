@@ -387,7 +387,7 @@ The hotfix only fires when `AllAreCascades=true` -- when even one failing file b
 
 ### IMPL Amendment
 
-**E36: Living IMPL Docs.** IMPL documents are not frozen after Scout approval. Three amendment operations allow controlled mid-execution mutation: `add-wave` appends an empty wave skeleton, `redirect-agent` re-queues an uncommitted agent with revised brief, and `extend-scope` re-engages the Scout with the current IMPL as context. Amendments are blocked after `SAW:COMPLETE`, and completed-wave ownership is frozen -- the protocol allows adaptation without compromising already-verified work.
+**E36: Living IMPL Docs.** IMPL documents are not frozen after Scout approval. Three amendment operations allow controlled mid-execution mutation: `add-wave` appends an empty wave skeleton, `redirect-agent` re-queues an uncommitted agent with revised brief, and `extend-scope` re-engages the Scout with the current IMPL as context. Amendments are blocked after `polywave:complete`, and completed-wave ownership is frozen -- the protocol allows adaptation without compromising already-verified work.
 
 ### Resume and Retry Intelligence
 

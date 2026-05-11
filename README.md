@@ -227,7 +227,7 @@ See [protocol/README.md](protocol/README.md) for the full adoption guide.
 
 ## SAW-Teams (Experimental)
 
-[`docs/proposals/saw-teams/`](docs/proposals/saw-teams/) is an alternate execution layer using Claude Code Agent Teams. Same protocol, same IMPL doc, same Scout. Different wave plumbing: teammates replace background Agent tool calls, providing inter-agent messaging and real-time deviation alerts. Trade-off: better visibility during execution, worse crash recovery. See [`docs/proposals/saw-teams/README.md`](docs/proposals/saw-teams/README.md) for setup and usage.
+[`docs/proposals/polywave-teams/`](docs/proposals/polywave-teams/) is an alternate execution layer using Claude Code Agent Teams. Same protocol, same IMPL doc, same Scout. Different wave plumbing: teammates replace background Agent tool calls, providing inter-agent messaging and real-time deviation alerts. Trade-off: better visibility during execution, worse crash recovery. See [`docs/proposals/polywave-teams/README.md`](docs/proposals/polywave-teams/README.md) for setup and usage.
 
 ## Blog Post
 
