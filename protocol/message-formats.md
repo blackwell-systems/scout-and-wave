@@ -149,10 +149,10 @@ Cross-repo format (add `Repo` column when agents work in different repositories)
 ```yaml type=impl-file-ownership
 | File | Agent | Wave | Depends On | Repo |
 |------|-------|------|------------|------|
-| pkg/engine/runner.go | A | 1 | — | saw-engine |
-| pkg/engine/types.go | A | 1 | — | saw-engine |
-| pkg/api/adapter.go | B | 1 | — | saw-web |
-| cmd/saw/main.go | B | 1 | — | saw-web |
+| pkg/engine/runner.go | A | 1 | — | polywave-engine |
+| pkg/engine/types.go | A | 1 | — | polywave-engine |
+| pkg/api/adapter.go | B | 1 | — | polywave-web |
+| cmd/polywave/main.go | B | 1 | — | polywave-web |
 ```
 
 The `Repo` column value is the short repo name (matches the directory name). E3 ownership verification is performed per-repo: the same file path in different repos is not a conflict.
@@ -204,8 +204,8 @@ Wave 3: {E}                        <- type: integration (wiring only, E27)
 status: complete | partial | blocked
 failure_type: transient | fixable | needs_replan | escalate | timeout  # required when status is partial or blocked; omit when status is complete
 repo: /absolute/path/to/repo  # omit for single-repo waves
-worktree: .claude/worktrees/saw/{slug}/wave{N}-agent-{ID}
-branch: saw/{slug}/wave{N}-agent-{ID}
+worktree: .claude/worktrees/polywave/{slug}/wave{N}-agent-{ID}
+branch: polywave/{slug}/wave{N}-agent-{ID}
 commit: {sha}
 files_changed:
   - path/to/file
@@ -363,13 +363,13 @@ Emitted by the Scout at the end of the suitability gate. Written to the IMPL doc
 
 **Step 1: Navigate to worktree**
 ```bash
-cd {absolute-repo-path}/.claude/worktrees/saw/{slug}/wave{N}-agent-{ID}
+cd {absolute-repo-path}/.claude/worktrees/polywave/{slug}/wave{N}-agent-{ID}
 ```
 
 **Step 2: Verify isolation**
 ```bash
 ACTUAL_DIR=$(pwd)
-EXPECTED_DIR="{absolute-repo-path}/.claude/worktrees/saw/{slug}/wave{N}-agent-{ID}"
+EXPECTED_DIR="{absolute-repo-path}/.claude/worktrees/polywave/{slug}/wave{N}-agent-{ID}"
 
 if [ "$ACTUAL_DIR" != "$EXPECTED_DIR" ]; then
   echo "ISOLATION FAILURE: Wrong directory"
@@ -379,7 +379,7 @@ if [ "$ACTUAL_DIR" != "$EXPECTED_DIR" ]; then
 fi
 
 ACTUAL_BRANCH=$(git branch --show-current)
-EXPECTED_BRANCH="saw/{slug}/wave{N}-agent-{ID}"
+EXPECTED_BRANCH="polywave/{slug}/wave{N}-agent-{ID}"
 
 if [ "$ACTUAL_BRANCH" != "$EXPECTED_BRANCH" ]; then
   echo "ISOLATION FAILURE: Wrong branch"
@@ -406,7 +406,7 @@ Agent identifiers follow the `[Letter][Generation]` scheme:
 - **Generation 1:** The bare letter, e.g., `A`, `B`, `C`. The digit is omitted for generation 1. `A` and `A1` are NOT both valid — only `A` represents generation 1.
 - **Multi-generation:** `A2`, `B3`, `C4`, etc. Used when >26 agents are needed, or when the Scout wants to express that agents share a logical sub-domain (e.g., `A`, `A2`, `A3` for closely related work).
 - **Appears in:** file ownership tables (`Agent` column), dep graph blocks (`[A2]`), wave structure blocks, Polywave tags, worktree branch names, and completion report sections.
-- **Worktree naming:** `saw/{slug}/wave{N}-agent-{ID}` — e.g., `saw/my-feature/wave1-agent-A2`, `saw/my-feature/wave2-agent-B3`. Branches created before v0.39.0 use the legacy format `wave{N}-agent-{ID}` without slug prefix; tools accept both formats.
+- **Worktree naming:** `polywave/{slug}/wave{N}-agent-{ID}` — e.g., `polywave/my-feature/wave1-agent-A2`, `polywave/my-feature/wave2-agent-B3`. Branches created before v0.39.0 use the legacy format `wave{N}-agent-{ID}` without slug prefix; tools accept both formats.
 - **Polywave tag format:** `[Polywave:wave{N}:agent-{ID}]` — e.g., `[Polywave:wave1:agent-A2]`.
 
 Generation-1 IDs (`A`, `B`, `C`, …) are valid wherever an agent ID appears. Multi-generation IDs are assigned by the Scout when needed; agents receive their full ID (e.g., `A2`) in Field 0 of their prompt.
@@ -442,8 +442,8 @@ status: complete | partial | blocked
 failure_type: transient | fixable | needs_replan | escalate | timeout
   # Required when status is partial or blocked.
   # Omit (or set to null) when status is complete.
-worktree: .claude/worktrees/saw/{slug}/wave{N}-agent-{ID}
-branch: saw/{slug}/wave{N}-agent-{ID}
+worktree: .claude/worktrees/polywave/{slug}/wave{N}-agent-{ID}
+branch: polywave/{slug}/wave{N}-agent-{ID}
 commit: {sha}  # or "uncommitted" if commit failed
 files_changed:
   - path/to/modified/file
@@ -482,9 +482,9 @@ verification: PASS | FAIL ({command} - N/N tests)
 
 - **repo:** Absolute path to the repository this agent worked in. Required for cross-repo waves so the Orchestrator knows which repo to merge in. Omit for single-repo waves.
 
-- **worktree:** Canonical worktree path. Must match E5 naming convention: `.claude/worktrees/saw/{slug}/wave{N}-agent-{ID}`
+- **worktree:** Canonical worktree path. Must match E5 naming convention: `.claude/worktrees/polywave/{slug}/wave{N}-agent-{ID}`
 
-- **branch:** Branch name. Must match worktree naming: `saw/{slug}/wave{N}-agent-{ID}`. Branches created before v0.39.0 use the legacy format `wave{N}-agent-{ID}` without slug prefix; tools accept both formats.
+- **branch:** Branch name. Must match worktree naming: `polywave/{slug}/wave{N}-agent-{ID}`. Branches created before v0.39.0 use the legacy format `wave{N}-agent-{ID}` without slug prefix; tools accept both formats.
 
 - **commit:** Git commit SHA if changes were committed. `"uncommitted"` if no changes or commit failed. I5 requires agents commit before reporting.
 
@@ -955,11 +955,11 @@ Before launching Wave agents, `polywave-tools prepare-wave` writes a `.polywave-
 
 ```markdown
 <!-- IMPL doc: /absolute/path/to/docs/IMPL/IMPL-feature.yaml | Wave N | Agent X -->
-<!-- Worktree: /absolute/path/to/worktree | Branch: saw/{slug}/wave{N}-agent-{X} -->
+<!-- Worktree: /absolute/path/to/worktree | Branch: polywave/{slug}/wave{N}-agent-{X} -->
 
 MANDATORY FIRST STEP - Verify isolation before any work:
 1. cd /absolute/path/to/worktree
-2. polywave-tools verify-isolation --branch saw/{slug}/wave{N}-agent-{X}
+2. polywave-tools verify-isolation --branch polywave/{slug}/wave{N}-agent-{X}
 3. If verification fails (exit code 1), STOP immediately and report status: blocked
 
 After verification passes, read your pre-extracted brief:
