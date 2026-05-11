@@ -1,6 +1,6 @@
 # Progressive Disclosure in Polywave Skills
 
-The Polywave `/saw` skill implements an **advanced progressive disclosure architecture** that extends the [Agent Skills specification](https://agentskills.io/specification#progressive-disclosure) with hook-based deterministic injection. This document explains the four-tier structure, the three-layer injection architecture, and the frontmatter-driven dispatch mechanism that makes context loading automatic rather than convention-based.
+The Polywave `/polywave` skill implements an **advanced progressive disclosure architecture** that extends the [Agent Skills specification](https://agentskills.io/specification#progressive-disclosure) with hook-based deterministic injection. This document explains the four-tier structure, the three-layer injection architecture, and the frontmatter-driven dispatch mechanism that makes context loading automatic rather than convention-based.
 
 ## Executive Summary: The Advanced Pattern
 
@@ -66,14 +66,14 @@ The injection architecture is implemented in `implementations/claude-code/prompt
 
 ## Why Progressive Disclosure
 
-Every token loaded into the Orchestrator's context window is a token that cannot be used for reasoning, agent prompts, and coordination work. The `/saw` skill has grown to cover several distinct subcommand families:
+Every token loaded into the Orchestrator's context window is a token that cannot be used for reasoning, agent prompts, and coordination work. The `/polywave` skill has grown to cover several distinct subcommand families:
 
 - **Core flow** — `/polywave scout`, `/polywave wave`, `/polywave status`, `/polywave bootstrap`, `/polywave interview` (invoked on nearly every session)
 - **Program commands** — `/polywave program plan/execute/status/replan` (~324 lines of flow logic)
 - **Amend commands** — `/polywave amend --add-wave/--redirect-agent/--extend-scope` (~39 lines)
 - **Failure routing** — E7a/E19 failure type routing, E25/E26/E35 integration gap detection (~69 lines)
 
-Loading all of this unconditionally would consume ~765 lines on every `/saw` invocation. A `/polywave wave` call has no need for the program execution tier graph or the amend flow. Loading them wastes roughly 40% of the skill's effective context budget on content that will never be referenced.
+Loading all of this unconditionally would consume ~765 lines on every `/polywave` invocation. A `/polywave wave` call has no need for the program execution tier graph or the amend flow. Loading them wastes roughly 40% of the skill's effective context budget on content that will never be referenced.
 
 **The advanced pattern:** Rather than relying on the model to read references on-demand (convention-based), Polywave uses **hook-based deterministic injection**. Scripts with direct conditional logic determine "when prompt matches X, inject file Y" -- the `UserPromptSubmit` hook enforces this before the model runs. The model receives the context it needs automatically, with zero routing decisions required.
 
@@ -92,7 +92,7 @@ Loading all of this unconditionally would consume ~765 lines on every `/saw` inv
 ```markdown
 ## Available Skills
 
-- `/saw` — Polywave parallel agent coordination.
+- `/polywave` — Polywave parallel agent coordination.
   Use for any feature work that can be decomposed across files.
   Subcommands: scout, wave, status, bootstrap, interview, program, amend.
 ```
@@ -115,7 +115,7 @@ A user who types "add caching to the API" in a project with this CLAUDE.md gets 
 ```markdown
 ## Available Skills
 
-- `/saw` — Parallel agent coordination for feature work.
+- `/polywave` — Parallel agent coordination for feature work.
 - `/deploy` — Deploy to staging or production.
 - `/review` — AI code review on open PRs.
 ```
@@ -157,7 +157,7 @@ Orchestrator trigger injection (`inject-context` script) and conditional agent i
 
 *Maps to Agent Skills spec: **Instructions** tier (<5000 tokens recommended).*
 
-The main body of `polywave-skill.md` is loaded on every `/saw` invocation. It contains everything the Orchestrator needs for the most common subcommands:
+The main body of `polywave-skill.md` is loaded on every `/polywave` invocation. It contains everything the Orchestrator needs for the most common subcommands:
 
 - Role separation invariants (I6)
 - Agent model selection (config lookup, `--model` override, fallback rule)
@@ -168,7 +168,7 @@ The main body of `polywave-skill.md` is loaded on every `/saw` invocation. It co
 - Execution logic for scout, wave, status, bootstrap, interview
 - The full wave loop (prepare-wave, agent launching, finalize-wave, close-impl)
 
-**Target:** Under 350 lines. The heuristic for what stays in core is: any logic invoked on more than 50% of `/saw` calls belongs here. If it is only needed for a minority subcommand family, it is a candidate for extraction.
+**Target:** Under 350 lines. The heuristic for what stays in core is: any logic invoked on more than 50% of `/polywave` calls belongs here. If it is only needed for a minority subcommand family, it is a candidate for extraction.
 
 ### Tier 3 — On-Demand Reference Files (loaded only when matched)
 
@@ -307,7 +307,7 @@ The failure-routing reference is triggered mid-execution rather than at dispatch
 
 This means failure routing is never loaded for successful waves, which is the common case.
 
-**Key convention:** All on-demand reference paths use `${CLAUDE_SKILL_DIR}/references/<name>.md`. The `CLAUDE_SKILL_DIR` environment variable is set by the Skills API; if unset, the Orchestrator falls back to `~/.claude/skills/saw/`.
+**Key convention:** All on-demand reference paths use `${CLAUDE_SKILL_DIR}/references/<name>.md`. The `CLAUDE_SKILL_DIR` environment variable is set by the Skills API; if unset, the Orchestrator falls back to `~/.claude/skills/polywave/`.
 
 ## The Reference File Format
 
@@ -333,7 +333,7 @@ Reference files follow a consistent internal structure:
 
 ## The Symlink Setup
 
-The `agents/` subdirectory already uses the symlink pattern: agent type definition files live in `implementations/claude-code/prompts/agents/` and are symlinked into `~/.claude/skills/saw/agents/` during installation. The Orchestrator references them as `${CLAUDE_SKILL_DIR}/agents/<type>.md`.
+The `agents/` subdirectory already uses the symlink pattern: agent type definition files live in `implementations/claude-code/prompts/agents/` and are symlinked into `~/.claude/skills/polywave/agents/` during installation. The Orchestrator references them as `${CLAUDE_SKILL_DIR}/agents/<type>.md`.
 
 The `references/` directory uses the same pattern. The consolidated `install.sh` at the repo root handles all symlinks: core skill files, agent definitions, references, and scripts. It dynamically discovers files in each subdirectory, so adding a new reference or agent definition requires no installer changes.
 
@@ -348,8 +348,8 @@ Use this checklist when extracting a new subcommand family into an on-demand ref
 ### Step 1: Determine whether extraction is warranted
 
 Apply the threshold heuristic:
-- Logic invoked on **more than 50%** of `/saw` calls → keep in core SKILL.md
-- Logic invoked on **less than 25%** of `/saw` calls → extract to an on-demand reference
+- Logic invoked on **more than 50%** of `/polywave` calls → keep in core SKILL.md
+- Logic invoked on **less than 25%** of `/polywave` calls → extract to an on-demand reference
 - 25–50% → judgment call based on line count and conceptual distance from the wave loop
 
 A new subcommand family that adds 50+ lines of flow logic and is not needed for scout/wave/status is almost always a candidate for extraction.
@@ -383,7 +383,7 @@ Include back-links to core SKILL.md for any logic that is already defined there 
 
 ```bash
 # In inject-context script:
-if [[ "$prompt" =~ ^/saw\ <subcommand> ]]; then
+if [[ "$prompt" =~ ^/polywave\ <subcommand> ]]; then
   inject references/<name>-flow.md
 fi
 ```
@@ -449,8 +449,8 @@ The decision heuristic (for content already past the CLAUDE.md entry stage):
 | Condition | Decision |
 |-----------|----------|
 | Skill discovery / routing hint | Tier 0: CLAUDE.md |
-| Invoked on >50% of `/saw` calls | Tier 2: core SKILL.md |
-| Invoked on <25% of `/saw` calls | Tier 3: on-demand reference |
+| Invoked on >50% of `/polywave` calls | Tier 2: core SKILL.md |
+| Invoked on <25% of `/polywave` calls | Tier 3: on-demand reference |
 | 25–50% and adds >80 lines | Tier 3: on-demand reference |
 | 25–50% and <30 lines | Tier 2: core SKILL.md |
 | Directly referenced by the wave loop | Tier 2: core SKILL.md |
@@ -459,13 +459,13 @@ The decision heuristic (for content already past the CLAUDE.md entry stage):
 **Always in Tier 0 (CLAUDE.md):**
 - Skill name and one-sentence purpose
 - Top-level subcommand list (breadth-first)
-- The trigger condition that helps Claude route the user to `/saw`
+- The trigger condition that helps Claude route the user to `/polywave`
 - Nothing else — no flags, no flow, no protocol terms
 
 **Always in Tier 2 (core SKILL.md):**
 - Role separation invariants (I6) and agent type preference — checked on every invocation
 - The on-demand routing table itself — the dispatch mechanism must always be present
-- Pre-flight validation — checked once per session on the first `/saw` call
+- Pre-flight validation — checked once per session on the first `/polywave` call
 - IMPL discovery and targeting — used by wave, status, and amend
 - The full wave loop (steps 1–11) — the core value of the skill; invoked by every `/polywave wave` call
 - E37 Critic Gate logic — triggered during scout and wave flows, both common paths
@@ -626,7 +626,7 @@ Polywave's progressive disclosure architecture combines **four tiers**, **three 
 
 1. **Tier 0** (CLAUDE.md): Discovery index. Always present. Zero invocation cost.
 2. **Tier 1** (Frontmatter): Standard Skills API metadata only. No custom frontmatter fields. Parsed at skill load time.
-3. **Tier 2** (Core SKILL.md): ~140 lines covering core flows (scout, wave, status, bootstrap, interview). Loaded on every `/saw` invocation.
+3. **Tier 2** (Core SKILL.md): ~140 lines covering core flows (scout, wave, status, bootstrap, interview). Loaded on every `/polywave` invocation.
 4. **Tier 3** (References): Conditional reference files loaded only when scenario requires them. Always-needed content inlined in agent definitions.
 
 ### Three Layers

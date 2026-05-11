@@ -1,4 +1,4 @@
-title: 'Enhance agentskills upgrade to SAW-quality progressive disclosure'
+title: 'Enhance agentskills upgrade to Polywave-quality progressive disclosure'
 feature_slug: agentskills-progressive-disclosure
 verdict: SUITABLE
 suitability_assessment: |
@@ -9,7 +9,7 @@ suitability_assessment: |
      routing_graph.rs, frontmatter_gen.rs. Modified: analyzer.rs, splitter.rs, generator.rs,
      upgrade.rs, models.rs.
 
-  2. Investigation: NO blockers. SAW reference implementation exists and is well-documented.
+  2. Investigation: NO blockers. Polywave reference implementation exists and is well-documented.
      Pattern extraction from YAML frontmatter is deterministic. Claude API integration
      is straightforward.
 
@@ -21,7 +21,7 @@ suitability_assessment: |
      - ScriptBundler::bundle_saw_script
 
   4. Pre-implementation status: ~20% complete. Mechanical splitter exists but lacks
-     SAW-level intelligence (pattern detection, semantic analysis, routing graph,
+     Polywave-level intelligence (pattern detection, semantic analysis, routing graph,
      conditional injection).
 
   5. Parallelization value: Moderate. Fast Rust compile (~1s) reduces speed benefit,
@@ -32,7 +32,7 @@ suitability_assessment: |
   - Scout phase: ~8 min (dependency mapping, interface contracts, IMPL doc)
   - Agent execution: ~15 min (6 agents × 2.5 min avg, 2 waves with parallelism)
   - Merge & verification: ~4 min
-  Total SAW time: ~27 min
+  Total Polywave time: ~27 min
 
   Sequential baseline: ~35 min (6 agents × 6 min avg sequential time)
   Time savings: ~8 min (23% faster)
@@ -126,7 +126,7 @@ interface_contracts:
 
       Parses YAML frontmatter, extracts `argument-hint:` field, and returns list of
       subcommands (e.g., ["scout", "wave", "status", "bootstrap", "interview"] from
-      "/saw [scout|wave|status] ...").
+      "/polywave [scout|wave|status] ...").
 
       Returns Vec<String> of normalized subcommand names (lowercase, no delimiters).
     location: src/upgrade/pattern_detector.rs
@@ -220,7 +220,7 @@ interface_contracts:
     location: src/upgrade/frontmatter_gen.rs
 
   - name: ScriptBundler::bundle_saw_script
-    description: Copy SAW inject-agent-context script to target skill
+    description: Copy Polywave inject-agent-context script to target skill
     definition: |
       pub fn bundle_saw_script(target_scripts_dir: &Path) -> Result<(), Error>
 
@@ -410,7 +410,7 @@ waves:
 
                  for (ref_file, section_header, intent) in sections {
                      let trigger_patterns = if intent.is_command_specific {
-                         vec![format!("^/saw {}", intent.command.as_ref().unwrap())]
+                         vec![format!("^/polywave {}", intent.command.as_ref().unwrap())]
                      } else {
                          vec![]
                      };
@@ -529,7 +529,7 @@ waves:
           ## Constraints
 
           - Use existing `RoutingGraph` and `RoutingNode` types from models.rs
-          - Follow SAW skill YAML format exactly (see /Users/dayna.blackwell/code/polywave/implementations/claude-code/prompts/SKILL.md lines 1-59)
+          - Follow Polywave skill YAML format exactly (see /Users/dayna.blackwell/code/polywave/implementations/claude-code/prompts/SKILL.md lines 1-59)
           - Use `#[cfg(test)]` module at bottom of file
         files:
           - src/upgrade/frontmatter_gen.rs
@@ -662,7 +662,7 @@ waves:
         task: |
           # Enhance Generator Module
 
-          Modify `src/upgrade/generator.rs` to bundle SAW inject-agent-context script.
+          Modify `src/upgrade/generator.rs` to bundle Polywave inject-agent-context script.
 
           ## What to implement
 
@@ -680,30 +680,30 @@ waves:
 
                  if !saw_script_path.exists() {
                      return Err(Error::IoError(
-                         format!("SAW inject-agent-context script not found at {:?}", saw_script_path)
+                         format!("Polywave inject-agent-context script not found at {:?}", saw_script_path)
                      ));
                  }
 
                  let script_content = fs::read_to_string(saw_script_path)
-                     .map_err(|e| Error::IoError(format!("Failed to read SAW script: {}", e)))?;
+                     .map_err(|e| Error::IoError(format!("Failed to read Polywave script: {}", e)))?;
 
                  Ok(script_content)
              }
              ```
 
-          2. Update docstring for `generate_inject_script` to explain it bundles SAW script
+          2. Update docstring for `generate_inject_script` to explain it bundles Polywave script
 
           ## Interface contracts
 
           `generate_inject_script` signature unchanged (maintains backward compatibility).
-          Returns bundled SAW script instead of generating simple script.
+          Returns bundled Polywave script instead of generating simple script.
 
           ## Tests
 
           Update existing tests:
           - `test_generate_inject_script_creates_valid_bash` — verify script still has shebang
           - `test_generate_inject_script_handles_skill_dir` — verify SKILL_DIR detection
-          - Add `test_bundle_saw_script` — verify SAW script path resolution
+          - Add `test_bundle_polywave_script` — verify Polywave script path resolution
 
           ## Verification gate
 
@@ -716,7 +716,7 @@ waves:
           ## Constraints
 
           - Maintain existing function signature (backward compatibility)
-          - Hardcoded path to SAW script is acceptable (this tool is in same repo ecosystem)
+          - Hardcoded path to Polywave script is acceptable (this tool is in same repo ecosystem)
           - Follow existing error handling patterns
         files:
           - src/upgrade/generator.rs
@@ -798,12 +798,12 @@ pre_mortem:
         Fall back to mechanical splitter if API unavailable. Document API key requirement
         in README and --help text.
 
-    - scenario: SAW script path hardcoded in generator breaks on user machines
+    - scenario: Polywave script path hardcoded in generator breaks on user machines
       likelihood: high
       impact: low
       mitigation: |
         Acceptable for v1 — this tool is in same repo ecosystem. Future enhancement:
-        add --saw-script-path flag to upgrade command or detect via CLAUDE_SKILL_DIR env var.
+        add --polywave-script-path flag to upgrade command or detect via CLAUDE_SKILL_DIR env var.
 
     - scenario: Semantic analysis misclassifies section intent
       likelihood: medium

@@ -59,14 +59,14 @@ Target Project (your codebase)
                               │   wave-go as Go module) │
                               └────────────────────────┘
 
-~/.claude/skills/saw/
+~/.claude/skills/polywave/
   polywave-skill.md  ──symlink──>  polywave/implementations/
                                    claude-code/prompts/polywave-skill.md
 ```
 
 - **polywave-tools** reads and writes IMPL docs directly in your project
 - **saw web server** imports `polywave-go` as a Go module for engine logic
-- **Skill files** are symlinked from the protocol repo into `~/.claude/skills/saw/`
+- **Skill files** are symlinked from the protocol repo into `~/.claude/skills/polywave/`
 
 See also: [symlink-diagram.md](../symlink-diagram.md),
 [ECOSYSTEM.md](../ECOSYSTEM.md)
