@@ -25,12 +25,12 @@ if ! echo "$tool_input" | grep -qE 'git (checkout|merge|rebase|cherry-pick|stash
   exit 0
 fi
 
-# Find .saw-ownership.json
+# Find .polywave-ownership.json
 ownership_file=""
 search_dir="$PWD"
 for _ in 1 2 3 4 5; do
-  if [[ -f "$search_dir/.saw-ownership.json" ]]; then
-    ownership_file="$search_dir/.saw-ownership.json"
+  if [[ -f "$search_dir/.polywave-ownership.json" ]]; then
+    ownership_file="$search_dir/.polywave-ownership.json"
     break
   fi
   parent=$(dirname "$search_dir")

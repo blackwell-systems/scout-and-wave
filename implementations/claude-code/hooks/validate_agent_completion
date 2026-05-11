@@ -59,7 +59,7 @@ fi
 agent_type=""
 wave_num=""
 agent_id=""
-saw_label=""
+polywave_label=""
 
 if [[ "$description" =~ \[polywave:wave([0-9]+):agent-([A-Za-z0-9]+)\] ]]; then
   agent_type="wave"
@@ -67,13 +67,13 @@ if [[ "$description" =~ \[polywave:wave([0-9]+):agent-([A-Za-z0-9]+)\] ]]; then
   agent_id="${BASH_REMATCH[2]}"
 elif [[ "$description" =~ \[polywave:critic:([A-Za-z0-9_-]+)\] ]]; then
   agent_type="critic"
-  saw_label="${BASH_REMATCH[1]}"
+  polywave_label="${BASH_REMATCH[1]}"
 elif [[ "$description" =~ \[polywave:scout\] ]] || [[ "$description" =~ \[polywave:scout:([A-Za-z0-9_-]+)\] ]]; then
   agent_type="scout"
-  saw_label="${BASH_REMATCH[1]:-}"
+  polywave_label="${BASH_REMATCH[1]:-}"
 elif [[ "$description" =~ \[polywave:scaffold:([A-Za-z0-9_-]+)\] ]]; then
   agent_type="scaffold"
-  saw_label="${BASH_REMATCH[1]}"
+  polywave_label="${BASH_REMATCH[1]}"
 else
   # No Polywave tag found — not a Polywave agent, pass through
   exit 0
@@ -140,8 +140,8 @@ if [[ "$agent_type" == "wave" ]]; then
   ownership_file=""
   search_dir="$PWD"
   for _ in 1 2 3 4 5; do
-    if [[ -f "$search_dir/.saw-ownership.json" ]]; then
-      ownership_file="$search_dir/.saw-ownership.json"
+    if [[ -f "$search_dir/.polywave-ownership.json" ]]; then
+      ownership_file="$search_dir/.polywave-ownership.json"
       break
     fi
     parent=$(dirname "$search_dir")
@@ -196,8 +196,8 @@ if [[ "$agent_type" == "wave" && -n "$wave_num" && -n "$agent_id" ]]; then
   ownership_file=""
   search_dir="$PWD"
   for _ in 1 2 3 4 5; do
-    if [[ -f "$search_dir/.saw-ownership.json" ]]; then
-      ownership_file="$search_dir/.saw-ownership.json"
+    if [[ -f "$search_dir/.polywave-ownership.json" ]]; then
+      ownership_file="$search_dir/.polywave-ownership.json"
       break
     fi
     parent=$(dirname "$search_dir")
@@ -211,7 +211,7 @@ if [[ "$agent_type" == "wave" && -n "$wave_num" && -n "$agent_id" ]]; then
 
     # Extract feature slug from IMPL path for expected branch name
     feature_slug=$(basename "$impl_path" .yaml | sed 's/^IMPL-//')
-    expected_branch="saw/${feature_slug}/wave${wave_num}-agent-${agent_id}"
+    expected_branch="polywave/${feature_slug}/wave${wave_num}-agent-${agent_id}"
 
     if [[ -n "$current_branch" && "$current_branch" != "$expected_branch" ]]; then
       echo "E42/I1 violation: agent ${agent_id} (wave ${wave_num}) committed to wrong branch" >&2
@@ -227,8 +227,8 @@ if [[ "$agent_type" == "wave" ]]; then
   ownership_file=""
   search_dir="$PWD"
   for _ in 1 2 3 4 5; do
-    if [[ -f "$search_dir/.saw-ownership.json" ]]; then
-      ownership_file="$search_dir/.saw-ownership.json"
+    if [[ -f "$search_dir/.polywave-ownership.json" ]]; then
+      ownership_file="$search_dir/.polywave-ownership.json"
       break
     fi
     parent=$(dirname "$search_dir")
@@ -430,14 +430,14 @@ case "$agent_type" in
     # Check unstaged changes
     if git -C "$repo_root" diff --name-only 2>/dev/null | grep -qF "$impl_basename"; then
       echo "E48: Critic agent must commit IMPL doc changes before stopping." >&2
-      echo "     Run: git -C ${repo_root} add ${impl_path} && git -C ${repo_root} commit -m \"chore: critic report for ${feature_slug} [polywave:critic:${saw_label}]\"" >&2
+      echo "     Run: git -C ${repo_root} add ${impl_path} && git -C ${repo_root} commit -m \"chore: critic report for ${feature_slug} [polywave:critic:${polywave_label}]\"" >&2
       exit 2
     fi
 
     # Check staged but not committed
     if git -C "$repo_root" diff --cached --name-only 2>/dev/null | grep -qF "$impl_basename"; then
       echo "E48: Critic agent IMPL doc is staged but not committed." >&2
-      echo "     Run: git -C ${repo_root} commit -m \"chore: critic report for ${feature_slug} [polywave:critic:${saw_label}]\"" >&2
+      echo "     Run: git -C ${repo_root} commit -m \"chore: critic report for ${feature_slug} [polywave:critic:${polywave_label}]\"" >&2
       exit 2
     fi
     ;;

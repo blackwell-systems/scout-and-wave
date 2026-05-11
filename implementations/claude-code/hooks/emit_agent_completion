@@ -40,7 +40,7 @@ fi
 agent_type=""
 wave_num=""
 agent_id=""
-saw_label=""
+polywave_label=""
 
 if [[ "$description" =~ \[polywave:wave([0-9]+):agent-([A-Za-z0-9]+)\] ]]; then
   agent_type="wave"
@@ -48,13 +48,13 @@ if [[ "$description" =~ \[polywave:wave([0-9]+):agent-([A-Za-z0-9]+)\] ]]; then
   agent_id="${BASH_REMATCH[2]}"
 elif [[ "$description" =~ \[polywave:critic:([A-Za-z0-9_-]+)\] ]]; then
   agent_type="critic"
-  saw_label="${BASH_REMATCH[1]}"
+  polywave_label="${BASH_REMATCH[1]}"
 elif [[ "$description" =~ \[polywave:scout\] ]] || [[ "$description" =~ \[polywave:scout:([A-Za-z0-9_-]+)\] ]]; then
   agent_type="scout"
-  saw_label="${BASH_REMATCH[1]:-}"
+  polywave_label="${BASH_REMATCH[1]:-}"
 elif [[ "$description" =~ \[polywave:scaffold:([A-Za-z0-9_-]+)\] ]]; then
   agent_type="scaffold"
-  saw_label="${BASH_REMATCH[1]}"
+  polywave_label="${BASH_REMATCH[1]}"
 else
   # Not a Polywave agent
   exit 0
@@ -80,10 +80,10 @@ if [[ "$agent_type" == "wave" && -n "$repo_root" && -n "$wave_num" && -n "$agent
   worktree_journal=""
 
   # Look for journal in worktree
-  if [[ -f "$PWD/.saw-journal.jsonl" ]]; then
-    worktree_journal="$PWD/.saw-journal.jsonl"
-  elif [[ -f "$repo_root/.saw-journal.jsonl" ]]; then
-    worktree_journal="$repo_root/.saw-journal.jsonl"
+  if [[ -f "$PWD/.polywave-journal.jsonl" ]]; then
+    worktree_journal="$PWD/.polywave-journal.jsonl"
+  elif [[ -f "$repo_root/.polywave-journal.jsonl" ]]; then
+    worktree_journal="$repo_root/.polywave-journal.jsonl"
   fi
 
   if [[ -d "$target_dir" ]]; then
@@ -145,7 +145,7 @@ wave_val="${wave_num:-0}"
 
 jq -n \
   --arg event "agent_complete" \
-  --arg agent_id "${agent_id:-${saw_label:-unknown}}" \
+  --arg agent_id "${agent_id:-${polywave_label:-unknown}}" \
   --argjson wave "${wave_val}" \
   --arg agent_type "$agent_type" \
   --arg status "$status" \

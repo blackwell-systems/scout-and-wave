@@ -14,7 +14,7 @@
 #
 # Test 2: Polywave wave agent with worktree
 #   - Should detect [polywave:wave1:agent-A] tag
-#   - Should find .saw-ownership.json and set POLYWAVE_AGENT_WORKTREE
+#   - Should find .polywave-ownership.json and set POLYWAVE_AGENT_WORKTREE
 #   - Should set all 5 environment variables
 #   - cd /path/to/worktree && echo '{}' | CLAUDE_AGENT_DESCRIPTION="[polywave:wave1:agent-A] Implement feature" ./inject_worktree_env
 #
@@ -52,10 +52,10 @@ fi
 worktree_path=""
 current_dir="$PWD"
 
-# Method 1: Walk up directories looking for .saw-ownership.json (up to 5 levels)
+# Method 1: Walk up directories looking for .polywave-ownership.json (up to 5 levels)
 check_dir="$current_dir"
 for _ in {1..5}; do
-  if [[ -f "$check_dir/.saw-ownership.json" ]]; then
+  if [[ -f "$check_dir/.polywave-ownership.json" ]]; then
     worktree_path="$check_dir"
     break
   fi
@@ -66,10 +66,10 @@ for _ in {1..5}; do
   check_dir="$parent"
 done
 
-# Method 2: If not found, check if PWD contains .claude/worktrees/saw/
-if [[ -z "$worktree_path" ]] && [[ "$current_dir" =~ \.claude/worktrees/saw/ ]]; then
+# Method 2: If not found, check if PWD contains .claude/worktrees/polywave/
+if [[ -z "$worktree_path" ]] && [[ "$current_dir" =~ \.claude/worktrees/polywave/ ]]; then
   # Extract worktree path (everything up to and including agent directory)
-  if [[ "$current_dir" =~ (.*\.claude/worktrees/saw/[^/]+/wave[0-9]+-agent-[A-Z0-9]+) ]]; then
+  if [[ "$current_dir" =~ (.*\.claude/worktrees/polywave/[^/]+/wave[0-9]+-agent-[A-Z0-9]+) ]]; then
     worktree_path="${BASH_REMATCH[1]}"
   fi
 fi
@@ -122,12 +122,12 @@ if [[ -z "$branch_name" ]] && [[ -n "$impl_path" ]]; then
   # Extract slug from IMPL doc filename: IMPL-{slug}.yaml
   if [[ "$impl_path" =~ IMPL-([^/]+)\.yaml ]]; then
     slug="${BASH_REMATCH[1]}"
-    branch_name="saw/${slug}/wave${wave_num}-agent-${agent_id}"
+    branch_name="polywave/${slug}/wave${wave_num}-agent-${agent_id}"
   fi
 fi
 
 # Write environment variables to temp file
-env_file="/tmp/saw-agent-env-$$"
+env_file="/tmp/polywave-agent-env-$$"
 {
   echo "export POLYWAVE_AGENT_WORKTREE=\"$worktree_path\""
   echo "export POLYWAVE_AGENT_ID=\"$agent_id\""
