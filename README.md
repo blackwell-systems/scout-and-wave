@@ -65,15 +65,15 @@ The five questions assess whether the work:
 See [protocol/preconditions.md](protocol/preconditions.md) for details.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/diagrams/saw-scout-wave-dark.svg">
-  <img src="assets/diagrams/saw-scout-wave-light.svg" alt="Polywave scout + wave execution flow">
+  <source media="(prefers-color-scheme: dark)" srcset="assets/diagrams/polywave-scout-wave-dark.svg">
+  <img src="assets/diagrams/polywave-scout-wave-light.svg" alt="Polywave scout + wave execution flow">
 </picture>
 
 ## Quick Start
 
 > **⚠️ BEFORE YOU START:** Add `"Agent"` to your allow list in `~/.claude/settings.json` or you'll need to manually approve each agent launch. See [implementations/claude-code/README.md](implementations/claude-code/README.md#step-1-configure-permissions-required) for details.
 
-> **ℹ️ Claude Code implementation shown below.** The `/saw` commands use Claude Code's Agent Skills syntax. Other Agent Skills-compatible tools (Cursor, GitHub Copilot, etc.) use their own invocation syntax - see [`implementations/`](implementations/) for the appropriate guide.
+> **ℹ️ Claude Code implementation shown below.** The `/polywave` commands use Claude Code's Agent Skills syntax. Other Agent Skills-compatible tools (Cursor, GitHub Copilot, etc.) use their own invocation syntax - see [`implementations/`](implementations/) for the appropriate guide.
 
 ```bash
 # 1. Clone and install
@@ -83,11 +83,11 @@ git clone https://github.com/blackwell-systems/polywave.git ~/code/polywave
 ~/code/polywave/install.sh
 
 # Or manually (see implementations/claude-code/README.md for full install):
-mkdir -p ~/.claude/skills/saw/agents
-ln -sf ~/code/polywave/implementations/claude-code/prompts/polywave-skill.md ~/.claude/skills/saw/SKILL.md
-ln -sf ~/code/polywave/implementations/claude-code/prompts/polywave-bootstrap.md ~/.claude/skills/saw/polywave-bootstrap.md
-ln -sf ~/code/polywave/implementations/claude-code/prompts/agent-template.md ~/.claude/skills/saw/agent-template.md
-ln -sf ~/code/polywave/implementations/claude-code/prompts/agents ~/.claude/skills/saw/agents
+mkdir -p ~/.claude/skills/polywave/agents
+ln -sf ~/code/polywave/implementations/claude-code/prompts/polywave-skill.md ~/.claude/skills/polywave/SKILL.md
+ln -sf ~/code/polywave/implementations/claude-code/prompts/polywave-bootstrap.md ~/.claude/skills/polywave/polywave-bootstrap.md
+ln -sf ~/code/polywave/implementations/claude-code/prompts/agent-template.md ~/.claude/skills/polywave/agent-template.md
+ln -sf ~/code/polywave/implementations/claude-code/prompts/agents ~/.claude/skills/polywave/agents
 
 # 2. Install polywave-tools CLI (pick one)
 brew install blackwell-systems/tap/polywave-tools                                     # Homebrew
@@ -148,7 +148,7 @@ Polywave has three interfaces backed by separate repositories, all implementing 
 
 | Interface | Repository | Description |
 |-----------|------------|-------------|
-| Claude Code skill (`/saw`) | [polywave](https://github.com/blackwell-systems/polywave) (this repo) | Runs inside Claude Code as a slash command. The orchestrator is Claude itself. Fastest way to get started. |
+| Claude Code skill (`/polywave`) | [polywave](https://github.com/blackwell-systems/polywave) (this repo) | Runs inside Claude Code as a slash command. The orchestrator is Claude itself. Fastest way to get started. |
 | Go engine + `polywave-tools` CLI | [polywave-go](https://github.com/blackwell-systems/polywave-go) | Protocol SDK, 75+ CLI commands, and LLM-agnostic engine. Supports Anthropic, OpenAI, and local (Ollama) backends. |
 | Web UI (`polywave serve`) | [polywave-web](https://github.com/blackwell-systems/polywave-web) | Browser-based dashboard with real-time SSE updates. Imports polywave-go as dependency. |
 
