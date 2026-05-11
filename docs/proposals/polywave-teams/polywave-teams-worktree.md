@@ -2,7 +2,7 @@
 # Polywave-Teams Worktree Lifecycle
 
 Manage git worktree creation, verification, and cleanup for Agent Teams wave
-execution. Adapted from `prompts/saw-worktree.md` (v0.4.2): same invariants,
+execution. Adapted from `prompts/polywave-worktree.md` (v0.4.2): same invariants,
 same defense-in-depth model, different execution plumbing.
 
 **Key difference from standard Polywave:** Agent Teams does not create worktrees
@@ -136,7 +136,7 @@ violations before they occur.
 ```bash
 # Back up existing pre-commit hook if present
 if [ -f .git/hooks/pre-commit ]; then
-  cp .git/hooks/pre-commit .git/hooks/pre-commit.saw-backup
+  cp .git/hooks/pre-commit .git/hooks/pre-commit.polywave-backup
 fi
 
 # Install the Polywave isolation guard (handled automatically by polywave-tools)
@@ -269,8 +269,8 @@ with future waves.
 After removing worktrees, restore the original pre-commit hook:
 
 ```bash
-if [ -f .git/hooks/pre-commit.saw-backup ]; then
-  mv .git/hooks/pre-commit.saw-backup .git/hooks/pre-commit
+if [ -f .git/hooks/pre-commit.polywave-backup ]; then
+  mv .git/hooks/pre-commit.polywave-backup .git/hooks/pre-commit
 else
   rm -f .git/hooks/pre-commit
 fi
