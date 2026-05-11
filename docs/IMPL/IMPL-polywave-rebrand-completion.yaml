@@ -528,6 +528,7 @@ waves:
             - docs/proposals/polywave-teams/polywave-teams-worktree.md
             - docs/IMPL/IMPL-agentskills-progressive-disclosure.yaml
             - assets/diagrams/three-repo-architecture.md
+      base_commit: 3cf934990ea6615eb775066a305cfa8626ec8b9c
 quality_gates:
     level: standard
     gates: []
@@ -607,5 +608,4 @@ critic_report:
     reviewed_at: "2026-05-11T22:24:34Z"
     issue_count: 4
 state: REVIEWED
-original_branch: main
 injection_method: hook
