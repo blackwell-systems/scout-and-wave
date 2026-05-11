@@ -81,7 +81,7 @@ if [[ -z "$slug" ]]; then
 fi
 
 # Construct expected branch
-expected_branch="saw/${slug}/wave${wave_num}-agent-${agent_id}"
+expected_branch="polywave/${slug}/wave${wave_num}-agent-${agent_id}"
 
 # Compare against actual branch
 if [[ "$actual_branch" != "$expected_branch" ]]; then

@@ -43,7 +43,7 @@ fi
 feature_slug=$(basename "$impl_path" .yaml | sed 's/^IMPL-//')
 
 # Construct expected branch name
-expected_branch="saw/${feature_slug}/wave${wave_num}-agent-${agent_id}"
+expected_branch="polywave/${feature_slug}/wave${wave_num}-agent-${agent_id}"
 
 # Run isolation verification with explicit cwd
 if ! polywave-tools verify-isolation --cwd "$(pwd)" --branch "$expected_branch" >/dev/null 2>&1; then

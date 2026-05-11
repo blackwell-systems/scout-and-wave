@@ -112,12 +112,12 @@ polywave-tools prepare-wave docs/IMPL/IMPL-add-caching.yaml --wave 1
     {
       "agent": "A",
       "path": ".claude/worktrees/polywave/add-caching/wave1-agent-A",
-      "branch": "saw/add-caching/wave1-agent-A"
+      "branch": "polywave/add-caching/wave1-agent-A"
     },
     {
       "agent": "B",
       "path": ".claude/worktrees/polywave/add-caching/wave1-agent-B",
-      "branch": "saw/add-caching/wave1-agent-B"
+      "branch": "polywave/add-caching/wave1-agent-B"
     }
   ],
   "status": "ready"
