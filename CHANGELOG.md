@@ -1,12 +1,445 @@
 # Changelog
 
-All notable changes to the Scout-and-Wave protocol will be documented in this file.
+All notable changes to the Polywave protocol will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## Version History
 
 ## [Unreleased]
+
+### Planned — Polywave Rebrand Migration
+
+Complete rebrand from `scout-and-wave` to `polywave` across all three repos. This document is the authoritative migration plan. Execute phases in order; each phase must build and pass tests before proceeding.
+
+**Rename mapping:**
+
+| Old | New |
+|-----|-----|
+| repo `scout-and-wave` | `polywave` |
+| repo `scout-and-wave-go` | `polywave-go` |
+| repo `scout-and-wave-web` | `polywave-web` |
+| Go module `github.com/blackwell-systems/scout-and-wave-go` | `github.com/blackwell-systems/polywave-go` |
+| Go module `github.com/blackwell-systems/scout-and-wave-web` | `github.com/blackwell-systems/polywave-web` |
+| binary `sawtools` | `polywave-tools` |
+| binary `saw` | `polywave` |
+| config `saw.config.json` | `polywave.config.json` |
+| state dir `.saw-state` | `.polywave-state` |
+| branch prefix `saw/` | `polywave/` |
+| worktree path `worktrees/saw/` | `worktrees/polywave/` |
+| skills dir `~/.claude/skills/saw` | `~/.claude/skills/polywave` |
+| env vars `SAW_*` | `POLYWAVE_*` |
+| protocol markers `[SAW:critic:X]` | `[polywave:critic:X]` |
+
+**Scope:** 713 Go files (`polywave-go`) + 149 Go files (`polywave-web`) + TypeScript frontend + protocol docs.
+
+**LSP leverage note:** Steps marked `[LSP]` use `rename_symbol` to atomically update all call sites across the workspace — zero manual file reads required. Steps marked `[sed]` are string-literal passes. Token savings vs a naive grep+sed approach are tracked per phase for benchmarking purposes.
+
+---
+
+#### Phase 0: GitHub (no code changes)
+
+Rename all three repos in the GitHub UI. GitHub generates permanent redirects — existing clone URLs and go.mod `replace` directives continue to work during migration.
+
+1. Rename `blackwell-systems/scout-and-wave` → `blackwell-systems/polywave`
+2. Rename `blackwell-systems/scout-and-wave-go` → `blackwell-systems/polywave-go`
+3. Rename `blackwell-systems/scout-and-wave-web` → `blackwell-systems/polywave-web`
+
+---
+
+#### Phase 1: `polywave-go` (was `scout-and-wave-go`)
+
+Must land first — `polywave-web` imports this module.
+
+**1a. Module rename [sed]**
+```bash
+cd /path/to/polywave-go
+go mod edit -module github.com/blackwell-systems/polywave-go
+find . -name '*.go' -not -path './.claude/*' | xargs sed -i '' \
+  's|github.com/blackwell-systems/scout-and-wave-go|github.com/blackwell-systems/polywave-go|g'
+go build ./... && go test ./...
+```
+
+**1b. Exported symbols [LSP]** — use `rename_symbol` for each; LSP updates all callers atomically:
+
+| Symbol | Location | Rename to |
+|--------|----------|-----------|
+| `SAWError` | `pkg/result/result.go` | `PolyError` |
+| `SAWConfig` | `pkg/config/config.go` | `PolyConfig` |
+| `SAWProviders` | `pkg/agent/backend/configfile.go` | `PolyProviders` |
+| `SawConfigParser` | `pkg/commands/saw_config.go` | `PolyConfigParser` |
+| `SAWStateDir` | `pkg/protocol/paths.go` | `StateDir` |
+| `SAWStateArchiveDir` | `pkg/protocol/paths.go` | `StateArchiveDir` |
+| `SAWStateAgentDir` | `pkg/protocol/paths.go` | `StateAgentDir` |
+| `ScoutCorrectionOpts` | `pkg/engine/scout_correction_loop.go` | `CorrectionOpts` |
+| `ScoutCorrectionLoop` | `pkg/engine/scout_correction_loop.go` | `CorrectionLoop` |
+| `MaxScoutCorrectionRetries` | `pkg/engine/scout_correction_loop.go` | `MaxCorrectionRetries` |
+| `CodeScoutCorrectionExhausted` | `pkg/result/codes.go` | `CodeCorrectionExhausted` |
+| `SAWRepoPath` (struct field) | `pkg/engine/engine.go`, `pkg/engine/scout_run.go`, `pkg/engine/runner_scaffold_opts.go` | `ProtocolRepoPath` |
+
+Note: `RunScout`, `ScoutData`, `RunScoutOpts` are functional role names, not brand identity — keep as-is.
+
+**1c. String literals [sed]**
+
+Config filename (drives all SDK usage; also update ~35 test literal occurrences):
+```bash
+sed -i '' 's|saw\.config\.json|polywave.config.json|g' $(grep -rl "saw.config.json" .)
+```
+
+State directory:
+```bash
+sed -i '' 's|\.saw-state|.polywave-state|g' $(grep -rl "\.saw-state" .)
+```
+
+Branch prefix and worktree path (targeted files):
+- `pkg/protocol/branchname.go` — `"saw/"` → `"polywave/"`, `"worktrees", "saw"` → `"worktrees", "polywave"`
+- `pkg/resume/worktree_status.go` — `"saw/"` → `"polywave/"`
+- `pkg/resume/detect.go` — `"saw/"` → `"polywave/"`
+- `pkg/protocol/cleanup.go` — `"worktrees", "saw"` → `"worktrees", "polywave"`
+- `pkg/protocol/worktree_resolve.go` — `"worktrees", "saw"` (4 occurrences)
+- `pkg/protocol/program_worktree.go` — `"worktrees", "saw"`
+- `cmd/sawtools/close_impl_cmd.go:141` — `strings.HasPrefix(currentBranch, "saw/")`
+
+Skills dir:
+- `pkg/engine/verify_install.go` lines 199, 225 — `".claude/skills/saw"` → `".claude/skills/polywave"`
+
+Verify-install check names:
+- `pkg/engine/verify_install.go` lines 134, 145 — `"sawtools_binary"` → `"polywave_tools_binary"`
+
+Environment variables (all `os.Getenv`/`os.Setenv` sites):
+
+| Old | New | Files |
+|-----|-----|-------|
+| `SAW_REPO` | `POLYWAVE_REPO` | `pkg/engine/runner.go`, `pkg/engine/critic.go`, `pkg/engine/chat.go`, `pkg/orchestrator/stubs.go` |
+| `SAW_ALLOW_MAIN_COMMIT` | `POLYWAVE_ALLOW_MAIN_COMMIT` | `internal/git/commands.go`, `pkg/engine/prepare.go`, `pkg/engine/prepare_agent.go` |
+| `SAW_WORKTREE_ROOT` | `POLYWAVE_WORKTREE_ROOT` | `pkg/engine/prepare.go` |
+| `SAW_CLI_BINARY` | `POLYWAVE_CLI_BINARY` | `pkg/orchestrator/orchestrator.go` |
+| `SAW_LOG_LEVEL` | `POLYWAVE_LOG_LEVEL` | `cmd/sawtools/logger.go` |
+| `SAW_NO_PRIORITIZE` | `POLYWAVE_NO_PRIORITIZE` | `pkg/engine/scheduler.go`, `cmd/sawtools/run_wave_cmd.go` |
+| `SAW_CONFLICT_MODEL` | `POLYWAVE_CONFLICT_MODEL` | `pkg/engine/resolve_conflicts.go` |
+| `SAW_FIX_BUILD_MODEL` | `POLYWAVE_FIX_BUILD_MODEL` | `pkg/engine/fix_build.go` |
+
+Embedded pre-commit hook template in `internal/git/commands.go`:
+- `# SAW pre-commit guard:` → `# Polywave pre-commit guard:`
+- `SAW_ALLOW_MAIN_COMMIT` → `POLYWAVE_ALLOW_MAIN_COMMIT` (within template string)
+- `SAW isolation violation` → `Polywave isolation violation`
+- `.saw-agent-brief.md` → `.polywave-agent-brief.md`
+
+Hook verification strings in `cmd/sawtools/verify_hook_installed.go` lines 23, 132–133:
+- `"SAW_ALLOW_MAIN_COMMIT"` → `"POLYWAVE_ALLOW_MAIN_COMMIT"`
+- `"SAW pre-commit guard"` → `"Polywave pre-commit guard"`
+
+Install hooks snippet in `cmd/sawtools/install_hooks_cmd.go`:
+- `# SAW pre-commit quality gate` → `# Polywave pre-commit quality gate`
+- `sawtools pre-commit-check` → `polywave-tools pre-commit-check`
+
+GitHub URL literals in `cmd/sawtools/init_cmd.go` lines 71, 76, 78:
+- `scout-and-wave#quick-start` → `polywave#quick-start`
+- `scout-and-wave-go/cmd/sawtools@latest` → `polywave-go/cmd/polywave-tools@latest`
+- `scout-and-wave-go.git` → `polywave-go.git`
+
+Integration test exec calls in `pkg/scaffold/integration_test.go` (6 occurrences):
+- `exec.Command("sawtools", ...)` → `exec.Command("polywave-tools", ...)`
+
+**1d. Filenames/directories to rename**
+
+| Old | New |
+|-----|-----|
+| `cmd/sawtools/` | `cmd/polywave-tools/` |
+| `pkg/pipeline/saw_steps.go` | `pkg/pipeline/polywave_steps.go` |
+| `pkg/pipeline/saw_steps_test.go` | `pkg/pipeline/polywave_steps_test.go` |
+| `pkg/commands/saw_config.go` | `pkg/commands/polywave_config.go` |
+| `pkg/commands/saw_config_test.go` | `pkg/commands/polywave_config_test.go` |
+
+**1e. Build config**
+
+`.goreleaser.yaml`:
+- `id: sawtools` → `id: polywave-tools`
+- `main: ./cmd/sawtools` → `./cmd/polywave-tools`
+- `binary: sawtools` → `polywave-tools`
+- `name_template:` entries referencing `sawtools_`
+
+**1f. Verification gate**
+```bash
+go build -o polywave-tools ./cmd/polywave-tools && go test ./...
+```
+
+---
+
+#### Phase 2: `polywave-web` (was `scout-and-wave-web`)
+
+Depends on Phase 1 completion.
+
+**2a. Module and import paths [sed]**
+```bash
+go mod edit -module github.com/blackwell-systems/polywave-web
+# Update require + replace directives for polywave-go:
+go mod edit -require github.com/blackwell-systems/polywave-go@v0.98.0
+go mod edit -replace github.com/blackwell-systems/polywave-go=/path/to/polywave-go
+find . -name '*.go' -not -path './.claude/*' | xargs sed -i '' \
+  's|github.com/blackwell-systems/scout-and-wave-go|github.com/blackwell-systems/polywave-go|g'
+find . -name '*.go' -not -path './.claude/*' | xargs sed -i '' \
+  's|github.com/blackwell-systems/scout-and-wave-web|github.com/blackwell-systems/polywave-web|g'
+```
+
+**2b. Exported symbols [LSP]**
+
+| Symbol | Location | Rename to |
+|--------|----------|-----------|
+| `SAWConfig` (type alias) | `pkg/api/types.go:253` | `PolyConfig` |
+| `SAWConfig` (interface) | `web/src/types.ts:317` | `PolyConfig` (TypeScript) |
+
+Note: `APIError = result.SAWError` in `pkg/api/types.go:27` updates automatically once `SAWError` is renamed in Phase 1.
+
+**2c. String literals [sed]**
+
+Root cobra command in `cmd/saw/root.go`:
+- `Use: "saw"` → `"polywave"`
+- `Short: "SAW Orchestration CLI..."` → `"Polywave Orchestration CLI..."`
+
+Environment variables:
+- `SAW_REPO` (7 files: `pkg/api/chat_handler.go`, `pkg/api/impl_edit.go`, `pkg/api/planner.go`, `pkg/api/bootstrap_handler.go`, `pkg/api/scaffold_handler.go`, `pkg/service/scout_service.go`, `cmd/saw/commands.go`) → `POLYWAVE_REPO`
+- `SAW_BACKEND` in `cmd/saw/commands.go` lines 430, 494 → `POLYWAVE_BACKEND`
+
+Config filename (~40 occurrences in `pkg/api/` and `pkg/service/`):
+```bash
+sed -i '' 's|saw\.config\.json|polywave.config.json|g' $(grep -rl "saw.config.json" pkg/ cmd/)
+```
+
+State dir (6 files in `pkg/api/`):
+- `pkg/api/journal_handler.go:261`, `pkg/api/stage_state.go:65`, `pkg/api/global_events.go:167`, `pkg/api/wave_runner.go:560`, `pkg/api/recovery_handlers.go:194`, `pkg/api/pipeline_state.go:74` — `.saw-state` → `.polywave-state`
+
+TypeScript frontend:
+
+| File | Old | New |
+|------|-----|-----|
+| `web/index.html` | `<title>SAW - Scout and Wave</title>` | `<title>Polywave</title>` |
+| `web/index.html` | `'saw-theme'` (localStorage) | `'polywave-theme'` |
+| `web/index.html` | `'saw-contrast'` (localStorage) | `'polywave-contrast'` |
+| `web/src/App.tsx:73` | `Welcome to Scout-and-Wave` | `Welcome to Polywave` |
+| `web/src/App.tsx:75` | `Scout-and-Wave uses AI agents...` | `Polywave uses AI agents...` |
+| `web/src/hooks/useDarkMode.ts` | `'saw-theme'` (3×) | `'polywave-theme'` |
+| `web/src/hooks/useContrast.ts` | `'saw-contrast'` (4×) | `'polywave-contrast'` |
+| `web/src/contexts/ReviewContext.tsx` | `'saw-review-panels'` (2×) | `'polywave-review-panels'` |
+| `web/src/lib/themes.ts` | `'saw-themes'` | `'polywave-themes'` |
+| `web/src/components/ScoutLauncher.tsx` | `'saw-scout-context'` | `'polywave-scout-context'` |
+| `web/src/components/SettingsScreen.tsx` | `'saw:contrast-changed'` | `'polywave:contrast-changed'` |
+| `web/src/components/SettingsScreen.tsx:275` | `sawtools init` | `polywave-tools init` |
+| `web/src/components/PipelineView.tsx:54` | `SAW Pipeline` | `Polywave Pipeline` |
+| `web/src/components/WorktreePanel.tsx:174` | `No SAW branches found` | `No Polywave branches found` |
+| `web/src/types.ts` | `interface SAWConfig` | `interface PolyConfig` |
+
+**2d. Filenames/directories to rename**
+
+| Old | New |
+|-----|-----|
+| `cmd/saw/` | `cmd/polywave/` |
+
+`Makefile` line 4: `go build -o saw ./cmd/saw` → `go build -o polywave ./cmd/polywave`
+
+**2e. Verification gate**
+```bash
+cd web && npm run build && cd ..
+go build -o polywave ./cmd/polywave
+go test ./...
+```
+
+---
+
+#### Phase 3: `polywave` (was `scout-and-wave`, protocol repo)
+
+Documentation-only — no Go build. Can run in parallel with Phase 2 after Phase 1 lands, or sequentially after Phase 2 is verified.
+
+**3a. Files to rename**
+
+| Old | New |
+|-----|-----|
+| `saw.config.json` | `polywave.config.json` |
+| `hooks/saw-critic-impl-commit.sh` | `hooks/polywave-critic-impl-commit.sh` |
+| `hooks/saw-worktree-boundary.sh` | `hooks/polywave-worktree-boundary.sh` |
+
+**3b. Protocol markers — atomic three-file update**
+
+These three files must be updated together. The hook parses the literal marker string emitted by the prompts — they must stay in sync:
+
+1. `hooks/polywave-critic-impl-commit.sh` — pattern match `[SAW:critic:*` → `[polywave:critic:*`; all `[SAW]` prefixes in echo messages
+2. `implementations/claude-code/prompts/saw-skill.md` line 149 — `description="[SAW:critic:<slug>]"` → `[polywave:critic:<slug>]`
+3. `implementations/claude-code/prompts/agents/critic-agent.md` line 272 — commit message template `[SAW:critic:${SLUG}]` → `[polywave:critic:${SLUG}]`
+
+Documentation examples (non-behavioral, update for consistency): `wave-agent-contracts.md`, `pre-wave-validation.md` — `[SAW:critic:...]` example callouts.
+
+**3c. `saw.config.json` content**
+```json
+"name": "polywave"          (was "scout-and-wave")
+"name": "polywave-go"       (was "scout-and-wave-go")
+"name": "polywave-web"      (was "scout-and-wave-web")
+```
+Update repo `path` values to match renamed local directories.
+
+**3d. Shell hooks**
+
+`hooks/polywave-worktree-boundary.sh`:
+- `SAW_WORKTREE_ROOT` → `POLYWAVE_WORKTREE_ROOT`
+- `[SAW]` echo prefix → `[Polywave]`
+
+**3e. `install.sh` (~15 brand occurrences)**
+- Binary install commands: `sawtools` → `polywave-tools`, `saw` → `polywave`
+- Module paths: `scout-and-wave-go/cmd/sawtools@latest` → `polywave-go/cmd/polywave-tools@latest`
+- Skills paths: `~/.claude/skills/saw` → `~/.claude/skills/polywave`
+- Hook filenames: update symlink targets to match renamed hook files
+
+**3f. Prose docs [sed]**
+
+High-volume files (pervasive brand references throughout):
+- `protocol/execution-rules.md` (~100 occurrences of `sawtools`, `SAW_REPO`, `saw.config.json`)
+- `README.md` (~40 occurrences)
+- `POSITION.md` (binary invocation examples, import paths, repo table)
+- `GLOSSARY.md` (title, `sawtools` definition)
+- `ROADMAP.md` (title + existing rebrand entry — mark complete)
+- `docs/architecture.md` (binary names, env vars, paths)
+- `docs/QUICKSTART-CLI.md`, `docs/QUICKSTART-WEB.md`
+- `implementations/claude-code/prompts/saw-skill.md` (all `sawtools` invocations)
+- All other files under `protocol/`, `implementations/`, `docs/` — sed pass:
+
+```bash
+sed -i '' \
+  -e 's|scout-and-wave-go|polywave-go|g' \
+  -e 's|scout-and-wave-web|polywave-web|g' \
+  -e 's|scout-and-wave|polywave|g' \
+  -e 's|Scout-and-Wave|Polywave|g' \
+  -e 's|Scout and Wave|Polywave|g' \
+  -e 's|sawtools|polywave-tools|g' \
+  -e 's|SAW_REPO|POLYWAVE_REPO|g' \
+  -e 's|SAW_ALLOW_MAIN_COMMIT|POLYWAVE_ALLOW_MAIN_COMMIT|g' \
+  -e 's|SAW_WORKTREE_ROOT|POLYWAVE_WORKTREE_ROOT|g' \
+  -e 's|SAW_CLI_BINARY|POLYWAVE_CLI_BINARY|g' \
+  -e 's|SAW_LOG_LEVEL|POLYWAVE_LOG_LEVEL|g' \
+  $(find . -name '*.md' -o -name '*.yaml' -o -name '*.sh' -o -name '*.json' | grep -v '.claude' | grep -v 'IMPL/')
+```
+
+Note: IMPL docs in `docs/IMPL/complete/` and `.saw-state/` reference historical SAW markers — skip these directories in the sed pass.
+
+**Historical entries in CHANGELOG.md:** Keep references to `sawtools` and `SAW` in past entries intact. Only update the title line and future-facing content.
+
+---
+
+#### Verification Checklist (all phases)
+
+- [ ] Phase 0: GitHub repo renames confirm redirect is live
+- [ ] Phase 1: `go build ./...` and `go test ./...` pass in `polywave-go`
+- [ ] Phase 1: `./polywave-tools --help` shows updated command name
+- [ ] Phase 2: `go build ./...` and `go test ./...` pass in `polywave-web`
+- [ ] Phase 2: `cd web && npm run build` succeeds
+- [ ] Phase 2: `./polywave serve` starts on port 7432; browser title shows "Polywave"
+- [ ] Phase 3: `install.sh` dry-run produces correct binary install commands
+- [ ] Phase 3: Protocol marker hook parses `[polywave:critic:X]` correctly (manual test)
+- [ ] All: `grep -r "scout-and-wave" . --include="*.go"` returns zero results in both Go repos
+- [ ] All: `grep -r "sawtools" . --include="*.go"` returns zero results in both Go repos (excluding CHANGELOG historical entries)
+
+---
+
+#### LSP Execution Playbook (for the executing agent)
+
+Each repo type has a different tool profile. Use the right tool for each layer — LSP for symbols, grep+Edit for strings. Never use grep where LSP applies; never expect LSP where it doesn't.
+
+---
+
+**Repo 1 — `polywave` (protocol: markdown + shell scripts)**
+
+LSP does not apply here. No language server traces references in markdown or shell. This is pure grep+sed.
+
+| Step | Approach |
+|------|----------|
+| Find all occurrences | `grep -rn "old-name" . --include="*.md" --include="*.sh" --include="*.yaml"` |
+| Replace | Edit tool (find/replace per file) |
+| Verify | `grep -rn "old-name" .` returns zero results |
+| Shell scripts | `bash -n hooks/*.sh` to verify syntax after edits |
+
+Watch for: URLs, badge links, install commands, CLI usage examples, config snippets — nothing validates these automatically. Manual review required.
+
+Run: `scripts/migrate-phase3.sh`
+
+---
+
+**Repo 2 — `polywave-go` (Go engine + CLI)**
+
+agent-lsp dominates for symbol renames. Strings use grep.
+
+**The split:** Go symbol renames (functions, types, methods, struct fields, variables) → LSP. Everything else (module paths, binary names, CLI flag strings, env var names, config filenames) → grep+Edit.
+
+| Step | Tool |
+|------|------|
+| Start LSP | `start_lsp(root_dir="/path/to/polywave-go")` |
+| Scope each rename | `blast_radius` on the file being changed — one call, returns all callers partitioned test/non-test, no file reads |
+| Rename Go symbols | `rename_symbol` with `dry_run: true` first, then apply |
+| Rename module path | grep + Edit (`import` paths are strings, not symbols) |
+| Rename binary name | grep + Edit (Makefile, `.goreleaser.yaml`, go build commands) |
+| Rename CLI command strings | grep + Edit (cobra `Use:` fields are strings) |
+| Rename env var names | grep + Edit (`os.Getenv("SAW_REPO")` is a string literal) |
+| Verify | `/lsp-verify` — diagnostics + `go build` + `go test` in one pass |
+| Run affected tests only | `/lsp-test-correlation` after symbol renames |
+
+Symbols to rename via LSP (from the table above): `SAWError`, `SAWConfig`, `SAWProviders`, `SawConfigParser`, `SAWStateDir`, `SAWStateArchiveDir`, `SAWStateAgentDir`, `ScoutCorrectionOpts`, `ScoutCorrectionLoop`, `MaxScoutCorrectionRetries`, `CodeScoutCorrectionExhausted`, `SAWRepoPath` (struct field).
+
+Everything else in Phase 1 (module path, env vars, config filename, branch prefix strings, hook template text): run `scripts/migrate-phase1.sh`.
+
+---
+
+**Repo 3 — `polywave-web` (Go API + TypeScript frontend)**
+
+TypeScript is a first-class LSP target. Use LSP for exported TS types and React component names. Use grep for API routes, env vars, localStorage keys, CSS class names.
+
+| Step | Tool |
+|------|------|
+| Start LSP (Go) | `start_lsp(root_dir="/path/to/polywave-web")`, add `polywave-go` as workspace folder |
+| Start LSP (TypeScript) | `start_lsp` with `typescript-language-server --stdio` |
+| Rename Go API types | `rename_symbol` (e.g. `SAWConfig` type alias in `pkg/api/types.go`) |
+| Rename TS exports | `rename_symbol` (traces imports across `.ts`/`.tsx` files atomically) |
+| Rename React component names | `rename_symbol` (JSX components are symbols) |
+| Rename API endpoint strings | grep + Edit (strings in `fetch()` calls, route configs) |
+| Rename env vars | grep + Edit (`process.env.X` and `os.Getenv("X")` are strings) |
+| Rename localStorage keys | grep + Edit (strings — `'saw-theme'` etc.) |
+| Rename CSS classes | grep + Edit (not symbols) |
+| Rename page title, UI text | grep + Edit (JSX string literals) |
+| Verify | `/lsp-verify` — tsc + `go build` + tests |
+
+Run `scripts/migrate-phase2.sh` for all string-based changes. Use LSP only for `SAWConfig` (Go type alias) and any exported TypeScript interface renames.
+
+---
+
+**Execution order**
+
+1. **Go repo first** — it is the source of truth; web imports it
+   - LSP symbol renames → `scripts/migrate-phase1.sh` → `/lsp-verify` → build must pass
+2. **Frontend second** — consumes Go repo API; update after Go types are renamed
+   - LSP TS/Go type renames → `scripts/migrate-phase2.sh` → `/lsp-verify` → build must pass
+3. **Protocol docs last** — references both; no build to verify
+   - `scripts/migrate-phase3.sh` → `grep -rn "scout-and-wave" .` returns zero
+
+---
+
+**Token tracking (for LSP case study)**
+
+Before each phase, record:
+- File count: `find . -name '*.go' | wc -l`
+- LOC: `find . -name '*.go' | xargs wc -l | tail -1`
+
+During execution, count tool calls made (blast_radius, rename_symbol calls).
+
+After completion, calculate grep+sed equivalent:
+```bash
+grep -rn "SAWError" . --include="*.go" | wc -l   # files grep would have read
+```
+Each file = ~tokens(file_size / 4). Each replacement = read + write + verify = 3 passes.
+
+Record in commit message: `"LSP rename: N calls, ~XK tokens. grep+sed equivalent: ~YK tokens."`
+
+---
+
+**Migration scripts** (run these for all string/mechanical changes; LSP handles symbols separately):
+- `scripts/migrate-phase1.sh` — polywave-go: module path, env vars, state dir, branch prefix, file renames, goreleaser
+- `scripts/migrate-phase2.sh` — polywave-web: module path, frontend strings, localStorage keys, Makefile
+- `scripts/migrate-phase3.sh` — protocol repo: hook renames, atomic marker update, install.sh, prose docs
 
 ### Added (2026-04-10) — Recovery improvements: reconcile-state, agent-status, finalize-wave auto-detect (E49/E50/E51)
 

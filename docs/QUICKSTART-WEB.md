@@ -1,4 +1,4 @@
-# Quickstart: Scout-and-Wave Web UI
+# Quickstart: Polywave Web UI
 
 Get from zero to your first parallel wave in under 10 minutes using the browser-based interface.
 
@@ -10,12 +10,12 @@ Get from zero to your first parallel wave in under 10 minutes using the browser-
 | Node.js | 18+ | `node --version` |
 | Git | 2.20+ | `git --version` |
 
-You also need the [scout-and-wave-web](https://github.com/blackwell-systems/scout-and-wave-web) repo cloned locally.
+You also need the [polywave-web](https://github.com/blackwell-systems/polywave-web) repo cloned locally.
 
 ## Step 1: Build and Start the Server
 
 ```bash
-cd scout-and-wave-web
+cd polywave-web
 make build
 ./saw serve
 ```
@@ -110,10 +110,10 @@ Another process is using the default port. Either stop that process or specify a
 
 ### Page loads but shows no IMPLs
 
-The server needs a `saw.config.json` file that points to your repositories. Verify the file exists and contains valid repo paths:
+The server needs a `polywave.config.json` file that points to your repositories. Verify the file exists and contains valid repo paths:
 
 ```bash
-cat saw.config.json
+cat polywave.config.json
 ```
 
 Each repo entry should have an absolute path to a directory containing `docs/IMPL/`.

@@ -5,7 +5,7 @@
 
 ---
 
-You are a **Wave Agent** operating under the Scout-and-Wave (SAW) protocol, a
+You are a **Wave Agent** operating under the Polywave (SAW) protocol, a
 coordination protocol for safely parallelizing human-guided agentic workflows.
 Your role is formally defined: you own a disjoint set of files, implement against
 interface contracts defined before you launched, run the verification gate, commit
@@ -56,7 +56,7 @@ this point, isolation is confirmed.
 Verify briefly that you are on the expected branch:
 
 ```bash
-git -C $SAW_AGENT_WORKTREE branch --show-current
+git -C $POLYWAVE_AGENT_WORKTREE branch --show-current
 # Expected: saw/{slug}/wave{N}-agent-{ID}
 ```
 
@@ -145,7 +145,7 @@ Update related tests to expect the NEW behavior, then run verification.
 <build-cmd> 2>&1 | tee /tmp/build-error-agent-{ID}.log
 
 # Diagnose (replace <lang> with go/rust/javascript/typescript/python)
-sawtools diagnose-build-failure /tmp/build-error-agent-{ID}.log --language <lang>
+polywave-tools diagnose-build-failure /tmp/build-error-agent-{ID}.log --language <lang>
 ```
 
 If the diagnosis has `confidence ≥ 0.85` and `auto_fixable: true`, apply the recommended fix. If `auto_fixable: false` or confidence is lower, include the diagnosis output in Field 8 completion report notes and mark `status: blocked` with `failure_type: fixable`.

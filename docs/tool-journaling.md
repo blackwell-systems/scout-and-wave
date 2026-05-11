@@ -50,7 +50,7 @@ When Claude Code compacts the agent's conversation, the journal-generated contex
 ┌─────────────────────────────────────────────────────────┐
 │ JournalObserver (external process)                      │
 │ ┌─────────────────────────────────────────────────────┐ │
-│ │ .saw-state/journals/wave1/agent-A/                  │ │
+│ │ .polywave-state/journals/wave1/agent-A/                  │ │
 │ │ ├── cursor.json        (read position tracker)      │ │
 │ │ ├── index.jsonl        (full tool history)          │ │
 │ │ ├── context.md         (generated summary)          │ │
@@ -85,10 +85,10 @@ When Claude Code compacts the agent's conversation, the journal-generated contex
 
 ### Directory Layout
 
-All journal state lives in `.saw-state/journals/<wave>/<agent>/`:
+All journal state lives in `.polywave-state/journals/<wave>/<agent>/`:
 
 ```
-.saw-state/
+.polywave-state/
 └── journals/
     └── wave1/
         ├── agent-A/
@@ -186,22 +186,22 @@ prompt := contextMd + "\n\n" + agentPrompt // Prepend to agent brief
 
 ## Debugging Failed Agents
 
-### CLI Command: `sawtools debug-journal`
+### CLI Command: `polywave-tools debug-journal`
 
 When an agent fails mid-wave, inspect its journal to understand what it did before failure:
 
 ```bash
 # Full summary (same as context.md)
-sawtools debug-journal wave1/agent-A
+polywave-tools debug-journal wave1/agent-A
 
 # Show only failed tool calls
-sawtools debug-journal wave1/agent-A --failures-only
+polywave-tools debug-journal wave1/agent-A --failures-only
 
 # Show last N entries
-sawtools debug-journal wave1/agent-A --last 20
+polywave-tools debug-journal wave1/agent-A --last 20
 
 # Export as HTML timeline (opens in browser)
-sawtools debug-journal wave1/agent-A --export timeline.html
+polywave-tools debug-journal wave1/agent-A --export timeline.html
 ```
 
 **Output format:**
@@ -243,16 +243,16 @@ For deep debugging, inspect journal files directly:
 
 ```bash
 # View full index (JSONL format)
-cat .saw-state/journals/wave1/agent-A/index.jsonl
+cat .polywave-state/journals/wave1/agent-A/index.jsonl
 
 # View last 50 entries (fast scan)
-cat .saw-state/journals/wave1/agent-A/recent.jsonl
+cat .polywave-state/journals/wave1/agent-A/recent.jsonl
 
 # View specific tool output
-cat .saw-state/journals/wave1/agent-A/results/tool_042.txt
+cat .polywave-state/journals/wave1/agent-A/results/tool_042.txt
 
 # Check cursor position
-cat .saw-state/journals/wave1/agent-A/cursor.json
+cat .polywave-state/journals/wave1/agent-A/cursor.json
 ```
 
 ## Checkpoints
@@ -268,7 +268,7 @@ Checkpoints are named snapshots of journal state at key milestones. Use them to 
 
 **Manual checkpoints** (created by user):
 ```bash
-sawtools checkpoint wave1/agent-A pre-test-run
+polywave-tools checkpoint wave1/agent-A pre-test-run
 ```
 
 **What's captured:**
@@ -277,12 +277,12 @@ sawtools checkpoint wave1/agent-A pre-test-run
 - Cursor position
 - Checkpoint metadata (name, timestamp, entry count)
 
-Checkpoint files are stored as `.tar.gz` archives in `.saw-state/journals/<wave>/<agent>/checkpoints/`.
+Checkpoint files are stored as `.tar.gz` archives in `.polywave-state/journals/<wave>/<agent>/checkpoints/`.
 
 ### Listing Checkpoints
 
 ```bash
-sawtools list-checkpoints wave1/agent-A
+polywave-tools list-checkpoints wave1/agent-A
 ```
 
 **Output:**
@@ -299,7 +299,7 @@ sawtools list-checkpoints wave1/agent-A
 **Use case:** Agent diverged into a bad path after a test failure. Restore to the checkpoint before the test run, revise the approach, and re-launch.
 
 ```bash
-sawtools restore-checkpoint wave1/agent-A pre-test-run
+polywave-tools restore-checkpoint wave1/agent-A pre-test-run
 ```
 
 **What happens:**
@@ -319,19 +319,19 @@ After a wave merges successfully, journals are archived to save disk space.
 The orchestrator calls `observer.Archive()` after merge verification passes:
 
 ```bash
-sawtools cleanup "<manifest-path>" --wave <N> --repo-dir "<repo-path>"
+polywave-tools cleanup "<manifest-path>" --wave <N> --repo-dir "<repo-path>"
 ```
 
 This command:
-1. Compresses each agent's journal directory into `.saw-state/archives/wave<N>-agent-<ID>.tar.gz`
+1. Compresses each agent's journal directory into `.polywave-state/archives/wave<N>-agent-<ID>.tar.gz`
 2. Removes the original journal directory
 3. Logs archive location to stdout
 
-**Archive location:** `.saw-state/archives/` in project root.
+**Archive location:** `.polywave-state/archives/` in project root.
 
 ### Retention Policy
 
-Archives are retained based on `saw.config.json` settings:
+Archives are retained based on `polywave.config.json` settings:
 
 ```json
 {
@@ -347,24 +347,24 @@ Archives are retained based on `saw.config.json` settings:
 
 **Manual cleanup:**
 ```bash
-sawtools clean-archives --older-than 30
+polywave-tools clean-archives --older-than 30
 ```
 
-This scans `.saw-state/archives/` and deletes archives older than 30 days.
+This scans `.polywave-state/archives/` and deletes archives older than 30 days.
 
 ### Restoring from Archive
 
 If you need to inspect a past wave's journal after it's been archived:
 
 ```bash
-sawtools restore-archive wave1-agent-A
+polywave-tools restore-archive wave1-agent-A
 ```
 
-This unpacks the archive back into `.saw-state/journals/wave1/agent-A/` for inspection. The original archive is preserved.
+This unpacks the archive back into `.polywave-state/journals/wave1/agent-A/` for inspection. The original archive is preserved.
 
 ## Configuration
 
-All journal settings live in `saw.config.json` (project-local) or `~/.claude/saw.config.json` (global default):
+All journal settings live in `polywave.config.json` (project-local) or `~/.claude/polywave.config.json` (global default):
 
 ```json
 {

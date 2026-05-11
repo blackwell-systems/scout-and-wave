@@ -1,8 +1,8 @@
-# Scout-and-Wave Protocol Invariants
+# Polywave Protocol Invariants
 
 **Version:** 0.26.0
 
-This document defines the invariants that must hold throughout the entire Scout-and-Wave protocol execution. Violations break the correctness guarantees.
+This document defines the invariants that must hold throughout the entire Polywave protocol execution. Violations break the correctness guarantees.
 
 ---
 

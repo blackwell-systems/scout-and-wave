@@ -1,5 +1,5 @@
 #!/bin/bash
-# task-completed-saw.sh
+# task-completed-polywave.sh
 # SAW TaskCompleted enforcement hook.
 #
 # Fires when a task is being marked complete in the shared task list.
@@ -7,14 +7,14 @@
 # to the IMPL doc. If not, exits 2 to block task completion.
 #
 # Install:
-#   cp task-completed-saw.sh /path/to/project/.claude/hooks/
-#   chmod +x /path/to/project/.claude/hooks/task-completed-saw.sh
+#   cp task-completed-polywave.sh /path/to/project/.claude/hooks/
+#   chmod +x /path/to/project/.claude/hooks/task-completed-polywave.sh
 #
 # Configure in .claude/settings.json:
 #   "hooks": {
 #     "TaskCompleted": [
 #       {"hooks": [{"type": "command",
-#                   "command": "bash .claude/hooks/task-completed-saw.sh"}]}
+#                   "command": "bash .claude/hooks/task-completed-polywave.sh"}]}
 #     ]
 #   }
 #

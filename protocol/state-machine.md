@@ -1,8 +1,8 @@
-# Scout-and-Wave State Machine
+# Polywave State Machine
 
 **Version:** 0.21.0
 
-This document defines the lifecycle states, transitions, and terminal conditions for Scout-and-Wave protocol execution.
+This document defines the lifecycle states, transitions, and terminal conditions for Polywave protocol execution.
 
 ---
 
@@ -14,7 +14,7 @@ SAW execution progresses through a series of states orchestrated by the synchron
 
 | State | Description | Entry Condition | Exit Condition |
 |-------|-------------|-----------------|----------------|
-| **INTERVIEWING** | User is being guided through structured requirements gathering via `/saw interview`. | `/saw interview` command invoked | Interview completes, REQUIREMENTS.md written (manual: user runs `/saw scout` or `/saw bootstrap` after) |
+| **INTERVIEWING** | User is being guided through structured requirements gathering via `/polywave interview`. | `/polywave interview` command invoked | Interview completes, REQUIREMENTS.md written (manual: user runs `/polywave scout` or `/polywave bootstrap` after) |
 | **SCOUT_PENDING** | Initial state. Scout analysis not yet complete. | Protocol invoked | Scout completes, produces IMPL doc |
 | **SCOUT_VALIDATING** | Orchestrator running validator on Scout output; feeding errors back to Scout if needed. | Scout writes IMPL doc | Validation passes OR retry limit exhausted |
 | **REVIEWED** | IMPL doc produced, awaiting human review and approval. | Scout complete | Human approves plan OR direct completion |
@@ -40,8 +40,8 @@ INTERVIEWING
 ```
 
 The INTERVIEWING → SCOUT_PENDING transition is manual: after the interview
-completes, the user invokes `/saw scout "<feature>" --requirements docs/REQUIREMENTS.md`
-(or `/saw bootstrap`) to enter SCOUT_PENDING. There is no automatic state signal
+completes, the user invokes `/polywave scout "<feature>" --requirements docs/REQUIREMENTS.md`
+(or `/polywave bootstrap`) to enter SCOUT_PENDING. There is no automatic state signal
 from the interview tool to the SAW orchestrator.
 
 ### Primary Flow (Success Path)
@@ -72,7 +72,7 @@ COMPLETE
 
 **Interview path (bypasses normal SCOUT_PENDING start):**
 The INTERVIEWING state is an optional precursor. After completing the interview,
-the user manually invokes `/saw scout` or `/saw bootstrap` with the generated
+the user manually invokes `/polywave scout` or `/polywave bootstrap` with the generated
 REQUIREMENTS.md, entering SCOUT_PENDING. The interview path bypasses the normal
 SCOUT_PENDING entry and feeds a REQUIREMENTS.md into it instead.
 
@@ -99,7 +99,7 @@ This transition occurs when:
 - Scout produces NOT_SUITABLE verdict that is later corrected to suitable, but work is cancelled
 - IMPL doc is used for planning purposes only
 
-Command: `sawtools close-impl` allows this transition as of friction-fixes-phase1.
+Command: `polywave-tools close-impl` allows this transition as of friction-fixes-phase1.
 
 **Next-wave loop:**
 ```
@@ -210,7 +210,7 @@ Transitions are conditional. The following guards determine whether a transition
 - NOT_SUITABLE verdict corrected to suitable but work cancelled
 - IMPL doc used for design/planning purposes only
 
-**Command:** `sawtools close-impl <impl-doc>` executes this transition.
+**Command:** `polywave-tools close-impl <impl-doc>` executes this transition.
 
 ### REVIEWED → BLOCKED
 
@@ -433,7 +433,7 @@ The following table is the canonical reference for all allowed state transitions
 
 | From State | Allowed Targets |
 |-----------|----------------|
-| **INTERVIEWING** | *(manual: user invokes /saw scout after interview completes)* |
+| **INTERVIEWING** | *(manual: user invokes /polywave scout after interview completes)* |
 | **SCOUT_PENDING** | REVIEWED, NOT_SUITABLE |
 | **SCOUT_VALIDATING** | REVIEWED, NOT_SUITABLE |
 | **REVIEWED** | SCAFFOLD_PENDING, WAVE_PENDING, WAVE_EXECUTING, BLOCKED, COMPLETE |

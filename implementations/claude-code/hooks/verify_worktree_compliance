@@ -27,17 +27,17 @@ _session_id=$(echo "$input" | jq -r '.session_id // ""')
 _exit_reason=$(echo "$input" | jq -r '.exit_reason // ""')
 
 # Passthrough condition 1: Not a SAW wave agent
-if ! [[ "$agent_description" =~ \[SAW:wave ]]; then
+if ! [[ "$agent_description" =~ \[polywave:wave ]]; then
   exit 0
 fi
 
 # Passthrough condition 2: Solo wave (no worktree)
-if [[ -z "${SAW_AGENT_WORKTREE:-}" ]]; then
+if [[ -z "${POLYWAVE_AGENT_WORKTREE:-}" ]]; then
   exit 0
 fi
 
-# Parse agent metadata from description tag [SAW:wave{N}:agent-{ID}]
-if [[ "$agent_description" =~ \[SAW:wave([0-9]+):agent-([A-Z0-9]+)\] ]]; then
+# Parse agent metadata from description tag [polywave:wave{N}:agent-{ID}]
+if [[ "$agent_description" =~ \[polywave:wave([0-9]+):agent-([A-Z0-9]+)\] ]]; then
   _wave_number="${BASH_REMATCH[1]}"
   agent_id="${BASH_REMATCH[2]}"
 else
@@ -46,8 +46,8 @@ else
 fi
 
 # Read environment variables set by inject_worktree_env
-impl_path="${SAW_IMPL_PATH:-}"
-branch_name="${SAW_BRANCH:-}"
+impl_path="${POLYWAVE_IMPL_PATH:-}"
+branch_name="${POLYWAVE_BRANCH:-}"
 
 # Verification Check 1: Completion report exists (E42/I4)
 if command -v sawtools &>/dev/null; then

@@ -12,8 +12,8 @@
 3. [PROGRAM Manifest Schema](#3-program-manifest-schema)
 4. [Program State Machine](#4-program-state-machine)
 5. [Program Invariants](#5-program-invariants-p1p4)
-6. [CLI Commands — /saw program](#6-cli-commands--saw-program)
-7. [sawtools Commands](#7-sawtools-commands)
+6. [CLI Commands — /polywave program](#6-cli-commands--saw-program)
+7. [polywave-tools Commands](#7-polywave-tools-commands)
 8. [API Reference](#8-api-reference)
 9. [SSE Events](#9-sse-events)
 10. [Web UI Guide](#10-web-ui-guide)
@@ -26,7 +26,7 @@
 
 ## 1. Overview
 
-Scout-and-Wave operates at three levels of abstraction:
+Polywave operates at three levels of abstraction:
 
 ```
 Program               — coordinates multiple IMPLs across tiers
@@ -46,7 +46,7 @@ Use the Program Layer when:
 - There are **at least 2 tiers** of features (some depend on others)
 
 Do not use the Program Layer when:
-- A single IMPL doc would handle the project (use `/saw bootstrap` instead)
+- A single IMPL doc would handle the project (use `/polywave bootstrap` instead)
 - Features are fully independent with no shared interfaces (use sequential Scout runs)
 - The Planner's suitability gate returns `NOT_SUITABLE`
 
@@ -79,17 +79,17 @@ The Program Layer offers three autonomy levels controlled by the command used.
 ### Level A: Plan Only
 
 ```
-/saw program plan "<project-description>"
+/polywave program plan "<project-description>"
 ```
 
-The Planner agent analyzes requirements and produces the PROGRAM manifest. No execution occurs automatically. The manifest serves as a formal roadmap: tier ordering, cross-IMPL dependency graph, and program contracts. The user manually runs `/saw scout` and `/saw wave` for each IMPL in the order specified by the tiers.
+The Planner agent analyzes requirements and produces the PROGRAM manifest. No execution occurs automatically. The manifest serves as a formal roadmap: tier ordering, cross-IMPL dependency graph, and program contracts. The user manually runs `/polywave scout` and `/polywave wave` for each IMPL in the order specified by the tiers.
 
 **Value even without automated execution:** The PROGRAM manifest provides a persistent, validated artifact capturing the project decomposition. Cross-IMPL contracts prevent interface drift even under manual execution.
 
 ### Level B: Tier-Gated Execution (Recommended)
 
 ```
-/saw program execute "<project-description>"
+/polywave program execute "<project-description>"
 ```
 
 The Orchestrator drives execution automatically within each tier — scouting all IMPLs in parallel, executing all waves — but **pauses at each tier boundary** for human review before advancing. Human gates fire:
@@ -102,7 +102,7 @@ This is the recommended mode for most projects. It provides full parallelism wit
 ### Level C: Full Autonomous
 
 ```
-/saw program execute --auto "<project-description>"
+/polywave program execute --auto "<project-description>"
 ```
 
 Same as Level B, but the inter-tier human confirmation gates are bypassed when tier gates pass. The Orchestrator advances automatically through tier boundaries. The initial PROGRAM manifest review (`PROGRAM_REVIEWED`) is **never skipped**, even in `--auto` mode. Failures always surface to the human regardless of `--auto`.
@@ -379,7 +379,7 @@ Go type: `protocol.ProgramState` (a `string` typedef)
 PLANNING
   ↓ (Planner writes manifest)
 VALIDATING
-  ↓ (sawtools validate-program passes)
+  ↓ (polywave-tools validate-program passes)
 REVIEWED
   ↓ (Human approves)
 SCAFFOLD  ← skipped if no program_contracts
@@ -397,7 +397,7 @@ COMPLETE
 
 ### 4.3 Failure Paths
 
-- `PLANNING → NOT_SUITABLE`: Terminal. Planner's suitability gate determined the project is too small or too entangled for multi-IMPL orchestration. A minimal manifest is written with `state: NOT_SUITABLE` and an explanation. The user should use `/saw bootstrap` or `/saw scout` instead.
+- `PLANNING → NOT_SUITABLE`: Terminal. Planner's suitability gate determined the project is too small or too entangled for multi-IMPL orchestration. A minimal manifest is written with `state: NOT_SUITABLE` and an explanation. The user should use `/polywave bootstrap` or `/polywave scout` instead.
 - `TIER_EXECUTING → BLOCKED`: An IMPL in the tier failed, or the tier gate failed. Recovery is possible (fix the IMPL, then resume).
 - `BLOCKED → TIER_EXECUTING`: Issue resolved, execution resumes.
 - `BLOCKED → REPLANNING`: Re-planning triggered (E34). Planner produces revised manifest.
@@ -418,7 +418,7 @@ The tier gate fires only when **all** IMPLs in the tier reach `complete`. An ind
 
 ### 4.5 Completion Marker
 
-When `sawtools mark-program-complete` runs successfully, it writes to the manifest:
+When `polywave-tools mark-program-complete` runs successfully, it writes to the manifest:
 - `state: COMPLETE`
 - `completion_date: "YYYY-MM-DD"` (inserted after `state:`)
 - `SAW:PROGRAM:COMPLETE` on its own line at the end of the file
@@ -483,27 +483,27 @@ Within a program tier, each IMPL's wave merges target the IMPL's dedicated branc
 
 ---
 
-## 6. CLI Commands — `/saw program`
+## 6. CLI Commands — `/polywave program`
 
 These commands are defined in `implementations/claude-code/prompts/saw-skill.md`. They are invoked via the `/saw` skill in Claude Code.
 
-### `/saw program plan "<project-description>"`
+### `/polywave program plan "<project-description>"`
 
 Analyze a project and produce a PROGRAM manifest. No execution occurs.
 
 **Orchestrator flow:**
 1. If the user provides a project description (not a reference to existing `REQUIREMENTS.md`), write `docs/REQUIREMENTS.md` using the bootstrap template. Ask user to review.
 2. Launch Planner agent: `Agent(subagent_type: planner, run_in_background: true)`. Falls back to `subagent_type: general-purpose` with `agents/planner.md` contents if `planner` type fails.
-3. Wait for Planner completion. If the Planner writes a manifest with `state: NOT_SUITABLE`, surface the explanation and recommend `/saw bootstrap` or `/saw scout` instead.
-4. Validate: `sawtools validate-program "<absolute-path-to-manifest>"`. On failure, send errors back to Planner with a resume prompt (up to 3 attempts). On retry limit exhaustion, enter BLOCKED.
+3. Wait for Planner completion. If the Planner writes a manifest with `state: NOT_SUITABLE`, surface the explanation and recommend `/polywave bootstrap` or `/polywave scout` instead.
+4. Validate: `polywave-tools validate-program "<absolute-path-to-manifest>"`. On failure, send errors back to Planner with a resume prompt (up to 3 attempts). On retry limit exhaustion, enter BLOCKED.
 5. Present tier structure, program contracts, dependency graph, estimated complexity, and tier gates for human review.
-6. On approval: `sawtools update-program-state "<manifest>" --state REVIEWED`
+6. On approval: `polywave-tools update-program-state "<manifest>" --state REVIEWED`
 
-### `/saw program execute "<project-description>"`
+### `/polywave program execute "<project-description>"`
 
 Plan and execute with tier-gated progression (Level B). Extends the planning flow with automated execution.
 
-**Phase 1:** Reuses steps 1–6 from `/saw program plan`.
+**Phase 1:** Reuses steps 1–6 from `/polywave program plan`.
 
 **Phase 2: Program Scaffold** (if `program_contracts` is non-empty):
 1. Launch Scaffold Agent (`subagent_type: scaffold-agent`, `run_in_background: true`) with the PROGRAM manifest path as the prompt parameter.
@@ -514,27 +514,27 @@ Plan and execute with tier-gated progression (Level B). Extends the planning flo
 **Phase 3: Tier Execution Loop** (for each tier N from 1 to `tiers_total`):
 
 - **3a — Parallel Scout Launching (E31):** For each IMPL in tier N with status `pending`, launch a Scout agent with the `--program` flag. All Scouts launch simultaneously. Validate each IMPL doc (E16) after completion. Present all IMPL docs for human review.
-- **3b — IMPL Execution:** Execute each reviewed IMPL's full lifecycle (`/saw wave --auto` flow). Update IMPL status in PROGRAM manifest as each completes via `sawtools update-program-impl`.
-- **3c — Tier Gate (E29):** `sawtools tier-gate "<manifest>" --tier N`. On failure, enter BLOCKED and surface to user.
-- **3d — Contract Freezing (E30):** `sawtools freeze-contracts "<manifest>" --tier N`. On failure, enter BLOCKED.
-- **3e — Tier Boundary:** Run `sawtools program-status`. If `--auto`: call `AdvanceTierAutomatically` to advance automatically. If not `--auto`: pause for human confirmation.
+- **3b — IMPL Execution:** Execute each reviewed IMPL's full lifecycle (`/polywave wave --auto` flow). Update IMPL status in PROGRAM manifest as each completes via `polywave-tools update-program-impl`.
+- **3c — Tier Gate (E29):** `polywave-tools tier-gate "<manifest>" --tier N`. On failure, enter BLOCKED and surface to user.
+- **3d — Contract Freezing (E30):** `polywave-tools freeze-contracts "<manifest>" --tier N`. On failure, enter BLOCKED.
+- **3e — Tier Boundary:** Run `polywave-tools program-status`. If `--auto`: call `AdvanceTierAutomatically` to advance automatically. If not `--auto`: pause for human confirmation.
 
 **Phase 4: Program Completion:**
-1. `sawtools mark-program-complete "<manifest>"`
-2. `sawtools update-context "<manifest>" --project-root "<repo-path>"`
+1. `polywave-tools mark-program-complete "<manifest>"`
+2. `polywave-tools update-context "<manifest>" --project-root "<repo-path>"`
 
 **Error handling:** A blocked IMPL in one tier does not cascade to other IMPLs in the same tier (P1). If the tier cannot complete because one IMPL is blocked, enter BLOCKED and surface the specific failure.
 
-### `/saw program execute --auto "<project-description>"`
+### `/polywave program execute --auto "<project-description>"`
 
-Same as `/saw program execute` but with `--auto` flag active. Tier boundaries advance automatically when gates pass. The initial `PROGRAM_REVIEWED` gate is never skipped.
+Same as `/polywave program execute` but with `--auto` flag active. Tier boundaries advance automatically when gates pass. The initial `PROGRAM_REVIEWED` gate is never skipped.
 
-### `/saw program status`
+### `/polywave program status`
 
 Show program-level progress without modifying state.
 
 **Orchestrator flow:**
-1. `sawtools list-programs --dir "<repo-path>/docs"` — discover PROGRAM manifests. If none found, report and suggest `/saw program plan`.
+1. `polywave-tools list-programs --dir "<repo-path>/docs"` — discover PROGRAM manifests. If none found, report and suggest `/polywave program plan`.
 2. If multiple found, ask user to specify. If exactly one, use it.
 3. Display:
    - Tier structure with IMPL statuses per tier
@@ -552,7 +552,7 @@ PROGRAM: greenfield-api (Tier 2 of 3)
 Overall: 3/5 IMPLs complete (60%)
 ```
 
-### `/saw program replan`
+### `/polywave program replan`
 
 Re-engage the Planner to revise the PROGRAM manifest after a tier gate failure or user request.
 
@@ -560,7 +560,7 @@ Re-engage the Planner to revise the PROGRAM manifest after a tier gate failure o
 1. Parse existing PROGRAM manifest.
 2. Construct revision prompt: current manifest content, failure reason, failed tier number (if applicable), completion reports from IMPLs in failed tier.
 3. Launch Planner agent with revision prompt (`subagent_type: planner`, `run_in_background: true`).
-4. Validate revised manifest (`sawtools validate-program`). Send errors back to Planner on failure (up to 3 attempts).
+4. Validate revised manifest (`polywave-tools validate-program`). Send errors back to Planner on failure (up to 3 attempts).
 5. Present revised manifest for human review (show what changed).
 6. On approval, update state to `REVIEWED` and resume execution.
 
@@ -568,11 +568,11 @@ Re-engage the Planner to revise the PROGRAM manifest after a tier gate failure o
 
 ---
 
-## 7. sawtools Commands
+## 7. polywave-tools Commands
 
-All program-related `sawtools` commands are registered in the Go SDK (`cmd/sawtools/`).
+All program-related `polywave-tools` commands are registered in the Go SDK (`cmd/polywave-tools/`).
 
-### `sawtools validate-program <program-manifest>`
+### `polywave-tools validate-program <program-manifest>`
 
 Validates a PROGRAM manifest against all schema rules.
 
@@ -595,7 +595,7 @@ Validates a PROGRAM manifest against all schema rules.
 
 **Note:** `validate-program` does NOT run full schema validation on the PROGRAM structure (it validates the Go struct, not the YAML raw parsing). Parse errors are reported separately by `ParseProgramManifest`.
 
-### `sawtools list-programs --dir <path>`
+### `polywave-tools list-programs --dir <path>`
 
 Scans the specified directory for `PROGRAM-*.yaml` files and returns a JSON array of `ProgramDiscovery` summaries.
 
@@ -613,7 +613,7 @@ Scans the specified directory for `PROGRAM-*.yaml` files and returns a JSON arra
 
 **Behavior:** Files that fail to parse are silently skipped. Results are sorted by filename for deterministic output. Returns empty array (not an error) if the directory contains no matching files or does not exist.
 
-### `sawtools tier-gate <manifest> --tier N`
+### `polywave-tools tier-gate <manifest> --tier N`
 
 Verifies all IMPLs in a tier are complete and runs the tier-level quality gates.
 
@@ -651,7 +651,7 @@ Verifies all IMPLs in a tier are complete and runs the tier-level quality gates.
 
 **Exit codes:** 0 = gate passed, 1 = gate failed or IMPLs incomplete.
 
-### `sawtools freeze-contracts <manifest> --tier N`
+### `polywave-tools freeze-contracts <manifest> --tier N`
 
 Freezes program contracts at a tier boundary. Identifies contracts whose `freeze_at` field matches an IMPL slug in the completing tier, verifies their source files exist and are committed to HEAD, and marks them as frozen.
 
@@ -686,7 +686,7 @@ Freezes program contracts at a tier boundary. Identifies contracts whose `freeze
 
 `success` is `true` only if all matching contracts are successfully frozen (no errors). A contract with `file_exists: false` or `committed: false` adds to `errors` and sets `success: false`.
 
-### `sawtools program-status <manifest>`
+### `polywave-tools program-status <manifest>`
 
 Returns a full structured status report for a PROGRAM manifest.
 
@@ -744,7 +744,7 @@ Returns a full structured status report for a PROGRAM manifest.
 
 **Note:** `buildContractStatuses` (used by `GetProgramStatus`) determines frozen status by matching the `freeze_at` string directly against IMPL slugs in the `implToTier` map. This is a simpler check than `FreezeContracts` — it only checks whether the referenced IMPL's tier is complete, not whether the file exists on disk.
 
-### `sawtools mark-program-complete <manifest>`
+### `polywave-tools mark-program-complete <manifest>`
 
 Marks a PROGRAM manifest as complete and updates `CONTEXT.md`.
 
@@ -775,9 +775,9 @@ Marks a PROGRAM manifest as complete and updates `CONTEXT.md`.
 }
 ```
 
-### `sawtools program-replan <manifest>`
+### `polywave-tools program-replan <manifest>`
 
-Re-engages the Planner agent to revise a PROGRAM manifest. Implemented in `cmd/sawtools/program_replan_cmd.go`.
+Re-engages the Planner agent to revise a PROGRAM manifest. Implemented in `cmd/polywave-tools/program_replan_cmd.go`.
 
 **Flags:**
 - `<manifest>`: Path to PROGRAM manifest
@@ -789,7 +789,7 @@ Re-engages the Planner agent to revise a PROGRAM manifest. Implemented in `cmd/s
 
 **Exit codes:** 0 = success, 1 = re-planning/validation failed, 2 = parse error.
 
-### `sawtools run-scout "<impl-title>" --program "<manifest>"`
+### `polywave-tools run-scout "<impl-title>" --program "<manifest>"`
 
 Launches a Scout agent for a specific IMPL with access to the PROGRAM manifest's frozen contracts. Referenced in E31 and `saw-skill.md`. Implementation details in the Go SDK.
 
@@ -911,7 +911,7 @@ Re-engage the Planner to revise the PROGRAM manifest.
 {"message": "Planner re-engagement not yet implemented (Phase 4)"}
 ```
 
-This endpoint is a placeholder. The `/saw program replan` CLI command is the current path for re-planning.
+This endpoint is a placeholder. The `/polywave program replan` CLI command is the current path for re-planning.
 
 ### GET /api/program/events
 
@@ -1112,7 +1112,7 @@ Rules E28–E34 govern orchestrator behavior for program-level execution. They a
 
 The Orchestrator reads the current tier from the PROGRAM manifest and launches Scout agents for all IMPLs in the tier with status `pending` in parallel (E1 applies — async). Each Scout receives the `--program` flag pointing to the PROGRAM manifest to consume frozen program contracts as immutable inputs.
 
-After all IMPLs are scouted and reviewed, the Orchestrator executes each IMPL's waves using the standard `/saw wave --auto` flow. When all IMPLs reach `complete`, transition to tier gate (E29).
+After all IMPLs are scouted and reviewed, the Orchestrator executes each IMPL's waves using the standard `/polywave wave --auto` flow. When all IMPLs reach `complete`, transition to tier gate (E29).
 
 **Enforces:** P1 (IMPLs within the same tier execute without coordination), P3 (tier N+1 does not begin until E29 passes).
 
@@ -1120,7 +1120,7 @@ After all IMPLs are scouted and reviewed, the Orchestrator executes each IMPL's 
 
 **Trigger:** All IMPLs in a tier reach `complete`
 
-Run `sawtools tier-gate <manifest> --tier N`. This verifies all IMPLs are complete and runs the `tier_gates` quality gate commands. If all required gates pass, mark the tier verified and advance to contract freezing (E30). If any required gate fails, enter `BLOCKED` and surface to the user.
+Run `polywave-tools tier-gate <manifest> --tier N`. This verifies all IMPLs are complete and runs the `tier_gates` quality gate commands. If all required gates pass, mark the tier verified and advance to contract freezing (E30). If any required gate fails, enter `BLOCKED` and surface to the user.
 
 **Enforces:** P3 (tier N+1 does not begin until gate passes). Gate failures always surface to the human regardless of `--auto` mode.
 
@@ -1128,7 +1128,7 @@ Run `sawtools tier-gate <manifest> --tier N`. This verifies all IMPLs are comple
 
 **Trigger:** Tier gate passes (E29)
 
-Run `sawtools freeze-contracts <manifest> --tier N`. Identifies contracts whose `freeze_at` matches an IMPL in the completing tier, verifies their source files exist and are committed to HEAD, and marks them as frozen. Frozen contracts are immutable — any IMPL in a later tier attempting to redefine a frozen contract violates P2.
+Run `polywave-tools freeze-contracts <manifest> --tier N`. Identifies contracts whose `freeze_at` matches an IMPL in the completing tier, verifies their source files exist and are committed to HEAD, and marks them as frozen. Frozen contracts are immutable — any IMPL in a later tier attempting to redefine a frozen contract violates P2.
 
 **Human gate:** After freezing, pause for human review before advancing (unless `--auto` is active).
 
@@ -1151,7 +1151,7 @@ The `--program` flag is passed via `RunScoutOpts.ProgramManifestPath` in the eng
 
 **Trigger:** Any IMPL within a PROGRAM changes state
 
-The Orchestrator updates the PROGRAM manifest's IMPL status field and completion counters. Run `sawtools program-status <manifest>` to get a structured report. Display tier-level progress:
+The Orchestrator updates the PROGRAM manifest's IMPL status field and completion counters. Run `polywave-tools program-status <manifest>` to get a structured report. Display tier-level progress:
 
 ```
 PROGRAM: my-program (Tier 2 of 3)
@@ -1168,7 +1168,7 @@ Overall: 5/9 IMPLs complete (56%)
 **Trigger:** All IMPLs in a tier reach `complete` and tier gate passes (E29), with `--auto` active
 
 Advancement sequence:
-1. `sawtools freeze-contracts` (E30)
+1. `polywave-tools freeze-contracts` (E30)
 2. Update PROGRAM manifest state to `TIER_EXECUTING` for next tier
 3. Launch Scout agents for all IMPLs in the next tier in parallel (E31)
 
@@ -1210,7 +1210,7 @@ The Planner produces a revised manifest. The Orchestrator validates it (E16) and
 
 **Non-destructive:** Completed tiers are not re-run. Frozen contracts cannot be revised.
 
-**Implemented by** `engine.ReplanProgram(opts ReplanProgramOpts)`. As of the current implementation, this function builds the revision prompt via `buildRevisionPrompt` but returns `"not yet implemented"` for the Planner agent launch step (the TODO references Wave 3 wiring). `sawtools program-replan` exposes this function as a CLI command but will return exit code 1 with the "not yet implemented" error until the Planner launch is wired.
+**Implemented by** `engine.ReplanProgram(opts ReplanProgramOpts)`. As of the current implementation, this function builds the revision prompt via `buildRevisionPrompt` but returns `"not yet implemented"` for the Planner agent launch step (the TODO references Wave 3 wiring). `polywave-tools program-replan` exposes this function as a CLI command but will return exit code 1 with the "not yet implemented" error until the Planner launch is wired.
 
 **Analog:** E34 is the program-scope analog of E8 (same-wave interface failure). E8 handles intra-wave contract failures by re-engaging Scout. E34 handles inter-tier failures by re-engaging Planner.
 
@@ -1222,7 +1222,7 @@ The Planner produces a revised manifest. The Orchestrator validates it (E16) and
 
 1. **Tier gate failure (E29):** A required quality gate command fails after all IMPLs in a tier complete.
 2. **Cross-IMPL interface mismatch:** Tier gate finds incompatible outputs between IMPLs.
-3. **User request:** `/saw program replan` invoked explicitly.
+3. **User request:** `/polywave program replan` invoked explicitly.
 
 ### What Re-Planning Does
 
@@ -1241,7 +1241,7 @@ The revised manifest goes through `PROGRAM_REVIEWED` before any execution resume
 
 **Automated path (`--auto`):** `AdvanceTierAutomatically` is called after each tier completes. It runs the gate, freezes contracts, and advances automatically if everything passes. If the gate fails, it sets `RequiresReview = true` and the Orchestrator enters BLOCKED regardless of `--auto`.
 
-**Manual path (no `--auto`):** The Orchestrator runs `sawtools tier-gate` and `sawtools freeze-contracts` as separate steps and pauses for human confirmation at each tier boundary before launching the next tier's Scouts.
+**Manual path (no `--auto`):** The Orchestrator runs `polywave-tools tier-gate` and `polywave-tools freeze-contracts` as separate steps and pauses for human confirmation at each tier boundary before launching the next tier's Scouts.
 
 ### Current Implementation Status of ReplanProgram
 
@@ -1250,7 +1250,7 @@ The revised manifest goes through `PROGRAM_REVIEWED` before any execution resume
 - **Implemented:** Reading the manifest, constructing the revision prompt via `buildRevisionPrompt` (includes reason, failed tier, and current manifest content with instructions not to modify frozen contracts)
 - **Not implemented:** Launching the Planner agent (returns `"not yet implemented"`)
 
-Tests for re-planning should mock Planner completion by writing a revised manifest file directly. The CLI command `sawtools program-replan` calls this function and will return exit code 1 until the agent launch is wired.
+Tests for re-planning should mock Planner completion by writing a revised manifest file directly. The CLI command `polywave-tools program-replan` calls this function and will return exit code 1 until the agent launch is wired.
 
 ---
 
@@ -1276,7 +1276,7 @@ Program contracts extend I2 (interface contracts precede implementation) from th
 
 ### Freeze Semantics
 
-A program contract is frozen when the tier specified in its `freeze_at` field completes and `sawtools freeze-contracts` runs successfully. Freezing requires:
+A program contract is frozen when the tier specified in its `freeze_at` field completes and `polywave-tools freeze-contracts` runs successfully. Freezing requires:
 1. The source file at `contract.Location` exists in the repository
 2. The file is committed to HEAD (no uncommitted changes)
 
@@ -1286,13 +1286,13 @@ Once frozen, a contract is immutable. No IMPL in a later tier may redefine it. T
 
 Program contracts are not automatically created — they must be materialized as source code before any IMPL in the consuming tier begins scouting. This is done by the Scaffold Agent in the PROGRAM_SCAFFOLD phase, or manually by the user.
 
-In the `/saw program execute` flow, after human approval of the PROGRAM manifest, a Scaffold Agent is launched with the PROGRAM manifest path. It reads `program_contracts` and creates the source files at the specified `location` paths. The Scaffold Agent commits these files before any tier execution begins.
+In the `/polywave program execute` flow, after human approval of the PROGRAM manifest, a Scaffold Agent is launched with the PROGRAM manifest path. It reads `program_contracts` and creates the source files at the specified `location` paths. The Scaffold Agent commits these files before any tier execution begins.
 
 ---
 
 ## 14. End-to-End Example
 
-A walkthrough of a 2-tier, 3-IMPL project from `/saw program plan` through `COMPLETE`.
+A walkthrough of a 2-tier, 3-IMPL project from `/polywave program plan` through `COMPLETE`.
 
 ### Project: Simple REST API
 
@@ -1307,7 +1307,7 @@ A walkthrough of a 2-tier, 3-IMPL project from `/saw program plan` through `COMP
 
 The Orchestrator writes `docs/REQUIREMENTS.md` with project description. User confirms.
 
-### Step 2: /saw program plan "Simple REST API"
+### Step 2: /polywave program plan "Simple REST API"
 
 The Orchestrator launches the Planner agent (`subagent_type: planner`). The Planner:
 1. Reads `docs/REQUIREMENTS.md`
@@ -1333,7 +1333,7 @@ impls:
 
 ### Step 3: Validate and Review
 
-The Orchestrator runs `sawtools validate-program docs/PROGRAM-simple-rest-api.yaml`. No errors. Presents tier structure and contracts to user. User approves.
+The Orchestrator runs `polywave-tools validate-program docs/PROGRAM-simple-rest-api.yaml`. No errors. Presents tier structure and contracts to user. User approves.
 
 Orchestrator updates state to `REVIEWED`.
 
@@ -1357,7 +1357,7 @@ Orchestrator validates both (E16), presents for human review. User approves both
 
 ### Step 6: Tier 1 — IMPL Execution
 
-The Orchestrator executes both IMPLs in parallel using the standard `/saw wave --auto` flow:
+The Orchestrator executes both IMPLs in parallel using the standard `/polywave wave --auto` flow:
 - `data-model`: Wave 1 (2 agents) → merge → COMPLETE
 - `auth`: Wave 1 (2 agents) → merge → COMPLETE
 
@@ -1372,13 +1372,13 @@ impls:
 
 ### Step 7: Tier 1 Gate (E29)
 
-Orchestrator runs `sawtools tier-gate docs/PROGRAM-simple-rest-api.yaml --tier 1`.
+Orchestrator runs `polywave-tools tier-gate docs/PROGRAM-simple-rest-api.yaml --tier 1`.
 
 `RunTierGate` checks both IMPLs have status `complete` (`AllImplsDone = true`). Runs `go build ./...` (passes) and `go test ./...` (passes). Returns `TierGateResult{Passed: true}`.
 
 ### Step 8: Contract Freezing (E30)
 
-Orchestrator runs `sawtools freeze-contracts docs/PROGRAM-simple-rest-api.yaml --tier 1`.
+Orchestrator runs `polywave-tools freeze-contracts docs/PROGRAM-simple-rest-api.yaml --tier 1`.
 
 `FreezeContracts` finds the `UserSession` contract with `freeze_at: "IMPL-auth completion"`. Word-boundary match: slug `auth` matches in `"IMPL-auth completion"`. Checks `pkg/types/session.go` exists and is committed. Both pass. Returns `FreezeContractsResult{Success: true}`.
 
@@ -1386,7 +1386,7 @@ SSE event emitted: `program_contract_frozen {program_slug: "simple-rest-api", co
 
 ### Step 9: Tier Boundary (Human Gate)
 
-The Orchestrator runs `sawtools program-status` and presents:
+The Orchestrator runs `polywave-tools program-status` and presents:
 ```
 Tier 1: 2/2 complete
   UserSession contract: FROZEN (pkg/types/session.go)
@@ -1405,9 +1405,9 @@ Orchestrator launches Scout for `api-routes` with `--program docs/PROGRAM-simple
 
 ### Step 12: Tier 2 Gate
 
-`sawtools tier-gate --tier 2` runs. `api-routes` is complete. Build and tests pass. Gate passes.
+`polywave-tools tier-gate --tier 2` runs. `api-routes` is complete. Build and tests pass. Gate passes.
 
-`sawtools freeze-contracts --tier 2` runs. No contracts with `freeze_at` matching Tier 2 IMPLs. `ContractsSkipped: ["APIResponse<T>"]` (if it existed). `Success: true`.
+`polywave-tools freeze-contracts --tier 2` runs. No contracts with `freeze_at` matching Tier 2 IMPLs. `ContractsSkipped: ["APIResponse<T>"]` (if it existed). `Success: true`.
 
 SSE: `program_tier_complete {program_slug: "simple-rest-api", tier: 2}`.
 
@@ -1415,7 +1415,7 @@ SSE: `program_tier_complete {program_slug: "simple-rest-api", tier: 2}`.
 
 The Orchestrator runs:
 ```bash
-sawtools mark-program-complete docs/PROGRAM-simple-rest-api.yaml
+polywave-tools mark-program-complete docs/PROGRAM-simple-rest-api.yaml
 ```
 
 Verifies all 3 IMPLs have status `complete`. Updates manifest to `state: COMPLETE` with `completion_date`. Appends `SAW:PROGRAM:COMPLETE` marker. Updates `docs/CONTEXT.md`. Commits both files with message `chore: mark PROGRAM simple-rest-api complete`.

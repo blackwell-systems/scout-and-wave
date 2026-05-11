@@ -10,8 +10,8 @@ Enforcement and injection hooks for CLI-based SAW agents. 21 hooks across Subage
 |------|-------|---------|------|-------------|
 | inject_worktree_env | SubagentStart | — | E43 | Sets 5 env vars (worktree path, agent ID, wave num, IMPL path, branch) |
 | validate_agent_isolation | SubagentStart | — | E12 | Verifies wave agent running in correct worktree (exit 2 blocks start) |
-| validate_worktree_isolation | SubagentStart | — | E12 | Phase 1: pwd+branch pattern check; Phase 2: exact branch via .saw-agent-brief.md frontmatter |
-| inject_bash_cd | PreToolUse | Bash | E43 | Auto-prepends `cd $SAW_AGENT_WORKTREE &&` to bash commands |
+| validate_worktree_isolation | SubagentStart | — | E12 | Phase 1: pwd+branch pattern check; Phase 2: exact branch via .polywave-agent-brief.md frontmatter |
+| inject_bash_cd | PreToolUse | Bash | E43 | Auto-prepends `cd $POLYWAVE_AGENT_WORKTREE &&` to bash commands |
 | validate_write_paths | PreToolUse | Write\|Edit | E43 | Blocks relative paths and paths outside worktree |
 | block_git_stash | PreToolUse | Bash | — | Blocks `git stash` in wave-agent worktrees (hides work from merge verification) |
 | verify_worktree_compliance | SubagentStop | — | E42/I5 | Verifies completion report and commits (warn-only) |
@@ -52,9 +52,9 @@ Fires when the user submits a prompt. The `inject-context` script uses direct co
 { "hookSpecificOutput": { "hookEventName": "UserPromptSubmit", "additionalContext": "..." } }
 ```
 
-The script matches `^/saw program` and `^/saw amend` patterns with direct conditional logic (no YAML frontmatter parsing).
+The script matches `^/polywave program` and `^/polywave amend` patterns with direct conditional logic (no YAML frontmatter parsing).
 
-**Coverage:** `/saw program *`, `/saw amend *`. Only subcommand-anchored patterns are reliable here — keyword triggers false-positive against skill body content.
+**Coverage:** `/polywave program *`, `/polywave amend *`. Only subcommand-anchored patterns are reliable here — keyword triggers false-positive against skill body content.
 
 ### Layer 2: Subagent injection (`validate_agent_launch`, PreToolUse/Agent)
 
@@ -84,12 +84,12 @@ All other agent types (critic-agent, planner, integration-agent) require no inje
 ### The two-layer picture
 
 ```
-User types: /saw wave
+User types: /polywave wave
     │
     ▼
 UserPromptSubmit → inject_skill_context
   Target: orchestrator context (additionalContext)
-  Matches: ^/saw program, ^/saw amend
+  Matches: ^/polywave program, ^/polywave amend
   Mechanism: inject-context script with direct conditional logic
 
       │
@@ -109,7 +109,7 @@ PreToolUse/Agent → validate_agent_launch (checks 1-8 enforcement + conditional
 ### Automated (Recommended)
 
 ```bash
-cd ~/code/scout-and-wave/implementations/claude-code/hooks
+cd ~/code/polywave/implementations/claude-code/hooks
 ./install.sh
 ```
 
@@ -141,7 +141,7 @@ See individual hook sections below for manual installation steps.
 
 1. Symlink:
    ```bash
-   ln -sf ~/code/scout-and-wave/implementations/claude-code/hooks/check_scout_boundaries ~/.local/bin/check_scout_boundaries
+   ln -sf ~/code/polywave/implementations/claude-code/hooks/check_scout_boundaries ~/.local/bin/check_scout_boundaries
    ```
 
 2. Add to `~/.claude/settings.json`:
@@ -187,9 +187,9 @@ echo $?  # Should be non-zero
 
 1. Claude Code calls the script after a Write tool completes
 2. Script checks if the written file matches `docs/IMPL/IMPL-*.yaml` (skips archived `/complete/` docs)
-3. Runs `sawtools validate` (read-only, no `--fix`)
+3. Runs `polywave-tools validate` (read-only, no `--fix`)
 4. If validation fails -> blocks with error list; agent must fix before continuing
-5. If `sawtools` or `jq` not on PATH -> exits silently (non-blocking)
+5. If `polywave-tools` or `jq` not on PATH -> exits silently (non-blocking)
 
 ### Defense-in-Depth
 
@@ -197,9 +197,9 @@ Three layers of IMPL validation:
 
 | Layer | When | Mechanism |
 |-------|------|-----------|
-| Scout self-validation (Step 16) | After Scout writes IMPL | Scout runs `sawtools validate --fix` |
-| Orchestrator E16 | After Scout completes | Orchestrator runs `sawtools validate --fix` |
-| **PostToolUse hook** | On every Write to IMPL doc | Hook runs `sawtools validate` (read-only) |
+| Scout self-validation (Step 16) | After Scout writes IMPL | Scout runs `polywave-tools validate --fix` |
+| Orchestrator E16 | After Scout completes | Orchestrator runs `polywave-tools validate --fix` |
+| **PostToolUse hook** | On every Write to IMPL doc | Hook runs `polywave-tools validate` (read-only) |
 
 The hook is the hard enforcement layer — it fires even if the Scout skips Step 16.
 
@@ -207,7 +207,7 @@ The hook is the hard enforcement layer — it fires even if the Scout skips Step
 
 1. Symlink:
    ```bash
-   ln -sf ~/code/scout-and-wave/implementations/claude-code/hooks/validate_impl_on_write ~/.local/bin/validate_impl_on_write
+   ln -sf ~/code/polywave/implementations/claude-code/hooks/validate_impl_on_write ~/.local/bin/validate_impl_on_write
    ```
 
 2. Add to `~/.claude/settings.json`:
@@ -258,7 +258,7 @@ echo $?  # 0
 
 1. Symlink:
    ```bash
-   ln -sf ~/code/scout-and-wave/implementations/claude-code/hooks/block_claire_paths ~/.local/bin/block_claire_paths
+   ln -sf ~/code/polywave/implementations/claude-code/hooks/block_claire_paths ~/.local/bin/block_claire_paths
    ```
 
 2. Add to `~/.claude/settings.json`:
@@ -310,7 +310,7 @@ echo $?  # Should be non-zero
 
 1. Symlink:
    ```bash
-   ln -sf ~/code/scout-and-wave/implementations/claude-code/hooks/check_wave_ownership ~/.local/bin/check_wave_ownership
+   ln -sf ~/code/polywave/implementations/claude-code/hooks/check_wave_ownership ~/.local/bin/check_wave_ownership
    ```
 
 2. Add to `~/.claude/settings.json`:
@@ -353,7 +353,7 @@ This is a second layer of I1 enforcement. Hook 4 (check_wave_ownership) catches 
 
 1. Symlink:
    ```bash
-   ln -sf ~/code/scout-and-wave/implementations/claude-code/hooks/check_git_ownership ~/.local/bin/check_git_ownership
+   ln -sf ~/code/polywave/implementations/claude-code/hooks/check_git_ownership ~/.local/bin/check_git_ownership
    ```
 
 2. Add to `~/.claude/settings.json`:
@@ -395,7 +395,7 @@ This prevents Wave agents from launching with stale or incorrect IMPL doc refere
 
 1. Symlink:
    ```bash
-   ln -sf ~/code/scout-and-wave/implementations/claude-code/hooks/check_impl_path ~/.local/bin/check_impl_path
+   ln -sf ~/code/polywave/implementations/claude-code/hooks/check_impl_path ~/.local/bin/check_impl_path
    ```
 
 2. Add to `~/.claude/settings.json`:
@@ -453,7 +453,7 @@ This hook is **non-blocking** — it warns the agent but does not prevent the wr
 
 1. Symlink:
    ```bash
-   ln -sf ~/code/scout-and-wave/implementations/claude-code/hooks/warn_stubs ~/.local/bin/warn_stubs
+   ln -sf ~/code/polywave/implementations/claude-code/hooks/warn_stubs ~/.local/bin/warn_stubs
    ```
 
 2. Add to `~/.claude/settings.json`:
@@ -510,7 +510,7 @@ This prevents accidental commits to `main` or another agent's branch during Wave
 
 1. Symlink:
    ```bash
-   ln -sf ~/code/scout-and-wave/implementations/claude-code/hooks/check_branch_drift ~/.local/bin/check_branch_drift
+   ln -sf ~/code/polywave/implementations/claude-code/hooks/check_branch_drift ~/.local/bin/check_branch_drift
    ```
 
 2. Add to `~/.claude/settings.json`:
@@ -552,16 +552,16 @@ echo $?  # 0 (if on expected branch)
 
 ### Checks 1–8: Enforcement
 
-1. **SAW tag detection** — Parse `[SAW:wave{N}:agent-{ID}]` from description; non-SAW agents pass through
+1. **SAW tag detection** — Parse `[polywave:wave{N}:agent-{ID}]` from description; non-SAW agents pass through
 2. **IMPL path extraction** — Extract `docs/IMPL/IMPL-*.yaml` from agent prompt
 3. **IMPL file exists** — Verify the IMPL doc exists on disk
-4. **IMPL validation** — Run `sawtools validate` (if sawtools on PATH)
+4. **IMPL validation** — Run `polywave-tools validate` (if polywave-tools on PATH)
 5. **Agent in wave** — Verify agent ID exists in the specified wave
 6. **Ownership file match** — Cross-reference `.saw-ownership.json` agent ID and wave
 7. **Branch verification** — Verify worktree branch matches `saw/{slug}/wave{N}-agent-{ID}`
 8. **Scaffold check** — Verify all scaffolds are committed (if any in IMPL doc)
-9. **Scout conditional injection** — Conditionally injects `scout-program-contracts.md` when `--program` appears in the prompt. Suitability gate and implementation process are now inlined in `scout.md`. Detection: fires if `[SAW:scout` appears in description, `subagent_type: scout` appears in prompt, or `# Scout Agent: Pre-Flight Dependency Mapping` appears in prompt. Dedup: uses HTML comment markers `<!-- injected: references/scout-X.md -->` to skip files already present in the prompt.
-10. **Wave-agent conditional injection** — Conditionally injects `wave-agent-build-diagnosis.md` (when baseline verification failed) and `wave-agent-program-contracts.md` (when frozen contracts present). Worktree isolation and completion report are now inlined in `wave-agent.md`. Detection: fires if `[SAW:wave` appears in description or `subagent_type: wave-agent` appears in tool input. Dedup: uses HTML comment markers `<!-- injected: references/wave-agent-X.md -->` to skip files already present in the prompt.
+9. **Scout conditional injection** — Conditionally injects `scout-program-contracts.md` when `--program` appears in the prompt. Suitability gate and implementation process are now inlined in `scout.md`. Detection: fires if `[polywave:scout` appears in description, `subagent_type: scout` appears in prompt, or `# Scout Agent: Pre-Flight Dependency Mapping` appears in prompt. Dedup: uses HTML comment markers `<!-- injected: references/scout-X.md -->` to skip files already present in the prompt.
+10. **Wave-agent conditional injection** — Conditionally injects `wave-agent-build-diagnosis.md` (when baseline verification failed) and `wave-agent-program-contracts.md` (when frozen contracts present). Worktree isolation and completion report are now inlined in `wave-agent.md`. Detection: fires if `[polywave:wave` appears in description or `subagent_type: wave-agent` appears in tool input. Dedup: uses HTML comment markers `<!-- injected: references/wave-agent-X.md -->` to skip files already present in the prompt.
 11. **Critic-agent** — No injection. All content inlined in `critic-agent.md`.
 12. **Planner** — No injection. All content inlined in `planner.md`.
 
@@ -584,7 +584,7 @@ After enforcement passes, dispatch on `subagent_type` and conditionally inject m
 
 1. Symlink:
    ```bash
-   ln -sf ~/code/scout-and-wave/implementations/claude-code/hooks/validate_agent_launch ~/.local/bin/validate_agent_launch
+   ln -sf ~/code/polywave/implementations/claude-code/hooks/validate_agent_launch ~/.local/bin/validate_agent_launch
    ```
 
 2. Add to `~/.claude/settings.json`:
@@ -614,11 +614,11 @@ echo '{"tool_name":"Agent","tool_input":{"prompt":"Do some work","description":"
 echo $?  # 0
 
 # SAW agent launch with valid context — should exit 0
-echo '{"tool_name":"Agent","agent_type":"wave-agent","tool_input":{"prompt":"IMPL doc: docs/IMPL/IMPL-feature.yaml","description":"[SAW:wave1:agent-A] implement feature"}}' | validate_agent_launch
+echo '{"tool_name":"Agent","agent_type":"wave-agent","tool_input":{"prompt":"IMPL doc: docs/IMPL/IMPL-feature.yaml","description":"[polywave:wave1:agent-A] implement feature"}}' | validate_agent_launch
 echo $?  # 0 (if all preconditions met)
 
 # SAW agent launch with missing IMPL — should exit 1
-echo '{"tool_name":"Agent","agent_type":"wave-agent","tool_input":{"prompt":"no impl path here","description":"[SAW:wave1:agent-A] implement feature"}}' | validate_agent_launch 2>&1
+echo '{"tool_name":"Agent","agent_type":"wave-agent","tool_input":{"prompt":"no impl path here","description":"[polywave:wave1:agent-A] implement feature"}}' | validate_agent_launch 2>&1
 echo $?  # 1 (blocked: no IMPL path found)
 ```
 
@@ -631,15 +631,15 @@ echo $?  # 1 (blocked: no IMPL path found)
 ### How It Works
 
 1. Claude Code calls the script when a subagent launches (before first tool execution)
-2. Script parses agent description for `[SAW:wave{N}:agent-{ID}]` tag
-3. Extracts IMPL doc path from agent prompt or reads from `.saw-state/active-impl`
-4. Determines worktree path from `.saw-state/worktrees.json` or returns empty if solo wave
+2. Script parses agent description for `[polywave:wave{N}:agent-{ID}]` tag
+3. Extracts IMPL doc path from agent prompt or reads from `.polywave-state/active-impl`
+4. Determines worktree path from `.polywave-state/worktrees.json` or returns empty if solo wave
 5. Returns `updatedEnvironment` with 5 variables:
-   - `SAW_AGENT_WORKTREE`: Absolute worktree path (empty if solo wave)
-   - `SAW_AGENT_ID`: Agent ID (e.g., "A", "B2")
-   - `SAW_WAVE_NUMBER`: Wave number (e.g., "1")
-   - `SAW_IMPL_PATH`: Absolute IMPL doc path
-   - `SAW_BRANCH`: Expected branch name (e.g., "saw/feature/wave1-agent-A")
+   - `POLYWAVE_AGENT_WORKTREE`: Absolute worktree path (empty if solo wave)
+   - `POLYWAVE_AGENT_ID`: Agent ID (e.g., "A", "B2")
+   - `POLYWAVE_WAVE_NUMBER`: Wave number (e.g., "1")
+   - `POLYWAVE_IMPL_PATH`: Absolute IMPL doc path
+   - `POLYWAVE_BRANCH`: Expected branch name (e.g., "saw/feature/wave1-agent-A")
 
 These variables are consumed by other E43 hooks (`inject_bash_cd`, `validate_write_paths`) and can be read by agents for debugging.
 
@@ -647,7 +647,7 @@ These variables are consumed by other E43 hooks (`inject_bash_cd`, `validate_wri
 
 1. Symlink:
    ```bash
-   ln -sf ~/code/scout-and-wave/implementations/claude-code/hooks/inject_worktree_env ~/.local/bin/inject_worktree_env
+   ln -sf ~/code/polywave/implementations/claude-code/hooks/inject_worktree_env ~/.local/bin/inject_worktree_env
    ```
 
 2. Add to `~/.claude/settings.json`:
@@ -672,7 +672,7 @@ These variables are consumed by other E43 hooks (`inject_bash_cd`, `validate_wri
 
 ```bash
 # Test with SAW agent description
-echo '{"description":"[SAW:wave1:agent-A] implement feature","prompt":"IMPL doc: /path/to/IMPL-feature.yaml"}' | inject_worktree_env
+echo '{"description":"[polywave:wave1:agent-A] implement feature","prompt":"IMPL doc: /path/to/IMPL-feature.yaml"}' | inject_worktree_env
 # Should return JSON with updatedEnvironment containing 5 variables
 
 # Test with non-SAW agent (should pass through)
@@ -684,15 +684,15 @@ echo $?  # 0 (no environment changes)
 
 ## Hook 11: Bash CD Injection (E43)
 
-**PreToolUse** — Auto-prepends `cd $SAW_AGENT_WORKTREE &&` to bash commands when in worktree context.
+**PreToolUse** — Auto-prepends `cd $POLYWAVE_AGENT_WORKTREE &&` to bash commands when in worktree context.
 
 ### How It Works
 
 1. Claude Code calls the script before executing a Bash tool
-2. Script checks if `SAW_AGENT_WORKTREE` environment variable is set (injected by Hook 10)
+2. Script checks if `POLYWAVE_AGENT_WORKTREE` environment variable is set (injected by Hook 10)
 3. If unset or empty -> pass through (exit 0, no modification)
-4. If command already starts with `cd $SAW_AGENT_WORKTREE` -> pass through (no double-injection)
-5. Otherwise -> return `updatedInput` with command modified to `cd $SAW_AGENT_WORKTREE && <original command>`
+4. If command already starts with `cd $POLYWAVE_AGENT_WORKTREE` -> pass through (no double-injection)
+5. Otherwise -> return `updatedInput` with command modified to `cd $POLYWAVE_AGENT_WORKTREE && <original command>`
 
 This eliminates the "Agent B leak" scenario where agents forget to use absolute paths and create files in the main repo instead of their worktree.
 
@@ -700,7 +700,7 @@ This eliminates the "Agent B leak" scenario where agents forget to use absolute 
 
 1. Symlink:
    ```bash
-   ln -sf ~/code/scout-and-wave/implementations/claude-code/hooks/inject_bash_cd ~/.local/bin/inject_bash_cd
+   ln -sf ~/code/polywave/implementations/claude-code/hooks/inject_bash_cd ~/.local/bin/inject_bash_cd
    ```
 
 2. Add to `~/.claude/settings.json`:
@@ -730,7 +730,7 @@ echo '{"tool_name":"Bash","tool_input":{"command":"echo hello"}}' | inject_bash_
 # Should return original input
 
 # Test with worktree env (should inject cd)
-export SAW_AGENT_WORKTREE="/path/to/worktree"
+export POLYWAVE_AGENT_WORKTREE="/path/to/worktree"
 echo '{"tool_name":"Bash","tool_input":{"command":"go test ./..."}}' | inject_bash_cd
 # Should return: {"hookSpecificOutput": {"updatedInput": {"command": "cd /path/to/worktree && go test ./..."}}}
 ```
@@ -744,10 +744,10 @@ echo '{"tool_name":"Bash","tool_input":{"command":"go test ./..."}}' | inject_ba
 ### How It Works
 
 1. Claude Code calls the script before executing Write/Edit tools
-2. Script checks if `SAW_AGENT_WORKTREE` environment variable is set
+2. Script checks if `POLYWAVE_AGENT_WORKTREE` environment variable is set
 3. If unset or empty -> pass through (solo wave agents use different isolation)
 4. If `file_path` is relative (doesn't start with `/`) -> block (exit 2) with error message
-5. If `file_path` doesn't start with `$SAW_AGENT_WORKTREE` -> block (exit 2) with boundary violation message
+5. If `file_path` doesn't start with `$POLYWAVE_AGENT_WORKTREE` -> block (exit 2) with boundary violation message
 6. Otherwise -> allow (exit 0)
 
 This is the hard enforcement layer for worktree isolation, catching attempts to write outside boundaries even if bash cd injection failed.
@@ -756,7 +756,7 @@ This is the hard enforcement layer for worktree isolation, catching attempts to 
 
 1. Symlink:
    ```bash
-   ln -sf ~/code/scout-and-wave/implementations/claude-code/hooks/validate_write_paths ~/.local/bin/validate_write_paths
+   ln -sf ~/code/polywave/implementations/claude-code/hooks/validate_write_paths ~/.local/bin/validate_write_paths
    ```
 
 2. Add to `~/.claude/settings.json`:
@@ -786,7 +786,7 @@ echo '{"tool_name":"Write","tool_input":{"file_path":"/tmp/test.txt"}}' | valida
 echo $?  # 0
 
 # Test with relative path (should block)
-export SAW_AGENT_WORKTREE="/Users/user/worktree"
+export POLYWAVE_AGENT_WORKTREE="/Users/user/worktree"
 echo '{"tool_name":"Write","tool_input":{"file_path":"relative/path.go"}}' | validate_write_paths 2>&1
 echo $?  # 2 (blocked)
 
@@ -808,11 +808,11 @@ echo $?  # 0
 ### How It Works
 
 1. Claude Code calls the script when a subagent stops (after last tool execution)
-2. Script checks if `SAW_AGENT_ID` and `SAW_IMPL_PATH` environment variables are set
+2. Script checks if `POLYWAVE_AGENT_ID` and `POLYWAVE_IMPL_PATH` environment variables are set
 3. If unset -> pass through (non-SAW agent)
 4. Reads IMPL doc and extracts completion report for the agent
 5. If completion report missing -> warn to stderr (exit 0, non-blocking)
-6. If `SAW_BRANCH` is set, checks that the branch has at least one commit
+6. If `POLYWAVE_BRANCH` is set, checks that the branch has at least one commit
 7. If no commits found -> warn to stderr (exit 0, non-blocking)
 8. Otherwise -> exit 0 silently
 
@@ -822,7 +822,7 @@ This hook is warn-only because SubagentStop fires after the agent completes — 
 
 1. Symlink:
    ```bash
-   ln -sf ~/code/scout-and-wave/implementations/claude-code/hooks/verify_worktree_compliance ~/.local/bin/verify_worktree_compliance
+   ln -sf ~/code/polywave/implementations/claude-code/hooks/verify_worktree_compliance ~/.local/bin/verify_worktree_compliance
    ```
 
 2. Add to `~/.claude/settings.json`:
@@ -851,9 +851,9 @@ echo '{}' | verify_worktree_compliance
 echo $?  # 0
 
 # Test with SAW context but no completion report (should warn)
-export SAW_AGENT_ID="A"
-export SAW_IMPL_PATH="/path/to/IMPL-feature.yaml"
-export SAW_BRANCH="saw/feature/wave1-agent-A"
+export POLYWAVE_AGENT_ID="A"
+export POLYWAVE_IMPL_PATH="/path/to/IMPL-feature.yaml"
+export POLYWAVE_BRANCH="saw/feature/wave1-agent-A"
 echo '{}' | verify_worktree_compliance 2>&1
 # Should output warning to stderr but exit 0
 echo $?  # 0
@@ -881,7 +881,7 @@ This hook provides structured data for external observability systems to track a
 
 1. Symlink:
    ```bash
-   ln -sf ~/code/scout-and-wave/implementations/claude-code/hooks/emit_agent_completion ~/.local/bin/emit_agent_completion
+   ln -sf ~/code/polywave/implementations/claude-code/hooks/emit_agent_completion ~/.local/bin/emit_agent_completion
    ```
 
 2. Add to `~/.claude/settings.json`:
@@ -906,10 +906,10 @@ This hook provides structured data for external observability systems to track a
 
 ```bash
 # Test with SAW agent context (should emit JSON event)
-export SAW_AGENT_ID="A"
-export SAW_WAVE_NUMBER="1"
-export SAW_IMPL_PATH="/path/to/IMPL-feature.yaml"
-echo '{"description":"[SAW:wave1:agent-A] implement feature"}' | emit_agent_completion
+export POLYWAVE_AGENT_ID="A"
+export POLYWAVE_WAVE_NUMBER="1"
+export POLYWAVE_IMPL_PATH="/path/to/IMPL-feature.yaml"
+echo '{"description":"[polywave:wave1:agent-A] implement feature"}' | emit_agent_completion
 # Should output JSON event to stdout
 
 # Test with non-SAW agent (should exit silently)
@@ -941,7 +941,7 @@ field prevents infinite re-trigger loops (Claude Code sets this to `true` on re-
 
 1. Symlink:
    ```bash
-   ln -sf ~/code/scout-and-wave/implementations/claude-code/hooks/saw_orchestrator_stop ~/.local/bin/saw_orchestrator_stop
+   ln -sf ~/code/polywave/implementations/claude-code/hooks/saw_orchestrator_stop ~/.local/bin/saw_orchestrator_stop
    ```
 
 2. Add to `~/.claude/settings.json`:
@@ -978,9 +978,9 @@ echo $?  # 0
 
 ## Maintenance
 
-- **Version control:** All hook scripts are tracked in the scout-and-wave repository
+- **Version control:** All hook scripts are tracked in the polywave repository
 - **Updates:** `git pull` updates the scripts via symlink
-- **Dependencies:** bash, jq, sawtools (graceful degradation if missing)
+- **Dependencies:** bash, jq, polywave-tools (graceful degradation if missing)
 - **Errors:** Print to stderr and return exit code 2 (block) or 0 (allow)
 - **Non-blocking warnings:** Return exit code 0 with JSON `additionalContext` on stdout
 - **Execution:** Runs synchronously (blocks tool execution if it exits non-zero)

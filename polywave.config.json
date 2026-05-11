@@ -1,16 +1,16 @@
 {
   "repos": [
     {
-      "name": "scout-and-wave",
-      "path": "/Users/dayna.blackwell/code/scout-and-wave"
+      "name": "polywave",
+      "path": "/Users/dayna.blackwell/code/polywave"
     },
     {
-      "name": "scout-and-wave-go",
-      "path": "/Users/dayna.blackwell/code/scout-and-wave-go"
+      "name": "polywave-go",
+      "path": "/Users/dayna.blackwell/code/polywave-go"
     },
     {
-      "name": "scout-and-wave-web",
-      "path": "/Users/dayna.blackwell/code/scout-and-wave-web"
+      "name": "polywave-web",
+      "path": "/Users/dayna.blackwell/code/polywave-web"
     }
   ],
   "repo": {

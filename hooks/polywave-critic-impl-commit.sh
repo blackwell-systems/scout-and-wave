@@ -18,7 +18,7 @@ input=$(cat)
 agent_description=$(printf '%s' "$input" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('agent_description',''))" 2>/dev/null || true)
 
 # Non-critic agents pass through immediately
-if [[ "$agent_description" != \[SAW:critic:* ]]; then
+if [[ "$agent_description" != \[polywave:critic:* ]]; then
   exit 0
 fi
 
@@ -27,10 +27,10 @@ fi
 # Step 1: Find the IMPL doc path
 impl_path=""
 
-# Try .saw-state/active-impl starting from cwd, walk up to repo root
+# Try .polywave-state/active-impl starting from cwd, walk up to repo root
 search_dir="$(pwd)"
 while [[ -n "$search_dir" && "$search_dir" != "/" ]]; do
-  candidate="$search_dir/.saw-state/active-impl"
+  candidate="$search_dir/.polywave-state/active-impl"
   if [[ -f "$candidate" ]]; then
     impl_path=$(cat "$candidate")
     break
@@ -82,7 +82,7 @@ staged=$(git -C "$repo_root" diff --cached --name-only 2>/dev/null | grep -F "$(
 if [[ -n "$unstaged" || -n "$staged" ]]; then
   slug=$(basename "$impl_path" .yaml | sed 's/^IMPL-//')
   echo "E48: Critic agent must commit IMPL doc changes before stopping." >&2
-  echo "     Run: git -C $repo_root add $impl_path && git -C $repo_root commit -m \"chore: critic report for $slug [SAW:critic:$slug]\"" >&2
+  echo "     Run: git -C $repo_root add $impl_path && git -C $repo_root commit -m \"chore: critic report for $slug [polywave:critic:$slug]\"" >&2
   exit 2
 fi
 

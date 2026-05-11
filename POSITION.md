@@ -1,4 +1,4 @@
-# Scout-and-Wave: Position Statement
+# Polywave: Position Statement
 
 ## Background
 
@@ -11,7 +11,7 @@ Most approaches to parallel agent coordination fall into one of four failure mod
 3. **Human orchestration.** A person manually partitions work, reviews each agent's output, resolves conflicts, and sequences merges. Correct, but the person is now the bottleneck the agents were supposed to remove.
 4. **Coarse serialization.** Run agents one at a time. No conflicts, but no parallelism either.
 
-Scout-and-Wave (SAW) treats parallel agent work as a distributed systems problem and solves it structurally: disjoint ownership eliminates conflicts by construction, interface contracts eliminate coordination drift, and wave sequencing eliminates cascade failures.
+Polywave (SAW) treats parallel agent work as a distributed systems problem and solves it structurally: disjoint ownership eliminates conflicts by construction, interface contracts eliminate coordination drift, and wave sequencing eliminates cascade failures.
 
 Systems in categories 1-3 rely on probabilistic outcomes -- files might not conflict, merges might succeed, humans might catch issues. SAW eliminates the probability: I1 makes conflicts impossible by construction, I2 makes API drift impossible by construction, and I3 makes cascade failures detectable at wave boundaries rather than at the end. The protocol's correctness properties are enforced by tool-level hooks, not by agent cooperation -- a model prompted to violate ownership will be blocked before the tool executes.
 
@@ -29,9 +29,9 @@ The architecture is three repositories:
 
 | Repository | Purpose | Contents |
 |---|---|---|
-| **scout-and-wave** | Language-agnostic protocol spec | Invariants, execution rules, agent prompts, `/saw` skill |
-| **scout-and-wave-go** | Go SDK + CLI engine | 40 packages: engine, protocol, hooks, resume, retry, journal, collision detection, autonomy, suitability analysis, wave solver, build diagnostics, error parsing, code review, 4 LLM backends |
-| **scout-and-wave-web** | Web application | HTTP/SSE real-time dashboard, React UI with command palette and Base16 theming, Go API server with Bedrock SSO device auth |
+| **polywave** | Language-agnostic protocol spec | Invariants, execution rules, agent prompts, `/saw` skill |
+| **polywave-go** | Go SDK + CLI engine | 40 packages: engine, protocol, hooks, resume, retry, journal, collision detection, autonomy, suitability analysis, wave solver, build diagnostics, error parsing, code review, 4 LLM backends |
+| **polywave-web** | Web application | HTTP/SSE real-time dashboard, React UI with command palette and Base16 theming, Go API server with Bedrock SSO device auth |
 
 CLI commands and web API routes are thin I/O wrappers over the same SDK functions. There is one source of truth for business logic.
 
@@ -46,7 +46,7 @@ SAW does not assume a specific LLM provider. The protocol specifies *what* agent
 | **OpenAI-compatible** | `pkg/agent/backend/openai` | Any OpenAI-compatible endpoint: OpenAI, Groq, Ollama (local models), or custom deployments |
 | **CLI** | `pkg/agent/backend/cli` | Wraps any CLI binary (`claude`, or any compatible CLI via `BinaryPath` config) |
 
-Model selection is configurable at three levels: per-invocation (`--model`), per-role in `saw.config.json` (separate `scout_model`, `wave_model`, `critic_model`, `integration_model`, `scaffold_model`, `planner_model`), or inherited from the parent session. A single SAW execution can use different models for different roles -- Opus for Scout planning, Sonnet for Wave agents, Haiku for critic review. The web app's ModelPicker UI surfaces this as per-role provider selection: each role (Scout, Wave, Critic, Scaffold, Integration, Planner, Chat) has its own model dropdown, and different roles can use different providers in the same session.
+Model selection is configurable at three levels: per-invocation (`--model`), per-role in `polywave.config.json` (separate `scout_model`, `wave_model`, `critic_model`, `integration_model`, `scaffold_model`, `planner_model`), or inherited from the parent session. A single SAW execution can use different models for different roles -- Opus for Scout planning, Sonnet for Wave agents, Haiku for critic review. The web app's ModelPicker UI surfaces this as per-role provider selection: each role (Scout, Wave, Critic, Scaffold, Integration, Planner, Chat) has its own model dropdown, and different roles can use different providers in the same session.
 
 The `Backend` config accepts `BaseURL` for endpoint override, meaning any API-compatible service works without code changes: `http://localhost:11434/v1` for local Ollama, `https://api.groq.com/openai/v1` for Groq, or a corporate proxy endpoint.
 
@@ -63,21 +63,21 @@ SAW has three distinct execution modes, each serving different use cases. All th
 The primary interactive experience. The `/saw` skill is a YAML-frontmatter + markdown file that conforms to the **agent skills open standard** -- the same format adopted by most frontier model agent frameworks. The skill turns a Claude Code session into a SAW Orchestrator.
 
 ```
-/saw scout "add caching layer"                 # Scout analyzes codebase, produces IMPL plan
-/saw wave --auto                               # Execute all waves with human checkpoints
-/saw auto "add caching layer"                  # Scout + confirm + all waves in one command
-/saw program --impl feat-a feat-b feat-c       # Bundle queued IMPLs → auto tier-assign by file ownership
-/saw program execute                           # Run all tiers; parallel within tier, sequential across
+/polywave scout "add caching layer"                 # Scout analyzes codebase, produces IMPL plan
+/polywave wave --auto                               # Execute all waves with human checkpoints
+/polywave auto "add caching layer"                  # Scout + confirm + all waves in one command
+/polywave program --impl feat-a feat-b feat-c       # Bundle queued IMPLs → auto tier-assign by file ownership
+/polywave program execute                           # Run all tiers; parallel within tier, sequential across
 ```
 
-`/saw auto` is the low-friction entry point for the common case — same human checkpoint as scout → wave, without the separate command invocations. It eliminates command overhead while preserving the review step where the plan is visible before any agent writes code.
+`/polywave auto` is the low-friction entry point for the common case — same human checkpoint as scout → wave, without the separate command invocations. It eliminates command overhead while preserving the review step where the plan is visible before any agent writes code.
 
-`/saw program --impl` is the natural next step once you have multiple IMPLs queued. It runs `check-impl-conflicts` on all provided slugs, assigns them to tiers automatically (IMPLs with disjoint file ownership land in the same tier and execute in parallel), and produces a PROGRAM manifest ready for `/saw program execute`. No planning agent is needed — the tier structure is derived mechanically from file ownership.
+`/polywave program --impl` is the natural next step once you have multiple IMPLs queued. It runs `check-impl-conflicts` on all provided slugs, assigns them to tiers automatically (IMPLs with disjoint file ownership land in the same tier and execute in parallel), and produces a PROGRAM manifest ready for `/polywave program execute`. No planning agent is needed — the tier structure is derived mechanically from file ownership.
 
 - Human-in-the-loop by default; `--auto` for autonomous wave progression
 - Access to Claude Code's full tool suite (file I/O, shell, subagents, MCP)
 - Subagent types (`scout`, `wave-agent`, `scaffold-agent`, `critic-agent`, `integration-agent`, `planner`) carry tool-level enforcement -- a Scout agent cannot `Edit` source files, a Wave agent cannot spawn sub-agents
-- Interview mode (E39): structured 6-phase requirements gathering (`/saw interview`) that produces a REQUIREMENTS.md for Scout consumption -- an alternative entry point when the user needs guided decomposition before planning
+- Interview mode (E39): structured 6-phase requirements gathering (`/polywave interview`) that produces a REQUIREMENTS.md for Scout consumption -- an alternative entry point when the user needs guided decomposition before planning
 - Because the skill conforms to the open standard, it is not structurally locked to Claude Code. Any agent runtime that supports the skills standard can load the same `saw-skill.md` file
 
 ### Context Window Architecture
@@ -100,10 +100,10 @@ Injection is driven by two scripts with direct conditional logic (no YAML frontm
 
 **Orchestrator triggers** (`inject-context` script) -- Injected via `UserPromptSubmit` hook into orchestrator context:
 
-- `^/saw program` in prompt → inject `references/program-flow.md`
-- `^/saw amend` in prompt → inject `references/amend-flow.md`
+- `^/polywave program` in prompt → inject `references/program-flow.md`
+- `^/polywave amend` in prompt → inject `references/amend-flow.md`
 
-When a user invokes `/saw program execute`, the `inject_skill_context` hook calls the `inject-context` script, which matches the prompt and returns `additionalContext` containing `program-flow.md` before the model runs. The model receives the reference automatically -- no routing decision required.
+When a user invokes `/polywave program execute`, the `inject_skill_context` hook calls the `inject-context` script, which matches the prompt and returns `additionalContext` containing `program-flow.md` before the model runs. The model receives the reference automatically -- no routing decision required.
 
 **Conditional agent references** (`inject-agent-context` script) -- Injected via `PreToolUse/Agent` hook into subagent prompts. Only 3 conditional references remain:
 
@@ -177,19 +177,19 @@ The `validate_agent_launch` hook calls the script before each agent launch. The 
 
 The `install.sh` script uses wildcard patterns to automatically symlink new reference files as they're added. For always-needed content, inline it in the agent definition. For conditional content, add logic to the relevant script (`inject-context` or `inject-agent-context`). Re-run `install.sh` to symlink new reference files.
 
-### CLI (`sawtools` binary)
+### CLI (`polywave-tools` binary)
 
 A standalone Go binary with no Claude Code dependency. Every protocol operation is a CLI command:
 
 ```
-sawtools run-scout <feature>              # Full Scout phase: launch, validate, finalize
-sawtools prepare-wave <impl> --wave N     # Atomic wave setup: deps, worktrees, briefs, journals
-sawtools finalize-wave <impl> --wave N    # Atomic wave teardown: verify, merge, build, cleanup
-sawtools run-wave <impl> --wave N         # Fully automated wave execution (any backend)
-sawtools daemon                           # Continuous autonomous operation from queue
+polywave-tools run-scout <feature>              # Full Scout phase: launch, validate, finalize
+polywave-tools prepare-wave <impl> --wave N     # Atomic wave setup: deps, worktrees, briefs, journals
+polywave-tools finalize-wave <impl> --wave N    # Atomic wave teardown: verify, merge, build, cleanup
+polywave-tools run-wave <impl> --wave N         # Fully automated wave execution (any backend)
+polywave-tools daemon                           # Continuous autonomous operation from queue
 ```
 
-The CLI is callable from CI/CD pipelines, shell scripts, cron jobs, or other orchestrators. `sawtools run-wave` drives agents through the API or Bedrock backend without a Claude Code session -- this is the path for fully automated pipelines. Pre-built binaries for macOS, Linux, and Windows (amd64/arm64) are published via GoReleaser on each release.
+The CLI is callable from CI/CD pipelines, shell scripts, cron jobs, or other orchestrators. `polywave-tools run-wave` drives agents through the API or Bedrock backend without a Claude Code session -- this is the path for fully automated pipelines. Pre-built binaries for macOS, Linux, and Windows (amd64/arm64) are published via GoReleaser on each release.
 
 Batching commands (`run-scout`, `prepare-wave`, `finalize-wave`, `finalize-impl`, `prepare-tier`, `finalize-tier`) package multi-step workflows as atomic operations. Each succeeds or fails as a unit with structured JSON output. Forgotten steps -- the most common source of silent protocol violations -- are eliminated by design.
 
@@ -215,9 +215,9 @@ Importable Go packages for building custom orchestrators:
 
 ```go
 import (
-    "github.com/blackwell-systems/scout-and-wave-go/pkg/engine"
-    "github.com/blackwell-systems/scout-and-wave-go/pkg/protocol"
-    "github.com/blackwell-systems/scout-and-wave-go/pkg/agent/backend/bedrock"
+    "github.com/blackwell-systems/polywave-go/pkg/engine"
+    "github.com/blackwell-systems/polywave-go/pkg/protocol"
+    "github.com/blackwell-systems/polywave-go/pkg/agent/backend/bedrock"
 )
 
 eng := engine.New(engine.Opts{
@@ -230,7 +230,7 @@ result := eng.RunScout(ctx, "add caching layer")
 eng.RunWaveFull(ctx, result.IMPLPath, 1)
 ```
 
-The web application (`scout-and-wave-web`) is built on this SDK. Every CLI command is a thin wrapper over an SDK function. The SDK also provides:
+The web application (`polywave-web`) is built on this SDK. Every CLI command is a thin wrapper over an SDK function. The SDK also provides:
 
 - `engine.RunDaemon()` for continuous autonomous operation -- polls an IMPL queue (`pkg/queue`), picks up work, executes waves, reports results, with auto-remediation loop (configurable retry count before escalation)
 - `engine.Chat()` for conversational agent interaction
@@ -324,16 +324,16 @@ Protocol compliance is not advisory. Lifecycle hooks enforce invariants mechanic
 - **PostToolUse (`check_git_ownership`)**: Catches git operations that modify files outside the ownership list -- the layer-2 defense that catches merge conflict resolutions bypassing Write/Edit hooks.
 - **PostToolUse (`warn_stubs`)**: E20 stub detection -- non-blocking warnings when Write/Edit creates files containing stub patterns (TODO, FIXME, NotImplementedError, panic("not implemented"), etc.) across 8 languages.
 - **PreToolUse (`block_git_stash`)**: Blocks `git stash` in wave-agent worktrees. Stashing hides uncommitted work from `finalize-wave`'s commit verification (I5) and risks data loss on worktree cleanup. Agents redirect to `git commit --no-verify` when parallel agents have unmerged type dependencies.
-- **SubagentStart (`validate_agent_isolation`)**: E43 startup gate -- fires when any wave agent starts, extracts wave/agent ID from the `[SAW:wave{N}:agent-{ID}]` tag, and calls `sawtools verify-isolation` to confirm the agent is running in the correct worktree before it takes its first step. Exit code 2 blocks the agent from starting. This is enforcement at agent startup, distinct from the write-time `check_wave_ownership` hook.
+- **SubagentStart (`validate_agent_isolation`)**: E43 startup gate -- fires when any wave agent starts, extracts wave/agent ID from the `[SAW:wave{N}:agent-{ID}]` tag, and calls `polywave-tools verify-isolation` to confirm the agent is running in the correct worktree before it takes its first step. Exit code 2 blocks the agent from starting. This is enforcement at agent startup, distinct from the write-time `check_wave_ownership` hook.
 - **PostToolUse (`auto_commit_on_write`)**: Async hook that fires after every Write/Edit in a SAW worktree context. Immediately runs `git add` + `git commit --no-verify` with an "auto-save: filename" message. Never blocks agent execution (async: true). Purpose: preserve partial work against API rate-limit interruptions or context window exhaustion while the wave is in flight.
-- **PostToolUse (`validate_impl_on_write`)**: Fires after any Write/Edit to an active IMPL doc (`docs/IMPL/IMPL-*.yaml`, skips `complete/`). Runs two checks: (1) `sawtools validate` for E16 structural validation, (2) `sawtools validate-briefs` for symbol existence and wave reference accuracy. Blocks with exit code 2 if either fails. Errors are surfaced at write time -- the Scout or Orchestrator sees them immediately, not when the next agent tries to start.
+- **PostToolUse (`validate_impl_on_write`)**: Fires after any Write/Edit to an active IMPL doc (`docs/IMPL/IMPL-*.yaml`, skips `complete/`). Runs two checks: (1) `polywave-tools validate` for E16 structural validation, (2) `polywave-tools validate-briefs` for symbol existence and wave reference accuracy. Blocks with exit code 2 if either fails. Errors are surfaced at write time -- the Scout or Orchestrator sees them immediately, not when the next agent tries to start.
 - **PreToolUse (`auto_format_saw_agent_names`)**: Validates that subagent names follow the `[SAW:{phase}:{identifier}]` format before launch. When the orchestrator's brief uses an old format or missed the `saw_name` frontmatter field, the hook extracts wave/agent/slug from the prompt via regex and reformats the name. The naming convention is what the entire observability infrastructure (cost events, web dashboard agent cards, `emit_agent_completion`) parses to track per-agent work.
-- **SubagentStop (`emit_agent_completion`)**: Async hook that emits a structured JSON `agent_complete` event for every SAW agent after completion. Fields include: agent ID, wave number, agent type, completion status, files changed, three validation check results (I1 ownership, I5 commit, completion report), journal archive status, and timestamp. Also handles journal archival to `.saw-state/journals/`. Always exits 0 -- observability infrastructure cannot block agent completion.
+- **SubagentStop (`emit_agent_completion`)**: Async hook that emits a structured JSON `agent_complete` event for every SAW agent after completion. Fields include: agent ID, wave number, agent type, completion status, files changed, three validation check results (I1 ownership, I5 commit, completion report), journal archive status, and timestamp. Also handles journal archival to `.polywave-state/journals/`. Always exits 0 -- observability infrastructure cannot block agent completion.
 - **PreToolUse (`block_claire_paths`)**: Blocks writes to paths containing `.claire` -- the token prediction failure mode where `.cla` completes to `ire` instead of `ude`. Represents a category of hook not present in other coordination systems: hardened defenses against known model failure modes rather than protocol enforcement.
 
 **E43: Hook-Based Worktree Isolation.** Four hooks enforce worktree isolation mechanically rather than through agent instructions:
-- `inject_worktree_env` (SubagentStart): Sets 5 environment variables (SAW_AGENT_WORKTREE, SAW_AGENT_ID, SAW_WAVE_NUMBER, SAW_IMPL_PATH, SAW_BRANCH) when wave agents launch
-- `inject_bash_cd` (PreToolUse:Bash): Prepends `cd $SAW_AGENT_WORKTREE &&` to every bash command via `updatedInput`, eliminating manual cd commands
+- `inject_worktree_env` (SubagentStart): Sets 5 environment variables (POLYWAVE_AGENT_WORKTREE, POLYWAVE_AGENT_ID, POLYWAVE_WAVE_NUMBER, POLYWAVE_IMPL_PATH, POLYWAVE_BRANCH) when wave agents launch
+- `inject_bash_cd` (PreToolUse:Bash): Prepends `cd $POLYWAVE_AGENT_WORKTREE &&` to every bash command via `updatedInput`, eliminating manual cd commands
 - `validate_write_paths` (PreToolUse:Write/Edit): Blocks relative paths and out-of-bounds writes in worktree context
 - `verify_worktree_compliance` (SubagentStop): Non-blocking audit trail for post-hoc violation analysis
 
@@ -379,7 +379,7 @@ The hotfix only fires when `AllAreCascades=true` -- when even one failing file b
 
 ### Test File Cascade Detection
 
-**E46: Test File Cascade Detection.** When interfaces change, test files in other packages calling the changed symbols are the most commonly missed ownership category. Three detection layers: Scout step 4 uses `sawtools check-callers` to enumerate all call sites including test files; `pre-wave-validate` runs `check-test-cascade` as Step 3 to detect orphaned test callers before worktrees are created; post-merge verification flags remaining gaps. Test files assigned to the same wave as their interface changes prevent silent test failures after merge.
+**E46: Test File Cascade Detection.** When interfaces change, test files in other packages calling the changed symbols are the most commonly missed ownership category. Three detection layers: Scout step 4 uses `polywave-tools check-callers` to enumerate all call sites including test files; `pre-wave-validate` runs `check-test-cascade` as Step 3 to detect orphaned test callers before worktrees are created; post-merge verification flags remaining gaps. Test files assigned to the same wave as their interface changes prevent silent test failures after merge.
 
 ### Wiring Obligation Tracking
 
@@ -401,13 +401,13 @@ Three distinct automated repair paths fire at different stages:
 
 **Targeted IMPL doc generation for gate failures (`pkg/retry`).** When a quality gate fails post-merge and `MaxRetries` haven't been exhausted, `RetryLoop` generates a new single-agent IMPL doc (`IMPL-{parent}-retry-{attempt}.yaml`) scoped to only the files that failed the gate. This spawns a focused repair agent without any human replanning -- the new IMPL inherits ownership from the failing files, not the full original scope.
 
-**E9: Idempotent finalization with data-loss detection.** `finalize-wave` writes `.saw-state/wave{N}/branch-refs.json` before any step executes. If the run is interrupted and branches are later cleaned up, re-running `finalize-wave` detects the absence of agent branches and verifies each agent's commit SHA (from their completion report) is reachable from HEAD via `git merge-base --is-ancestor`. If any SHA is unreachable, the command returns a data-loss error with a specific recovery command (`git branch recover-<id> <sha>`). In CI/CD pipelines where finalization can be interrupted mid-run, this guarantee distinguishes between "already merged successfully" and "lost work."
+**E9: Idempotent finalization with data-loss detection.** `finalize-wave` writes `.polywave-state/wave{N}/branch-refs.json` before any step executes. If the run is interrupted and branches are later cleaned up, re-running `finalize-wave` detects the absence of agent branches and verifies each agent's commit SHA (from their completion report) is reachable from HEAD via `git merge-base --is-ancestor`. If any SHA is unreachable, the command returns a data-loss error with a specific recovery command (`git branch recover-<id> <sha>`). In CI/CD pipelines where finalization can be interrupted mid-run, this guarantee distinguishes between "already merged successfully" and "lost work."
 
 Build failure diagnosis (`pkg/builddiag`) classifies errors across languages (Go, JavaScript/TypeScript) with pattern-matched error parsers (`pkg/errparse`) that extract file paths, line numbers, and error categories from compiler output. This structured diagnosis feeds into retry context so agents receive actionable fix guidance rather than raw stderr.
 
 ### Autonomy Levels
 
-The autonomy system (`pkg/autonomy`) supports graduated levels: supervised (human confirms each wave), semi-autonomous (`--auto` with human checkpoints at wave boundaries), and fully autonomous (daemon mode with queue-based continuous operation). Autonomy level is configurable per-project in `saw.config.json` and can be overridden per-invocation. Queue items (`docs/IMPL/queue/`) support per-item overrides: `autonomy_override` (overrides project-level autonomy for a specific item) and `require_review` (forces human IMPL review even in autonomous mode). Queue items carry `depends_on` for ordered execution and `priority` for scheduling within the daemon's pick-next logic.
+The autonomy system (`pkg/autonomy`) supports graduated levels: supervised (human confirms each wave), semi-autonomous (`--auto` with human checkpoints at wave boundaries), and fully autonomous (daemon mode with queue-based continuous operation). Autonomy level is configurable per-project in `polywave.config.json` and can be overridden per-invocation. Queue items (`docs/IMPL/queue/`) support per-item overrides: `autonomy_override` (overrides project-level autonomy for a specific item) and `require_review` (forces human IMPL review even in autonomous mode). Queue items carry `depends_on` for ordered execution and `priority` for scheduling within the daemon's pick-next logic.
 
 ### PROGRAM Layer for Multi-Feature Coordination
 
@@ -422,9 +422,9 @@ For projects spanning multiple features, the PROGRAM layer provides tier-gated e
 
 **Program creation supports two directions:**
 
-**Top-down:** `/saw program plan "description"` launches a Planner agent that decomposes the project into features, identifies cross-feature dependencies, and produces a PROGRAM manifest with tier assignments before any Scout runs. Scouts then execute with awareness of their tier context. The Planner uses BFS unblocking score to prioritize IMPLs by critical path and assigns concurrency caps per tier.
+**Top-down:** `/polywave program plan "description"` launches a Planner agent that decomposes the project into features, identifies cross-feature dependencies, and produces a PROGRAM manifest with tier assignments before any Scout runs. Scouts then execute with awareness of their tier context. The Planner uses BFS unblocking score to prioritize IMPLs by critical path and assigns concurrency caps per tier.
 
-**Bottom-up:** `/saw program --impl slug1 slug2 ...` assembles a PROGRAM manifest from pre-existing IMPL docs. The `check-impl-conflicts` command runs greedy graph coloring to compute disjoint tier assignments. Both paths produce the same PROGRAM manifest format and execute identically from that point forward.
+**Bottom-up:** `/polywave program --impl slug1 slug2 ...` assembles a PROGRAM manifest from pre-existing IMPL docs. The `check-impl-conflicts` command runs greedy graph coloring to compute disjoint tier assignments. Both paths produce the same PROGRAM manifest format and execute identically from that point forward.
 
 **Program execution:** `program-execute` runs the tier loop (E28): launches Scouts in parallel (E31), tracks cross-IMPL progress (E32), runs tier gate verification (E29), and auto-advances in `--auto` mode (E33). On tier gate failure, `program-replan` re-engages the Planner to revise the PROGRAM manifest (E34). DAG prioritization scores IMPLs by unblocking value within each tier for optimal parallelism.
 
@@ -439,7 +439,7 @@ SAW uses **atomic batching commands** to combine multi-step workflows into singl
 **Core batching commands:**
 - **`run-scout`**: Resolve paths → ScoutCorrectionLoop (3 retries) → Validate (E16) → Auto-fix → Finalize gates → Detect shared types (E45) → RunCritic (E37, if threshold met) → Return validated IMPL
 - **`prepare-wave`**: Resume detection → I3 sequencing gate → E37 critic verdict check → Stale worktree cleanup → Repo validation → Dependency output verification (wave 2+) → File existence check → Baseline gates (E21A) → Cross-repo baseline (E21B, multi-repo) → Wiring ownership (E35) → Scaffold commit validation (I2) → Freeze check (I2) → I1 disjoint ownership → Type collision check (E41) → Pre-wave readiness gate → Create worktrees → Workspace setup (LSP) → Verify hooks (E43) → Extract briefs + init journals → Return worktree paths
-- **`finalize-wave`**: Verify commits (I5) → Verify completion reports (I4) → Check agent statuses (E7) → Predict conflicts (E11) → Scan stubs (E20) → Run pre-merge gates (E21) → Check type collisions (E27, opt-in) → Validate integration (E25) → Check wiring declarations (E35) → Merge → Populate integration checklist (M5) → Fix go.mod replace paths → Restore workspace config → Verify build → Classify caller cascades (E47) → Run post-merge gates → Cross-repo verify (opt-in) → Cleanup → Return result. Writes `.saw-state/wave{N}/branch-refs.json` before any step executes — if finalization fails mid-run, re-running restores branch refs from this file for a clean retry rather than re-scanning cleaned-up worktrees.
+- **`finalize-wave`**: Verify commits (I5) → Verify completion reports (I4) → Check agent statuses (E7) → Predict conflicts (E11) → Scan stubs (E20) → Run pre-merge gates (E21) → Check type collisions (E27, opt-in) → Validate integration (E25) → Check wiring declarations (E35) → Merge → Populate integration checklist (M5) → Fix go.mod replace paths → Restore workspace config → Verify build → Classify caller cascades (E47) → Run post-merge gates → Cross-repo verify (opt-in) → Cleanup → Return result. Writes `.polywave-state/wave{N}/branch-refs.json` before any step executes — if finalization fails mid-run, re-running restores branch refs from this file for a clean retry rather than re-scanning cleaned-up worktrees.
 - **`finalize-scout`**: Validate (E16) → Pre-wave validation (E35 + test cascade + wave structure) → Brief accuracy validation → Auto-set injection_method → Return per-step JSON
 - **`finalize-impl`**: Validate (E16) → Populate gates → Populate integration checklist → Validate again → Return status
 - **`prepare-tier`**: Cross-IMPL conflict check (P1+) → Create IMPL branches (E28B, P5) → Coordinate worktree creation → Return tier readiness
@@ -453,7 +453,7 @@ The engine includes an LLM-powered code review system (`pkg/codereview`) that sc
 
 ### Real-Time Observability
 
-The web application (`scout-and-wave-web`) provides a real-time SSE-based dashboard for monitoring parallel agent execution. Built on the Go SDK, it streams tool call events, agent progress, wave state transitions, and build verification results as they happen. The API server (`pkg/api`) exposes the same operations available through CLI, making the web app a visual orchestrator rather than a separate system.
+The web application (`polywave-web`) provides a real-time SSE-based dashboard for monitoring parallel agent execution. Built on the Go SDK, it streams tool call events, agent progress, wave state transitions, and build verification results as they happen. The API server (`pkg/api`) exposes the same operations available through CLI, making the web app a visual orchestrator rather than a separate system.
 
 The web application includes:
 
@@ -469,7 +469,7 @@ The web application includes:
 - **Command Palette** -- keyboard-driven navigation across all operations
 - **File Browser** -- tree view with diff viewer (per-agent per-file unified diff via `/api/impl/{slug}/diff/{agent}`) and file content inspection
 - **Chat Panel** -- conversational agent interaction via `engine.Chat()`
-- **Notification System** -- browser push notifications and in-app toasts for 9 event types (wave complete, agent failed, merge complete/failed, scaffold complete, build verify pass/fail, plan complete, run failed), with per-event muting and preferences persisted in `saw.config.json`
+- **Notification System** -- browser push notifications and in-app toasts for 9 event types (wave complete, agent failed, merge complete/failed, scaffold complete, build verify pass/fail, plan complete, run failed), with per-event muting and preferences persisted in `polywave.config.json`
 - **Base16 Theming** -- 200+ color themes with dark/light mode and live preview
 - **Bedrock SSO** -- browser-based device authorization for AWS credentials
 
@@ -477,7 +477,7 @@ The observability event schema (E40) defines three event types -- `cost` (token 
 
 ## Capabilities by Phase
 
-**Planning:** Scout codebase analysis, quantitative suitability scoring, dependency graph construction, automatic wave assignment (topological solver), file ownership assignment, interface contract specification, shared data structure detection (E45), PROGRAM manifests with automatic tiering, structured requirements interviews (E39), IMPL amendment for mid-execution adaptation (E36), `sawtools init` zero-config project initialization with auto-detection (Go/Rust/Node/Python/Ruby/Makefile). Five suitability preconditions gate Scout execution: P1 (file decomposability), P2 (no investigation-first blockers), P3 (interface discoverability), P4 (pre-implementation scan — DONE/PARTIAL/TODO classification of existing work), P5 (positive parallelization value — quantitative overhead vs. gain check). NOT_SUITABLE verdicts name the failed precondition with codebase evidence and a suggested alternative (serial execution, investigate-first, etc.). The IMPL state machine has 11 states (INTERVIEWING, SCOUT_PENDING, SCOUT_VALIDATING, REVIEWED, SCAFFOLD_PENDING, WAVE_PENDING, WAVE_EXECUTING, WAVE_MERGING, WAVE_VERIFIED, BLOCKED, COMPLETE/NOT_SUITABLE terminal) with documented transition guards; the Program state machine wraps this with 9 program-level states (PROGRAM_PLANNING through PROGRAM_COMPLETE/PROGRAM_NOT_SUITABLE).
+**Planning:** Scout codebase analysis, quantitative suitability scoring, dependency graph construction, automatic wave assignment (topological solver), file ownership assignment, interface contract specification, shared data structure detection (E45), PROGRAM manifests with automatic tiering, structured requirements interviews (E39), IMPL amendment for mid-execution adaptation (E36), `polywave-tools init` zero-config project initialization with auto-detection (Go/Rust/Node/Python/Ruby/Makefile). Five suitability preconditions gate Scout execution: P1 (file decomposability), P2 (no investigation-first blockers), P3 (interface discoverability), P4 (pre-implementation scan — DONE/PARTIAL/TODO classification of existing work), P5 (positive parallelization value — quantitative overhead vs. gain check). NOT_SUITABLE verdicts name the failed precondition with codebase evidence and a suggested alternative (serial execution, investigate-first, etc.). The IMPL state machine has 11 states (INTERVIEWING, SCOUT_PENDING, SCOUT_VALIDATING, REVIEWED, SCAFFOLD_PENDING, WAVE_PENDING, WAVE_EXECUTING, WAVE_MERGING, WAVE_VERIFIED, BLOCKED, COMPLETE/NOT_SUITABLE terminal) with documented transition guards; the Program state machine wraps this with 9 program-level states (PROGRAM_PLANNING through PROGRAM_COMPLETE/PROGRAM_NOT_SUITABLE).
 
 **Validation:** E16 IMPL structural validation with auto-fix (`validate --fix` auto-corrects invalid gate types and strips unknown keys), E37 critic brief review with pass/issues/fail verdict, E41 type collision detection (AST-based duplicate detection in same package), E45 shared data structure detection (prevents duplicate type definitions), P1+ cross-IMPL file ownership conflict detection, E21A/E21B baseline gate verification (pre-wave build/test verification with parallel execution and gate result caching E38, including cross-repo), H5 pre-launch agent validation (8 checks), scaffold correctness verification, E35 wiring obligation enforcement.
 
@@ -487,11 +487,11 @@ The observability event schema (E40) defines three event types -- `cost` (token 
 
 **Recovery:** E19 failure type classification (transient/fixable/needs_replan/escalate/timeout) with automatic orchestrator action routing; E19.1 per-IMPL `reactions:` block overrides default routing per failure type with custom action and max_attempts; autonomy gating (gated/supervised/autonomous) controls which stages require human approval; daemon-mode auto-remediation loop retries build failures up to a configurable limit before escalating. Session resume detection with progress percentage and suggested actions, structured retry context with error classification, multi-language build failure diagnosis (Go, JS/TS), error parsing with file/line extraction, prior-work context injection via tool journals.
 
-**Observability:** Structured completion reports with context injection metadata (E44), hook enforcement audit trail, cost/agent_performance/activity event schema (E40) with token usage and USD estimates per agent, tool call event streaming (SSE), agent progress tracking, CONTEXT.md project history, web dashboard with 15+ review panels and real-time monitoring, browser push notifications with per-event muting (9 event types: wave complete, agent failed, merge complete/failed, scaffold complete, build verify pass/fail, plan complete, run failed), SQLite observability store with cost analytics (`ComputeCostRollup()` and `ComputeTrend()` aggregate by agent ID, wave number, IMPL slug, program slug, or model across configurable time buckets — enabling cost-per-feature, cost-per-model-role, and cost-over-time queries via `sawtools query`), drift signal detection (stuck reading without implementing).
+**Observability:** Structured completion reports with context injection metadata (E44), hook enforcement audit trail, cost/agent_performance/activity event schema (E40) with token usage and USD estimates per agent, tool call event streaming (SSE), agent progress tracking, CONTEXT.md project history, web dashboard with 15+ review panels and real-time monitoring, browser push notifications with per-event muting (9 event types: wave complete, agent failed, merge complete/failed, scaffold complete, build verify pass/fail, plan complete, run failed), SQLite observability store with cost analytics (`ComputeCostRollup()` and `ComputeTrend()` aggregate by agent ID, wave number, IMPL slug, program slug, or model across configurable time buckets — enabling cost-per-feature, cost-per-model-role, and cost-over-time queries via `polywave-tools query`), drift signal detection (stuck reading without implementing).
 
 ## Evidence
 
-The protocol is self-hosting. The scout-and-wave protocol repository, Go SDK, and web application were built using SAW. CONTEXT.md records 130+ completed features executed through the protocol, ranging from 1-wave/2-agent documentation fixes to 6-wave/31-agent cross-cutting refactors. The PROGRAM layer's first real execution (a 3-tier, 5-IMPL unification project) drove the discovery and resolution of 13 integration gaps (P1-P13) -- gaps that would not have been found without running the protocol at scale on its own codebase.
+The protocol is self-hosting. The polywave protocol repository, Go SDK, and web application were built using SAW. CONTEXT.md records 130+ completed features executed through the protocol, ranging from 1-wave/2-agent documentation fixes to 6-wave/31-agent cross-cutting refactors. The PROGRAM layer's first real execution (a 3-tier, 5-IMPL unification project) drove the discovery and resolution of 13 integration gaps (P1-P13) -- gaps that would not have been found without running the protocol at scale on its own codebase.
 
 A full canonicalization review of all 40 `pkg/` packages was completed via the SAW PROGRAM layer: every package was reviewed for result.Result[T] adoption, error code migration, API hygiene, and test coverage. Packages where the review found issues had dedicated fix IMPLs executed immediately. The `AnalyzeDeps` function was deleted and replaced by `BuildGraph(ctx, repoRoot, files)` + `ToOutput(graph)`. The `CascadeFile` type was unified into `CascadeCandidate`. All 40 packages are now reviewed and closed.
 

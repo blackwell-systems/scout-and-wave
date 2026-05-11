@@ -10,10 +10,10 @@ This guide walks you through your first SAW session step-by-step, showing exactl
 
 Before starting, ensure you've completed the [installation steps](README.md#installation) in the main README:
 - [x] Permissions configured (`"Agent"` in allow list)
-- [x] Repository cloned (scout-and-wave for protocol/skills)
-- [x] `sawtools` binary installed (`~/.local/bin/sawtools` from scout-and-wave-go)
+- [x] Repository cloned (polywave for protocol/skills)
+- [x] `polywave-tools` binary installed (`~/.local/bin/polywave-tools` from polywave-go)
 - [x] Skill installed (`~/.claude/skills/saw/saw-skill.md` symlinked)
-- [x] Installation verified (`/saw status` works)
+- [x] Installation verified (`/polywave status` works)
 
 ## Your First SAW Run
 
@@ -26,7 +26,7 @@ Open Claude Code in any project directory. SAW works best with existing codebase
 ### Step 2: Run your first scout
 
 ```
-You: /saw scout "add a simple cache to the API client"
+You: /polywave scout "add a simple cache to the API client"
 ```
 
 **What happens (30-90 seconds):**
@@ -169,7 +169,7 @@ The orchestrator will update the IMPL doc. Once you're satisfied, proceed to the
 ### Step 4: Launch the first wave
 
 ```
-You: /saw wave
+You: /polywave wave
 ```
 
 **What happens:**
@@ -201,7 +201,7 @@ Scaffold Agent completed:
   X Build failed: undefined: CachOptions
   -> IMPL doc updated: Status: FAILED
 
-Fix the interface contracts in the IMPL doc and re-run /saw wave.
+Fix the interface contracts in the IMPL doc and re-run /polywave wave.
 Wave 1 will not launch until all scaffolds show Status: committed.
 ```
 
@@ -236,7 +236,7 @@ Launching Wave 1 agents in parallel:
 Agents running in background...
 
 You can continue working in Claude Code while they run.
-Check /saw status anytime to see progress.
+Check /polywave status anytime to see progress.
 ```
 
 **Agent execution (2-5 minutes):**
@@ -245,7 +245,7 @@ Both agents work simultaneously in their worktrees:
 - Reading files (via Read, Glob, Grep)
 - Writing implementation (via Edit, Write)
 - Running tests (via Bash: `go test ./...`)
-- Writing completion reports (via `sawtools set-completion`)
+- Writing completion reports (via `polywave-tools set-completion`)
 - Committing to their worktree branches
 
 You'll see periodic updates:
@@ -261,7 +261,7 @@ Agent B: Writing completion report...
 
 #### 4d. Agents complete and report
 
-Completion reports are written to the IMPL doc's `completion_reports` section using `sawtools set-completion`:
+Completion reports are written to the IMPL doc's `completion_reports` section using `polywave-tools set-completion`:
 
 ```yaml
 completion_reports:
@@ -301,7 +301,7 @@ The orchestrator verifies both agents succeeded, then runs the atomic finalizati
 ```
 All agents completed successfully. Beginning wave finalization...
 
-Running: sawtools finalize-wave docs/IMPL/IMPL-simple-cache.yaml --wave 1 --repo-dir .
+Running: polywave-tools finalize-wave docs/IMPL/IMPL-simple-cache.yaml --wave 1 --repo-dir .
 
 [1/6] Verifying commits...
   OK All agents have commits on their branches
@@ -357,7 +357,7 @@ This is an **atomic batching command** that combines 6 operations: (1) verify-co
 
 To inspect how `finalize-wave` would classify a build failure without running the merge:
 ```bash
-sawtools finalize-wave docs/IMPL/IMPL-simple-cache.yaml --wave 1 --dry-run
+polywave-tools finalize-wave docs/IMPL/IMPL-simple-cache.yaml --wave 1 --dry-run
 ```
 
 **Why unscoped tests matter:**
@@ -371,7 +371,7 @@ Example: Agent B added a cache field to `Client` struct. If a test in a differen
 If this was the last wave (no Wave 2 pending), the orchestrator closes the IMPL:
 
 ```
-Running: sawtools close-impl docs/IMPL/IMPL-simple-cache.yaml --date "2026-03-28"
+Running: polywave-tools close-impl docs/IMPL/IMPL-simple-cache.yaml --date "2026-03-28"
 
 [1/4] Writing SAW:COMPLETE marker...
   OK Updated docs/IMPL/IMPL-simple-cache.yaml
@@ -392,7 +392,7 @@ OK IMPL closed successfully
 
 Another **atomic batching command** that combines 4 operations: (1) write SAW:COMPLETE marker, (2) archive to complete/ directory, (3) update CONTEXT.md, (4) clean stale worktrees. This finalizes the entire feature, not just a single wave.
 
-**If more waves remain:** Skip this step. Run `/saw wave` again for Wave 2, and only close the IMPL after all waves complete.
+**If more waves remain:** Skip this step. Run `/polywave wave` again for Wave 2, and only close the IMPL after all waves complete.
 
 ### Step 7: Review the changes
 
@@ -457,10 +457,10 @@ Scaffold Agent completed:
   X Build failed: src/cache/types.go:5:15: undefined: CachOptions
   -> Status: FAILED
 
-Fix the interface contracts in the IMPL doc and re-run /saw wave.
+Fix the interface contracts in the IMPL doc and re-run /polywave wave.
 ```
 
-Fix the typo in the IMPL doc (`CachOptions` -> `CacheOptions`), then run `/saw wave` again. The Scaffold Agent will re-run with the corrected interface.
+Fix the typo in the IMPL doc (`CachOptions` -> `CacheOptions`), then run `/polywave wave` again. The Scaffold Agent will re-run with the corrected interface.
 
 **Agent reports Status: partial:**
 
@@ -504,7 +504,7 @@ You can investigate, fix the issue, and re-run verification.
 **If you have more waves:**
 
 ```
-/saw status
+/polywave status
 ```
 
 Shows:
@@ -513,13 +513,13 @@ Shows:
 Current wave: Wave 2 (pending)
   Agent C: Add cache metrics/observability
 
-Run /saw wave to execute Wave 2.
+Run /polywave wave to execute Wave 2.
 ```
 
 **Run all remaining waves automatically:**
 
 ```
-/saw wave --auto
+/polywave wave --auto
 ```
 
 Auto mode will:
@@ -530,7 +530,7 @@ Auto mode will:
 **Start a new feature:**
 
 ```
-/saw scout "add rate limiting to the API"
+/polywave scout "add rate limiting to the API"
 ```
 
 This creates a new IMPL doc and doesn't interfere with the cache feature.
@@ -557,7 +557,7 @@ The 30 seconds you spend reviewing interface contracts saves hours of rework lat
 
 **Let agents run in background:**
 
-Don't watch them execute. Do other work in Claude Code or check back with `/saw status`. Agents report when done.
+Don't watch them execute. Do other work in Claude Code or check back with `/polywave status`. Agents report when done.
 
 **Trust the merge:**
 
@@ -571,7 +571,7 @@ Yes! SAW works on any branch. Just ensure your working tree is clean before star
 
 **Q: What if I need to stop mid-wave?**
 
-Claude Code background agents continue even if you close the session. If you restart, use `/saw status` to check progress.
+Claude Code background agents continue even if you close the session. If you restart, use `/polywave status` to check progress.
 
 **Q: Can I modify files while agents are running?**
 
@@ -606,7 +606,7 @@ Solution: Add `"Agent"` to `~/.claude/settings.json` permissions allow list (see
 
 **Problem: Scaffold Agent says "Build failed"**
 
-Solution: Check the IMPL doc `scaffolds` section for the error message (status will show `FAILED: <reason>`). Fix the interface contracts and re-run `/saw wave`.
+Solution: Check the IMPL doc `scaffolds` section for the error message (status will show `FAILED: <reason>`). Fix the interface contracts and re-run `/polywave wave`.
 
 **Problem: Merge conflicts**
 
@@ -618,7 +618,7 @@ Solution: This is the point of the unscoped test gate. Fix the cross-package iss
 
 **Problem: `duplicate key in YAML manifest`**
 
-Solution: The IMPL doc has two top-level keys with the same name (usually `critic_report`). Open the IMPL YAML, search for the duplicated key, and remove the extra occurrence. Use `sawtools set-critic-verdict <path> --verdict pass` instead of manually editing the critic_report field.
+Solution: The IMPL doc has two top-level keys with the same name (usually `critic_report`). Open the IMPL YAML, search for the duplicated key, and remove the extra occurrence. Use `polywave-tools set-critic-verdict <path> --verdict pass` instead of manually editing the critic_report field.
 
 **Problem: `baseline verification failed: baseline_verification_failed`**
 
@@ -637,4 +637,4 @@ Solution: Two agents defined the same type (e.g., both created a struct with the
 - [GLOSSARY.md](../../GLOSSARY.md) - Quick definitions of SAW-specific terms
 - [README](../README.md) - Main documentation
 - [Protocol specification](../../protocol/) - Formal specification
-- [Blog series](https://blog.blackwell-systems.com/posts/scout-and-wave/) - Pattern evolution and lessons learned
+- [Blog series](https://blog.blackwell-systems.com/posts/polywave/) - Pattern evolution and lessons learned

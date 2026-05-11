@@ -1,4 +1,4 @@
-# Scout-and-Wave Procedures
+# Polywave Procedures
 
 **Version:** 0.21.0
 
@@ -136,12 +136,12 @@ SAW procedures are executed by the Orchestrator (synchronous agent in the user's
 
 **When to use:** E11 blocks merge with false positive (identical edits)
 
-**Trigger condition:** `sawtools finalize-wave` exits with E11 error but visual inspection confirms edits are identical
+**Trigger condition:** `polywave-tools finalize-wave` exits with E11 error but visual inspection confirms edits are identical
 
 **Procedure:**
 1. Verify E11 block is false positive (compare file hashes between branches)
 2. Perform manual octopus merge: `git merge --no-ff {branches}`
-3. Resume finalization: `sawtools finalize-wave --skip-merge`
+3. Resume finalization: `polywave-tools finalize-wave --skip-merge`
 4. Integration validation (E25/E26) runs automatically in step 5.5
 
 **See also:** E11a in execution-rules.md for detailed steps
@@ -307,29 +307,29 @@ Scaffold files are committed to HEAD before worktrees are created. Once worktree
        repo: "saw-web"
    ```
 
-   **sawtools cross-repo support:** All sawtools commands accept `--repo-dir` parameter. Run once per repository:
+   **polywave-tools cross-repo support:** All polywave-tools commands accept `--repo-dir` parameter. Run once per repository:
    ```bash
-   sawtools create-worktrees "<manifest-path>" --wave <N> --repo-dir "~/code/saw-engine"
-   sawtools create-worktrees "<manifest-path>" --wave <N> --repo-dir "~/code/saw-web"
+   polywave-tools create-worktrees "<manifest-path>" --wave <N> --repo-dir "~/code/saw-engine"
+   polywave-tools create-worktrees "<manifest-path>" --wave <N> --repo-dir "~/code/saw-web"
    ```
 
    **Merge step:** Run merge procedure separately in each repo:
    ```bash
-   sawtools merge-agents "<manifest-path>" --wave <N> --repo-dir "~/code/saw-engine"
-   sawtools merge-agents "<manifest-path>" --wave <N> --repo-dir "~/code/saw-web"
+   polywave-tools merge-agents "<manifest-path>" --wave <N> --repo-dir "~/code/saw-engine"
+   polywave-tools merge-agents "<manifest-path>" --wave <N> --repo-dir "~/code/saw-web"
    ```
 
    Each repo's agent branches merge into that repo's main branch independently. There is no cross-repo merge operation.
 
    **Cleanup:** Run cleanup per repository:
    ```bash
-   sawtools cleanup "<manifest-path>" --wave <N> --repo-dir "~/code/saw-engine"
-   sawtools cleanup "<manifest-path>" --wave <N> --repo-dir "~/code/saw-web"
+   polywave-tools cleanup "<manifest-path>" --wave <N> --repo-dir "~/code/saw-engine"
+   polywave-tools cleanup "<manifest-path>" --wave <N> --repo-dir "~/code/saw-web"
    ```
 
    **Key constraint:** Prefer agents that own files in exactly one repo. If an agent must own files in multiple repos, provide explicit absolute paths for each repo's worktree in Field 0. Keep cross-repo agent ownership minimal — single-repo agents have cleaner isolation boundaries.
 
-3. **Repo match validation:** `prepare-wave` calls `ValidateRepoMatch` to verify the IMPL doc's declared repo (via `repo:` fields in `file_ownership` and `saw.config.json`) matches the working directory passed as `--repo-dir`. A mismatch (e.g., running prepare-wave for a saw-web IMPL while in the saw-engine directory) produces a blocking error with a message referencing `saw.config.json`.
+3. **Repo match validation:** `prepare-wave` calls `ValidateRepoMatch` to verify the IMPL doc's declared repo (via `repo:` fields in `file_ownership` and `polywave.config.json`) matches the working directory passed as `--repo-dir`. A mismatch (e.g., running prepare-wave for a saw-web IMPL while in the saw-engine directory) produces a blocking error with a message referencing `polywave.config.json`.
 
 4. **File existence validation:** `prepare-wave` calls `ValidateFileExistenceMultiRepo` to check that all `action: modify` files exist in their resolved repos. Missing files produce non-blocking warnings, with one exception: if ALL `action: modify` files are absent, `prepare-wave` emits `E16_REPO_MISMATCH_SUSPECTED` and exits with a blocking error — this pattern indicates the IMPL targets a different repository than the one being used.
 
@@ -337,7 +337,7 @@ Scaffold files are committed to HEAD before worktrees are created. Once worktree
 
 **Solo wave exception:** If wave contains exactly one agent, do NOT use `prepare-wave` — it always creates worktrees regardless of agent count. Instead, run:
 ```bash
-sawtools prepare-agent "<manifest-path>" --wave <N> --agent <ID> --repo-dir "<repo-path>" --no-worktree
+polywave-tools prepare-agent "<manifest-path>" --wave <N> --agent <ID> --repo-dir "<repo-path>" --no-worktree
 ```
 The agent runs on the main branch directly. `finalize-wave` auto-detects that no worktrees exist and skips VerifyCommits and MergeAgents automatically. Proceed to Phase 3.
 
@@ -350,9 +350,9 @@ The agent runs on the main branch directly. `finalize-wave` auto-detects that no
    - All worktrees branch from current HEAD (includes committed scaffolds from Scaffold Agent)
 
 2. **Install pre-commit hooks:** Two hooks are installed during wave setup:
-   - **Isolation hook (Layer 0):** Installed per-worktree by `sawtools create-worktrees` (via `internal/git/commands.go`). Blocks commits to main/master unless `SAW_ALLOW_MAIN_COMMIT=1` is set. Orchestrator bypasses this for legitimate main commits.
-   - **Quality gate hook (M4):** Installed to the project root by `prepare-wave` (via `sawtools install-hooks`). Runs `sawtools pre-commit-check` on every commit to enforce quality gates inline.
-   - Note: The `pkg/orchestrator/` programmatic path installs a simplified isolation hook variant (`pkg/worktree/manager.go`) — the CLI path above is authoritative for `sawtools`-based orchestration.
+   - **Isolation hook (Layer 0):** Installed per-worktree by `polywave-tools create-worktrees` (via `internal/git/commands.go`). Blocks commits to main/master unless `POLYWAVE_ALLOW_MAIN_COMMIT=1` is set. Orchestrator bypasses this for legitimate main commits.
+   - **Quality gate hook (M4):** Installed to the project root by `prepare-wave` (via `polywave-tools install-hooks`). Runs `polywave-tools pre-commit-check` on every commit to enforce quality gates inline.
+   - Note: The `pkg/orchestrator/` programmatic path installs a simplified isolation hook variant (`pkg/worktree/manager.go`) — the CLI path above is authoritative for `polywave-tools`-based orchestration.
 
 ### Phase 3: Agent Launch (E1: Background Execution)
 
@@ -371,7 +371,7 @@ The agent runs on the main branch directly. `finalize-wave` auto-detects that no
 **Each agent independently:**
 
 1. **Field 0: Isolation verification (mandatory pre-flight):**
-   - **E43 hook-based enforcement:** For Claude Code implementations, lifecycle hooks automatically inject environment variables (SAW_AGENT_WORKTREE, SAW_AGENT_ID, SAW_WAVE_NUMBER, SAW_IMPL_PATH, SAW_BRANCH), prepend cd commands to bash calls, and block out-of-bounds writes. Agents still verify isolation, but violations are now prevented mechanically rather than detected after-the-fact.
+   - **E43 hook-based enforcement:** For Claude Code implementations, lifecycle hooks automatically inject environment variables (POLYWAVE_AGENT_WORKTREE, POLYWAVE_AGENT_ID, POLYWAVE_WAVE_NUMBER, POLYWAVE_IMPL_PATH, POLYWAVE_BRANCH), prepend cd commands to bash calls, and block out-of-bounds writes. Agents still verify isolation, but violations are now prevented mechanically rather than detected after-the-fact.
    - Step 1: Navigate to worktree via strict `cd` (fails fast if worktree doesn't exist)
    - Step 2: Verify working directory matches expected worktree path
    - Step 3: Verify git branch matches expected branch name
@@ -452,7 +452,7 @@ The agent runs on the main branch directly. `finalize-wave` auto-detects that no
 4. **E20: Stub detection.** After all agents complete:
    - **Note:** Agents claiming `status: complete` have already passed the SubagentStop stub consistency check — any remaining stubs in their files were caught at agent exit time.
    - Collect union of all `files_changed` and `files_created` from completion reports
-   - Run `sawtools scan-stubs --append-impl "<manifest-path>" --wave {N}` (exit code is always 0 — informational only)
+   - Run `polywave-tools scan-stubs --append-impl "<manifest-path>" --wave {N}` (exit code is always 0 — informational only)
    - **Note:** `finalize-wave` runs this automatically as step 2; no manual invocation needed when using `finalize-wave`
    - Surface stubs at the review checkpoint (includes stubs from `partial` agents that were not required to clear them)
 
@@ -514,7 +514,7 @@ The agent runs on the main branch directly. `finalize-wave` auto-detects that no
 
 ### Phase 2: Per-Agent Merge
 
-**Automated merge via `finalize-wave`:** The merge phase is handled by `sawtools finalize-wave <manifest> --wave N --repo-dir <path>`. For program-mode IMPL branch isolation (E28B), pass `--merge-target <branch>` to merge agent branches into the IMPL branch rather than main. Manual invocation of the individual git commands below is only needed when `finalize-wave` is unavailable or when the octopus merge fallback (Phase 0 above) is in use.
+**Automated merge via `finalize-wave`:** The merge phase is handled by `polywave-tools finalize-wave <manifest> --wave N --repo-dir <path>`. For program-mode IMPL branch isolation (E28B), pass `--merge-target <branch>` to merge agent branches into the IMPL branch rather than main. Manual invocation of the individual git commands below is only needed when `finalize-wave` is unavailable or when the octopus merge fallback (Phase 0 above) is in use.
 
 **E11: Merge order is arbitrary within a valid wave.** Same-wave agents are independent by construction. If merge order appears to matter, wave structure is wrong.
 
@@ -562,17 +562,17 @@ After merge and before post-merge verification, `finalize-wave` automatically ru
 
 ### Phase 4: Worktree Cleanup
 
-Use `sawtools cleanup` — three modes available:
+Use `polywave-tools cleanup` — three modes available:
 
 ```bash
 # Manifest-based (standard post-wave):
-sawtools cleanup "<manifest-path>" --wave <N> --repo-dir "<repo-path>"
+polywave-tools cleanup "<manifest-path>" --wave <N> --repo-dir "<repo-path>"
 
 # Slug-based (no manifest required):
-sawtools cleanup --slug <slug> --repo-dir "<repo-path>"
+polywave-tools cleanup --slug <slug> --repo-dir "<repo-path>"
 
 # All stale across all slugs (recovery / maintenance):
-sawtools cleanup --all-stale --repo-dir "<repo-path>"
+polywave-tools cleanup --all-stale --repo-dir "<repo-path>"
 ```
 
 Add `--force` to skip safety checks for uncommitted changes. `finalize-wave` runs manifest-based cleanup automatically as its final step — manual invocation is only needed for recovery scenarios.
@@ -623,7 +623,7 @@ Add `--force` to skip safety checks for uncommitted changes. `finalize-wave` run
 
 3. **E15: Mark complete.** Run:
    ```bash
-   sawtools mark-complete "<manifest-path>" --date "YYYY-MM-DD"
+   polywave-tools mark-complete "<manifest-path>" --date "YYYY-MM-DD"
    ```
    This writes the `<!-- SAW:COMPLETE YYYY-MM-DD -->` marker, archives the manifest to `docs/IMPL/complete/`, and auto-cleans stale worktrees. It does NOT commit. If the marker is already present, do not re-run. Commit the archived file together with the E18 CONTEXT.md update in the next step.
 

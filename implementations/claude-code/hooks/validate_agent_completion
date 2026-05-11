@@ -3,7 +3,7 @@
 # SubagentStop lifecycle hook — validates protocol compliance before agent session closes
 #
 # Fires when any agent session ends. Validates SAW agent protocol obligations.
-# Non-SAW agents (no [SAW:...] tag in agent_description) pass through immediately.
+# Non-polywave agents (no [polywave:...] tag in agent_description) pass through immediately.
 #
 # Exit codes:
 #   0 — Pass (agent fulfilled obligations or is not a SAW agent)
@@ -17,22 +17,22 @@
 #   echo $?  # 0
 #
 #   # SAW wave agent with completion report present — should exit 0
-#   echo '{"session_id":"abc","agent_name":"wave-A","agent_description":"[SAW:wave1:agent-A] implement feature","exit_reason":"completed"}' \
+#   echo '{"session_id":"abc","agent_name":"wave-A","agent_description":"[polywave:wave1:agent-A] implement feature","exit_reason":"completed"}' \
 #     | bash implementations/claude-code/hooks/validate_agent_completion
 #   echo $?  # depends on IMPL doc state
 #
 #   # SAW wave agent missing completion report — should exit 2 (block)
-#   echo '{"session_id":"abc","agent_name":"wave-A","agent_description":"[SAW:wave1:agent-A] implement feature","exit_reason":"completed"}' \
+#   echo '{"session_id":"abc","agent_name":"wave-A","agent_description":"[polywave:wave1:agent-A] implement feature","exit_reason":"completed"}' \
 #     | bash implementations/claude-code/hooks/validate_agent_completion
 #   echo $?  # 2
 #
 #   # SAW critic agent — should validate critic_report field and check IMPL doc is committed (E48)
-#   echo '{"session_id":"abc","agent_name":"critic","agent_description":"[SAW:critic:wave1] review agents","exit_reason":"completed"}' \
+#   echo '{"session_id":"abc","agent_name":"critic","agent_description":"[polywave:critic:wave1] review agents","exit_reason":"completed"}' \
 #     | bash implementations/claude-code/hooks/validate_agent_completion
 #   echo $?  # depends on IMPL doc state
 #
 #   # SAW scaffold agent — should validate scaffold statuses
-#   echo '{"session_id":"abc","agent_name":"scaffold","agent_description":"[SAW:scaffold:types] create types","exit_reason":"completed"}' \
+#   echo '{"session_id":"abc","agent_name":"scaffold","agent_description":"[polywave:scaffold:types] create types","exit_reason":"completed"}' \
 #     | bash implementations/claude-code/hooks/validate_agent_completion
 #   echo $?  # depends on IMPL doc state
 
@@ -51,27 +51,27 @@ fi
 
 # --- Step 1: Parse SAW tag ---
 # Supported formats:
-#   [SAW:wave{N}:agent-{ID}] — wave agent
-#   [SAW:critic:{label}]     — critic agent
-#   [SAW:scout]              — scout agent
-#   [SAW:scout:{label}]      — scout agent with label
-#   [SAW:scaffold:{label}]   — scaffold agent
+#   [polywave:wave{N}:agent-{ID}] — wave agent
+#   [polywave:critic:{label}]     — critic agent
+#   [polywave:scout]              — scout agent
+#   [polywave:scout:{label}]      — scout agent with label
+#   [polywave:scaffold:{label}]   — scaffold agent
 agent_type=""
 wave_num=""
 agent_id=""
 saw_label=""
 
-if [[ "$description" =~ \[SAW:wave([0-9]+):agent-([A-Za-z0-9]+)\] ]]; then
+if [[ "$description" =~ \[polywave:wave([0-9]+):agent-([A-Za-z0-9]+)\] ]]; then
   agent_type="wave"
   wave_num="${BASH_REMATCH[1]}"
   agent_id="${BASH_REMATCH[2]}"
-elif [[ "$description" =~ \[SAW:critic:([A-Za-z0-9_-]+)\] ]]; then
+elif [[ "$description" =~ \[polywave:critic:([A-Za-z0-9_-]+)\] ]]; then
   agent_type="critic"
   saw_label="${BASH_REMATCH[1]}"
-elif [[ "$description" =~ \[SAW:scout\] ]] || [[ "$description" =~ \[SAW:scout:([A-Za-z0-9_-]+)\] ]]; then
+elif [[ "$description" =~ \[polywave:scout\] ]] || [[ "$description" =~ \[polywave:scout:([A-Za-z0-9_-]+)\] ]]; then
   agent_type="scout"
   saw_label="${BASH_REMATCH[1]:-}"
-elif [[ "$description" =~ \[SAW:scaffold:([A-Za-z0-9_-]+)\] ]]; then
+elif [[ "$description" =~ \[polywave:scaffold:([A-Za-z0-9_-]+)\] ]]; then
   agent_type="scaffold"
   saw_label="${BASH_REMATCH[1]}"
 else
@@ -82,9 +82,9 @@ fi
 # --- Step 2: Find IMPL doc ---
 impl_path=""
 
-# Check .saw-state/active-impl first
-if [[ -f ".saw-state/active-impl" ]]; then
-  impl_path=$(cat .saw-state/active-impl 2>/dev/null || true)
+# Check .polywave-state/active-impl first
+if [[ -f ".polywave-state/active-impl" ]]; then
+  impl_path=$(cat .polywave-state/active-impl 2>/dev/null || true)
 fi
 
 # Try extracting from agent_description if not found
@@ -110,8 +110,8 @@ if [[ -z "$impl_path" || ! -f "$impl_path" ]]; then
 
   if [[ -n "$repo_root" ]]; then
     # Check for active-impl at repo root
-    if [[ -f "$repo_root/.saw-state/active-impl" ]]; then
-      candidate=$(cat "$repo_root/.saw-state/active-impl" 2>/dev/null || true)
+    if [[ -f "$repo_root/.polywave-state/active-impl" ]]; then
+      candidate=$(cat "$repo_root/.polywave-state/active-impl" 2>/dev/null || true)
       if [[ -n "$candidate" && -f "$candidate" ]]; then
         impl_path="$candidate"
       elif [[ -n "$candidate" && -f "$repo_root/$candidate" ]]; then
@@ -130,7 +130,7 @@ if [[ -z "$impl_path" || ! -f "$impl_path" ]]; then
 fi
 
 if [[ -z "$impl_path" || ! -f "$impl_path" ]]; then
-  echo "E42: Cannot locate IMPL doc for SAW ${agent_type} agent. Checked .saw-state/active-impl and agent_description." >&2
+  echo "E42: Cannot locate IMPL doc for SAW ${agent_type} agent. Checked .polywave-state/active-impl and agent_description." >&2
   exit 2
 fi
 
@@ -430,14 +430,14 @@ case "$agent_type" in
     # Check unstaged changes
     if git -C "$repo_root" diff --name-only 2>/dev/null | grep -qF "$impl_basename"; then
       echo "E48: Critic agent must commit IMPL doc changes before stopping." >&2
-      echo "     Run: git -C ${repo_root} add ${impl_path} && git -C ${repo_root} commit -m \"chore: critic report for ${feature_slug} [SAW:critic:${saw_label}]\"" >&2
+      echo "     Run: git -C ${repo_root} add ${impl_path} && git -C ${repo_root} commit -m \"chore: critic report for ${feature_slug} [polywave:critic:${saw_label}]\"" >&2
       exit 2
     fi
 
     # Check staged but not committed
     if git -C "$repo_root" diff --cached --name-only 2>/dev/null | grep -qF "$impl_basename"; then
       echo "E48: Critic agent IMPL doc is staged but not committed." >&2
-      echo "     Run: git -C ${repo_root} commit -m \"chore: critic report for ${feature_slug} [SAW:critic:${saw_label}]\"" >&2
+      echo "     Run: git -C ${repo_root} commit -m \"chore: critic report for ${feature_slug} [polywave:critic:${saw_label}]\"" >&2
       exit 2
     fi
     ;;

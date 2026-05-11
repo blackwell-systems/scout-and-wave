@@ -1,14 +1,14 @@
 # Agent Model Selection
 
-**Purpose:** This reference documents the 3-level model override hierarchy and config file lookup logic for Scout-and-Wave agent launches.
+**Purpose:** This reference documents the 3-level model override hierarchy and config file lookup logic for Polywave agent launches.
 
 ## Override Hierarchy (Highest Precedence First)
 
 ### 1. Skill Argument Override
 
 Parse `--model <value>` from the skill invocation before the subcommand payload:
-- `/saw scout --model sonnet "add caching layer"`
-- `/saw wave --model haiku --impl tool-journaling`
+- `/polywave scout --model sonnet "add caching layer"`
+- `/polywave wave --model haiku --impl tool-journaling`
 
 If present, this model takes precedence over config and parent model.
 
@@ -16,8 +16,8 @@ If present, this model takes precedence over config and parent model.
 
 Use a two-level config file lookup (first match wins):
 
-1. **Project-local:** `<project-root>/saw.config.json`
-2. **Global default:** `~/.claude/saw.config.json`
+1. **Project-local:** `<project-root>/polywave.config.json`
+2. **Global default:** `~/.claude/polywave.config.json`
 
 The config uses per-role model fields under the `agent` key:
 
@@ -36,9 +36,9 @@ The config uses per-role model fields under the `agent` key:
 ```
 
 **Role-to-field mapping:**
-- `/saw scout` → `agent.scout_model`
-- `/saw wave` → `agent.wave_model`
-- `/saw program execute` → `agent.planner_model`
+- `/polywave scout` → `agent.scout_model`
+- `/polywave wave` → `agent.wave_model`
+- `/polywave program execute` → `agent.planner_model`
 - Scaffold agents → `agent.scaffold_model`
 - Critic agents → `agent.critic_model`
 - Integration agents → `agent.integration_model`
@@ -63,7 +63,7 @@ Implementation: Custom `subagent_type` values (`scout`, `wave-agent`, etc.) inhe
 2. Use `subagent_type: general-purpose` with the full agent prompt from `${CLAUDE_SKILL_DIR}/agents/<type>.md`
 3. Pass the same context payload (IMPL doc path, feature description, repo root, etc.)
 
-**Example:** Parent session is Opus, user requests `/saw wave --model sonnet`:
+**Example:** Parent session is Opus, user requests `/polywave wave --model sonnet`:
 - Custom `wave-agent` type would inherit Opus
 - Override detected → use `subagent_type: general-purpose` + `agents/wave-agent.md` prompt
 - Result: Agent runs with parent model (which should be changed to Sonnet via session-level override if possible)

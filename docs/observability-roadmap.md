@@ -17,7 +17,7 @@ The observability pipeline has a working storage layer and query surface, but th
 - Eleven activity subtypes covering the full lifecycle (scout launch/complete, wave start/merge/fail, gate executed/failed, tier advanced/passed/failed, impl complete)
 - Storage requirements defined (append-only, filtered queries, aggregation rollups, batch writes)
 
-**Go SDK** (`scout-and-wave-go/pkg/observability/`):
+**Go SDK** (`polywave-go/pkg/observability/`):
 - `Event` interface with four methods (`EventID`, `EventType`, `Timestamp`, `Metadata`)
 - Three concrete event types: `CostEvent`, `AgentPerformanceEvent`, `ActivityEvent`
 - `Store` interface with `RecordEvent`, `QueryEvents`, `GetRollup`, `Close`
@@ -29,24 +29,24 @@ The observability pipeline has a working storage layer and query surface, but th
 - High-level query functions: `GetAgentHistory`, `GetIMPLMetrics`, `GetProgramSummary`, `GetCostBreakdown`, `GetFailurePatterns`
 - 13 helper constructors for common `ActivityEvent` subtypes in `emitter.go`
 
-**SQLite Store** (`scout-and-wave-go/pkg/observability/sqlite/`):
+**SQLite Store** (`polywave-go/pkg/observability/sqlite/`):
 - Concrete `Store` implementation backed by SQLite with WAL mode (pure Go via `modernc.org/sqlite`)
 - `Open(path)` creates/opens database, auto-creates schema
 - `RecordEvent`, `QueryEvents` (with type/time filtering + in-Go JSON-field filtering for impl/program/agent), `GetRollup` (delegates to SDK rollup functions), `Close`
 - Schema uses `(id, type, time, data)` — simpler than the originally planned dimension-indexed schema; JSON-field filtering happens in Go after SQL fetch
 
-**Engine integration** (`scout-and-wave-go/pkg/engine/`):
+**Engine integration** (`polywave-go/pkg/engine/`):
 - `ObsEmitter *observability.Emitter` field on `FinalizeWaveOpts`, `FinalizeIMPLOpts`, `TierLoopOpts`, and the engine config
 - Emit calls wired into: `runner.go` (scout launch/complete), `finalize.go` (gate executed, wave failed, wave merge, impl complete), `program_tier_loop.go` (tier gate passed/failed, tier advanced)
-- Emit helper functions exist in `cmd/sawtools/finalize_wave_obs.go` and `prepare_wave_obs.go` but are never called — no code constructs an Emitter and passes it through
+- Emit helper functions exist in `cmd/polywave-tools/finalize_wave_obs.go` and `prepare_wave_obs.go` but are never called — no code constructs an Emitter and passes it through
 
-**CLI** (`sawtools`):
-- `sawtools query events` — query observability events with filters (`--type`, `--impl`, `--program`, `--agent`, `--since`, `--format table|json|csv`)
-- `sawtools metrics <impl-slug>` — show IMPL metrics (cost, duration, success rate), with `--breakdown` and `--program` flags
+**CLI** (`polywave-tools`):
+- `polywave-tools query events` — query observability events with filters (`--type`, `--impl`, `--program`, `--agent`, `--since`, `--format table|json|csv`)
+- `polywave-tools metrics <impl-slug>` — show IMPL metrics (cost, duration, success rate), with `--breakdown` and `--program` flags
 - Both commands open a SQLite store (default: `~/.saw/observability.db`) and return real results if events exist in the database
 - Events must be recorded externally or via manual testing; the engine pipeline does not yet write events automatically
 
-**Web app** (`scout-and-wave-web/pkg/api/observability.go`):
+**Web app** (`polywave-web/pkg/api/observability.go`):
 - Five HTTP endpoints registered: `GET /api/observability/metrics/{impl_slug}`, `GET /api/observability/metrics/program/{program_slug}`, `GET /api/observability/events`, `GET /api/observability/rollup`, `GET /api/observability/cost-breakdown/{impl_slug}`
 - `SetObservabilityStore` method on Server for dependency injection
 - Full query parameter parsing for filters and rollup requests
@@ -54,7 +54,7 @@ The observability pipeline has a working storage layer and query surface, but th
 
 ### What Is Missing
 
-1. **No store initialization in engine or web app.** The CLI query commands (`metrics`, `query events`) open a SQLite store per-invocation. But `prepare-wave`, `finalize-wave`, `run-wave`, and `saw serve` do not construct a store or Emitter. The emit helpers in `finalize_wave_obs.go` and `prepare_wave_obs.go` are dead code.
+1. **No store initialization in engine or web app.** The CLI query commands (`metrics`, `query events`) open a SQLite store per-invocation. But `prepare-wave`, `finalize-wave`, `run-wave`, and `polywave serve` do not construct a store or Emitter. The emit helpers in `finalize_wave_obs.go` and `prepare_wave_obs.go` are dead code.
 2. **No cost extraction from agents.** No code parses agent output (Claude Code JSONL logs, etc.) to produce `CostEvent` records. Cost events would need to be emitted manually or by a post-wave extraction step.
 3. **No invariant violation tracking.** The existing event types track operational metrics (cost, performance, activity) but not protocol-level correctness (did I1 hold? did I2 hold?).
 4. **No budget policies.** No mechanism to set spend limits or enforce them at wave boundaries.
@@ -90,7 +90,7 @@ The `data_json` column stores the complete event payload. New fields are added t
 
 ### Retention Policy
 
-Events are append-only. No automatic deletion in Tier 1. Tier 3 introduces configurable retention (default: 90 days for raw events, indefinite for rollup summaries). Users can manually purge with `sawtools query purge --before <date>`. The SQLite file can be deleted entirely to reset observability state without affecting protocol operation.
+Events are append-only. No automatic deletion in Tier 1. Tier 3 introduces configurable retention (default: 90 days for raw events, indefinite for rollup summaries). Users can manually purge with `polywave-tools query purge --before <date>`. The SQLite file can be deleted entirely to reset observability state without affecting protocol operation.
 
 ### Multi-Instance Considerations
 
@@ -126,21 +126,21 @@ The goal of Tier 1 is to make the existing observability pipeline produce and st
 
 **Scope:** Small. Field type change, update ~10 functions that reference `CostUSD`, update protocol spec's CostEvent documentation.
 
-**Repos:** scout-and-wave-go (types + functions), scout-and-wave (protocol spec)
+**Repos:** polywave-go (types + functions), polywave (protocol spec)
 
 ### T1.3: Wire Store into Engine and Web App
 
-**What it is:** Construct a SQLite store at startup in `prepare-wave`, `finalize-wave`, `run-wave`, and `saw serve`. Pass the store to `observability.NewEmitter()` and inject it into the engine's `ObsEmitter` field and the web server's `SetObservabilityStore`. Default database path: `~/.saw/observability.db` or configurable via `--store` flag / environment variable.
+**What it is:** Construct a SQLite store at startup in `prepare-wave`, `finalize-wave`, `run-wave`, and `polywave serve`. Pass the store to `observability.NewEmitter()` and inject it into the engine's `ObsEmitter` field and the web server's `SetObservabilityStore`. Default database path: `~/.saw/observability.db` or configurable via `--store` flag / environment variable.
 
-**Current state:** The CLI query commands (`sawtools metrics`, `sawtools query events`) already open a SQLite store per-invocation via `openStore()`. The emit helper functions in `finalize_wave_obs.go` and `prepare_wave_obs.go` exist but are never called because no code constructs an Emitter in the workflow commands. The engine's `runner.go` checks `if opts.ObsEmitter != nil` but callers always pass nil.
+**Current state:** The CLI query commands (`polywave-tools metrics`, `polywave-tools query events`) already open a SQLite store per-invocation via `openStore()`. The emit helper functions in `finalize_wave_obs.go` and `prepare_wave_obs.go` exist but are never called because no code constructs an Emitter in the workflow commands. The engine's `runner.go` checks `if opts.ObsEmitter != nil` but callers always pass nil.
 
-**What remains:** ~20 lines in each of `prepare_wave.go`, `finalize_wave.go`, and `run_wave_cmd.go` to open the store, create an Emitter, and pass it through. Same for `saw serve` startup to enable web API endpoints.
+**What remains:** ~20 lines in each of `prepare_wave.go`, `finalize_wave.go`, and `run_wave_cmd.go` to open the store, create an Emitter, and pass it through. Same for `polywave serve` startup to enable web API endpoints.
 
 **Dependencies:** None (SQLite store shipped).
 
 **Scope:** Small.
 
-**Repos:** scout-and-wave-go (CLI wiring), scout-and-wave-web (server wiring)
+**Repos:** polywave-go (CLI wiring), polywave-web (server wiring)
 
 ### T1.4: Verify All Existing Emit Points
 
@@ -152,11 +152,11 @@ The goal of Tier 1 is to make the existing observability pipeline produce and st
 
 **Scope:** Small. One integration test plus any missing emit calls discovered.
 
-**Repos:** scout-and-wave-go
+**Repos:** polywave-go
 
 ### T1.5: CLI Commands Return Real Results
 
-**What it is:** Verify that `sawtools query events` and `sawtools metrics <slug>` return meaningful data after a wave execution. Fix any serialization or query issues discovered.
+**What it is:** Verify that `polywave-tools query events` and `polywave-tools metrics <slug>` return meaningful data after a wave execution. Fix any serialization or query issues discovered.
 
 **Current state:** Both commands exist with `--format table|json|csv` support and open the SQLite store correctly. They will return real results once T1.3 wires the Emitter into the engine pipeline. This item is primarily a verification pass after T1.3 lands.
 
@@ -164,7 +164,7 @@ The goal of Tier 1 is to make the existing observability pipeline produce and st
 
 **Scope:** Small. Mostly verification.
 
-**Repos:** scout-and-wave-go
+**Repos:** polywave-go
 
 ---
 
@@ -182,7 +182,7 @@ The goal of Tier 2 is to track things no competitor tracks: whether the protocol
 
 **Scope:** Medium. New event type, ~6 new emit points in the engine (one per invariant check), update Store deserialization to handle the new type.
 
-**Repos:** scout-and-wave (protocol spec update), scout-and-wave-go (event type + emit points)
+**Repos:** polywave (protocol spec update), polywave-go (event type + emit points)
 
 ### T2.2: Wave Efficiency Metrics
 
@@ -192,9 +192,9 @@ The goal of Tier 2 is to track things no competitor tracks: whether the protocol
 
 **Dependencies:** T1.3, T1.4 (need real event data to compute from).
 
-**Scope:** Medium. New query functions in `pkg/observability/`, new `sawtools efficiency <impl-slug>` command.
+**Scope:** Medium. New query functions in `pkg/observability/`, new `polywave-tools efficiency <impl-slug>` command.
 
-**Repos:** scout-and-wave-go
+**Repos:** polywave-go
 
 ### T2.3: Integration Gap Patterns
 
@@ -206,7 +206,7 @@ The goal of Tier 2 is to track things no competitor tracks: whether the protocol
 
 **Scope:** Medium. New event subtype for integration gaps, emit points in integration validation/agent code, aggregation query.
 
-**Repos:** scout-and-wave-go
+**Repos:** polywave-go
 
 ### T2.4: Cost per Correctness
 
@@ -218,7 +218,7 @@ The goal of Tier 2 is to track things no competitor tracks: whether the protocol
 
 **Scope:** Small. New function in `pkg/observability/query.go` that joins cost and performance data. New field in `IMPLMetrics`.
 
-**Repos:** scout-and-wave-go
+**Repos:** polywave-go
 
 ### T2.5: Pre-Mortem Calibration
 
@@ -230,7 +230,7 @@ The goal of Tier 2 is to track things no competitor tracks: whether the protocol
 
 **Scope:** Medium. Parse risk fields from IMPL docs, correlate with wave outcomes, produce calibration report.
 
-**Repos:** scout-and-wave-go
+**Repos:** polywave-go
 
 ---
 
@@ -248,7 +248,7 @@ The goal of Tier 3 is to close the loop -- use observability data to automatical
 
 **Scope:** Large. New config format, policy evaluation engine, integration into `prepare-wave`, notification emission, web UI for policy management.
 
-**Repos:** scout-and-wave-go (policy engine + CLI), scout-and-wave-web (UI), scout-and-wave (protocol doc for budget enforcement rules)
+**Repos:** polywave-go (policy engine + CLI), polywave-web (UI), polywave (protocol doc for budget enforcement rules)
 
 ### T3.2: Real-Time CI Feedback During Wave Execution
 
@@ -260,7 +260,7 @@ The goal of Tier 3 is to close the loop -- use observability data to automatical
 
 **Scope:** Large. New polling subsystem, CI provider abstraction (GitHub, GitLab), event emission, optional agent notification mechanism, web UI for real-time CI status per agent.
 
-**Repos:** scout-and-wave-go (CI polling + events), scout-and-wave-web (real-time CI status UI)
+**Repos:** polywave-go (CI polling + events), polywave-web (real-time CI status UI)
 
 ### T3.3: Scout Improvement Signals
 
@@ -272,7 +272,7 @@ The goal of Tier 3 is to close the loop -- use observability data to automatical
 
 **Scope:** Large. Historical data aggregation, pattern extraction, report generation, potentially automatic Scout prompt tuning.
 
-**Repos:** scout-and-wave-go (analysis), scout-and-wave (Scout prompt updates)
+**Repos:** polywave-go (analysis), polywave (Scout prompt updates)
 
 ### T3.4: Auto-Generated IMPL Risk Assessments
 
@@ -284,7 +284,7 @@ The goal of Tier 3 is to close the loop -- use observability data to automatical
 
 **Scope:** Medium. Historical pattern matching, risk score computation, web UI integration.
 
-**Repos:** scout-and-wave-go (risk engine), scout-and-wave-web (UI)
+**Repos:** polywave-go (risk engine), polywave-web (UI)
 
 ### T3.5: Structured Agent Run Logs
 
@@ -296,7 +296,7 @@ The goal of Tier 3 is to close the loop -- use observability data to automatical
 
 **Scope:** Medium. New log format, writer in engine, parser for cost extraction, integrity hashing.
 
-**Repos:** scout-and-wave-go (log format + writer), scout-and-wave-web (streaming reader)
+**Repos:** polywave-go (log format + writer), polywave-web (streaming reader)
 
 ---
 
@@ -314,7 +314,7 @@ The goal of Tier 4 is to make observability data visible and exportable. The API
 
 **Scope:** Medium. React components, chart library integration, new page in the web app navigation.
 
-**Repos:** scout-and-wave-web
+**Repos:** polywave-web
 
 ### T4.2: Per-IMPL Execution Timeline
 
@@ -326,7 +326,7 @@ The goal of Tier 4 is to make observability data visible and exportable. The API
 
 **Scope:** Medium. Timeline component, event-to-timeline mapping, drill-down navigation.
 
-**Repos:** scout-and-wave-web
+**Repos:** polywave-web
 
 ### T4.3: Program-Level Cost Rollups
 
@@ -338,7 +338,7 @@ The goal of Tier 4 is to make observability data visible and exportable. The API
 
 **Scope:** Small. Extend existing `GetProgramSummary`, add tier grouping, frontend component.
 
-**Repos:** scout-and-wave-go (query extension), scout-and-wave-web (UI)
+**Repos:** polywave-go (query extension), polywave-web (UI)
 
 ### T4.4: Historical Comparison
 
@@ -350,7 +350,7 @@ The goal of Tier 4 is to make observability data visible and exportable. The API
 
 **Scope:** Medium. Similarity scoring, historical aggregation, comparison UI.
 
-**Repos:** scout-and-wave-go (comparison engine), scout-and-wave-web (UI)
+**Repos:** polywave-go (comparison engine), polywave-web (UI)
 
 ### T4.5: Export to External Systems
 
@@ -362,7 +362,7 @@ The goal of Tier 4 is to make observability data visible and exportable. The API
 
 **Scope:** Large. OTLP client implementation, webhook delivery with retry, configuration format, backpressure handling.
 
-**Repos:** scout-and-wave-go (export engine), scout-and-wave (configuration spec)
+**Repos:** polywave-go (export engine), polywave (configuration spec)
 
 ---
 
@@ -385,10 +385,10 @@ The critical path is: T1.2 -> T1.3 -> T1.4 -> T2.1. Everything else builds on th
 ## Cross-References
 
 - Protocol event schema: `protocol/observability-events.md`
-- Go SDK observability package: `scout-and-wave-go/pkg/observability/`
-- SQLite store: `scout-and-wave-go/pkg/observability/sqlite/`
-- Engine emit points: `scout-and-wave-go/pkg/engine/runner.go`, `finalize.go`, `program_tier_loop.go`
-- CLI emit helpers (unwired): `scout-and-wave-go/cmd/sawtools/finalize_wave_obs.go`, `prepare_wave_obs.go`
-- Web app API endpoints: `scout-and-wave-web/pkg/api/observability.go`
-- CLI commands: `sawtools query events`, `sawtools metrics`
+- Go SDK observability package: `polywave-go/pkg/observability/`
+- SQLite store: `polywave-go/pkg/observability/sqlite/`
+- Engine emit points: `polywave-go/pkg/engine/runner.go`, `finalize.go`, `program_tier_loop.go`
+- CLI emit helpers (unwired): `polywave-go/cmd/polywave-tools/finalize_wave_obs.go`, `prepare_wave_obs.go`
+- Web app API endpoints: `polywave-web/pkg/api/observability.go`
+- CLI commands: `polywave-tools query events`, `polywave-tools metrics`
 - Protocol invariants: `protocol/invariants.md`

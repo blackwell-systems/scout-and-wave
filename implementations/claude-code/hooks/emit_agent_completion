@@ -17,7 +17,7 @@
 #   echo $?  # 0
 #
 #   # SAW wave agent — should emit observability JSON to stdout
-#   echo '{"session_id":"abc","agent_name":"wave-A","agent_description":"[SAW:wave1:agent-A] implement feature","exit_reason":"completed"}' \
+#   echo '{"session_id":"abc","agent_name":"wave-A","agent_description":"[polywave:wave1:agent-A] implement feature","exit_reason":"completed"}' \
 #     | bash implementations/claude-code/hooks/emit_agent_completion
 #   echo $?  # 0 (always)
 
@@ -42,17 +42,17 @@ wave_num=""
 agent_id=""
 saw_label=""
 
-if [[ "$description" =~ \[SAW:wave([0-9]+):agent-([A-Za-z0-9]+)\] ]]; then
+if [[ "$description" =~ \[polywave:wave([0-9]+):agent-([A-Za-z0-9]+)\] ]]; then
   agent_type="wave"
   wave_num="${BASH_REMATCH[1]}"
   agent_id="${BASH_REMATCH[2]}"
-elif [[ "$description" =~ \[SAW:critic:([A-Za-z0-9_-]+)\] ]]; then
+elif [[ "$description" =~ \[polywave:critic:([A-Za-z0-9_-]+)\] ]]; then
   agent_type="critic"
   saw_label="${BASH_REMATCH[1]}"
-elif [[ "$description" =~ \[SAW:scout\] ]] || [[ "$description" =~ \[SAW:scout:([A-Za-z0-9_-]+)\] ]]; then
+elif [[ "$description" =~ \[polywave:scout\] ]] || [[ "$description" =~ \[polywave:scout:([A-Za-z0-9_-]+)\] ]]; then
   agent_type="scout"
   saw_label="${BASH_REMATCH[1]:-}"
-elif [[ "$description" =~ \[SAW:scaffold:([A-Za-z0-9_-]+)\] ]]; then
+elif [[ "$description" =~ \[polywave:scaffold:([A-Za-z0-9_-]+)\] ]]; then
   agent_type="scaffold"
   saw_label="${BASH_REMATCH[1]}"
 else
@@ -76,7 +76,7 @@ done
 # --- Step 6: Journal archival ---
 journal_archived=false
 if [[ "$agent_type" == "wave" && -n "$repo_root" && -n "$wave_num" && -n "$agent_id" ]]; then
-  target_dir="$repo_root/.saw-state/journals/wave${wave_num}/agent-${agent_id}"
+  target_dir="$repo_root/.polywave-state/journals/wave${wave_num}/agent-${agent_id}"
   worktree_journal=""
 
   # Look for journal in worktree
@@ -101,12 +101,12 @@ fi
 # --- Step 7: Observability event emission ---
 # Find IMPL doc to extract completion status
 impl_path=""
-if [[ -f ".saw-state/active-impl" ]]; then
-  impl_path=$(cat .saw-state/active-impl 2>/dev/null || true)
+if [[ -f ".polywave-state/active-impl" ]]; then
+  impl_path=$(cat .polywave-state/active-impl 2>/dev/null || true)
 fi
 if [[ -z "$impl_path" || ! -f "$impl_path" ]] && [[ -n "$repo_root" ]]; then
-  if [[ -f "$repo_root/.saw-state/active-impl" ]]; then
-    impl_path=$(cat "$repo_root/.saw-state/active-impl" 2>/dev/null || true)
+  if [[ -f "$repo_root/.polywave-state/active-impl" ]]; then
+    impl_path=$(cat "$repo_root/.polywave-state/active-impl" 2>/dev/null || true)
     if [[ -n "$impl_path" && ! -f "$impl_path" && -f "$repo_root/$impl_path" ]]; then
       impl_path="$repo_root/$impl_path"
     fi

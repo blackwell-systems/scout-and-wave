@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # SAW Agent Naming Helper (E44)
-# Generates standardized [SAW:{phase}:{identifier}] names for agent launches
+# Generates standardized [polywave:{phase}:{identifier}] names for agent launches
 #
 # Usage:
 #   saw_agent_name wave 1 A logging-injection "inject logger"
 #   saw_agent_name scout - - user-auth "analyze codebase"
 #   saw_agent_name critic - - logging-injection "review briefs"
 #
-# Output: [SAW:wave1:agent-A] inject logger
+# Output: [polywave:wave1:agent-A] inject logger
 
 set -euo pipefail
 
@@ -23,23 +23,23 @@ case "$phase" in
       echo "Error: wave phase requires wave number and agent ID" >&2
       exit 1
     fi
-    echo "[SAW:wave${wave_or_dash}:agent-${agent_or_dash}] ${description}"
+    echo "[polywave:wave${wave_or_dash}:agent-${agent_or_dash}] ${description}"
     ;;
   scout)
-    echo "[SAW:scout:${slug}] ${description}"
+    echo "[polywave:scout:${slug}] ${description}"
     ;;
   critic)
-    echo "[SAW:critic:${slug}] ${description}"
+    echo "[polywave:critic:${slug}] ${description}"
     ;;
   scaffold)
-    echo "[SAW:scaffold:${slug}] ${description}"
+    echo "[polywave:scaffold:${slug}] ${description}"
     ;;
   integration)
     if [[ "$wave_or_dash" == "-" ]]; then
       echo "Error: integration phase requires wave number" >&2
       exit 1
     fi
-    echo "[SAW:integration:wave${wave_or_dash}] ${description}"
+    echo "[polywave:integration:wave${wave_or_dash}] ${description}"
     ;;
   *)
     echo "Error: unknown phase '$phase'. Valid: wave, scout, critic, scaffold, integration" >&2

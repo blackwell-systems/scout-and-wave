@@ -1,4 +1,4 @@
-# Scout-and-Wave Message Formats
+# Polywave Message Formats
 
 **Version:** 0.26.0
 
@@ -193,7 +193,7 @@ Wave 3: {E}                        <- type: integration (wiring only, E27)
 
 **Wave additional fields:**
 - `agent_launch_order` — Optional list of agent IDs specifying explicit launch ordering within the wave (e.g. `["A", "B", "C"]`). When omitted, agents are launched in parallel. Use when an agent requires another agent's output before starting, but they are in the same wave.
-- `base_commit` — Git commit SHA recorded when worktrees are created. Used by the Orchestrator for post-merge verification to confirm no upstream commits were missed. Set automatically by `sawtools prepare-wave`; do not set manually.
+- `base_commit` — Git commit SHA recorded when worktrees are created. Used by the Orchestrator for post-merge verification to confirm no upstream commits were missed. Set automatically by `polywave-tools prepare-wave`; do not set manually.
 
 **Agent additional fields:**
 - `model` — Optional model override for this specific agent (e.g. `"claude-opus-4-5"`). Overrides the default model configured in the Orchestrator. Use when an agent's task requires a different model capability level than the wave default.
@@ -514,7 +514,7 @@ verification: PASS | FAIL ({command} - N/N tests)
 
 ## Journal Entry Format
 
-The tool journal is a sequence of JSONL entries written to `.saw-state/wave{N}/agent-{ID}/index.jsonl` during agent execution. Each line is a JSON object representing a single tool invocation or tool result. The journal is append-only and never modified after writing.
+The tool journal is a sequence of JSONL entries written to `.polywave-state/wave{N}/agent-{ID}/index.jsonl` during agent execution. Each line is a JSON object representing a single tool invocation or tool result. The journal is append-only and never modified after writing.
 
 **Purpose:** The journal captures execution history for agent recovery (E23A). When an agent is relaunched (after failure, timeout, or context compaction), the Orchestrator loads the journal, generates a summary, and prepends it to the agent's prompt. This gives the agent working memory of what it has already attempted.
 
@@ -557,7 +557,7 @@ type ToolEntry struct {
 
 **Journal persistence across retries:** If an agent fails with `failure_type: transient` or `failure_type: fixable` (E19), the Orchestrator relaunches it. The journal is preserved — entries from the failed attempt remain in `index.jsonl`. On relaunch, the agent sees what it tried before via the recovered context (E23A). This prevents retry loops where the agent repeats the same failing operation without learning from it.
 
-**Journal cleanup:** Journals are archived after wave merge (per agent completion). Archived journals are compressed and moved to `.saw-state/archives/wave{N}-agent-{ID}.tar.gz` for post-mortem debugging but are not loaded during normal execution. Only active agent journals (for in-progress waves) are read by E23A recovery. Note: archive paths remain at `.saw-state/archives/wave{N}-agent-{ID}.tar.gz` (no slug needed -- `.saw-state/` is already project-scoped).
+**Journal cleanup:** Journals are archived after wave merge (per agent completion). Archived journals are compressed and moved to `.polywave-state/archives/wave{N}-agent-{ID}.tar.gz` for post-mortem debugging but are not loaded during normal execution. Only active agent journals (for in-progress waves) are read by E23A recovery. Note: archive paths remain at `.polywave-state/archives/wave{N}-agent-{ID}.tar.gz` (no slug needed -- `.polywave-state/` is already project-scoped).
 
 **Related Rules:** See E23A (tool journal recovery), E19 (failure type decision tree), I4 (IMPL doc and journal duality).
 
@@ -751,7 +751,7 @@ A persistent project-level document at `docs/CONTEXT.md` in the target project. 
 **Canonical schema:**
 
 ```yaml
-# docs/CONTEXT.md — Project memory for Scout-and-Wave
+# docs/CONTEXT.md — Project memory for Polywave
 created: YYYY-MM-DD
 protocol_version: "x.y.z"
 
@@ -937,7 +937,7 @@ If no known issues exist, omit the section entirely or write:
 
 ## Per-Agent Context Payload
 
-Before launching Wave agents, `sawtools prepare-wave` writes a `.saw-agent-brief.md` file to each agent's worktree root. The Agent tool receives a short stub prompt (~60 tokens) referencing the IMPL doc path, wave number, and agent ID; the agent reads its full brief from `.saw-agent-brief.md`.
+Before launching Wave agents, `polywave-tools prepare-wave` writes a `.polywave-agent-brief.md` file to each agent's worktree root. The Agent tool receives a short stub prompt (~60 tokens) referencing the IMPL doc path, wave number, and agent ID; the agent reads its full brief from `.polywave-agent-brief.md`.
 
 **Brief contents (written by `engine/prepare.go`):**
 
@@ -959,11 +959,11 @@ Before launching Wave agents, `sawtools prepare-wave` writes a `.saw-agent-brief
 
 MANDATORY FIRST STEP - Verify isolation before any work:
 1. cd /absolute/path/to/worktree
-2. sawtools verify-isolation --branch saw/{slug}/wave{N}-agent-{X}
+2. polywave-tools verify-isolation --branch saw/{slug}/wave{N}-agent-{X}
 3. If verification fails (exit code 1), STOP immediately and report status: blocked
 
 After verification passes, read your pre-extracted brief:
-Read .saw-agent-brief.md
+Read .polywave-agent-brief.md
 
 Follow the brief exactly.
 ```
@@ -1101,7 +1101,7 @@ Orchestrators must parse these fields from each completion report:
 
 ## SSE Event Catalog
 
-The Scout-and-Wave engine emits Server-Sent Events (SSE) to provide real-time progress updates during orchestration. All events are JSON payloads sent via HTTP SSE with an `event:` field for the event type and `data:` field for the payload.
+The Polywave engine emits Server-Sent Events (SSE) to provide real-time progress updates during orchestration. All events are JSON payloads sent via HTTP SSE with an `event:` field for the event type and `data:` field for the payload.
 
 ### Wave Execution Events
 
@@ -1309,9 +1309,9 @@ Emitted when all program tiers complete successfully.
 
 ## Event Consumption
 
-**Web UI:** All SSE events are consumed by the web application's event stream endpoint (`GET /api/sse/{execution_id}`) for real-time progress display. See `docs/reference/sse-events.md` in scout-and-wave-go for full API documentation.
+**Web UI:** All SSE events are consumed by the web application's event stream endpoint (`GET /api/sse/{execution_id}`) for real-time progress display. See `docs/reference/sse-events.md` in polywave-go for full API documentation.
 
-**CLI:** The CLI does not consume SSE events (agents run synchronously in `sawtools run-wave`). Event emission is disabled in CLI mode.
+**CLI:** The CLI does not consume SSE events (agents run synchronously in `polywave-tools run-wave`). Event emission is disabled in CLI mode.
 
 **Observability:** All events except `agent_output` chunks are also logged to the observability store (SQLite) for post-execution analysis and metrics.
 

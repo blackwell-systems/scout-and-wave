@@ -244,7 +244,7 @@ else
     cp "$worktree/$file" "./$file"
     git add "./$file"
   done
-  SAW_ALLOW_MAIN_COMMIT=1 git commit -m "Apply agent {ID} changes from worktree"
+  POLYWAVE_ALLOW_MAIN_COMMIT=1 git commit -m "Apply agent {ID} changes from worktree"
 fi
 ```
 
@@ -313,7 +313,7 @@ If it did, commit those changes before running build and tests:
 
 ```bash
 git add -A
-SAW_ALLOW_MAIN_COMMIT=1 git commit -m "style: post-merge lint/format fix"
+POLYWAVE_ALLOW_MAIN_COMMIT=1 git commit -m "style: post-merge lint/format fix"
 ```
 
 This is the correct place for auto-fix: one centralized pass on the merged

@@ -1,6 +1,6 @@
-# Scout-and-Wave Implementations
+# Polywave Implementations
 
-Scout-and-Wave is an open protocol for safely parallelizing human-guided agentic workflows. It follows the [Agent Skills](https://agentskills.io) open standard, making it compatible with Claude Code, Cursor, GitHub Copilot, and other Agent Skills-compatible tools. This directory contains implementations of the protocol for different runtimes.
+Polywave is an open protocol for safely parallelizing human-guided agentic workflows. It follows the [Agent Skills](https://agentskills.io) open standard, making it compatible with Claude Code, Cursor, GitHub Copilot, and other Agent Skills-compatible tools. This directory contains implementations of the protocol for different runtimes.
 
 ## Available Implementations
 
@@ -23,8 +23,8 @@ Fully automated implementation using Claude Code's agent runtime and git worktre
 
 **Usage:**
 ```
-/saw scout "add caching layer"
-/saw wave
+/polywave scout "add caching layer"
+/polywave wave
 ```
 
 See [`claude-code/README.md`](claude-code/README.md) for installation and detailed usage.
@@ -41,7 +41,7 @@ All implementations must conform to the protocol specification in [`../protocol/
 
 ## Building a New Implementation
 
-To implement Scout-and-Wave in a different runtime (Python, Rust, TypeScript, etc.):
+To implement Polywave in a different runtime (Python, Rust, TypeScript, etc.):
 
 1. Read protocol docs in order: `participants` → `preconditions` → `invariants` → `execution-rules` → `state-machine` → `message-formats` → `procedures`
 2. Identify which participant roles your runtime will support (minimum: Orchestrator + Wave Agent)

@@ -1,4 +1,4 @@
-# Scout-and-Wave Roadmap
+# Polywave Roadmap
 
 Items are grouped by theme, not priority. Nothing here is committed or scheduled.
 
@@ -43,7 +43,7 @@ Decouple verdict from research. NOT SUITABLE IMPL docs should contain full file 
 
 ### Cross-Repo Field 8 Completion Report Path
 
-Wave agent prompt already includes absolute IMPL doc path in payload header and `sawtools set-completion`. Explicit callout in `saw-worktree.md` cross-repo section still needed.
+Wave agent prompt already includes absolute IMPL doc path in payload header and `polywave-tools set-completion`. Explicit callout in `saw-worktree.md` cross-repo section still needed.
 
 **Potential:** Trivial — one doc paragraph. Should be done alongside any cross-repo work.
 
@@ -66,7 +66,7 @@ Tier 1 created `config/state.go` importing `protocol`, making `protocol → conf
 | Layer | Scope |
 |-------|-------|
 | **SDK** | `pkg/protocol/tier_deps.go` (new) — `CheckTierDependencyGraph(manifest *PROGRAMManifest, repoDir string) result.Result[*TierDepsData]`. For each tier boundary, analyze Go import graphs: collect packages modified by Tier N IMPLs, check if Tier N+1 IMPL files can import them without cycles. Uses `go list -json ./...` to build the import graph. Returns cycle details if found. |
-| **CLI** | `cmd/sawtools/check_tier_deps_cmd.go` (new) — `sawtools check-tier-deps <program-manifest> --repo-dir <path>`. Integrate into `prepare-tier` as a pre-flight step (after P1+ conflict check, before IMPL validation). |
+| **CLI** | `cmd/polywave-tools/check_tier_deps_cmd.go` (new) — `polywave-tools check-tier-deps <program-manifest> --repo-dir <path>`. Integrate into `prepare-tier` as a pre-flight step (after P1+ conflict check, before IMPL validation). |
 | **Web** | `pkg/api/program_handler.go` — add `POST /api/program/{slug}/check-tier-deps` endpoint. Display cycle warnings in program status panel (text/table format). |
 
 **Potential:** Medium. Only matters in PROGRAM mode. Import cycles are catch-at-compile-time anyway — this just catches them earlier (pre-wave). Worth doing before the next large PROGRAM.
@@ -100,7 +100,7 @@ Two features have complete SDK/CLI but no web layer:
 
 ### Framework Skills Content
 
-Language/framework-specific best practice documents in `scout-and-wave/skills/` (e.g., `go.md`, `react.md`, `python.md`). Scout detects the project language at step 2 (reads go.mod, package.json, etc.) and conditionally includes the relevant skill reference in agent task fields. Scout-injected rather than globally auto-loaded — Scout already knows the language at planning time, so no separate detection mechanism needed.
+Language/framework-specific best practice documents in `polywave/skills/` (e.g., `go.md`, `react.md`, `python.md`). Scout detects the project language at step 2 (reads go.mod, package.json, etc.) and conditionally includes the relevant skill reference in agent task fields. Scout-injected rather than globally auto-loaded — Scout already knows the language at planning time, so no separate detection mechanism needed.
 
 Content examples: Go — `go work use` for cross-module worktrees, `GOWORK=off` for isolated builds; React — hook dependency arrays, component split guidelines; Python — `__init__.py` implications, virtual env isolation.
 
@@ -108,16 +108,56 @@ Content examples: Go — `go work use` for cross-module worktrees, `GOWORK=off` 
 
 ### Claude Orchestrator Chat Panel
 
-Add Claude chat panel to `saw serve`. Read-only diagnostic mode first (why did agent B fail?), then write tools (retry, skip), then proactive SSE monitoring. No protocol changes required. Full design in `scout-and-wave-web/docs/ROADMAP.md`.
+Add Claude chat panel to `polywave serve`. Read-only diagnostic mode first (why did agent B fail?), then write tools (retry, skip), then proactive SSE monitoring. No protocol changes required. Full design in `polywave-web/docs/ROADMAP.md`.
 
 **Potential:** High UX value. "Why did agent B fail?" is the most-asked question during wave execution. Read-only mode is a quick win that unblocks the rest.
 
 
 ### Constraint-Solving Validator
 
-Replace rule-by-rule `sawtools validate` with a constraint solver: model the manifest as a CSP (agents, files, dependencies as variables/constraints) and prove the execution plan correct. Scout declares dependencies; the solver derives wave assignment. Wave numbers become computed, not guessed — I2_WAVE_ORDER errors become impossible.
+Replace rule-by-rule `polywave-tools validate` with a constraint solver: model the manifest as a CSP (agents, files, dependencies as variables/constraints) and prove the execution plan correct. Scout declares dependencies; the solver derives wave assignment. Wave numbers become computed, not guessed — I2_WAVE_ORDER errors become impossible.
 
 **Potential:** High long-term value, high implementation cost. The right end-state for validation. Defer until current rule-based validator shows consistent false-negative patterns.
+
+---
+
+## Rebrand: polywave → polywave
+
+### Rename Project to Polywave
+
+Rebrand all three repos and their artifacts from "polywave" to "polywave".
+
+**Binary names (confirmed):**
+- `polywave` (web server + orchestration CLI) → `polywave`
+- `polywave-tools` (protocol toolkit, CI/CD, power users) → `polywave-tools`
+
+The two binaries are independent — `polywave` imports `polywave-go/pkg/` as a Go library and never execs `polywave-tools`. See `polywave-go/docs/reference/binaries.md` for the authoritative split rationale ("Do Not Merge These Binaries").
+
+**Protocol markers in git history** (`[SAW:complete]`, `[SAW:critic:X]`) stay as-is in past commits. Future commits use the equivalent polywave marker.
+
+**Change inventory:**
+
+| Area | What changes | Scale |
+|------|-------------|-------|
+| Go module path (`polywave-go`) | `go mod edit -module` + import path sed across all `.go` files | Large, mechanical |
+| Go module path (`polywave-web`) | Same — `polywave-go` import path replaced everywhere | Medium, mechanical |
+| Binary name: `polywave` → `polywave` | `.goreleaser.yaml` (none present), `Makefile` line 4, `cmd/saw/` directory rename | Trivial |
+| Binary name: `polywave-tools` → `polywave-tools` | `.goreleaser.yaml` `binary` field, `cmd/polywave-tools/` directory rename | Trivial |
+| Web UI strings | `<title>SAW - Polywave</title>`, welcome text, theme comments | ~5 files |
+| Protocol repo docs | README, ROADMAP, CHANGELOG, GLOSSARY prose | Prose edits |
+| `polywave.config.json` | Rename to `polywave.config.json`; any internal `name` field | Trivial |
+| GitHub repo names | 3 renames: `polywave` → `polywave`, `polywave-go` → `polywave-go`, `polywave-web` → `polywave-web` | GitHub UI |
+
+**Execution order:**
+1. Rename Go module in `polywave-go` (`go mod edit` + sed) — widest cascade, must land first
+2. Update `polywave-web` to reference new module path
+3. Rename binary outputs (`polywave` → `polywave`, `polywave-tools` → `polywave-tools`) in build configs
+4. Rename config file (`polywave.config.json` → `polywave.config.json`) and update all references
+5. Update web UI strings (title, welcome text)
+6. Update protocol repo prose docs
+7. Rename GitHub repos
+
+**Potential:** Low implementation risk — mostly mechanical string replacement. Module rename is the critical path; everything else is cosmetic. Binary rename has no user-facing breakage risk as long as install docs are updated in the same pass.
 
 ---
 

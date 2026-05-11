@@ -2,26 +2,26 @@
 # inject_worktree_env - SubagentStart hook for SAW worktree environment injection
 #
 # Lifecycle: SubagentStart (fires when wave agent threads are created)
-# Purpose: Set SAW_AGENT_WORKTREE, SAW_AGENT_ID, SAW_WAVE_NUMBER, SAW_IMPL_PATH, SAW_BRANCH
+# Purpose: Set POLYWAVE_AGENT_WORKTREE, POLYWAVE_AGENT_ID, POLYWAVE_WAVE_NUMBER, POLYWAVE_IMPL_PATH, POLYWAVE_BRANCH
 #          environment variables for wave agents to enable absolute path patterns
 #
 # Convention: Hooks receive JSON on stdin, must return JSON on stdout, exit 0 always
 #
 # Test Cases:
-# Test 1: Non-SAW agent (no [SAW:wave tag)
+# Test 1: Non-SAW agent (no [polywave:wave tag)
 #   - Should exit 0 immediately, no env file created
 #   - echo '{}' | CLAUDE_AGENT_DESCRIPTION="Generic agent" ./inject_worktree_env
 #
 # Test 2: SAW wave agent with worktree
-#   - Should detect [SAW:wave1:agent-A] tag
-#   - Should find .saw-ownership.json and set SAW_AGENT_WORKTREE
+#   - Should detect [polywave:wave1:agent-A] tag
+#   - Should find .saw-ownership.json and set POLYWAVE_AGENT_WORKTREE
 #   - Should set all 5 environment variables
-#   - cd /path/to/worktree && echo '{}' | CLAUDE_AGENT_DESCRIPTION="[SAW:wave1:agent-A] Implement feature" ./inject_worktree_env
+#   - cd /path/to/worktree && echo '{}' | CLAUDE_AGENT_DESCRIPTION="[polywave:wave1:agent-A] Implement feature" ./inject_worktree_env
 #
 # Test 3: SAW solo agent (no worktree)
-#   - Should detect [SAW:wave tag but no worktree
-#   - Should set 4 vars (SAW_AGENT_WORKTREE empty)
-#   - echo '{}' | CLAUDE_AGENT_DESCRIPTION="[SAW:wave1:agent-A] Solo task" ./inject_worktree_env
+#   - Should detect [polywave:wave tag but no worktree
+#   - Should set 4 vars (POLYWAVE_AGENT_WORKTREE empty)
+#   - echo '{}' | CLAUDE_AGENT_DESCRIPTION="[polywave:wave1:agent-A] Solo task" ./inject_worktree_env
 
 set -euo pipefail
 
@@ -32,14 +32,14 @@ read -r _ || true  # Consume stdin, ignore content
 agent_desc="${CLAUDE_AGENT_DESCRIPTION:-}"
 
 # Check if this is a SAW wave agent
-if ! [[ "$agent_desc" =~ \[SAW:wave ]]; then
+if ! [[ "$agent_desc" =~ \[polywave:wave ]]; then
   # Not a SAW agent, exit cleanly (no side effects)
   echo '{"hookSpecificOutput": {"hookEventName": "SubagentStart", "sawAgent": false}}'
   exit 0
 fi
 
-# Parse wave number and agent ID from [SAW:wave{N}:agent-{ID}] tag
-if [[ "$agent_desc" =~ \[SAW:wave([0-9]+):agent-([A-Z0-9]+)\] ]]; then
+# Parse wave number and agent ID from [polywave:wave{N}:agent-{ID}] tag
+if [[ "$agent_desc" =~ \[polywave:wave([0-9]+):agent-([A-Z0-9]+)\] ]]; then
   wave_num="${BASH_REMATCH[1]}"
   agent_id="${BASH_REMATCH[2]}"
 else
@@ -77,11 +77,11 @@ fi
 # Detect IMPL doc path
 impl_path=""
 
-# Method 1: Check .saw-state/active-impl (walk up to repo root)
+# Method 1: Check .polywave-state/active-impl (walk up to repo root)
 check_dir="$current_dir"
 while [[ "$check_dir" != "/" ]]; do
-  if [[ -f "$check_dir/.saw-state/active-impl" ]]; then
-    impl_path="$(cat "$check_dir/.saw-state/active-impl")"
+  if [[ -f "$check_dir/.polywave-state/active-impl" ]]; then
+    impl_path="$(cat "$check_dir/.polywave-state/active-impl")"
     break
   fi
   parent="$(dirname "$check_dir")"
@@ -129,11 +129,11 @@ fi
 # Write environment variables to temp file
 env_file="/tmp/saw-agent-env-$$"
 {
-  echo "export SAW_AGENT_WORKTREE=\"$worktree_path\""
-  echo "export SAW_AGENT_ID=\"$agent_id\""
-  echo "export SAW_WAVE_NUMBER=\"$wave_num\""
-  echo "export SAW_IMPL_PATH=\"$impl_path\""
-  echo "export SAW_BRANCH=\"$branch_name\""
+  echo "export POLYWAVE_AGENT_WORKTREE=\"$worktree_path\""
+  echo "export POLYWAVE_AGENT_ID=\"$agent_id\""
+  echo "export POLYWAVE_WAVE_NUMBER=\"$wave_num\""
+  echo "export POLYWAVE_IMPL_PATH=\"$impl_path\""
+  echo "export POLYWAVE_BRANCH=\"$branch_name\""
 } > "$env_file"
 
 # Return JSON with env file path
@@ -144,11 +144,11 @@ cat <<EOF
     "sawAgent": true,
     "envFile": "$env_file",
     "variables": {
-      "SAW_AGENT_WORKTREE": "$worktree_path",
-      "SAW_AGENT_ID": "$agent_id",
-      "SAW_WAVE_NUMBER": "$wave_num",
-      "SAW_IMPL_PATH": "$impl_path",
-      "SAW_BRANCH": "$branch_name"
+      "POLYWAVE_AGENT_WORKTREE": "$worktree_path",
+      "POLYWAVE_AGENT_ID": "$agent_id",
+      "POLYWAVE_WAVE_NUMBER": "$wave_num",
+      "POLYWAVE_IMPL_PATH": "$impl_path",
+      "POLYWAVE_BRANCH": "$branch_name"
     }
   }
 }

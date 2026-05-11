@@ -15,7 +15,7 @@ go build ./... 2>&1 | tee /tmp/build-error.log
 
 **Step 2: Run diagnosis**
 ```bash
-sawtools diagnose-build-failure /tmp/build-error.log --language go
+polywave-tools diagnose-build-failure /tmp/build-error.log --language go
 ```
 
 **Step 3: Apply fix if confidence ≥ 0.85**
@@ -33,4 +33,4 @@ If `auto_fixable: true` and `confidence ≥ 0.85`, apply the fix immediately. If
 
 **Supported languages:** go, rust, javascript, typescript, python
 
-**Pattern catalog:** 27 error patterns across 4 languages (6 Go, 5 Rust, 5 JS/TS, 11 Python). See scout-and-wave-go/pkg/builddiag for full catalog.
+**Pattern catalog:** 27 error patterns across 4 languages (6 Go, 5 Rust, 5 JS/TS, 11 Python). See polywave-go/pkg/builddiag for full catalog.

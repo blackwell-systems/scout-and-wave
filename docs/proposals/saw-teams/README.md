@@ -1,6 +1,6 @@
 # SAW-Teams
 
-Alternate execution layer for the Scout-and-Wave (SAW) protocol using Claude
+Alternate execution layer for the Polywave (SAW) protocol using Claude
 Code Agent Teams. Same invariants, same IMPL doc, same Scout. Different wave
 plumbing: teammates replace background Agent tool calls, and you get
 inter-agent messaging, a shared task list, and real-time protocol enforcement
@@ -69,8 +69,8 @@ Copy the hook scripts to your project:
 mkdir -p .claude/hooks
 
 # Or symlink from the saw-teams directory if you keep SAW as a submodule
-cp /path/to/scout-and-wave/saw-teams/hooks/teammate-idle-saw.sh .claude/hooks/
-cp /path/to/scout-and-wave/saw-teams/hooks/task-completed-saw.sh .claude/hooks/
+cp /path/to/polywave/saw-teams/hooks/teammate-idle-saw.sh .claude/hooks/
+cp /path/to/polywave/saw-teams/hooks/task-completed-saw.sh .claude/hooks/
 chmod +x .claude/hooks/*.sh
 ```
 

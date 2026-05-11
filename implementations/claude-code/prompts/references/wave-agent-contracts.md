@@ -24,7 +24,7 @@
 
 **Verification:** Check Scaffolds section before creating worktrees. If any scaffold file shows `Status: pending`, the Scaffold Agent has not run. If any shows `Status: FAILED`, stop immediately.
 
-**Last moment for revision:** Before `sawtools prepare-wave` creates worktrees. After worktree creation, type signatures cannot change without aborting the wave.
+**Last moment for revision:** Before `polywave-tools prepare-wave` creates worktrees. After worktree creation, type signatures cannot change without aborting the wave.
 
 ## I5: Agents Commit Before Reporting
 
@@ -105,8 +105,8 @@ This creates an integration wave where agent B wires agent A's work into the app
 - `[SAW:critic:user-auth] pre-wave brief review`
 
 **Implementation (automatic):**
-1. `sawtools prepare-wave/prepare-agent` writes `saw_name` field to brief frontmatter
-2. Orchestrator reads `saw_name` from `.saw-agent-brief.md` and uses as Agent tool name parameter
+1. `polywave-tools prepare-wave/prepare-agent` writes `saw_name` field to brief frontmatter
+2. Orchestrator reads `saw_name` from `.polywave-agent-brief.md` and uses as Agent tool name parameter
 3. `auto_format_saw_agent_names` PreToolUse hook validates format and provides fallback
 
 **Why:** Enables monitoring tools (claudewatch, SAW dashboard) to detect and track agent runs.
@@ -140,7 +140,7 @@ This creates an integration wave where agent B wires agent A's work into the app
 
 **Different repo:**
 - **Do NOT** use `isolation` field (creates worktrees in wrong repo)
-- Use manual worktree creation via `sawtools prepare-wave` instead
+- Use manual worktree creation via `polywave-tools prepare-wave` instead
 - Pass absolute paths to worktree directories in agent prompts
 
 ## Async Execution Requirement

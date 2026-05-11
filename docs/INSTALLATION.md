@@ -2,32 +2,32 @@
 
 ## Zero to First Scout
 
-Five commands from nothing to your first `/saw scout`. Copy-paste in order:
+Five commands from nothing to your first `/polywave scout`. Copy-paste in order:
 
 ```bash
 # 0. Prerequisites: Git 2.20+, jq 1.6+
 git --version && jq --version
 
 # 1. Install skill files, hooks, and Agent permission
-git clone https://github.com/blackwell-systems/scout-and-wave.git
-cd scout-and-wave && ./install.sh
+git clone https://github.com/blackwell-systems/polywave.git
+cd polywave && ./install.sh
 
 # 2. Install the CLI (pick one)
-brew install blackwell-systems/tap/sawtools            # Homebrew
-go install github.com/blackwell-systems/scout-and-wave-go/cmd/sawtools@latest  # Go install
+brew install blackwell-systems/tap/polywave-tools            # Homebrew
+go install github.com/blackwell-systems/polywave-go/cmd/polywave-tools@latest  # Go install
 
 # Or download a pre-built binary (no Go/Homebrew required):
-# https://github.com/blackwell-systems/scout-and-wave-go/releases/latest
+# https://github.com/blackwell-systems/polywave-go/releases/latest
 
 # 3. Initialize your project
 cd /path/to/your-project
-sawtools init
+polywave-tools init
 
 # 4. Verify everything works
-sawtools verify-install
+polywave-tools verify-install
 
 # 5. Run your first scout (in Claude Code, type this as a prompt)
-/saw scout "describe your feature here"
+/polywave scout "describe your feature here"
 ```
 
 The installer auto-detects Claude Code and handles everything: skill files, enforcement hooks, settings.json registration, and Agent permission. No manual configuration needed.
@@ -50,12 +50,12 @@ That's it for most users. The Web UI is optional -- see [Step 3](#step-3-web-ui-
 
 ## What you need
 
-Most users need **two repos**: this one (protocol + skill files + hooks) and `sawtools` (a single binary from scout-and-wave-go). The web UI is a third repo, optional.
+Most users need **two repos**: this one (protocol + skill files + hooks) and `polywave-tools` (a single binary from polywave-go). The web UI is a third repo, optional.
 
 | What | Install method | Required? |
 |---|---|---|
 | Protocol + skill + hooks | `git clone` + `./install.sh` | Yes |
-| `sawtools` CLI | `brew install`, `go install`, or [binary download](https://github.com/blackwell-systems/scout-and-wave-go/releases/latest) | Yes |
+| `polywave-tools` CLI | `brew install`, `go install`, or [binary download](https://github.com/blackwell-systems/polywave-go/releases/latest) | Yes |
 | Web UI | `git clone` + `npm build` + `go build` | No -- only if you want the browser dashboard |
 
 ## Installation Steps
@@ -67,8 +67,8 @@ Install in this order. Each step builds on the previous one.
 Clone this repository and run the installer:
 
 ```bash
-git clone https://github.com/blackwell-systems/scout-and-wave.git
-cd scout-and-wave
+git clone https://github.com/blackwell-systems/polywave.git
+cd polywave
 ./install.sh
 ```
 
@@ -115,27 +115,27 @@ After installation, the skill directory structure looks like this:
 
 All symlink targets point into `implementations/claude-code/prompts/` in the protocol repo, so pulling the latest revision updates skill behavior without re-symlinking.
 
-### Step 2: CLI Tools (`sawtools`)
+### Step 2: CLI Tools (`polywave-tools`)
 
-Install the `sawtools` binary using one of these methods:
+Install the `polywave-tools` binary using one of these methods:
 
 **Homebrew (macOS/Linux):**
 ```bash
-brew install blackwell-systems/tap/sawtools
+brew install blackwell-systems/tap/polywave-tools
 ```
 
 **Go install (any platform with Go 1.21+):**
 ```bash
-go install github.com/blackwell-systems/scout-and-wave-go/cmd/sawtools@latest
+go install github.com/blackwell-systems/polywave-go/cmd/polywave-tools@latest
 ```
 
 <details>
 <summary>Alternative: build from source (for contributors)</summary>
 
 ```bash
-git clone https://github.com/blackwell-systems/scout-and-wave-go.git
-cd scout-and-wave-go
-go build -o ~/.local/bin/sawtools ./cmd/sawtools
+git clone https://github.com/blackwell-systems/polywave-go.git
+cd polywave-go
+go build -o ~/.local/bin/polywave-tools ./cmd/polywave-tools
 ```
 
 Make sure `~/.local/bin` is on your PATH: `export PATH="$HOME/.local/bin:$PATH"`
@@ -144,33 +144,33 @@ Make sure `~/.local/bin` is on your PATH: `export PATH="$HOME/.local/bin:$PATH"`
 Verify the installation:
 
 ```bash
-sawtools version
+polywave-tools version
 ```
 
 ### Step 2b: Initialize Your Project
 
-After installing `sawtools`, run `sawtools init` in your project directory to auto-generate a `saw.config.json` configuration file:
+After installing `polywave-tools`, run `polywave-tools init` in your project directory to auto-generate a `polywave.config.json` configuration file:
 
 ```bash
 cd your-project
-sawtools init
+polywave-tools init
 ```
 
-`sawtools init` auto-detects your project's language (Go, Rust, Node, Python, Ruby, or Makefile-based), build command, and test command, then writes a `saw.config.json` with sensible defaults. No manual configuration needed for most projects.
+`polywave-tools init` auto-detects your project's language (Go, Rust, Node, Python, Ruby, or Makefile-based), build command, and test command, then writes a `polywave.config.json` with sensible defaults. No manual configuration needed for most projects.
 
 **Flags:**
 - `--repo <path>` — Initialize a project at a different path (default: current directory)
-- `--force` — Overwrite an existing `saw.config.json`
+- `--force` — Overwrite an existing `polywave.config.json`
 
-If you already have a `saw.config.json` or prefer to configure manually, this step is optional — see [Configuration](#configuration) below.
+If you already have a `polywave.config.json` or prefer to configure manually, this step is optional — see [Configuration](#configuration) below.
 
 ### Step 3: Web UI (Optional)
 
 If you want the browser-based interface:
 
 ```bash
-git clone https://github.com/blackwell-systems/scout-and-wave-web.git
-cd scout-and-wave-web
+git clone https://github.com/blackwell-systems/polywave-web.git
+cd polywave-web
 cd web && npm install && npm run build && cd ..
 go build -o saw ./cmd/saw
 ```
@@ -203,7 +203,7 @@ The hook installer registers 20 hooks across five lifecycle events. All hook scr
 | `check_wave_ownership` | `Write\|Edit\|NotebookEdit` | Blocks Wave agents from writing files outside their ownership manifest |
 | `auto_format_saw_agent_names` | `Agent` | Validates/formats SAW agent names from brief metadata (fallback for E44) |
 | `validate_agent_launch` | `Agent` | Full pre-launch validation gate: checks IMPL doc, agent existence, scaffolds, branch |
-| `inject_bash_cd` | `Bash` | Auto-prepends `cd $SAW_AGENT_WORKTREE &&` to every bash command when agent is in worktree |
+| `inject_bash_cd` | `Bash` | Auto-prepends `cd $POLYWAVE_AGENT_WORKTREE &&` to every bash command when agent is in worktree |
 | `validate_write_paths` | `Write\|Edit` | Blocks relative paths and paths outside worktree boundaries |
 | `block_git_stash` | `Bash` | Blocks `git stash` in wave-agent worktrees (stash hides uncommitted work from merge verification) |
 
@@ -277,33 +277,33 @@ Note: The installer script also references `check_impl_path` in its uninstall in
 Run the installation verification command:
 
 ```bash
-sawtools verify-install
+polywave-tools verify-install
 ```
 
-This checks that all prerequisites are met: `sawtools` is on PATH, skill files are symlinked, Git version is sufficient, and configured repos exist on disk. Fix any reported issues before proceeding.
+This checks that all prerequisites are met: `polywave-tools` is on PATH, skill files are symlinked, Git version is sufficient, and configured repos exist on disk. Fix any reported issues before proceeding.
 
 For human-readable output instead of JSON:
 
 ```bash
-sawtools verify-install --human
+polywave-tools verify-install --human
 ```
 
-## Configuration: `saw.config.json`
+## Configuration: `polywave.config.json`
 
 ### What it is
 
-`saw.config.json` is a per-project configuration file that lives in your project root. It tells SAW how to build, test, and manage your project -- which repos are involved, which models to use for each agent role, and what quality gates to run.
+`polywave.config.json` is a per-project configuration file that lives in your project root. It tells SAW how to build, test, and manage your project -- which repos are involved, which models to use for each agent role, and what quality gates to run.
 
 ### What happens without it
 
-SAW works without `saw.config.json`, but with reduced capabilities:
+SAW works without `polywave.config.json`, but with reduced capabilities:
 
 | Feature | With config | Without config |
 |---------|-------------|----------------|
 | Agent model selection | Per-role models (Scout=Sonnet, Wave=Opus, etc.) | All agents inherit parent session model |
 | Build/test commands | Auto-detected or configured | Must be specified in IMPL doc quality gates |
 | Multi-repo awareness | Repos listed, cross-repo IMPL docs work | Single-repo only |
-| Web UI project binding | `saw serve` auto-finds project | Must pass `--repo` flag every time |
+| Web UI project binding | `polywave serve` auto-finds project | Must pass `--repo` flag every time |
 | Webhook notifications | Adapters configured under `webhooks:` key | No webhook delivery |
 
 **Bottom line:** A single-repo project with default models works fine without it. Multi-repo projects or custom model selection need it.
@@ -314,7 +314,7 @@ The recommended approach is auto-detection:
 
 ```bash
 cd your-project
-sawtools init
+polywave-tools init
 ```
 
 This scans for language markers (go.mod, Cargo.toml, package.json, pyproject.toml, Gemfile, Makefile) and generates a config with sensible defaults. Use `--force` to overwrite an existing file.
@@ -353,11 +353,11 @@ This scans for language markers (go.mod, Cargo.toml, package.json, pyproject.tom
 
 ### Field reference
 
-**`repos`** (array of `{name, path}`) -- Repositories this project spans. For single-repo projects, `sawtools init` creates one entry pointing to the current directory. For multi-repo projects, add additional entries. Cross-repo IMPL docs use `repo:` tags on file_ownership and quality_gates that must match a `name` here.
+**`repos`** (array of `{name, path}`) -- Repositories this project spans. For single-repo projects, `polywave-tools init` creates one entry pointing to the current directory. For multi-repo projects, add additional entries. Cross-repo IMPL docs use `repo:` tags on file_ownership and quality_gates that must match a `name` here.
 
 **`agent`** (object) -- Model override per agent role. Empty string or missing field means "inherit the parent session's model." The `/saw` skill reads these at agent launch time. Available roles: `scout_model`, `wave_model`, `scaffold_model`, `integration_model`, `planner_model`, `critic_model`, `chat_model`.
 
-**`build`** / **`test`** (object with `command` and `detected`) -- Build and test commands for the project. `sawtools init` auto-detects these and sets `detected: true`. Override `command` if auto-detection chose wrong. These are used by `sawtools finalize-wave` for post-merge verification.
+**`build`** / **`test`** (object with `command` and `detected`) -- Build and test commands for the project. `polywave-tools init` auto-detects these and sets `detected: true`. Override `command` if auto-detection chose wrong. These are used by `polywave-tools finalize-wave` for post-merge verification.
 
 **`webhooks`** (object) -- Webhook notification configuration. `enabled: true` activates delivery. `adapters` is an array of adapter configs (Slack, Discord, Telegram). Configure via the web UI Settings page or edit directly.
 
@@ -365,20 +365,20 @@ This scans for language markers (go.mod, Cargo.toml, package.json, pyproject.tom
 
 SAW checks two locations (first match wins):
 
-1. `<project-root>/saw.config.json` -- per-project config
-2. `~/.claude/saw.config.json` -- global default for all projects
+1. `<project-root>/polywave.config.json` -- per-project config
+2. `~/.claude/polywave.config.json` -- global default for all projects
 
 The project-local file takes full precedence. There is no merging between levels.
 
 ## Troubleshooting
 
-### "sawtools: command not found"
+### "polywave-tools: command not found"
 
 Install or reinstall:
 ```bash
-brew install blackwell-systems/tap/sawtools
+brew install blackwell-systems/tap/polywave-tools
 # or
-go install github.com/blackwell-systems/scout-and-wave-go/cmd/sawtools@latest
+go install github.com/blackwell-systems/polywave-go/cmd/polywave-tools@latest
 ```
 
 If installed via `go install`, ensure `$GOPATH/bin` (typically `~/go/bin`) is on your PATH:
@@ -386,7 +386,7 @@ If installed via `go install`, ensure `$GOPATH/bin` (typically `~/go/bin`) is on
 export PATH="$(go env GOPATH)/bin:$PATH"
 ```
 
-Verify with: `which sawtools`
+Verify with: `which polywave-tools`
 
 ### "/saw not recognized"
 
@@ -430,7 +430,7 @@ Upgrade Git:
 - **macOS:** `brew install git`
 - **Ubuntu/Debian:** `sudo apt-get install git`
 
-### Build fails for scout-and-wave-go
+### Build fails for polywave-go
 
 Ensure you have Go 1.25+ installed:
 
@@ -451,7 +451,7 @@ node --version
 If the React build fails, try clearing the cache:
 
 ```bash
-cd scout-and-wave-web/web
+cd polywave-web/web
 rm -rf node_modules
 npm install
 npm run build
@@ -460,7 +460,7 @@ npm run build
 Then rebuild the Go binary (required because assets are embedded):
 
 ```bash
-cd scout-and-wave-web
+cd polywave-web
 go build -o saw ./cmd/saw
 ```
 
@@ -474,7 +474,7 @@ The installer supports multiple platforms via flags:
 | `./install.sh --claude-code` | `~/.claude/skills/saw/` | `~/.local/bin/` | Registers in `settings.json` + Agent permission |
 | `./install.sh --generic` | `~/.agents/skills/saw/` | `~/.local/bin/` | None (manual registration) |
 
-**`sawtools` works on any platform** -- it's a standalone Go binary that manages git worktrees, validates IMPL docs, merges branches, and runs quality gates. No LLM API calls. Key capabilities include:
+**`polywave-tools` works on any platform** -- it's a standalone Go binary that manages git worktrees, validates IMPL docs, merges branches, and runs quality gates. No LLM API calls. Key capabilities include:
 
 - Worktree management: `prepare-wave`, `finalize-wave`, `create-worktree`
 - Validation: `pre-wave-validate`, `verify-install`, `validate-impl`, `validate-briefs`

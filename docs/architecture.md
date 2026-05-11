@@ -1,8 +1,8 @@
-# Scout-and-Wave Architecture
+# Polywave Architecture
 
 ## System Overview
 
-Scout-and-Wave is a protocol for parallel agent coordination in software development. It decomposes feature work into independent units with disjoint file ownership, enabling concurrent implementation by multiple AI agents.
+Polywave is a protocol for parallel agent coordination in software development. It decomposes feature work into independent units with disjoint file ownership, enabling concurrent implementation by multiple AI agents.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -42,7 +42,7 @@ Scout-and-Wave is a protocol for parallel agent coordination in software develop
 
 ## Agent Types
 
-Scout-and-Wave coordinates seven asynchronous agent roles plus the synchronous Orchestrator. Each type has mechanically enforced boundaries; a model prompted to violate its role is blocked before the tool executes.
+Polywave coordinates seven asynchronous agent roles plus the synchronous Orchestrator. Each type has mechanically enforced boundaries; a model prompted to violate its role is blocked before the tool executes.
 
 | Agent Type | Subagent Tag | Role | Tool Access |
 |------------|-------------|------|-------------|
@@ -69,17 +69,17 @@ The Critic Agent is a pre-wave quality gate that runs **after E16 IMPL validatio
    - Check 5 (`import_chains`): All packages referenced in interface contracts must be importable
    - Check 6 (`side_effect_completeness`): New exported symbols that require registration (CLI commands, HTTP routes, React components) must have their registration file in `file_ownership`
    - Check 7 (`complexity_balance`): Warning if any agent owns >8 files or >40% of total IMPL files
-   - Check 8 (`caller_exhaustiveness`): All callers of changed symbols must be in `file_ownership`; uses `sawtools check-callers` to enumerate call sites
+   - Check 8 (`caller_exhaustiveness`): All callers of changed symbols must be in `file_ownership`; uses `polywave-tools check-callers` to enumerate call sites
    - Check 9 (`i1_disjoint_ownership`): Validates `file_ownership` table for I1 violations before worktrees are created
    - Check 10 (`result_code_semantics`): Verifies correct `result.Result[T]` usage in agent briefs
-4. Writes a structured `CriticResult` to the IMPL doc's `critic_report` field via `sawtools set-critic-review`
+4. Writes a structured `CriticResult` to the IMPL doc's `critic_report` field via `polywave-tools set-critic-review`
 5. Emits overall verdict: `PASS` (all agents pass, or only warnings present) or `ISSUES` (one or more agents have errors)
 
 **Enforcement:** `prepare-wave` checks the critic verdict before creating worktrees. Verdict `ISSUES` blocks worktree creation with exit code 1. Verdict `PASS` (including warning-only) proceeds.
 
 **What it does NOT do:** The Critic Agent never modifies source files or fixes briefs. It verifies accuracy only. Brief corrections are applied by the Orchestrator or human after reviewing the `CriticResult` summary; the critic is then re-run until verdict is `PASS`.
 
-**CLI note (Claude Code sessions):** In CLI orchestration mode, the Orchestrator uses `Agent(subagent_type=critic-agent, ...)` rather than `sawtools run-critic`. The `sawtools run-critic` command is only valid for programmatic/API orchestration outside of a Claude Code session.
+**CLI note (Claude Code sessions):** In CLI orchestration mode, the Orchestrator uses `Agent(subagent_type=critic-agent, ...)` rather than `polywave-tools run-critic`. The `polywave-tools run-critic` command is only valid for programmatic/API orchestration outside of a Claude Code session.
 
 See E37 in `protocol/execution-rules.md` for full specification.
 
@@ -130,9 +130,9 @@ repo/
 
 In Claude Code implementations, worktree isolation is enforced mechanically via six lifecycle hooks rather than relying on agent cooperation:
 
-1. **SubagentStart: Environment injection** — Sets `SAW_AGENT_WORKTREE`, `SAW_AGENT_ID`, `SAW_WAVE_NUMBER`, `SAW_IMPL_PATH`, `SAW_BRANCH` when wave agents launch
-2. **SubagentStart: Worktree isolation validation** (`validate_worktree_isolation`) — Two-phase check: Phase 1 validates pwd+branch pattern; Phase 2 verifies exact branch via `.saw-agent-brief.md` frontmatter
-3. **PreToolUse:Bash: CD auto-injection** — Prepends `cd $SAW_AGENT_WORKTREE &&` to every bash command, ensuring commands run in the correct working directory automatically
+1. **SubagentStart: Environment injection** — Sets `POLYWAVE_AGENT_WORKTREE`, `POLYWAVE_AGENT_ID`, `POLYWAVE_WAVE_NUMBER`, `POLYWAVE_IMPL_PATH`, `POLYWAVE_BRANCH` when wave agents launch
+2. **SubagentStart: Worktree isolation validation** (`validate_worktree_isolation`) — Two-phase check: Phase 1 validates pwd+branch pattern; Phase 2 verifies exact branch via `.polywave-agent-brief.md` frontmatter
+3. **PreToolUse:Bash: CD auto-injection** — Prepends `cd $POLYWAVE_AGENT_WORKTREE &&` to every bash command, ensuring commands run in the correct working directory automatically
 4. **PreToolUse:Write/Edit: Path validation** — Blocks relative paths and paths outside worktree boundaries at the tool boundary (exit 2), preventing the "Agent B leak" scenario where files are created in the main repo instead of the worktree
 5. **SubagentStop: Compliance verification** — Checks completion report exists and commits exist on branch, creating an audit trail for post-hoc violation analysis
 6. **Stop: Orchestrator stop warning** (`saw_orchestrator_stop`) — Warns when the session ends with an active IMPL in WAVE_PENDING or WAVE_EXECUTING state, or with active worktrees present. Non-blocking (exit 0 always); uses `stop_hook_active` to prevent re-trigger loops.
@@ -141,9 +141,9 @@ This defense-in-depth approach makes isolation violations impossible at the tool
 
 See E43 in `protocol/execution-rules.md` for full specification.
 
-### 3. Protocol SDK (sawtools CLI)
+### 3. Protocol SDK (polywave-tools CLI)
 
-The `sawtools` binary provides 75+ commands covering all protocol operations. Key commands include:
+The `polywave-tools` binary provides 75+ commands covering all protocol operations. Key commands include:
 
 **Batching commands (atomic multi-step workflows):**
 - `run-scout` — Launch Scout, validate IMPL, auto-correct IDs, finalize gates
@@ -195,7 +195,7 @@ The `sawtools` binary provides 75+ commands covering all protocol operations. Ke
 - `verify-hook-installed` / `verify-install` — Installation verification
 - `update-context` — E18 project memory update
 
-Run `sawtools --help` for the complete command list.
+Run `polywave-tools --help` for the complete command list.
 
 See `protocol/execution-rules.md` for detailed command specifications.
 
@@ -238,7 +238,7 @@ External observer pattern that preserves agent execution context across Claude C
 ┌──────────────────────────────────────────────────────────────┐
 │ JournalObserver (pkg/journal/)                               │
 │ ┌──────────────────────────────────────────────────────────┐ │
-│ │ .saw-state/wave1/agent-A/                                │ │
+│ │ .polywave-state/wave1/agent-A/                                │ │
 │ │ ├── cursor.json      (read position)                     │ │
 │ │ ├── index.jsonl      (tool execution history)            │ │
 │ │ ├── context.md       (generated on-demand summary)       │ │
@@ -282,7 +282,7 @@ External observer pattern that preserves agent execution context across Claude C
 - `pkg/journal/context.go` — Context generator (analyze history, produce markdown)
 - `pkg/journal/checkpoint.go` — Checkpoint manager (create/restore snapshots)
 - `pkg/journal/archive.go` — Archive policy (compress, retain, cleanup)
-- `cmd/sawtools/debug_journal.go` — CLI for debugging failed agents
+- `cmd/polywave-tools/debug_journal.go` — CLI for debugging failed agents
 
 **Integration points:**
 - `prepare-wave` / `prepare-agent`: JSON output includes `journal_context_available` and `journal_context_file` per agent, enabling the orchestrator to prepend journal context to agent prompts
@@ -296,10 +296,10 @@ See [tool-journaling.md](./tool-journaling.md) for full documentation.
 
 ### Phase 1: Scout
 
-1. User invokes `/saw scout <feature-description>` (optionally with `--repo <path>` to target a different repo than the session cwd)
+1. User invokes `/polywave scout <feature-description>` (optionally with `--repo <path>` to target a different repo than the session cwd)
 2. Orchestrator launches Scout agent (async, `subagent_type: scout`)
 3. Scout analyzes codebase, identifies interfaces, writes IMPL manifest
-4. Orchestrator validates IMPL manifest (E16: `sawtools validate`)
+4. Orchestrator validates IMPL manifest (E16: `polywave-tools validate`)
 5. Orchestrator checks E37 trigger conditions: if wave 1 has 3+ agents or `file_ownership` spans 2+ repos, launches Critic Agent (async, `subagent_type: critic-agent`)
 6. Critic reads every brief and owned file, runs 10 verification checks, writes `CriticResult` to IMPL doc; execution blocks if `verdict: ISSUES`
 7. User reviews and approves decomposition; IMPL transitions to `REVIEWED` state
@@ -317,7 +317,7 @@ See [tool-journaling.md](./tool-journaling.md) for full documentation.
 For each wave (1..N):
 
 1. **Worktree creation:**
-   - `sawtools create-worktrees` creates isolated worktrees for each agent
+   - `polywave-tools create-worktrees` creates isolated worktrees for each agent
    - Enforces interface freeze (I2: no contract changes after this point)
 
 2. **Journal initialization:**
@@ -340,26 +340,26 @@ For each wave (1..N):
    - Orchestrator reads completion reports (I4: IMPL doc is source of truth)
 
 6. **Quality gates:**
-   - `sawtools scan-stubs` (E20: detect unimplemented stubs)
-   - `sawtools run-gates` (E21: verify build/test/lint)
+   - `polywave-tools scan-stubs` (E20: detect unimplemented stubs)
+   - `polywave-tools run-gates` (E21: verify build/test/lint)
 
 7. **Merge verification:**
-   - `sawtools verify-commits` (all agents committed)
-   - `sawtools merge-agents` (merge to main with --no-ff)
-   - `sawtools verify-build` (post-merge build check)
+   - `polywave-tools verify-commits` (all agents committed)
+   - `polywave-tools merge-agents` (merge to main with --no-ff)
+   - `polywave-tools verify-build` (post-merge build check)
 
 8. **Journal archiving:**
    - `observer.Archive()` compresses journals
-   - Removes worktrees via `sawtools cleanup`
+   - Removes worktrees via `polywave-tools cleanup`
 
 9. **Next wave:**
    - If more waves remain: repeat from step 1
-   - If final wave: `sawtools mark-complete` (E15)
+   - If final wave: `polywave-tools mark-complete` (E15)
 
 ### Phase 4: Completion
 
-1. Orchestrator runs `sawtools mark-complete` on IMPL manifest
-2. Orchestrator runs `sawtools update-context` (E18: update project memory)
+1. Orchestrator runs `polywave-tools mark-complete` on IMPL manifest
+2. Orchestrator runs `polywave-tools update-context` (E18: update project memory)
 3. IMPL doc is marked `state: COMPLETE`
 4. Feature is done
 
@@ -369,7 +369,7 @@ The protocol enforces six core invariants:
 
 **I1: Disjoint File Ownership**
 - No two agents in the same wave own the same file
-- Checked by `sawtools check-conflicts` before worktree creation
+- Checked by `polywave-tools check-conflicts` before worktree creation
 - Violated IMPL docs are rejected at validation time
 
 **I2: Interface Contracts Precede Implementation**
@@ -384,12 +384,12 @@ The protocol enforces six core invariants:
 
 **I4: IMPL Doc is Single Source of Truth**
 - Completion reports written to IMPL doc, not chat
-- Status updates via `sawtools update-status`
+- Status updates via `polywave-tools update-status`
 - Orchestrator reads IMPL doc to determine wave state
 
 **I5: Agents Commit Before Reporting**
 - Each agent commits to worktree branch before writing completion report
-- Orchestrator verifies commits exist via `sawtools verify-commits`
+- Orchestrator verifies commits exist via `polywave-tools verify-commits`
 - Missing commits flag protocol deviation
 
 **I6: Role Separation**
@@ -427,7 +427,7 @@ Orchestrator response:
 When an agent fails mid-wave:
 
 1. Journal preserves full execution history (not lost to compaction)
-2. User inspects via `sawtools debug-journal wave<N>/agent-<ID>`
+2. User inspects via `polywave-tools debug-journal wave<N>/agent-<ID>`
 3. User identifies root cause from tool history
 4. User reverts worktree to last good commit (if needed)
 5. Orchestrator re-launches agent with updated prompt
@@ -448,7 +448,7 @@ repo/
 │   │           └── wave1-agent-B/
 │   └── sessions/                   # Claude Code session logs (read by journal)
 │       └── 1a2b3c4d.jsonl
-├── .saw-state/
+├── .polywave-state/
 │   ├── wave1/                      # Tool execution history
 │   │   ├── agent-A/
 │   │   │   ├── cursor.json
@@ -462,13 +462,13 @@ repo/
 │   ├── IMPL/                       # IMPL manifests (I4)
 │   │   └── IMPL-<feature>.yaml
 │   └── CONTEXT.md                  # Project memory (E18)
-├── saw.config.json                 # Project config (model defaults, quality settings)
+├── polywave.config.json                 # Project config (model defaults, quality settings)
 └── [source code]
 ```
 
 ## Configuration
 
-Project-local config at `<repo>/saw.config.json` or global default at `~/.claude/saw.config.json`:
+Project-local config at `<repo>/polywave.config.json` or global default at `~/.claude/polywave.config.json`:
 
 ```json
 {
@@ -560,7 +560,7 @@ The Program state machine wraps these with 9 program-level states: `PROGRAM_PLAN
 
 The system supports continuous automated execution through a daemon loop:
 
-- **Daemon** (`sawtools daemon`) — Long-running process that pulls work from a queue and executes Scout/Wave workflows continuously
+- **Daemon** (`polywave-tools daemon`) — Long-running process that pulls work from a queue and executes Scout/Wave workflows continuously
 - **Queue** — Ordered list of pending work items (features to scout, waves to execute)
 - **Autonomy settings** — Controls how much the daemon can do without human approval (e.g., auto-approve scouts, auto-merge waves)
 
@@ -568,11 +568,11 @@ The system supports continuous automated execution through a daemon loop:
 
 A requirements-gathering pathway that launches an interactive interview session before Scout. The interview agent asks clarifying questions to refine a vague feature request into a well-specified Scout input.
 
-**Command:** `sawtools interview`
+**Command:** `polywave-tools interview`
 
 ## Go Engine Package Structure
 
-The Go engine (`scout-and-wave-go`) contains 40 packages under `pkg/`. Key packages beyond the core:
+The Go engine (`polywave-go`) contains 40 packages under `pkg/`. Key packages beyond the core:
 
 | Package | Purpose |
 |---------|---------|
@@ -606,9 +606,9 @@ The Go engine (`scout-and-wave-go`) contains 40 packages under `pkg/`. Key packa
 
 ## Web Application Architecture
 
-The web application (`scout-and-wave-web`) provides an HTTP/SSE interface for the protocol engine.
+The web application (`polywave-web`) provides an HTTP/SSE interface for the protocol engine.
 
-**Dependency:** Imports `scout-and-wave-go` via a `replace` directive pointing to the local filesystem in `go.mod`.
+**Dependency:** Imports `polywave-go` via a `replace` directive pointing to the local filesystem in `go.mod`.
 
 **Structure:**
 - `pkg/api/` — HTTP route handlers (88 route registrations)
@@ -618,14 +618,14 @@ The web application (`scout-and-wave-web`) provides an HTTP/SSE interface for th
 - `web/embed.go` — `//go:embed` directive embeds built frontend assets into the Go binary
 
 **Binaries produced:**
-- `scout-and-wave-go` produces `sawtools` (CLI toolkit, ~21MB)
-- `scout-and-wave-web` produces `saw` (web server with embedded assets, ~24MB)
+- `polywave-go` produces `polywave-tools` (CLI toolkit, ~21MB)
+- `polywave-web` produces `polywave` (web server with embedded assets, ~24MB)
 
 **Build requirement:** Web assets are embedded at compile time. Any frontend change requires `cd web && npm run build` followed by `go build -o saw ./cmd/saw` to produce an updated binary.
 
 **Key UI components:** `ProgramBoard`, `ProgramDependencyGraph`, `DaemonControl`, `QueuePanel`, `AutonomySettings`, `InterviewLauncher`
 
-**API surface:** REST endpoints under `/api/` covering IMPLs, waves, programs, daemon control, queue management, autonomy settings, and interviews. Server-Sent Events (SSE) provide real-time progress updates during Scout and Wave execution.
+**API surface:** REST endpoints under `/api/` covering IMPLs, waves, programs, daemon control, queue management, autonomy settings, and interviews. Server-Sent Events (SSE) provide real-time progress updates during Polywave execution.
 
 ## See Also
 

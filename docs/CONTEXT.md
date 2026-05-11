@@ -131,18 +131,18 @@
   - IMPL doc: docs/IMPL/complete/IMPL-tools-review-fixes.yaml
 - **gatecache-review**: completed 2026-04-02, 2 waves, 4 agents
   - IMPL doc: docs/IMPL/complete/IMPL-gatecache-review.yaml
-- **sawtools-scout-automation**: completed 2026-04-02, 4 waves, 9 agents
-  - IMPL doc: docs/IMPL/complete/IMPL-sawtools-scout-automation.yaml
+- **polywave-tools-scout-automation**: completed 2026-04-02, 4 waves, 9 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-polywave-tools-scout-automation.yaml
 
 ## Established Interfaces
 
 ### Brief Validation (validate-briefs)
 
-**Location:** `pkg/protocol/brief_validator.go` (scout-and-wave-go repo)
+**Location:** `pkg/protocol/brief_validator.go` (polywave-go repo)
 
 **Purpose:** Automated validation of agent briefs for symbol and line accuracy.
 Language-agnostic approach using grep and line counting. Runs as part of
-`sawtools finalize-scout` to catch errors before the critic gate.
+`polywave-tools finalize-scout` to catch errors before the critic gate.
 
 **Key types:**
 - `BriefValidationData` — top-level result with per-agent validation results
@@ -154,7 +154,7 @@ Language-agnostic approach using grep and line counting. Runs as part of
 func ValidateBriefs(ctx context.Context, implPath string) (BriefValidationData, error)
 ```
 
-**CLI command:** `sawtools validate-briefs <impl-path>`
+**CLI command:** `polywave-tools validate-briefs <impl-path>`
 
 **Checks performed:**
 1. Symbol existence: all symbols in briefs exist in owned files (grep-based)
@@ -162,7 +162,7 @@ func ValidateBriefs(ctx context.Context, implPath string) (BriefValidationData, 
 3. Wave reference consistency (`wave_reference_invalid`): "Wave N Agent X" prose references are validated against the actual wave assignment in the IMPL doc — catches cases like a brief saying "Wave 2 Agent G" when Agent G is in Wave 3
 4. Suggestions: fuzzy-matched alternatives for missing symbols
 
-**Integration point:** Scout agent runs this via `sawtools finalize-scout` after
+**Integration point:** Scout agent runs this via `polywave-tools finalize-scout` after
 schema validation passes. Output is JSON with actionable fix suggestions. Reduces critic gate
 round-trip time by catching errors at source (~5 min saved per critic cycle).
 
@@ -229,8 +229,8 @@ round-trip time by catching errors at source (~5 min saved per critic cycle).
   - IMPL doc: docs/IMPL/complete/IMPL-critic-impl-commit.yaml
 - **friction-fixes-phase2**: completed 2026-04-10, 1 waves, 2 agents
   - IMPL doc: docs/IMPL/complete/IMPL-friction-fixes-phase2.yaml
-- **sawtools-validation-fixes**: completed 2026-04-10, 1 waves, 3 agents
-  - IMPL doc: docs/IMPL/complete/IMPL-sawtools-validation-fixes.yaml
+- **polywave-tools-validation-fixes**: completed 2026-04-10, 1 waves, 3 agents
+  - IMPL doc: docs/IMPL/complete/IMPL-polywave-tools-validation-fixes.yaml
 - **stale-constraint-lint**: completed 2026-04-10, 2 waves, 2 agents
   - IMPL doc: docs/IMPL/complete/IMPL-stale-constraint-lint.yaml
 - **recovery-improvements**: completed 2026-04-10, 2 waves, 4 agents

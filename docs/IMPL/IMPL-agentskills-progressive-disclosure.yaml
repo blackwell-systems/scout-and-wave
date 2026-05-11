@@ -224,7 +224,7 @@ interface_contracts:
     definition: |
       pub fn bundle_saw_script(target_scripts_dir: &Path) -> Result<(), Error>
 
-      Copies /Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/prompts/scripts/inject-agent-context
+      Copies /Users/dayna.blackwell/code/polywave/implementations/claude-code/prompts/scripts/inject-agent-context
       to target_scripts_dir/inject-agent-context. Preserves shebang and executable permissions.
 
       Returns Ok(()) on success, Error on IO failure.
@@ -529,7 +529,7 @@ waves:
           ## Constraints
 
           - Use existing `RoutingGraph` and `RoutingNode` types from models.rs
-          - Follow SAW skill YAML format exactly (see /Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/prompts/SKILL.md lines 1-59)
+          - Follow SAW skill YAML format exactly (see /Users/dayna.blackwell/code/polywave/implementations/claude-code/prompts/SKILL.md lines 1-59)
           - Use `#[cfg(test)]` module at bottom of file
         files:
           - src/upgrade/frontmatter_gen.rs
@@ -676,7 +676,7 @@ waves:
              }
 
              fn bundle_saw_script() -> Result<String, Error> {
-                 let saw_script_path = Path::new("/Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/prompts/scripts/inject-agent-context");
+                 let saw_script_path = Path::new("/Users/dayna.blackwell/code/polywave/implementations/claude-code/prompts/scripts/inject-agent-context");
 
                  if !saw_script_path.exists() {
                      return Err(Error::IoError(

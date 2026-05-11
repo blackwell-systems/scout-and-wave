@@ -2,7 +2,7 @@
 
 **Version:** 0.20.0
 
-This document defines the event schema for Scout-and-Wave observability. Events capture token costs, agent performance outcomes, and high-level orchestrator actions. Implementations consume this schema to build dashboards, cost tracking, and trend analysis.
+This document defines the event schema for Polywave observability. Events capture token costs, agent performance outcomes, and high-level orchestrator actions. Implementations consume this schema to build dashboards, cost tracking, and trend analysis.
 
 ---
 

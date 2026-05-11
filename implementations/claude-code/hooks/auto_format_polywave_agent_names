@@ -33,8 +33,8 @@ prompt=$(echo "$input" | jq -r '.parameters.prompt // empty' 2>/dev/null || true
 description=$(echo "$input" | jq -r '.parameters.description // empty' 2>/dev/null || true)
 subagent_type=$(echo "$input" | jq -r '.parameters.subagent_type // empty' 2>/dev/null || true)
 
-# Fast path: if name already has correct SAW tag format, allow
-if [[ "$name" =~ ^\[SAW:(wave[0-9]+:agent-[A-Za-z0-9]+|scout:[a-z0-9-]+|critic:[a-z0-9-]+|scaffold:[a-z0-9-]+|integration:wave[0-9]+)\]  ]]; then
+# Fast path: if name already has correct polywave tag format, allow
+if [[ "$name" =~ ^\[polywave:(wave[0-9]+:agent-[A-Za-z0-9]+|scout:[a-z0-9-]+|critic:[a-z0-9-]+|scaffold:[a-z0-9-]+|integration:wave[0-9]+)\]  ]]; then
   exit 0
 fi
 
@@ -77,21 +77,21 @@ case "$phase" in
       if [[ -n "$description" ]]; then
         desc="$description"
       fi
-      formatted_name="[SAW:wave${wave_num}:agent-${agent_id}] ${desc}"
+      formatted_name="[polywave:wave${wave_num}:agent-${agent_id}] ${desc}"
     fi
     ;;
   scout|critic|scaffold)
     if [[ -n "$slug" ]]; then
       desc="$description"
       [[ -z "$desc" ]] && desc="$phase task"
-      formatted_name="[SAW:${phase}:${slug}] ${desc}"
+      formatted_name="[polywave:${phase}:${slug}] ${desc}"
     fi
     ;;
   integration)
     if [[ -n "$wave_num" ]]; then
       desc="$description"
       [[ -z "$desc" ]] && desc="wire integration"
-      formatted_name="[SAW:integration:wave${wave_num}] ${desc}"
+      formatted_name="[polywave:integration:wave${wave_num}] ${desc}"
     fi
     ;;
 esac

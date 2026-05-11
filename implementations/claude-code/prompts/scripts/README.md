@@ -1,10 +1,10 @@
 # Scripts Directory
 
-This directory contains **vendor-neutral fallback scripts** for Scout-and-Wave's progressive disclosure system. These scripts enable reference injection on platforms that don't support Claude Code hooks (raw API, other LLMs, CI/CD environments).
+This directory contains **vendor-neutral fallback scripts** for Polywave's progressive disclosure system. These scripts enable reference injection on platforms that don't support Claude Code hooks (raw API, other LLMs, CI/CD environments).
 
 ## Purpose
 
-Scout-and-Wave uses a two-layer progressive disclosure architecture:
+Polywave uses a two-layer progressive disclosure architecture:
 
 1. **Hook layer** (Claude Code): `validate_agent_launch` and `inject_skill_context` hooks automatically inject reference files when launching agents or processing user prompts
 2. **Script layer** (vendor-neutral): Bash scripts that can be called manually from agent prompts when hooks are unavailable
@@ -27,17 +27,17 @@ These scripts mirror the logic of Claude Code hooks but run as model-initiated b
 **Conditional logic:**
 ```bash
 # Direct conditional logic:
-#   "^/saw program" in prompt -> inject references/program-flow.md
-#   "^/saw amend" in prompt -> inject references/amend-flow.md
+#   "^/polywave program" in prompt -> inject references/program-flow.md
+#   "^/polywave amend" in prompt -> inject references/amend-flow.md
 ```
 
 **Usage:**
 ```bash
 # From stdin
-echo "/saw program plan" | bash scripts/inject-context
+echo "/polywave program plan" | bash scripts/inject-context
 
 # From argument
-bash scripts/inject-context "/saw amend --add-wave"
+bash scripts/inject-context "/polywave amend --add-wave"
 
 # Model-initiated (in agent prompt instructions):
 inject=$(bash ${CLAUDE_SKILL_DIR}/scripts/inject-context "$user_prompt")
@@ -57,7 +57,7 @@ inject=$(bash ${CLAUDE_SKILL_DIR}/scripts/inject-context "$user_prompt")
 - `1` - Error (script directory resolution failure)
 
 **Related documentation:**
-- [inject_skill_context hook](/Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/hooks/inject_skill_context) - Hook orchestrator
+- [inject_skill_context hook](/Users/dayna.blackwell/code/polywave/implementations/claude-code/hooks/inject_skill_context) - Hook orchestrator
 
 ---
 
@@ -118,8 +118,8 @@ inject=$(bash ${CLAUDE_SKILL_DIR}/scripts/inject-agent-context \
 - `CLAUDE_SKILL_DIR` - Overrides default skill directory resolution (defaults to parent of scripts/)
 
 **Related documentation:**
-- [validate_agent_launch hook](/Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/hooks/validate_agent_launch) - Hook implementation
-- [skills-progressive-disclosure.md](/Users/dayna.blackwell/code/scout-and-wave/docs/skills-progressive-disclosure.md) - Architecture overview
+- [validate_agent_launch hook](/Users/dayna.blackwell/code/polywave/implementations/claude-code/hooks/validate_agent_launch) - Hook implementation
+- [skills-progressive-disclosure.md](/Users/dayna.blackwell/code/polywave/docs/skills-progressive-disclosure.md) - Architecture overview
 
 ---
 
@@ -192,10 +192,10 @@ No model action required. Hooks call scripts automatically.
 
 **Orchestrator perspective:**
 ```
-User types: /saw program plan
+User types: /polywave program plan
 → inject_skill_context hook fires
 → Calls scripts/inject-context for all skills
-→ Matches trigger "^/saw program"
+→ Matches trigger "^/polywave program"
 → Injects references/program-flow.md
 → Model receives expanded prompt
 ```
@@ -282,15 +282,15 @@ chmod +x scripts/inject-context scripts/inject-agent-context
 
 ## Protocol References
 
-These scripts implement execution rules from the Scout-and-Wave protocol:
+These scripts implement execution rules from the Polywave protocol:
 
 - **E42** (Progressive Disclosure): References loaded on-demand, not upfront
 - **H5** (Agent Launch Validation): `validate_agent_launch` hook calls injection logic
 - **M1-M4** (Determinism Tools): Reference injection ensures consistent agent behavior
 
 See protocol documentation for execution rule details:
-- [/Users/dayna.blackwell/code/scout-and-wave/protocol/execution-rules.md](/Users/dayna.blackwell/code/scout-and-wave/protocol/execution-rules.md)
-- [/Users/dayna.blackwell/code/scout-and-wave/docs/skills-progressive-disclosure.md](/Users/dayna.blackwell/code/scout-and-wave/docs/skills-progressive-disclosure.md)
+- [/Users/dayna.blackwell/code/polywave/protocol/execution-rules.md](/Users/dayna.blackwell/code/polywave/protocol/execution-rules.md)
+- [/Users/dayna.blackwell/code/polywave/docs/skills-progressive-disclosure.md](/Users/dayna.blackwell/code/polywave/docs/skills-progressive-disclosure.md)
 
 ## Maintenance
 
@@ -307,14 +307,14 @@ See protocol documentation for execution rule details:
 
 **Test inject-context:**
 ```bash
-cd /Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/prompts
-echo "/saw program plan" | bash scripts/inject-context
+cd /Users/dayna.blackwell/code/polywave/implementations/claude-code/prompts
+echo "/polywave program plan" | bash scripts/inject-context
 # Should output: <!-- injected: references/program-flow.md --> + file contents
 ```
 
 **Test inject-agent-context (conditional injection):**
 ```bash
-cd /Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/prompts
+cd /Users/dayna.blackwell/code/polywave/implementations/claude-code/prompts
 
 # Scout without --program: should produce empty output
 bash scripts/inject-agent-context --type scout --prompt "Analyze codebase for feature X"
@@ -334,15 +334,15 @@ bash scripts/inject-agent-context --type wave-agent \
 ## Cross-References
 
 **Protocol documentation:**
-- [execution-rules.md](/Users/dayna.blackwell/code/scout-and-wave/protocol/execution-rules.md) - E42 progressive disclosure
-- [invariants.md](/Users/dayna.blackwell/code/scout-and-wave/protocol/invariants.md) - I6 role separation
+- [execution-rules.md](/Users/dayna.blackwell/code/polywave/protocol/execution-rules.md) - E42 progressive disclosure
+- [invariants.md](/Users/dayna.blackwell/code/polywave/protocol/invariants.md) - I6 role separation
 
 **Pattern documentation:**
-- [skills-progressive-disclosure.md](/Users/dayna.blackwell/code/scout-and-wave/docs/skills-progressive-disclosure.md) - Progressive disclosure architecture
+- [skills-progressive-disclosure.md](/Users/dayna.blackwell/code/polywave/docs/skills-progressive-disclosure.md) - Progressive disclosure architecture
 
 **Hook implementations:**
-- [inject_skill_context](/Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/hooks/inject_skill_context) - UserPromptSubmit hook
-- [validate_agent_launch](/Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/hooks/validate_agent_launch) - PreToolUse(Agent) hook
+- [inject_skill_context](/Users/dayna.blackwell/code/polywave/implementations/claude-code/hooks/inject_skill_context) - UserPromptSubmit hook
+- [validate_agent_launch](/Users/dayna.blackwell/code/polywave/implementations/claude-code/hooks/validate_agent_launch) - PreToolUse(Agent) hook
 
 **Skill configuration:**
-- [saw-skill.md](/Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/prompts/saw-skill.md) - Orchestrator skill definition
+- [saw-skill.md](/Users/dayna.blackwell/code/polywave/implementations/claude-code/prompts/saw-skill.md) - Orchestrator skill definition

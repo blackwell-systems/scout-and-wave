@@ -10,8 +10,8 @@ set -euo pipefail
 # Extract agent name from CLAUDE_CODE_AGENT_NAME environment variable
 agent_name="${CLAUDE_CODE_AGENT_NAME:-}"
 
-# Only validate wave agents (format: [SAW:wave{N}:agent-{ID}] ...)
-if [[ ! "$agent_name" =~ ^\[SAW:wave([0-9]+):agent-([A-Z][2-9]?)\] ]]; then
+# Only validate wave agents (format: [polywave:wave{N}:agent-{ID}] ...)
+if [[ ! "$agent_name" =~ ^\[polywave:wave([0-9]+):agent-([A-Z][2-9]?)\] ]]; then
   # Not a wave agent (could be scout, critic, integration, etc.) — skip check
   exit 0
 fi
@@ -19,19 +19,19 @@ fi
 wave_num="${BASH_REMATCH[1]}"
 agent_id="${BASH_REMATCH[2]}"
 
-# Check if running in worktree by looking for .saw-agent-brief.md
-if [[ ! -f .saw-agent-brief.md ]]; then
-  echo "E12 violation: Wave agent must run in worktree with .saw-agent-brief.md" >&2
+# Check if running in worktree by looking for .polywave-agent-brief.md
+if [[ ! -f .polywave-agent-brief.md ]]; then
+  echo "E12 violation: Wave agent must run in worktree with .polywave-agent-brief.md" >&2
   echo "  Agent: $agent_name" >&2
   echo "  Current directory: $(pwd)" >&2
   exit 2
 fi
 
 # Extract IMPL doc path and feature slug from brief frontmatter
-impl_path=$(grep -m1 "^**IMPL Doc:**" .saw-agent-brief.md | sed 's/^**IMPL Doc:** //' || echo "")
+impl_path=$(grep -m1 "^**IMPL Doc:**" .polywave-agent-brief.md | sed 's/^**IMPL Doc:** //' || echo "")
 if [[ -z "$impl_path" ]]; then
   # Try alternate format in frontmatter
-  impl_path=$(head -20 .saw-agent-brief.md | grep "impl_doc:" | sed 's/^impl_doc: *//' || echo "")
+  impl_path=$(head -20 .polywave-agent-brief.md | grep "impl_doc:" | sed 's/^impl_doc: *//' || echo "")
 fi
 
 if [[ -z "$impl_path" ]]; then

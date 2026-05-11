@@ -1,4 +1,4 @@
-# Quickstart: Scout-and-Wave CLI (sawtools)
+# Quickstart: Polywave CLI (polywave-tools)
 
 Get from zero to your first parallel wave using the command-line interface.
 
@@ -9,22 +9,22 @@ Get from zero to your first parallel wave using the command-line interface.
 | Go | 1.25+ | `go version` |
 | Git | 2.20+ | `git --version` |
 
-You also need `sawtools` built and on your PATH. See the [Installation Guide](INSTALLATION.md) for build instructions.
+You also need `polywave-tools` built and on your PATH. See the [Installation Guide](INSTALLATION.md) for build instructions.
 
 ## Step 1: Verify Installation
 
 ```bash
-sawtools verify-install
+polywave-tools verify-install
 ```
 
-**What happens:** Checks that all SAW prerequisites are met -- sawtools on PATH, skill files symlinked, Git version sufficient, configured repos exist on disk.
+**What happens:** Checks that all SAW prerequisites are met -- polywave-tools on PATH, skill files symlinked, Git version sufficient, configured repos exist on disk.
 
 **Expected output:**
 
 ```json
 {
   "checks": [
-    {"name": "sawtools_on_path", "status": "pass"},
+    {"name": "polywave-tools_on_path", "status": "pass"},
     {"name": "skill_symlinks", "status": "pass"},
     {"name": "git_version", "status": "pass", "detail": "2.43.0"},
     {"name": "config_file", "status": "pass"},
@@ -42,13 +42,13 @@ Navigate to your project directory and run:
 
 ```bash
 # Scout the current project:
-sawtools run-scout "add caching to the API client"
+polywave-tools run-scout "add caching to the API client"
 
 # Scout a specific repo (IMPL doc written to that repo's docs/IMPL/):
-sawtools run-scout "add caching to the API client" --repo-dir /path/to/other-repo
+polywave-tools run-scout "add caching to the API client" --repo-dir /path/to/other-repo
 
 # Scout one repo, write IMPL doc to a different location:
-sawtools run-scout "add caching to the API client" \
+polywave-tools run-scout "add caching to the API client" \
   --repo-dir /path/to/target \
   --impl-output-path /path/to/protocol-docs/docs/IMPL/IMPL-caching.yaml
 ```
@@ -98,7 +98,7 @@ file_ownership:
 ## Step 4: Prepare a Wave
 
 ```bash
-sawtools prepare-wave docs/IMPL/IMPL-add-caching.yaml --wave 1
+polywave-tools prepare-wave docs/IMPL/IMPL-add-caching.yaml --wave 1
 ```
 
 **What happens:** Creates isolated git worktrees for each agent, extracts agent briefs, installs pre-commit hooks, and runs pre-flight checks (dependency validation, scaffold verification).
@@ -130,7 +130,7 @@ Agent execution requires Claude Code or the Claude API. Each agent receives a br
 
 **Hook-based enforcement (Claude Code only):** If using the `/saw` skill in Claude Code, worktree isolation is enforced automatically via 4 hooks (environment injection, bash cd injection, path validation, compliance verification). API-based execution uses Layer 1 (manual pre-creation) and Layer 4 (merge-time trip wire) for isolation.
 
-If you are using the `/saw` skill in Claude Code, run `/saw wave` to launch agents automatically. For API-based execution, pass each agent's brief file (`.saw-agent-brief.md` in the worktree root) to your Claude API client.
+If you are using the `/saw` skill in Claude Code, run `/polywave wave` to launch agents automatically. For API-based execution, pass each agent's brief file (`.polywave-agent-brief.md` in the worktree root) to your Claude API client.
 
 Agents run in parallel, implement their assigned files, run tests, and write completion reports back to the IMPL doc.
 
@@ -139,7 +139,7 @@ Agents run in parallel, implement their assigned files, run tests, and write com
 After all agents report complete:
 
 ```bash
-sawtools finalize-wave docs/IMPL/IMPL-add-caching.yaml --wave 1
+polywave-tools finalize-wave docs/IMPL/IMPL-add-caching.yaml --wave 1
 ```
 
 **What happens:** Verifies all agents committed, scans for stub functions, runs quality gates, merges branches to main, runs unscoped build and test verification, and cleans up worktrees.
@@ -165,19 +165,19 @@ If any step fails, the output includes diagnostics and the merge is not finalize
 
 | Command | Purpose |
 |---|---|
-| `sawtools verify-install` | Check all prerequisites are met |
-| `sawtools run-scout "feature"` | Analyze codebase and create IMPL doc |
-| `sawtools validate <impl-doc>` | Validate an IMPL doc against protocol rules |
-| `sawtools prepare-wave <impl-doc> --wave N` | Create worktrees and extract agent briefs |
-| `sawtools finalize-wave <impl-doc> --wave N` | Merge agent work, verify, and clean up |
-| `sawtools list-impls` | Show all IMPL docs and their status |
-| `sawtools set-completion <impl-doc>` | Write agent completion report (used by agents) |
+| `polywave-tools verify-install` | Check all prerequisites are met |
+| `polywave-tools run-scout "feature"` | Analyze codebase and create IMPL doc |
+| `polywave-tools validate <impl-doc>` | Validate an IMPL doc against protocol rules |
+| `polywave-tools prepare-wave <impl-doc> --wave N` | Create worktrees and extract agent briefs |
+| `polywave-tools finalize-wave <impl-doc> --wave N` | Merge agent work, verify, and clean up |
+| `polywave-tools list-impls` | Show all IMPL docs and their status |
+| `polywave-tools set-completion <impl-doc>` | Write agent completion report (used by agents) |
 
 ## Troubleshooting
 
-### "sawtools: command not found"
+### "polywave-tools: command not found"
 
-Install: `brew install blackwell-systems/tap/sawtools` or `go install github.com/blackwell-systems/scout-and-wave-go/cmd/sawtools@latest`. Ensure the binary is on your PATH.
+Install: `brew install blackwell-systems/tap/polywave-tools` or `go install github.com/blackwell-systems/polywave-go/cmd/polywave-tools@latest`. Ensure the binary is on your PATH.
 
 ### "verify-install: skill_symlinks: FAIL"
 
@@ -185,7 +185,7 @@ Run the skill installer from the protocol repo root: `./install.sh`. This create
 
 ### "prepare-wave: config_file: not found"
 
-Create `saw.config.json` in your project root with repository paths. See the [Installation Guide](INSTALLATION.md) for format.
+Create `polywave.config.json` in your project root with repository paths. See the [Installation Guide](INSTALLATION.md) for format.
 
 ### "finalize-wave: stub detected"
 

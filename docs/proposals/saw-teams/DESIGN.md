@@ -211,8 +211,8 @@ Agent Teams is experimental with limitations that affect SAW-Teams:
    (`saw-teams-skill.md`, adapted agent template, teammate-aware merge
    procedure).
 
-4. **Phase 3:** Document when to use `saw` vs `saw-teams`. The default
-   recommendation: `saw` for maximum portability and crash recovery,
+4. **Phase 3:** Document when to use `polywave` vs `saw-teams`. The default
+   recommendation: `polywave` for maximum portability and crash recovery,
    `saw-teams` when inter-agent communication is worth the experimental
    risk.
 

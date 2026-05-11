@@ -8,7 +8,7 @@
 
 **Command:**
 ```bash
-sawtools pre-wave-validate "<absolute-path-to-impl-doc>" --wave <N> --fix
+polywave-tools pre-wave-validate "<absolute-path-to-impl-doc>" --wave <N> --fix
 ```
 
 **What it does:**
@@ -24,11 +24,11 @@ sawtools pre-wave-validate "<absolute-path-to-impl-doc>" --wave <N> --fix
 
 ## E16: IMPL Doc Validation
 
-**When:** Part of `pre-wave-validate` batch (or standalone via `sawtools validate --fix`).
+**When:** Part of `pre-wave-validate` batch (or standalone via `polywave-tools validate --fix`).
 
 **Standalone command:**
 ```bash
-sawtools validate --fix "<absolute-path-to-impl-doc>"
+polywave-tools validate --fix "<absolute-path-to-impl-doc>"
 ```
 
 ### The `--fix` Flag
@@ -145,7 +145,7 @@ Warnings about content that should be in typed blocks (e.g., dependency graph in
 
 ## E37: Critic Gate (Pre-Wave Brief Review)
 
-**When:** After `sawtools validate` passes (E16), before human review and wave execution.
+**When:** After `polywave-tools validate` passes (E16), before human review and wave execution.
 
 **Purpose:** Automated review of agent briefs for 3+ agent waves or multi-repo coordination. Catches task ambiguity, missing dependencies, ownership conflicts.
 
@@ -155,16 +155,16 @@ Auto-trigger if **either**:
 1. Wave 1 has **3+ agents**, OR
 2. `file_ownership` spans **2+ repos**
 
-**Skip condition:** `--no-critic` flag passed to `sawtools run-scout`.
+**Skip condition:** `--no-critic` flag passed to `polywave-tools run-scout`.
 
 ### Execution Steps
 
-1. **Model selection:** Read `agent.critic_model` from `saw.config.json` (fall back to parent model).
+1. **Model selection:** Read `agent.critic_model` from `polywave.config.json` (fall back to parent model).
 
 2. **Get critic prompt and launch critic agent (CLI/Claude Code sessions):**
    ```bash
    # Get the assembled critic prompt — safe in Claude Code; no subprocess spawned
-   CRITIC_PROMPT=$(sawtools run-critic --backend agent-tool "<absolute-impl-path>")
+   CRITIC_PROMPT=$(polywave-tools run-critic --backend agent-tool "<absolute-impl-path>")
    ```
    Then launch:
    ```
@@ -176,7 +176,7 @@ Auto-trigger if **either**:
    )
    ```
 
-   **CRITICAL:** The IMPL doc absolute path MUST be in the `description` field so the E48 SubagentStop hook can locate it for commit enforcement (fallback when `.saw-state/active-impl` is absent, which is typical — critics run before `prepare-wave`).
+   **CRITICAL:** The IMPL doc absolute path MUST be in the `description` field so the E48 SubagentStop hook can locate it for commit enforcement (fallback when `.polywave-state/active-impl` is absent, which is typical — critics run before `prepare-wave`).
 
    **`--backend agent-tool` is the correct pattern** for CLI orchestration (inside a Claude Code session). The default `--backend cli` spawns a subprocess that fails inside an active Claude Code session. Always use `--backend agent-tool` in CLI orchestration mode.
 
@@ -190,7 +190,7 @@ Auto-trigger if **either**:
 
 **ISSUES (severity: error):**
 - **BLOCKS execution** — must resolve before wave launch
-- Correct briefs using `sawtools amend-impl --redirect-agent <ID>`
+- Correct briefs using `polywave-tools amend-impl --redirect-agent <ID>`
 - Re-validate (E16)
 - Re-run critic
 
@@ -215,7 +215,7 @@ critic_report:
 
 ## E21A: Baseline Gate Failure
 
-**When:** During `sawtools prepare-wave` (step 5 of wave execution).
+**When:** During `polywave-tools prepare-wave` (step 5 of wave execution).
 
 **Purpose:** Verify the codebase builds/tests **before** creating worktrees. Prevents agents from working on a broken baseline.
 
@@ -229,7 +229,7 @@ If `baseline_verification_failed` is returned:
 1. **The codebase was already broken** — not an agent failure
 2. Report to user: "Baseline verification failed. Fix the build/tests before launching Wave N."
 3. **Do not create worktrees**
-4. After user fixes, re-run `sawtools prepare-wave`
+4. After user fixes, re-run `polywave-tools prepare-wave`
 
 ### Success Behavior
 
@@ -237,13 +237,13 @@ If baseline passes, proceed with worktree creation and agent launches.
 
 ## E46: Test File Cascade Detection (Step 3 of pre-wave-validate)
 
-**When:** Runs automatically as Step 3 of `sawtools pre-wave-validate`, after E35 passes.
+**When:** Runs automatically as Step 3 of `polywave-tools pre-wave-validate`, after E35 passes.
 
 **Purpose:** Detect orphaned test file callers — `*_test.go` files that call symbols being changed by wave agents but are not assigned to any agent. Prevents post-merge test compilation failures from missed test cascades.
 
 **Command (standalone):**
 ```bash
-sawtools check-test-cascade "<absolute-path-to-impl-doc>" --repo-dir "<repo-path>"
+polywave-tools check-test-cascade "<absolute-path-to-impl-doc>" --repo-dir "<repo-path>"
 ```
 
 **How it works:** Scans the entire repo for test files calling symbols listed in the IMPL doc's changed interfaces. Reports any test file that calls a changed symbol but is not in any agent's `files` list.
@@ -260,9 +260,9 @@ These commands support Scout planning beyond E35/E46 detection:
 
 | Command | Purpose |
 |---------|---------|
-| `sawtools check-callers "<symbol>" --repo-dir <path>` | Whole-repo call site scanner including test files (used by E46 and Critic Check 8) |
-| `sawtools list-error-ranges --repo-dir <path>` | Lists all allocated error code range prefixes from `pkg/result/codes.go` |
-| `sawtools suggest-wave-structure <manifest> --repo-dir <path>` | Validates wave ordering for changed symbols — ensures callers of changed interfaces are in correct downstream waves |
+| `polywave-tools check-callers "<symbol>" --repo-dir <path>` | Whole-repo call site scanner including test files (used by E46 and Critic Check 8) |
+| `polywave-tools list-error-ranges --repo-dir <path>` | Lists all allocated error code range prefixes from `pkg/result/codes.go` |
+| `polywave-tools suggest-wave-structure <manifest> --repo-dir <path>` | Validates wave ordering for changed symbols — ensures callers of changed interfaces are in correct downstream waves |
 
 ---
 
@@ -270,7 +270,7 @@ These commands support Scout planning beyond E35/E46 detection:
 
 **Scout flow (new IMPL):**
 1. Scout completes → Read IMPL doc
-2. Run `sawtools pre-wave-validate` (combines E16 + E35 + E46 check-test-cascade)
+2. Run `polywave-tools pre-wave-validate` (combines E16 + E35 + E46 check-test-cascade)
 3. If validation failed → send errors to Scout for correction, retry once
 4. If E37 triggered → Run E37 (this file § E37)
 5. Present for human review
@@ -278,7 +278,7 @@ These commands support Scout planning beyond E35/E46 detection:
 **Existing IMPL flow (wave execution):**
 1. Check if critic already ran (non-empty `critic_report` field)
 2. If not and E37 triggered → Run E37
-3. Run `sawtools prepare-wave` → E21A executes automatically
+3. Run `polywave-tools prepare-wave` → E21A executes automatically
 4. Launch wave agents
 
 **Retry procedure for E35/E46 gaps:**

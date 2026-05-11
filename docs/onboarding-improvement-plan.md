@@ -1,4 +1,4 @@
-# Onboarding Improvement Plan for Scout-and-Wave
+# Onboarding Improvement Plan for Polywave
 
 **Date:** 2026-03-22
 **Author:** Claire (research agent)
@@ -13,11 +13,11 @@
 A new user who discovers SAW and wants to try it goes through these steps:
 
 1. **Read the README** (206 lines). Encounters seven participant roles, six invariants, five preconditions, 47 execution rules, worktree isolation layers, scaffold agents, interface contracts, and wave sequencing — before seeing `Quick Start`.
-2. **Follow Quick Start** — clone the protocol repo, run `install.sh` (handles skill symlinks, hook registration, settings.json merge, Agent permission), `brew install blackwell-systems/tap/sawtools`, optionally run `sawtools verify-install`.
+2. **Follow Quick Start** — clone the protocol repo, run `install.sh` (handles skill symlinks, hook registration, settings.json merge, Agent permission), `brew install blackwell-systems/tap/polywave-tools`, optionally run `polywave-tools verify-install`.
 3. **Navigate to `implementations/claude-code/QUICKSTART.md`** for a step-by-step walkthrough.
-4. **Run `/saw scout "feature"`** (or `/saw auto "feature"` for the single-command flow) — and wait 30-90 seconds for a result they need protocol knowledge to evaluate.
+4. **Run `/polywave scout "feature"`** (or `/polywave auto "feature"` for the single-command flow) — and wait 30-90 seconds for a result they need protocol knowledge to evaluate.
 
-**Minimum steps before first productive use: ~4** (clone protocol repo, run install.sh, `brew install blackwell-systems/tap/sawtools`, run `/saw scout`). Previously 9 steps before `go install` and Homebrew were available. Compare with AO's 1 step: `ao start <url>`.
+**Minimum steps before first productive use: ~4** (clone protocol repo, run install.sh, `brew install blackwell-systems/tap/polywave-tools`, run `/polywave scout`). Previously 9 steps before `go install` and Homebrew were available. Compare with AO's 1 step: `ao start <url>`.
 
 **Minimum concepts required before first use:**
 - What a "Scout" is and why it runs first
@@ -34,7 +34,7 @@ That is seven protocol-specific concepts, all required upfront. A user who skips
 
 1. Clone three repos, build the web app (`make build`), run `./saw serve`.
 2. Open `http://localhost:7432`.
-3. See the **WelcomeCard** component: "Scout-and-Wave uses AI agents to plan and implement features in parallel." Then: "First, add a repository in Settings so Scout knows which codebase to analyze."
+3. See the **WelcomeCard** component: "Polywave uses AI agents to plan and implement features in parallel." Then: "First, add a repository in Settings so Scout knows which codebase to analyze."
 4. Click "Open Settings," navigate to the repo configuration form, add a repo path, validate it.
 5. Return to the main view — see "No plan selected" with an empty document icon.
 6. Must figure out that "New Plan" in the header triggers a Scout.
@@ -61,8 +61,8 @@ That is seven protocol-specific concepts, all required upfront. A user who skips
 | Wave sequencing (I3) | - | Can learn by doing (system handles it) |
 | Worktree isolation | - | Can learn by doing (invisible to user) |
 | Seven participant roles | - | Can learn later (most are invisible) |
-| `sawtools` binary and its 75+ commands | Must learn (to install) | Can defer (skill handles orchestration) |
-| `saw.config.json` format | Must learn (for web app) | Can defer (CLI auto-detects) |
+| `polywave-tools` binary and its 75+ commands | Must learn (to install) | Can defer (skill handles orchestration) |
+| `polywave.config.json` format | Must learn (for web app) | Can defer (CLI auto-detects) |
 | Agent permissions in Claude Code | Must learn | - |
 | Three-repo architecture | Must learn (to install) | Can defer understanding why |
 
@@ -132,12 +132,12 @@ One command that:
 
 | Concept | AO | Paperclip | SAW (current) |
 |---|---|---|---|
-| Project setup | Auto-detect | One command | ~4 steps (was 9, now: clone, install.sh, brew install, /saw scout) |
+| Project setup | Auto-detect | One command | ~4 steps (was 9, now: clone, install.sh, brew install, /polywave scout) |
 | Planning phase | None (skip to execution) | CEO delegates tasks | Scout (required, must understand) |
 | Correctness model | None | None | 6 invariants, 47 execution rules (front-loaded in docs) |
 | Agent roles | Hidden (one agent per issue) | Corporate metaphor (CEO, CTO, engineer) | 7 roles (front-loaded in README) |
-| Configuration | Zero-config | `--yes` defaults | `install.sh` + `sawtools init` auto-generates config |
-| First productive use | 30 seconds | 2 minutes | ~5 minutes (was 15-30, improved by install.sh + Homebrew + /saw auto) |
+| Configuration | Zero-config | `--yes` defaults | `install.sh` + `polywave-tools init` auto-generates config |
+| First productive use | 30 seconds | 2 minutes | ~5 minutes (was 15-30, improved by install.sh + Homebrew + /polywave auto) |
 
 ---
 
@@ -146,10 +146,10 @@ One command that:
 ### Level 0: Zero Protocol Knowledge (30 seconds)
 
 **What the user can do:**
-- Run `saw init` in any project directory
+- Run `polywave init` in any project directory
 - System auto-detects language, build commands, test commands
 - System generates config with sensible defaults
-- User sees: "Ready. Run `saw plan 'your feature'` to get started."
+- User sees: "Ready. Run `polywave plan 'your feature'` to get started."
 
 **What they need to understand:**
 - SAW plans features before building them
@@ -175,13 +175,13 @@ Detected: Go project (go.mod found)
 
 SAW is ready. Next steps:
   saw plan "describe your feature"     Plan a feature (Scout analyzes your code)
-  saw serve                            Open the web dashboard
+  polywave serve                            Open the web dashboard
 ```
 
 ### Level 1: First Feature (5 minutes)
 
 **What the user can do:**
-- Run `saw plan "add caching to the API client"`
+- Run `polywave plan "add caching to the API client"`
 - See the plan summary in plain English (not raw YAML)
 - Approve or reject
 - Watch agents work in parallel
@@ -226,7 +226,7 @@ Plan: Add caching to the API client
 **What the user can do:**
 - Understand and edit IMPL docs directly
 - Use `--model` overrides for different agents
-- Run `/saw amend --add-wave` to extend plans
+- Run `/polywave amend --add-wave` to extend plans
 - Use the interview system for requirements gathering
 - Configure quality gates
 - Run programs (multi-feature orchestration)
@@ -267,7 +267,7 @@ Plan: Add caching to the API client
 
 ### 4.1 Zero-Config CLI Entry Point
 
-**Command:** `saw init`
+**Command:** `polywave init`
 
 **Behavior:**
 
@@ -280,7 +280,7 @@ saw init [--repo <path>] [--force]
    - Determine language, build command, test command
    - Determine if project uses monorepo structure (multiple go.mod, workspaces)
 
-2. **Generate `saw.config.json`:**
+2. **Generate `polywave.config.json`:**
    ```json
    {
      "repos": [{ "path": "/current/directory", "name": "my-project" }],
@@ -293,15 +293,15 @@ saw init [--repo <path>] [--force]
    }
    ```
 
-3. **Run verify-install** (check for sawtools, git version, etc.)
+3. **Run verify-install** (check for polywave-tools, git version, etc.)
 
-4. **If sawtools is missing**, print install instructions:
+4. **If polywave-tools is missing**, print install instructions:
    ```
-   sawtools not found. Install it:
-     brew install blackwell-systems/tap/sawtools
+   polywave-tools not found. Install it:
+     brew install blackwell-systems/tap/polywave-tools
 
    Or via Go install:
-     go install github.com/blackwell-systems/scout-and-wave-go/cmd/sawtools@latest
+     go install github.com/blackwell-systems/polywave-go/cmd/polywave-tools@latest
    ```
 
 5. **Print next steps:**
@@ -310,7 +310,7 @@ saw init [--repo <path>] [--force]
 
    Quick start:
      saw plan "describe your feature"     Create an implementation plan
-     saw serve                            Open the web dashboard
+     polywave serve                            Open the web dashboard
 
    Learn more:
      saw help                             All commands
@@ -318,12 +318,12 @@ saw init [--repo <path>] [--force]
    ```
 
 **Implementation:**
-- **Repo:** scout-and-wave-go (`cmd/sawtools/init_cmd.go`)
+- **Repo:** polywave-go (`cmd/polywave-tools/init_cmd.go`)
 - **Effort:** Medium (new command, project detection heuristics, config generation)
 - **Dependencies:** None
 
 **Design decisions:**
-- `saw init` (not `sawtools init`) — use the simpler binary name for the entry point. The web app binary is already called `saw`; unify the CLI name.
+- `polywave init` (not `polywave-tools init`) — use the simpler binary name for the entry point. The web app binary is already called `polywave`; unify the CLI name.
 - Do not require cloning the protocol repo for basic usage. The protocol repo is for skill files (Claude Code) and protocol specification. If the user is using the web app or standalone CLI, they do not need it.
 - `--force` overwrites existing config.
 
@@ -333,9 +333,9 @@ saw init [--repo <path>] [--force]
 
 #### CLI First Run (`/saw` skill in Claude Code)
 
-**Current behavior:** Pre-flight validation checks sawtools, skill files, git version, config. If anything fails, prints what is missing and stops.
+**Current behavior:** Pre-flight validation checks polywave-tools, skill files, git version, config. If anything fails, prints what is missing and stops.
 
-**Proposed behavior:** If pre-flight detects this is the first run (no `saw.config.json`, no `docs/IMPL/` directory), switch to guided mode:
+**Proposed behavior:** If pre-flight detects this is the first run (no `polywave.config.json`, no `docs/IMPL/` directory), switch to guided mode:
 
 ```
 This looks like your first time using SAW in this project.
@@ -368,8 +368,8 @@ Scout is defining the interface between agents...
 Plan saved to docs/IMPL/IMPL-health-check.yaml
 
 Review the plan above. If it looks right:
-  /saw wave          Launch the agents
-  /saw status        Check progress anytime
+  /polywave wave          Launch the agents
+  /polywave status        Check progress anytime
 ```
 
 **Key differences from current behavior:**
@@ -379,7 +379,7 @@ Review the plan above. If it looks right:
 - Gives explicit next-step commands
 
 **Implementation:**
-- **Repo:** scout-and-wave (skill prompt modifications in `implementations/claude-code/prompts/saw-skill.md`)
+- **Repo:** polywave (skill prompt modifications in `implementations/claude-code/prompts/saw-skill.md`)
 - **Effort:** Small (conditional prompt section for first-run detection)
 - **Dependencies:** None
 
@@ -411,9 +411,9 @@ Review the plan above. If it looks right:
   - "Approve to start building" (approve button)
 
 **Implementation:**
-- **Repo:** scout-and-wave-web (`web/src/components/Onboarding.tsx` — new component replacing WelcomeCard)
+- **Repo:** polywave-web (`web/src/components/Onboarding.tsx` — new component replacing WelcomeCard)
 - **Effort:** Medium (new component, 3-step wizard, project detection API endpoint)
-- **Dependencies:** Project detection logic from 4.1 (shared with `saw init`)
+- **Dependencies:** Project detection logic from 4.1 (shared with `polywave init`)
 
 ### 4.3 Web App Empty State
 
@@ -456,7 +456,7 @@ Recent activity:
 ```
 
 **Implementation:**
-- **Repo:** scout-and-wave-web (modify `App.tsx` empty state block and WelcomeCard)
+- **Repo:** polywave-web (modify `App.tsx` empty state block and WelcomeCard)
 - **Effort:** Small (replace static text with dynamic content)
 - **Dependencies:** None
 
@@ -490,29 +490,29 @@ Recent activity:
    - "Waves — Groups of agents that work in parallel"
 
 **Implementation:**
-- **Repo:** scout-and-wave-web (UI label changes across multiple components)
-- **Repo:** scout-and-wave (skill prompt — use "plan" in user-facing output, keep "wave" and "scaffold" with explanations)
+- **Repo:** polywave-web (UI label changes across multiple components)
+- **Repo:** polywave (skill prompt — use "plan" in user-facing output, keep "wave" and "scaffold" with explanations)
 - **Effort:** Medium (many small changes across both repos)
 - **Dependencies:** None
 
 ### 4.5 Error Messages as Teaching Moments
 
-#### Error: sawtools not installed
+#### Error: polywave-tools not installed
 
 **Current message (from pre-flight in saw-skill.md):**
-> "sawtools on PATH: blocker if missing"
+> "polywave-tools on PATH: blocker if missing"
 
 The skill prompt tells the orchestrator to "print what's missing and how to install it (see `docs/INSTALLATION.md`)" but the actual error is LLM-generated and varies.
 
 **Proposed standard error:**
 ```
-SAW needs the 'sawtools' command-line tool, but it's not installed.
+SAW needs the 'polywave-tools' command-line tool, but it's not installed.
 
 Install it (choose one):
-  brew install blackwell-systems/tap/sawtools
+  brew install blackwell-systems/tap/polywave-tools
 
   Or via Go install:
-    go install github.com/blackwell-systems/scout-and-wave-go/cmd/sawtools@latest
+    go install github.com/blackwell-systems/polywave-go/cmd/polywave-tools@latest
 
 After installing, try your command again.
 ```
@@ -521,7 +521,7 @@ After installing, try your command again.
 
 #### Error: Running waves without a Scout
 
-**Current behavior:** If a user runs `/saw wave` with no IMPL docs, the orchestrator runs `sawtools list-impls`, gets an empty list, and produces an LLM-generated error.
+**Current behavior:** If a user runs `/polywave wave` with no IMPL docs, the orchestrator runs `polywave-tools list-impls`, gets an empty list, and produces an LLM-generated error.
 
 **Proposed standard error:**
 ```
@@ -531,14 +531,14 @@ Before running agents, you need a plan. A plan tells SAW which files each
 agent should work on so they don't conflict.
 
 Create a plan:
-  /saw scout "describe the feature you want to build"
+  /polywave scout "describe the feature you want to build"
 
 The Scout will analyze your codebase and produce a plan for you to review.
 ```
 
 #### Error: IMPL doc validation failure (E16)
 
-**Current behavior:** The orchestrator runs `sawtools validate`, gets structured JSON errors, and presents them. The errors are technical (missing fields, invalid YAML, schema violations).
+**Current behavior:** The orchestrator runs `polywave-tools validate`, gets structured JSON errors, and presents them. The errors are technical (missing fields, invalid YAML, schema violations).
 
 **Proposed enhancement:** Wrap each validation error with a "what this means" explanation:
 
@@ -558,8 +558,8 @@ Plan validation found 2 issues:
 ```
 
 **Implementation:**
-- **Repo:** scout-and-wave-go (add `UserMessage string` field to validation errors in `pkg/protocol/validate.go`)
-- **Repo:** scout-and-wave (update skill prompt to use UserMessage when available)
+- **Repo:** polywave-go (add `UserMessage string` field to validation errors in `pkg/protocol/validate.go`)
+- **Repo:** polywave (update skill prompt to use UserMessage when available)
 - **Effort:** Medium (add human-readable messages to ~15 validation error types)
 - **Dependencies:** None
 
@@ -580,7 +580,7 @@ Add this to ~/.claude/settings.json:
 
 Then restart Claude Code and try again.
 
-Why: SAW runs Scout and Wave agents in the background. Without this
+Why: SAW runs Polywave agents in the background. Without this
 permission, it cannot launch any agents and cannot function.
 ```
 
@@ -616,55 +616,55 @@ What happened: Agent B could not resolve a test failure in client_test.go.
 The build passes but one test assertion fails.
 
 Options:
-  /saw wave                     Retry the failed agent
-  /saw amend --redirect-agent B Re-assign agent B with updated instructions
+  /polywave wave                     Retry the failed agent
+  /polywave amend --redirect-agent B Re-assign agent B with updated instructions
   (edit the plan manually)      Fix the IMPL doc and re-run
 ```
 
 **Implementation across all errors:**
-- **Repo:** scout-and-wave (skill prompt — add verbatim error templates for the 6 most common errors)
-- **Repo:** scout-and-wave-go (add `UserMessage` to validation errors and build diagnostics)
-- **Repo:** scout-and-wave-web (add error explanation panels to ReviewScreen and WaveBoard)
+- **Repo:** polywave (skill prompt — add verbatim error templates for the 6 most common errors)
+- **Repo:** polywave-go (add `UserMessage` to validation errors and build diagnostics)
+- **Repo:** polywave-web (add error explanation panels to ReviewScreen and WaveBoard)
 - **Effort:** Medium (error template catalog + UI work)
 
 ### 4.6 ~~Unified Binary Name~~ REJECTED
 
-**Decision:** Keep two separate binaries. The CLI (`sawtools`) doesn't need the web app, and the web app (`saw`) doesn't need the CLI. Merging them conflates installation friction with architectural coupling.
+**Decision:** Keep two separate binaries. The CLI (`polywave-tools`) doesn't need the web app, and the web app (`polywave`) doesn't need the CLI. Merging them conflates installation friction with architectural coupling.
 
-- **`sawtools`** — protocol engine CLI for the `/saw` skill, CI pipelines, SDK consumers. No web dependency.
-- **`saw`** — web app binary. Imports Go engine as a library. Embeds React. Serves HTTP/SSE.
+- **`polywave-tools`** — protocol engine CLI for the `/saw` skill, CI pipelines, SDK consumers. No web dependency.
+- **`polywave`** — web app binary. Imports Go engine as a library. Embeds React. Serves HTTP/SSE.
 
 They share the engine (`pkg/`), not each other. That's correct architecture.
 
-**The installation friction was solved by `go install` and Homebrew** (v0.92.0, 2026-03-25). Both binaries are now easy to install without building from source. `brew install blackwell-systems/tap/sawtools` works. The README documents Homebrew as the primary install method.
+**The installation friction was solved by `go install` and Homebrew** (v0.92.0, 2026-03-25). Both binaries are now easy to install without building from source. `brew install blackwell-systems/tap/polywave-tools` works. The README documents Homebrew as the primary install method.
 
 **Note:** The fact that this proposal was generated at all is itself an onboarding signal -- the two-binary architecture and its rationale need to be documented clearly in INSTALLATION.md and the README. If a researcher reading the codebase can't tell why they're separate, new users can't either.
 
-### 4.7 `saw plan` as Alias for Scout
+### 4.7 `polywave plan` as Alias for Scout
 
-**Current state:** `/saw scout "feature"` is the command. "Scout" is protocol jargon.
+**Current state:** `/polywave scout "feature"` is the command. "Scout" is protocol jargon.
 
-**Proposal:** Add `saw plan "feature"` as an alias. Both work; `plan` is recommended for new users, `scout` for power users and documentation.
+**Proposal:** Add `polywave plan "feature"` as an alias. Both work; `plan` is recommended for new users, `scout` for power users and documentation.
 
 In the web app, the "New Plan" button already uses "Plan" language. This makes CLI and web consistent.
 
 **Implementation:**
-- **Repo:** scout-and-wave-go (alias in command routing)
-- **Repo:** scout-and-wave (update skill prompt to accept `/saw plan` as equivalent to `/saw scout`)
+- **Repo:** polywave-go (alias in command routing)
+- **Repo:** polywave (update skill prompt to accept `/saw plan` as equivalent to `/polywave scout`)
 - **Effort:** Small
 - **Dependencies:** None
 
-### 4.8 Wave Execution Alias (Rejected: `saw build`)
+### 4.8 Wave Execution Alias (Rejected: `polywave build`)
 
-**Current state:** `/saw wave` launches the next wave. "Wave" is protocol jargon.
+**Current state:** `/polywave wave` launches the next wave. "Wave" is protocol jargon.
 
-**Original proposal:** Add `saw build` as an alias. This was **rejected** — "build" conflicts with the compile/build step that SAW already runs as part of verification gates, creating ambiguity ("build the plan" vs "build the code").
+**Original proposal:** Add `polywave build` as an alias. This was **rejected** — "build" conflicts with the compile/build step that SAW already runs as part of verification gates, creating ambiguity ("build the plan" vs "build the code").
 
-**If an alias is needed:** `saw run` is the preferred alternative ("run the next wave"). However, `saw wave` is acceptable as-is — per the concept renaming audit (Section 4.4), "wave" is distinctive, memorable, and becomes intuitive after one use. Adding an alias is lower priority than the `saw plan` alias (Section 4.7) since users encounter `plan`/`scout` first.
+**If an alias is needed:** `polywave run` is the preferred alternative ("run the next wave"). However, `polywave wave` is acceptable as-is — per the concept renaming audit (Section 4.4), "wave" is distinctive, memorable, and becomes intuitive after one use. Adding an alias is lower priority than the `polywave plan` alias (Section 4.7) since users encounter `plan`/`scout` first.
 
 **Implementation (if pursued):**
-- **Repo:** scout-and-wave-go (alias in command routing)
-- **Repo:** scout-and-wave (update skill prompt)
+- **Repo:** polywave-go (alias in command routing)
+- **Repo:** polywave (update skill prompt)
 - **Effort:** Small
 - **Dependencies:** None
 
@@ -676,17 +676,17 @@ In the web app, the "New Plan" button already uses "Plan" language. This makes C
 **Overall Completion:** ~40% (5 of 13 actionable items complete or shipped via other work)
 
 ### Completed Items
-- **4.1 `sawtools init`** -- Completed 2026-03-25, documented in CHANGELOG v0.69.0
+- **4.1 `polywave-tools init`** -- Completed 2026-03-25, documented in CHANGELOG v0.69.0
 - **4.4 Web UI tooltips** (partial) -- Completed 2026-03-20 via IMPL-webapp-ux-onboarding.yaml
-- **4.6 Unified binary** -- REJECTED and resolved. Homebrew formula shipped (`brew install blackwell-systems/tap/sawtools`), eliminating install friction without merging binaries.
+- **4.6 Unified binary** -- REJECTED and resolved. Homebrew formula shipped (`brew install blackwell-systems/tap/polywave-tools`), eliminating install friction without merging binaries.
 - **install.sh overhaul** (not in original plan) -- Shipped. Handles hook registration (18 hooks), skill symlinks, settings.json merge, Agent permission, smoke tests. Reduces manual steps from 9 to ~4.
-- **`/saw auto` command** (not in original plan) -- Shipped. Collapses scout + review + wave into one command, addressing the "too many steps" friction from section 1.1.
-- **`sawtools verify-install`** -- Exists in sawtools CLI (`verify_install_cmd.go`)
+- **`/polywave auto` command** (not in original plan) -- Shipped. Collapses scout + review + wave into one command, addressing the "too many steps" friction from section 1.1.
+- **`polywave-tools verify-install`** -- Exists in polywave-tools CLI (`verify_install_cmd.go`)
 - **QUICKSTART.md** -- Comprehensive step-by-step walkthrough with example output, error handling, and troubleshooting
 - **README.md** -- Updated with 7-step install guide, Homebrew instructions, hook documentation
 
 ### Rejected/Deferred Items
-- **4.7 `saw plan` alias** -- Deferred (second review, line 730)
+- **4.7 `polywave plan` alias** -- Deferred (second review, line 730)
 - **4.4 Hide advanced model selectors** -- Rejected (line 746, all 7 stay visible)
 
 ---
@@ -697,33 +697,33 @@ In the web app, the "New Plan" button already uses "Plan" language. This makes C
 
 | # | Proposal | Impact | Effort | Repos | Dependencies | Status |
 |---|---|---|---|---|---|---|
-| 1 | **4.5 Error messages as teaching moments** (skill prompt templates) | High — every new user hits at least one error | Small | scout-and-wave | None | **INCOMPLETE** — No verbatim templates in saw-skill.md |
-| 2 | **4.7 `saw plan` alias** | ~~High~~ Low — removes first jargon barrier | Small | scout-and-wave-go, scout-and-wave | None | **DEFERRED** — Overloads "plan", no standalone CLI (see line 730) |
-| 3 | **4.8 `saw run` alias** (if needed; `saw wave` is acceptable) | Low — "wave" is distinctive and learnable | Small | scout-and-wave-go, scout-and-wave | None | **NOT STARTED** — `/saw auto` partially addresses this by collapsing the multi-command flow |
-| 4 | **4.4 Concept renaming** (UI labels only) | High — reduces cognitive load on every page | Small-Medium | scout-and-wave-web | None | **PARTIAL** — Tooltips done (IMPL-webapp-ux-onboarding, 2026-03-20), model selectors kept visible (REJECTED) |
-| 5 | **README screenshot/recording** (from Tier 1 revised, line 748) | High — 10-second GIF converts evaluators | Small | scout-and-wave | None | **INCOMPLETE** — No visual in first 20 lines |
+| 1 | **4.5 Error messages as teaching moments** (skill prompt templates) | High — every new user hits at least one error | Small | polywave | None | **INCOMPLETE** — No verbatim templates in saw-skill.md |
+| 2 | **4.7 `polywave plan` alias** | ~~High~~ Low — removes first jargon barrier | Small | polywave-go, polywave | None | **DEFERRED** — Overloads "plan", no standalone CLI (see line 730) |
+| 3 | **4.8 `polywave run` alias** (if needed; `polywave wave` is acceptable) | Low — "wave" is distinctive and learnable | Small | polywave-go, polywave | None | **NOT STARTED** — `/polywave auto` partially addresses this by collapsing the multi-command flow |
+| 4 | **4.4 Concept renaming** (UI labels only) | High — reduces cognitive load on every page | Small-Medium | polywave-web | None | **PARTIAL** — Tooltips done (IMPL-webapp-ux-onboarding, 2026-03-20), model selectors kept visible (REJECTED) |
+| 5 | **README screenshot/recording** (from Tier 1 revised, line 748) | High — 10-second GIF converts evaluators | Small | polywave | None | **INCOMPLETE** — No visual in first 20 lines |
 
 ### Tier 2: High Impact, Medium Effort (do second)
 
 | # | Proposal | Impact | Effort | Repos | Dependencies | Status |
 |---|---|---|---|---|---|---|
-| 5 | **4.2 Guided first run** (CLI skill prompt changes) | High — transforms first experience | Medium | scout-and-wave | None | **INCOMPLETE** |
-| 6 | **4.3 Web app empty state** redesign | High — eliminates dead-end first impression | Medium | scout-and-wave-web | None | **INCOMPLETE** |
-| 7 | **~~4.1 `sawtools init`~~** | -- | -- | COMPLETE (2026-03-25) | -- | **COMPLETE** |
-| 8 | **4.5 Error messages** (Go-side UserMessage fields) | Medium — better diagnostics compound over time | Medium | scout-and-wave-go | None | **INCOMPLETE** |
+| 5 | **4.2 Guided first run** (CLI skill prompt changes) | High — transforms first experience | Medium | polywave | None | **INCOMPLETE** |
+| 6 | **4.3 Web app empty state** redesign | High — eliminates dead-end first impression | Medium | polywave-web | None | **INCOMPLETE** |
+| 7 | **~~4.1 `polywave-tools init`~~** | -- | -- | COMPLETE (2026-03-25) | -- | **COMPLETE** |
+| 8 | **4.5 Error messages** (Go-side UserMessage fields) | Medium — better diagnostics compound over time | Medium | polywave-go | None | **INCOMPLETE** |
 
 ### Tier 3: High Impact, Large Effort (do third)
 
 | # | Proposal | Impact | Effort | Repos | Dependencies |
 |---|---|---|---|---|---|
-| 10 | **4.2 Guided first run** (web app onboarding wizard) | High — transforms web app first experience | Large | scout-and-wave-web, scout-and-wave-go | 4.1 (project detection logic) |
-| 11 | **4.4 Concept renaming** (protocol doc updates, blog references) | Low-Medium — docs are secondary to the product experience | Large | scout-and-wave | After UI changes settle |
+| 10 | **4.2 Guided first run** (web app onboarding wizard) | High — transforms web app first experience | Large | polywave-web, polywave-go | 4.1 (project detection logic) |
+| 11 | **4.4 Concept renaming** (protocol doc updates, blog references) | Low-Medium — docs are secondary to the product experience | Large | polywave | After UI changes settle |
 
 ### Tier 4: Nice to Have
 
 | # | Proposal | Impact | Effort | Repos |
 |---|---|---|---|---|
-| 12 | Interactive web tutorial (guided overlay) | Medium — web-specific onboarding | Large | scout-and-wave-web |
+| 12 | Interactive web tutorial (guided overlay) | Medium — web-specific onboarding | Large | polywave-web |
 
 ---
 
@@ -732,23 +732,23 @@ In the web app, the "New Plan" button already uses "Plan" language. This makes C
 Independent review verdict: **APPROVE WITH CHANGES**. Status of each condition:
 
 ### Open (still to address)
-- **First-run detection reconciliation:** `saw init` checks `saw.config.json`; skill guided mode checks `docs/IMPL/`. Need single signal. Recommendation: `saw.config.json` existence is the canonical "initialized" flag.
-- **Web onboarding wizard split:** Decouple generic wizard (no project detection dependency) from language-specific examples. Generic version can ship in Tier 2 without `saw init`.
+- **First-run detection reconciliation:** `polywave init` checks `polywave.config.json`; skill guided mode checks `docs/IMPL/`. Need single signal. Recommendation: `polywave.config.json` existence is the canonical "initialized" flag.
+- **Web onboarding wizard split:** Decouple generic wizard (no project detection dependency) from language-specific examples. Generic version can ship in Tier 2 without `polywave init`.
 - **Team lead / evaluator persona:** README needs "What does it look like?" with screenshot/recording in first 20 lines. Not addressed by current plan.
-- **"Just try it" persona:** Can `saw plan "feature"` work without `saw init`? Auto-detect everything on the fly for the zero-commitment trial.
+- **"Just try it" persona:** Can `polywave plan "feature"` work without `polywave init`? Auto-detect everything on the fly for the zero-commitment trial.
 - **Onboarding metrics:** No way to measure if improvements work. Suggest: time from init to first merge, abandonment rate per step, error frequency by type.
 
 ### Second review (2026-03-24)
 
 **Pushbacks:**
 
-1. **4.7 `saw plan` alias — DEFERRED.** The CLI is invoked via `/saw scout` inside Claude Code — there is no standalone `saw` binary for CLI users. The alias would need to live in the skill prompt as routing logic, not in sawtools. Additionally, "plan" is already overloaded: it is a noun (the IMPL doc), a verb in `/saw program plan`, and would become a second verb meaning "run the scout." This creates ambiguity. Revisit only if a standalone CLI entry point is built.
+1. **4.7 `polywave plan` alias — DEFERRED.** The CLI is invoked via `/polywave scout` inside Claude Code — there is no standalone `polywave` binary for CLI users. The alias would need to live in the skill prompt as routing logic, not in polywave-tools. Additionally, "plan" is already overloaded: it is a noun (the IMPL doc), a verb in `/polywave program plan`, and would become a second verb meaning "run the scout." This creates ambiguity. Revisit only if a standalone CLI entry point is built.
 
-2. **4.1 `sawtools init` — COMPLETE (2026-03-25).** Implemented as `sawtools init` (not `saw init`). Auto-detects language (Go, Rust, Node, Python, Ruby, Makefile), build and test commands, and generates `saw.config.json`. Flags: `--repo <path>` (default: cwd), `--force` (overwrite existing config). Documentation updated in INSTALLATION.md, README.md, and saw-skill.md.
+2. **4.1 `polywave-tools init` — COMPLETE (2026-03-25).** Implemented as `polywave-tools init` (not `polywave init`). Auto-detects language (Go, Rust, Node, Python, Ruby, Makefile), build and test commands, and generates `polywave.config.json`. Flags: `--repo <path>` (default: cwd), `--force` (overwrite existing config). Documentation updated in INSTALLATION.md, README.md, and saw-skill.md.
 
 3. **4.2 Guided first-run — RESTRUCTURE.** Adding ~50 lines to the skill prompt for a path that fires once per project is expensive context for every subsequent invocation. Move the guided first-run content into a reference file (e.g., `references/first-run.md`) loaded on first-run detection, same pattern as `program-flow.md` and `amend-flow.md`. The routing table in the core skill adds one line; the content loads on demand.
 
-4. **Section 6 "Open" items underweighted.** The screenshot/recording for evaluators ("What does it look like?" in README first 20 lines) and the zero-commitment trial (`/saw scout` auto-detects everything without init) would have more impact than error message templates. A 10-second GIF showing Scout → review → wave → merge would convert more evaluators than any amount of better error messages.
+4. **Section 6 "Open" items underweighted.** The screenshot/recording for evaluators ("What does it look like?" in README first 20 lines) and the zero-commitment trial (`/polywave scout` auto-detects everything without init) would have more impact than error message templates. A 10-second GIF showing Scout → review → wave → merge would convert more evaluators than any amount of better error messages.
 
 **Revised priority order:**
 
@@ -774,8 +774,8 @@ Independent review verdict: **APPROVE WITH CHANGES**. Status of each condition:
 
 | # | Proposal | Impact | Effort | Rationale |
 |---|---|---|---|---|
-| 10 | **`saw plan` alias (4.7)** | Low | Small | Deferred -- overloads "plan" and no standalone CLI exists. Revisit if CLI entry point is built. |
-| 11 | **~~`sawtools init` command (4.1)~~** | -- | -- | COMPLETE (2026-03-25). Implemented as `sawtools init` with auto-detection. |
+| 10 | **`polywave plan` alias (4.7)** | Low | Small | Deferred -- overloads "plan" and no standalone CLI exists. Revisit if CLI entry point is built. |
+| 11 | **~~`polywave-tools init` command (4.1)~~** | -- | -- | COMPLETE (2026-03-25). Implemented as `polywave-tools init` with auto-detection. |
 | 12 | **Protocol doc renaming (4.4 docs)** | Low | Large | Docs are secondary to the product experience. |
 | 13 | **Interactive web tutorial** | Medium | Large | Guided overlay in web app. Nice to have. |
 
@@ -790,9 +790,9 @@ The protocol is the value proposition. AO has zero correctness guarantees and us
 ### 6.2 Do Not Create a "Beginner Mode" Dead End
 
 Do not build a separate simplified interface that diverges from the real one. Every simplification should be a layer on top of the real system:
-- `saw plan` calls the same code as `saw scout`
+- `polywave plan` calls the same code as `polywave scout`
 - The guided first run uses the same IMPL doc format
-- The web onboarding wizard writes the same `saw.config.json`
+- The web onboarding wizard writes the same `polywave.config.json`
 
 Users who outgrow Level 0 should find themselves already in Level 1, not needing to migrate.
 
@@ -806,7 +806,7 @@ The current QUICKSTART.md files show example output that will drift from reality
 ### 6.4 Do Not Sacrifice Power-User Workflows
 
 Every onboarding simplification must be additive, not reductive:
-- `saw plan` is an alias, not a replacement — `saw scout` still works
+- `polywave plan` is an alias, not a replacement — `polywave scout` still works
 - "Build" is a command alias, not a schema change — YAML still says `wave`
 - The advanced model selectors are hidden behind a toggle, not removed
 - The `--auto` flag, `--model` overrides, amendment commands, and program orchestration remain unchanged
@@ -824,19 +824,19 @@ SAW's target users are developers who have already experienced the pain of paral
 
 Key files that would be modified by these proposals:
 
-**scout-and-wave (protocol repo):**
-- `/Users/dayna.blackwell/code/scout-and-wave/implementations/claude-code/prompts/saw-skill.md` — skill prompt (guided first run, error templates, plan/build aliases)
-- `/Users/dayna.blackwell/code/scout-and-wave/docs/INSTALLATION.md` — simplify to reference `saw init`
-- `/Users/dayna.blackwell/code/scout-and-wave/docs/GETTING_STARTED.md` — rewrite around progressive disclosure levels
-- `/Users/dayna.blackwell/code/scout-and-wave/README.md` — simplify Quick Start to `saw init` + `saw plan`
+**polywave (protocol repo):**
+- `/Users/dayna.blackwell/code/polywave/implementations/claude-code/prompts/saw-skill.md` — skill prompt (guided first run, error templates, plan/build aliases)
+- `/Users/dayna.blackwell/code/polywave/docs/INSTALLATION.md` — simplify to reference `polywave init`
+- `/Users/dayna.blackwell/code/polywave/docs/GETTING_STARTED.md` — rewrite around progressive disclosure levels
+- `/Users/dayna.blackwell/code/polywave/README.md` — simplify Quick Start to `polywave init` + `polywave plan`
 
-**scout-and-wave-go (Go engine):**
-- `/Users/dayna.blackwell/code/scout-and-wave-go/cmd/sawtools/` — `init_cmd.go` (COMPLETE), 75+ commands total
-- `/Users/dayna.blackwell/code/scout-and-wave-go/pkg/protocol/validate.go` — add `UserMessage` to validation errors
-- `/Users/dayna.blackwell/code/scout-and-wave-go/pkg/engine/runner.go` — enhanced error context in `RunScout`, `RunSingleWave`
+**polywave-go (Go engine):**
+- `/Users/dayna.blackwell/code/polywave-go/cmd/polywave-tools/` — `init_cmd.go` (COMPLETE), 75+ commands total
+- `/Users/dayna.blackwell/code/polywave-go/pkg/protocol/validate.go` — add `UserMessage` to validation errors
+- `/Users/dayna.blackwell/code/polywave-go/pkg/engine/runner.go` — enhanced error context in `RunScout`, `RunSingleWave`
 
-**scout-and-wave-web (web app):**
-- `/Users/dayna.blackwell/code/scout-and-wave-web/web/src/App.tsx` — replace WelcomeCard, improve empty states
-- `/Users/dayna.blackwell/code/scout-and-wave-web/web/src/components/layout/AppHeader.tsx` — hide advanced model selectors, rename labels
-- `/Users/dayna.blackwell/code/scout-and-wave-web/web/src/components/SettingsScreen.tsx` — integrate into onboarding flow
-- `/Users/dayna.blackwell/code/scout-and-wave-web/web/src/components/ReviewScreen.tsx` — add section explanations
+**polywave-web (web app):**
+- `/Users/dayna.blackwell/code/polywave-web/web/src/App.tsx` — replace WelcomeCard, improve empty states
+- `/Users/dayna.blackwell/code/polywave-web/web/src/components/layout/AppHeader.tsx` — hide advanced model selectors, rename labels
+- `/Users/dayna.blackwell/code/polywave-web/web/src/components/SettingsScreen.tsx` — integrate into onboarding flow
+- `/Users/dayna.blackwell/code/polywave-web/web/src/components/ReviewScreen.tsx` — add section explanations

@@ -35,7 +35,7 @@ prompts/
 
 | File | Purpose |
 |------|---------|
-| [`saw-skill.md`](saw-skill.md) | The `/saw` skill body. Loaded on every `/saw` invocation. Drives all protocol state transitions as the Orchestrator. Uses `sawtools prepare-wave`, `sawtools finalize-wave`, `sawtools close-impl` for orchestration operations. Routes: `scout`, `wave`, `wave --auto`, `status`, `bootstrap`, `interview`. On-demand routing to `references/` for `program`, `amend`, and failure handling. |
+| [`saw-skill.md`](saw-skill.md) | The `/saw` skill body. Loaded on every `/saw` invocation. Drives all protocol state transitions as the Orchestrator. Uses `polywave-tools prepare-wave`, `polywave-tools finalize-wave`, `polywave-tools close-impl` for orchestration operations. Routes: `scout`, `wave`, `wave --auto`, `status`, `bootstrap`, `interview`. On-demand routing to `references/` for `program`, `amend`, and failure handling. |
 
 ## Agent Type Definitions (`agents/`)
 
@@ -47,7 +47,7 @@ uses to enforce tool restrictions and behavioral invariants. Launched via
 |------|-------|---------|
 | [`agents/scout.md`](agents/scout.md) | Scout | Self-contained agent definition (~780 lines). Includes suitability gate, IMPL production steps. Program contract rules conditionally injected from `references/scout-program-contracts.md`. Cannot edit source files (I6 enforcement). |
 | [`agents/wave-agent.md`](agents/wave-agent.md) | Wave Agent | Self-contained agent definition (~320 lines). Includes worktree isolation protocol, completion report reference. Build diagnosis and program contract rules conditionally injected from `references/wave-agent-*.md`. Cannot spawn sub-agents. |
-| [`agents/scaffold-agent.md`](agents/scaffold-agent.md) | Scaffold Agent | Materializes approved interface contracts as type scaffold source files. Runs between Scout and Wave 1. Creates only files listed in IMPL doc Scaffolds section. |
+| [`agents/scaffold-agent.md`](agents/scaffold-agent.md) | Scaffold Agent | Materializes approved interface contracts as type scaffold source files. Runs between Polywave 1. Creates only files listed in IMPL doc Scaffolds section. |
 | [`agents/integration-agent.md`](agents/integration-agent.md) | Integration Agent | Self-contained agent definition (~233 lines). Post-merge wiring agent (E26/E27). Wires unconnected exports into connector files. Runs on main branch after wave merge. |
 | [`agents/critic-agent.md`](agents/critic-agent.md) | Critic Agent | Self-contained agent definition (~210 lines). Includes verification checks (7 checks) and completion format. Never modifies source files. |
 | [`agents/planner.md`](agents/planner.md) | Planner | Self-contained agent definition (~555 lines). Includes suitability gate, implementation process, and example manifest. Produces PROGRAM manifests only. |
@@ -60,7 +60,7 @@ does not read them directly; it includes the path in the Scout's prompt.
 | File | When used | Purpose |
 |------|-----------|---------|
 | [`agent-template.md`](agent-template.md) | Every Scout launch | INSTANCE LAYER reference. Defines the 9-field agent brief structure, isolation verification protocol, YAML completion schema, and protocol constraints. Scout reads this → writes filled briefs into the IMPL doc. Wave agents never read this file directly. |
-| [`saw-bootstrap.md`](saw-bootstrap.md) | `/saw bootstrap` only | Bootstrap Scout procedure. Architecture design principles, disjoint ownership patterns, Rust workspace rules, types scaffold specification, and IMPL-bootstrap.yaml output format. |
+| [`saw-bootstrap.md`](saw-bootstrap.md) | `/polywave bootstrap` only | Bootstrap Scout procedure. Architecture design principles, disjoint ownership patterns, Rust workspace rules, types scaffold specification, and IMPL-bootstrap.yaml output format. |
 
 ## On-Demand References (`references/`)
 
@@ -71,13 +71,13 @@ See `docs/skills-progressive-disclosure.md` for the design.
 
 | File | Trigger | Purpose |
 |------|---------|---------|
-| [`references/program-flow.md`](references/program-flow.md) | `/saw program *` | Program plan/execute/status/replan flow. ~324 lines. Includes lifecycle analogy table and per-subcommand Orchestrator steps. |
-| [`references/amend-flow.md`](references/amend-flow.md) | `/saw amend *` | Amend subcommands: `--add-wave`, `--redirect-agent`, `--extend-scope`. |
+| [`references/program-flow.md`](references/program-flow.md) | `/polywave program *` | Program plan/execute/status/replan flow. ~324 lines. Includes lifecycle analogy table and per-subcommand Orchestrator steps. |
+| [`references/amend-flow.md`](references/amend-flow.md) | `/polywave amend *` | Amend subcommands: `--add-wave`, `--redirect-agent`, `--extend-scope`. |
 | [`references/failure-routing.md`](references/failure-routing.md) | Agent failure or post-merge integration gaps | E7a retry context, E19 failure type routing, E19.1 reactions override, E8 interface failures, E20 stub scanning, E25/E26/E35 integration gap detection. |
-| [`references/impl-targeting.md`](references/impl-targeting.md) | `/saw wave --impl`, `/saw status --impl` | IMPL doc targeting and resume logic. Supports slug, filename, or path resolution. |
-| [`references/model-selection.md`](references/model-selection.md) | All agent launches | Model selection hierarchy (skill argument → config file → parent session). Config file lookup order and saw.config.json schema. |
-| [`references/pre-wave-validation.md`](references/pre-wave-validation.md) | `/saw wave` | E16 IMPL validation, E37 critic gate, E21A baseline verification. Pre-flight validation sequence before worktree creation. |
-| [`references/wave-agent-contracts.md`](references/wave-agent-contracts.md) | `/saw wave` | I1/I2/I5/E35/E42 protocol rules. Disjoint ownership enforcement, interface freeze contracts, commit requirements, wiring obligations. |
+| [`references/impl-targeting.md`](references/impl-targeting.md) | `/polywave wave --impl`, `/polywave status --impl` | IMPL doc targeting and resume logic. Supports slug, filename, or path resolution. |
+| [`references/model-selection.md`](references/model-selection.md) | All agent launches | Model selection hierarchy (skill argument → config file → parent session). Config file lookup order and polywave.config.json schema. |
+| [`references/pre-wave-validation.md`](references/pre-wave-validation.md) | `/polywave wave` | E16 IMPL validation, E37 critic gate, E21A baseline verification. Pre-flight validation sequence before worktree creation. |
+| [`references/wave-agent-contracts.md`](references/wave-agent-contracts.md) | `/polywave wave` | I1/I2/I5/E35/E42 protocol rules. Disjoint ownership enforcement, interface freeze contracts, commit requirements, wiring obligations. |
 
 ### Agent References (conditionally injected)
 

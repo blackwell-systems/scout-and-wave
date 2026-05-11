@@ -1,4 +1,4 @@
-# Scout-and-Wave
+# Polywave
 
 [![Blackwell Systems™](https://raw.githubusercontent.com/blackwell-systems/blackwell-docs-theme/main/badge-trademark.svg)](https://github.com/blackwell-systems)
 ![Version](https://img.shields.io/badge/version-0.9.3-blue)
@@ -12,10 +12,10 @@ Other multi-agent frameworks run fast and merge chaos. SAW gives every agent its
 
 > Follows the [Agent Skills](https://agentskills.io) open standard - compatible with Claude Code, Cursor, GitHub Copilot, and other Agent Skills-compatible tools. See [`implementations/`](implementations/) for reference implementations.
 
-> **New to Scout-and-Wave?** Follow this path:
+> **New to Polywave?** Follow this path:
 > 1. Read this README (15 min) - understand "why" and "how" at a high level
 > 2. Read [implementations/claude-code/QUICKSTART.md](implementations/claude-code/QUICKSTART.md) (20 min) - see a real example with output
-> 3. Try it yourself: `/saw scout "feature"` on a test project
+> 3. Try it yourself: `/polywave scout "feature"` on a test project
 > 4. Deep dive: [protocol/](protocol/) specification when building a new implementation
 
 ## Why
@@ -35,15 +35,15 @@ The system has seven participant roles, but you interact with two: the **Orchest
 
 **What happens when you run SAW:**
 
-1. You run `/saw scout "feature"` → Scout analyzes codebase, assigns files to agents
+1. You run `/polywave scout "feature"` → Scout analyzes codebase, assigns files to agents
 2. Scout writes IMPL doc (implementation document — a YAML coordination artifact that defines file ownership, interface contracts, and wave structure for the feature) → You review the wave structure (waves are groups of agents that execute in parallel)
-3. You run `/saw wave` → Scaffold Agent creates scaffold files (type/interface definitions shared across agents, created before any wave launches) if needed
+3. You run `/polywave wave` → Scaffold Agent creates scaffold files (type/interface definitions shared across agents, created before any wave launches) if needed
 4. Wave Agents launch in parallel → Each works in isolated worktree on disjoint files
 5. Orchestrator merges → Runs tests → Cleans up worktrees
 
 **Key mechanisms:**
 
-- **Orchestrator:** Synchronous coordination agent in your session. Launches Scout and Wave Agents, enforces file ownership, executes merge procedure, runs verification gates. Human reviews and approves through it directly.
+- **Orchestrator:** Synchronous coordination agent in your session. Launches Polywave Agents, enforces file ownership, executes merge procedure, runs verification gates. Human reviews and approves through it directly.
 
 - **Scout:** Asynchronous agent. Analyzes codebase, produces IMPL doc with dependency graph, interface contracts, file ownership table, and wave structure. Every file assigned to exactly one agent. Resolves ownership conflicts at planning time or declares work NOT SUITABLE.
 
@@ -77,66 +77,66 @@ See [protocol/preconditions.md](protocol/preconditions.md) for details.
 
 ```bash
 # 1. Clone and install
-git clone https://github.com/blackwell-systems/scout-and-wave.git ~/code/scout-and-wave
+git clone https://github.com/blackwell-systems/polywave.git ~/code/polywave
 
 # Quick install
-~/code/scout-and-wave/install.sh
+~/code/polywave/install.sh
 
 # Or manually (see implementations/claude-code/README.md for full install):
 mkdir -p ~/.claude/skills/saw/agents
-ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/saw-skill.md ~/.claude/skills/saw/SKILL.md
-ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/saw-bootstrap.md ~/.claude/skills/saw/saw-bootstrap.md
-ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agent-template.md ~/.claude/skills/saw/agent-template.md
-ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agents ~/.claude/skills/saw/agents
+ln -sf ~/code/polywave/implementations/claude-code/prompts/saw-skill.md ~/.claude/skills/saw/SKILL.md
+ln -sf ~/code/polywave/implementations/claude-code/prompts/saw-bootstrap.md ~/.claude/skills/saw/saw-bootstrap.md
+ln -sf ~/code/polywave/implementations/claude-code/prompts/agent-template.md ~/.claude/skills/saw/agent-template.md
+ln -sf ~/code/polywave/implementations/claude-code/prompts/agents ~/.claude/skills/saw/agents
 
-# 2. Install sawtools CLI (pick one)
-brew install blackwell-systems/tap/sawtools                                     # Homebrew
-go install github.com/blackwell-systems/scout-and-wave-go/cmd/sawtools@latest   # Go install
-# Or download binary: https://github.com/blackwell-systems/scout-and-wave-go/releases/latest
+# 2. Install polywave-tools CLI (pick one)
+brew install blackwell-systems/tap/polywave-tools                                     # Homebrew
+go install github.com/blackwell-systems/polywave-go/cmd/polywave-tools@latest   # Go install
+# Or download binary: https://github.com/blackwell-systems/polywave-go/releases/latest
 
 # 3. Initialize your project (auto-detects language, build, and test commands)
 cd your-project
-sawtools init
+polywave-tools init
 
 # 4. Restart Claude Code, then in any session on any project:
-/saw scout "add a caching layer to the API client"
+/polywave scout "add a caching layer to the API client"
 # → Scout analyzes the codebase, assigns files to agents, writes docs/IMPL/IMPL-caching-layer.yaml
 # → Orchestrator shows you the wave structure and interface contracts for review
 # → You review the IMPL doc. This is the last chance to change interfaces.
 
-/saw wave
+/polywave wave
 # → If shared types are needed, Scaffold Agent creates them automatically
 # → Parallel agents implement their assigned files concurrently
 # → Orchestrator merges, runs tests, reports result
 
 # Or collapse both steps into one command:
-/saw auto "add a caching layer to the API client"
+/polywave auto "add a caching layer to the API client"
 # → Scout analyzes, writes IMPL doc, shows wave structure
 # → You confirm ("Proceed? [y/N]") -- this is the human checkpoint
 # → On Y: all waves execute automatically
 
 # When you have multiple IMPLs queued — run them all in parallel:
-/saw program --impl feature-a feature-b feature-c
+/polywave program --impl feature-a feature-b feature-c
 # → Checks for file ownership conflicts across all three
 # → If disjoint (no overlapping files), assigns all to Tier 1
 # → All three IMPLs execute simultaneously; sequential tiers only when files overlap
-/saw program execute
+/polywave program execute
 ```
 
 **Subcommands:**
 
 | Command | Purpose |
 |---------|---------|
-| `/saw scout "<feature>"` | Analyze codebase, produce IMPL doc |
-| `/saw wave` | Execute next pending wave |
-| `/saw wave --auto` | Execute all remaining waves unattended |
-| `/saw auto "<feature>"` | Scout + confirm + wave in one command |
-| `/saw status` | Show current wave and agent progress |
-| `/saw bootstrap "<project>"` | Design new project structure from scratch |
-| `/saw interview "<description>"` | Structured requirements gathering |
-| `/saw program --impl <slug> ...` | Bundle queued IMPLs into a parallel program (auto tier-assigns by file ownership) |
-| `/saw program plan/execute/status/replan` | Top-down multi-feature planning and tier-gated execution |
-| `/saw amend --add-wave/--redirect-agent/--extend-scope` | Modify active IMPL |
+| `/polywave scout "<feature>"` | Analyze codebase, produce IMPL doc |
+| `/polywave wave` | Execute next pending wave |
+| `/polywave wave --auto` | Execute all remaining waves unattended |
+| `/polywave auto "<feature>"` | Scout + confirm + wave in one command |
+| `/polywave status` | Show current wave and agent progress |
+| `/polywave bootstrap "<project>"` | Design new project structure from scratch |
+| `/polywave interview "<description>"` | Structured requirements gathering |
+| `/polywave program --impl <slug> ...` | Bundle queued IMPLs into a parallel program (auto tier-assigns by file ownership) |
+| `/polywave program plan/execute/status/replan` | Top-down multi-feature planning and tier-gated execution |
+| `/polywave amend --add-wave/--redirect-agent/--extend-scope` | Modify active IMPL |
 
 The scout produces an **Implementation Document (IMPL doc)** (`docs/IMPL/IMPL-<feature>.yaml`): a structured YAML coordination document that defines which files each agent will modify, what interfaces they'll implement, and how they'll work in parallel. You review it before any agent writes code. This is the human checkpoint that makes parallel execution safe.
 
@@ -148,11 +148,11 @@ SAW has three interfaces backed by separate repositories, all implementing the s
 
 | Interface | Repository | Description |
 |-----------|------------|-------------|
-| Claude Code skill (`/saw`) | [scout-and-wave](https://github.com/blackwell-systems/scout-and-wave) (this repo) | Runs inside Claude Code as a slash command. The orchestrator is Claude itself. Fastest way to get started. |
-| Go engine + `sawtools` CLI | [scout-and-wave-go](https://github.com/blackwell-systems/scout-and-wave-go) | Protocol SDK, 75+ CLI commands, and LLM-agnostic engine. Supports Anthropic, OpenAI, and local (Ollama) backends. |
-| Web UI (`saw serve`) | [scout-and-wave-web](https://github.com/blackwell-systems/scout-and-wave-web) | Browser-based dashboard with real-time SSE updates. Imports scout-and-wave-go as dependency. |
+| Claude Code skill (`/saw`) | [polywave](https://github.com/blackwell-systems/polywave) (this repo) | Runs inside Claude Code as a slash command. The orchestrator is Claude itself. Fastest way to get started. |
+| Go engine + `polywave-tools` CLI | [polywave-go](https://github.com/blackwell-systems/polywave-go) | Protocol SDK, 75+ CLI commands, and LLM-agnostic engine. Supports Anthropic, OpenAI, and local (Ollama) backends. |
+| Web UI (`polywave serve`) | [polywave-web](https://github.com/blackwell-systems/polywave-web) | Browser-based dashboard with real-time SSE updates. Imports polywave-go as dependency. |
 
-All implement the same SAW protocol and produce identical IMPL docs. Use the Claude Code skill to start quickly. Use `sawtools` for programmatic orchestration, or the Web UI for a browser-based dashboard with real-time monitoring.
+All implement the same SAW protocol and produce identical IMPL docs. Use the Claude Code skill to start quickly. Use `polywave-tools` for programmatic orchestration, or the Web UI for a browser-based dashboard with real-time monitoring.
 
 ## Documentation
 
@@ -204,7 +204,7 @@ Agents don't always respect isolation instructions. SAW treats worktree isolatio
 | Layer | Mechanism | Type |
 |-------|-----------|------|
 | **E43** | **Hook-based enforcement** - Claude Code lifecycle hooks (SubagentStart, PreToolUse:Bash, PreToolUse:Write/Edit, SubagentStop) automatically inject environment variables, prepend cd commands to bash calls, and block out-of-bounds writes at the tool boundary. Violations become impossible rather than merely detected. See E43 in `protocol/execution-rules.md`. | **Prevention (Primary)** |
-| 0 | **Pre-commit hook** - installed automatically by `sawtools create-worktrees` (embedded in Go SDK at `pkg/worktree/manager.go`). Blocks commits to main during active waves. Agents receive an instructive error. Orchestrator bypasses via `SAW_ALLOW_MAIN_COMMIT=1`. | Prevention |
+| 0 | **Pre-commit hook** - installed automatically by `polywave-tools create-worktrees` (embedded in Go SDK at `pkg/worktree/manager.go`). Blocks commits to main during active waves. Agents receive an instructive error. Orchestrator bypasses via `POLYWAVE_ALLOW_MAIN_COMMIT=1`. | Prevention |
 | 1 | **Manual worktree pre-creation** - Orchestrator creates all worktrees before any agent launches | Deterministic |
 | 2 | **`isolation: "worktree"` parameter** - each agent launch specifies worktree isolation at the tool level. **Omitted for cross-repo waves** (would create worktrees in the wrong repo); Layer 1 and Layer 3 provide isolation instead. See `saw-worktree.md` Cross-Repo Mode. | Tool-level |
 | 3 | **Field 0 self-verification** - agents confirm branch via brief check (primary enforcement is the `validate_worktree_isolation` SubagentStart hook) | Cooperative |
@@ -233,10 +233,10 @@ See [protocol/README.md](protocol/README.md) for the full adoption guide.
 
 Four-part series on the pattern, the lessons learned from dogfooding it, and how the protocol evolved:
 
-1. [Scout-and-Wave: A Coordination Pattern for Parallel AI Agents](https://blog.blackwell-systems.com/posts/scout-and-wave/). The pattern: failure modes of naive parallelism, the scout deliverable, wave execution, and a worked example from brewprune.
-2. [Scout-and-Wave, Part 2: What Dogfooding Taught Us](https://blog.blackwell-systems.com/posts/scout-and-wave-part2/). The audit-fix-audit loop, overhead measurement (88% slower when ignored), Quick mode, and the bootstrap problem for new projects.
-3. [Scout-and-Wave, Part 3: Five Failures, Five Fixes](https://blog.blackwell-systems.com/posts/scout-and-wave-part3/). How the skill file decomposed from a 400-line monolith, why version headers matter, and five scout prompt fixes driven by real failures.
-4. [Scout-and-Wave, Part 4: Trust Is Structural](https://blog.blackwell-systems.com/posts/scout-and-wave-part4/). The Scaffold Agent, the 5-layer worktree isolation defense, and why correctness belongs in infrastructure rather than cooperation.
+1. [Polywave: A Coordination Pattern for Parallel AI Agents](https://blog.blackwell-systems.com/posts/polywave/). The pattern: failure modes of naive parallelism, the scout deliverable, wave execution, and a worked example from brewprune.
+2. [Polywave, Part 2: What Dogfooding Taught Us](https://blog.blackwell-systems.com/posts/polywave-part2/). The audit-fix-audit loop, overhead measurement (88% slower when ignored), Quick mode, and the bootstrap problem for new projects.
+3. [Polywave, Part 3: Five Failures, Five Fixes](https://blog.blackwell-systems.com/posts/polywave-part3/). How the skill file decomposed from a 400-line monolith, why version headers matter, and five scout prompt fixes driven by real failures.
+4. [Polywave, Part 4: Trust Is Structural](https://blog.blackwell-systems.com/posts/polywave-part4/). The Scaffold Agent, the 5-layer worktree isolation defense, and why correctness belongs in infrastructure rather than cooperation.
 
 ## License
 

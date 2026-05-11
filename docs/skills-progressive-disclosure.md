@@ -16,17 +16,17 @@ SAW's progressive disclosure goes beyond the Agent Skills spec's convention-base
 6. **Vendor-neutral scripts** — Bash scripts (`inject-context`, `inject-agent-context`) use direct conditional logic for platforms without hooks
 7. **Dedup markers** — HTML comments prevent double-injection regardless of which layer loaded the content
 
-**The result:** A `/saw wave` invocation never loads program coordination logic. A scout launch never loads wave agent worktree isolation procedures. Conditional references (program contracts, frozen interfaces) only load when the scenario requires them. The model receives exactly the context it needs, automatically, with zero routing decisions.
+**The result:** A `/polywave wave` invocation never loads program coordination logic. A scout launch never loads wave agent worktree isolation procedures. Conditional references (program contracts, frozen interfaces) only load when the scenario requires them. The model receives exactly the context it needs, automatically, with zero routing decisions.
 
 **Example flow:**
 
 ```
-User: /saw program execute "add caching"
+User: /polywave program execute "add caching"
   ↓
 UserPromptSubmit hook fires
   ↓
 inject_skill_context calls inject-context script with direct conditional matching:
-  prompt matches "^/saw program" → inject references/program-flow.md
+  prompt matches "^/polywave program" → inject references/program-flow.md
   ↓
 Hook returns additionalContext with program-flow.md content
   ↓
@@ -68,12 +68,12 @@ The injection architecture is implemented in `implementations/claude-code/prompt
 
 Every token loaded into the Orchestrator's context window is a token that cannot be used for reasoning, agent prompts, and coordination work. The `/saw` skill has grown to cover several distinct subcommand families:
 
-- **Core flow** — `/saw scout`, `/saw wave`, `/saw status`, `/saw bootstrap`, `/saw interview` (invoked on nearly every session)
-- **Program commands** — `/saw program plan/execute/status/replan` (~324 lines of flow logic)
-- **Amend commands** — `/saw amend --add-wave/--redirect-agent/--extend-scope` (~39 lines)
+- **Core flow** — `/polywave scout`, `/polywave wave`, `/polywave status`, `/polywave bootstrap`, `/polywave interview` (invoked on nearly every session)
+- **Program commands** — `/polywave program plan/execute/status/replan` (~324 lines of flow logic)
+- **Amend commands** — `/polywave amend --add-wave/--redirect-agent/--extend-scope` (~39 lines)
 - **Failure routing** — E7a/E19 failure type routing, E25/E26/E35 integration gap detection (~69 lines)
 
-Loading all of this unconditionally would consume ~765 lines on every `/saw` invocation. A `/saw wave` call has no need for the program execution tier graph or the amend flow. Loading them wastes roughly 40% of the skill's effective context budget on content that will never be referenced.
+Loading all of this unconditionally would consume ~765 lines on every `/saw` invocation. A `/polywave wave` call has no need for the program execution tier graph or the amend flow. Loading them wastes roughly 40% of the skill's effective context budget on content that will never be referenced.
 
 **The advanced pattern:** Rather than relying on the model to read references on-demand (convention-based), SAW uses **hook-based deterministic injection**. Scripts with direct conditional logic determine "when prompt matches X, inject file Y" -- the `UserPromptSubmit` hook enforces this before the model runs. The model receives the context it needs automatically, with zero routing decisions required.
 
@@ -92,12 +92,12 @@ Loading all of this unconditionally would consume ~765 lines on every `/saw` inv
 ```markdown
 ## Available Skills
 
-- `/saw` — Scout-and-Wave parallel agent coordination.
+- `/saw` — Polywave parallel agent coordination.
   Use for any feature work that can be decomposed across files.
   Subcommands: scout, wave, status, bootstrap, interview, program, amend.
 ```
 
-A user who types "add caching to the API" in a project with this CLAUDE.md gets the routing suggestion immediately — the skill's 300-line body hasn't loaded yet. Only when they invoke `/saw scout` does Tier 1 and Tier 2 come into play.
+A user who types "add caching to the API" in a project with this CLAUDE.md gets the routing suggestion immediately — the skill's 300-line body hasn't loaded yet. Only when they invoke `/polywave scout` does Tier 1 and Tier 2 come into play.
 
 **What belongs in the Tier 0 entry:**
 - Skill name and one-sentence purpose
@@ -122,7 +122,7 @@ A user who types "add caching to the API" in a project with this CLAUDE.md gets 
 
 This is the progressive disclosure model applied at the project level: the index is always loaded; the skill bodies load only when invoked.
 
-**Known limitation:** CLAUDE.md entries are advisory — Claude reads them but there is no enforcement mechanism that prevents the model from ignoring them. The entries should be written to make the correct routing the obvious choice, not to mandate it. The `UserPromptSubmit` hook and `inject-context` script address the same gap the Agent Skills spec leaves open: the spec defines the Resources tier but leaves loading to convention. The script-based conditional dispatch provides deterministic injection for subcommand-anchored references (e.g. `/saw program` → `program-flow.md`). Mid-execution references (failure routing, error states) remain convention-based.
+**Known limitation:** CLAUDE.md entries are advisory — Claude reads them but there is no enforcement mechanism that prevents the model from ignoring them. The entries should be written to make the correct routing the obvious choice, not to mandate it. The `UserPromptSubmit` hook and `inject-context` script address the same gap the Agent Skills spec leaves open: the spec defines the Resources tier but leaves loading to convention. The script-based conditional dispatch provides deterministic injection for subcommand-anchored references (e.g. `/polywave program` → `program-flow.md`). Mid-execution references (failure routing, error states) remain convention-based.
 
 ### Tier 1 — Metadata (always loaded, ~20 lines)
 
@@ -178,8 +178,8 @@ Three on-demand references live in `implementations/claude-code/prompts/referenc
 
 | File | Subcommand trigger | Lines |
 |------|--------------------|-------|
-| `references/program-flow.md` | `/saw program *` | ~334 |
-| `references/amend-flow.md` | `/saw amend *` | ~39 |
+| `references/program-flow.md` | `/polywave program *` | ~334 |
+| `references/amend-flow.md` | `/polywave amend *` | ~39 |
 | `references/failure-routing.md` | Agent failure or post-merge integration | ~69 |
 
 **Target per file:** No hard limit, but each file should cover exactly one logical domain. A on-demand reference that grows past ~400 lines is a signal it has taken on too many concerns.
@@ -196,9 +196,9 @@ As of v0.56.0, the former YAML frontmatter dispatch tables (`triggers:` and `age
 
 The `inject-context` script matches prompt patterns with direct conditional logic:
 
-- `^/saw program` in prompt → inject `references/program-flow.md`
-- `^/saw amend` in prompt → inject `references/amend-flow.md`
-- `^/saw auto` in prompt → no-op (no file to inject; auto flow is Tier 2 core, inlined in `saw-skill.md`)
+- `^/polywave program` in prompt → inject `references/program-flow.md`
+- `^/polywave amend` in prompt → inject `references/amend-flow.md`
+- `^/polywave auto` in prompt → no-op (no file to inject; auto flow is Tier 2 core, inlined in `saw-skill.md`)
 
 Multiple matches result in all matching references injected (concatenated). No match results in no injection, zero overhead.
 
@@ -248,7 +248,7 @@ This distinction is non-obvious. Early implementations tried `additionalContext`
 
 Bash scripts bundled in `scripts/` provide portable injection for any platform with Bash:
 
-- **`scripts/inject-context`**: Uses direct conditional matching against provided prompt (`^/saw program` → program-flow.md, `^/saw amend` → amend-flow.md), outputs concatenated reference content
+- **`scripts/inject-context`**: Uses direct conditional matching against provided prompt (`^/polywave program` → program-flow.md, `^/polywave amend` → amend-flow.md), outputs concatenated reference content
 - **`scripts/inject-agent-context --type <agent-type> --prompt "$prompt"`**: Uses direct conditional logic to match agent type + prompt patterns, outputs reference content for the 3 conditional references
 
 The skill's instructions include: "Before executing, run `scripts/inject-context` with the user's prompt." The model calls Bash, the script matches conditions and outputs reference content, the model has context. Model-initiated, but simpler than following a multi-entry routing table.
@@ -279,8 +279,8 @@ The routing table lives in the "On-Demand References" section of `saw-skill.md`.
 ```
 | Subcommand | Reference file |
 |------------|----------------|
-| `/saw program *` | Read `${CLAUDE_SKILL_DIR}/references/program-flow.md` |
-| `/saw amend *` | Read `${CLAUDE_SKILL_DIR}/references/amend-flow.md` |
+| `/polywave program *` | Read `${CLAUDE_SKILL_DIR}/references/program-flow.md` |
+| `/polywave amend *` | Read `${CLAUDE_SKILL_DIR}/references/amend-flow.md` |
 | Agent failure or post-merge integration | Read `${CLAUDE_SKILL_DIR}/references/failure-routing.md` |
 ```
 
@@ -322,7 +322,7 @@ Reference files follow a consistent internal structure:
    ```
    **Wave execution:** Program tiers execute IMPLs using the standard wave loop from
    the core SKILL.md (steps 3-11 of Execution Logic). Do not duplicate that logic
-   here — when Step 3b says "use existing `/saw wave --auto` flow", follow the
+   here — when Step 3b says "use existing `/polywave wave --auto` flow", follow the
    wave loop in the core file.
    ```
    This back-link convention is important: it keeps on-demand references focused on their additive content and prevents the core wave loop from being duplicated and drifting.
@@ -430,11 +430,11 @@ Verify all three layers:
 
 **Layer 1 (Hooks):**
 - A `/saw <new-subcommand>` invocation on Claude Code receives the reference content before the model runs (check via hook logs or model behavior)
-- A `/saw wave` invocation does not receive the reference
+- A `/polywave wave` invocation does not receive the reference
 
 **Layer 2 (Scripts):**
 - `bash scripts/inject-context "/saw <new-subcommand>"` outputs the reference content
-- `bash scripts/inject-context "/saw wave"` outputs empty string (no match)
+- `bash scripts/inject-context "/polywave wave"` outputs empty string (no match)
 
 **Layer 3 (Routing table):**
 - The model correctly reads the reference when hooks/scripts are disabled
@@ -467,15 +467,15 @@ The decision heuristic (for content already past the CLAUDE.md entry stage):
 - The on-demand routing table itself — the dispatch mechanism must always be present
 - Pre-flight validation — checked once per session on the first `/saw` call
 - IMPL discovery and targeting — used by wave, status, and amend
-- The full wave loop (steps 1–11) — the core value of the skill; invoked by every `/saw wave` call
+- The full wave loop (steps 1–11) — the core value of the skill; invoked by every `/polywave wave` call
 - E37 Critic Gate logic — triggered during scout and wave flows, both common paths
-- `/saw auto` flow — invoked on a significant fraction of sessions; its logic directly chains the existing scout and wave flows (11 steps), making it short and tightly coupled to the core wave loop; it belongs inline in `saw-skill.md`, not in a separate reference file
+- `/polywave auto` flow — invoked on a significant fraction of sessions; its logic directly chains the existing scout and wave flows (11 steps), making it short and tightly coupled to the core wave loop; it belongs inline in `saw-skill.md`, not in a separate reference file
 
 **Always in Tier 3 (on-demand references):**
 - Subcommand families that represent a distinct execution tier (program, amend)
 - Failure routing logic beyond the basic "read failure-routing.md" trigger point — agents succeed on the majority of runs, so detailed remediation logic is pay-per-use
 
-**Note on `/saw auto` and Tier 3:** `/saw auto` does NOT require a new on-demand reference file. The auto flow (11 steps) is short and tightly coupled to the existing scout and wave flows — it lives inline in `saw-skill.md` as Tier 2 core content. A separate reference file would be overhead without benefit.
+**Note on `/polywave auto` and Tier 3:** `/polywave auto` does NOT require a new on-demand reference file. The auto flow (11 steps) is short and tightly coupled to the existing scout and wave flows — it lives inline in `saw-skill.md` as Tier 2 core content. A separate reference file would be overhead without benefit.
 
 ---
 
@@ -649,8 +649,8 @@ SAW's progressive disclosure architecture combines **four tiers**, **three layer
 
 ### The Result
 
-- A `/saw wave` invocation never loads program coordination logic
-- A `/saw scout` launch never loads wave agent worktree isolation (that's in wave-agent.md, not scout.md)
+- A `/polywave wave` invocation never loads program coordination logic
+- A `/polywave scout` launch never loads wave agent worktree isolation (that's in wave-agent.md, not scout.md)
 - Conditional references (program contracts, frozen interfaces) only load when the scenario requires them
 - The orchestrator receives only the references matching the current subcommand
 - Agents receive self-contained definitions with no injection needed for standard operations
@@ -669,7 +669,7 @@ Model: [continues execution]
 **After (hook-based):**
 ```
 UserPromptSubmit hook fires
-Hook: prompt matches "^/saw program", injecting references/program-flow.md
+Hook: prompt matches "^/polywave program", injecting references/program-flow.md
 Model receives: [core] + [program-flow.md] in initial context
 Model: [begins execution with all context present]
 ```

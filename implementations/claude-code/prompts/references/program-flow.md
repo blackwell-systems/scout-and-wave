@@ -3,24 +3,24 @@
 **Contents:**
 - [Create PROGRAM from Existing IMPLs](#saw-program---impl)
 - [Level A: Planning Only — program plan/execute/status/replan](#program-commands-level-a-planning-only)
-  - [/saw program plan](#saw-program-plan-project-description)
-  - [/saw program execute](#saw-program-execute-project-description)
-  - [/saw program status](#saw-program-status)
-  - [/saw program replan](#saw-program-replan---reason-reason)
+  - [/polywave program plan](#saw-program-plan-project-description)
+  - [/polywave program execute](#saw-program-execute-project-description)
+  - [/polywave program status](#saw-program-status)
+  - [/polywave program replan](#saw-program-replan---reason-reason)
 
-**Wave execution:** Program tiers execute IMPLs using the standard wave loop from the core SKILL.md (steps 3-11 of Execution Logic). Do not duplicate that logic here — when Step 3b says "use existing `/saw wave --auto` flow", follow the wave loop in the core file.
+**Wave execution:** Program tiers execute IMPLs using the standard wave loop from the core SKILL.md (steps 3-11 of Execution Logic). Do not duplicate that logic here — when Step 3b says "use existing `/polywave wave --auto` flow", follow the wave loop in the core file.
 
 **Lifecycle analogy — Program commands mirror IMPL commands:**
 
 | IMPL Lifecycle | Program Lifecycle | Purpose |
 |---------------|-------------------|---------|
-| `/saw scout <feature>` | `/saw program --impl x y z` or `/saw program plan` | Create the plan artifact |
-| `/saw wave` | `/saw program execute` | Execute next unit of work (wave / tier) |
-| `/saw wave --auto` | `/saw program execute --auto` | Execute all remaining units automatically |
-| `/saw status` | `/saw program status` | Show progress |
-| `/saw amend --extend-scope` | `/saw program replan --reason` | Revise the plan after failure |
+| `/polywave scout <feature>` | `/polywave program --impl x y z` or `/polywave program plan` | Create the plan artifact |
+| `/polywave wave` | `/polywave program execute` | Execute next unit of work (wave / tier) |
+| `/polywave wave --auto` | `/polywave program execute --auto` | Execute all remaining units automatically |
+| `/polywave status` | `/polywave program status` | Show progress |
+| `/polywave amend --extend-scope` | `/polywave program replan --reason` | Revise the plan after failure |
 
-## /saw program --impl — Create PROGRAM from Existing IMPLs
+## /polywave program --impl — Create PROGRAM from Existing IMPLs
 
 Create a PROGRAM manifest from pre-existing IMPL docs with automatic tiering based on file ownership disjointness.
 
@@ -32,13 +32,13 @@ Create a PROGRAM manifest from pre-existing IMPL docs with automatic tiering bas
 
 2. **Resolve slugs to IMPL doc paths.** Run:
    ```bash
-   sawtools list-impls --dir "<repo-path>/docs/IMPL"
+   polywave-tools list-impls --dir "<repo-path>/docs/IMPL"
    ```
    Match each provided slug against the returned IMPL metadata. If any slug cannot be resolved, report the missing slug(s) to the user and stop.
 
 3. **Create PROGRAM manifest.** Run:
    ```bash
-   sawtools create-program --from-impls <slug1> --from-impls <slug2> ... --repo-dir "<repo-path>"
+   polywave-tools create-program --from-impls <slug1> --from-impls <slug2> ... --repo-dir "<repo-path>"
    ```
    If `--slug` was provided, append `--slug <name>`. If `--title` was provided, append `--title <name>`.
 
@@ -51,15 +51,15 @@ Create a PROGRAM manifest from pre-existing IMPL docs with automatic tiering bas
    - **Tier assignments** — which IMPLs were placed in which tier, and why
    - **File ownership conflicts** — any overlaps detected between IMPLs (these drive tier separation)
    - **Generated manifest path** — the absolute path to the new PROGRAM manifest
-   - **Suggested next step** — `/saw program execute` to begin tier-gated execution, or `/saw program status` to review the manifest
+   - **Suggested next step** — `/polywave program execute` to begin tier-gated execution, or `/polywave program status` to review the manifest
 
-5. **Does NOT auto-execute.** This is a planning-only command. The user must explicitly invoke `/saw program execute` or `/saw program status` to proceed.
+5. **Does NOT auto-execute.** This is a planning-only command. The user must explicitly invoke `/polywave program execute` or `/polywave program status` to proceed.
 
 ---
 
 ## Program Commands (Level A: Planning Only)
 
-### `/saw program plan "<project-description>"`
+### `/polywave program plan "<project-description>"`
 
 Analyze a project and produce a PROGRAM manifest that decomposes it into multiple IMPLs organized into tiers for parallel execution. Use this for projects that span multiple features with cross-feature dependencies.
 
@@ -73,11 +73,11 @@ Analyze a project and produce a PROGRAM manifest that decomposes it into multipl
    ```
    Inform the user the Planner is running.
 
-3. **Wait for Planner completion.** The Planner produces `docs/PROGRAM-<slug>.yaml`. If the Planner determines the project is NOT_SUITABLE for multi-IMPL orchestration, it writes a minimal manifest with `state: "NOT_SUITABLE"` and an explanation. Surface this to the user and recommend `/saw bootstrap` or `/saw scout` instead.
+3. **Wait for Planner completion.** The Planner produces `docs/PROGRAM-<slug>.yaml`. If the Planner determines the project is NOT_SUITABLE for multi-IMPL orchestration, it writes a minimal manifest with `state: "NOT_SUITABLE"` and an explanation. Surface this to the user and recommend `/polywave bootstrap` or `/polywave scout` instead.
 
 4. **Validate PROGRAM manifest.** Run:
    ```bash
-   sawtools validate-program "<absolute-path-to-program-manifest>"
+   polywave-tools validate-program "<absolute-path-to-program-manifest>"
    ```
    This validates the PROGRAM schema and enforces invariant P1 (no circular dependencies within tiers). If exit code is 0, proceed to human review. If exit code is 1, send the validation errors back to the Planner as a correction prompt using **resume with the Planner's agent ID**: `resume: <planner-agent-id>`, `prompt: "Your PROGRAM manifest failed validation. Fix these issues:\n{errors}"`. Retry up to 3 attempts. On retry limit exhaustion, enter BLOCKED state and surface the validation errors to the user.
 
@@ -92,7 +92,7 @@ Analyze a project and produce a PROGRAM manifest that decomposes it into multipl
 
 6. **State transition.** If the user approves, update the PROGRAM manifest state to `REVIEWED`:
    ```bash
-   sawtools update-program-state "<manifest-path>" --state REVIEWED
+   polywave-tools update-program-state "<manifest-path>" --state REVIEWED
    ```
 
 **What happens next (not in your scope as Orchestrator):**
@@ -104,28 +104,28 @@ After human approval, the program enters the execution phase:
 - **Tier 2 execution:** Launch Scout agents for all Tier 2 IMPLs in parallel
 - Repeat until all tiers complete
 
-This is the `/saw program execute` flow (Level B), which is documented in the next section.
+This is the `/polywave program execute` flow (Level B), which is documented in the next section.
 
-### `/saw program execute "<project-description>"`
+### `/polywave program execute "<project-description>"`
 
-Orchestrator flow for `/saw program execute`: Plan and execute a multi-IMPL program with tier-gated progression. This extends the Level A planning flow with automated execution.
+Orchestrator flow for `/polywave program execute`: Plan and execute a multi-IMPL program with tier-gated progression. This extends the Level A planning flow with automated execution.
 
 **Resume detection:** Before starting the planning flow, check if a PROGRAM manifest already exists:
 ```bash
-sawtools list-programs --dir "<repo-path>/docs"
+polywave-tools list-programs --dir "<repo-path>/docs"
 ```
 If a PROGRAM manifest is found with state `REVIEWED`, `TIER_EXECUTING`, `TIER_VERIFIED`, or `BLOCKED`:
 - Report the existing program to the user: "Found existing PROGRAM: {title} ({slug}) in state {state}"
 - If state is `REVIEWED` or `TIER_VERIFIED`: skip Phase 1, proceed directly to Phase 2 (scaffold) or Phase 3 (tier execution) as appropriate
 - If state is `TIER_EXECUTING`: resume the current tier (identify the first tier with incomplete IMPLs and continue execution)
 - If state is `BLOCKED`: surface the blocking issue and ask the user whether to fix and resume, or replan
-- This mirrors how `/saw wave` auto-selects an existing IMPL when one is pending
+- This mirrors how `/polywave wave` auto-selects an existing IMPL when one is pending
 
 If no existing PROGRAM manifest is found, or the user provides a new description, proceed with Phase 1.
 
-**Phase 1: Planning (reuses /saw program plan flow)**
+**Phase 1: Planning (reuses /polywave program plan flow)**
 
-Steps 1-6 from the existing `/saw program plan` section apply:
+Steps 1-6 from the existing `/polywave program plan` section apply:
 1. Requirements intake
 2. Launch Planner agent
 3. Wait for Planner completion
@@ -160,28 +160,28 @@ Partition tier N IMPLs by status (E28A):
 *Scout new IMPLs:*
 - For each IMPL in tier N with status "pending":
   - Launch Scout agent with: `subagent_type: scout`, `run_in_background: true`
-  - Pass --program flag: `sawtools run-scout "<impl-title>" --program "<manifest-path>"`
+  - Pass --program flag: `polywave-tools run-scout "<impl-title>" --program "<manifest-path>"`
   - Scout receives frozen program contracts as immutable inputs
 - Wait for all Scouts to complete
-- Validate each newly scouted IMPL doc (E16): run `sawtools validate --fix "<impl-doc-path>"` for each
+- Validate each newly scouted IMPL doc (E16): run `polywave-tools validate --fix "<impl-doc-path>"` for each
 
 *Validate pre-existing IMPLs (E28A):*
 - For each IMPL in tier N with status "reviewed" or "complete":
   - Verify IMPL doc exists: `docs/IMPL/IMPL-<slug>.yaml`
-  - Run: `sawtools validate --fix "<impl-doc-path>"`
-  - Check P2 compliance: `sawtools freeze-check "<program-manifest>" --impl "<slug>"`
+  - Run: `polywave-tools validate --fix "<impl-doc-path>"`
+  - Check P2 compliance: `polywave-tools freeze-check "<program-manifest>" --impl "<slug>"`
   - If validation fails, enter BLOCKED
 - **Stale brief check (Tier 2+):** Pre-existing IMPLs imported to Tier 2+ may have
   stale briefs if earlier tiers modified their dependencies. After Tier N completes,
   list pre-existing IMPLs in Tier N+1 and ask: "These IMPLs may have stale briefs.
   Re-scout? (y/n)". If yes, run:
   ```bash
-  sawtools run-scout --resume "<impl-doc-path>" --refresh-brief
+  polywave-tools run-scout --resume "<impl-doc-path>" --refresh-brief
   ```
   This re-runs Scout preserving file ownership and wave structure, only updating
   agent task descriptions to reflect the current (post-Tier-N) codebase state.
 
-> **Tip:** Use `sawtools import-impls` before program execution to bulk-import
+> **Tip:** Use `polywave-tools import-impls` before program execution to bulk-import
 > pre-existing IMPL docs into the PROGRAM manifest with correct tier assignments
 > and status. This avoids manual manifest editing when adopting existing work.
 
@@ -191,7 +191,7 @@ Partition tier N IMPLs by status (E28A):
 
 After human review approves the tier, run the conflict check before launching any IMPL agents:
 ```bash
-sawtools check-program-conflicts "<manifest-path>" --tier N
+polywave-tools check-program-conflicts "<manifest-path>" --tier N
 ```
 This enforces P1+: no two IMPLs in the same tier may own the same file. If conflicts are found, enter BLOCKED — surface the conflicting IMPL/file pairs to the user and do not launch any agents until the IMPL docs are revised to resolve ownership.
 
@@ -199,7 +199,7 @@ This enforces P1+: no two IMPLs in the same tier may own the same file. If confl
 
 Create long-lived IMPL branches for all IMPLs in the tier:
 ```bash
-sawtools create-program-worktrees "<manifest-path>" --tier N --repo-dir "<repo-path>"
+polywave-tools create-program-worktrees "<manifest-path>" --tier N --repo-dir "<repo-path>"
 ```
 Each IMPL gets a branch: `saw/program/{slug}/tier{N}-impl-{implSlug}`.
 These branches are the merge targets for all wave executions within
@@ -209,15 +209,15 @@ the IMPL — waves merge to the IMPL branch, NOT to main.
 - For each reviewed IMPL in tier N:
   - Compute IMPL branch: `saw/program/{slug}/tier{N}-impl-{implSlug}`
   - Execute the full IMPL lifecycle with IMPL branch as merge target:
-    - prepare-wave: `sawtools prepare-wave <impl-doc> --wave W --repo-dir "<repo-path>" --merge-target <impl-branch>`
-    - finalize-wave: `sawtools finalize-wave <impl-doc> --wave W --repo-dir "<repo-path>" --merge-target <impl-branch>`
+    - prepare-wave: `polywave-tools prepare-wave <impl-doc> --wave W --repo-dir "<repo-path>" --merge-target <impl-branch>`
+    - finalize-wave: `polywave-tools finalize-wave <impl-doc> --wave W --repo-dir "<repo-path>" --merge-target <impl-branch>`
     - The engine detects when `--merge-target` is already checked out as a worktree and skips the checkout (no manual workaround needed).
     - `verify-build` automatically runs in the IMPL branch worktree when `--merge-target` is set, so it sees merged changes rather than the pre-merge state of main.
     - Waves merge to the IMPL branch, isolating each IMPL's work
-  - Use existing `/saw wave --auto` flow per IMPL (with merge target threading)
+  - Use existing `/polywave wave --auto` flow per IMPL (with merge target threading)
   - Update IMPL status in PROGRAM manifest as each completes (E32):
     ```bash
-    sawtools update-program-impl "<manifest>" --impl "<slug>" --status "<status>"
+    polywave-tools update-program-impl "<manifest>" --impl "<slug>" --status "<status>"
     ```
 - Wait for all IMPLs in the tier to reach "complete"
 
@@ -225,20 +225,20 @@ the IMPL — waves merge to the IMPL branch, NOT to main.
 
 After all IMPLs in the tier complete, merge their IMPL branches to main:
 ```bash
-sawtools finalize-tier "<manifest-path>" --tier N --repo-dir "<repo-path>"
+polywave-tools finalize-tier "<manifest-path>" --tier N --repo-dir "<repo-path>"
 ```
 This merges all IMPL branches (created in Step 3a.5) for the tier to main in order, runs `RunTierGate` as a post-merge verification, and is idempotent (already-merged branches are skipped). Each IMPL branch contains the accumulated work from all waves executed against it. If any merge fails, enter BLOCKED before running the quality gate.
 
-**Backward compatibility:** When running outside a program context (standard `/saw wave` flow), MergeTarget is empty and waves merge to HEAD as before. The IMPL branch model only activates during `/saw program execute`.
+**Backward compatibility:** When running outside a program context (standard `/polywave wave` flow), MergeTarget is empty and waves merge to HEAD as before. The IMPL branch model only activates during `/polywave program execute`.
 
 **Step 3c: Tier Gate (E29)**
-- Run: `sawtools tier-gate "<manifest>" --tier N`
+- Run: `polywave-tools tier-gate "<manifest>" --tier N`
 - This verifies all IMPLs are complete and runs tier_gates quality gate commands from the PROGRAM manifest
 - If gate fails, enter BLOCKED. Surface failure to user.
 - If gate passes, proceed to contract freezing.
 
 **Step 3d: Contract Freezing (E30)**
-- Run: `sawtools freeze-contracts "<manifest>" --tier N`
+- Run: `polywave-tools freeze-contracts "<manifest>" --tier N`
 - This identifies program contracts whose freeze_at matches tier N
 - Verifies contract source files exist and are committed to HEAD
 - Marks contracts as frozen in the manifest
@@ -246,7 +246,7 @@ This merges all IMPL branches (created in Step 3a.5) for the tier to main in ord
 - If freezing succeeds, all contracts consumed by next tier are locked
 
 **Step 3e: Tier Boundary Review**
-- Run: `sawtools program-status "<manifest>"`
+- Run: `polywave-tools program-status "<manifest>"`
 - Surface tier completion status to user (tier N complete, contracts frozen)
 - If `--auto` flag is active:
   - Call `AdvanceTierAutomatically(manifest, N, repoPath, autoMode=true)` to check gate, freeze contracts, and advance (E33)
@@ -259,7 +259,7 @@ This merges all IMPL branches (created in Step 3a.5) for the tier to main in ord
 **Phase 4: Program Completion**
 
 After final tier gate passes:
-1. Run: `sawtools mark-program-complete "<manifest>"`
+1. Run: `polywave-tools mark-program-complete "<manifest>"`
    - Verifies all tiers complete (all IMPLs have status "complete")
    - Updates manifest (state: PROGRAM_COMPLETE, completion_date, SAW:PROGRAM:COMPLETE marker)
    - Archives manifest to `docs/PROGRAM/complete/`
@@ -273,7 +273,7 @@ After final tier gate passes:
 - If the tier cannot complete because one IMPL is blocked, enter BLOCKED and surface the specific IMPL failure.
 - The user may fix the blocked IMPL and resume, or re-plan.
 
-### `/saw program status`
+### `/polywave program status`
 
 Show program-level progress: tier completion, IMPL statuses, and program contract freeze status.
 
@@ -281,9 +281,9 @@ Show program-level progress: tier completion, IMPL statuses, and program contrac
 
 1. **Discover PROGRAM manifests.** Run:
    ```bash
-   sawtools list-programs --dir "<repo-path>/docs"
+   polywave-tools list-programs --dir "<repo-path>/docs"
    ```
-   This returns a JSON array of PROGRAM manifest metadata (path, slug, state, title). If no PROGRAM manifests are found, report: "No PROGRAM manifests found. Use `/saw program plan` to create one."
+   This returns a JSON array of PROGRAM manifest metadata (path, slug, state, title). If no PROGRAM manifests are found, report: "No PROGRAM manifests found. Use `/polywave program plan` to create one."
 
 2. **Select target PROGRAM.** If exactly 1 PROGRAM manifest is found, use it automatically. If multiple are found, list them and ask the user to specify which one.
 
@@ -293,7 +293,7 @@ Show program-level progress: tier completion, IMPL statuses, and program contrac
 
 5. **Blocked state handling.** If the program state is `BLOCKED`, read the IMPL docs for all IMPLs in the current tier and surface any failure reports or blocking issues to the user.
 
-### `/saw program replan --reason "<reason>"`
+### `/polywave program replan --reason "<reason>"`
 
 Re-engage the Planner agent to revise a PROGRAM manifest after a tier gate failure or when the user explicitly requests it. The `--reason` argument is required and provides context for the Planner about why re-planning is needed.
 
@@ -303,7 +303,7 @@ Re-engage the Planner agent to revise a PROGRAM manifest after a tier gate failu
 
 2. Record the replan trigger:
    ```bash
-   sawtools program-replan "<manifest-path>" --reason "<reason>"
+   polywave-tools program-replan "<manifest-path>" --reason "<reason>"
    ```
    This updates the manifest state to `REPLANNING` and records the reason for audit. If the reason originates from a tier gate failure, include the tier number and gate output in the reason string.
 
@@ -322,7 +322,7 @@ Re-engage the Planner agent to revise a PROGRAM manifest after a tier gate failu
 
 6. Validate revised manifest:
    ```bash
-   sawtools validate-program "<revised-manifest-path>"
+   polywave-tools validate-program "<revised-manifest-path>"
    ```
    If validation fails, send errors back to Planner as correction prompt
    using resume (up to 3 attempts).

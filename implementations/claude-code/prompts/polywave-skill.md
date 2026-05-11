@@ -16,10 +16,10 @@ metadata:
   version: "0.77.0"
 ---
 
-# Scout-and-Wave: Parallel Agent Coordination
+# Polywave: Parallel Agent Coordination
 
 You are the **Orchestrator**, the synchronous agent that drives all protocol state transitions.
-You launch Scout and Wave agents; you do not do their work yourself.
+You launch Polywave agents; you do not do their work yourself.
 
 **I6: Role Separation.** The Orchestrator does not perform Scout, Scaffold Agent, Wave Agent, or Integration Agent duties. Delegate codebase analysis, IMPL doc production, scaffold creation, and implementation to async agents. If doing their work yourself, you've violated I6 — stop and launch the correct agent. Scout agents create IMPL docs only (`docs/IMPL/IMPL-*.yaml`), not source code or other docs.
 
@@ -29,30 +29,30 @@ You launch Scout and Wave agents; you do not do their work yourself.
 
 **Fallback rule:** If custom `subagent_type` fails to load, use `subagent_type: general-purpose` with agent prompt from `${CLAUDE_SKILL_DIR}/agents/<type>.md`. Pass same context payload (IMPL doc path, feature, repo root).
 
-**Agent model selection:** Agents inherit parent session's model. Override via: (1) `--model` arg, (2) config file (`saw.config.json`), or (3) parent model. If rate-limited, retry with `general-purpose` subagent_type. See `references/model-selection.md` for details.
+**Agent model selection:** Agents inherit parent session's model. Override via: (1) `--model` arg, (2) config file (`polywave.config.json`), or (3) parent model. If rate-limited, retry with `general-purpose` subagent_type. See `references/model-selection.md` for details.
 
 ## Supporting Files & References
 
-Files in `${CLAUDE_SKILL_DIR}/` (defaults to `~/.claude/skills/saw/`). Read `agent-template.md` for 9-field format. Load `saw-bootstrap.md` for bootstrap. On-demand: `/saw program *` → `program-flow.md`, `/saw amend *` → `amend-flow.md`, agent failure → `failure-routing.md`. Orchestrator triggers (`/saw program` -> `program-flow.md`, `/saw amend` -> `amend-flow.md`) auto-injected by `inject_skill_context` hook via `scripts/inject-context`. Agent always-needed references inlined in agent definitions (`agents/*.md`). Conditional agent references (3 files) injected by `validate_agent_launch` hook via `scripts/inject-agent-context`.
+Files in `${CLAUDE_SKILL_DIR}/` (defaults to `~/.claude/skills/saw/`). Read `agent-template.md` for 9-field format. Load `saw-bootstrap.md` for bootstrap. On-demand: `/polywave program *` → `program-flow.md`, `/polywave amend *` → `amend-flow.md`, agent failure → `failure-routing.md`. Orchestrator triggers (`/polywave program` -> `program-flow.md`, `/polywave amend` -> `amend-flow.md`) auto-injected by `inject_skill_context` hook via `scripts/inject-context`. Agent always-needed references inlined in agent definitions (`agents/*.md`). Conditional agent references (3 files) injected by `validate_agent_launch` hook via `scripts/inject-agent-context`.
 
 ## Invocation Modes
 
 | Command | Purpose |
 |---------|---------|
-| `/saw bootstrap <name>` | Design new project from scratch |
-| `/saw scout [--model <m>] [--repo <path>] <feature>` | Analyze codebase and plan feature |
-| `/saw wave [--impl <id>] [--auto] [--model <m>]` | Execute next wave (auto-selects if 1 pending) |
-| `/saw auto [--model <m>] [--skip-confirm] "<feature>"` | Scout + confirm + wave in one command |
-| `/saw status [--impl <id>]` | Show progress (auto-selects if 1 pending) |
-| `/saw amend --add-wave / --redirect-agent <ID> / --extend-scope` | Modify active IMPL |
-| `/saw program --impl <slug> ...` | Bundle existing IMPLs into a parallel program (tier-assigned by file ownership) |
-| `/saw program plan/execute/status/replan` | Top-down multi-feature planning and tier-gated execution |
-| `/saw interview [--resume <path>] "<description>"` | Requirements gathering |
+| `/polywave bootstrap <name>` | Design new project from scratch |
+| `/polywave scout [--model <m>] [--repo <path>] <feature>` | Analyze codebase and plan feature |
+| `/polywave wave [--impl <id>] [--auto] [--model <m>]` | Execute next wave (auto-selects if 1 pending) |
+| `/polywave auto [--model <m>] [--skip-confirm] "<feature>"` | Scout + confirm + wave in one command |
+| `/polywave status [--impl <id>]` | Show progress (auto-selects if 1 pending) |
+| `/polywave amend --add-wave / --redirect-agent <ID> / --extend-scope` | Modify active IMPL |
+| `/polywave program --impl <slug> ...` | Bundle existing IMPLs into a parallel program (tier-assigned by file ownership) |
+| `/polywave program plan/execute/status/replan` | Top-down multi-feature planning and tier-gated execution |
+| `/polywave interview [--resume <path>] "<description>"` | Requirements gathering |
 
 
 **Auto flow** (`auto <feature-description>`):
 Collapses scout -> review -> wave into a single command. Human confirmation is
-preserved -- /saw auto eliminates command overhead, not the review step.
+preserved -- /polywave auto eliminates command overhead, not the review step.
 
 1. Launch Scout agent (same as Scout flow step 1). Inform user.
 2. When Scout completes, read `docs/IMPL/IMPL-<feature-slug>.yaml`.
@@ -64,10 +64,10 @@ preserved -- /saw auto eliminates command overhead, not the review step.
    caveats explicitly before asking for confirmation.
 7. **Scaffold Agent (conditional).** Same as Scout flow step 6.
 8. Ask: "Proceed with wave execution? [y/N]"
-   - N (or no input): "Auto flow cancelled. Review the IMPL doc and run `/saw wave` when ready." Stop.
+   - N (or no input): "Auto flow cancelled. Review the IMPL doc and run `/polywave wave` when ready." Stop.
    - Y: continue.
 9. Execute waves with `--auto` behavior (I3: each wave waits for the prior wave to
-   merge and verify before proceeding). Equivalent to `/saw wave --auto` starting
+   merge and verify before proceeding). Equivalent to `/polywave wave --auto` starting
    at Wave 1.
 10. On any wave failure: stop and report. Do not proceed.
 11. On completion: report result (same as standard wave completion).
@@ -79,16 +79,16 @@ checkpoint entirely. NOT recommended for regular use.
 
 Run once per session on first `/saw` invocation. Skip on subsequent.
 
-1. **sawtools on PATH**: `command -v sawtools` — blocker
+1. **polywave-tools on PATH**: `command -v polywave-tools` — blocker
 2. **Skill files**: Check `${CLAUDE_SKILL_DIR}/agent-template.md` exists — blocker
 3. **Git 2.20+**: `git --version` — blocker if < 2.20
-4. **saw.config.json** (optional): If missing, suggest `sawtools init`. Not a blocker.
+4. **polywave.config.json** (optional): If missing, suggest `polywave-tools init`. Not a blocker.
 
 If 1-3 fail, print what's missing (see `docs/INSTALLATION.md`) and stop.
 
 ## Execution Models
 
-**CLI orchestration (you):** Use Agent tool to launch agents. Manual flow: `create-worktrees` → launch → `merge-agents`. Only way to access Max plan/Bedrock/MCP. **Programmatic:** `sawtools run-wave` for automation (not available in CLI sessions).
+**CLI orchestration (you):** Use Agent tool to launch agents. Manual flow: `create-worktrees` → launch → `merge-agents`. Only way to access Max plan/Bedrock/MCP. **Programmatic:** `polywave-tools run-wave` for automation (not available in CLI sessions).
 
 ## Execution Logic
 
@@ -97,16 +97,16 @@ If 1-3 fail, print what's missing (see `docs/INSTALLATION.md`) and stop.
 **--repo flag (scout/auto commands):** Parse `--repo <path>` from scout and auto args before --model and the feature description. When present:
 - Target repo = absolute path of `<path>` (the repo to analyze)
 - IMPL output path = `<path>/docs/IMPL/IMPL-<slug>.yaml` (slug derived from feature description)
-- All subsequent sawtools calls use `--repo-dir <path>` instead of session cwd
+- All subsequent polywave-tools calls use `--repo-dir <path>` instead of session cwd
 - Include explicit IMPL path in scout agent launch prompt (see Scout flow step 1 below)
 When absent, behavior is unchanged: target repo = session cwd, scout derives IMPL path itself.
 
-**Resume detection:** Run `sawtools resume-detect` before `wave` or `status` execution. For `status`, include resume state in report. For `wave`, report interrupted session and use `sawtools build-retry-context` for failed agents.
+**Resume detection:** Run `polywave-tools resume-detect` before `wave` or `status` execution. For `status`, include resume state in report. For `wave`, report interrupted session and use `polywave-tools build-retry-context` for failed agents.
 
 **After any rate limit, crash, or interrupted finalize-wave (E49, E50):** Run these commands before resuming:
 ```bash
-sawtools agent-status "<absolute-impl-path>"     # see what landed per agent
-sawtools reconcile-state "<absolute-impl-path>"  # fix IMPL state to match git reality
+polywave-tools agent-status "<absolute-impl-path>"     # see what landed per agent
+polywave-tools reconcile-state "<absolute-impl-path>"  # fix IMPL state to match git reality
 ```
 If reconcile-state reports state_changed: true, review the recommended_action field before proceeding.
 
@@ -135,18 +135,18 @@ See `references/impl-targeting.md` for discovery commands, resolution logic, aut
    Without `--repo`, the prompt is the feature description only; scout derives the path from cwd.
 2. When Scout completes, read the IMPL doc. When `--repo` was provided, the path is
    `<repo>/docs/IMPL/IMPL-<feature-slug>.yaml`; otherwise `docs/IMPL/IMPL-<feature-slug>.yaml`
-   relative to cwd. Record injection method: `sawtools set-injection-method "<path>" --method hook`.
-3. **E16+E35+TestCascade: Validate IMPL doc.** `sawtools pre-wave-validate "<path>" --wave 1 --fix`.
+   relative to cwd. Record injection method: `polywave-tools set-injection-method "<path>" --method hook`.
+3. **E16+E35+TestCascade: Validate IMPL doc.** `polywave-tools pre-wave-validate "<path>" --wave 1 --fix`.
    Exit 0 = proceed. Exit 1 = send errors to Scout (resume), retry once. Failure = BLOCKED.
    Now includes Step 3: test cascade check — verifies that *_test.go files calling changed
    symbols are assigned to agents. See `references/pre-wave-validation.md`.
 4. **Critic Gate (E37).** Check trigger conditions (3+ agents OR 2+ repos). If triggered:
    ```bash
    # Get the critic prompt (safe in Claude Code sessions — no subprocess spawning)
-   CRITIC_PROMPT=$(sawtools run-critic --backend agent-tool "<impl-path>")
+   CRITIC_PROMPT=$(polywave-tools run-critic --backend agent-tool "<impl-path>")
    ```
    Then launch the critic agent using the Agent tool:
-   `Agent(subagent_type=critic-agent, run_in_background=true, description="[SAW:critic:<slug>] <absolute-impl-path>", prompt="$CRITIC_PROMPT")`
+   `Agent(subagent_type=critic-agent, run_in_background=true, description="[polywave:critic:<slug>] <absolute-impl-path>", prompt="$CRITIC_PROMPT")`
    **E48:** The IMPL doc path MUST appear in `description` so the SubagentStop hook can locate it for commit enforcement.
    Wait for it to complete, then read `critic_report.verdict` from the IMPL doc.
    - **PASS** → proceed.
@@ -159,11 +159,11 @@ If a `docs/IMPL/IMPL-*.yaml` file already exists:
 1. Read it and identify the current wave. Check Scaffolds section: if any file has `Status: pending` or `Status: FAILED`, spawn/fix Scaffold Agent before creating worktrees.
 2. **Critic gate (E37):** Check for non-empty `critic_report` field. If missing and E37 triggered (see `references/pre-wave-validation.md`), run E37 using the --backend agent-tool pattern above. Otherwise skip.
 
-3. **Integration wave (E27):** If `type: integration`, skip worktrees. For each agent: `sawtools prepare-agent --no-worktree`, launch `integration-agent` on main branch with `[SAW:wave{N}:agent-{ID}] wire integration`. Read `agent.integration_model` from config. Agent's `files` list constrains modifications. After all complete, proceed to step 7.
-4. **Solo agent:** If exactly 1 agent (not integration type), skip worktrees. Run `sawtools prepare-agent --no-worktree`, launch `wave-agent` on main branch. After completes, proceed to step 7. Solo agents still operate in Wave Agent role (I6).
+3. **Integration wave (E27):** If `type: integration`, skip worktrees. For each agent: `polywave-tools prepare-agent --no-worktree`, launch `integration-agent` on main branch with `[SAW:wave{N}:agent-{ID}] wire integration`. Read `agent.integration_model` from config. Agent's `files` list constrains modifications. After all complete, proceed to step 7.
+4. **Solo agent:** If exactly 1 agent (not integration type), skip worktrees. Run `polywave-tools prepare-agent --no-worktree`, launch `wave-agent` on main branch. After completes, proceed to step 7. Solo agents still operate in Wave Agent role (I6).
 5. **Wave preparation (multi-agent):** For waves with 2+ agents:
    ```bash
-   sawtools prepare-wave "<manifest-path>" --wave <N> --repo-dir "<repo-path>" [--commit-baseline]
+   polywave-tools prepare-wave "<manifest-path>" --wave <N> --repo-dir "<repo-path>" [--commit-baseline]
    ```
    Combines worktree creation + agent preparation (brief extraction, journal init). Exit 1 = failure (E21A baseline gate, scaffolds, or worktree errors) — do not proceed.
 
@@ -175,45 +175,45 @@ If a `docs/IMPL/IMPL-*.yaml` file already exists:
 
    **E21A baseline failure:** Codebase already broken. Fix and re-run. See `references/pre-wave-validation.md` § E21A.
 
-   Returns JSON with worktree paths and agent metadata. Result also written to `.saw-state/wave{N}/prepare-result.json` for automation-friendly access.
+   Returns JSON with worktree paths and agent metadata. Result also written to `.polywave-state/wave{N}/prepare-result.json` for automation-friendly access.
 
-6. **Agent launching.** For each agent, launch with `subagent_type: wave-agent` and `run_in_background: true`. Use short IMPL-referencing prompts (~60 tokens). Agent reads full brief from `.saw-agent-brief.md`.
+6. **Agent launching.** For each agent, launch with `subagent_type: wave-agent` and `run_in_background: true`. Use short IMPL-referencing prompts (~60 tokens). Agent reads full brief from `.polywave-agent-brief.md`.
 
    **Journal context recovery (resumed agents):** The `prepare-wave` and `prepare-agent` JSON output includes `"journal_context_available"` per agent. If `true`, read the file at `"journal_context_file"` and prepend its contents to the agent's launch prompt (before the IMPL doc comment block). This restores working memory for agents resuming after context compaction or interruption. If `journal_context_available` is `false` (first launch or no prior history), omit this step.
 
-**E44: Agent naming from brief metadata.** Read `.saw-agent-brief.md` frontmatter and extract `saw_name` field. Use this as the `name` parameter for the Agent tool call. The brief metadata contains the SAW-formatted name `[SAW:wave{N}:agent-{ID}] {task_summary}`. If frontmatter is missing or `saw_name` field is absent (old briefs), the `auto_format_saw_agent_names` PreToolUse hook provides fallback formatting.
+**E44: Agent naming from brief metadata.** Read `.polywave-agent-brief.md` frontmatter and extract `saw_name` field. Use this as the `name` parameter for the Agent tool call. The brief metadata contains the SAW-formatted name `[SAW:wave{N}:agent-{ID}] {task_summary}`. If frontmatter is missing or `saw_name` field is absent (old briefs), the `auto_format_saw_agent_names` PreToolUse hook provides fallback formatting.
 
 **YAML manifest prompt template:**
 ```
 <!-- IMPL doc: /abs/path/to/IMPL-feature.yaml | Wave N | Agent X -->
 <!-- Worktree: /abs/path/to/.claude/worktrees/saw/{slug}/wave{N}-agent-{X} -->
 
-Read .saw-agent-brief.md and follow exactly.
+Read .polywave-agent-brief.md and follow exactly.
 ```
 
 **Protocol contracts:** See `references/wave-agent-contracts.md` for I1 (disjoint ownership), I2 (interface-first), I5 (commit before report), E35 (own the caller), E42 (SubagentStop validation), SAW tag format, and async execution requirements.
 
-**Status tracking:** After agent completes, run `sawtools update-status` with `--status complete/partial/blocked`.
+**Status tracking:** After agent completes, run `polywave-tools update-status` with `--status complete/partial/blocked`.
 7. **After all agents complete:** Read completion reports from IMPL doc (`### Agent {ID} - Completion Report`). **I4:** IMPL doc is single source of truth, not chat output. **I5:** Agents commit before reporting (see `references/wave-agent-contracts.md`). **E7:** If any agent reports `partial` or `blocked`, wave goes to BLOCKED. Resolve failing agent before merge. No partial merges. If non-complete status, read `references/failure-routing.md` for E7a retry, E19 routing, E8 interface failures, E20 stub scanning.
 
 8. **Wave finalization:** Batch command verifies, merges, and cleans up:
    ```bash
-   sawtools finalize-wave "<absolute-manifest-path>" --wave <N> --repo-dir "<repo-path>"
+   polywave-tools finalize-wave "<absolute-manifest-path>" --wave <N> --repo-dir "<repo-path>"
    ```
-   **Always use absolute path for `<manifest-path>`.** Cross-repo IMPLs fail with relative paths. For cross-repo IMPLs, add `--cross-repo-verify` to run baseline gates on all repos after primary merge (catches cross-repo breakage early). **Cross-repo auto-detect (E51):** When `--repo-dir` is omitted on a cross-repo IMPL, `finalize-wave` auto-detects the primary repo from saw.config.json and logs the selection to stderr. You may still provide `--repo-dir` explicitly; if it points to a repo that owns 0 files for the wave, finalize-wave exits with a pre-flight error naming the correct path. Combines 6 steps: (1) verify-commits (E7), (2) scan-stubs (E20, orchestrator-level — agents already passed SubagentStop stub check), (3) run-gates (E21), (4) merge-agents, (5) verify-build, (6) cleanup. Exit 1 = failure. For solo agents, run `verify-build` manually. For integration waves, skip merge-agents (no worktree branches).
+   **Always use absolute path for `<manifest-path>`.** Cross-repo IMPLs fail with relative paths. For cross-repo IMPLs, add `--cross-repo-verify` to run baseline gates on all repos after primary merge (catches cross-repo breakage early). **Cross-repo auto-detect (E51):** When `--repo-dir` is omitted on a cross-repo IMPL, `finalize-wave` auto-detects the primary repo from polywave.config.json and logs the selection to stderr. You may still provide `--repo-dir` explicitly; if it points to a repo that owns 0 files for the wave, finalize-wave exits with a pre-flight error naming the correct path. Combines 6 steps: (1) verify-commits (E7), (2) scan-stubs (E20, orchestrator-level — agents already passed SubagentStop stub check), (3) run-gates (E21), (4) merge-agents, (5) verify-build, (6) cleanup. Exit 1 = failure. For solo agents, run `verify-build` manually. For integration waves, skip merge-agents (no worktree branches).
 8a. **E25/E26/E35: Integration gap detection.** After finalization succeeds, read `references/integration-gap-detection.md` for the 7-step integration gap detection workflow.
 8b. **E47: Caller cascade hotfix.** `finalize-wave` automatically runs
    `apply-cascade-hotfix` (step 6a) when `CallerCascadeOnly=true`.
    When hotfix succeeds, `finalize-wave` exits 0 — proceed normally to
    step 9. To debug classification without running the agent:
    ```bash
-   sawtools finalize-wave "<absolute-manifest-path>" --wave <N> --dry-run
+   polywave-tools finalize-wave "<absolute-manifest-path>" --wave <N> --dry-run
    ```
    If hotfix fails (`finalize-wave` exits 1 with `"build still fails
    after hotfix"`), treat as a genuine build failure and route through E7/E8.
 9. **E15: IMPL completion.** If final wave and verification passed:
    ```bash
-   sawtools close-impl "<impl-doc-path>" --date "YYYY-MM-DD"
+   polywave-tools close-impl "<impl-doc-path>" --date "YYYY-MM-DD"
    ```
    Atomically: writes SAW:COMPLETE, archives to `docs/IMPL/complete/`, updates `docs/CONTEXT.md` (E18), cleans worktrees. Commit in single commit. Don't run if more waves remain.
 10. **I3: Wave sequencing.** Wave N+1 launches only after Wave N merges and post-merge verification passes. If `--auto` and verification passed, proceed to next wave. Otherwise, report result and ask user.

@@ -1,6 +1,6 @@
 ---
 name: integration-agent
-description: Scout-and-Wave integration agent (E26) that wires detected integration gaps after a wave merge. Receives an IntegrationReport with unconnected exports and writes call-sites into connector files. Runs on the main branch (not a worktree) because it needs to see the merged result of all wave agents.
+description: Polywave integration agent (E26) that wires detected integration gaps after a wave merge. Receives an IntegrationReport with unconnected exports and writes call-sites into connector files. Runs on the main branch (not a worktree) because it needs to see the merged result of all wave agents.
 tools: Read, Write, Edit, Grep, Glob, Bash, LSP
 color: cyan
 background: true
@@ -9,7 +9,7 @@ background: true
 <!-- integration-agent v0.1.0 -->
 # Integration Agent: Post-Merge Wiring (E26)
 
-You are an Integration Agent in the Scout-and-Wave protocol. Your job is to wire
+You are an Integration Agent in the Polywave protocol. Your job is to wire
 newly exported functions and types into their appropriate caller files after wave
 agents have been merged. You bridge the gap between parallel implementation
 (where agents cannot coordinate directly) and a fully connected codebase.
@@ -82,7 +82,7 @@ ownership.
 
 Integration connectors are used in two scenarios:
 
-1. **Reactive gap detection (E25/E26):** After a wave merges, `sawtools scan-stubs`
+1. **Reactive gap detection (E25/E26):** After a wave merges, `polywave-tools scan-stubs`
    detects unconnected exports -- new functions or types that exist but are never
    called. The Orchestrator launches an Integration Agent with these gaps plus the
    connector file list.
@@ -163,7 +163,7 @@ A and B and wires them into the registration points. Agent C may only modify
 After finishing, write your completion report:
 
 ```bash
-sawtools set-completion "<IMPL_DOC_PATH>" \
+polywave-tools set-completion "<IMPL_DOC_PATH>" \
   --agent "integrator" \
   --status complete \
   --commit "<commit-sha>" \
@@ -177,7 +177,7 @@ If you cannot wire a gap (e.g., the connector file does not exist, or the
 suggested fix is ambiguous), report `status: partial` with details:
 
 ```bash
-sawtools set-completion "<IMPL_DOC_PATH>" \
+polywave-tools set-completion "<IMPL_DOC_PATH>" \
   --agent "integrator" \
   --status partial \
   --failure-type fixable \
@@ -254,7 +254,7 @@ specified.
 - Files where exports are defined (agent-owned files)
 - Scaffold files (shared type definitions)
 - Test files (unless a connector file is a test helper)
-- The IMPL doc itself (use `sawtools set-completion` for reporting)
+- The IMPL doc itself (use `polywave-tools set-completion` for reporting)
 
 ## Rules
 

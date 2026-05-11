@@ -2,7 +2,7 @@
 
 **Status:** Gap identified — not yet designed
 **Created:** 2026-03-25
-**Relates to:** `docs/program-layer.md`, `/saw program plan/execute`
+**Relates to:** `docs/program-layer.md`, `/polywave program plan/execute`
 
 ---
 
@@ -10,13 +10,13 @@
 
 ### Bottom-Up (implemented)
 
-Individual scouts run first → IMPLs exist independently → `/saw program --impl s1 s2 ...` assembles them into a PROGRAM manifest with auto-tiering.
+Individual scouts run first → IMPLs exist independently → `/polywave program --impl s1 s2 ...` assembles them into a PROGRAM manifest with auto-tiering.
 
 The work happened before the program was defined. The Planner reverse-engineers a tier structure from existing IMPLs based on declared dependencies. Inter-IMPL constraints are inferred after the fact.
 
 ### Top-Down (gap)
 
-Start with a high-level vision → `/saw program plan "description"` → Planner decomposes into features with tier structure and dependency constraints → Scouts run per-feature → IMPLs produced already slotted into the program.
+Start with a high-level vision → `/polywave program plan "description"` → Planner decomposes into features with tier structure and dependency constraints → Scouts run per-feature → IMPLs produced already slotted into the program.
 
 The program structure precedes the implementation work. Scouts run with awareness of their tier context and inter-IMPL constraints.
 
@@ -24,7 +24,7 @@ The program structure precedes the implementation work. Scouts run with awarenes
 
 ## The Gap
 
-`/saw program plan` and `/saw program execute` are meant to be the top-down path. The Planner produces a PROGRAM manifest with feature descriptions. But:
+`/polywave program plan` and `/polywave program execute` are meant to be the top-down path. The Planner produces a PROGRAM manifest with feature descriptions. But:
 
 1. **Scouts run independently** — each Scout analyzes its feature in isolation, unaware of sibling features or program-level constraints. A Scout planning `engine-reference-injection` doesn't know it must depend on `*-prompt-extraction` IMPLs completing first.
 
@@ -66,7 +66,7 @@ In bottom-up creation, the PROGRAM manifest is assembled after all Scouts comple
 
 2. **Who resolves conflicts between Planner intent and Scout findings?** The Planner may assign a feature to Tier 1, but the Scout's suitability gate may find a dependency on a Tier 2 feature. Resolution needs a defined protocol (E-rule or Orchestrator decision point).
 
-3. **Should the Planner run incrementally or once?** In a large program, new Scout findings may require the Planner to revise the tier structure (`/saw program replan`). Top-down creation may need a tighter Planner-Scout feedback loop than current implementation supports.
+3. **Should the Planner run incrementally or once?** In a large program, new Scout findings may require the Planner to revise the tier structure (`/polywave program replan`). Top-down creation may need a tighter Planner-Scout feedback loop than current implementation supports.
 
 4. **How does this interact with cross-repo programs?** When IMPLs span multiple repos (as in the progressive disclosure program), top-down planning requires the Planner to understand both repos' structure before assigning features to tiers.
 
@@ -74,7 +74,7 @@ In bottom-up creation, the PROGRAM manifest is assembled after all Scouts comple
 
 ## Relationship to Current Implementation
 
-The bottom-up path (`/saw program --impl`) is working. Top-down (`/saw program plan/execute`) partially works — the Planner decomposes features and Scouts run, but the program context is not passed to Scouts and inter-IMPL contracts are not pre-wired.
+The bottom-up path (`/polywave program --impl`) is working. Top-down (`/polywave program plan/execute`) partially works — the Planner decomposes features and Scouts run, but the program context is not passed to Scouts and inter-IMPL contracts are not pre-wired.
 
 The gap is most visible when:
 - A program has cross-IMPL dependencies on shared artifacts (files one IMPL creates that another consumes)

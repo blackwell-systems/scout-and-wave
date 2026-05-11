@@ -1,8 +1,8 @@
-# Scout-and-Wave Program Invariants
+# Polywave Program Invariants
 
 **Version:** 0.3.0
 
-This document defines the invariants that must hold throughout program-level execution in Scout-and-Wave. These invariants extend the IMPL-level invariants (I1-I6 in `invariants.md`) to multi-IMPL orchestration.
+This document defines the invariants that must hold throughout program-level execution in Polywave. These invariants extend the IMPL-level invariants (I1-I6 in `invariants.md`) to multi-IMPL orchestration.
 
 ---
 
@@ -138,7 +138,7 @@ violating P1+ (both modify the same file). P1+ is the machine-enforceable
 complement to P1's logical constraint.
 
 **Enforcement:** Machine-enforced before launching any IMPL in a tier via
-`sawtools check-program-conflicts <PROGRAM.yaml> --tier N`. This command:
+`polywave-tools check-program-conflicts <PROGRAM.yaml> --tier N`. This command:
 1. Loads all IMPL docs for tier N (via `CheckIMPLConflicts()`)
 2. Intersects their `file_ownership` tables
 3. If any file appears in two or more IMPL ownership tables: BLOCKED with
@@ -159,12 +159,12 @@ Additionally, `ValidateProgramImportMode()` performs P1+ file disjointness check
 check-program-conflicts: BLOCKED — 2 conflict(s) detected in tier 1
 Conflicting IMPLs:
   pkg/shared/types.go: [feature-a, feature-b]
-Resolve by moving conflicting IMPLs to different tiers (sawtools tier-gate
+Resolve by moving conflicting IMPLs to different tiers (polywave-tools tier-gate
 suggestion: feature-b → tier 2).
 ```
 
 **Resolution:** When P1+ is violated:
-1. Run `sawtools check-impl-conflicts --impls <slugs>` for tier suggestion
+1. Run `polywave-tools check-impl-conflicts --impls <slugs>` for tier suggestion
 2. Move the conflicting IMPL to the suggested tier in the PROGRAM manifest
 3. Re-run check-program-conflicts to confirm resolution
 4. Alternatively, split the conflicting IMPL into sub-IMPLs with disjoint ownership
@@ -176,13 +176,13 @@ complete safety guarantee for parallel tier execution. P1 prevents logical
 dependency violations. P1+ prevents the physical merge failures that would occur
 even if logical dependencies are respected. Without P1+, two IMPLs that logically
 don't depend on each other may both modify the same infrastructure file (e.g.,
-`cmd/sawtools/main.go` for command registration), causing merge conflicts that block
+`cmd/polywave-tools/main.go` for command registration), causing merge conflicts that block
 tier completion.
 
 **Related Rules:**
 - See P1 (IMPL Independence Within a Tier) above
 - See I1 (Disjoint File Ownership) in `protocol/invariants.md`
-- `sawtools check-program-conflicts` is the P1+ equivalent of `sawtools check-conflicts`
+- `polywave-tools check-program-conflicts` is the P1+ equivalent of `polywave-tools check-conflicts`
   (which enforces I1 at the agent/wave level)
 
 ---
@@ -358,7 +358,7 @@ These updates are atomic file writes (read-modify-write), not concurrent edits. 
 The PROGRAM manifest persists state to disk, enabling the Orchestrator to reconstruct state without relying on context window memory:
 - Read PROGRAM manifest at each tier boundary
 - Load only the current tier's IMPL docs into context
-- Use `sawtools program-status` to reconstruct full program state from disk
+- Use `polywave-tools program-status` to reconstruct full program state from disk
 
 **Related Rules:**
 - See I4 (IMPL doc is source of truth) in `protocol/invariants.md`
@@ -406,7 +406,7 @@ When all preconditions hold and all invariants (I1-I6 + P1-P5 including P1+) are
 
 ## Enforcement Mechanisms
 
-All enforcement mechanisms described below are implemented in the Go SDK (`pkg/protocol/`) and CLI (`cmd/sawtools/`).
+All enforcement mechanisms described below are implemented in the Go SDK (`pkg/protocol/`) and CLI (`cmd/polywave-tools/`).
 
 ### P1 Enforcement: IMPL Independence Validation
 
@@ -429,7 +429,7 @@ All enforcement mechanisms described below are implemented in the Go SDK (`pkg/p
 
 **When:**
 - As Step 3 of `PrepareTier()` — before IMPL validation and branch creation
-- Via standalone `sawtools check-program-conflicts <PROGRAM.yaml> --tier N`
+- Via standalone `polywave-tools check-program-conflicts <PROGRAM.yaml> --tier N`
 - During import-mode validation (`ValidateProgramImportMode()`)
 
 **How:**
@@ -438,7 +438,7 @@ All enforcement mechanisms described below are implemented in the Go SDK (`pkg/p
 - If conflicts found, `PrepareTier()` aborts with `Success=false` before any branches are created
 - CLI `check-program-conflicts` exits 1 with structured `ConflictReport` JSON and human-readable BLOCKED message on stderr
 
-**Implementation:** `pkg/protocol/program_tier_prepare.go` — `PrepareTier()` Step 3; `pkg/protocol/program_validation.go` — `ValidateP1FileDisjointness()`, `ValidateProgramImportMode()`; `cmd/sawtools/check_program_conflicts_cmd.go`
+**Implementation:** `pkg/protocol/program_tier_prepare.go` — `PrepareTier()` Step 3; `pkg/protocol/program_validation.go` — `ValidateP1FileDisjointness()`, `ValidateProgramImportMode()`; `cmd/polywave-tools/check_program_conflicts_cmd.go`
 
 ### P2 Enforcement: Program Contract Freeze and Redefinition Check
 
@@ -453,7 +453,7 @@ All enforcement mechanisms described below are implemented in the Go SDK (`pkg/p
 - If any contract file is missing or uncommitted, returns partial result with `Success=false`
 - `ValidateProgramImportMode()` checks P2 redefinition: if an IMPL doc's `interface_contracts` redefines a frozen program contract name → `P2_CONTRACT_REDEFINITION`
 
-**Implementation:** `pkg/protocol/program_freeze.go` — `FreezeContracts()`, `matchesSlugInFreezeAt()`; `pkg/protocol/program_validation.go` — `ValidateProgramImportMode()`; `cmd/sawtools/freeze_contracts_cmd.go`
+**Implementation:** `pkg/protocol/program_freeze.go` — `FreezeContracts()`, `matchesSlugInFreezeAt()`; `pkg/protocol/program_validation.go` — `ValidateProgramImportMode()`; `cmd/polywave-tools/freeze_contracts_cmd.go`
 
 ### P3 Enforcement: Tier Completion and Gate Check
 
@@ -564,14 +564,14 @@ IMPL branches follow the naming convention: `saw/program/{program-slug}/tier{N}-
 | `pkg/protocol/program_prioritizer.go` | `UnblockingScore()`, `PrioritizeIMPLs()` |
 | `pkg/engine/program_auto.go` | `AdvanceTierAutomatically()`, `ReplanProgram()`, `ScoreTierIMPLs()` |
 | `pkg/engine/program_tier_loop.go` | `RunTierLoop()`, `AutoTriggerReplan()` |
-| `cmd/sawtools/prepare_tier_cmd.go` | CLI: `sawtools prepare-tier` |
-| `cmd/sawtools/finalize_tier_cmd.go` | CLI: `sawtools finalize-tier` (with `--auto` flag) |
-| `cmd/sawtools/check_program_conflicts_cmd.go` | CLI: `sawtools check-program-conflicts` |
-| `cmd/sawtools/freeze_contracts_cmd.go` | CLI: `sawtools freeze-contracts` |
-| `cmd/sawtools/mark_program_complete_cmd.go` | CLI: `sawtools mark-program-complete` |
-| `cmd/sawtools/update_program_state_cmd.go` | CLI: `sawtools update-program-state` |
-| `cmd/sawtools/update_program_impl_cmd.go` | CLI: `sawtools update-program-impl` |
-| `cmd/sawtools/program_status_cmd.go` | CLI: `sawtools program-status` |
+| `cmd/polywave-tools/prepare_tier_cmd.go` | CLI: `polywave-tools prepare-tier` |
+| `cmd/polywave-tools/finalize_tier_cmd.go` | CLI: `polywave-tools finalize-tier` (with `--auto` flag) |
+| `cmd/polywave-tools/check_program_conflicts_cmd.go` | CLI: `polywave-tools check-program-conflicts` |
+| `cmd/polywave-tools/freeze_contracts_cmd.go` | CLI: `polywave-tools freeze-contracts` |
+| `cmd/polywave-tools/mark_program_complete_cmd.go` | CLI: `polywave-tools mark-program-complete` |
+| `cmd/polywave-tools/update_program_state_cmd.go` | CLI: `polywave-tools update-program-state` |
+| `cmd/polywave-tools/update_program_impl_cmd.go` | CLI: `polywave-tools update-program-impl` |
+| `cmd/polywave-tools/program_status_cmd.go` | CLI: `polywave-tools program-status` |
 
 ---
 

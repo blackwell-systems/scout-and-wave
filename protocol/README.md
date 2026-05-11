@@ -1,6 +1,6 @@
-# Scout-and-Wave Protocol Documentation
+# Polywave Protocol Documentation
 
-This directory contains the implementation-agnostic specification of the Scout-and-Wave (SAW) protocol. These documents define the coordination rules, correctness guarantees, and behavioral contracts that any SAW implementation must satisfy, independent of the runtime or tooling used.
+This directory contains the implementation-agnostic specification of the Polywave (SAW) protocol. These documents define the coordination rules, correctness guarantees, and behavioral contracts that any SAW implementation must satisfy, independent of the runtime or tooling used.
 
 **Intended audience:** Developers implementing SAW in new runtimes (Python, Rust, TypeScript, etc.), humans orchestrating SAW workflows manually, and maintainers of existing implementations verifying protocol compliance.
 

@@ -2,13 +2,13 @@
 
 **Protocol Version:** 0.9.3
 
-Scout-and-Wave implemented as a Claude Code skill for fully automated parallel agent execution.
+Polywave implemented as a Claude Code skill for fully automated parallel agent execution.
 
 ## Prerequisites
 
 - Claude Code desktop app
 - Git 2.20+ (for worktree support)
-- `sawtools` CLI (see Step 2 below)
+- `polywave-tools` CLI (see Step 2 below)
 - Project with existing codebase OR empty repo for bootstrap mode
 
 ## Installation
@@ -54,33 +54,33 @@ EOF
 ```
 
 **Why these permissions:**
-- **`"Agent"`** (critical): Launches Scout and Wave agents without blocking
+- **`"Agent"`** (critical): Launches Polywave agents without blocking
 - `"Bash"`, `"Read"`, `"Write"`, `"Edit"`, `"Glob"`, `"Grep"`: Git commands, worktree management, IMPL doc writes, codebase reads
 - `"TaskCreate"`: Wave progress tracking
 - `"WebFetch"`, `"WebSearch"`: Doc/API lookups during scout analysis
 
 For project-scoped settings, add the same block to `.claude/settings.json` in the project root.
 
-### Step 2: Install sawtools (Required)
+### Step 2: Install polywave-tools (Required)
 
-`sawtools` is the CLI engine for all wave operations — worktree creation, merge, IMPL validation, stub scanning. **Without it, `/saw wave` cannot function.**
+`polywave-tools` is the CLI engine for all wave operations — worktree creation, merge, IMPL validation, stub scanning. **Without it, `/polywave wave` cannot function.**
 
 ```bash
 # Homebrew (macOS/Linux)
-brew install blackwell-systems/tap/sawtools
+brew install blackwell-systems/tap/polywave-tools
 
 # Or download a pre-built binary (no Go/Homebrew required)
-# Releases: https://github.com/blackwell-systems/scout-and-wave-go/releases/latest
-VERSION=$(curl -sI https://github.com/blackwell-systems/scout-and-wave-go/releases/latest | grep -i location | sed 's|.*/v||;s/\r//')
-curl -sL "https://github.com/blackwell-systems/scout-and-wave-go/releases/download/v${VERSION}/sawtools_${VERSION}_darwin_arm64.tar.gz" | tar xz
-mkdir -p ~/.local/bin && mv sawtools ~/.local/bin/
+# Releases: https://github.com/blackwell-systems/polywave-go/releases/latest
+VERSION=$(curl -sI https://github.com/blackwell-systems/polywave-go/releases/latest | grep -i location | sed 's|.*/v||;s/\r//')
+curl -sL "https://github.com/blackwell-systems/polywave-go/releases/download/v${VERSION}/polywave-tools_${VERSION}_darwin_arm64.tar.gz" | tar xz
+mkdir -p ~/.local/bin && mv polywave-tools ~/.local/bin/
 # Replace darwin_arm64 with: darwin_amd64, linux_amd64, or linux_arm64
 
 # Or via Go install (requires Go 1.21+)
-go install github.com/blackwell-systems/scout-and-wave-go/cmd/sawtools@latest
+go install github.com/blackwell-systems/polywave-go/cmd/polywave-tools@latest
 
 # Verify
-sawtools version
+polywave-tools version
 ```
 
 ### Step 3: Clone the Repository (Required)
@@ -89,10 +89,10 @@ The skill reads prompt files from the repository at runtime, so keep it on disk:
 
 ```bash
 # Clone to a location of your choice (~/code is just a suggestion)
-git clone https://github.com/blackwell-systems/scout-and-wave.git ~/code/scout-and-wave
+git clone https://github.com/blackwell-systems/polywave.git ~/code/polywave
 
 # Or anywhere else:
-# git clone https://github.com/blackwell-systems/scout-and-wave.git /path/you/prefer
+# git clone https://github.com/blackwell-systems/polywave.git /path/you/prefer
 ```
 
 ### Step 4: Install the Skill (Required)
@@ -104,18 +104,18 @@ Create the skill directory and symlink all required files:
 mkdir -p ~/.claude/skills/saw/agents
 
 # Symlink main skill file
-ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/saw-skill.md \
+ln -sf ~/code/polywave/implementations/claude-code/prompts/saw-skill.md \
        ~/.claude/skills/saw/SKILL.md
 
 # Symlink supporting files
-ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/saw-bootstrap.md \
+ln -sf ~/code/polywave/implementations/claude-code/prompts/saw-bootstrap.md \
        ~/.claude/skills/saw/saw-bootstrap.md
-ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agent-template.md \
+ln -sf ~/code/polywave/implementations/claude-code/prompts/agent-template.md \
        ~/.claude/skills/saw/agent-template.md
 
 # If you cloned elsewhere, adjust all paths:
 # mkdir -p ~/.claude/skills/saw/agents
-# ln -sf /your/path/scout-and-wave/implementations/claude-code/prompts/saw-skill.md ~/.claude/skills/saw/SKILL.md
+# ln -sf /your/path/polywave/implementations/claude-code/prompts/saw-skill.md ~/.claude/skills/saw/SKILL.md
 # ... (repeat for all supporting files)
 ```
 
@@ -128,17 +128,17 @@ SAW uses custom Claude Code agent types that provide structural tool restriction
 **Install agent types into the skill directory:**
 
 ```bash
-ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agents/scout.md \
+ln -sf ~/code/polywave/implementations/claude-code/prompts/agents/scout.md \
        ~/.claude/skills/saw/agents/scout.md
-ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agents/wave-agent.md \
+ln -sf ~/code/polywave/implementations/claude-code/prompts/agents/wave-agent.md \
        ~/.claude/skills/saw/agents/wave-agent.md
-ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agents/scaffold-agent.md \
+ln -sf ~/code/polywave/implementations/claude-code/prompts/agents/scaffold-agent.md \
        ~/.claude/skills/saw/agents/scaffold-agent.md
-ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agents/integration-agent.md \
+ln -sf ~/code/polywave/implementations/claude-code/prompts/agents/integration-agent.md \
        ~/.claude/skills/saw/agents/integration-agent.md
-ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agents/critic-agent.md \
+ln -sf ~/code/polywave/implementations/claude-code/prompts/agents/critic-agent.md \
        ~/.claude/skills/saw/agents/critic-agent.md
-ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agents/planner.md \
+ln -sf ~/code/polywave/implementations/claude-code/prompts/agents/planner.md \
        ~/.claude/skills/saw/agents/planner.md
 ```
 
@@ -146,7 +146,7 @@ ln -sf ~/code/scout-and-wave/implementations/claude-code/prompts/agents/planner.
 
 ```bash
 mkdir -p ~/.claude/skills/saw/references
-cd ~/code/scout-and-wave/implementations/claude-code/prompts/references
+cd ~/code/polywave/implementations/claude-code/prompts/references
 for file in *.md; do
   ln -sf "$(pwd)/$file" ~/.claude/skills/saw/references/"$file"
 done
@@ -167,7 +167,7 @@ These files are loaded on-demand only when the matching subcommand is invoked or
 Hooks enforce the protocol's correctness guarantees at the Claude Code level — preventing Scout from writing source files (I6), blocking wave agents from touching files they don't own (I1), validating IMPL docs on write (E16), checking agent launch/completion protocol (E42/H5), enforcing worktree isolation (E43), verifying agent isolation on launch (E12), detecting stub patterns (E20/H3), preventing branch drift (H4), blocking git stash in wave-agent worktrees, and emitting observability events (E40). **Without hooks, many invariants are advisory only.**
 
 ```bash
-cd ~/code/scout-and-wave/implementations/claude-code/hooks
+cd ~/code/polywave/implementations/claude-code/hooks
 ./install.sh
 ```
 
@@ -186,7 +186,7 @@ See `implementations/claude-code/hooks/README.md` for the full list of hooks and
 Restart Claude Code (if it was already running), then in any session:
 
 ```
-/saw status
+/polywave status
 ```
 
 **Expected output:** `"No IMPL doc found in this project"` or similar. This confirms the skill loaded successfully.
@@ -209,8 +209,8 @@ ls -la ~/.claude/skills/saw/
 Navigate to a project with existing code and run:
 
 ```
-/saw scout "add a cache to the API"   # Scout analyzes (30-90s)
-/saw wave                              # Agents execute in parallel (2-5min)
+/polywave scout "add a cache to the API"   # Scout analyzes (30-90s)
+/polywave wave                              # Agents execute in parallel (2-5min)
 ```
 
 **New to SAW?** See **[QUICKSTART.md](QUICKSTART.md)** for a detailed step-by-step guide with example output, error handling, and tips for success.
@@ -219,35 +219,35 @@ Navigate to a project with existing code and run:
 
 **Command flow:**
 ```
-/saw scout <feature>   → Analyzes, writes IMPL doc
+/polywave scout <feature>   → Analyzes, writes IMPL doc
 [You review IMPL doc]
-/saw wave              → Runs next pending wave
-/saw wave              → Runs next wave (repeat for multi-wave)
-/saw wave --auto       → Runs ALL remaining waves hands-free
-/saw status            → Shows current wave and progress
+/polywave wave              → Runs next pending wave
+/polywave wave              → Runs next wave (repeat for multi-wave)
+/polywave wave --auto       → Runs ALL remaining waves hands-free
+/polywave status            → Shows current wave and progress
 ```
 
 **Which command to use:**
-- **Empty repo or no architecture yet?** → `/saw bootstrap <project-name>` (designs structure from scratch)
-- **Existing codebase, adding a feature?** → `/saw scout <feature-description>` (analyzes and parallelizes work)
+- **Empty repo or no architecture yet?** → `/polywave bootstrap <project-name>` (designs structure from scratch)
+- **Existing codebase, adding a feature?** → `/polywave scout <feature-description>` (analyzes and parallelizes work)
 
 ### Workflow
 
-0. **Bootstrap (new projects only):** `/saw bootstrap "description"` designs package structure, interface contracts, and wave layout for a new repo before any code is written.
+0. **Bootstrap (new projects only):** `/polywave bootstrap "description"` designs package structure, interface contracts, and wave layout for a new repo before any code is written.
 
-1. **Scout:** `/saw scout "feature description"` analyzes the codebase, runs the suitability gate, and produces `docs/IMPL/IMPL-<feature>.yaml`. This file, the IMPL doc, is the coordination artifact: it contains file ownership (which agent owns which files), interface contracts (exact function signatures crossing agent boundaries), and a per-agent prompt for each wave agent. The orchestrator will show you a summary before any agent starts.
+1. **Scout:** `/polywave scout "feature description"` analyzes the codebase, runs the suitability gate, and produces `docs/IMPL/IMPL-<feature>.yaml`. This file, the IMPL doc, is the coordination artifact: it contains file ownership (which agent owns which files), interface contracts (exact function signatures crossing agent boundaries), and a per-agent prompt for each wave agent. The orchestrator will show you a summary before any agent starts.
 
 2. **Review:** Read the IMPL doc. Verify ownership is clean, interfaces are correct, and wave order makes sense. Adjust before proceeding. This is the last moment to change interface signatures.
 
 3. **Scaffold Agent (conditional):** If the IMPL doc has a non-empty Scaffolds section, the Orchestrator launches the Scaffold Agent automatically. It creates the shared type files, verifies compilation, and commits to HEAD. If any scaffold fails to compile, the run stops here — fix the contracts in the IMPL doc before proceeding. When all scaffolds show `Status: committed`, the interface contracts are frozen.
 
-4. **Wave:** `/saw wave` launches parallel agents for the current wave, merges on completion, and runs the **verification gate** (build + tests + lint).
+4. **Wave:** `/polywave wave` launches parallel agents for the current wave, merges on completion, and runs the **verification gate** (build + tests + lint).
 
-5. **Repeat:** `/saw wave` for each subsequent wave, or `/saw wave --auto` to run all remaining waves unattended. Auto mode still pauses if verification fails.
+5. **Repeat:** `/polywave wave` for each subsequent wave, or `/polywave wave --auto` to run all remaining waves unattended. Auto mode still pauses if verification fails.
 
 ### What Happens
 
-**When you run `/saw scout "feature"` + `/saw wave`:**
+**When you run `/polywave scout "feature"` + `/polywave wave`:**
 
 1. **Scout** analyzes your codebase and writes `docs/IMPL/IMPL-<feature>.yaml`
 2. **You review** the wave structure and interface contracts (last chance to change them)
@@ -277,7 +277,7 @@ The `/saw` skill consists of several specialized prompts, all installed to `~/.c
 - **`agent-template.md`** - Wave Agent template (Scout fills this to generate per-agent prompts)
 - **`agents/`** - Custom agent type definitions (scout, wave-agent, scaffold-agent, integration-agent, critic-agent, planner)
 
-All orchestration operations (worktree management, merge procedures, validation, stub scanning) are handled by the `sawtools` CLI from the scout-and-wave-go SDK.
+All orchestration operations (worktree management, merge procedures, validation, stub scanning) are handled by the `polywave-tools` CLI from the polywave-go SDK.
 
 All files are symlinked from `implementations/claude-code/prompts/` (the single source of truth). The skill references them via `${CLAUDE_SKILL_DIR}` for portability.
 
@@ -291,26 +291,26 @@ Model can be overridden at three levels (highest precedence first):
 
 | Level | Scope | How |
 |-------|-------|-----|
-| **Skill argument** | Per-invocation | `/saw scout --model sonnet "feature"` |
-| **Config file** | Per-project or global | `saw.config.json` (see lookup order below) |
+| **Skill argument** | Per-invocation | `/polywave scout --model sonnet "feature"` |
+| **Config file** | Per-project or global | `polywave.config.json` (see lookup order below) |
 | **Parent model** | Session default | Inherited automatically (no config needed) |
 
-### `saw.config.json`
+### `polywave.config.json`
 
 The skill looks for this file in two locations (first match wins):
 
-1. **`<project-root>/saw.config.json`** — per-project config (same file the web app uses)
-2. **`~/.claude/saw.config.json`** — global default for all projects
+1. **`<project-root>/polywave.config.json`** — per-project config (same file the web app uses)
+2. **`~/.claude/polywave.config.json`** — global default for all projects
 
 Per-project config overrides global. Use global for your default model preferences, per-project to override for specific repos.
 
 **Install the global config (optional):**
 
 ```bash
-ln -sf ~/code/scout-and-wave/config/saw.config.json ~/.claude/saw.config.json
+ln -sf ~/code/polywave/config/polywave.config.json ~/.claude/polywave.config.json
 ```
 
-Edit `config/saw.config.json` in the repo to set your preferred models. Empty string fields inherit the parent session's model. Changes are version-controlled and propagate via `git pull`.
+Edit `config/polywave.config.json` in the repo to set your preferred models. Empty string fields inherit the parent session's model. Changes are version-controlled and propagate via `git pull`.
 
 ```json
 {
@@ -332,8 +332,8 @@ Edit `config/saw.config.json` in the repo to set your preferred models. Empty st
 
 | Field | Used by | Default |
 |-------|---------|---------|
-| `scout_model` | `/saw scout`, `/saw bootstrap` | Parent session model |
-| `wave_model` | `/saw wave` (all wave agents) | Parent session model |
+| `scout_model` | `/polywave scout`, `/polywave bootstrap` | Parent session model |
+| `wave_model` | `/polywave wave` (all wave agents) | Parent session model |
 | `chat_model` | Web app chat panel | Parent session model |
 | `integration_model` | Integration Agent (E26) | Parent session model |
 
@@ -345,7 +345,7 @@ Edit `config/saw.config.json` in the repo to set your preferred models. Empty st
 | `require_lint` | Lint gate is enforced |
 | `block_on_failure` | Block merge on quality gate failure |
 
-If the file doesn't exist, all values fall back to defaults. The CLI skill reads `scout_model` for `/saw scout` and `wave_model` for `/saw wave`.
+If the file doesn't exist, all values fall back to defaults. The CLI skill reads `scout_model` for `/polywave scout` and `wave_model` for `/polywave wave`.
 
 ### Agent Architecture
 
@@ -404,7 +404,7 @@ If the work doesn't decompose cleanly, the Scout says so. It runs a suitability 
 
 **Worktree isolation failures:**
 - See [worktree defense layers](../../protocol/invariants.md#i1-disjoint-file-ownership) in protocol docs
-- Pre-commit hook is installed automatically by `sawtools create-worktrees`
+- Pre-commit hook is installed automatically by `polywave-tools create-worktrees`
 
 **For more help:**
 - Read the [protocol specification](../../protocol/README.md)

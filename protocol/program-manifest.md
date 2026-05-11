@@ -8,7 +8,7 @@ This document defines the canonical schema for the PROGRAM manifest YAML format.
 
 ## 1. Overview
 
-Scout-and-Wave operates at three levels:
+Polywave operates at three levels:
 
 ```
 Program (this document)   — coordinates multiple IMPLs
@@ -388,7 +388,7 @@ Planner agent can be re-engaged to revise the PROGRAM manifest.
 **Triggers:**
 - Tier gate failure (required gates fail, tier cannot advance)
 - Cross-IMPL interface mismatch detected
-- User request (`/saw program replan`)
+- User request (`/polywave program replan`)
 
 **Planner receives:**
 - Current PROGRAM manifest
@@ -417,25 +417,25 @@ may be revised.
 
 ## 11. Orchestrator Commands
 
-The following `/saw program` commands are available for program-level orchestration:
+The following `/polywave program` commands are available for program-level orchestration:
 
 | Command | Description | Analogy |
 |---------|-------------|---------|
-| `/saw program --impl <s1> <s2> ...` | Create PROGRAM manifest from existing IMPLs with auto-tiering | `/saw scout` (produces the plan artifact) |
-| `/saw program plan <requirements>` | Launch Planner to produce a PROGRAM manifest from requirements | `/saw scout` (produces the plan artifact) |
-| `/saw program execute [--auto]` | Begin or resume program execution (tier-by-tier) | `/saw wave [--auto]` (executes the plan) |
-| `/saw program status` | Show current program state, tier progress, and IMPL statuses | `/saw status` (shows progress) |
-| `/saw program replan --reason "<reason>"` | Re-engage Planner to revise PROGRAM manifest after failure | `/saw amend --extend-scope` (revises the plan) |
+| `/polywave program --impl <s1> <s2> ...` | Create PROGRAM manifest from existing IMPLs with auto-tiering | `/polywave scout` (produces the plan artifact) |
+| `/polywave program plan <requirements>` | Launch Planner to produce a PROGRAM manifest from requirements | `/polywave scout` (produces the plan artifact) |
+| `/polywave program execute [--auto]` | Begin or resume program execution (tier-by-tier) | `/polywave wave [--auto]` (executes the plan) |
+| `/polywave program status` | Show current program state, tier progress, and IMPL statuses | `/polywave status` (shows progress) |
+| `/polywave program replan --reason "<reason>"` | Re-engage Planner to revise PROGRAM manifest after failure | `/polywave amend --extend-scope` (revises the plan) |
 
 **Command details:**
 
-- **`/saw program plan`** — Runs the Planner agent, which analyzes requirements and produces a `PROGRAM-<name>.yaml` manifest. The Planner also runs a suitability gate; if the project is too small or too simple for multi-IMPL orchestration, the Planner returns `NOT_SUITABLE` with an explanation.
+- **`/polywave program plan`** — Runs the Planner agent, which analyzes requirements and produces a `PROGRAM-<name>.yaml` manifest. The Planner also runs a suitability gate; if the project is too small or too simple for multi-IMPL orchestration, the Planner returns `NOT_SUITABLE` with an explanation.
 
-- **`/saw program status`** — Reads the PROGRAM manifest from disk and renders a human-readable summary of tier and IMPL progress without modifying state.
+- **`/polywave program status`** — Reads the PROGRAM manifest from disk and renders a human-readable summary of tier and IMPL progress without modifying state.
 
-- **`/saw program execute [--auto]`** — Executes the program tier by tier. Without `--auto`, halts at each tier gate for human review. With `--auto`, advances automatically through tier gates that pass, stopping only on failure or program completion.
+- **`/polywave program execute [--auto]`** — Executes the program tier by tier. Without `--auto`, halts at each tier gate for human review. With `--auto`, advances automatically through tier gates that pass, stopping only on failure or program completion.
 
-- **`/saw program replan`** — Re-engages the Planner with the current PROGRAM manifest and any available failure context (tier gate results, blocked IMPL reports). Sets program state to `PLANNING` and produces a revised manifest for human approval before execution resumes. See Section 10 for full re-planning semantics.
+- **`/polywave program replan`** — Re-engages the Planner with the current PROGRAM manifest and any available failure context (tier gate results, blocked IMPL reports). Sets program state to `PLANNING` and produces a revised manifest for human approval before execution resumes. See Section 10 for full re-planning semantics.
 
 ---
 
@@ -794,7 +794,7 @@ pre_mortem:
     mitigation: |
       PROGRAM manifest persists state to disk. Orchestrator re-reads
       manifest at tier boundaries. Tool journaling captures execution
-      history. /saw program status reconstructs state from disk.
+      history. /polywave program status reconstructs state from disk.
 ```
 
 ---

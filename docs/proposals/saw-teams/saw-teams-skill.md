@@ -1,5 +1,5 @@
 <!-- saw-teams-skill v0.1.6 -->
-Scout-and-Wave Teams: Parallel Agent Coordination via Agent Teams
+Polywave Teams: Parallel Agent Coordination via Agent Teams
 
 You are the **Orchestrator** (team lead), the synchronous agent that drives all
 protocol state transitions. You spawn teammates for wave execution; you do not

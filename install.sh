@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# install.sh — Installs Scout-and-Wave skill files and enforcement hooks.
+# install.sh — Installs Polywave skill files and enforcement hooks.
 #
 # Usage:
 #   ./install.sh                 # auto-detect platform (defaults to --claude-code)
 #   ./install.sh --claude-code   # skill files + hooks + settings.json + Agent permission
-#   ./install.sh --generic       # skill files to ~/.agents/skills/saw/ + hook scripts only
+#   ./install.sh --generic       # skill files to ~/.agents/skills/polywave/ + hook scripts only
 #   ./install.sh --test          # run smoke tests (requires hooks already installed)
 #   ./install.sh --uninstall     # remove everything
 #
@@ -32,7 +32,7 @@ HOOK_SCRIPTS=(
   "check_git_ownership"
   "warn_stubs"
   "check_branch_drift"
-  "auto_format_saw_agent_names"
+  "auto_format_polywave_agent_names"
   "validate_agent_launch"
   "validate_agent_completion"
   "validate_agent_isolation"
@@ -45,13 +45,13 @@ HOOK_SCRIPTS=(
   "verify_worktree_compliance"
   "block_git_stash"
   "auto_commit_on_write"
-  "saw_orchestrator_stop"
+  "polywave_orchestrator_stop"
 )
 
 # Core skill files: source (relative to PROMPTS_DIR) -> target name
 SKILL_FILES=(
-  "saw-skill.md:SKILL.md"
-  "saw-bootstrap.md:saw-bootstrap.md"
+  "polywave-skill.md:SKILL.md"
+  "polywave-bootstrap.md:polywave-bootstrap.md"
   "agent-template.md:agent-template.md"
 )
 
@@ -77,7 +77,7 @@ install_skill_files() {
     fi
     ln -sf "${src}" "${dst}"
   done
-  echo "   Core files: SKILL.md, saw-bootstrap.md, agent-template.md"
+  echo "   Core files: SKILL.md, polywave-bootstrap.md, agent-template.md"
 
   # Agent definitions
   for src in "${PROMPTS_DIR}"/agents/*.md; do
@@ -125,13 +125,13 @@ install_hook_scripts() {
   done
   echo "   ${ok} hooks installed${warn:+, ${warn} warnings}"
 
-  # Install repo-root hooks (saw-critic-impl-commit.sh, etc.)
-  local root_hook_src="${REPO_DIR}/hooks/saw-critic-impl-commit.sh"
-  local root_hook_dst="${BIN_DIR}/saw_critic_impl_commit"
+  # Install repo-root hooks (polywave-critic-impl-commit.sh, etc.)
+  local root_hook_src="${REPO_DIR}/hooks/polywave-critic-impl-commit.sh"
+  local root_hook_dst="${BIN_DIR}/polywave_critic_impl_commit"
   if [ -f "$root_hook_src" ]; then
     chmod +x "$root_hook_src"
     ln -sf "$root_hook_src" "$root_hook_dst"
-    echo "   + saw_critic_impl_commit (E48 critic commit enforcement)"
+    echo "   + polywave_critic_impl_commit (E48 critic commit enforcement)"
     ok=$((ok + 1))
   else
     echo "   WARN: Hook not found: ${root_hook_src}" >&2
@@ -165,7 +165,7 @@ verify_installation() {
   local errors=0
 
   # Skill files
-  for f in SKILL.md saw-bootstrap.md agent-template.md; do
+  for f in SKILL.md polywave-bootstrap.md agent-template.md; do
     if [ -L "${skill_dir}/${f}" ] && [ -e "${skill_dir}/${f}" ]; then
       echo "   OK  ${f}"
     else
@@ -244,9 +244,9 @@ smoke_test() {
 # ============================================================
 install_claude_code() {
   local settings_file="${HOME}/.claude/settings.json"
-  local skill_dir="${HOME}/.claude/skills/saw"
+  local skill_dir="${HOME}/.claude/skills/polywave"
 
-  echo "Installing Scout-and-Wave for Claude Code..."
+  echo "Installing Polywave for Claude Code..."
   echo ""
 
   # Phase 1 + 1b + 2: universal + Claude Code agent definitions
@@ -299,7 +299,7 @@ install_claude_code() {
   add_hook "PreToolUse" "Write|Edit|Bash" "${BIN_DIR}/block_claire_paths" ".claire path blocker"
   add_hook "PreToolUse" "Write|Edit|NotebookEdit" "${BIN_DIR}/check_wave_ownership" "I1 file ownership"
   add_hook "PreToolUse" "Agent" "${BIN_DIR}/validate_agent_launch" "H5 pre-launch validation"
-  add_hook "PreToolUse" "Agent" "${BIN_DIR}/auto_format_saw_agent_names" "E44 agent name formatting"
+  add_hook "PreToolUse" "Agent" "${BIN_DIR}/auto_format_polywave_agent_names" "E44 agent name formatting"
   add_hook "PreToolUse" "Bash" "${BIN_DIR}/inject_bash_cd" "E43 Bash cd injection"
   add_hook "PreToolUse" "Write|Edit" "${BIN_DIR}/validate_write_paths" "E43 Write path validation"
   add_hook "PreToolUse" "Bash" "${BIN_DIR}/block_git_stash" "I5 no-stash enforcement"
@@ -318,7 +318,7 @@ install_claude_code() {
 
   # SubagentStop
   add_hook "SubagentStop" "" "${BIN_DIR}/verify_worktree_compliance" "E42/I5 compliance check"
-  add_hook "SubagentStop" "" "${BIN_DIR}/saw_critic_impl_commit" "E48 critic IMPL commit enforcement"
+  add_hook "SubagentStop" "" "${BIN_DIR}/polywave_critic_impl_commit" "E48 critic IMPL commit enforcement"
   local comp_existing
   comp_existing=$(jq -r '.hooks.SubagentStop // [] | map(select(.hooks[]?.command | contains("validate_agent_completion"))) | length' "$settings_file")
   if [ "$comp_existing" -eq 0 ]; then
@@ -338,7 +338,7 @@ install_claude_code() {
   add_hook "UserPromptSubmit" "" "${BIN_DIR}/inject_skill_context" "Tier 3 context injection"
 
   # Stop
-  add_hook "Stop" "" "${BIN_DIR}/saw_orchestrator_stop" "Orchestrator stop warning"
+  add_hook "Stop" "" "${BIN_DIR}/polywave_orchestrator_stop" "Orchestrator stop warning"
 
   # Phase 4: Agent permission
   local has_agent
@@ -425,16 +425,16 @@ install_claude_code() {
   echo "  PostToolUse:       check_branch_drift         (H4 branch drift detection)"
   echo "  PostToolUse:       auto_commit_on_write       (P6 incremental auto-save) [async]"
   echo "  SubagentStop:      verify_worktree_compliance (E42/I5 compliance check)"
-  echo "  SubagentStop:      saw_critic_impl_commit     (E48 critic commit enforcement)"
+  echo "  SubagentStop:      polywave_critic_impl_commit     (E48 critic commit enforcement)"
   echo "  SubagentStop:      validate_agent_completion  (E42 protocol compliance)"
   echo "  SubagentStop:      emit_agent_completion      (E42 observability) [async]"
   echo "  UserPromptSubmit:  inject_skill_context       (Tier 3 context injection)"
-  echo "  Stop:              saw_orchestrator_stop      (Orchestrator stop warning)"
+  echo "  Stop:              polywave_orchestrator_stop      (Orchestrator stop warning)"
   echo ""
   echo "Next steps:"
-  echo "  1. Install sawtools:  go install github.com/blackwell-systems/scout-and-wave-go/cmd/sawtools@latest"
-  echo "  2. Init your project: cd your-project && sawtools init"
-  echo "  3. First scout:       /saw scout \"your feature description\""
+  echo "  1. Install polywave-tools:  go install github.com/blackwell-systems/polywave-go/cmd/polywave-tools@latest"
+  echo "  2. Init your project: cd your-project && polywave-tools init"
+  echo "  3. First scout:       /polywave scout \"your feature description\""
   echo ""
   echo "  Full guide: docs/GETTING_STARTED.md"
 }
@@ -443,9 +443,9 @@ install_claude_code() {
 # Platform: Generic (Agent Skills spec convention)
 # ============================================================
 install_generic() {
-  local skill_dir="${HOME}/.agents/skills/saw"
+  local skill_dir="${HOME}/.agents/skills/polywave"
 
-  echo "Installing Scout-and-Wave (generic / Agent Skills convention)..."
+  echo "Installing Polywave (generic / Agent Skills convention)..."
   echo ""
 
   # Phase 1 + 2: universal
@@ -478,9 +478,9 @@ install_generic() {
   echo "read JSON from stdin and return JSON — see docs/HOOKS.md for the protocol."
   echo ""
   echo "Next steps:"
-  echo "  1. Install sawtools:  go install github.com/blackwell-systems/scout-and-wave-go/cmd/sawtools@latest"
+  echo "  1. Install polywave-tools:  go install github.com/blackwell-systems/polywave-go/cmd/polywave-tools@latest"
   echo "  2. Register hooks in your platform's config (see docs/HOOKS.md)"
-  echo "  3. Init your project: cd your-project && sawtools init"
+  echo "  3. Init your project: cd your-project && polywave-tools init"
   echo ""
   echo "  Full guide: docs/GETTING_STARTED.md"
 }
@@ -489,11 +489,11 @@ install_generic() {
 # Uninstall
 # ============================================================
 do_uninstall() {
-  echo "Uninstalling Scout-and-Wave..."
+  echo "Uninstalling Polywave..."
   echo ""
 
   # Remove all known skill directories
-  for skill_dir in "${HOME}/.claude/skills/saw" "${HOME}/.agents/skills/saw"; do
+  for skill_dir in "${HOME}/.claude/skills/polywave" "${HOME}/.agents/skills/polywave"; do
     if [ -d "$skill_dir" ]; then
       rm -rf "$skill_dir"
       echo "  Removed ${skill_dir}"
@@ -531,7 +531,7 @@ do_uninstall() {
 
 if [ ! -d "${PROMPTS_DIR}" ]; then
   echo "ERROR: Prompts directory not found at ${PROMPTS_DIR}" >&2
-  echo "       Is this script in the scout-and-wave repo root?" >&2
+  echo "       Is this script in the polywave repo root?" >&2
   exit 1
 fi
 

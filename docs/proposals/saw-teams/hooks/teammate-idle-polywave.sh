@@ -1,5 +1,5 @@
 #!/bin/bash
-# teammate-idle-saw.sh
+# teammate-idle-polywave.sh
 # SAW TeammateIdle enforcement hook.
 #
 # Fires when a teammate is about to go idle. Checks whether the teammate
@@ -7,14 +7,14 @@
 # exits 2 to send feedback and keep the teammate working.
 #
 # Install:
-#   cp teammate-idle-saw.sh /path/to/project/.claude/hooks/
-#   chmod +x /path/to/project/.claude/hooks/teammate-idle-saw.sh
+#   cp teammate-idle-polywave.sh /path/to/project/.claude/hooks/
+#   chmod +x /path/to/project/.claude/hooks/teammate-idle-polywave.sh
 #
 # Configure in .claude/settings.json:
 #   "hooks": {
 #     "TeammateIdle": [
 #       {"hooks": [{"type": "command",
-#                   "command": "bash .claude/hooks/teammate-idle-saw.sh"}]}
+#                   "command": "bash .claude/hooks/teammate-idle-polywave.sh"}]}
 #     ]
 #   }
 #

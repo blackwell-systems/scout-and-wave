@@ -8,20 +8,20 @@ This document specifies the interview mode protocol (E39), which provides a stru
 
 ## E39: Interview Mode (Deterministic Requirements Gathering)
 
-**Trigger:** User invokes `/saw interview "<description>"` (in Claude Code) or `sawtools interview "<description>"` (CLI)
+**Trigger:** User invokes `/polywave interview "<description>"` (in Claude Code) or `polywave-tools interview "<description>"` (CLI)
 
-**Rule:** The orchestrator enters an INTERVIEWING state and conducts a structured question-and-answer session with the user. This is an alternative entry point to the Scout Agent pathway — instead of generating an IMPL doc in one turn, the orchestrator guides the user through explicit requirements gathering, then produces a REQUIREMENTS.md file suitable for `/saw bootstrap` or `/saw scout`.
+**Rule:** The orchestrator enters an INTERVIEWING state and conducts a structured question-and-answer session with the user. This is an alternative entry point to the Scout Agent pathway — instead of generating an IMPL doc in one turn, the orchestrator guides the user through explicit requirements gathering, then produces a REQUIREMENTS.md file suitable for `/polywave bootstrap` or `/polywave scout`.
 
 ### State Machine
 
-Interview mode adds a new state to the Scout-and-Wave state machine:
+Interview mode adds a new state to the Polywave state machine:
 
 ```
-IDLE → INTERVIEWING (on /saw interview command)
-INTERVIEWING → SCOUT_PENDING (manual: user invokes /saw scout or /saw bootstrap after interview completes)
+IDLE → INTERVIEWING (on /polywave interview command)
+INTERVIEWING → SCOUT_PENDING (manual: user invokes /polywave scout or /polywave bootstrap after interview completes)
 ```
 
-The INTERVIEWING state is terminal for the interview process — it either completes (writes REQUIREMENTS.md) or the user pauses/abandons it. The transition to SCOUT_PENDING is manual: after the interview completes, the user explicitly invokes `/saw scout "<feature>" --requirements docs/REQUIREMENTS.md` (or `/saw bootstrap`). There is no automatic state signal from the interview tool to the SAW orchestrator. There is no automatic retry or failure recovery; if the user exits, they must explicitly resume.
+The INTERVIEWING state is terminal for the interview process — it either completes (writes REQUIREMENTS.md) or the user pauses/abandons it. The transition to SCOUT_PENDING is manual: after the interview completes, the user explicitly invokes `/polywave scout "<feature>" --requirements docs/REQUIREMENTS.md` (or `/polywave bootstrap`). There is no automatic state signal from the interview tool to the SAW orchestrator. There is no automatic retry or failure recovery; if the user exits, they must explicitly resume.
 
 ### Interview Structure
 
@@ -97,13 +97,13 @@ requirements_path: string     # Path to generated REQUIREMENTS.md (set when stat
 The user may pause an interview at any point (Ctrl-C, session timeout, etc.). To resume:
 
 ```bash
-sawtools interview --resume docs/INTERVIEW-<slug>.yaml
+polywave-tools interview --resume docs/INTERVIEW-<slug>.yaml
 ```
 
 Or in Claude Code:
 
 ```
-/saw interview --resume docs/INTERVIEW-my-feature.yaml
+/polywave interview --resume docs/INTERVIEW-my-feature.yaml
 ```
 
 The orchestrator:
@@ -120,9 +120,9 @@ The orchestrator:
 
 On completion (when the final question is answered and `status: complete` is set), the orchestrator calls the interview compiler, which generates `docs/REQUIREMENTS.md`.
 
-**Note:** The compiled format is tailored to the `saw-bootstrap.md` intake format (bootstrap-oriented sections) rather than mirroring the 6 interview phases. This maximizes compatibility with `/saw bootstrap` which parses these specific section headings.
+**Note:** The compiled format is tailored to the `saw-bootstrap.md` intake format (bootstrap-oriented sections) rather than mirroring the 6 interview phases. This maximizes compatibility with `/polywave bootstrap` which parses these specific section headings.
 
-**Note:** Sections with no data are emitted with a placeholder comment `<!-- placeholder — fill in before running /saw bootstrap -->` so the file is always complete and can be manually edited before running bootstrap.
+**Note:** Sections with no data are emitted with a placeholder comment `<!-- placeholder — fill in before running /polywave bootstrap -->` so the file is always complete and can be manually edited before running bootstrap.
 
 The actual format produced by the compiler is:
 
@@ -161,8 +161,8 @@ The actual format produced by the compiler is:
 ```
 
 This REQUIREMENTS.md file is suitable input for:
-- `/saw bootstrap "<feature>" --requirements docs/REQUIREMENTS.md` (bootstrap mode: generate scaffold from requirements)
-- `/saw scout "<feature>" --requirements docs/REQUIREMENTS.md` (scout mode: decompose requirements into IMPL doc)
+- `/polywave bootstrap "<feature>" --requirements docs/REQUIREMENTS.md` (bootstrap mode: generate scaffold from requirements)
+- `/polywave scout "<feature>" --requirements docs/REQUIREMENTS.md` (scout mode: decompose requirements into IMPL doc)
 
 ### Error Handling
 
@@ -178,14 +178,14 @@ The deterministic manager enforces linear phase progression. If the internal sta
 **stdin closed before completion:**
 If the CLI detects EOF on stdin before the interview is complete, it:
 1. Saves the current state to `docs/INTERVIEW-<slug>.yaml`
-2. Prints a resume instruction: `Interview paused. Resume with: sawtools interview --resume docs/INTERVIEW-<slug>.yaml`
+2. Prints a resume instruction: `Interview paused. Resume with: polywave-tools interview --resume docs/INTERVIEW-<slug>.yaml`
 3. Exits with code 2 (distinct from success=0 and error=1)
 
 ### Implementation Notes
 
 **CLI Implementation:**
-- Command: `sawtools interview "<description>"` (in scout-and-wave-go repo)
-- Located in: `cmd/sawtools/interview_cmd.go`
+- Command: `polywave-tools interview "<description>"` (in polywave-go repo)
+- Located in: `cmd/polywave-tools/interview_cmd.go`
 - Uses: `pkg/interview` package (Manager interface, DeterministicManager implementation)
 
 **CLI Flags:**
@@ -193,11 +193,11 @@ If the CLI detects EOF on stdin before the interview is complete, it:
 **`--non-interactive`** — When set, suppresses question prompts (phase progress
 header, question text, hint, and `> ` prompt) from stdout. Answers are still
 read from stdin normally. Use for testing/piping: `echo "My App\nA CLI tool" |
-sawtools interview "test" --non-interactive`. The interview log and state files
+polywave-tools interview "test" --non-interactive`. The interview log and state files
 are written normally regardless of this flag.
 
 **Claude Code Integration:**
-- Skill command: `/saw interview "<description>"`
+- Skill command: `/polywave interview "<description>"`
 - Located in: `implementations/claude-code/prompts/saw-skill.md`
 - The orchestrator executes the CLI command via Bash tool and manages the question-answer loop interactively
 
@@ -206,7 +206,7 @@ The deterministic mode uses a fixed question bank defined in `pkg/interview/phas
 
 ### Canonical Question Bank (Deterministic Mode)
 
-The deterministic interview mode uses a fixed question bank defined in `pkg/interview/phase_questions.go` (scout-and-wave-go repo). Each phase has a predefined list of questions with field mappings to the SpecData schema. The total question count is 16 (plus 1 confirmation prompt in the review phase).
+The deterministic interview mode uses a fixed question bank defined in `pkg/interview/phase_questions.go` (polywave-go repo). Each phase has a predefined list of questions with field mappings to the SpecData schema. The total question count is 16 (plus 1 confirmation prompt in the review phase).
 
 **Phase 1: Overview (4 questions)**
 
@@ -305,5 +305,5 @@ The deterministic question flow (vs LLM-generated questions) ensures:
 
 - See `state-machine.md` for the INTERVIEWING state definition
 - See `message-formats.md` for INTERVIEW-<slug>.yaml schema details
-- See `implementations/claude-code/prompts/saw-skill.md` for `/saw interview` command usage
+- See `implementations/claude-code/prompts/saw-skill.md` for `/polywave interview` command usage
 - See `participants.md` (Scout Agent) for the alternative requirements gathering pathway

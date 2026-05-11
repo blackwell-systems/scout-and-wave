@@ -1,10 +1,10 @@
-# Scout-and-Wave Protocol Execution Rules
+# Polywave Protocol Execution Rules
 
 **Version:** 0.20.0
 
 > **See also:** `procedures.md` (v0.21.0) — operational procedures for Orchestrator, Scout, Scaffold Agent, and Wave Agent participants.
 
-This document defines the execution rules that govern orchestrator behavior during Scout-and-Wave protocol execution. These rules are not captured by the state machine alone.
+This document defines the execution rules that govern orchestrator behavior during Polywave protocol execution. These rules are not captured by the state machine alone.
 
 ---
 
@@ -24,7 +24,7 @@ To audit consistency, search implementation files for `E{N}` and verify the embe
 
 **Why This Is Not a Performance Preference:** A blocking agent launch serializes the wave; the orchestrator waits for one agent before launching the next, eliminating parallelism. This is a protocol violation. Any implementation that blocks the orchestrator on agent execution or polling is non-conforming.
 
-**Agent launch prioritization:** `sawtools run-wave` uses `engine.PrioritizeAgents` to determine launch order. Agents with a longer critical path depth (more downstream dependents) launch first to unblock downstream work sooner. Tie-breaker: when two agents share equal critical path depth, the agent with fewer owned files launches first (lower implementation risk). To disable this ordering and use declaration order instead, pass `--no-prioritize` to `sawtools run-wave` (sets `SAW_NO_PRIORITIZE=1` internally).
+**Agent launch prioritization:** `polywave-tools run-wave` uses `engine.PrioritizeAgents` to determine launch order. Agents with a longer critical path depth (more downstream dependents) launch first to unblock downstream work sooner. Tie-breaker: when two agents share equal critical path depth, the agent with fewer owned files launches first (lower implementation risk). To disable this ordering and use declaration order instead, pass `--no-prioritize` to `polywave-tools run-wave` (sets `POLYWAVE_NO_PRIORITIZE=1` internally).
 
 **Failure Handling:** If the runtime does not support asynchronous execution, the implementation is non-conforming.
 
@@ -159,7 +159,7 @@ This prevents prepare-wave failures caused by leftover git worktrees from crashe
 
 **Required Action:** Worktrees must be named `.claude/worktrees/saw/{slug}/wave{N}-agent-{ID}` where `{slug}` is the IMPL doc's `feature_slug` field, `{N}` is the 1-based wave number, and `{ID}` is the agent identifier. Branch names follow the same pattern: `saw/{slug}/wave{N}-agent-{ID}`. Agent identifiers follow the `[A-Z][2-9]?` pattern: a single uppercase letter (generation 1, e.g., `A`, `B`, `C`) or a letter followed by a digit 2–9 (multi-generation, e.g., `A2`, `B3`). Examples: `saw/my-feature/wave1-agent-A`, `saw/my-feature/wave1-agent-A2`, `saw/my-feature/wave2-agent-B3`.
 
-**Backward compatibility:** Branches created in the legacy format `wave{N}-agent-{ID}` (without slug prefix) are still accepted. The slug-prefix convention was introduced in the scout-and-wave-go engine after protocol v0.20.0. Tools accept both formats.
+**Backward compatibility:** Branches created in the legacy format `wave{N}-agent-{ID}` (without slug prefix) are still accepted. The slug-prefix convention was introduced in the polywave-go engine after protocol v0.20.0. Tools accept both formats.
 
 **Why This Is Not a Style Choice:** This is a canonical requirement. The naming scheme is the mechanism by which external tooling identifies SAW sessions and correlates agents to waves. Deviating from it breaks observability silently. Any tooling that consumes SAW session data must treat this naming scheme as the stable interface.
 
@@ -175,7 +175,7 @@ This prevents prepare-wave failures caused by leftover git worktrees from crashe
 
 **Rationale:** There is no separate prompt file to keep in sync. The IMPL doc is the single source of truth.
 
-**Note:** Automated deviation propagation (reading interface_deviations from completion reports and auto-updating downstream agent prompts) is intentionally not automated. Interface deviation resolution requires human judgment to determine the correct prompt updates. The orchestrator surfaces deviations; the human applies them via `sawtools update-agent-prompt`.
+**Note:** Automated deviation propagation (reading interface_deviations from completion reports and auto-updating downstream agent prompts) is intentionally not automated. Interface deviation resolution requires human judgment to determine the correct prompt updates. The orchestrator surfaces deviations; the human applies them via `polywave-tools update-agent-prompt`.
 
 **Related Invariants:** See I4 (IMPL doc is single source of truth)
 
@@ -232,7 +232,7 @@ Always surface to the user regardless of `--auto` mode:
 - Agents that completed cleanly against unaffected contracts do not re-run
 - The wave restarts from WAVE_PENDING with the corrected contracts
 
-**Note:** The `needs_replan` failure type surfaces to the human orchestrator as a pause point. Automatic Scout re-engagement for contract revision is not implemented to prevent cascading contract changes without human review. Use `sawtools update-agent-prompt` and manual wave restart.
+**Note:** The `needs_replan` failure type surfaces to the human orchestrator as a pause point. Automatic Scout re-engagement for contract revision is not implemented to prevent cascading contract changes without human review. Use `polywave-tools update-agent-prompt` and manual wave restart.
 
 **Relationship to E2:** E2 governs orchestrator-initiated interface changes. E8 governs the same problem from the other direction: agent-discovered contract failures.
 
@@ -403,7 +403,7 @@ Do NOT use when:
 
 3. Resume finalize-wave from verify-build:
    ```bash
-   sawtools finalize-wave docs/IMPL/IMPL-{slug}.yaml --wave {N} --skip-merge
+   polywave-tools finalize-wave docs/IMPL/IMPL-{slug}.yaml --wave {N} --skip-merge
    ```
 
 4. Integration validation runs automatically in step 5.5 (RunPostMergeGates)
@@ -412,7 +412,7 @@ Do NOT use when:
 
 Full step sequence for a standard `finalize-wave` run:
 - Step 1: VerifyCommits — each agent branch has ≥1 commit ahead of merge base (I5)
-- Step 1.1: Completion report check — every agent has a report in `manifest.completion_reports` (I4). Missing reports are a blocking error: `"finalize-wave: missing completion reports for agents: [...] — agents must call sawtools set-completion before merge"`
+- Step 1.1: Completion report check — every agent has a report in `manifest.completion_reports` (I4). Missing reports are a blocking error: `"finalize-wave: missing completion reports for agents: [...] — agents must call polywave-tools set-completion before merge"`
 - Step 1.5: CheckTypeCollisions — AST-based duplicate type/function/const detection across agent branches (E41)
 - Step 2: ScanStubs — scan for hollow implementations (`pass`, `...`, `NotImplementedError`) in changed files (E20)
 - Step 3: RunPreMergeGates — required gates block merge; optional gates warn (E21)
@@ -450,7 +450,7 @@ When --skip-merge flag is used, `finalize-wave` jumps directly to the post-merge
 
 If --skip-merge is not used, integration validation can be run separately:
 ```bash
-sawtools validate-integration "<manifest-path>" --wave {N}
+polywave-tools validate-integration "<manifest-path>" --wave {N}
 ```
 The `--wiring` flag (default: true) enables wiring declaration checks (E35 Layer 3B). Use `--wiring=false` to skip wiring checks.
 
@@ -522,7 +522,7 @@ Three distinct conflict types can arise; each has a different resolution path:
 
 **Required Action:** The orchestrator runs:
 ```bash
-sawtools close-impl "<manifest-path>" --date "YYYY-MM-DD"
+polywave-tools close-impl "<manifest-path>" --date "YYYY-MM-DD"
 ```
 This atomically: (1) writes `<!-- SAW:COMPLETE YYYY-MM-DD -->` on the line immediately after the IMPL doc title, (2) archives the manifest to `docs/IMPL/complete/`, (3) stages `git rm <original-manifest-path>` so the deletion of the original path is included in the commit, (4) updates `docs/CONTEXT.md` (E18), and (5) auto-cleans any stale worktrees for the completed IMPL slug. All staged changes (archive, deletion, CONTEXT.md) are committed in a single atomic commit. The marker must be present before reporting completion to the user.
 
@@ -534,7 +534,7 @@ This atomically: (1) writes `<!-- SAW:COMPLETE YYYY-MM-DD -->` on the line immed
 
 **Related Rules:** See E14 (IMPL doc write discipline). See state-machine.md for the WAVE_VERIFIED → COMPLETE transition guard.
 
-**Amend constraint:** Once the `<!-- SAW:COMPLETE -->` marker is written, `saw amend`
+**Amend constraint:** Once the `<!-- SAW:COMPLETE -->` marker is written, `polywave amend`
 is invalid. The orchestrator must reject any amend attempt against a completed IMPL.
 To extend completed work, start a new IMPL doc (E36).
 
@@ -646,7 +646,7 @@ where `N` is the 1-based line number of the opening fence of the suspect block.
 
 ### E16D: Enhanced Validation Checks
 
-**Trigger:** Scout writes IMPL doc to disk OR human runs `sawtools validate`
+**Trigger:** Scout writes IMPL doc to disk OR human runs `polywave-tools validate`
 
 **Required Action:** Run enhanced validation checks on the manifest:
 
@@ -686,7 +686,7 @@ When validation fails, the orchestrator automatically re-prompts the Scout with 
 4. Repeats up to 3 times
 5. On exhaustion: sets state to `BLOCKED`
 
-Note: `sawtools validate --fix` (which auto-corrects fixable issues like invalid gate types → `custom`) is a useful standalone CLI tool but is NOT called inside the correction loop. The loop sends errors back to Scout for self-correction rather than applying mechanical fixes.
+Note: `polywave-tools validate --fix` (which auto-corrects fixable issues like invalid gate types → `custom`) is a useful standalone CLI tool but is NOT called inside the correction loop. The loop sends errors back to Scout for self-correction rather than applying mechanical fixes.
 
 **Key property:** The correction loop is idempotent — running it multiple times on an already-valid IMPL doc is a no-op (validation passes on first attempt, no Scout re-invocation).
 
@@ -704,9 +704,9 @@ Note: `sawtools validate --fix` (which auto-corrects fixable issues like invalid
 
 Before launching the Scout agent, the engine runs automation tools that produce context injected into the Scout prompt:
 
-- **H1a (analyze-suitability):** Scans a requirements file against the current codebase to classify each requirement as DONE, PARTIAL, or TODO. Implemented by `sawtools analyze-suitability`.
-- **H2 (extract-commands):** Detects project toolchain and extracts build/test/lint/format commands from CI configs, Makefiles, and package manifests. Implemented by `sawtools extract-commands`.
-- **H3 (analyze-deps):** Traces import paths and type dependencies to produce a dependency graph with wave candidate assignments. Implemented by `sawtools analyze-deps`.
+- **H1a (analyze-suitability):** Scans a requirements file against the current codebase to classify each requirement as DONE, PARTIAL, or TODO. Implemented by `polywave-tools analyze-suitability`.
+- **H2 (extract-commands):** Detects project toolchain and extracts build/test/lint/format commands from CI configs, Makefiles, and package manifests. Implemented by `polywave-tools extract-commands`.
+- **H3 (analyze-deps):** Traces import paths and type dependencies to produce a dependency graph with wave candidate assignments. Implemented by `polywave-tools analyze-deps`.
 
 These helpers are best-effort: failures are logged but do not block Scout execution. Their output appears in the Scout prompt under '## Automation Analysis Results'.
 
@@ -744,7 +744,7 @@ transition — same trigger as E15)
 
 **Required Action:** Run:
 ```bash
-sawtools update-context "<manifest-path>" --project-root "<project-root>"
+polywave-tools update-context "<manifest-path>" --project-root "<project-root>"
 ```
 This creates or updates `docs/CONTEXT.md`, appending to `features_completed`, `decisions`, and `established_interfaces` as needed. Returns JSON; does NOT commit. The commit is the Orchestrator's responsibility (see Constraint below).
 
@@ -763,7 +763,7 @@ If manual construction is needed, the fields to update are:
 
 3. Append any new scaffold-file interfaces to `established_interfaces`.
 
-**Constraint:** E18 runs as part of E15 (`sawtools close-impl`). The command commits archive, git rm, and CONTEXT.md changes together in a single atomic commit — no separate commit step is required.
+**Constraint:** E18 runs as part of E15 (`polywave-tools close-impl`). The command commits archive, git rm, and CONTEXT.md changes together in a single atomic commit — no separate commit step is required.
 
 **When to omit:** If no new decisions, interfaces, or conventions were established
 during the feature, E18 still appends to `features_completed` but may omit the
@@ -855,14 +855,14 @@ default behavior unchanged. Individual missing entries also fall back to default
 
 **Required Action:** The Orchestrator:
 1. Collects the union of all `files_changed` and `files_created` from wave agent completion reports.
-2. Runs `sawtools scan-stubs --append-impl "<manifest-path>" --wave {N}` — this writes the report directly into the manifest.
+2. Runs `polywave-tools scan-stubs --append-impl "<manifest-path>" --wave {N}` — this writes the report directly into the manifest.
 3. The scan report is available in the manifest's stub detection section for that wave.
 
 **Two-phase enforcement:**
 
-1. **Agent-level (SubagentStop, blocking):** The `validate_agent_completion` hook checks each wave agent at exit. If an agent reports `status: complete` but `sawtools scan-stubs` finds stub patterns in their changed files, the agent is blocked (exit 2). The agent must either fix the stubs or change status to `partial`. This prevents agents from self-reporting "complete" while leaving placeholder implementations.
+1. **Agent-level (SubagentStop, blocking):** The `validate_agent_completion` hook checks each wave agent at exit. If an agent reports `status: complete` but `polywave-tools scan-stubs` finds stub patterns in their changed files, the agent is blocked (exit 2). The agent must either fix the stubs or change status to `partial`. This prevents agents from self-reporting "complete" while leaving placeholder implementations.
 
-2. **Orchestrator-level (post-wave, informational):** Exit code of `sawtools scan-stubs` at the orchestrator level is always 0 — the post-wave scan is informational. Stubs found are surfaced at the review checkpoint but do not block merge automatically. By this point, agents claiming `status: complete` have already passed the SubagentStop consistency check.
+2. **Orchestrator-level (post-wave, informational):** Exit code of `polywave-tools scan-stubs` at the orchestrator level is always 0 — the post-wave scan is informational. Stubs found are surfaced at the review checkpoint but do not block merge automatically. By this point, agents claiming `status: complete` have already passed the SubagentStop consistency check.
 
 **Note:** `finalize-wave` runs the orchestrator-level stub scanning automatically as step 2 of its pipeline; the orchestrator does not need to invoke this manually when using `finalize-wave`.
 
@@ -936,7 +936,7 @@ quality_gates:
     - type: custom
       phase: POST_VALIDATION
       parallel_group: review
-      command: sawtools run-review --impl IMPL-feature.yaml --wave 1
+      command: polywave-tools run-review --impl IMPL-feature.yaml --wave 1
       required: false
 ```
 
@@ -976,9 +976,9 @@ Quality gates with `fix: true` in their configuration run in **fix mode** — th
 
 **CRITICAL:** Fix-mode gates MUST be placed in PRE_VALIDATION phase. The validator enforces this constraint. Fix-mode gates modify files in-place but do not `git add` or commit — that is the caller's responsibility.
 
-**Closed-loop gate retry (CLI path only):** When a required pre-merge gate fails, `sawtools finalize-wave` automatically calls `engine.ClosedLoopGateRetry` (up to 2 retries) before reporting failure. The retry spawns a repair agent that receives the gate output and attempts to fix the failing code in the agent's worktree. If the retry succeeds, gates are re-run to confirm before merge proceeds. This auto-retry is a CLI-only behavior — the engine path (`engine.FinalizeWave`) does not retry automatically.
+**Closed-loop gate retry (CLI path only):** When a required pre-merge gate fails, `polywave-tools finalize-wave` automatically calls `engine.ClosedLoopGateRetry` (up to 2 retries) before reporting failure. The retry spawns a repair agent that receives the gate output and attempts to fix the failing code in the agent's worktree. If the retry succeeds, gates are re-run to confirm before merge proceeds. This auto-retry is a CLI-only behavior — the engine path (`engine.FinalizeWave`) does not retry automatically.
 
-**Cross-repo gate scoping and routing:** Each `QualityGate` has an optional `repo` field. When `repo:` is set, the engine resolves that repo's absolute path from `saw.config.json` (walking up from the IMPL manifest directory) and executes the gate command in that directory. When `repo:` is omitted, the gate runs in the primary `repoDir` passed to `finalize-wave`. For cross-repo IMPLs (file_ownership spans 2+ repos), every gate MUST include `repo:` — a docs-only repo has no build system and `go build ./...` will fail. The validator enforces this: MR02_UNSCOPED_GATE blocks IMPLs with 2+ repos and un-scoped gates at validation time (E16). If a gate's `repo:` value is not found in `saw.config.json`, the gate fails immediately with an error message listing the known repo names.
+**Cross-repo gate scoping and routing:** Each `QualityGate` has an optional `repo` field. When `repo:` is set, the engine resolves that repo's absolute path from `polywave.config.json` (walking up from the IMPL manifest directory) and executes the gate command in that directory. When `repo:` is omitted, the gate runs in the primary `repoDir` passed to `finalize-wave`. For cross-repo IMPLs (file_ownership spans 2+ repos), every gate MUST include `repo:` — a docs-only repo has no build system and `go build ./...` will fail. The validator enforces this: MR02_UNSCOPED_GATE blocks IMPLs with 2+ repos and un-scoped gates at validation time (E16). If a gate's `repo:` value is not found in `polywave.config.json`, the gate fails immediately with an error message listing the known repo names.
 
 **Rationale:** Individual agents run gates in isolation (their own package scope). The orchestrator's post-wave gate runs unscoped — catching cross-package cascade failures that agent-scoped gates miss.
 
@@ -1112,7 +1112,7 @@ This assembled payload is passed as the `prompt` parameter when launching the ag
 
 ## E23A: Tool Journal Recovery
 
-**Trigger:** Before launching a Wave agent, the Orchestrator checks for an existing tool journal at `.saw-state/wave{N}/agent-{ID}/index.jsonl`.
+**Trigger:** Before launching a Wave agent, the Orchestrator checks for an existing tool journal at `.polywave-state/wave{N}/agent-{ID}/index.jsonl`.
 
 **Required Action:** If found:
 
@@ -1218,7 +1218,7 @@ waves:
     agents:
       - id: D
         task: "Wire new packages into main.go and finalize.go"
-        files: [cmd/sawtools/main.go, pkg/engine/finalize.go]
+        files: [cmd/polywave-tools/main.go, pkg/engine/finalize.go]
 ```
 
 **Orchestrator behavior for `type: integration` waves:**
@@ -1243,9 +1243,9 @@ waves:
 
 **Trigger:** PROGRAM manifest state transitions to TIER_EXECUTING
 
-**Required Action:** The Orchestrator reads the current tier from the PROGRAM manifest and launches Scout agents for all IMPLs in the tier with status "pending" (in parallel, using the existing `/saw scout` flow per IMPL). Each Scout receives the `--program` flag pointing to the PROGRAM manifest so it can consume frozen program contracts as immutable inputs.
+**Required Action:** The Orchestrator reads the current tier from the PROGRAM manifest and launches Scout agents for all IMPLs in the tier with status "pending" (in parallel, using the existing `/polywave scout` flow per IMPL). Each Scout receives the `--program` flag pointing to the PROGRAM manifest so it can consume frozen program contracts as immutable inputs.
 
-After all IMPLs in the tier are scouted and reviewed, the Orchestrator executes each IMPL's waves using the standard `/saw wave --auto` flow. Track IMPL completion. When all IMPLs in the tier reach "complete", transition to tier gate (E29).
+After all IMPLs in the tier are scouted and reviewed, the Orchestrator executes each IMPL's waves using the standard `/polywave wave --auto` flow. Track IMPL completion. When all IMPLs in the tier reach "complete", transition to tier gate (E29).
 
 **Relationship to E1:** Scout launches are async (E1 applies)
 
@@ -1365,13 +1365,13 @@ When `prepare-wave` runs inside a program context, it uses the IMPL branch as th
 
 **Trigger:** All IMPLs in a tier reach "complete"
 
-**Required Action:** Run `sawtools tier-gate <manifest> --tier N`. This verifies all IMPLs are complete and runs the tier_gates quality gate commands from the PROGRAM manifest. If all gates pass, mark the tier as verified. If any required gate fails, enter BLOCKED.
+**Required Action:** Run `polywave-tools tier-gate <manifest> --tier N`. This verifies all IMPLs are complete and runs the tier_gates quality gate commands from the PROGRAM manifest. If all gates pass, mark the tier as verified. If any required gate fails, enter BLOCKED.
 
 **Enforcement of P3:** Tier N+1 does not begin until tier gate passes
 
 **Failure Handling:** On gate failure, the Orchestrator surfaces the specific gate failure to the user and enters BLOCKED state. The user must resolve the failure (fix code, update gate definition, or descope failing IMPL) before the PROGRAM can advance to the next tier.
 
-**Implementation:** `sawtools tier-gate` is implemented by the `RunTierGate` function (see interface contracts in IMPL doc). The function returns a `TierGateResult` struct with per-gate and per-IMPL status.
+**Implementation:** `polywave-tools tier-gate` is implemented by the `RunTierGate` function (see interface contracts in IMPL doc). The function returns a `TierGateResult` struct with per-gate and per-IMPL status.
 
 **Related Invariants:** See P3 (tier gate sequencing) in `program-invariants.md`
 
@@ -1383,13 +1383,13 @@ When `prepare-wave` runs inside a program context, it uses the IMPL branch as th
 
 **Trigger:** Tier gate passes (E29)
 
-**Required Action:** Run `sawtools freeze-contracts <manifest> --tier N`. This identifies program contracts whose `freeze_at` matches the completing tier, verifies their source files exist and are committed to HEAD, and marks them as frozen. Frozen contracts are immutable — any IMPL in a later tier that attempts to redefine a frozen contract violates P2.
+**Required Action:** Run `polywave-tools freeze-contracts <manifest> --tier N`. This identifies program contracts whose `freeze_at` matches the completing tier, verifies their source files exist and are committed to HEAD, and marks them as frozen. Frozen contracts are immutable — any IMPL in a later tier that attempts to redefine a frozen contract violates P2.
 
 **Enforcement of P2:** Contracts are frozen before next tier's Scouts launch. When Scouts in tier N+1 receive the PROGRAM manifest via `--program` flag (E28), they receive all contracts frozen up through tier N. Scouts must not redefine frozen contracts.
 
 **Human gate:** After freezing, pause for human review before advancing to the next tier (unless `--auto` mode is active). The Orchestrator presents the list of newly frozen contracts and waits for confirmation to proceed.
 
-**Implementation:** `sawtools freeze-contracts` is implemented by the `FreezeContracts` function (see interface contracts in IMPL doc). The function returns a `FreezeContractsResult` struct listing which contracts were frozen and any errors.
+**Implementation:** `polywave-tools freeze-contracts` is implemented by the `FreezeContracts` function (see interface contracts in IMPL doc). The function returns a `FreezeContractsResult` struct listing which contracts were frozen and any errors.
 
 **Related Invariants:** See P2 (contract immutability) in `program-invariants.md`
 
@@ -1426,7 +1426,7 @@ Scout agents are independent — they do not coordinate with each other. The Orc
 
 **Trigger:** Any IMPL within a PROGRAM changes state
 
-**Required Action:** The Orchestrator updates the PROGRAM manifest's impl status field and completion counters. Run `sawtools program-status <manifest>` to get a structured report. When reporting status to the user, show tier-level progress (how many IMPLs in each tier are complete) and overall progress.
+**Required Action:** The Orchestrator updates the PROGRAM manifest's impl status field and completion counters. Run `polywave-tools program-status <manifest>` to get a structured report. When reporting status to the user, show tier-level progress (how many IMPLs in each tier are complete) and overall progress.
 
 **Enforcement of P4:** PROGRAM manifest is always up to date. The manifest is the single source of truth for program state, including which IMPLs are pending, in progress, complete, or blocked.
 
@@ -1436,7 +1436,7 @@ Scout agents are independent — they do not coordinate with each other. The Orc
 - Contract freeze states (which contracts are frozen at which tier)
 - Completion tracking (N of M IMPLs complete in current tier, overall completion percentage)
 
-**Implementation:** `sawtools program-status` is implemented by the `GetProgramStatus` function (see interface contracts in IMPL doc). The function cross-references IMPL docs on disk for real-time status.
+**Implementation:** `polywave-tools program-status` is implemented by the `GetProgramStatus` function (see interface contracts in IMPL doc). The function cross-references IMPL docs on disk for real-time status.
 
 **User reporting:** The Orchestrator displays tier-level progress in the CLI/UI:
 ```
@@ -1459,7 +1459,7 @@ Overall: 5/9 IMPLs complete (56%)
 
 **Required Action:** When `--auto` flag is active, the orchestrator automatically advances to the next tier without a human review gate. The advancement sequence is:
 
-1. Run `sawtools freeze-contracts` (E30) to freeze contracts for the completing tier
+1. Run `polywave-tools freeze-contracts` (E30) to freeze contracts for the completing tier
 2. Update PROGRAM manifest state to `TIER_EXECUTING` for the next tier
 3. Launch Scout agents for all IMPLs in the next tier in parallel (E31)
 
@@ -1528,9 +1528,9 @@ wiring:
 **Enforcement:**
 - **prepare-wave pre-flight (Layer 3A):** fails if `must_be_called_from` is not in the owning agent's `file_ownership`.
 - **validate-integration --wiring (Layer 3B):** post-merge grep/AST check that `symbol` actually appears as a call in `must_be_called_from`. Reports severity: error (not info) for declared but missing wiring.
-- **Agent brief injection (Layer 3C):** prepare-wave injects all `wiring:` entries for the agent into `.saw-agent-brief.md` with explicit instruction.
+- **Agent brief injection (Layer 3C):** prepare-wave injects all `wiring:` entries for the agent into `.polywave-agent-brief.md` with explicit instruction.
 
-**Detection aid:** Scout can auto-generate wiring declarations from agent task prompts using `sawtools detect-wiring <impl-doc-path>`. This command scans for patterns like "calls `FunctionName()`" and cross-references against file_ownership to detect cross-agent function calls. Output is YAML in wiring: schema format. Pattern matching is ~80% reliable; Scout should review and adjust before committing.
+**Detection aid:** Scout can auto-generate wiring declarations from agent task prompts using `polywave-tools detect-wiring <impl-doc-path>`. This command scans for patterns like "calls `FunctionName()`" and cross-references against file_ownership to detect cross-agent function calls. Output is YAML in wiring: schema format. Pattern matching is ~80% reliable; Scout should review and adjust before committing.
 
 **Rationale:** The heuristic export scanner (E25/E26) detects gaps reactively post-merge. E35 makes wiring intent explicit and machine-checkable before and after execution.
 
@@ -1544,22 +1544,22 @@ wiring:
 
 ## E36: IMPL Amendment (Living IMPL Docs)
 
-**Trigger:** Orchestrator receives `/saw amend` subcommand on an active IMPL doc
+**Trigger:** Orchestrator receives `/polywave amend` subcommand on an active IMPL doc
 (state is not COMPLETE; no SAW:COMPLETE marker present).
 
 **Three operations:**
 
 ### E36a: Add Wave
-`sawtools amend-impl <manifest> --add-wave`
+`polywave-tools amend-impl <manifest> --add-wave`
 - Appends a new wave skeleton (next wave number, empty agents array) to the manifest
-- Validates the resulting manifest passes `sawtools validate` before saving
+- Validates the resulting manifest passes `polywave-tools validate` before saving
 - New wave starts in WAVE_PENDING state after Scout adds agents via Scout-style
   interface contract definition
 - Completed waves (all agents status: complete) are immutable — their file_ownership
   and interface_contracts entries cannot be changed by this operation
 
 ### E36b: Redirect Agent
-`sawtools amend-impl <manifest> --redirect-agent <ID> --wave <N>`
+`polywave-tools amend-impl <manifest> --redirect-agent <ID> --wave <N>`
 - Valid only if the agent has NOT committed yet (checked by: no completion report
   in completion_reports map AND no git commits on worktree branch beyond base_commit)
 - Updates the agent's task field in the manifest with new content (read from
@@ -1569,7 +1569,7 @@ wiring:
 - If agent HAS committed: operation is rejected with ErrAmendBlocked
 
 ### E36c: Extend Scope
-`sawtools amend-impl <manifest> --extend-scope`
+`polywave-tools amend-impl <manifest> --extend-scope`
 - Returns a JSON hint: `{"operation": "extend-scope", "manifest_path": "<path>", "message": "Re-engage Scout with --impl-context <path>"}` — the CLI does not launch a Scout agent itself.
 - The orchestrator is responsible for acting on the hint: launch Scout with `--impl-context <manifest>` so Scout can append new waves without modifying existing waves or contracts.
 - Scout produces an updated IMPL doc with additional waves appended; human reviews before any new wave executes.
@@ -1578,7 +1578,7 @@ wiring:
 **Common preconditions for all E36 operations:**
 1. IMPL doc must not have completion_date set (state != COMPLETE)
 2. SAW:COMPLETE marker must not be present in the file
-3. Resulting manifest must pass `sawtools validate` after mutation
+3. Resulting manifest must pass `polywave-tools validate` after mutation
 4. File ownership for agents in completed waves is frozen (cannot be changed)
 5. Interface contracts listed in frozen_contracts_hash are immutable
 
@@ -1595,14 +1595,14 @@ E15 (completion marker — amend invalid after SAW:COMPLETE)
 **Trigger:** After IMPL doc validation passes (E16) and before entering REVIEWED state.
 Auto-triggered when wave 1 has 3 or more agents, or when file_ownership contains
 entries from 2 or more repos. Optional for smaller IMPLs; can be suppressed with
-`--no-critic` flag on `sawtools run-scout`.
+`--no-critic` flag on `polywave-tools run-scout`.
 
 **CLI orchestration note:** In CLI orchestration mode (inside a Claude Code session),
-use `sawtools run-critic --backend agent-tool "<impl-path>"` to get the assembled
+use `polywave-tools run-critic --backend agent-tool "<impl-path>"` to get the assembled
 critic prompt without spawning a subprocess. Capture the stdout output and pass it
 as the `prompt` parameter when launching the critic via the Agent tool:
 `Agent(subagent_type=critic-agent, run_in_background=true, description="[SAW:critic:<slug>]",
-prompt="$(sawtools run-critic --backend agent-tool '<impl-path>')")`.
+prompt="$(polywave-tools run-critic --backend agent-tool '<impl-path>')")`.
 The --backend cli mode (default) spawns a subprocess and fails inside
 an active Claude Code session; always use --backend agent-tool in CLI orchestration.
 
@@ -1682,7 +1682,7 @@ protocol and must be documented in the implementation's critic agent definition.
 interface contracts in IMPL-critic-agent.yaml). Per-agent verdict: PASS or ISSUES.
 Overall verdict: PASS (all agents pass) or ISSUES (one or more agents have errors).
 
-**Note:** Critic agents write their results to the IMPL manifest via `sawtools set-critic-review` (or equivalent SDK call), not by direct file modification. This preserves the structured `critic_report:` field format.
+**Note:** Critic agents write their results to the IMPL manifest via `polywave-tools set-critic-review` (or equivalent SDK call), not by direct file modification. This preserves the structured `critic_report:` field format.
 
 **Failure path:** If overall verdict is ISSUES, orchestrator does NOT enter REVIEWED
 state. Instead:
@@ -1691,12 +1691,12 @@ state. Instead:
    - Wrong file: update file_ownership, re-validate (E16), re-run critic
    - Wrong symbol: update interface contract or agent brief, re-validate, re-run critic
    - Missing registration: add registration file to file_ownership, re-validate, re-run critic
-3. After corrections applied, orchestrator re-runs critic (via `sawtools run-critic --backend agent-tool` + Agent tool launch in CLI mode; via `sawtools run-critic` in programmatic/API orchestration)
+3. After corrections applied, orchestrator re-runs critic (via `polywave-tools run-critic --backend agent-tool` + Agent tool launch in CLI mode; via `polywave-tools run-critic` in programmatic/API orchestration)
 4. Repeat until verdict is PASS, then enter REVIEWED state normally
 
-**Skip condition:** Pass `--no-critic` to `sawtools run-scout` to disable
+**Skip condition:** Pass `--no-critic` to `polywave-tools run-scout` to disable
 auto-triggering.
-Manual skip: `sawtools run-critic --skip` writes a PASS result with
+Manual skip: `polywave-tools run-critic --skip` writes a PASS result with
 summary "Skipped by operator" to satisfy downstream state checks.
 
 **Related rules:** E16 (schema validation precedes critic gate), E36 (amend
@@ -1705,7 +1705,7 @@ E2 (interface freeze: critic runs before freeze, so corrections are safe)
 
 ### Pre-Wave-Gate Standalone Check
 
-`sawtools pre-wave-gate <manifest-path>` runs a structured pre-wave readiness check and returns JSON. Checks performed:
+`polywave-tools pre-wave-gate <manifest-path>` runs a structured pre-wave readiness check and returns JSON. Checks performed:
 
 | Check | Description |
 |-------|-------------|
@@ -1729,7 +1729,7 @@ enabled (the default). Opt out with `--no-cache` on `run-gates`.
    The gate command string is part of the key, so changing a gate's command
    (e.g. adding a flag) automatically invalidates its cached result.
 
-2. Check `.saw-state/gate-cache.json` for a non-expired entry matching the key.
+2. Check `.polywave-state/gate-cache.json` for a non-expired entry matching the key.
 
 3. **Cache hit:** Return the cached result immediately without re-executing the
    gate. Emit to stderr: `gate [TYPE]: skipped (cached at SHA <headCommit>)`.
@@ -1742,10 +1742,10 @@ enabled (the default). Opt out with `--no-cache` on `run-gates`.
 **TTL:** Cached entries expire after 5 minutes. Expired entries are treated
 as misses and re-executed.
 
-**Storage:** `.saw-state/gate-cache.json` — a runtime artifact. This file
+**Storage:** `.polywave-state/gate-cache.json` — a runtime artifact. This file
 MUST be listed in `.gitignore` and is not committed to version control.
 
-**Opt-out:** Pass `--no-cache` to `sawtools run-gates` to bypass caching
+**Opt-out:** Pass `--no-cache` to `polywave-tools run-gates` to bypass caching
 entirely for that invocation. `finalize-wave` always uses caching for
 pre-merge gates (steps 3, 3.5). Post-merge gates (step 5.5) always execute
 fresh via `RunPostMergeGates`, which never consults the cache.
@@ -1763,7 +1763,7 @@ All gate execution paths must check the cache before running commands. The follo
 
 | Execution Path | Cache Consulted | Notes |
 |----------------|----------------|-------|
-| `sawtools run-gates` | Yes (default) | Opt-out via `--no-cache` |
+| `polywave-tools run-gates` | Yes (default) | Opt-out via `--no-cache` |
 | `finalize-wave` pre-merge gates (step 3, 3.5) | Yes (always) | Uses cached results from prior `run-gates` invocations |
 | `finalize-wave` post-merge gates (step 5.5) | No (never) | Post-merge gates always execute fresh via `RunPostMergeGates` — the merge changes HEAD, invalidating any prior cache |
 | E21A pre-wave baseline | Yes | Runs through `run-gates` internally |
@@ -1782,16 +1782,16 @@ baseline), E21B (parallel gate execution).
 
 ## E39: Interview Mode (Deterministic Requirements Gathering)
 
-**Trigger:** User invokes `/saw interview "<description>"` (in Claude Code) or `sawtools interview "<description>"` (CLI)
+**Trigger:** User invokes `/polywave interview "<description>"` (in Claude Code) or `polywave-tools interview "<description>"` (CLI)
 
-**Rule:** The orchestrator enters an INTERVIEWING state and conducts a structured question-and-answer session with the user. This is an alternative entry point to the Scout Agent pathway — instead of generating an IMPL doc in one turn, the orchestrator guides the user through explicit requirements gathering, then produces a REQUIREMENTS.md file suitable for `/saw bootstrap` or `/saw scout`.
+**Rule:** The orchestrator enters an INTERVIEWING state and conducts a structured question-and-answer session with the user. This is an alternative entry point to the Scout Agent pathway — instead of generating an IMPL doc in one turn, the orchestrator guides the user through explicit requirements gathering, then produces a REQUIREMENTS.md file suitable for `/polywave bootstrap` or `/polywave scout`.
 
 ### State Machine
 
-Interview mode adds a new state to the Scout-and-Wave state machine:
+Interview mode adds a new state to the Polywave state machine:
 
 ```
-IDLE → INTERVIEWING (on /saw interview command)
+IDLE → INTERVIEWING (on /polywave interview command)
 INTERVIEWING → SCOUT_PENDING (on interview completion, REQUIREMENTS.md written)
 ```
 
@@ -1819,14 +1819,14 @@ See `interview-mode.md` for full INTERVIEW-<slug>.yaml schema definition.
 The user may pause an interview at any point. To resume:
 
 ```bash
-sawtools interview --resume docs/INTERVIEW-<slug>.yaml
+polywave-tools interview --resume docs/INTERVIEW-<slug>.yaml
 ```
 
 The orchestrator reads the INTERVIEW doc, restores the phase and question cursor, and continues from the next unanswered question. The history is preserved across resume operations.
 
 ### Output Contract
 
-On completion, the orchestrator compiles the accumulated spec_data into `docs/REQUIREMENTS.md`, a structured markdown file with sections corresponding to the 6 interview phases. This file is suitable input for `/saw bootstrap` or `/saw scout`.
+On completion, the orchestrator compiles the accumulated spec_data into `docs/REQUIREMENTS.md`, a structured markdown file with sections corresponding to the 6 interview phases. This file is suitable input for `/polywave bootstrap` or `/polywave scout`.
 
 ### Error Handling
 
@@ -1912,14 +1912,14 @@ The following checklist enumerates ALL lifecycle events that must be emitted. Ev
 
 **Trigger:** Two distinct points in the wave lifecycle:
 
-1. **prepare-wave (pre-flight):** Before worktree creation. Blocks wave launch. Run manually with `sawtools check-type-collisions <impl-doc>`.
+1. **prepare-wave (pre-flight):** Before worktree creation. Blocks wave launch. Run manually with `polywave-tools check-type-collisions <impl-doc>`.
 2. **finalize-wave step 1.5 (pre-merge):** Before agent branches are merged. Blocking — if collisions are found, the merge does not proceed. This second check catches any collisions introduced during wave execution that were absent at launch time.
 
-> **CLI-only note:** The finalize-wave step 1.5 collision check runs in the `sawtools` CLI path only. The programmatic engine path (`sawtools run-wave`) does not run this check; collision detection is not in the engine's step functions.
+> **CLI-only note:** The finalize-wave step 1.5 collision check runs in the `polywave-tools` CLI path only. The programmatic engine path (`polywave-tools run-wave`) does not run this check; collision detection is not in the engine's step functions.
 
-**Required Action:** Run `sawtools check-type-collisions <impl-doc>` to detect potential type name collisions across agents in the same wave. If two agents define the same type name in different files, the merge will fail with duplicate declarations.
+**Required Action:** Run `polywave-tools check-type-collisions <impl-doc>` to detect potential type name collisions across agents in the same wave. If two agents define the same type name in different files, the merge will fail with duplicate declarations.
 
-**Implementation:** The `pkg/collision/` package in scout-and-wave-go provides AST-based detection. The prepare-wave check runs as a pre-flight step alongside E3 ownership verification. The finalize-wave step 1.5 check runs per-repo immediately after completion report verification (step 1.1) and conflict prediction (step 1.2).
+**Implementation:** The `pkg/collision/` package in polywave-go provides AST-based detection. The prepare-wave check runs as a pre-flight step alongside E3 ownership verification. The finalize-wave step 1.5 check runs per-repo immediately after completion report verification (step 1.1) and conflict prediction (step 1.2).
 
 **Detection mechanism:**
 1. Parse all scaffold files and agent-owned files listed in the IMPL doc's file ownership table
@@ -1947,19 +1947,19 @@ The following checklist enumerates ALL lifecycle events that must be emitted. Ev
 |-----------|----------------|
 | Wave (`[SAW:wave*:agent-*]`) | I1 ownership verification, I5 commit verification, completion report in IMPL doc |
 | Critic (`[SAW:critic:*]`) | `critic_report:` field present with `verdict`, `agents_reviewed`, and `issues` keys |
-| Scout (`[SAW:scout]` or `[SAW:scout:*]`) | IMPL doc exists at expected path and passes `sawtools validate` |
+| Scout (`[SAW:scout]` or `[SAW:scout:*]`) | IMPL doc exists at expected path and passes `polywave-tools validate` |
 | Scaffold (`[SAW:scaffold:*]`) | All scaffold entries have `status: committed (...)` |
 | Other SAW tags | Pass through (exit 0) |
 
-**Active IMPL marker:** Before creating worktrees, `prepare-wave` writes the absolute IMPL doc path to `.saw-state/active-impl` (creating the directory if needed). The E42 SubagentStop hook uses this file to locate the IMPL doc without requiring it as a command-line argument. If this file is absent when a wave agent exits, the hook falls back to extracting the path from `agent_description`.
+**Active IMPL marker:** Before creating worktrees, `prepare-wave` writes the absolute IMPL doc path to `.polywave-state/active-impl` (creating the directory if needed). The E42 SubagentStop hook uses this file to locate the IMPL doc without requiring it as a command-line argument. If this file is absent when a wave agent exits, the hook falls back to extracting the path from `agent_description`.
 
 **Validation sequence (wave agents):**
 
 1. **Parse SAW tag** from `agent_description`. If no `[SAW:...]` tag, exit 0 (not a SAW agent).
-2. **Find IMPL doc** via `.saw-state/active-impl` or extraction from `agent_description`.
+2. **Find IMPL doc** via `.polywave-state/active-impl` or extraction from `agent_description`.
 3. **I1 ownership verification:** Run `git diff --name-only` in the worktree. Compare changed files against the agent's file ownership from `.saw-ownership.json`. Any unowned modified file triggers exit 2 with "I1 violation: agent modified unowned file(s): \<list\>".
 4. **I5 commit verification:** Check that the worktree branch has at least 1 commit ahead of the merge base. If zero commits but a completion report exists, exit 2 with "I5 violation: completion report written but no commits found".
-5. **Protocol report validation:** Verify the agent's completion report exists in the IMPL doc's `completion_reports:` section. Uses `sawtools check-completion` if available, otherwise falls back to grep-based detection.
+5. **Protocol report validation:** Verify the agent's completion report exists in the IMPL doc's `completion_reports:` section. Uses `polywave-tools check-completion` if available, otherwise falls back to grep-based detection.
 
 **Exit code convention:**
 - Exit 0: Pass (agent fulfilled obligations, or is not a SAW agent)
@@ -1971,7 +1971,7 @@ The following checklist enumerates ALL lifecycle events that must be emitted. Ev
 
 **Rationale:** Without E42, agents can "complete" without fulfilling their protocol obligations. I1 ownership violations and I5 commit violations are only detected at wave finalization time (E21), creating a delayed feedback loop. E42 catches these violations at the agent boundary — the earliest possible point — enabling faster feedback and reducing wasted orchestrator time on agents that failed to comply.
 
-**Failure Handling:** If the hook cannot locate the IMPL doc for a SAW-tagged agent, it exits 2 with an actionable error message. If `sawtools` is not on PATH, the hook degrades gracefully to grep-based validation. Performance is critical: non-SAW agents must exit 0 within milliseconds, and SAW agent validation should complete in under 2 seconds.
+**Failure Handling:** If the hook cannot locate the IMPL doc for a SAW-tagged agent, it exits 2 with an actionable error message. If `polywave-tools` is not on PATH, the hook degrades gracefully to grep-based validation. Performance is critical: non-SAW agents must exit 0 within milliseconds, and SAW agent validation should complete in under 2 seconds.
 
 **Related Rules:** See I1 (disjoint file ownership — verified at agent completion), I4 (IMPL doc as single source of truth — completion reports verified), I5 (agents commit before reporting — commit existence verified), E3 (pre-launch ownership verification — E42 is the post-completion counterpart), E21 (post-wave verification gates — E42 provides earlier feedback), E40 (observability event emission — E42 emits agent_complete events)
 
@@ -1987,26 +1987,26 @@ The following checklist enumerates ALL lifecycle events that must be emitted. Ev
 
 **Hook 1: SubagentStart environment injection (inject_worktree_env)**
 - Sets 5 environment variables when wave agents launch:
-  - SAW_AGENT_WORKTREE (absolute worktree path)
-  - SAW_AGENT_ID (agent identifier, e.g., "A", "B2")
-  - SAW_WAVE_NUMBER (1-based wave number)
-  - SAW_IMPL_PATH (absolute path to IMPL doc)
-  - SAW_BRANCH (agent's branch name, e.g., "saw/{slug}/wave1-agent-A")
+  - POLYWAVE_AGENT_WORKTREE (absolute worktree path)
+  - POLYWAVE_AGENT_ID (agent identifier, e.g., "A", "B2")
+  - POLYWAVE_WAVE_NUMBER (1-based wave number)
+  - POLYWAVE_IMPL_PATH (absolute path to IMPL doc)
+  - POLYWAVE_BRANCH (agent's branch name, e.g., "saw/{slug}/wave1-agent-A")
 - Non-blocking (always exits 0)
-- Solo waves and integration waves: SAW_AGENT_WORKTREE is empty string
+- Solo waves and integration waves: POLYWAVE_AGENT_WORKTREE is empty string
 
 **Hook 2: PreToolUse:Bash cd auto-injection (inject_bash_cd)**
-- Prepends cd $SAW_AGENT_WORKTREE && to every bash command via updatedInput
-- Fires only when SAW_AGENT_WORKTREE is non-empty (skips solo waves)
-- Skips if command already starts with cd $SAW_AGENT_WORKTREE
+- Prepends cd $POLYWAVE_AGENT_WORKTREE && to every bash command via updatedInput
+- Fires only when POLYWAVE_AGENT_WORKTREE is non-empty (skips solo waves)
+- Skips if command already starts with cd $POLYWAVE_AGENT_WORKTREE
 - Non-blocking (always exits 0, injection is best-effort)
 - Eliminates manual cd commands and $WORKTREE variable usage
 
 **Hook 3: PreToolUse:Write/Edit path validation (validate_write_paths + saw-worktree-boundary.sh)**
-- validate_write_paths: blocks relative paths and out-of-worktree writes using SAW_AGENT_WORKTREE (set by SubagentStart inject_worktree_env hook)
-- saw-worktree-boundary.sh: hard-denies (exit 2) Write/Edit/MultiEdit calls whose target path resolves to the main repo root instead of the agent's worktree; uses SAW_WORKTREE_ROOT (set by prepare-wave, see E43 Implementation Notes)
+- validate_write_paths: blocks relative paths and out-of-worktree writes using POLYWAVE_AGENT_WORKTREE (set by SubagentStart inject_worktree_env hook)
+- saw-worktree-boundary.sh: hard-denies (exit 2) Write/Edit/MultiEdit calls whose target path resolves to the main repo root instead of the agent's worktree; uses POLYWAVE_WORKTREE_ROOT (set by prepare-wave, see E43 Implementation Notes)
 - Both hooks fire only when their respective env var is non-empty (skips solo waves, integration waves, orchestrator context)
-- Error message format: "[SAW] Write blocked: <path> is in main repo, not agent worktree. Use: <SAW_WORKTREE_ROOT>/..."
+- Error message format: "[SAW] Write blocked: <path> is in main repo, not agent worktree. Use: <POLYWAVE_WORKTREE_ROOT>/..."
 - Prevents Agent B leak scenario (files created in main repo instead of worktree)
 
 **Hook 4: SubagentStop compliance verification (verify_worktree_compliance)**
@@ -2026,7 +2026,7 @@ E43 enforces E4 mechanically. E4 (Worktree Isolation) states the requirement: al
 ### Implementation Notes
 
 - **Claude Code-specific:** E43 hooks use Claude Code lifecycle API (SubagentStart, PreToolUse, SubagentStop). Other platforms must implement equivalent enforcement at their tool invocation boundary.
-- **SAW_WORKTREE_ROOT:** prepare-wave writes `.saw-worktree-env` to each agent's worktree root containing `SAW_WORKTREE_ROOT=<absolute_worktree_path>`. The `hooks/saw-worktree-boundary.sh` PreToolUse hook reads this var to enforce write boundaries independently of the SubagentStart hook. This provides defense-in-depth: boundary enforcement works even if the SubagentStart hook is unavailable.
+- **POLYWAVE_WORKTREE_ROOT:** prepare-wave writes `.saw-worktree-env` to each agent's worktree root containing `POLYWAVE_WORKTREE_ROOT=<absolute_worktree_path>`. The `hooks/saw-worktree-boundary.sh` PreToolUse hook reads this var to enforce write boundaries independently of the SubagentStart hook. This provides defense-in-depth: boundary enforcement works even if the SubagentStart hook is unavailable.
 - **Vendor-neutral fallback:** When hooks are unavailable, fall back to instruction-based isolation (E4 Layer 3: Field 0 self-verification). Agents manually verify working directory at startup.
 - **Defense-in-depth:** E43 hooks complement E4 layers (pre-creation, task tool isolation, merge-time trip wire). All layers remain active.
 
@@ -2039,14 +2039,14 @@ E43 enforces E4 mechanically. E4 (Worktree Isolation) states the requirement: al
 ## E44: Context Injection Observability
 
 **Scout obligation:** Before completing, the Scout MUST call
-`sawtools set-injection-method <impl-doc-path> --method <value>`
+`polywave-tools set-injection-method <impl-doc-path> --method <value>`
 to record how reference files were received. Valid values: `hook`, `manual-fallback`, `unknown`.
 
-**Orchestrator obligation:** `sawtools prepare-agent` automatically writes `context_source`
+**Orchestrator obligation:** `polywave-tools prepare-agent` automatically writes `context_source`
 to each agent entry when extracting the brief. Valid values: `prepared-brief`, `cross-repo-full`.
 The orchestrator may write `fallback-full-context` manually when the fallback prompt path was used.
 
-**Enforcement:** `sawtools validate` warns (non-blocking) when `injection_method` is absent
+**Enforcement:** `polywave-tools validate` warns (non-blocking) when `injection_method` is absent
 on an active IMPL, and warns when `context_source` is absent on wave agents in
 `WAVE_EXECUTING`/`WAVE_MERGING`/`WAVE_VERIFIED` state.
 
@@ -2071,7 +2071,7 @@ entry to the Scaffolds section of the IMPL doc.
 - Types in existing codebase files not owned by any agent
 - Types mentioned in only one agent's task (no cross-agent dependency)
 
-**Automated tool:** `sawtools detect-shared-types <impl-doc>` automates this
+**Automated tool:** `polywave-tools detect-shared-types <impl-doc>` automates this
 detection. Scout should invoke it after writing agent prompts (step 10 of Scout
 procedure) and merge the output into the Scaffolds section.
 
@@ -2098,10 +2098,10 @@ time. However, this is a late failure — E45 exists to prevent it proactively.
 
 1. **Scout-time (primary):** During dependency analysis, Scout scans for `*_test.go` files that reference changed interfaces:
    - For each interface contract with signature change keywords ("migrate", "update signature", "change return type")
-   - Run: `sawtools check-callers "<InterfaceName>" --repo-dir <repo-path>` (returns JSON including test files)
+   - Run: `polywave-tools check-callers "<InterfaceName>" --repo-dir <repo-path>` (returns JSON including test files)
    - Filter the output for `_test.go` files; assign unowned test files to the interface-changing agent
 
-2. **Pre-wave validation (E35 extension):** `sawtools pre-wave-validate` runs E35 detection, which includes test cascade detection via `detectTestCascades()`. Reports orphaned test files as E35Gap entries with CalledFrom pointing to test file locations.
+2. **Pre-wave validation (E35 extension):** `polywave-tools pre-wave-validate` runs E35 detection, which includes test cascade detection via `detectTestCascades()`. Reports orphaned test files as E35Gap entries with CalledFrom pointing to test file locations.
    As of E46, pre-wave-validate also runs Step 3: `check-test-cascade`, which performs a whole-repo
    scan for test files calling changed symbols. Exit 1 if any orphaned test callers are found.
    Also runs Step 4 (wave structure check) and Step 5 (stale constraint lint — warning only).
@@ -2126,7 +2126,7 @@ time. However, this is a late failure — E45 exists to prevent it proactively.
 failed but ALL errors are in future-wave-owned or unowned files (caller
 cascade side-effects of wave N signature changes, not genuine wave N failures).
 
-**Required Action (automatic):** `sawtools finalize-wave` detects
+**Required Action (automatic):** `polywave-tools finalize-wave` detects
 `CallerCascadeOnly=true` and automatically runs the `apply-cascade-hotfix`
 step inline (step 6a, after VerifyBuild). The hotfix agent is restricted
 to the files listed in `CallerCascadeErrors` and applies minimal caller
@@ -2165,7 +2165,7 @@ E7 (completion verification), E8 (interface change recovery).
 **Trigger:** SubagentStop lifecycle event fires for a critic agent (tag `[SAW:critic:*]`).
 
 **Required Action:** Before the critic agent session closes, the critic MUST commit
-the IMPL doc changes produced by `sawtools set-critic-review`. Two enforcement
+the IMPL doc changes produced by `polywave-tools set-critic-review`. Two enforcement
 mechanisms apply:
 
 1. **E42 SubagentStop hook (`validate_agent_completion`):** Extended to include a
@@ -2179,7 +2179,7 @@ mechanisms apply:
    `hooks/saw-worktree-boundary.sh` for wave agent write boundaries. Exits 2
    if the critic agent's IMPL doc has uncommitted changes.
 
-**IMPL doc location:** Both hooks locate the IMPL doc via `.saw-state/active-impl`
+**IMPL doc location:** Both hooks locate the IMPL doc via `.polywave-state/active-impl`
 (written by `prepare-wave`), with fallback to extracting the path from the
 agent_description field. The IMPL doc path MUST appear in the critic's
 `description` (the `[SAW:critic:<slug>]` string passed to the Agent tool) to
@@ -2191,8 +2191,8 @@ chore: critic report for <slug> [SAW:critic:<slug>]
 ```
 
 **Rationale:** Without E48, critic agents write critic_report to the IMPL doc
-(via `sawtools set-critic-review`) but do not commit the file. The next step
-in the flow is `sawtools prepare-wave`, which fails if the working directory is
+(via `polywave-tools set-critic-review`) but do not commit the file. The next step
+in the flow is `polywave-tools prepare-wave`, which fails if the working directory is
 dirty. This creates manual overhead: the orchestrator must commit the IMPL doc
 before proceeding. E48 automates this by enforcing the commit at the agent
 boundary, the same pattern E42 uses for wave agents (I5).
@@ -2203,7 +2203,7 @@ IMPL path), not from a worktree-relative path. This is distinct from wave
 agents, which run in worktrees and use `.saw-ownership.json` to locate the
 worktree root.
 
-**Skip condition:** If the critic runs `sawtools set-critic-review` and the
+**Skip condition:** If the critic runs `polywave-tools set-critic-review` and the
 command writes the critic_report without modifying the IMPL doc on disk (edge
 case: no-op write), `git status --porcelain` returns empty and E48 passes
 silently. This is correct behavior.
@@ -2219,7 +2219,7 @@ trigger and validation), E42 (SubagentStop validation matrix)
 **Trigger:** After any rate limit, crash, or interrupted finalize-wave, before
 resuming wave execution or running finalize-wave again.
 
-**Required Action:** Run sawtools reconcile-state to derive the correct IMPL state
+**Required Action:** Run polywave-tools reconcile-state to derive the correct IMPL state
 from observable git evidence.
 
 **What it checks:**
@@ -2243,7 +2243,7 @@ evidence array, recommended_action, and per-agent observations.
 **Idempotency:** Safe to run at any time. Does NOT commit the state change.
 The Orchestrator decides whether to commit after reconcile-state reports a change.
 
-**Cross-repo:** Checks all repos listed in saw.config.json when file_ownership
+**Cross-repo:** Checks all repos listed in polywave.config.json when file_ownership
 has repo fields.
 
 **Related:** E7 (completion verification), E38 (gate caching), resume-detect.
@@ -2255,7 +2255,7 @@ has repo fields.
 **Trigger:** After any interruption, or when the Orchestrator needs to verify
 what has landed before proceeding.
 
-**Required Action:** Run sawtools agent-status to see a table of all agents
+**Required Action:** Run polywave-tools agent-status to see a table of all agents
 with their branch state, commit count, and report status.
 
 **Table columns:** Agent ID, Role (wave1/wave2/critic), Branch name (or "main"
@@ -2264,13 +2264,13 @@ Status (not_started / in_progress / complete / blocked).
 
 The --json flag outputs structured JSON for programmatic use.
 
-**Cross-repo:** Checks all repos from saw.config.json when file_ownership has
+**Cross-repo:** Checks all repos from polywave.config.json when file_ownership has
 repo fields.
 
 **Recommended sequence after interruption:**
-1. sawtools agent-status to see what landed
-2. sawtools reconcile-state to fix IMPL state to match reality
-3. sawtools finalize-wave or skip-merge if already merged
+1. polywave-tools agent-status to see what landed
+2. polywave-tools reconcile-state to fix IMPL state to match reality
+3. polywave-tools finalize-wave or skip-merge if already merged
 
 **Related:** E49 (state reconciliation), E7 (completion verification).
 
@@ -2280,7 +2280,7 @@ repo fields.
 
 **Auto-detect:** When finalize-wave is run on a cross-repo IMPL without an
 explicit --repo-dir flag, the CLI automatically:
-1. Loads saw.config.json from the directory containing the IMPL doc.
+1. Loads polywave.config.json from the directory containing the IMPL doc.
 2. Counts file_ownership entries per repo name for the given wave.
 3. Selects the repo with the most owned files as the primary repo.
 4. Sets --repo-dir to the resolved absolute path.
@@ -2294,7 +2294,7 @@ repo that owns 0 files for the given wave, finalize-wave exits with:
 This is a fatal error (exit 1) — proceeding with the wrong repo-dir silently
 misroutes the merge.
 
-**Scope:** CLI layer only (cmd/sawtools/finalize_wave.go). The engine
+**Scope:** CLI layer only (cmd/polywave-tools/finalize_wave.go). The engine
 pkg/engine/finalize.go already handles multi-repo via ExtractReposFromManifest.
 
 **Related:** E7 (verify-commits), E21 (quality gates), MR02_UNSCOPED_GATE (E16).
@@ -2359,8 +2359,8 @@ subsection for the full specification.
 - E35: Scout declares wiring obligations for exported symbols that must be called from aggregation files — enforced by prepare-wave (Layer 3A), validate-integration (Layer 3B), and agent brief injection (Layer 3C) — see also E25, E26, E27
 - E37: Pre-Wave Brief Review (Critic Gate) — after E16 validation, before REVIEWED state; auto-triggered for large/multi-repo IMPLs; critic agent verifies briefs against actual codebase — see also E16, E36, E2, `participants.md` (Critic Agent)
 - E36: IMPL Amendment — see E2, E14, E15
-- E38: Gate Result Caching — run-gates/finalize-wave cache gate results keyed on headCommit+diffStat+command; TTL 5 min; --no-cache opt-out; stored in .saw-state/gate-cache.json — see also E21, E21A, E21B
-- E39: Interview Mode (Deterministic Requirements Gathering) — /saw interview command; 6-phase structured Q&A; state persistence in INTERVIEW-<slug>.yaml; resume capability; outputs REQUIREMENTS.md for bootstrap/scout — see also E16, E17, Scout Agent, `interview-mode.md`, `state-machine.md` (INTERVIEWING state)
+- E38: Gate Result Caching — run-gates/finalize-wave cache gate results keyed on headCommit+diffStat+command; TTL 5 min; --no-cache opt-out; stored in .polywave-state/gate-cache.json — see also E21, E21A, E21B
+- E39: Interview Mode (Deterministic Requirements Gathering) — /polywave interview command; 6-phase structured Q&A; state persistence in INTERVIEW-<slug>.yaml; resume capability; outputs REQUIREMENTS.md for bootstrap/scout — see also E16, E17, Scout Agent, `interview-mode.md`, `state-machine.md` (INTERVIEWING state)
 - E40: Observability Event Emission — orchestrator emits cost, agent_performance, and activity events at lifecycle transitions; non-blocking; batch writes preferred; stored as JSONB — see also E19, E21, E28, E29, E33, `observability-events.md`
 - E41: Type Collision Detection — pre-flight check during prepare-wave; AST-based detection of duplicate type/function/const names across agents in same package; blocks wave launch on collision — see also E3, E22, I1
 - E42: SubagentStop Validation — SubagentStop lifecycle hook validates protocol obligations before agent session closes; checks I1 ownership, I5 commit, and completion reports for wave agents; agent-type-specific validation matrix; exit 2 blocks completion — see also I1, I4, I5, E3, E21, E40
@@ -2371,6 +2371,6 @@ subsection for the full specification.
   diagnosis; distinct from E26 (compile errors vs missing wiring) — see
   also E26, E25, E7, E8
 - E48: Critic agent must commit IMPL doc before stopping — see also E37 (critic gate), E42 (SubagentStop validation), `implementations/claude-code/prompts/agents/critic-agent.md`, `hooks/saw-critic-impl-commit.sh`
-- E49: State Reconciliation After Interruption -- sawtools reconcile-state reads IMPL + git state and derives correct ProtocolState; idempotent; does not commit; cross-repo aware -- see also E7, E38, resume-detect
-- E50: Agent Status Inspection -- sawtools agent-status prints branch/commit/report table per agent; --json flag; cross-repo aware -- see also E49, E7
-- E51: finalize-wave Cross-Repo Auto-Detection -- auto-selects primary repo-dir from saw.config.json when not explicitly set; pre-flight error when wrong repo-dir provided -- see also E7, E38, MR02_UNSCOPED_GATE
+- E49: State Reconciliation After Interruption -- polywave-tools reconcile-state reads IMPL + git state and derives correct ProtocolState; idempotent; does not commit; cross-repo aware -- see also E7, E38, resume-detect
+- E50: Agent Status Inspection -- polywave-tools agent-status prints branch/commit/report table per agent; --json flag; cross-repo aware -- see also E49, E7
+- E51: finalize-wave Cross-Repo Auto-Detection -- auto-selects primary repo-dir from polywave.config.json when not explicitly set; pre-flight error when wrong repo-dir provided -- see also E7, E38, MR02_UNSCOPED_GATE
