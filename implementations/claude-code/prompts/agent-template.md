@@ -57,7 +57,7 @@ Verify briefly that you are on the expected branch:
 
 ```bash
 git -C $POLYWAVE_AGENT_WORKTREE branch --show-current
-# Expected: saw/{slug}/wave{N}-agent-{ID}
+# Expected: polywave/{slug}/wave{N}-agent-{ID}
 ```
 
 If the branch is wrong despite reaching this point, report immediately:
@@ -245,8 +245,8 @@ then add free-form notes beneath it.
 status: complete | partial | blocked  # E20: "complete" triggers SubagentStop stub scan — fix all stubs before claiming complete
 failure_type: transient | fixable | needs_replan | escalate | timeout  # Required when status is partial or blocked. Omit when status is complete.
 repo: /absolute/path/to/repo  # omit for single-repo waves
-worktree: .claude/worktrees/saw/{slug}/wave{N}-agent-{ID}
-branch: saw/{slug}/wave{N}-agent-{ID}
+worktree: .claude/worktrees/polywave/{slug}/wave{N}-agent-{ID}
+branch: polywave/{slug}/wave{N}-agent-{ID}
 commit: {sha}  # or "uncommitted" if commit failed
 files_changed:
   - path/to/modified/file
