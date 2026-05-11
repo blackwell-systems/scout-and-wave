@@ -17,7 +17,7 @@ These scripts mirror the logic of Claude Code hooks but run as model-initiated b
 
 **Purpose:** Context injection for user-invoked commands based on trigger patterns.
 
-**When used:** Automatically called by the `inject_skill_context` hook when the user types a `/saw` command. Can be manually invoked on platforms without hooks.
+**When used:** Automatically called by the `inject_skill_context` hook when the user types a `/polywave` command. Can be manually invoked on platforms without hooks.
 
 **How it works:**
 1. Receives user prompt as argument or stdin
@@ -173,7 +173,7 @@ Before injecting a reference file, the script checks if the marker already exist
 
 **Skill directory structure:**
 ```
-~/.claude/skills/saw/
+~/.claude/skills/polywave/
 ├── polywave-skill.md              # Orchestrator skill definition
 ├── scripts/
 │   ├── inject-context        # Orchestrator reference injection
@@ -212,7 +212,7 @@ Vendor-neutral fallback: `scripts/inject-agent-context --type <agent-type>`.
 **Agent launch code:**
 ```bash
 # Resolve skill directory
-SKILL_DIR="${CLAUDE_SKILL_DIR:-$HOME/.claude/skills/saw}"
+SKILL_DIR="${CLAUDE_SKILL_DIR:-$HOME/.claude/skills/polywave}"
 
 # Inject references
 inject=$(bash "$SKILL_DIR/scripts/inject-agent-context" \
