@@ -39,16 +39,39 @@ All implementations must conform to the protocol specification in [`../protocol/
 - [`execution-rules.md`](../protocol/execution-rules.md) - State transitions and verification gates (E1-E45)
 - [`message-formats.md`](../protocol/message-formats.md) - IMPL doc and completion report formats
 
+## Portability Layers
+
+Polywave is designed as a layered system. Most of it is already platform-agnostic:
+
+| Layer | Platform-specific? | Details |
+|-------|-------------------|---------|
+| **Protocol** (invariants, state machine, execution rules) | No | Fully platform-agnostic specification |
+| **Go Engine** (`polywave-go/pkg/engine`, `pkg/protocol`) | No | Provider-agnostic orchestration, validation, and merging |
+| **Agent backends** (`polywave-go/pkg/agent/backend/`) | No | 4 backends: Anthropic API, AWS Bedrock, OpenAI-compatible (Ollama, Groq, LM Studio), CLI |
+| **Skill** (SKILL.md + references/) | No | [Agent Skills](https://agentskills.io) standard format; any compatible tool can load it |
+| **Progressive disclosure** | Mostly no | 3-layer design: hooks (Claude Code), scripts (any platform with script execution), routing table in SKILL.md (universal fallback) |
+| **Enforcement hooks** (22 hooks) | Yes (Claude Code) | Uses Claude Code lifecycle events (SubagentStart, PreToolUse, SubagentStop). Other platforms implement equivalent enforcement at their tool boundary. |
+| **Agent prompts** | Partially | Prompt content is generic; delivery mechanism (`subagent_type`) is Claude Code-specific |
+
+The protocol requires that invariants (I1-I6) be enforced. It does not prescribe how. The Claude Code hooks are one implementation of enforcement; other platforms can enforce the same invariants through their own tool-boundary mechanisms.
+
 ## Building a New Implementation
 
-To implement Polywave in a different runtime (Python, Rust, TypeScript, etc.):
+The Polywave skill follows the [Agent Skills](https://agentskills.io) open standard. On any Agent Skills-compatible platform (Cursor, GitHub Copilot, etc.), the skill's SKILL.md and reference docs load without modification. What you need to provide:
 
-1. Read protocol docs in order: `participants` → `preconditions` → `invariants` → `execution-rules` → `state-machine` → `message-formats` → `procedures`
+1. **Agent spawning**: your platform's mechanism for launching parallel agents (the Go engine's 4-backend system handles this for programmatic orchestration)
+2. **Invariant enforcement**: any mechanism that blocks writes outside an agent's assigned files and worktree (hooks are one approach; filesystem permissions, container boundaries, or tool-level filtering all satisfy the same requirement)
+3. **Worktree isolation**: git worktrees (recommended) or equivalent filesystem isolation
+
+### Steps
+
+1. Read protocol docs in order: `participants` -> `preconditions` -> `invariants` -> `execution-rules` -> `state-machine` -> `message-formats` -> `procedures`
 2. Identify which participant roles your runtime will support (minimum: Orchestrator + Wave Agent)
 3. Choose an isolation mechanism that satisfies I1 (disjoint file ownership): git worktrees, filesystem snapshots, containers, etc.
-4. Use [`../protocol/`](../protocol/) as reference for participant roles and orchestrator logic
-5. Use [`protocol/message-formats.md`](../protocol/message-formats.md) as reference for IMPL doc structure and message schemas
-6. Verify your implementation satisfies all six invariants (I1-I6)
+4. Choose an enforcement mechanism for I1 at the tool boundary: pre-execution validation, filesystem permissions, or platform-specific hooks
+5. Use [`../protocol/`](../protocol/) as reference for participant roles and orchestrator logic
+6. Use [`protocol/message-formats.md`](../protocol/message-formats.md) as reference for IMPL doc structure and message schemas
+7. Verify your implementation satisfies all six invariants (I1-I6)
 
 See [`../protocol/README.md`](../protocol/README.md) for the full adoption guide.
 
