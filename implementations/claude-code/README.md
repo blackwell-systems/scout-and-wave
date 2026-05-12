@@ -7,200 +7,51 @@ Polywave implemented as a Claude Code skill for fully automated parallel agent e
 ## Prerequisites
 
 - Claude Code desktop app
-- Git 2.20+ (for worktree support)
-- `polywave-tools` CLI (see Step 2 below)
-- Project with existing codebase OR empty repo for bootstrap mode
+- Git 2.20+
+- jq 1.6+
+- `polywave-tools` CLI (installed in step 2 below)
 
 ## Installation
 
-### Step 1: Configure Permissions (Required)
-
-Polywave requires `"Agent"` in your Claude Code permissions allow list. **Without this, every agent launch will pause for manual approval.**
-
-**If `~/.claude/settings.json` doesn't exist yet**, create it:
+The fastest path is the root installer, which handles permissions, skill symlinks, hooks, and agent types in one command:
 
 ```bash
-mkdir -p ~/.claude
-cat > ~/.claude/settings.json <<'EOF'
-{
-  "permissions": {
-    "allow": [
-      "Agent",
-      "Bash",
-      "Read",
-      "Write",
-      "Edit",
-      "Glob",
-      "Grep",
-      "WebFetch",
-      "WebSearch",
-      "TaskCreate"
-    ]
-  }
-}
-EOF
-```
-
-**If `~/.claude/settings.json` already exists**, add `"Agent"` to the `allow` array if it's not there:
-
-```json
-{
-  "permissions": {
-    "allow": [
-      "Agent"
-    ]
-  }
-}
-```
-
-**Why these permissions:**
-- **`"Agent"`** (critical): Launches Polywave agents without blocking
-- `"Bash"`, `"Read"`, `"Write"`, `"Edit"`, `"Glob"`, `"Grep"`: Git commands, worktree management, IMPL doc writes, codebase reads
-- `"TaskCreate"`: Wave progress tracking
-- `"WebFetch"`, `"WebSearch"`: Doc/API lookups during scout analysis
-
-For project-scoped settings, add the same block to `.claude/settings.json` in the project root.
-
-### Step 2: Install polywave-tools (Required)
-
-`polywave-tools` is the CLI engine for all wave operations — worktree creation, merge, IMPL validation, stub scanning. **Without it, `/polywave wave` cannot function.**
-
-```bash
-# Homebrew (macOS/Linux)
-brew install blackwell-systems/tap/polywave-tools
-
-# Or download a pre-built binary (no Go/Homebrew required)
-# Releases: https://github.com/blackwell-systems/polywave-go/releases/latest
-VERSION=$(curl -sI https://github.com/blackwell-systems/polywave-go/releases/latest | grep -i location | sed 's|.*/v||;s/\r//')
-curl -sL "https://github.com/blackwell-systems/polywave-go/releases/download/v${VERSION}/polywave-tools_${VERSION}_darwin_arm64.tar.gz" | tar xz
-mkdir -p ~/.local/bin && mv polywave-tools ~/.local/bin/
-# Replace darwin_arm64 with: darwin_amd64, linux_amd64, or linux_arm64
-
-# Or via Go install (requires Go 1.21+)
-go install github.com/blackwell-systems/polywave-go/cmd/polywave-tools@latest
-
-# Verify
-polywave-tools version
-```
-
-### Step 3: Clone the Repository (Required)
-
-The skill reads prompt files from the repository at runtime, so keep it on disk:
-
-```bash
-# Clone to a location of your choice (~/code is just a suggestion)
 git clone https://github.com/blackwell-systems/polywave.git ~/code/polywave
-
-# Or anywhere else:
-# git clone https://github.com/blackwell-systems/polywave.git /path/you/prefer
+~/code/polywave/install.sh
 ```
 
-### Step 4: Install the Skill (Required)
-
-Create the skill directory and symlink all required files:
+Then install the CLI and initialize your project:
 
 ```bash
-# Create skill directory structure
-mkdir -p ~/.claude/skills/polywave/agents
-
-# Symlink main skill file
-ln -sf ~/code/polywave/implementations/claude-code/prompts/polywave-skill.md \
-       ~/.claude/skills/polywave/SKILL.md
-
-# Symlink supporting files
-ln -sf ~/code/polywave/implementations/claude-code/prompts/polywave-bootstrap.md \
-       ~/.claude/skills/polywave/polywave-bootstrap.md
-ln -sf ~/code/polywave/implementations/claude-code/prompts/agent-template.md \
-       ~/.claude/skills/polywave/agent-template.md
-
-# If you cloned elsewhere, adjust all paths:
-# mkdir -p ~/.claude/skills/polywave/agents
-# ln -sf /your/path/polywave/implementations/claude-code/prompts/polywave-skill.md ~/.claude/skills/polywave/SKILL.md
-# ... (repeat for all supporting files)
+brew install blackwell-systems/tap/polywave-tools     # or: go install github.com/blackwell-systems/polywave-go/cmd/polywave-tools@latest
+cd your-project && polywave-tools init
+polywave-tools verify-install
 ```
 
-**Why symlinks?** The Polywave repo is the single source of truth. Symlinks mean `git pull` on the repo automatically updates the skill — no reinstall step needed.
+Restart Claude Code, then run `/polywave scout "feature"`.
 
-### Step 5: Install Custom Agent Types (Required)
+See [docs/INSTALLATION.md](../../docs/INSTALLATION.md) for the full guide with manual steps, troubleshooting, and platform-specific options.
 
-Polywave uses custom Claude Code agent types that provide structural tool restrictions (e.g., scout cannot edit source files, wave agents cannot spawn sub-agents) and behavioral instructions. These must be installed for the skill to function.
+### What install.sh does
 
-**Install agent types into the skill directory:**
+1. Configures `"Agent"` permission in `~/.claude/settings.json`
+2. Symlinks skill files to `~/.claude/skills/polywave/`
+3. Symlinks agent type definitions (scout, wave-agent, scaffold-agent, integration-agent, critic-agent, planner)
+4. Symlinks on-demand reference files for progressive disclosure
+5. Installs 22 protocol enforcement hooks to `~/.claude/agents/hooks/`
+
+All installed files are symlinks back to the cloned repo, so `git pull` updates everything automatically.
+
+### Verify
 
 ```bash
-ln -sf ~/code/polywave/implementations/claude-code/prompts/agents/scout.md \
-       ~/.claude/skills/polywave/agents/scout.md
-ln -sf ~/code/polywave/implementations/claude-code/prompts/agents/wave-agent.md \
-       ~/.claude/skills/polywave/agents/wave-agent.md
-ln -sf ~/code/polywave/implementations/claude-code/prompts/agents/scaffold-agent.md \
-       ~/.claude/skills/polywave/agents/scaffold-agent.md
-ln -sf ~/code/polywave/implementations/claude-code/prompts/agents/integration-agent.md \
-       ~/.claude/skills/polywave/agents/integration-agent.md
-ln -sf ~/code/polywave/implementations/claude-code/prompts/agents/critic-agent.md \
-       ~/.claude/skills/polywave/agents/critic-agent.md
-ln -sf ~/code/polywave/implementations/claude-code/prompts/agents/planner.md \
-       ~/.claude/skills/polywave/agents/planner.md
+polywave-tools verify-install  # checks skill files, CLI, hooks, permissions
 ```
 
-**Install on-demand reference files (progressive disclosure):**
-
-```bash
-mkdir -p ~/.claude/skills/polywave/references
-cd ~/code/polywave/implementations/claude-code/prompts/references
-for file in *.md; do
-  ln -sf "$(pwd)/$file" ~/.claude/skills/polywave/references/"$file"
-done
-```
-
-This symlinks the 11 remaining reference files (down from 22):
-- **Orchestrator references** (8 files, loaded by skill on matching subcommands): `program-flow.md`, `amend-flow.md`, `failure-routing.md`, `impl-targeting.md`, `model-selection.md`, `pre-wave-validation.md`, `wave-agent-contracts.md`, `integration-gap-detection.md`
-- **Conditional agent references** (3 files, injected by hooks only when specific conditions match): `scout-program-contracts.md`, `wave-agent-build-diagnosis.md`, `wave-agent-program-contracts.md`
-
-Most agent reference content is now inlined directly in agent type definitions (`agents/*.md`), eliminating hook-based injection for the common case. Only 3 conditional references remain for context that applies in specific scenarios (program contracts, build diagnosis).
-
-These files are loaded on-demand only when the matching subcommand is invoked or condition is met at agent launch. See `docs/skills-progressive-disclosure.md` for the design.
-
-**What you get:** Custom agent types provide runtime-enforced tool restrictions (scout cannot Edit source files, wave agents cannot spawn sub-agents) and better observability. Each agent type has YAML frontmatter that Claude Code uses to enforce behavioral constraints.
-
-### Step 6: Install Hooks (Required)
-
-Hooks enforce the protocol's correctness guarantees at the Claude Code level — preventing Scout from writing source files (I6), blocking wave agents from touching files they don't own (I1), validating IMPL docs on write (E16), checking agent launch/completion protocol (E42/H5), enforcing worktree isolation (E43), verifying agent isolation on launch (E12), detecting stub patterns (E20/H3), preventing branch drift (H4), blocking git stash in wave-agent worktrees, and emitting observability events (E40). **Without hooks, many invariants are advisory only.**
-
-```bash
-cd ~/code/polywave/implementations/claude-code/hooks
-./install.sh
-```
-
-The installer symlinks all 20 hook scripts to `~/.local/bin/`, registers them in `~/.claude/settings.json`, and verifies each hook is executable. It will print a summary of what was installed.
-
-**If `~/.local/bin` is not on your `$PATH`**, add it:
-```bash
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc  # or ~/.bashrc
-source ~/.zshrc
-```
-
-See `implementations/claude-code/hooks/README.md` for the full list of hooks and what each enforces.
-
-### Step 7: Verify Installation
-
-Restart Claude Code (if it was already running), then in any session:
-
-```
-/polywave status
-```
-
-**Expected output:** `"No IMPL doc found in this project"` or similar. This confirms the skill loaded successfully.
-
-**If you see an error about `/polywave` not being recognized:**
-- Check that `SKILL.md` exists in `~/.claude/skills/polywave/`
-- Verify all supporting files are symlinked correctly: `ls -la ~/.claude/skills/polywave/`
-- Restart Claude Code
-
-**To check symlinks:**
-```bash
-ls -la ~/.claude/skills/polywave/
-# Should show symlinks pointing to implementations/claude-code/prompts/
-```
+**If `/polywave` is not recognized after restart:**
+- Check that `SKILL.md` exists: `ls ~/.claude/skills/polywave/SKILL.md`
+- Check symlinks: `ls -la ~/.claude/skills/polywave/`
+- Restart Claude Code again (skills are loaded at session start)
 
 ## Usage
 

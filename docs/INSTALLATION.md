@@ -496,7 +496,7 @@ This removes skill file symlinks and hook script symlinks. Hook registrations in
 
 - [Getting Started](GETTING_STARTED.md) -- decide which interface to use
 - [First Run Walkthrough](../implementations/claude-code/QUICKSTART.md) -- step-by-step example
-- [Protocol Specification](../protocol/) -- deep dive into how Polywave works
+- [Protocol Specification](https://github.com/blackwell-systems/polywave-protocol) -- deep dive into how Polywave works
 - [Hook System](../implementations/claude-code/hooks/README.md) -- detailed documentation for all enforcement hooks
 
 ---

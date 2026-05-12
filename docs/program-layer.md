@@ -485,7 +485,7 @@ Within a program tier, each IMPL's wave merges target the IMPL's dedicated branc
 
 ## 6. CLI Commands — `/polywave program`
 
-These commands are defined in `implementations/claude-code/prompts/polywave-skill.md`. They are invoked via the `/saw` skill in Claude Code.
+These commands are defined in `implementations/claude-code/prompts/polywave-skill.md`. They are invoked via the `/polywave` skill in Claude Code.
 
 ### `/polywave program plan "<project-description>"`
 

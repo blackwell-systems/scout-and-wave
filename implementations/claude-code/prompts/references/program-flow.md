@@ -201,13 +201,13 @@ Create long-lived IMPL branches for all IMPLs in the tier:
 ```bash
 polywave-tools create-program-worktrees "<manifest-path>" --tier N --repo-dir "<repo-path>"
 ```
-Each IMPL gets a branch: `saw/program/{slug}/tier{N}-impl-{implSlug}`.
+Each IMPL gets a branch: `polywave/program/{slug}/tier{N}-impl-{implSlug}`.
 These branches are the merge targets for all wave executions within
 the IMPL — waves merge to the IMPL branch, NOT to main.
 
 **Step 3b: IMPL Execution**
 - For each reviewed IMPL in tier N:
-  - Compute IMPL branch: `saw/program/{slug}/tier{N}-impl-{implSlug}`
+  - Compute IMPL branch: `polywave/program/{slug}/tier{N}-impl-{implSlug}`
   - Execute the full IMPL lifecycle with IMPL branch as merge target:
     - prepare-wave: `polywave-tools prepare-wave <impl-doc> --wave W --repo-dir "<repo-path>" --merge-target <impl-branch>`
     - finalize-wave: `polywave-tools finalize-wave <impl-doc> --wave W --repo-dir "<repo-path>" --merge-target <impl-branch>`
