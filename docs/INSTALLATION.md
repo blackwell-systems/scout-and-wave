@@ -185,14 +185,15 @@ Start the server with:
 
 ## Hooks
 
-The installer registers 22 hooks across five lifecycle events. All hook scripts live in `implementations/claude-code/hooks/` and are symlinked to `~/.claude/agents/hooks/`.
+The installer registers 22 hooks across six lifecycle events. All hook scripts live in `implementations/claude-code/hooks/` and are symlinked to `~/.claude/agents/hooks/`.
 
-### SubagentStart (2 hooks — fire when an agent session starts)
+### SubagentStart (3 hooks — fire when an agent session starts)
 
 | Hook | Matcher | Purpose |
 |---|---|---|
 | `inject_worktree_env` | *(all)* | Sets 5 environment variables (worktree path, agent ID, wave number, IMPL path, branch name) |
 | `validate_agent_isolation` | *(all)* | Verifies wave agent is running in the correct worktree (exit 2 blocks start) |
+| `validate_worktree_isolation` | *(all)* | Verifies worktree directory exists and matches expected layout |
 
 ### PreToolUse (8 hooks — fire before tool execution)
 
@@ -207,7 +208,7 @@ The installer registers 22 hooks across five lifecycle events. All hook scripts 
 | `validate_write_paths` | `Write\|Edit` | Blocks relative paths and paths outside worktree boundaries |
 | `block_git_stash` | `Bash` | Blocks `git stash` in wave-agent worktrees (stash hides uncommitted work from merge verification) |
 
-### PostToolUse (4 hooks — fire after tool execution)
+### PostToolUse (5 hooks — fire after tool execution)
 
 | Hook | Matcher | Purpose |
 |---|---|---|
@@ -215,14 +216,22 @@ The installer registers 22 hooks across five lifecycle events. All hook scripts 
 | `check_git_ownership` | `Bash` (async) | Warns when git operations modify files outside ownership list |
 | `warn_stubs` | `Write\|Edit` | Warns on stub patterns (TODO, FIXME, panic) in written files |
 | `check_branch_drift` | `Bash` | Blocks commits directly to `main` or `master` |
+| `auto_commit_on_write` | `Write\|Edit` | Auto-commits IMPL doc changes after orchestrator writes |
 
-### SubagentStop (3 hooks — fire when an agent session ends)
+### SubagentStop (4 hooks — fire when an agent session ends)
 
 | Hook | Matcher | Purpose |
 |---|---|---|
 | `validate_agent_completion` | *(all)* | Blocks completion if protocol obligations are unfulfilled (timeout: 10s) |
 | `emit_agent_completion` | *(all, async)* | Emits observability events for monitoring and the web dashboard |
 | `verify_worktree_compliance` | *(all)* | Verifies completion report and commits exist (warn-only, creates audit trail) |
+| `polywave_critic_impl_commit` | *(all)* | Commits IMPL doc changes before critic agent stops (E48) |
+
+### Stop (1 hook — fires when Claude finishes responding)
+
+| Hook | Matcher | Purpose |
+|---|---|---|
+| `polywave_orchestrator_stop` | *(all)* | Post-response orchestrator hook for state tracking and observability |
 
 ### UserPromptSubmit (1 hook — fires when user submits a prompt)
 

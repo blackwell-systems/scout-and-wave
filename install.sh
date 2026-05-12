@@ -511,8 +511,8 @@ do_uninstall() {
     fi
   done
 
-  # Remove hook symlinks
-  for hook in "${HOOK_SCRIPTS[@]}"; do
+  # Remove hook symlinks (HOOK_SCRIPTS array + separately installed hooks)
+  for hook in "${HOOK_SCRIPTS[@]}" "polywave_critic_impl_commit"; do
     if [ -L "${BIN_DIR}/${hook}" ]; then
       rm "${BIN_DIR}/${hook}"
       echo "  Removed ${BIN_DIR}/${hook}"

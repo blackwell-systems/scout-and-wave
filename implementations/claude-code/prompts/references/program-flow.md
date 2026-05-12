@@ -1,12 +1,12 @@
 # Program Commands — On-Demand Reference
 
 **Contents:**
-- [Create PROGRAM from Existing IMPLs](#saw-program---impl)
+- [Create PROGRAM from Existing IMPLs](#polywave-program---impl)
 - [Level A: Planning Only — program plan/execute/status/replan](#program-commands-level-a-planning-only)
-  - [/polywave program plan](#saw-program-plan-project-description)
-  - [/polywave program execute](#saw-program-execute-project-description)
-  - [/polywave program status](#saw-program-status)
-  - [/polywave program replan](#saw-program-replan---reason-reason)
+  - [/polywave program plan](#polywave-program-plan-project-description)
+  - [/polywave program execute](#polywave-program-execute-project-description)
+  - [/polywave program status](#polywave-program-status)
+  - [/polywave program replan](#polywave-program-replan---reason-reason)
 
 **Wave execution:** Program tiers execute IMPLs using the standard wave loop from the core SKILL.md (steps 3-11 of Execution Logic). Do not duplicate that logic here — when Step 3b says "use existing `/polywave wave --auto` flow", follow the wave loop in the core file.
 

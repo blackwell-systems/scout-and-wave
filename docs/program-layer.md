@@ -12,7 +12,7 @@
 3. [PROGRAM Manifest Schema](#3-program-manifest-schema)
 4. [Program State Machine](#4-program-state-machine)
 5. [Program Invariants](#5-program-invariants-p1p4)
-6. [CLI Commands — /polywave program](#6-cli-commands--saw-program)
+6. [CLI Commands — /polywave program](#6-cli-commands--polywave-program)
 7. [polywave-tools Commands](#7-polywave-tools-commands)
 8. [API Reference](#8-api-reference)
 9. [SSE Events](#9-sse-events)
