@@ -8,10 +8,10 @@ This guide walks you through your first Polywave session step-by-step, showing e
 
 ## Prerequisites
 
-Before starting, ensure you've completed the [installation steps](README.md#installation) in the main README:
+Before starting, ensure you've completed the [installation steps](../../docs/INSTALLATION.md#zero-to-first-scout):
 - [x] Permissions configured (`"Agent"` in allow list)
 - [x] Repository cloned (polywave for protocol/skills)
-- [x] `polywave-tools` binary installed (`~/.local/bin/polywave-tools` from polywave-go)
+- [x] `polywave-tools` binary installed (via Homebrew, `go install`, or pre-built binary from polywave-go)
 - [x] Skill installed (`~/.claude/skills/polywave/polywave-skill.md` symlinked)
 - [x] Installation verified (`/polywave status` works)
 
@@ -602,7 +602,7 @@ Solution: Check `~/.claude/skills/polywave/SKILL.md` exists and restart Claude C
 
 **Problem: "Agent tool not allowed"**
 
-Solution: Add `"Agent"` to `~/.claude/settings.json` permissions allow list (see [Install -> Step 1](README.md#installation)).
+Solution: Add `"Agent"` to `~/.claude/settings.json` permissions allow list (see [Installation Guide](../../docs/INSTALLATION.md)).
 
 **Problem: Scaffold Agent says "Build failed"**
 

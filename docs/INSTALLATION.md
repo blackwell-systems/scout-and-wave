@@ -355,7 +355,7 @@ This scans for language markers (go.mod, Cargo.toml, package.json, pyproject.tom
 
 **`repos`** (array of `{name, path}`) -- Repositories this project spans. For single-repo projects, `polywave-tools init` creates one entry pointing to the current directory. For multi-repo projects, add additional entries. Cross-repo IMPL docs use `repo:` tags on file_ownership and quality_gates that must match a `name` here.
 
-**`agent`** (object) -- Model override per agent role. Empty string or missing field means "inherit the parent session's model." The `/saw` skill reads these at agent launch time. Available roles: `scout_model`, `wave_model`, `scaffold_model`, `integration_model`, `planner_model`, `critic_model`, `chat_model`.
+**`agent`** (object) -- Model override per agent role. Empty string or missing field means "inherit the parent session's model." The `/polywave` skill reads these at agent launch time. Available roles: `scout_model`, `wave_model`, `scaffold_model`, `integration_model`, `planner_model`, `critic_model`, `chat_model`.
 
 **`build`** / **`test`** (object with `command` and `detected`) -- Build and test commands for the project. `polywave-tools init` auto-detects these and sets `detected: true`. Override `command` if auto-detection chose wrong. These are used by `polywave-tools finalize-wave` for post-merge verification.
 
@@ -482,7 +482,7 @@ The installer supports multiple platforms via flags:
 - Scout automation: `check-callers`, `list-error-ranges`, `suggest-wave-structure`,
   and `check-test-cascade` replace manual grep during planning
 
-**The orchestrator prompt and hooks are platform-specific.** The `/saw` skill prompt is written for Claude Code's skill system. The hook scripts use a JSON stdin/stdout protocol that can be adapted to other platforms' hook systems (Gemini CLI's `BeforeAgent`, Cursor's `beforeSubmitPrompt`, etc.). Use `--generic` to install the scripts, then register them in your platform's configuration.
+**The orchestrator prompt and hooks are platform-specific.** The `/polywave` skill prompt is written for Claude Code's skill system. The hook scripts use a JSON stdin/stdout protocol that can be adapted to other platforms' hook systems (Gemini CLI's `BeforeAgent`, Cursor's `beforeSubmitPrompt`, etc.). Use `--generic` to install the scripts, then register them in your platform's configuration.
 
 ## Uninstalling
 

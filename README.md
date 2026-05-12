@@ -80,9 +80,13 @@ go install github.com/blackwell-systems/polywave-go/cmd/polywave-tools@latest   
 cd your-project
 polywave-tools init            # auto-detects language, build, and test commands
 
-# 4. Verify and go
+# 4. Verify
 polywave-tools verify-install  # checks skill files, CLI, hooks, permissions
-# Restart Claude Code, then:
+```
+
+**5. Restart Claude Code**, then run your first scout:
+
+```bash
 /polywave scout "add a caching layer to the API client"
 ```
 
