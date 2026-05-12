@@ -106,7 +106,7 @@ allowed prefixes.
 
 ```yaml
 integration_connectors:
-  - file: cmd/saw/main.go
+  - file: cmd/polywave-tools/main.go
     description: "Register new CLI commands"
   - file: pkg/engine/finalize.go
     description: "Wire freeze-contracts into finalize-wave"
@@ -114,7 +114,7 @@ integration_connectors:
     description: "Register new HTTP handlers"
 ```
 
-This translates to `AllowedPathPrefixes: ["cmd/saw/main.go", "pkg/engine/finalize.go", "pkg/api/routes.go"]`. The agent may only modify these exact files.
+This translates to `AllowedPathPrefixes: ["cmd/polywave-tools/main.go", "pkg/engine/finalize.go", "pkg/api/routes.go"]`. The agent may only modify these exact files.
 
 ### Relationship with type: integration waves
 
@@ -143,12 +143,12 @@ waves:
     agents:
       - id: C
         task: "Wire auth handler and metrics collector into main.go and routes.go"
-        files: [cmd/saw/main.go, pkg/api/routes.go]
+        files: [cmd/polywave-tools/main.go, pkg/api/routes.go]
 ```
 
 In this example, Agent C runs after Wave 1 merges. It sees the exports from Agents
 A and B and wires them into the registration points. Agent C may only modify
-`cmd/saw/main.go` and `pkg/api/routes.go`.
+`cmd/polywave-tools/main.go` and `pkg/api/routes.go`.
 
 ### Common wiring patterns
 

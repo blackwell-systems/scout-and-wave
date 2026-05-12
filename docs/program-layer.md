@@ -475,7 +475,7 @@ IMPL docs reference the PROGRAM manifest but do not duplicate its information. T
 
 ### P5: IMPL Branch Isolation
 
-Within a program tier, each IMPL's wave merges target the IMPL's dedicated branch (`saw/program/{slug}/tier{N}-impl-{implSlug}`), not main. Main is only updated by `FinalizeTier` after all IMPLs in the tier complete and the tier gate passes. This prevents partial state leakage between co-tier IMPLs.
+Within a program tier, each IMPL's wave merges target the IMPL's dedicated branch (`polywave/program/{slug}/tier{N}-impl-{implSlug}`), not main. Main is only updated by `FinalizeTier` after all IMPLs in the tier complete and the tier gate passes. This prevents partial state leakage between co-tier IMPLs.
 
 **Enforcement:** `CreateProgramWorktrees` creates the IMPL branch; `MergeTarget` is threaded through `RunWaveFull` / `FinalizeWave` / `MergeAgents`. `FinalizeTier` merges IMPL branches to main.
 

@@ -71,10 +71,10 @@ The protocol has a built-in **suitability gate** that answers [five questions](h
 git clone https://github.com/blackwell-systems/polywave.git ~/code/polywave
 ~/code/polywave/install.sh    # configures Agent permission, symlinks skills, installs hooks
 
-# 2. Install polywave-tools CLI (the skill orchestrates; the CLI executes)
-brew install blackwell-systems/tap/polywave-tools                                     # Homebrew
-go install github.com/blackwell-systems/polywave-go/cmd/polywave-tools@latest   # Go install
-# Or download binary: https://github.com/blackwell-systems/polywave-go/releases/latest
+# 2. Install polywave-tools CLI (pick one)
+brew install blackwell-systems/tap/polywave-tools                                     # Homebrew (recommended)
+go install github.com/blackwell-systems/polywave-go/cmd/polywave-tools@latest   # Go install (alternative)
+# Or download a pre-built binary: https://github.com/blackwell-systems/polywave-go/releases/latest
 
 # 3. Initialize your project
 cd your-project

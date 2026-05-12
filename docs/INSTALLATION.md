@@ -26,7 +26,7 @@ polywave-tools init
 # 4. Verify everything works
 polywave-tools verify-install
 
-# 5. Run your first scout (in Claude Code, type this as a prompt)
+# 5. Restart Claude Code, then run your first scout
 /polywave scout "describe your feature here"
 ```
 
@@ -50,11 +50,11 @@ That's it for most users. The Web UI is optional -- see [Step 3](#step-3-web-ui-
 
 ## What you need
 
-Most users need **two repos**: this one (protocol + skill files + hooks) and `polywave-tools` (a single binary from polywave-go). The web UI is a third repo, optional.
+Most users need **two repos**: this one (skill files, hooks, agent prompts) and `polywave-tools` (a single binary from polywave-go). The protocol spec lives in [polywave-protocol](https://github.com/blackwell-systems/polywave-protocol) but you don't need it to use Polywave. The web UI is optional.
 
 | What | Install method | Required? |
 |---|---|---|
-| Protocol + skill + hooks | `git clone` + `./install.sh` | Yes |
+| Skill + hooks + prompts | `git clone` + `./install.sh` | Yes |
 | `polywave-tools` CLI | `brew install`, `go install`, or [binary download](https://github.com/blackwell-systems/polywave-go/releases/latest) | Yes |
 | Web UI | `git clone` + `npm build` + `go build` | No -- only if you want the browser dashboard |
 
@@ -75,7 +75,7 @@ cd polywave
 The installer auto-detects Claude Code (checks for `~/.claude`) and does four things:
 
 1. **Symlinks skill files** to `~/.claude/skills/polywave/` (SKILL.md, agent definitions, references, scripts).
-2. **Symlinks hook scripts** to `~/.local/bin/` (18 enforcement hooks, see [Hooks](#hooks-18-total) below).
+2. **Symlinks hook scripts** to `~/.claude/agents/hooks/` (22 enforcement hooks, see [Hooks](#hooks) below).
 3. **Registers hooks** in `~/.claude/settings.json` under `PreToolUse`, `PostToolUse`, `SubagentStart`, `SubagentStop`, and `UserPromptSubmit` lifecycle events.
 4. **Adds `Agent` permission** to `~/.claude/settings.json` so Polywave can launch agents without manual approval.
 
@@ -183,9 +183,9 @@ Start the server with:
 ./polywave-web serve
 ```
 
-## Hooks (20 total)
+## Hooks
 
-The hook installer registers 20 hooks across five lifecycle events. All hook scripts live in `implementations/claude-code/hooks/` and are symlinked to `~/.local/bin/`.
+The installer registers 22 hooks across five lifecycle events. All hook scripts live in `implementations/claude-code/hooks/` and are symlinked to `~/.claude/agents/hooks/`.
 
 ### SubagentStart (2 hooks — fire when an agent session starts)
 

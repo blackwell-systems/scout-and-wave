@@ -1,6 +1,6 @@
 # Polywave Claude Code Hooks
 
-Enforcement and injection hooks for CLI-based Polywave agents. 21 hooks across SubagentStart, PreToolUse, PostToolUse, SubagentStop, UserPromptSubmit, and Stop events.
+Enforcement and injection hooks for CLI-based Polywave agents. 22 hooks across SubagentStart, PreToolUse, PostToolUse, SubagentStop, UserPromptSubmit, and Stop events.
 
 ## Hook Summary
 
@@ -114,7 +114,7 @@ cd ~/code/polywave/implementations/claude-code/hooks
 ```
 
 The installer:
-- Creates symlinks in `~/.local/bin/` for all 21 hook scripts
+- Creates symlinks in `~/.claude/agents/hooks/` for all 22 hook scripts
 - Merges hook configs into `~/.claude/settings.json` (preserves existing hooks)
 - Verifies installation and runs basic tests
 
@@ -141,7 +141,7 @@ See individual hook sections below for manual installation steps.
 
 1. Symlink:
    ```bash
-   ln -sf ~/code/polywave/implementations/claude-code/hooks/check_scout_boundaries ~/.local/bin/check_scout_boundaries
+   ln -sf ~/code/polywave/implementations/claude-code/hooks/check_scout_boundaries ~/.claude/agents/hooks/check_scout_boundaries
    ```
 
 2. Add to `~/.claude/settings.json`:
@@ -154,7 +154,7 @@ See individual hook sections below for manual installation steps.
            "hooks": [
              {
                "type": "command",
-               "command": "$HOME/.local/bin/check_scout_boundaries"
+               "command": "$HOME/.claude/agents/hooks/check_scout_boundaries"
              }
            ]
          }
@@ -207,7 +207,7 @@ The hook is the hard enforcement layer — it fires even if the Scout skips Step
 
 1. Symlink:
    ```bash
-   ln -sf ~/code/polywave/implementations/claude-code/hooks/validate_impl_on_write ~/.local/bin/validate_impl_on_write
+   ln -sf ~/code/polywave/implementations/claude-code/hooks/validate_impl_on_write ~/.claude/agents/hooks/validate_impl_on_write
    ```
 
 2. Add to `~/.claude/settings.json`:
@@ -220,7 +220,7 @@ The hook is the hard enforcement layer — it fires even if the Scout skips Step
            "hooks": [
              {
                "type": "command",
-               "command": "$HOME/.local/bin/validate_impl_on_write"
+               "command": "$HOME/.claude/agents/hooks/validate_impl_on_write"
              }
            ]
          }
@@ -258,7 +258,7 @@ echo $?  # 0
 
 1. Symlink:
    ```bash
-   ln -sf ~/code/polywave/implementations/claude-code/hooks/block_claire_paths ~/.local/bin/block_claire_paths
+   ln -sf ~/code/polywave/implementations/claude-code/hooks/block_claire_paths ~/.claude/agents/hooks/block_claire_paths
    ```
 
 2. Add to `~/.claude/settings.json`:
@@ -271,7 +271,7 @@ echo $?  # 0
            "hooks": [
              {
                "type": "command",
-               "command": "$HOME/.local/bin/block_claire_paths"
+               "command": "$HOME/.claude/agents/hooks/block_claire_paths"
              }
            ]
          }
@@ -310,7 +310,7 @@ echo $?  # Should be non-zero
 
 1. Symlink:
    ```bash
-   ln -sf ~/code/polywave/implementations/claude-code/hooks/check_wave_ownership ~/.local/bin/check_wave_ownership
+   ln -sf ~/code/polywave/implementations/claude-code/hooks/check_wave_ownership ~/.claude/agents/hooks/check_wave_ownership
    ```
 
 2. Add to `~/.claude/settings.json`:
@@ -323,7 +323,7 @@ echo $?  # Should be non-zero
            "hooks": [
              {
                "type": "command",
-               "command": "$HOME/.local/bin/check_wave_ownership"
+               "command": "$HOME/.claude/agents/hooks/check_wave_ownership"
              }
            ]
          }
@@ -353,7 +353,7 @@ This is a second layer of I1 enforcement. Hook 4 (check_wave_ownership) catches 
 
 1. Symlink:
    ```bash
-   ln -sf ~/code/polywave/implementations/claude-code/hooks/check_git_ownership ~/.local/bin/check_git_ownership
+   ln -sf ~/code/polywave/implementations/claude-code/hooks/check_git_ownership ~/.claude/agents/hooks/check_git_ownership
    ```
 
 2. Add to `~/.claude/settings.json`:
@@ -366,7 +366,7 @@ This is a second layer of I1 enforcement. Hook 4 (check_wave_ownership) catches 
            "hooks": [
              {
                "type": "command",
-               "command": "$HOME/.local/bin/check_git_ownership"
+               "command": "$HOME/.claude/agents/hooks/check_git_ownership"
              }
            ]
          }
@@ -395,7 +395,7 @@ This prevents Wave agents from launching with stale or incorrect IMPL doc refere
 
 1. Symlink:
    ```bash
-   ln -sf ~/code/polywave/implementations/claude-code/hooks/check_impl_path ~/.local/bin/check_impl_path
+   ln -sf ~/code/polywave/implementations/claude-code/hooks/check_impl_path ~/.claude/agents/hooks/check_impl_path
    ```
 
 2. Add to `~/.claude/settings.json`:
@@ -408,7 +408,7 @@ This prevents Wave agents from launching with stale or incorrect IMPL doc refere
            "hooks": [
              {
                "type": "command",
-               "command": "$HOME/.local/bin/check_impl_path"
+               "command": "$HOME/.claude/agents/hooks/check_impl_path"
              }
            ]
          }
@@ -453,7 +453,7 @@ This hook is **non-blocking** — it warns the agent but does not prevent the wr
 
 1. Symlink:
    ```bash
-   ln -sf ~/code/polywave/implementations/claude-code/hooks/warn_stubs ~/.local/bin/warn_stubs
+   ln -sf ~/code/polywave/implementations/claude-code/hooks/warn_stubs ~/.claude/agents/hooks/warn_stubs
    ```
 
 2. Add to `~/.claude/settings.json`:
@@ -466,7 +466,7 @@ This hook is **non-blocking** — it warns the agent but does not prevent the wr
            "hooks": [
              {
                "type": "command",
-               "command": "$HOME/.local/bin/warn_stubs"
+               "command": "$HOME/.claude/agents/hooks/warn_stubs"
              }
            ]
          }
@@ -510,7 +510,7 @@ This prevents accidental commits to `main` or another agent's branch during Wave
 
 1. Symlink:
    ```bash
-   ln -sf ~/code/polywave/implementations/claude-code/hooks/check_branch_drift ~/.local/bin/check_branch_drift
+   ln -sf ~/code/polywave/implementations/claude-code/hooks/check_branch_drift ~/.claude/agents/hooks/check_branch_drift
    ```
 
 2. Add to `~/.claude/settings.json`:
@@ -523,7 +523,7 @@ This prevents accidental commits to `main` or another agent's branch during Wave
            "hooks": [
              {
                "type": "command",
-               "command": "$HOME/.local/bin/check_branch_drift"
+               "command": "$HOME/.claude/agents/hooks/check_branch_drift"
              }
            ]
          }
@@ -584,7 +584,7 @@ After enforcement passes, dispatch on `subagent_type` and conditionally inject m
 
 1. Symlink:
    ```bash
-   ln -sf ~/code/polywave/implementations/claude-code/hooks/validate_agent_launch ~/.local/bin/validate_agent_launch
+   ln -sf ~/code/polywave/implementations/claude-code/hooks/validate_agent_launch ~/.claude/agents/hooks/validate_agent_launch
    ```
 
 2. Add to `~/.claude/settings.json`:
@@ -597,7 +597,7 @@ After enforcement passes, dispatch on `subagent_type` and conditionally inject m
            "hooks": [
              {
                "type": "command",
-               "command": "$HOME/.local/bin/validate_agent_launch"
+               "command": "$HOME/.claude/agents/hooks/validate_agent_launch"
              }
            ]
          }
@@ -647,7 +647,7 @@ These variables are consumed by other E43 hooks (`inject_bash_cd`, `validate_wri
 
 1. Symlink:
    ```bash
-   ln -sf ~/code/polywave/implementations/claude-code/hooks/inject_worktree_env ~/.local/bin/inject_worktree_env
+   ln -sf ~/code/polywave/implementations/claude-code/hooks/inject_worktree_env ~/.claude/agents/hooks/inject_worktree_env
    ```
 
 2. Add to `~/.claude/settings.json`:
@@ -659,7 +659,7 @@ These variables are consumed by other E43 hooks (`inject_bash_cd`, `validate_wri
            "hooks": [
              {
                "type": "command",
-               "command": "$HOME/.local/bin/inject_worktree_env"
+               "command": "$HOME/.claude/agents/hooks/inject_worktree_env"
              }
            ]
          }
@@ -700,7 +700,7 @@ This eliminates the "Agent B leak" scenario where agents forget to use absolute 
 
 1. Symlink:
    ```bash
-   ln -sf ~/code/polywave/implementations/claude-code/hooks/inject_bash_cd ~/.local/bin/inject_bash_cd
+   ln -sf ~/code/polywave/implementations/claude-code/hooks/inject_bash_cd ~/.claude/agents/hooks/inject_bash_cd
    ```
 
 2. Add to `~/.claude/settings.json`:
@@ -713,7 +713,7 @@ This eliminates the "Agent B leak" scenario where agents forget to use absolute 
            "hooks": [
              {
                "type": "command",
-               "command": "$HOME/.local/bin/inject_bash_cd"
+               "command": "$HOME/.claude/agents/hooks/inject_bash_cd"
              }
            ]
          }
@@ -756,7 +756,7 @@ This is the hard enforcement layer for worktree isolation, catching attempts to 
 
 1. Symlink:
    ```bash
-   ln -sf ~/code/polywave/implementations/claude-code/hooks/validate_write_paths ~/.local/bin/validate_write_paths
+   ln -sf ~/code/polywave/implementations/claude-code/hooks/validate_write_paths ~/.claude/agents/hooks/validate_write_paths
    ```
 
 2. Add to `~/.claude/settings.json`:
@@ -769,7 +769,7 @@ This is the hard enforcement layer for worktree isolation, catching attempts to 
            "hooks": [
              {
                "type": "command",
-               "command": "$HOME/.local/bin/validate_write_paths"
+               "command": "$HOME/.claude/agents/hooks/validate_write_paths"
              }
            ]
          }
@@ -822,7 +822,7 @@ This hook is warn-only because SubagentStop fires after the agent completes — 
 
 1. Symlink:
    ```bash
-   ln -sf ~/code/polywave/implementations/claude-code/hooks/verify_worktree_compliance ~/.local/bin/verify_worktree_compliance
+   ln -sf ~/code/polywave/implementations/claude-code/hooks/verify_worktree_compliance ~/.claude/agents/hooks/verify_worktree_compliance
    ```
 
 2. Add to `~/.claude/settings.json`:
@@ -834,7 +834,7 @@ This hook is warn-only because SubagentStop fires after the agent completes — 
            "hooks": [
              {
                "type": "command",
-               "command": "$HOME/.local/bin/verify_worktree_compliance"
+               "command": "$HOME/.claude/agents/hooks/verify_worktree_compliance"
              }
            ]
          }
@@ -881,7 +881,7 @@ This hook provides structured data for external observability systems to track a
 
 1. Symlink:
    ```bash
-   ln -sf ~/code/polywave/implementations/claude-code/hooks/emit_agent_completion ~/.local/bin/emit_agent_completion
+   ln -sf ~/code/polywave/implementations/claude-code/hooks/emit_agent_completion ~/.claude/agents/hooks/emit_agent_completion
    ```
 
 2. Add to `~/.claude/settings.json`:
@@ -893,7 +893,7 @@ This hook provides structured data for external observability systems to track a
            "hooks": [
              {
                "type": "command",
-               "command": "$HOME/.local/bin/emit_agent_completion"
+               "command": "$HOME/.claude/agents/hooks/emit_agent_completion"
              }
            ]
          }
@@ -941,7 +941,7 @@ field prevents infinite re-trigger loops (Claude Code sets this to `true` on re-
 
 1. Symlink:
    ```bash
-   ln -sf ~/code/polywave/implementations/claude-code/hooks/polywave_orchestrator_stop ~/.local/bin/polywave_orchestrator_stop
+   ln -sf ~/code/polywave/implementations/claude-code/hooks/polywave_orchestrator_stop ~/.claude/agents/hooks/polywave_orchestrator_stop
    ```
 
 2. Add to `~/.claude/settings.json`:
@@ -953,7 +953,7 @@ field prevents infinite re-trigger loops (Claude Code sets this to `true` on re-
            "hooks": [
              {
                "type": "command",
-               "command": "$HOME/.local/bin/polywave_orchestrator_stop"
+               "command": "$HOME/.claude/agents/hooks/polywave_orchestrator_stop"
              }
            ]
          }

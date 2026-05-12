@@ -333,7 +333,7 @@ pre_mortem:
 # Known Issues (omit if none)
 known_issues: []
 
-# Completion Reports (empty at scout time — agents populate via saw set-completion)
+# Completion Reports (empty at scout time; agents populate via polywave-tools set-completion)
 completion_reports: {}
 ```
 
