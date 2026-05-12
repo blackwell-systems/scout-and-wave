@@ -403,12 +403,12 @@ If the work doesn't decompose cleanly, the Scout says so. It runs a suitability 
 - Restart Claude Code
 
 **Worktree isolation failures:**
-- See [worktree defense layers](../../protocol/invariants.md#i1-disjoint-file-ownership) in protocol docs
+- See [worktree defense layers](https://github.com/blackwell-systems/polywave-protocol/blob/main/invariants.md#i1-disjoint-file-ownership) in protocol docs
 - Pre-commit hook is installed automatically by `polywave-tools create-worktrees`
 
 **For more help:**
-- Read the [protocol specification](../../protocol/README.md)
-- Check [execution rules](../../protocol/execution-rules.md)
+- Read the [protocol specification](https://github.com/blackwell-systems/polywave-protocol)
+- Check [execution rules](https://github.com/blackwell-systems/polywave-protocol/blob/main/execution-rules.md)
 - Review [invariants](../../protocol/invariants.md)
 
 ## License

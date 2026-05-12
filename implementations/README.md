@@ -32,12 +32,7 @@ See [`claude-code/README.md`](claude-code/README.md) for installation and detail
 
 ## Protocol Specification
 
-All implementations must conform to the protocol specification in [`../protocol/`](../protocol/). Key documents:
-
-- [`participants.md`](../protocol/participants.md) - Participant roles and responsibilities
-- [`invariants.md`](../protocol/invariants.md) - Correctness guarantees (I1-I6, v0.26.0)
-- [`execution-rules.md`](../protocol/execution-rules.md) - State transitions and verification gates (E1-E45)
-- [`message-formats.md`](../protocol/message-formats.md) - IMPL doc and completion report formats
+All implementations must conform to the protocol specification: **[polywave-protocol](https://github.com/blackwell-systems/polywave-protocol)**
 
 ## Portability Layers
 
@@ -72,11 +67,10 @@ The Polywave skill follows the [Agent Skills](https://agentskills.io) open stand
 2. Identify which participant roles your runtime will support (minimum: Orchestrator + Wave Agent)
 3. Choose an isolation mechanism that satisfies I1 (disjoint file ownership): git worktrees, filesystem snapshots, containers, etc.
 4. Choose an enforcement mechanism for I1 at the tool boundary: pre-execution validation, filesystem permissions, or platform-specific hooks
-5. Use [`../protocol/`](../protocol/) as reference for participant roles and orchestrator logic
-6. Use [`protocol/message-formats.md`](../protocol/message-formats.md) as reference for IMPL doc structure and message schemas
-7. Verify your implementation satisfies all six invariants (I1-I6)
+5. Use the [protocol specification](https://github.com/blackwell-systems/polywave-protocol) as reference for participant roles and orchestrator logic
+6. Verify your implementation satisfies all six invariants (I1-I6)
 
-See [`../protocol/README.md`](../protocol/README.md) for the full adoption guide.
+See the [polywave-protocol README](https://github.com/blackwell-systems/polywave-protocol#building-a-new-implementation) for the full adoption guide.
 
 ## License
 

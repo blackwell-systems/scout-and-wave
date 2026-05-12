@@ -1,7 +1,7 @@
 # Prompts
 
 Reference implementations of the Polywave protocol. Each file maps to a specific
-participant role or procedure defined in the [protocol/](../protocol/) specification.
+participant role or procedure defined in the [polywave-protocol](https://github.com/blackwell-systems/polywave-protocol) specification.
 
 ## Directory Structure
 
@@ -89,7 +89,7 @@ See `docs/skills-progressive-disclosure.md` for the design.
 
 ## Protocol Invariants Referenced
 
-Invariants I1–I6 are defined in [`protocol/invariants.md`](../protocol/invariants.md). Where
+Invariants I1-I6 are defined in the [protocol specification](https://github.com/blackwell-systems/polywave-protocol/blob/main/invariants.md). Where
 invariants appear in these prompts, they are embedded verbatim alongside
 their I-number so each prompt is self-contained. To audit consistency:
 

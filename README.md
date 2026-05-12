@@ -4,67 +4,58 @@
   <img src="assets/logo.png" alt="Polywave" width="600" />
 </p>
 
-[![Blackwell Systems™](https://raw.githubusercontent.com/blackwell-systems/blackwell-docs-theme/main/badge-trademark.svg)](https://github.com/blackwell-systems)
+[![Blackwell Systems](https://raw.githubusercontent.com/blackwell-systems/blackwell-docs-theme/main/badge-trademark.svg)](https://github.com/blackwell-systems)
 ![Version](https://img.shields.io/badge/version-0.11.0-blue)
 [![Agent Skills](assets/badge-agentskills.svg)](https://agentskills.io)
 
 **Parallel AI agents that don't break each other's code.**
 
-Other multi-agent frameworks run fast and merge chaos. Polywave gives every agent its own worktree, assigns every file to exactly one agent, and shows you the full plan before any agent touches your code. Conflicts are resolved at planning time, not at merge time, after two agents have already built divergent solutions.
+Other multi-agent frameworks run fast and merge chaos. Polywave gives every agent its own worktree, assigns every file to exactly one agent, and shows you the full plan before any agent touches your code. Conflicts are resolved at planning time, not at merge time.
 
-> Published as an [Agent Skill](https://agentskills.io) (open standard). Compatible with Claude Code, Cursor, GitHub Copilot, and other Agent Skills-compatible tools. See [`implementations/`](implementations/) for platform guides.
+> Published as an [Agent Skill](https://agentskills.io) (open standard). Compatible with Claude Code, Cursor, GitHub Copilot, and other Agent Skills-compatible tools.
 
-> **New to Polywave?** Follow this path:
-> 1. Read this README (15 min) - understand "why" and "how" at a high level
-> 2. Read [implementations/claude-code/QUICKSTART.md](implementations/claude-code/QUICKSTART.md) (20 min) - see a real example with output
-> 3. Try it yourself: `/polywave scout "feature"` on a test project
-> 4. Deep dive: [protocol/](protocol/) specification when building a new implementation
+> **New to Polywave?**
+> 1. Read this README (15 min)
+> 2. Read [QUICKSTART.md](implementations/claude-code/QUICKSTART.md) (20 min) for a worked example
+> 3. Try it: `/polywave scout "feature"` on a test project
+> 4. Deep dive: [polywave-protocol](https://github.com/blackwell-systems/polywave-protocol) for the full specification
 
 ## Why
 
-You've run parallel agents before. You know what happens: two agents edit the same file, the merge produces garbage, and you spend longer fixing it than if you'd done the work sequentially. Or worse - the merge succeeds silently because both agents touched different functions in the same file, but they made contradictory assumptions about shared state. You find out at runtime.
+You've run parallel agents before. You know what happens: two agents edit the same file, the merge produces garbage, and you spend longer fixing it than if you'd done the work sequentially. Or worse, the merge succeeds silently because both agents touched different functions in the same file, but they made contradictory assumptions about shared state. You find out at runtime.
 
 Most frameworks try to solve this with better prompts. Polywave solves it with structure:
 
 - **Disjoint file ownership.** The Scout assigns every file to exactly one agent before any code is written. Two agents in the same wave cannot produce edits to the same file. Merge conflicts become structurally impossible.
-- **Per-agent worktree isolation.** Each agent works in its own git worktree - a separate directory with an independent file tree. Concurrent builds, tests, and tool-cache writes don't race on shared state.
-- **Human review before execution.** You see the full plan - file assignments, interface contracts, wave structure - and approve it before any agent launches. This is the last point where changing the architecture is cheap.
+- **Per-agent worktree isolation.** Each agent works in its own git worktree, a separate directory with an independent file tree. Concurrent builds, tests, and tool-cache writes don't race on shared state.
+- **Human review before execution.** You see the full plan (file assignments, interface contracts, wave structure) and approve it before any agent launches. This is the last point where changing the architecture is cheap.
 - **Suitability gate.** Polywave says "no" when the work doesn't decompose cleanly. A poor-fit assessment prevents bad decompositions from producing expensive failures.
 
-The system has seven participant roles, but you interact with two: the **Orchestrator** (your Claude Code session — coordinates everything) and the **Scout** (analyzes codebase, assigns files, writes the plan). The other five — Scaffold Agent, Wave Agents, Integration Agent, Critic Agent, Planner — run automatically when needed. See [protocol/participants.md](protocol/participants.md) for the full role breakdown.
+The system has seven [participant roles](https://github.com/blackwell-systems/polywave-protocol/blob/main/participants.md), but you interact with two: the **Orchestrator** (your Claude Code session, coordinates everything) and the **Scout** (analyzes codebase, assigns files, writes the plan). The other five (Scaffold Agent, Wave Agents, Integration Agent, Critic Agent, Planner) run automatically when needed.
 
 ## How
 
 **What happens when you run Polywave:**
 
-1. You run `/polywave scout "feature"` → Scout analyzes codebase, assigns files to agents
-2. Scout writes IMPL doc (implementation document — a YAML coordination artifact that defines file ownership, interface contracts, and wave structure for the feature) → You review the wave structure (waves are groups of agents that execute in parallel)
-3. You run `/polywave wave` → Scaffold Agent creates scaffold files (type/interface definitions shared across agents, created before any wave launches) if needed
-4. Wave Agents launch in parallel → Each works in isolated worktree on disjoint files
-5. Orchestrator merges → Runs tests → Cleans up worktrees
+1. You run `/polywave scout "feature"` -> Scout analyzes codebase, assigns files to agents
+2. Scout writes IMPL doc (a YAML coordination artifact that defines file ownership, interface contracts, and wave structure) -> You review the wave structure
+3. You run `/polywave wave` -> Scaffold Agent creates scaffold files if needed
+4. Wave Agents launch in parallel -> Each works in isolated worktree on disjoint files
+5. Orchestrator merges -> Runs tests -> Cleans up worktrees
 
 **Key mechanisms:**
 
-- **Orchestrator:** Synchronous coordination agent in your session. Launches Polywave Agents, enforces file ownership, executes merge procedure, runs verification gates. Human reviews and approves through it directly.
+- **Orchestrator:** Synchronous coordination agent in your session. Launches agents, enforces file ownership, executes merge procedure, runs verification gates.
 
-- **Scout:** Asynchronous agent. Analyzes codebase, produces IMPL doc with dependency graph, interface contracts, file ownership table, and wave structure. Every file assigned to exactly one agent. Resolves ownership conflicts at planning time or declares work NOT SUITABLE.
+- **Scout:** Asynchronous agent. Analyzes codebase, produces IMPL doc with dependency graph, interface contracts, file ownership table, and wave structure. Every file assigned to exactly one agent.
 
-- **Scaffold Agent:** Asynchronous agent. Runs once before Wave 1 if the IMPL doc specifies shared types that multiple agents need (e.g., interface definitions). Creates shared type files (called "scaffolds") from IMPL doc contracts, verifies compilation, commits to HEAD. Runs once before any Wave Agent launches. If compilation fails, wave stops before worktrees are created.
+- **Scaffold Agent:** Runs once before Wave 1 if shared types are needed. Creates shared type files from IMPL doc contracts, verifies compilation, commits to HEAD.
 
 - **Wave Agents:** Asynchronous agents running in parallel. Each owns disjoint files, implements against frozen interface contracts, runs verification gate, commits work, writes completion report.
 
-- **Integration Agent:** Asynchronous agent running after wave merge. Wires new exports from wave agents into caller code. Restricted to `integration_connectors` files. Non-fatal — gaps are reported to the human if wiring fails.
+- **Integration Agent:** Runs after wave merge. Wires new exports from wave agents into caller code. Non-fatal; gaps are reported to the human if wiring fails.
 
-The protocol has a built-in **suitability gate** that answers five questions before producing any agent prompts. If preconditions don't hold, the scout emits NOT SUITABLE and stops. **Polywave isn't for everything.** A poor-fit assessment prevents bad decompositions.
-
-The five questions assess whether the work:
-1. Decomposes into independent files
-2. Avoids investigation-first blockers
-3. Has discoverable interfaces
-4. Has been pre-scanned for already-implemented items (from audit/findings lists)
-5. Provides value from parallelization
-
-See [protocol/preconditions.md](protocol/preconditions.md) for details.
+The protocol has a built-in **suitability gate** that answers [five questions](https://github.com/blackwell-systems/polywave-protocol/blob/main/preconditions.md) before producing any agent prompts. If preconditions don't hold, the scout emits NOT SUITABLE and stops.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/diagrams/polywave-scout-wave-dark.svg">
@@ -73,9 +64,7 @@ See [protocol/preconditions.md](protocol/preconditions.md) for details.
 
 ## Quick Start
 
-> **⚠️ BEFORE YOU START:** Add `"Agent"` to your allow list in `~/.claude/settings.json` or you'll need to manually approve each agent launch. See [implementations/claude-code/README.md](implementations/claude-code/README.md#step-1-configure-permissions-required) for details.
-
-> **ℹ️ Claude Code implementation shown below.** The `/polywave` commands use Claude Code's Agent Skills syntax. Other Agent Skills-compatible tools (Cursor, GitHub Copilot, etc.) use their own invocation syntax - see [`implementations/`](implementations/) for the appropriate guide.
+> **Before you start:** Add `"Agent"` to your allow list in `~/.claude/settings.json` or you'll need to manually approve each agent launch. See [implementations/claude-code/README.md](implementations/claude-code/README.md#step-1-configure-permissions-required) for details.
 
 ```bash
 # 1. Clone and install
@@ -102,27 +91,12 @@ polywave-tools init
 
 # 4. Restart Claude Code, then in any session on any project:
 /polywave scout "add a caching layer to the API client"
-# → Scout analyzes the codebase, assigns files to agents, writes docs/IMPL/IMPL-caching-layer.yaml
-# → Orchestrator shows you the wave structure and interface contracts for review
-# → You review the IMPL doc. This is the last chance to change interfaces.
+# -> Scout analyzes the codebase, assigns files to agents, writes docs/IMPL/IMPL-caching-layer.yaml
+# -> You review the IMPL doc. This is the last chance to change interfaces.
 
 /polywave wave
-# → If shared types are needed, Scaffold Agent creates them automatically
-# → Parallel agents implement their assigned files concurrently
-# → Orchestrator merges, runs tests, reports result
-
-# Or collapse both steps into one command:
-/polywave auto "add a caching layer to the API client"
-# → Scout analyzes, writes IMPL doc, shows wave structure
-# → You confirm ("Proceed? [y/N]") -- this is the human checkpoint
-# → On Y: all waves execute automatically
-
-# When you have multiple IMPLs queued — run them all in parallel:
-/polywave program --impl feature-a feature-b feature-c
-# → Checks for file ownership conflicts across all three
-# → If disjoint (no overlapping files), assigns all to Tier 1
-# → All three IMPLs execute simultaneously; sequential tiers only when files overlap
-/polywave program execute
+# -> Parallel agents implement their assigned files concurrently
+# -> Orchestrator merges, runs tests, reports result
 ```
 
 **Subcommands:**
@@ -136,48 +110,20 @@ polywave-tools init
 | `/polywave status` | Show current wave and agent progress |
 | `/polywave bootstrap "<project>"` | Design new project structure from scratch |
 | `/polywave interview "<description>"` | Structured requirements gathering |
-| `/polywave program --impl <slug> ...` | Bundle queued IMPLs into a parallel program (auto tier-assigns by file ownership) |
-| `/polywave program plan/execute/status/replan` | Top-down multi-feature planning and tier-gated execution |
+| `/polywave program --impl <slug> ...` | Bundle queued IMPLs into a parallel program |
+| `/polywave program plan/execute/status/replan` | Multi-feature planning and tier-gated execution |
 | `/polywave amend --add-wave/--redirect-agent/--extend-scope` | Modify active IMPL |
 
-The scout produces an **Implementation Document (IMPL doc)** (`docs/IMPL/IMPL-<feature>.yaml`): a structured YAML coordination document that defines which files each agent will modify, what interfaces they'll implement, and how they'll work in parallel. You review it before any agent writes code. This is the human checkpoint that makes parallel execution safe.
+**First time using Polywave?** See [QUICKSTART.md](implementations/claude-code/QUICKSTART.md) for step-by-step guidance with example output.
 
-**First time using Polywave?** See [implementations/claude-code/QUICKSTART.md](implementations/claude-code/QUICKSTART.md) for step-by-step guidance with example output.
+## Repositories
 
-## Ways to Use Polywave
-
-Polywave has three interfaces backed by separate repositories, all implementing the same protocol.
-
-| Interface | Repository | Description |
-|-----------|------------|-------------|
-| Claude Code skill (`/polywave`) | [polywave](https://github.com/blackwell-systems/polywave) (this repo) | Runs inside Claude Code as a slash command. The orchestrator is Claude itself. Fastest way to get started. |
-| Go engine + `polywave-tools` CLI | [polywave-go](https://github.com/blackwell-systems/polywave-go) | Protocol SDK, 75+ CLI commands, and LLM-agnostic engine. Supports Anthropic, OpenAI, and local (Ollama) backends. |
-| Web UI (`polywave serve`) | [polywave-web](https://github.com/blackwell-systems/polywave-web) | Browser-based dashboard with real-time SSE updates. Imports polywave-go as dependency. |
-
-All implement the same Polywave protocol and produce identical IMPL docs. Use the Claude Code skill to start quickly. Use `polywave-tools` for programmatic orchestration, or the Web UI for a browser-based dashboard with real-time monitoring.
-
-## Documentation
-
-### Protocol Specification
-
-The protocol is defined independent of any implementation. Read these to understand how Polywave works:
-
-- **[protocol/README.md](protocol/README.md)** - Protocol overview and navigation guide
-- **[protocol/participants.md](protocol/participants.md)** - Seven participant roles and their responsibilities
-- **[protocol/preconditions.md](protocol/preconditions.md)** - Five preconditions for suitability gate
-- **[protocol/invariants.md](protocol/invariants.md)** - Six invariants (I1–I6) — formal correctness rules that every implementation must satisfy (e.g., I1: disjoint file ownership, I2: interface contracts precede parallel implementation)
-- **[protocol/execution-rules.md](protocol/execution-rules.md)** - 47 execution rules (E1–E47) governing the full lifecycle: state transitions, agent launches, merge procedures, verification gates, failure recovery, integration, and hook-based enforcement. You don't need to read these to use Polywave — the tooling enforces them automatically.
-- **[protocol/state-machine.md](protocol/state-machine.md)** - Protocol states and transitions
-- **[protocol/message-formats.md](protocol/message-formats.md)** - IMPL doc and completion report schemas
-- **[protocol/procedures.md](protocol/procedures.md)** - Step-by-step merge and verification procedures
-
-### Implementations
-
-Polywave can be executed in different ways:
-
-- **[implementations/claude-code/](implementations/claude-code/)** - Fully automated implementation using Claude Code
-
-See **[implementations/README.md](implementations/README.md)** for details.
+| Repository | Purpose |
+|-----------|---------|
+| [polywave-protocol](https://github.com/blackwell-systems/polywave-protocol) | Protocol specification: invariants, execution rules, state machine, message formats |
+| **polywave** (this repo) | Claude Code implementation: Agent Skill, hooks, prompts, agent templates |
+| [polywave-go](https://github.com/blackwell-systems/polywave-go) | Go engine, Protocol SDK, and `polywave-tools` CLI |
+| [polywave-web](https://github.com/blackwell-systems/polywave-web) | Web UI and HTTP/SSE server |
 
 ## When to Use It
 
@@ -189,47 +135,28 @@ If the work doesn't decompose cleanly, the Scout says so. It runs a suitability 
 
 Polywave enforces two independent constraints that together make parallel execution correct:
 
-**Disjoint file ownership** prevents merge conflicts. Every file that will change is assigned to exactly one agent in the IMPL doc. No two agents in the same wave can produce edits to the same file, so the merge step is always conflict-free regardless of what agents do during execution.
+**Disjoint file ownership** prevents merge conflicts. Every file that will change is assigned to exactly one agent in the IMPL doc. No two agents in the same wave can produce edits to the same file, so the merge step is always conflict-free.
 
-**Worktree isolation** prevents execution-time interference. Each agent works in its own git worktree - a separate directory that shares the same git history but has an independent file tree. This means concurrent `go build`, `go test`, and tool-cache writes don't race on shared build caches, lock files, or intermediate object files.
+**Worktree isolation** prevents execution-time interference. Each agent works in its own git worktree, a separate directory that shares the same git history but has an independent file tree. Concurrent builds, tests, and tool-cache writes don't race on shared state.
 
-Neither constraint substitutes for the other. Disjoint ownership without worktrees: merge is safe, but concurrent builds are flaky. Worktrees without disjoint ownership: execution is clean, but merge produces unresolvable conflicts. Both must hold for a wave to be correct and reproducible.
-
-**Cascade failures:** These happen when Agent A changes a function signature and Agent B's code breaks at integration time, even though both passed isolated tests. The post-merge verification gate catches these cross-package issues that individual agents can't see in their isolated worktrees.
+Neither constraint substitutes for the other. Disjoint ownership without worktrees: merge is safe, but concurrent builds are flaky. Worktrees without disjoint ownership: execution is clean, but merge produces unresolvable conflicts. Both must hold.
 
 ### Worktree Isolation Defense (6 layers)
 
 Agents don't always respect isolation instructions. Polywave treats worktree isolation as an infrastructure problem, not a cooperation problem, with hook-based enforcement (E43) as the primary mechanism.
 
-(Layers numbered 0-4, plus E43 hook-based enforcement. Layer 0 is the foundational prevention layer; higher layers add defense-in-depth.)
-
 | Layer | Mechanism | Type |
 |-------|-----------|------|
-| **E43** | **Hook-based enforcement** - Claude Code lifecycle hooks (SubagentStart, PreToolUse:Bash, PreToolUse:Write/Edit, SubagentStop) automatically inject environment variables, prepend cd commands to bash calls, and block out-of-bounds writes at the tool boundary. Violations become impossible rather than merely detected. See E43 in `protocol/execution-rules.md`. | **Prevention (Primary)** |
-| 0 | **Pre-commit hook** - installed automatically by `polywave-tools create-worktrees` (embedded in Go SDK at `pkg/worktree/manager.go`). Blocks commits to main during active waves. Agents receive an instructive error. Orchestrator bypasses via `POLYWAVE_ALLOW_MAIN_COMMIT=1`. | Prevention |
-| 1 | **Manual worktree pre-creation** - Orchestrator creates all worktrees before any agent launches | Deterministic |
-| 2 | **`isolation: "worktree"` parameter** - each agent launch specifies worktree isolation at the tool level. **Omitted for cross-repo waves** (would create worktrees in the wrong repo); Layer 1 and Layer 3 provide isolation instead. See `saw-worktree.md` Cross-Repo Mode. | Tool-level |
-| 3 | **Field 0 self-verification** - agents confirm branch via brief check (primary enforcement is the `validate_worktree_isolation` SubagentStart hook) | Cooperative |
-| 4 | **Merge-time trip wire** - Orchestrator counts commits per worktree branch before merging. Zero commits = isolation failure. Stops with recovery options. | Deterministic |
-
-E43 (hook-based enforcement) and Layers 0 and 4 are the structural guarantees: E43 prevents violations at the tool boundary, Layer 0 prevents agents from committing to main, Layer 4 detects if isolation failed by any mechanism. Layers 1-3 are defense-in-depth.
-
-## Building a New Implementation
-
-To implement Polywave in a different runtime (Python, Rust, TypeScript, etc.):
-
-1. Read protocol docs in order: [participants](protocol/participants.md) → [preconditions](protocol/preconditions.md) → [invariants](protocol/invariants.md) → [execution-rules](protocol/execution-rules.md) → [state-machine](protocol/state-machine.md) → [message-formats](protocol/message-formats.md) → [procedures](protocol/procedures.md)
-2. Identify which participant roles your runtime will support (minimum: Orchestrator + Wave Agent)
-3. Choose an isolation mechanism that satisfies I1 (disjoint file ownership): git worktrees, filesystem snapshots, containers, etc.
-4. Use the [protocol/](protocol/) specification as reference for orchestrator logic
-5. Use [protocol/message-formats.md](protocol/message-formats.md) as reference for IMPL doc structure and message schemas
-6. Verify your implementation satisfies all six invariants (I1–I6) defined in [protocol/invariants.md](protocol/invariants.md)
-
-See [protocol/README.md](protocol/README.md) for the full adoption guide.
+| **E43** | **Hook-based enforcement**: Claude Code lifecycle hooks (SubagentStart, PreToolUse:Bash, PreToolUse:Write/Edit, SubagentStop) automatically inject environment variables, prepend cd commands to bash calls, and block out-of-bounds writes at the tool boundary. Violations become impossible rather than merely detected. | **Prevention (Primary)** |
+| 0 | **Pre-commit hook**: installed automatically by `polywave-tools create-worktrees`. Blocks commits to main during active waves. Orchestrator bypasses via `POLYWAVE_ALLOW_MAIN_COMMIT=1`. | Prevention |
+| 1 | **Manual worktree pre-creation**: Orchestrator creates all worktrees before any agent launches | Deterministic |
+| 2 | **`isolation: "worktree"` parameter**: each agent launch specifies worktree isolation at the tool level | Tool-level |
+| 3 | **Field 0 self-verification**: agents confirm branch via brief check (primary enforcement is the `validate_worktree_isolation` SubagentStart hook) | Cooperative |
+| 4 | **Merge-time trip wire**: Orchestrator counts commits per worktree branch before merging. Zero commits = isolation failure. Stops with recovery options. | Deterministic |
 
 ## Polywave-Teams (Experimental)
 
-[`docs/proposals/polywave-teams/`](docs/proposals/polywave-teams/) is an alternate execution layer using Claude Code Agent Teams. Same protocol, same IMPL doc, same Scout. Different wave plumbing: teammates replace background Agent tool calls, providing inter-agent messaging and real-time deviation alerts. Trade-off: better visibility during execution, worse crash recovery. See [`docs/proposals/polywave-teams/README.md`](docs/proposals/polywave-teams/README.md) for setup and usage.
+[`docs/proposals/polywave-teams/`](docs/proposals/polywave-teams/) is an alternate execution layer using Claude Code Agent Teams. Same protocol, same IMPL doc, same Scout. Different wave plumbing: teammates replace background Agent tool calls, providing inter-agent messaging and real-time deviation alerts.
 
 ## Blog Post
 
