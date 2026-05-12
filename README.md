@@ -1,5 +1,9 @@
 # Polywave
 
+<p align="center">
+  <img src="assets/logo.png" alt="Polywave" width="600" />
+</p>
+
 [![Blackwell Systems™](https://raw.githubusercontent.com/blackwell-systems/blackwell-docs-theme/main/badge-trademark.svg)](https://github.com/blackwell-systems)
 ![Version](https://img.shields.io/badge/version-0.9.3-blue)
 [![Agent Skills](assets/badge-agentskills.svg)](https://agentskills.io)
