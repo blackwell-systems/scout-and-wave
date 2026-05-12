@@ -67,20 +67,15 @@ The protocol has a built-in **suitability gate** that answers [five questions](h
 ```bash
 # 0. Add "Agent" to your Claude Code allow list (required — without this,
 #    every agent launch pauses for manual approval)
-#    See implementations/claude-code/README.md for details
+#    Add this to ~/.claude/settings.json under "permissions" -> "allow":
+#    "Agent"
 
 # 1. Clone and install (symlinks skill files into ~/.claude/skills/polywave/)
 git clone https://github.com/blackwell-systems/polywave.git ~/code/polywave
 ~/code/polywave/install.sh
 
-# Or manually:
-mkdir -p ~/.claude/skills/polywave/agents
-ln -sf ~/code/polywave/implementations/claude-code/prompts/polywave-skill.md ~/.claude/skills/polywave/SKILL.md
-ln -sf ~/code/polywave/implementations/claude-code/prompts/polywave-bootstrap.md ~/.claude/skills/polywave/polywave-bootstrap.md
-ln -sf ~/code/polywave/implementations/claude-code/prompts/agent-template.md ~/.claude/skills/polywave/agent-template.md
-ln -sf ~/code/polywave/implementations/claude-code/prompts/agents ~/.claude/skills/polywave/agents
-
-# 2. Install polywave-tools CLI (pick one)
+# 2. Install polywave-tools CLI — handles worktree creation, manifest
+#    validation, and merge gating. The skill orchestrates; the CLI executes.
 brew install blackwell-systems/tap/polywave-tools                                     # Homebrew
 go install github.com/blackwell-systems/polywave-go/cmd/polywave-tools@latest   # Go install
 # Or download binary: https://github.com/blackwell-systems/polywave-go/releases/latest
