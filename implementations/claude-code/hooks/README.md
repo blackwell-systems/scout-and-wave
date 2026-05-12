@@ -379,55 +379,7 @@ This is a second layer of I1 enforcement. Hook 4 (check_wave_ownership) catches 
 
 ## Hook 6: IMPL Path Validation (H2)
 
-**PreToolUse** — Validates that the IMPL doc path referenced in the agent prompt exists on disk before launching a subagent.
-
-### How It Works
-
-1. Claude Code calls the script before executing the Agent tool (subagent launch)
-2. Script extracts the IMPL doc path from the agent prompt text
-3. Verifies the file exists on disk
-4. If path not found in prompt or file does not exist -> block (exit 2) with error
-5. Otherwise -> allow (exit 0)
-
-This prevents Wave agents from launching with stale or incorrect IMPL doc references, which would cause them to work against a non-existent specification.
-
-### Manual Installation
-
-1. Symlink:
-   ```bash
-   ln -sf ~/code/polywave/implementations/claude-code/hooks/check_impl_path ~/.claude/agents/hooks/check_impl_path
-   ```
-
-2. Add to `~/.claude/settings.json`:
-   ```json
-   {
-     "hooks": {
-       "PreToolUse": [
-         {
-           "matcher": "Agent",
-           "hooks": [
-             {
-               "type": "command",
-               "command": "$HOME/.claude/agents/hooks/check_impl_path"
-             }
-           ]
-         }
-       ]
-     }
-   }
-   ```
-
-### Testing
-
-```bash
-# Agent launch with valid IMPL path — should exit 0
-echo '{"tool_name":"Agent","tool_input":{"prompt":"IMPL doc: /path/to/docs/IMPL/IMPL-feature.yaml"}}' | check_impl_path
-echo $?  # 0 (if file exists)
-
-# Agent launch with missing IMPL path — should exit 2
-echo '{"tool_name":"Agent","tool_input":{"prompt":"Do some work"}}' | check_impl_path 2>&1
-echo $?  # 2 (no IMPL path found)
-```
+**Note:** The standalone `check_impl_path` hook has been superseded by `validate_agent_launch` (Hook 10), which combines IMPL path validation with pre-launch gate checks. IMPL path validation is now part of the unified agent launch validation flow.
 
 ---
 

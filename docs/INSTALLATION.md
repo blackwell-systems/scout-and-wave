@@ -247,30 +247,21 @@ For detailed hook documentation, see [hooks/README.md](../implementations/claude
 
 ### Symlinks Created
 
-The installer creates these symlinks in `~/.local/bin/`:
+The installer creates 22 symlinks in `~/.claude/agents/hooks/`:
 
 ```
-~/.local/bin/inject_worktree_env
-~/.local/bin/validate_agent_isolation
-~/.local/bin/check_scout_boundaries
-~/.local/bin/block_claire_paths
-~/.local/bin/check_wave_ownership
-~/.local/bin/auto_format_polywave_agent_names
-~/.local/bin/validate_agent_launch
-~/.local/bin/inject_bash_cd
-~/.local/bin/validate_write_paths
-~/.local/bin/block_git_stash
-~/.local/bin/validate_impl_on_write
-~/.local/bin/check_git_ownership
-~/.local/bin/warn_stubs
-~/.local/bin/check_branch_drift
-~/.local/bin/validate_agent_completion
-~/.local/bin/emit_agent_completion
-~/.local/bin/verify_worktree_compliance
-~/.local/bin/inject_skill_context
+check_scout_boundaries           validate_agent_launch
+validate_impl_on_write           validate_agent_completion
+block_claire_paths               validate_agent_isolation
+check_wave_ownership             validate_worktree_isolation
+check_git_ownership              emit_agent_completion
+warn_stubs                       inject_skill_context
+check_branch_drift               inject_worktree_env
+auto_format_polywave_agent_names inject_bash_cd
+validate_write_paths             verify_worktree_compliance
+block_git_stash                  auto_commit_on_write
+polywave_orchestrator_stop       polywave_critic_impl_commit
 ```
-
-Note: The installer script also references `check_impl_path` in its uninstall instructions, but this hook has been superseded by `validate_agent_launch` and is no longer installed or registered.
 
 ## Verify Installation
 
@@ -404,8 +395,8 @@ If any are missing, re-run the installer: `./install.sh`
 
 1. Check that symlinks exist and are executable:
    ```bash
-   ls -la ~/.local/bin/check_scout_boundaries
-   ls -la ~/.local/bin/validate_agent_launch
+   ls -la ~/.claude/agents/hooks/check_scout_boundaries
+   ls -la ~/.claude/agents/hooks/validate_agent_launch
    ```
 
 2. Check that hooks are registered in settings:
@@ -470,9 +461,9 @@ The installer supports multiple platforms via flags:
 
 | Flag | Skill directory | Hooks | Settings |
 |------|----------------|-------|----------|
-| `./install.sh` (auto-detect) | `~/.claude/skills/polywave/` if Claude Code detected, else `~/.agents/skills/polywave/` | `~/.local/bin/` | `settings.json` if Claude Code |
-| `./install.sh --claude-code` | `~/.claude/skills/polywave/` | `~/.local/bin/` | Registers in `settings.json` + Agent permission |
-| `./install.sh --generic` | `~/.agents/skills/polywave/` | `~/.local/bin/` | None (manual registration) |
+| `./install.sh` (auto-detect) | `~/.claude/skills/polywave/` if Claude Code detected, else `~/.agents/skills/polywave/` | `~/.claude/agents/hooks/` | `settings.json` if Claude Code |
+| `./install.sh --claude-code` | `~/.claude/skills/polywave/` | `~/.claude/agents/hooks/` | Registers in `settings.json` + Agent permission |
+| `./install.sh --generic` | `~/.agents/skills/polywave/` | `~/.claude/agents/hooks/` | None (manual registration) |
 
 **`polywave-tools` works on any platform** -- it's a standalone Go binary that manages git worktrees, validates IMPL docs, merges branches, and runs quality gates. No LLM API calls. Key capabilities include:
 
