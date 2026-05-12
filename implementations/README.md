@@ -48,16 +48,19 @@ Polywave is designed as a layered system. Most of it is already platform-agnosti
 | **Protocol** (invariants, state machine, execution rules) | No | Fully platform-agnostic specification |
 | **Go Engine** (`polywave-go/pkg/engine`, `pkg/protocol`) | No | Provider-agnostic orchestration, validation, and merging |
 | **Agent backends** (`polywave-go/pkg/agent/backend/`) | No | 4 backends: Anthropic API, AWS Bedrock, OpenAI-compatible (Ollama, Groq, LM Studio), CLI |
-| **Skill** (SKILL.md + references/) | No | [Agent Skills](https://agentskills.io) standard format; any compatible tool can load it |
+| **Skill format** (SKILL.md + references/) | No | [Agent Skills](https://agentskills.io) standard format; any compatible tool can load the skill |
+| **Skill content** (orchestration instructions) | Yes (`polywave-tools`) | The skill's instructions call `polywave-tools` CLI commands throughout the orchestration flow (prepare-wave, finalize-wave, validate, close-impl, etc.). `polywave-tools` on PATH is a pre-flight blocker. Any platform running this skill needs the Go CLI installed. |
 | **Progressive disclosure** | Mostly no | 3-layer design: hooks (Claude Code), scripts (any platform with script execution), routing table in SKILL.md (universal fallback) |
 | **Enforcement hooks** (22 hooks) | Yes (Claude Code) | Uses Claude Code lifecycle events (SubagentStart, PreToolUse, SubagentStop). Other platforms implement equivalent enforcement at their tool boundary. |
 | **Agent prompts** | Partially | Prompt content is generic; delivery mechanism (`subagent_type`) is Claude Code-specific |
+
+The skill's packaging follows the Agent Skills standard (portable format), but its orchestration logic requires `polywave-tools` (the Go CLI). This is by design: the CLI is the predictability boundary that makes agent behavior deterministic. Platforms that embed the Go engine directly (web app, native app) bypass the CLI entirely, but skill-based orchestration on any platform needs it installed.
 
 The protocol requires that invariants (I1-I6) be enforced. It does not prescribe how. The Claude Code hooks are one implementation of enforcement; other platforms can enforce the same invariants through their own tool-boundary mechanisms.
 
 ## Building a New Implementation
 
-The Polywave skill follows the [Agent Skills](https://agentskills.io) open standard. On any Agent Skills-compatible platform (Cursor, GitHub Copilot, etc.), the skill's SKILL.md and reference docs load without modification. What you need to provide:
+The Polywave skill follows the [Agent Skills](https://agentskills.io) open standard. Any Agent Skills-compatible platform (Cursor, GitHub Copilot, etc.) can load the skill's SKILL.md and reference docs. To run the orchestration flow, `polywave-tools` must be installed (`go install github.com/blackwell-systems/polywave-go/cmd/polywave-tools@latest`). What else you need to provide:
 
 1. **Agent spawning**: your platform's mechanism for launching parallel agents (the Go engine's 4-backend system handles this for programmatic orchestration)
 2. **Invariant enforcement**: any mechanism that blocks writes outside an agent's assigned files and worktree (hooks are one approach; filesystem permissions, container boundaries, or tool-level filtering all satisfy the same requirement)
