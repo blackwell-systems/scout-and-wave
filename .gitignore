@@ -5,3 +5,5 @@
 docs/IMPL/.polywave-state/
 *.bak
 .serena/
+.saw-state/
+docs/IMPL/.saw-state/
