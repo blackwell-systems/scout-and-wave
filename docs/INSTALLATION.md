@@ -172,7 +172,7 @@ If you want the browser-based interface:
 git clone https://github.com/blackwell-systems/polywave-web.git
 cd polywave-web
 cd web && npm install && npm run build && cd ..
-go build -o saw ./cmd/saw
+go build -o polywave-web ./cmd/polywave-web
 ```
 
 The React frontend is embedded into the Go binary via `//go:embed`, so **both** the npm build and the Go build are required. Any change to the frontend requires re-running both steps.
@@ -180,7 +180,7 @@ The React frontend is embedded into the Go binary via `//go:embed`, so **both** 
 Start the server with:
 
 ```bash
-./polywave serve
+./polywave-web serve
 ```
 
 ## Hooks (20 total)
@@ -303,7 +303,7 @@ Polywave works without `polywave.config.json`, but with reduced capabilities:
 | Agent model selection | Per-role models (Scout=Sonnet, Wave=Opus, etc.) | All agents inherit parent session model |
 | Build/test commands | Auto-detected or configured | Must be specified in IMPL doc quality gates |
 | Multi-repo awareness | Repos listed, cross-repo IMPL docs work | Single-repo only |
-| Web UI project binding | `polywave serve` auto-finds project | Must pass `--repo` flag every time |
+| Web UI project binding | `polywave-web serve` auto-finds project | Must pass `--repo` flag every time |
 | Webhook notifications | Adapters configured under `webhooks:` key | No webhook delivery |
 
 **Bottom line:** A single-repo project with default models works fine without it. Multi-repo projects or custom model selection need it.
@@ -461,7 +461,7 @@ Then rebuild the Go binary (required because assets are embedded):
 
 ```bash
 cd polywave-web
-go build -o saw ./cmd/saw
+go build -o polywave-web ./cmd/polywave-web
 ```
 
 ## Platform Support

@@ -17,7 +17,7 @@ You also need the [polywave-web](https://github.com/blackwell-systems/polywave-w
 ```bash
 cd polywave-web
 make build
-./polywave serve
+./polywave-web serve
 ```
 
 **What happens:** The `make build` command compiles the React frontend and embeds it into the Go binary. The server starts on port 7432 by default.
@@ -99,7 +99,7 @@ Example prompts:
 Another process is using the default port. Either stop that process or specify a different address:
 
 ```bash
-./polywave serve --addr localhost:8080
+./polywave-web serve --addr localhost:8080
 ```
 
 ### Build fails during `make build`

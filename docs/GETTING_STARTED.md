@@ -16,7 +16,7 @@ The most common way to use Polywave. Install the skill, then run `/polywave scou
 
 **Isolation enforcement:** Worktree isolation is enforced automatically via hooks (environment injection, cd auto-injection, path validation, compliance verification). No manual `cd` commands required.
 
-### Web UI (`polywave serve`)
+### Web UI (`polywave-web serve`)
 
 A browser-based interface for reviewing IMPL docs, monitoring wave progress, and chatting with the orchestrator. Gives you visual feedback on agent status and file ownership.
 
@@ -73,21 +73,24 @@ See [INSTALLATION.md](INSTALLATION.md) for the full installation guide, includin
 2. Install polywave-tools: `brew install blackwell-systems/tap/polywave-tools` (or `go install github.com/blackwell-systems/polywave-go/cmd/polywave-tools@latest`)
 3. (Optional) Clone [polywave-web](https://github.com/blackwell-systems/polywave-web) for the Web UI
 
-## Three Repos, One System
+## Four Repos, One System
 
-Polywave is split across three repositories, each with a distinct role:
+Polywave is split across four repositories, each with a distinct role:
 
 | Repository | What It Contains | When You Need It |
 |---|---|---|
-| [polywave](https://github.com/blackwell-systems/polywave) | Protocol spec, skill files, agent prompts | Always (this repo) |
+| [polywave-protocol](https://github.com/blackwell-systems/polywave-protocol) | Protocol specification (invariants, execution rules, state machine) | Only if building a new implementation or reading the spec |
+| [polywave](https://github.com/blackwell-systems/polywave) | Claude Code skill, hooks, agent prompts | Always (this repo) |
 | [polywave-go](https://github.com/blackwell-systems/polywave-go) | Go engine, `polywave-tools` CLI binary | Always (provides the CLI tools) |
-| [polywave-web](https://github.com/blackwell-systems/polywave-web) | Web UI, `polywave serve` binary | Only if you want the browser interface |
+| [polywave-web](https://github.com/blackwell-systems/polywave-web) | Web UI, `polywave-web` binary | Only if you want the browser interface |
 
-**polywave** (this repo) defines the protocol and contains the Claude Code skill files. It has no runtime dependencies beyond Git.
+**polywave** (this repo) contains the Claude Code skill files, hooks, and agent prompts. It has no runtime dependencies beyond Git.
 
 **polywave-go** implements the protocol engine in Go and produces the `polywave-tools` binary. This is what creates worktrees, validates IMPL docs, and runs verification gates.
 
-**polywave-web** adds an HTTP server and React frontend on top of the Go engine. It produces the `polywave` binary that serves the Web UI.
+**polywave-web** adds an HTTP server and React frontend on top of the Go engine. It produces the `polywave-web` binary that serves the Web UI.
+
+**polywave-protocol** contains the normative protocol specification. You don't need it to use Polywave; the tooling enforces the protocol automatically.
 
 ## Next Steps
 

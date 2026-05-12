@@ -64,34 +64,26 @@ The protocol has a built-in **suitability gate** that answers [five questions](h
 
 ## Quick Start
 
+**Prerequisites:** Git 2.20+, jq 1.6+, Claude Code. You do not need polywave-protocol or polywave-web.
+
 ```bash
-# 0. Add "Agent" to your Claude Code allow list (required — without this,
-#    every agent launch pauses for manual approval)
-#    Add this to ~/.claude/settings.json under "permissions" -> "allow":
-#    "Agent"
-
-# 1. Clone and install (symlinks skill files into ~/.claude/skills/polywave/)
+# 1. Install skill files, hooks, and Agent permission
 git clone https://github.com/blackwell-systems/polywave.git ~/code/polywave
-~/code/polywave/install.sh
+~/code/polywave/install.sh    # configures Agent permission, symlinks skills, installs hooks
 
-# 2. Install polywave-tools CLI — handles worktree creation, manifest
-#    validation, and merge gating. The skill orchestrates; the CLI executes.
+# 2. Install polywave-tools CLI (the skill orchestrates; the CLI executes)
 brew install blackwell-systems/tap/polywave-tools                                     # Homebrew
 go install github.com/blackwell-systems/polywave-go/cmd/polywave-tools@latest   # Go install
 # Or download binary: https://github.com/blackwell-systems/polywave-go/releases/latest
 
-# 3. Initialize your project (auto-detects language, build, and test commands)
+# 3. Initialize your project
 cd your-project
-polywave-tools init
+polywave-tools init            # auto-detects language, build, and test commands
 
-# 4. Restart Claude Code, then in any session on any project:
+# 4. Verify and go
+polywave-tools verify-install  # checks skill files, CLI, hooks, permissions
+# Restart Claude Code, then:
 /polywave scout "add a caching layer to the API client"
-# -> Scout analyzes the codebase, assigns files to agents, writes docs/IMPL/IMPL-caching-layer.yaml
-# -> You review the IMPL doc. This is the last chance to change interfaces.
-
-/polywave wave
-# -> Parallel agents implement their assigned files concurrently
-# -> Orchestrator merges, runs tests, reports result
 ```
 
 **Subcommands:**
