@@ -1,6 +1,6 @@
 # First Run Walkthrough
 
-**Protocol Version:** 0.9.3
+**Protocol Version:** 0.11.0
 
 This guide walks you through your first Polywave session step-by-step, showing exactly what to expect at each stage.
 

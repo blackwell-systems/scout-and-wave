@@ -1,6 +1,6 @@
 # Claude Code Reference Implementation
 
-**Protocol Version:** 0.9.3
+**Protocol Version:** 0.11.0
 
 Polywave implemented as a Claude Code skill for fully automated parallel agent execution.
 
