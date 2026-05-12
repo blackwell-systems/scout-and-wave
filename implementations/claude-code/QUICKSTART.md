@@ -637,4 +637,4 @@ Solution: Two agents defined the same type (e.g., both created a struct with the
 - [GLOSSARY.md](../../GLOSSARY.md) - Quick definitions of Polywave-specific terms
 - [README](../README.md) - Main documentation
 - [Protocol specification](../../protocol/) - Formal specification
-- [Blog series](https://blog.blackwell-systems.com/posts/polywave/) - Pattern evolution and lessons learned
+- [Blog series](https://blog.blackwell-systems.com/posts/scout-and-wave/) - Pattern evolution and lessons learned
