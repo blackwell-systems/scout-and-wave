@@ -64,16 +64,16 @@ The protocol has a built-in **suitability gate** that answers [five questions](h
 
 ## Quick Start
 
-> **Before you start:** Add `"Agent"` to your allow list in `~/.claude/settings.json` or you'll need to manually approve each agent launch. See [implementations/claude-code/README.md](implementations/claude-code/README.md#step-1-configure-permissions-required) for details.
-
 ```bash
-# 1. Clone and install
-git clone https://github.com/blackwell-systems/polywave.git ~/code/polywave
+# 0. Add "Agent" to your Claude Code allow list (required — without this,
+#    every agent launch pauses for manual approval)
+#    See implementations/claude-code/README.md for details
 
-# Quick install
+# 1. Clone and install (symlinks skill files into ~/.claude/skills/polywave/)
+git clone https://github.com/blackwell-systems/polywave.git ~/code/polywave
 ~/code/polywave/install.sh
 
-# Or manually (see implementations/claude-code/README.md for full install):
+# Or manually:
 mkdir -p ~/.claude/skills/polywave/agents
 ln -sf ~/code/polywave/implementations/claude-code/prompts/polywave-skill.md ~/.claude/skills/polywave/SKILL.md
 ln -sf ~/code/polywave/implementations/claude-code/prompts/polywave-bootstrap.md ~/.claude/skills/polywave/polywave-bootstrap.md
