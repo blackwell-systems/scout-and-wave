@@ -8,7 +8,7 @@ Polywave (Polywave) runs parallel AI coding agents that don't break each other's
 
 Choose the path that fits your workflow:
 
-### Claude Code Skill (`/saw`)
+### Claude Code Skill (`/polywave`)
 
 The most common way to use Polywave. Install the skill, then run `/polywave scout "feature"` directly in Claude Code. The orchestrator handles everything: launching agents, creating worktrees, merging results, running tests.
 

@@ -126,7 +126,7 @@ The web UI reads IMPL docs from disk. Refresh the browser page after saving chan
 
 - [Getting Started Guide](GETTING_STARTED.md) -- Overview of all three Polywave interfaces
 - [Installation Guide](INSTALLATION.md) -- Full installation walkthrough for all components
-- [Claude Code Quickstart](../implementations/claude-code/QUICKSTART.md) -- Using Polywave via the `/saw` skill in Claude Code
+- [Claude Code Quickstart](../implementations/claude-code/QUICKSTART.md) -- Using Polywave via the `/polywave` skill in Claude Code
 
 ---
 
