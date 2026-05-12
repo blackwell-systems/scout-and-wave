@@ -4,9 +4,11 @@
   <img src="assets/logo.png" alt="Polywave" width="600" />
 </p>
 
-[![Blackwell Systems](https://raw.githubusercontent.com/blackwell-systems/blackwell-docs-theme/main/badge-trademark.svg)](https://github.com/blackwell-systems)
-![Version](https://img.shields.io/badge/version-0.11.0-blue)
-[![Agent Skills](assets/badge-agentskills.svg)](https://agentskills.io)
+<p align="center">
+  <a href="https://github.com/blackwell-systems"><img src="https://raw.githubusercontent.com/blackwell-systems/blackwell-docs-theme/main/badge-trademark.svg" alt="Blackwell Systems" /></a>
+  <img src="https://img.shields.io/badge/version-0.11.0-blue" alt="Version" />
+  <a href="https://agentskills.io"><img src="assets/badge-agentskills.svg" alt="Agent Skills" /></a>
+</p>
 
 **Parallel AI agents that don't break each other's code.**
 
