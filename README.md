@@ -29,10 +29,12 @@ You've run parallel agents before. You know what happens: two agents edit the sa
 
 Most frameworks try to solve this with better prompts. Polywave solves it with structure:
 
-- **Disjoint file ownership.** The Scout assigns every file to exactly one agent before any code is written. Two agents in the same wave cannot produce edits to the same file. Merge conflicts become structurally impossible.
+- **Disjoint file ownership.** The Scout assigns every file to exactly one agent before any code is written. Two agents in the same wave cannot produce edits to the same file. This assignment is enforced at the tool boundary, not delegated to agent discipline; violations become impossible. Merge conflicts become structurally impossible.
 - **Per-agent worktree isolation.** Each agent works in its own git worktree, a separate directory with an independent file tree. Concurrent builds, tests, and tool-cache writes don't race on shared state.
 - **Human review before execution.** You see the full plan (file assignments, interface contracts, wave structure) and approve it before any agent launches. This is the last point where changing the architecture is cheap.
 - **Suitability gate.** Polywave says "no" when the work doesn't decompose cleanly. A poor-fit assessment prevents bad decompositions from producing expensive failures.
+
+Polywave is not an agent runtime. It does not route tasks, manage inter-agent messaging, or maintain cross-session memory. It is a coordination protocol: partition the work safely, verify the partition, launch agents independently, merge deterministically. Agents run in parallel but do not communicate; correctness comes from the partition, not from cooperation.
 
 The system has seven [participant roles](https://github.com/blackwell-systems/polywave-protocol/blob/main/participants.md), but you interact with two: the **Orchestrator** (your Claude Code session, coordinates everything) and the **Scout** (analyzes codebase, assigns files, writes the plan). The other five (Scaffold Agent, Wave Agents, Integration Agent, Critic Agent, Planner) run automatically when needed.
 
