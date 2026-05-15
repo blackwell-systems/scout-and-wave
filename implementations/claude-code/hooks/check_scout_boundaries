@@ -37,7 +37,7 @@ dir=$(dirname "$normalized")
 base=$(basename "$normalized")
 
 # Allow only docs/IMPL/IMPL-*.yaml (not subdirectories)
-if [[ "$dir" == "docs/IMPL" && "$base" == IMPL-*.yaml ]]; then
+if [[ "$dir" == */docs/IMPL ]] && [[ "$base" == IMPL-*.yaml ]]; then
   exit 0  # Allow
 fi
 
