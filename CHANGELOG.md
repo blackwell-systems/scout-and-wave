@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- `check_branch_drift` hook: worktree detection used stale `.claude/worktrees/saw/` pattern; now matches `.claude/worktrees/` (any Polywave worktree)
+- `validate_worktree_isolation` hook: worktree and branch patterns used stale `saw/` prefix; now matches `.claude/worktrees/` and `polywave/` branches
+- Error messages in both hooks updated from `saw/*` to `polywave/*` branch patterns
+
 ### Completed — Polywave Rebrand (v0.10.0 phases + rebrand-completion IMPL)
 
 Complete rebrand from `scout-and-wave` to `polywave` across all three repos. Migration plan below executed across 5 phases (v0.10.0) plus a 4-agent Polywave IMPL for the long-tail references.

@@ -34,20 +34,20 @@ wave_num="${BASH_REMATCH[1]}"
 agent_id="${BASH_REMATCH[2]}"
 
 # Phase 1 check — pwd pattern:
-# If PWD does not contain .claude/worktrees/saw/, this is not a worktree context.
+# If PWD does not contain .claude/worktrees/, this is not a worktree context.
 # Pass through to avoid blocking non-worktree scenarios (e.g. solo waves).
-if [[ ! "$PWD" =~ \.claude/worktrees/saw/ ]]; then
+if [[ ! "$PWD" =~ \.claude/worktrees/ ]]; then
   exit 0
 fi
 
 # Phase 1 check — git branch pattern:
-# Wave agent is in a worktree path, so it must be on a saw/* branch.
+# Wave agent is in a worktree path, so it must be on a polywave/* branch.
 actual_branch=$(git branch --show-current 2>/dev/null || echo "")
 
-if [[ ! "$actual_branch" =~ ^saw/ ]]; then
+if [[ ! "$actual_branch" =~ ^polywave/ ]]; then
   echo "ISOLATION VIOLATION: Not on a Polywave branch" >&2
   echo "  Agent: $agent_name" >&2
-  echo "  Expected branch pattern: saw/*" >&2
+  echo "  Expected branch pattern: polywave/*" >&2
   if [[ -z "$actual_branch" ]]; then
     echo "  Actual branch: unknown" >&2
   else
