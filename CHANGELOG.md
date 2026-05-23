@@ -8,8 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **`validate_scout_output` SubagentStop hook** (Hook 16): validates IMPL schema after scout completes; runs `polywave-tools validate --fix` then blocks if errors remain. Closes the gap between "scout wrote something" and "orchestrator accepts it." Prevents invalid state enums, wrong `depends_on` formats, and schema violations from reaching the orchestrator.
+- Three-layer defense-in-depth for IMPL validation: (1) PostToolUse inline warning, (2) SubagentStop hard gate (new), (3) PreToolUse wave launch gate (H5)
+
 ### Fixed
 
+- `check_scout_boundaries` hook: path comparison used literal `docs/IMPL` instead of glob pattern; now works with absolute paths from `realpath`
 - `check_branch_drift` hook: worktree detection used stale `.claude/worktrees/saw/` pattern; now matches `.claude/worktrees/` (any Polywave worktree)
 - `validate_worktree_isolation` hook: worktree and branch patterns used stale `saw/` prefix; now matches `.claude/worktrees/` and `polywave/` branches
 - Error messages in both hooks updated from `saw/*` to `polywave/*` branch patterns
