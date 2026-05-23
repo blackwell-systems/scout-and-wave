@@ -1,0 +1,146 @@
+#!/usr/bin/env bash
+# SubagentStop hook: Validate Scout IMPL output before returning to orchestrator
+#
+# Fires when a Scout agent session ends. Runs polywave-tools validate --fix on
+# the IMPL doc the scout wrote. If validation still fails after auto-fix, blocks
+# the scout from completing so the orchestrator receives a clean IMPL or an error.
+#
+# This closes the gap between "scout wrote something" and "orchestrator accepts it."
+# Without this hook, invalid state enums (SCOUT_COMPLETE), wrong depends_on formats
+# (file paths instead of agent IDs), and schema violations reach the orchestrator.
+#
+# Exit codes:
+#   0 — Pass (IMPL is valid, or agent is not a scout, or polywave-tools not available)
+#   2 — Block (IMPL validation failed after auto-fix attempt)
+#
+# Manual test commands:
+#
+#   # Non-scout agent — should exit 0 (pass through)
+#   echo '{"agent_description":"[polywave:wave1:agent-A] implement"}' \
+#     | bash implementations/claude-code/hooks/validate_scout_output
+#   echo $?  # 0
+#
+#   # Scout agent with valid IMPL — should exit 0
+#   echo '{"agent_description":"[polywave:scout:feature] analyze repo"}' \
+#     | bash implementations/claude-code/hooks/validate_scout_output
+#   echo $?  # 0 (if IMPL is valid)
+#
+#   # Scout agent with invalid IMPL — should exit 2
+#   echo '{"agent_description":"[polywave:scout:feature] analyze repo"}' \
+#     | bash implementations/claude-code/hooks/validate_scout_output
+#   echo $?  # 2 (if IMPL has schema errors after --fix)
+
+set -euo pipefail
+
+# Read JSON from stdin
+input=$(cat)
+
+# --- Step 1: Identify scout agents ---
+description=$(echo "$input" | jq -r '.agent_description // empty' 2>/dev/null || true)
+
+if [[ -z "$description" ]]; then
+  exit 0
+fi
+
+# Only fire for scout agents
+if [[ ! "$description" =~ \[polywave:scout ]] && [[ ! "$description" =~ \[Polywave:scout ]]; then
+  exit 0
+fi
+
+# --- Step 2: Locate IMPL doc ---
+impl_path=""
+
+# Check .polywave-state/active-impl
+if [[ -f ".polywave-state/active-impl" ]]; then
+  impl_path=$(cat .polywave-state/active-impl 2>/dev/null || true)
+fi
+
+# Try extracting from agent description
+if [[ -z "$impl_path" || ! -f "$impl_path" ]]; then
+  impl_path=$(echo "$description" | grep -oE '/[^ ]*docs/IMPL/IMPL-[a-z0-9-]+\.yaml' | head -1 || true)
+fi
+
+# Walk up to find repo root
+if [[ -z "$impl_path" || ! -f "$impl_path" ]]; then
+  repo_root=""
+  search_dir="$PWD"
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    if [[ -d "$search_dir/.git" || -f "$search_dir/.git" ]]; then
+      repo_root="$search_dir"
+      break
+    fi
+    parent=$(dirname "$search_dir")
+    if [[ "$parent" == "$search_dir" ]]; then
+      break
+    fi
+    search_dir="$parent"
+  done
+
+  if [[ -n "$repo_root" ]]; then
+    # Check active-impl at repo root
+    if [[ -f "$repo_root/.polywave-state/active-impl" ]]; then
+      candidate=$(cat "$repo_root/.polywave-state/active-impl" 2>/dev/null || true)
+      if [[ -n "$candidate" && -f "$candidate" ]]; then
+        impl_path="$candidate"
+      elif [[ -n "$candidate" && -f "$repo_root/$candidate" ]]; then
+        impl_path="$repo_root/$candidate"
+      fi
+    fi
+
+    # Try finding most recent IMPL doc
+    if [[ -z "$impl_path" || ! -f "$impl_path" ]]; then
+      impl_path=$(find "$repo_root/docs/IMPL" -name "IMPL-*.yaml" -not -path "*/complete/*" 2>/dev/null | sort -t/ -k999 | tail -1 || true)
+    fi
+  fi
+fi
+
+if [[ -z "$impl_path" || ! -f "$impl_path" ]]; then
+  # Cannot find IMPL doc. This might be a scout that failed early (no output).
+  # Non-blocking: let the orchestrator handle it.
+  exit 0
+fi
+
+# --- Step 3: Validate with auto-fix ---
+if ! command -v polywave-tools &>/dev/null; then
+  # polywave-tools not on PATH. Graceful degradation.
+  exit 0
+fi
+
+# Determine repo dir for file-existence checks
+repo_dir=""
+search_dir=$(dirname "$impl_path")
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  if [[ -d "$search_dir/.git" || -f "$search_dir/.git" ]]; then
+    repo_dir="$search_dir"
+    break
+  fi
+  parent=$(dirname "$search_dir")
+  if [[ "$parent" == "$search_dir" ]]; then
+    break
+  fi
+  search_dir="$parent"
+done
+
+# Run validate --fix (auto-corrects fixable issues like invalid gate types, unknown keys)
+fix_output=$(polywave-tools validate --fix ${repo_dir:+--repo-dir "$repo_dir"} "$impl_path" 2>&1) || true
+
+# Run validate again (read-only) to check if issues remain after fix
+validate_output=$(polywave-tools validate ${repo_dir:+--repo-dir "$repo_dir"} "$impl_path" 2>&1)
+validate_exit=$?
+
+if [[ $validate_exit -ne 0 ]]; then
+  echo "SCOUT OUTPUT VALIDATION FAILED: The IMPL doc at ${impl_path} has schema or structural errors that could not be auto-fixed." >&2
+  echo "" >&2
+  echo "Validation output:" >&2
+  echo "$validate_output" >&2
+  echo "" >&2
+  echo "The scout must fix these errors before completing. Common issues:" >&2
+  echo "  - Invalid state value (use SCOUT_PENDING, not SCOUT_COMPLETE)" >&2
+  echo "  - Agent.dependencies contains file paths instead of agent IDs (e.g., 'A', 'B2')" >&2
+  echo "  - file_ownership has agent: scaffold / wave: 0 (scaffolds go in scaffolds section only)" >&2
+  echo "" >&2
+  exit 2
+fi
+
+# IMPL is valid. Allow scout to complete.
+exit 0

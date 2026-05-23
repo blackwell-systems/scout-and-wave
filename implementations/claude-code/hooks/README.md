@@ -1,6 +1,6 @@
 # Polywave Claude Code Hooks
 
-Enforcement and injection hooks for CLI-based Polywave agents. 22 hooks across SubagentStart, PreToolUse, PostToolUse, SubagentStop, UserPromptSubmit, and Stop events.
+Enforcement and injection hooks for CLI-based Polywave agents. 23 hooks across SubagentStart, PreToolUse, PostToolUse, SubagentStop, UserPromptSubmit, and Stop events.
 
 ## Hook Summary
 
@@ -25,6 +25,7 @@ Enforcement and injection hooks for CLI-based Polywave agents. 22 hooks across S
 | warn_stubs | PostToolUse | Write\|Edit | H3 | Warns on stub patterns in written code |
 | check_branch_drift | PostToolUse | Bash | H4 | Detects commits on wrong branch |
 | validate_agent_completion | SubagentStop | — | E42/I1/I4/I5/E20 | Validates protocol compliance at agent completion (incl. stub consistency) |
+| validate_scout_output | SubagentStop | — | E16/I4 | Validates IMPL schema after scout completes; runs validate --fix then blocks if errors remain |
 
 ### Injection hooks (prepend reference content)
 
@@ -924,6 +925,87 @@ echo $?  # 0, no output
 # Test: no active IMPLs — should exit 0 silently
 echo '{"stop_hook_active":false,"session_id":"test"}' | polywave_orchestrator_stop
 echo $?  # 0
+```
+
+---
+
+---
+
+## Hook 16: Scout Output Validation (E16/I4)
+
+**SubagentStop** — Validates the IMPL doc after the Scout completes, blocking if schema errors persist.
+
+### How It Works
+
+1. Claude Code calls the script when any subagent stops
+2. Script checks if agent description contains `[polywave:scout` tag; non-scouts pass through
+3. Locates the IMPL doc (via `.polywave-state/active-impl`, description path extraction, or filesystem scan)
+4. Runs `polywave-tools validate --fix` (auto-corrects fixable issues: invalid gate types, unknown keys)
+5. Runs `polywave-tools validate` again (read-only) to check if errors remain
+6. If errors persist after fix -> block (exit 2) with detailed error output
+7. If IMPL is valid -> allow (exit 0)
+
+### Why This Hook Exists
+
+Without it, invalid IMPL docs (wrong state enum like `SCOUT_COMPLETE`, file paths in `Agent.dependencies`, scaffold entries in `file_ownership`) reach the orchestrator. The orchestrator then hits validation failures during wave preparation, wasting time on issues the scout should have caught.
+
+This hook creates a hard gate between "scout finishes" and "orchestrator proceeds."
+
+### Defense-in-Depth Position
+
+```
+Scout writes IMPL
+    |
+PostToolUse: validate_impl_on_write (warns agent inline, non-blocking)
+    |
+Scout finishes
+    |
+SubagentStop: validate_scout_output (BLOCKS if IMPL invalid after --fix)
+    |
+Orchestrator receives control
+    |
+PreToolUse/Agent: validate_agent_launch (H5: validates before wave agent launch)
+```
+
+### Manual Installation
+
+1. Symlink:
+   ```bash
+   ln -sf ~/code/polywave/implementations/claude-code/hooks/validate_scout_output ~/.claude/agents/hooks/validate_scout_output
+   ```
+
+2. Add to `~/.claude/settings.json`:
+   ```json
+   {
+     "hooks": {
+       "SubagentStop": [
+         {
+           "hooks": [
+             {
+               "type": "command",
+               "command": "$HOME/.claude/agents/hooks/validate_scout_output"
+             }
+           ]
+         }
+       ]
+     }
+   }
+   ```
+
+### Testing
+
+```bash
+# Non-scout agent — should exit 0 (pass through)
+echo '{"agent_description":"[polywave:wave1:agent-A] implement feature"}' | validate_scout_output
+echo $?  # 0
+
+# Scout agent with valid IMPL — should exit 0
+echo '{"agent_description":"[polywave:scout:feature] analyze repo"}' | validate_scout_output
+echo $?  # 0 (if IMPL doc exists and is valid)
+
+# Scout agent with invalid IMPL — should exit 2
+echo '{"agent_description":"[polywave:scout:feature] analyze repo"}' | validate_scout_output 2>&1
+echo $?  # 2 (if IMPL has unfixable schema errors)
 ```
 
 ---

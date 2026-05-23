@@ -46,6 +46,7 @@ HOOK_SCRIPTS=(
   "block_git_stash"
   "auto_commit_on_write"
   "polywave_orchestrator_stop"
+  "validate_scout_output"
 )
 
 # Core skill files: source (relative to PROMPTS_DIR) -> target name
