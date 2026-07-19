@@ -8,6 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Quick Start reduces new-user friction.** Homebrew is now the single default CLI install; `go install` moved to a collapsed "Alternative methods" note with an explicit `~/go/bin` PATH warning (the most common silent-failure trap) and a note that such builds report version `dev`. A language server (gopls, rust-analyzer, pyright, etc.) is now listed as a prerequisite since agents fall back to slower grep without one.
+- **`polywave.config.json` is gitignored** (holds machine-specific absolute paths and personal repo lists); a `polywave.config.example.json` documents the schema. `polywave-tools init` generates the real file locally. Previously it was committed, so a fresh clone inherited another machine's paths and `verify-install` reported "0/N repos found".
+
 ### Added
 
 - **`validate_scout_output` SubagentStop hook** (Hook 16): validates IMPL schema after scout completes; runs `polywave-tools validate --fix` then blocks if errors remain. Closes the gap between "scout wrote something" and "orchestrator accepts it." Prevents invalid state enums, wrong `depends_on` formats, and schema violations from reaching the orchestrator.

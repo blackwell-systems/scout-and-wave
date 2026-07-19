@@ -8,3 +8,4 @@ docs/IMPL/.polywave-state/
 .saw-state/
 docs/IMPL/.saw-state/
 .codebase-memory/
+polywave.config.json

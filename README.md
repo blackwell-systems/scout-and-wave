@@ -69,25 +69,39 @@ The protocol has a built-in **suitability gate** that answers [five questions](h
 
 ## Quick Start
 
-**Prerequisites:** Git 2.20+, jq 1.6+, Claude Code. You do not need polywave-protocol or polywave-web.
+**Prerequisites:** Git 2.20+, jq 1.6+, Claude Code. A language server for your stack (e.g. `gopls`, `rust-analyzer`, `pyright`, `typescript-language-server`) is strongly recommended: agents use LSP for navigation and fall back to slower grep without one. You do not need polywave-protocol or polywave-web.
 
 ```bash
 # 1. Install skill files, hooks, and Agent permission
 git clone https://github.com/blackwell-systems/polywave.git ~/code/polywave
 ~/code/polywave/install.sh    # configures Agent permission, symlinks skills, installs hooks
 
-# 2. Install polywave-tools CLI (pick one)
-brew install blackwell-systems/tap/polywave-tools                                     # Homebrew (recommended)
-go install github.com/blackwell-systems/polywave-go/cmd/polywave-tools@latest   # Go install (alternative)
-# Or download a pre-built binary: https://github.com/blackwell-systems/polywave-go/releases/latest
+# 2. Install polywave-tools CLI (Homebrew — recommended)
+brew install blackwell-systems/tap/polywave-tools
 
 # 3. Initialize your project
 cd your-project
 polywave-tools init            # auto-detects language, build, and test commands
 
 # 4. Verify
-polywave-tools verify-install  # checks skill files, CLI, hooks, permissions
+polywave-tools verify-install  # checks CLI, git, LSP, skill files, hooks, permissions
 ```
+
+<details>
+<summary>Alternative CLI install methods</summary>
+
+**Pre-built binary** (no Go toolchain needed): download from the [latest release](https://github.com/blackwell-systems/polywave-go/releases/latest) and move it onto your `PATH`.
+
+**Go install:**
+```bash
+go install github.com/blackwell-systems/polywave-go/cmd/polywave-tools@latest
+```
+Note: `go install` places the binary in `$(go env GOPATH)/bin` (usually `~/go/bin`). If `polywave-tools` reports "command not found" afterward, that directory is not on your `PATH` — add it:
+```bash
+echo 'export PATH="$(go env GOPATH)/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc
+```
+Binaries installed this way report their version as `dev`; use Homebrew or a release binary for a versioned build.
+</details>
 
 **5. Restart Claude Code**, then run your first scout:
 
