@@ -11,9 +11,11 @@
   <a href="https://buymeacoffee.com/blackwellsystems"><img src="https://img.shields.io/badge/buy%20me%20a%20coffee-donate-yellow.svg" alt="Buy Me A Coffee" /></a>
 </p>
 
-**Parallel AI agents that don't break each other's code.**
+**Parallel AI agents that don't break each other's code, in the CLI you already use.**
 
-Other multi-agent frameworks run fast and merge chaos. Polywave gives every agent its own worktree, assigns every file to exactly one agent, and shows you the full plan before any agent touches your code. Conflicts are resolved at planning time, not at merge time.
+Polywave is a lightweight overlay, not an agent platform. You keep working in Claude Code (or Codex); you add a skill, a set of hooks, and a small CLI. In return, every agent gets its own worktree, every file is assigned to exactly one agent, and you see the full plan before any agent touches your code. Conflicts are resolved at planning time, not at merge time.
+
+You do not adopt a runtime, migrate to a new tool, or run a messaging/memory/orchestration engine. If you can run `/polywave scout "feature"` in Claude Code, you have the whole thing. Heavyweight agent frameworks ask you to move into their world to get parallelism; Polywave meets you in yours and makes the merge safe.
 
 > Published as an [Agent Skill](https://agentskills.io) (open standard). Compatible with Claude Code, Cursor, GitHub Copilot, and other Agent Skills-compatible tools.
 
@@ -35,6 +37,8 @@ Most frameworks try to solve this with better prompts. Polywave solves it with s
 - **Suitability gate.** Polywave says "no" when the work doesn't decompose cleanly. A poor-fit assessment prevents bad decompositions from producing expensive failures.
 
 Polywave is not an agent runtime. It does not route tasks, manage inter-agent messaging, or maintain cross-session memory. It is a coordination protocol: partition the work safely, verify the partition, launch agents independently, merge deterministically. Agents run in parallel but do not communicate; correctness comes from the partition, not from cooperation.
+
+This is a deliberate weight class. Full agent engines (Hermes, swarm frameworks, and the like) bundle the execution runtime, memory, messaging, and orchestration into a platform you adopt. Polywave carries none of that. It rides on the agent runtime you already have and adds exactly one thing those platforms lack: the file-ownership partition and deterministic merge that make parallel edits safe. If you want a whole agent engine, use one. If you want your existing CLI to run several coding agents at once without the merge blowing up, that is what Polywave is for.
 
 The system has seven [participant roles](https://github.com/blackwell-systems/polywave-protocol/blob/main/participants.md), but you interact with two: the **Orchestrator** (your Claude Code session, coordinates everything) and the **Scout** (analyzes codebase, assigns files, writes the plan). The other five (Scaffold Agent, Wave Agents, Integration Agent, Critic Agent, Planner) run automatically when needed.
 
