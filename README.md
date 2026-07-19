@@ -13,9 +13,9 @@
 
 **Parallel AI agents that don't break each other's code, in the CLI you already use.**
 
-Polywave is a lightweight overlay, not an agent platform. You keep working in Claude Code (or Codex); you add a skill, a set of hooks, and a small CLI. In return, every agent gets its own worktree, every file is assigned to exactly one agent, and you see the full plan before any agent touches your code. Conflicts are resolved at planning time, not at merge time.
+Polywave is a lightweight overlay, not an agent platform. You keep working in Claude Code (or Codex). Install once, then your entire interface is `/polywave` in the tool you already use: every agent gets its own worktree, every file is assigned to exactly one agent, and you see the full plan before any agent touches your code. Conflicts are resolved at planning time, not at merge time.
 
-You do not adopt a runtime, migrate to a new tool, or run a messaging/memory/orchestration engine. If you can run `/polywave scout "feature"` in Claude Code, you have the whole thing. Heavyweight agent frameworks ask you to move into their world to get parallelism; Polywave meets you in yours and makes the merge safe.
+You do not adopt a runtime, migrate to a new tool, or run a messaging/memory/orchestration engine. The install adds a skill, a set of hooks, and the `polywave-tools` binary. The skill and hooks drive the workflow: they call the binary under the hood, so in normal use you just type `/polywave scout "feature"` and `/polywave wave`. The CLI is there when you want it (recovery, scripting, CI, power use), but most sessions never touch it directly. Heavyweight agent frameworks ask you to move into their world to get parallelism; Polywave meets you in yours and makes the merge safe.
 
 > Published as an [Agent Skill](https://agentskills.io) (open standard). Compatible with Claude Code, Cursor, GitHub Copilot, and other Agent Skills-compatible tools.
 
