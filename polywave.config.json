@@ -2,15 +2,15 @@
   "repos": [
     {
       "name": "polywave",
-      "path": "/Users/dayna.blackwell/code/polywave"
+      "path": "/Users/dayna/code/polywave"
     },
     {
       "name": "polywave-go",
-      "path": "/Users/dayna.blackwell/code/polywave-go"
+      "path": "/Users/dayna/code/polywave-go"
     },
     {
       "name": "polywave-web",
-      "path": "/Users/dayna.blackwell/code/polywave-web"
+      "path": "/Users/dayna/code/polywave-web"
     }
   ],
   "repo": {
